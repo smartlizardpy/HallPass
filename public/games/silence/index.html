@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SILENCE: LIDAR</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+        :root {
+            --bg-color: #010101;
+            --text-color: #888;
+            --phosphor: #ccffcc;
+            --danger: #ff3333;
+            --warning: #ffaa33;
+            --stealth: #88ccff;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;x
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            overflow: hidden;
+            font-family: 'VT323', monospace;
+            cursor: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            filter: contrast(1.2) brightness(0.9);
+        }
+
+        #cursor {
+            position: fixed;
+            width: 20px;
+            height: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            z-index: 100;
+            mix-blend-mode: difference;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            color: var(--text-color);
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 6rem;
+            margin: 0;
+            text-shadow: 4px 0px 2px #300;
+            letter-spacing: 15px;
+            animation: flicker 4s infinite;
+            color: #dcdcdc;
+        }
+
+        p {
+            font-size: 1.5rem;
+            margin-top: 20px;
+            opacity: 0.8;
+            max-width: 600px;
+        }
+
+        .btn {
+            margin-top: 40px;
+            padding: 15px 40px;
+            background: rgba(0,0,0,0.8);
+            border: 1px solid var(--text-color);
+            color: var(--text-color);
+            font-family: 'VT323', monospace;
+            font-size: 2rem;
+            cursor: pointer;
+            pointer-events: all;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .btn:hover {
+            background: var(--text-color);
+            color: var(--bg-color);
+            box-shadow: 0 0 20px var(--text-color);
+        }
+
+        #sound-meter-container {
+            position: absolute;
+            bottom: 40px;
+            right: 40px;
+            width: 25px;
+            height: 200px;
+            border: 2px solid #333;
+            background: rgba(10, 10, 10, 0.8);
+            pointer-events: none;
+            display: flex;
+            flex-direction: column-reverse;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        }
+
+        #sound-meter-bar {
+            width: 100%;
+            height: 0%;
+            background-color: var(--phosphor);
+            transition: height 0.1s linear, background-color 0.2s ease;
+            box-shadow: 0 0 10px var(--phosphor);
+            opacity: 0.8;
+        }
+
+        .meter-label {
+            position: absolute;
+            bottom: -30px;
+            right: 0;
+            width: 100px;
+            text-align: right;
+            font-size: 1.5rem;
+            color: #555;
+            font-family: 'VT323', monospace;
+            letter-spacing: 2px;
+        }
+
+        #threshold-line {
+            position: absolute;
+            top: 25%;
+            left: -5px;
+            width: 35px;
+            height: 2px;
+            background-color: #500;
+            z-index: 2;
+        }
+
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(
+                to bottom,
+                rgba(0,0,0,0),
+                rgba(0,0,0,0) 50%,
+                rgba(0,0,0,0.3) 50%,
+                rgba(0,0,0,0.3)
+            );
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .vignette {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(circle, rgba(0,0,0,0) 50%, rgba(0,0,0,0.95) 100%);
+            pointer-events: none;
+            z-index: 6;
+            transition: background 0.5s ease;
+        }
+
+        .noise {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            opacity: 0.12;
+            pointer-events: none;
+            z-index: 4;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+            animation: noiseAnim 0.1s infinite;
+        }
+
+        @keyframes noiseAnim {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(5%, 0); }
+        }
+
+        #level-indicator {
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            font-size: 1.5rem;
+            color: #444;
+            pointer-events: none;
+            letter-spacing: 2px;
+        }
+
+        @keyframes flicker {
+            0% { opacity: 0.8; }
+            50% { opacity: 1; }
+            100% { opacity: 0.8; }
+        }
+
+        .hidden { display: none !important; }
+
+        .glitch {
+            position: relative;
+            color: var(--danger);
+            font-size: 8rem;
+            animation: glitch-skew 1s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite;
+        }
+        @keyframes glitch-skew {
+            0% { transform: skew(0deg); }
+            100% { transform: skew(0deg); }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="cursor"></div>
+    <div class="noise"></div>
+    <div class="scanlines"></div>
+    <div class="vignette" id="vignette"></div>
+
+    <div id="ui-layer">
+        <div id="start-screen">
+            <h1>SILENCE</h1>
+            <p>The dark is alive. Paint it with sound.</p>
+            <p style="color: #aa4444; font-size: 1.2rem; margin-top: 5px;">WARNING: FLASHING LIGHTS & LOUD NOISES</p>
+            <p style="font-size: 1.2rem; margin-top: 30px;">
+                <span style="color: #fff;">WASD</span> Move | <span style="color: #fff;">MOUSE</span> Aim | <span style="color: #fff;">CLICK</span> Scream<br>
+            </p>
+            <p style="font-size: 1rem; color: #88ccff; margin-top: 10px;">Stop moving to hide. Don't run out of breath.</p>
+            <button class="btn" id="start-btn">DESCEND</button>
+        </div>
+        <div id="game-over-screen" class="hidden">
+            <h1 class="glitch">FOUND</h1>
+            <p>Silence was not enough.</p>
+            <button class="btn" id="restart-btn">WAKE UP</button>
+        </div>
+        <div id="victory-screen" class="hidden">
+            <h1 style="color: #ccffcc;">SURVIVED</h1>
+            <p>The echoes fade...</p>
+            <button class="btn" id="replay-btn">GO DEEPER</button>
+        </div>
+        <div id="level-indicator" class="hidden">DEPTH: 1</div>
+        
+        <div id="sound-meter-container" class="hidden">
+            <div id="threshold-line"></div>
+            <div id="sound-meter-bar"></div>
+            <div class="meter-label">NOISE</div>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        class AudioEngine {
+            constructor() {
+                this.ctx = null;
+                this.masterGain = null;
+                this.initialized = false;
+            }
+
+            init() {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!this.initialized) {
+                    this.ctx = new AudioContext();
+                    this.masterGain = this.ctx.createGain();
+                    this.masterGain.gain.value = 0.6; 
+                    this.masterGain.connect(this.ctx.destination);
+                    const compressor = this.ctx.createDynamicsCompressor();
+                    compressor.threshold.value = -10;
+                    compressor.knee.value = 40;
+                    compressor.ratio.value = 12;
+                    compressor.connect(this.masterGain);
+                    this.initialized = true;
+                    this.playDrone();
+                } else if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            createSpatialPanner(sourceX, sourceY) {
+                if (!this.initialized || !player) return this.masterGain;
+                const panner = this.ctx.createStereoPanner();
+                const dx = sourceX - player.x;
+                const dy = sourceY - player.y;
+                const angleToSource = Math.atan2(dy, dx);
+                let relativeAngle = angleToSource - player.angle;
+                while (relativeAngle > Math.PI) relativeAngle -= Math.PI * 2;
+                while (relativeAngle < -Math.PI) relativeAngle += Math.PI * 2;
+                const pan = Math.sin(relativeAngle);
+                panner.pan.value = pan;
+                panner.connect(this.masterGain);
+                return panner;
+            }
+
+            playPing(freq = 600) {
+                if (!this.initialized) return;
+                const t = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, t);
+                osc.frequency.exponentialRampToValueAtTime(freq * 0.5, t + 0.3);
+                gain.gain.setValueAtTime(0, t);
+                gain.gain.linearRampToValueAtTime(0.3, t + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+                osc.connect(gain);
+                gain.connect(this.masterGain); 
+                osc.start();
+                osc.stop(t + 0.5);
+            }
+
+            playGasp() {
+                if (!this.initialized) return;
+                const t = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(150, t);
+                osc.frequency.linearRampToValueAtTime(400, t + 0.2);
+                const bufferSize = this.ctx.sampleRate * 0.3;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+                const noiseGain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.3, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+                noiseGain.gain.setValueAtTime(0.3, t);
+                noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+                osc.connect(gain);
+                gain.connect(this.masterGain);
+                noise.connect(noiseGain);
+                noiseGain.connect(this.masterGain);
+                osc.start();
+                osc.stop(t + 0.3);
+                noise.start();
+            }
+
+            playBounce(intensity, x, y) {
+                if (!this.initialized || intensity < 0.2) return;
+                const t = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.value = 200;
+                gain.gain.setValueAtTime(0.05 * intensity, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+                const panner = this.createSpatialPanner(x, y);
+                osc.connect(gain);
+                gain.connect(panner);
+                osc.start();
+                osc.stop(t + 0.06);
+            }
+
+            playDrone() {
+                const t = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.value = 40;
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.value = 100;
+                const lfo = this.ctx.createOscillator();
+                lfo.type = 'sine';
+                lfo.frequency.value = 0.15; 
+                const lfoGain = this.ctx.createGain();
+                lfoGain.gain.value = 50; 
+                lfo.connect(lfoGain);
+                lfoGain.connect(filter.frequency);
+                gain.gain.value = 0.08;
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.masterGain);
+                osc.start();
+                lfo.start();
+            }
+
+            playMonsterScreech(x, y) {
+                if (!this.initialized) return;
+                const t = this.ctx.currentTime;
+                const panner = this.createSpatialPanner(x, y);
+                const osc = this.ctx.createOscillator();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(100, t);
+                osc.frequency.linearRampToValueAtTime(800, t + 0.1);
+                osc.frequency.exponentialRampToValueAtTime(100, t + 0.6);
+                const shaper = this.ctx.createWaveShaper();
+                shaper.curve = this.makeDistortionCurve(1000);
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0, t);
+                gain.gain.linearRampToValueAtTime(0.4, t + 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.6);
+                osc.connect(shaper);
+                shaper.connect(gain);
+                gain.connect(panner);
+                osc.start();
+                osc.stop(t + 0.7);
+            }
+
+            playHeartbeat(stressLevel) {
+                if (!this.initialized) return;
+                const t = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.frequency.setValueAtTime(50 + (stressLevel * 20), t);
+                osc.frequency.exponentialRampToValueAtTime(10, t + 0.1);
+                const vol = Math.min(0.8, 0.2 + stressLevel * 0.6);
+                gain.gain.setValueAtTime(vol, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+                osc.connect(gain);
+                gain.connect(this.masterGain);
+                osc.start();
+                osc.stop(t + 0.2);
+            }
+
+            playFootstep(x, y, isPlayer = true) {
+                if (!this.initialized) return;
+                const t = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.frequency.value = isPlayer ? 80 : 150; 
+                osc.type = 'square';
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.value = 100;
+                gain.gain.setValueAtTime(isPlayer ? 0.1 : 0.05, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+                const output = isPlayer ? this.masterGain : this.createSpatialPanner(x, y);
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(output);
+                osc.start();
+                osc.stop(t + 0.1);
+            }
+
+            playWhisper(x, y) {
+                if (!this.initialized) return;
+                const t = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                const panner = this.createSpatialPanner(x, y);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(8000, t);
+                osc.frequency.linearRampToValueAtTime(2000, t + 0.2);
+                gain.gain.setValueAtTime(0, t);
+                gain.gain.linearRampToValueAtTime(0.05, t + 0.1);
+                gain.gain.linearRampToValueAtTime(0, t + 0.3);
+                osc.connect(gain);
+                gain.connect(panner);
+                osc.start();
+                osc.stop(t + 0.3);
+            }
+
+            makeDistortionCurve(amount) {
+                const k = amount;
+                const n_samples = 44100;
+                const curve = new Float32Array(n_samples);
+                for (let i = 0; i < n_samples; ++i) {
+                    const x = (i * 2) / n_samples - 1;
+                    curve[i] = (3 + k) * x * 20 * (Math.PI / 180) / (Math.PI + k * Math.abs(x));
+                }
+                return curve;
+            }
+        }
+
+        const audio = new AudioEngine();
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const cursor = document.getElementById('cursor');
+        const vignette = document.getElementById('vignette');
+        const meterBar = document.getElementById('sound-meter-bar');
+
+        let gameState = 'MENU';
+        let currentLevel = 1;
+        let lastTime = 0;
+        let globalShake = 0;
+        let terrorLevel = 0; 
+        let playerNoise = 0; 
+        let clickedThisFrame = false;
+        const NOISE_THRESHOLD = 0.75;
+        const STEALTH_THRESHOLD = 0.05;
+        
+        const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowLeft: false, ArrowDown: false, ArrowRight: false };
+        const mouse = { x: 0, y: 0 };
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        window.addEventListener('keydown', (e) => {
+            if(keys.hasOwnProperty(e.key) || keys.hasOwnProperty(e.key.toLowerCase())) {
+                keys[e.key.toLowerCase()] = true;
+                keys[e.key] = true;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+             if(keys.hasOwnProperty(e.key) || keys.hasOwnProperty(e.key.toLowerCase())) {
+                keys[e.key.toLowerCase()] = false;
+                keys[e.key] = false;
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+            cursor.style.left = mouse.x + 'px';
+            cursor.style.top = mouse.y + 'px';
+        });
+
+        window.addEventListener('mousedown', () => {
+            if (gameState === 'PLAYING') {
+                audio.playPing(600 + Math.random()*200);
+                
+                // Spawn LIDAR Rays
+                const rayCount = 100;
+                const spreadAngle = Math.PI / 2.5; 
+                const baseAngle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+                
+                for(let i=0; i<rayCount; i++) {
+                    const angle = baseAngle - spreadAngle/2 + (spreadAngle * i / rayCount) + (Math.random()-0.5)*0.1;
+                    const speed = 600 + Math.random() * 200;
+                    rays.push(new Ray(player.x, player.y, angle, speed));
+                }
+                
+                playerNoise = Math.min(1.0, playerNoise + 0.3);
+                clickedThisFrame = true; 
+                
+                monster.hear(player.x, player.y);
+                globalShake = 5;
+            }
+        });
+
+        // Scan Points: The LIDAR dots that persist
+        class ScanPoint {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.life = 3.0; // Persist for 3 seconds
+                this.maxLife = 3.0;
+            }
+            draw(ctx) {
+                const alpha = Math.pow(this.life / this.maxLife, 2); // Fade out
+                ctx.fillStyle = `rgba(180, 255, 200, ${alpha})`;
+                ctx.fillRect(this.x, this.y, 2, 2);
+            }
+        }
+
+        class Player {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = 8;
+                this.speed = 150;
+                this.angle = 0;
+                this.stepTimer = 0;
+                this.idleTimer = 0;
+                this.isMoving = false;
+                this.breath = 1.0;
+                this.noiseRipples = [];
+            }
+
+            update(dt) {
+                let dx = 0;
+                let dy = 0;
+                
+                if (keys.w || keys.ArrowUp) dy -= 1;
+                if (keys.s || keys.ArrowDown) dy += 1;
+                if (keys.a || keys.ArrowLeft) dx -= 1;
+                if (keys.d || keys.ArrowRight) dx += 1;
+
+                if (dx !== 0 || dy !== 0) {
+                    this.isMoving = true;
+                    this.idleTimer = 0;
+                    const len = Math.sqrt(dx*dx + dy*dy);
+                    dx /= len;
+                    dy /= len;
+                    
+                    const currentSpeed = this.speed * (1 - terrorLevel * 0.4);
+                    
+                    const nextX = this.x + dx * currentSpeed * dt;
+                    const nextY = this.y + dy * currentSpeed * dt;
+
+                    if (!checkWallCollision(nextX, this.y)) this.x = nextX;
+                    if (!checkWallCollision(this.x, nextY)) this.y = nextY;
+
+                    playerNoise = Math.min(1.0, playerNoise + dt * 0.4);
+                    this.breath = Math.min(1.0, this.breath + dt * 0.3);
+
+                    this.stepTimer -= dt;
+                    if (this.stepTimer <= 0) {
+                        audio.playFootstep(this.x, this.y, true);
+                        this.stepTimer = 0.5 - (terrorLevel * 0.2); 
+                        this.noiseRipples.push({r: 0, a: 1.0});
+                    }
+                } else {
+                    this.isMoving = false;
+                    this.idleTimer += dt;
+                    this.breath = Math.max(0, this.breath - dt * 0.15); 
+                    
+                    if (this.breath <= 0) {
+                        this.breath = 0.5; 
+                        playerNoise = 1.0; 
+                        audio.playGasp();
+                        globalShake = 10;
+                        monster.hear(this.x, this.y); 
+                    }
+                }
+                
+                // Ensure noiseRipples is initialized
+                if (!this.noiseRipples) this.noiseRipples = [];
+
+                for(let i = this.noiseRipples.length - 1; i >= 0; i--) {
+                    const r = this.noiseRipples[i];
+                    r.r += dt * 50;
+                    r.a -= dt * 2.0;
+                    if(r.a <= 0) this.noiseRipples.splice(i, 1);
+                }
+
+                this.angle = Math.atan2(mouse.y - this.y, mouse.x - this.x);
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.angle);
+
+                const isSafe = !this.isMoving && playerNoise <= NOISE_THRESHOLD;
+
+                if (this.noiseRipples) {
+                    for(let r of this.noiseRipples) {
+                         ctx.strokeStyle = `rgba(150, 150, 150, ${r.a * 0.5})`;
+                         ctx.beginPath();
+                         ctx.arc(0, 0, r.r + 10, 0, Math.PI*2);
+                         ctx.stroke();
+                    }
+                }
+
+                // Personal Light - Fixed brightness
+                const flicker = Math.random() > (0.95 - terrorLevel * 0.2) ? 0.2 : 1.0;
+                
+                let lightColor = isSafe ? 'rgba(100, 200, 255,' : 'rgba(200, 200, 200,';
+                if (playerNoise > NOISE_THRESHOLD) lightColor = 'rgba(255, 100, 100,';
+                
+                const radius = 50 - (terrorLevel * 20); 
+                
+                const grad = ctx.createRadialGradient(0, 0, 5, 0, 0, Math.max(10, radius));
+                grad.addColorStop(0, `${lightColor} ${0.15 * flicker})`); // Fixed intensity
+                grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(0, 0, Math.max(10, radius * 1.5), 0, Math.PI*2);
+                ctx.fill();
+
+                if (playerNoise > NOISE_THRESHOLD) {
+                    ctx.fillStyle = '#f55'; 
+                } else if (isSafe) {
+                    ctx.fillStyle = 'rgba(136, 204, 255, 0.4)'; 
+                } else {
+                    ctx.fillStyle = '#888'; 
+                }
+
+                ctx.beginPath();
+                ctx.moveTo(8, 0);
+                ctx.lineTo(-5, -5);
+                ctx.lineTo(-5, 5);
+                ctx.closePath();
+                ctx.fill();
+                
+                if (isSafe) {
+                    ctx.strokeStyle = 'rgba(136, 204, 255, 0.6)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+                
+                // Breath bar
+                ctx.rotate(-this.angle); 
+                ctx.fillStyle = '#333';
+                ctx.fillRect(-15, 20, 30, 4);
+                ctx.fillStyle = this.breath < 0.3 ? '#f55' : '#8cf';
+                ctx.fillRect(-15, 20, 30 * this.breath, 4);
+
+                ctx.restore();
+            }
+        }
+
+        class Ray {
+            constructor(x, y, angle, speed) {
+                this.x = x;
+                this.y = y;
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                this.life = 0.8;
+                this.active = true;
+            }
+
+            update(dt) {
+                if(!this.active) return;
+                this.life -= dt;
+                if(this.life <= 0) {
+                    this.active = false;
+                    return;
+                }
+
+                const nextX = this.x + this.vx * dt;
+                const nextY = this.y + this.vy * dt;
+
+                let hitWall = null;
+                // Optimized Check: Just convert pos to grid coord
+                const c = Math.floor(nextX / 40); // 40 is tile size
+                const r = Math.floor(nextY / 40);
+                
+                // Simple boundary check
+                if (r >= 0 && r < wallGrid.length && c >= 0 && c < wallGrid[0].length) {
+                    if (wallGrid[r][c] === 1) hitWall = true;
+                }
+
+                if (hitWall) {
+                    this.active = false;
+                    // Add Scan Point
+                    scanPoints.push(new ScanPoint(nextX, nextY));
+                    // Small bounce sound occasionally
+                    if(Math.random() < 0.1) audio.playBounce(0.1, this.x, this.y);
+                } else {
+                    this.x = nextX;
+                    this.y = nextY;
+                }
+                
+                if(this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) this.active = false;
+            }
+
+            draw(ctx) {
+                ctx.fillStyle = `rgba(200, 255, 200, ${this.life})`;
+                ctx.fillRect(this.x, this.y, 2, 2);
+            }
+        }
+
+        class Monster {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = 15;
+                this.speed = 50;
+                this.chaseSpeed = 230;
+                this.targetX = x;
+                this.targetY = y;
+                this.state = 'IDLE'; 
+                this.visibleTimer = 0;
+                this.trail = []; 
+                this.moveTimer = 0; 
+                this.isFrenzied = false; 
+                this.searchTimer = 0; 
+            }
+
+            hear(x, y) {
+                this.state = 'CHASE';
+                this.targetX = x + (Math.random() - 0.5) * 50;
+                this.targetY = y + (Math.random() - 0.5) * 50;
+            }
+
+            update(dt, player) {
+                const distToPlayer = Math.hypot(player.x - this.x, player.y - this.y);
+                const isSilent = playerNoise <= STEALTH_THRESHOLD;
+                const isSafe = !player.isMoving && playerNoise <= NOISE_THRESHOLD;
+
+                if (this.state === 'SEARCHING') {
+                    this.speed = 20; 
+                    this.searchTimer -= dt;
+                    this.targetX = this.x + (Math.random()-0.5)*50;
+                    this.targetY = this.y + (Math.random()-0.5)*50;
+
+                    if(this.searchTimer <= 0) {
+                        this.state = 'WANDER';
+                    }
+                    if(!isSafe && distToPlayer < 200) {
+                        this.state = 'CHASE';
+                    }
+
+                } else if (this.state === 'CHASE') {
+                    this.speed = this.speed < this.chaseSpeed ? this.speed + 100*dt : this.chaseSpeed;
+                    
+                    if (this.isFrenzied) {
+                        this.targetX = player.x;
+                        this.targetY = player.y;
+                    } else {
+                        if (distToPlayer < 250 && !isSafe) {
+                             this.targetX = player.x;
+                             this.targetY = player.y;
+                        } else if (isSafe && distToPlayer < 100) {
+                            this.state = 'SEARCHING';
+                            this.searchTimer = 2.0; 
+                        }
+                    }
+
+                    const isVulnerable = this.isFrenzied || player.isMoving || clickedThisFrame;
+                    if (distToPlayer < 20 && isVulnerable) {
+                        endGame();
+                    }
+
+                } else {
+                    this.speed = 50;
+                    if (Math.random() < 0.01) {
+                         this.targetX = this.x + (Math.random() - 0.5) * 300;
+                         this.targetY = this.y + (Math.random() - 0.5) * 300;
+                    }
+                }
+
+                this.moveTimer += dt;
+                let shouldMove = true;
+                if (this.state === 'CHASE' && distToPlayer < 300) {
+                     if (Math.sin(this.moveTimer * 20) < 0) shouldMove = false;
+                }
+                if (this.state === 'SEARCHING') shouldMove = true; 
+
+                if (shouldMove) {
+                    const dx = this.targetX - this.x;
+                    const dy = this.targetY - this.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+
+                    if (dist > 1) {
+                        const moveDist = this.speed * dt;
+                        this.x += (dx / dist) * moveDist;
+                        this.y += (dy / dist) * moveDist;
+                    }
+                }
+
+                if (frameCount % 5 === 0) {
+                    this.trail.push({x: this.x, y: this.y, life: 1.0});
+                    if (this.trail.length > 20) this.trail.shift();
+                }
+                this.trail.forEach(t => t.life -= dt * 0.5);
+
+                if (this.visibleTimer > 0) this.visibleTimer -= dt;
+
+                return distToPlayer; 
+            }
+
+            draw(ctx) {
+                const dist = Math.hypot(player.x - this.x, player.y - this.y);
+                let proximityAlpha = 0;
+                if (dist < 300) {
+                    proximityAlpha = Math.pow(1 - (dist / 300), 3); 
+                }
+
+                if (this.visibleTimer > 0 || terrorLevel > 0.7 || proximityAlpha > 0) {
+                    
+                    let finalAlpha = Math.max(this.visibleTimer * 2, proximityAlpha);
+                    if (terrorLevel > 0.7) finalAlpha = Math.max(finalAlpha, (terrorLevel - 0.7) * 3);
+
+                    ctx.save();
+                    ctx.translate(this.x, this.y);
+                    
+                    const shakeAmt = this.state === 'SEARCHING' ? 10 : (this.isFrenzied ? 25 : 5);
+                    const sx = (Math.random() - 0.5) * shakeAmt;
+                    const sy = (Math.random() - 0.5) * shakeAmt;
+                    
+                    ctx.strokeStyle = this.isFrenzied ? `rgba(255, 50, 50, ${finalAlpha})` : `rgba(200, 200, 200, ${finalAlpha})`;
+                    ctx.lineWidth = 2;
+                    
+                    const spokes = 12;
+                    for (let i = 0; i < spokes; i++) {
+                        ctx.beginPath();
+                        const angle = (Math.PI * 2 * i / spokes) + (Math.random() * 0.5);
+                        const len = this.radius * (1.5 + Math.random() * 1.5); 
+                        
+                        const startX = sx + Math.cos(angle) * (this.radius * 0.5);
+                        const startY = sy + Math.sin(angle) * (this.radius * 0.5);
+                        
+                        const endX = sx + Math.cos(angle) * len;
+                        const endY = sy + Math.sin(angle) * len;
+
+                        ctx.moveTo(startX, startY);
+                        ctx.lineTo(startX + (endX-startX)*0.5 + (Math.random()-0.5)*20, startY + (endY-startY)*0.5 + (Math.random()-0.5)*20);
+                        ctx.lineTo(endX, endY);
+                        ctx.stroke();
+                    }
+
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath();
+                    ctx.arc(sx, sy, this.radius, 0, Math.PI*2);
+                    ctx.fill();
+
+                    const angleToPlayer = Math.atan2(player.y - (this.y + sy), player.x - (this.x + sx));
+                    const eyeOffset = 6;
+                    
+                    const leftEyeX = sx + Math.cos(angleToPlayer - 0.5) * eyeOffset;
+                    const leftEyeY = sy + Math.sin(angleToPlayer - 0.5) * eyeOffset;
+                    
+                    const rightEyeX = sx + Math.cos(angleToPlayer + 0.5) * eyeOffset;
+                    const rightEyeY = sy + Math.sin(angleToPlayer + 0.5) * eyeOffset;
+
+                    ctx.shadowBlur = 20;
+                    ctx.shadowColor = '#f00';
+                    ctx.fillStyle = `rgba(255, 0, 0, ${finalAlpha + 0.2})`; 
+                    
+                    const eyeSize = 2 + Math.random() * 2;
+                    ctx.beginPath();
+                    ctx.arc(leftEyeX, leftEyeY, eyeSize, 0, Math.PI*2);
+                    ctx.arc(rightEyeX, rightEyeY, eyeSize, 0, Math.PI*2);
+                    ctx.fill();
+                    
+                    ctx.shadowBlur = 0; 
+
+                    if (this.isFrenzied || proximityAlpha > 0.3) {
+                         ctx.strokeStyle = `rgba(150, 0, 0, ${(finalAlpha) * 0.4})`;
+                         ctx.lineWidth = 1;
+                         ctx.beginPath();
+                         if(this.trail.length > 0) {
+                             ctx.moveTo(this.trail[0].x - this.x, this.trail[0].y - this.y);
+                             for(let t of this.trail) {
+                                 ctx.lineTo((t.x - this.x) + (Math.random()-0.5)*10, (t.y - this.y) + (Math.random()-0.5)*10);
+                             }
+                         }
+                         ctx.stroke();
+                    }
+
+                    ctx.restore();
+                }
+            }
+        }
+
+        let player, monster, rays, scanPoints, walls, wallGrid, exitZone;
+        let heartbeatTimer = 0;
+        let frameCount = 0;
+
+        function checkWallCollision(x, y) {
+            for(let w of walls) {
+                if (x + 5 > w.x && x - 5 < w.x + w.w && y + 5 > w.y && y - 5 < w.y + w.h) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // --- ORGANIC CAVE GENERATION ---
+        function generateLevel(levelNum) {
+            walls = [];
+            const TILE_SIZE = 40;
+            const COLS = Math.ceil(canvas.width / TILE_SIZE);
+            const ROWS = Math.ceil(canvas.height / TILE_SIZE);
+            
+            // Init with noise
+            let grid = [];
+            for(let r=0; r<ROWS; r++) {
+                let row = [];
+                for(let c=0; c<COLS; c++) {
+                    if (r === 0 || r === ROWS-1 || c === 0 || c === COLS-1) row.push(1);
+                    else row.push(Math.random() < 0.45 ? 1 : 0);
+                }
+                grid.push(row);
+            }
+
+            // Cellular Automata smoothing (5 passes)
+            for(let i=0; i<5; i++) {
+                let newGrid = JSON.parse(JSON.stringify(grid));
+                for(let r=1; r<ROWS-1; r++) {
+                    for(let c=1; c<COLS-1; c++) {
+                        let neighbors = 0;
+                        for(let rr=-1; rr<=1; rr++) {
+                            for(let cc=-1; cc<=1; cc++) {
+                                if(rr===0 && cc===0) continue;
+                                neighbors += grid[r+rr][c+cc];
+                            }
+                        }
+                        if (neighbors > 4) newGrid[r][c] = 1;
+                        else if (neighbors < 4) newGrid[r][c] = 0;
+                    }
+                }
+                grid = newGrid;
+            }
+
+            // Path Carving
+            const startR = 3; const startC = 3;
+            const exitR = ROWS - 4; const exitC = COLS - 4;
+            
+            // Ensure areas clear
+            for(let r=startR-2; r<=startR+2; r++) for(let c=startC-2; c<=startC+2; c++) grid[r][c] = 0;
+            for(let r=exitR-2; r<=exitR+2; r++) for(let c=exitC-2; c<=exitC+2; c++) grid[r][c] = 0;
+
+            // Random Walk to guarantee a tunnel
+            let currR = startR, currC = startC;
+            while(currR !== exitR || currC !== exitC) {
+                // Wide tunnel
+                grid[currR][currC] = 0;
+                if(currR+1 < ROWS) grid[currR+1][currC] = 0;
+                if(currC+1 < COLS) grid[currR][currC+1] = 0;
+                
+                if (Math.random() < 0.5) {
+                    if (currR < exitR) currR++; else if (currR > exitR) currR--;
+                } else {
+                    if (currC < exitC) currC++; else if (currC > exitC) currC--;
+                }
+            }
+
+            // Convert to Walls
+            wallGrid = grid; // Store for raycasting
+            for(let r=0; r<ROWS; r++) {
+                for(let c=0; c<COLS; c++) {
+                    if(grid[r][c] === 1) {
+                        walls.push({
+                            x: c * TILE_SIZE,
+                            y: r * TILE_SIZE,
+                            w: TILE_SIZE,
+                            h: TILE_SIZE
+                        });
+                    }
+                }
+            }
+
+            player = new Player(startC * TILE_SIZE + 20, startR * TILE_SIZE + 20);
+            monster = new Monster(exitC * TILE_SIZE, exitR * TILE_SIZE);
+            exitZone = { x: exitC * TILE_SIZE, y: exitR * TILE_SIZE, w: TILE_SIZE * 2, h: TILE_SIZE * 2 };
+            rays = [];
+            scanPoints = [];
+        }
+
+        function endGame() {
+            gameState = 'GAMEOVER';
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            document.getElementById('sound-meter-container').classList.add('hidden');
+            audio.playMonsterScreech(monster.x, monster.y);
+            globalShake = 50;
+        }
+
+        function loop(timestamp) {
+            if (gameState !== 'PLAYING') {
+                if (gameState !== 'MENU') requestAnimationFrame(loop);
+                return;
+            }
+
+            const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+            lastTime = timestamp;
+            frameCount++;
+
+            if (globalShake > 0) globalShake *= 0.9;
+            if (globalShake < 0.5) globalShake = 0;
+
+            if (terrorLevel > 0.6) {
+                ctx.fillStyle = `rgba(0, 0, 0, 0.8)`; 
+            } else {
+                ctx.fillStyle = '#020202';
+            }
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            let shakeX = (Math.random()-0.5)*globalShake;
+            let shakeY = (Math.random()-0.5)*globalShake;
+            if (terrorLevel > 0.5 && Math.random() < terrorLevel * 0.2) {
+                shakeX += (Math.random() - 0.5) * 50;
+                if (Math.random() < 0.3) ctx.scale(1, 1 + (Math.random()*0.1));
+            }
+            ctx.translate(shakeX, shakeY);
+
+            player.update(dt);
+            
+            playerNoise = Math.max(0, playerNoise - dt * 0.3);
+            
+            meterBar.style.height = (playerNoise * 100) + '%';
+            if (playerNoise > NOISE_THRESHOLD) {
+                meterBar.style.backgroundColor = 'var(--danger)';
+                meterBar.style.boxShadow = '0 0 25px var(--danger)'; 
+                monster.state = 'CHASE';
+                monster.isFrenzied = true;
+                monster.visibleTimer = 0.1; 
+                globalShake = Math.max(globalShake, 10);
+            } else {
+                if (monster.isFrenzied) {
+                    monster.isFrenzied = false;
+                    monster.state = 'SEARCHING';
+                    monster.searchTimer = 1.5; 
+                }
+                if (playerNoise > 0.4) {
+                    meterBar.style.backgroundColor = 'var(--warning)';
+                    meterBar.style.boxShadow = '0 0 10px var(--warning)';
+                } else if (!player.isMoving && playerNoise <= NOISE_THRESHOLD) {
+                    meterBar.style.backgroundColor = 'var(--stealth)';
+                    meterBar.style.boxShadow = '0 0 10px var(--stealth)';
+                } else {
+                    meterBar.style.backgroundColor = 'var(--phosphor)';
+                    meterBar.style.boxShadow = '0 0 10px var(--phosphor)';
+                }
+            }
+
+            const distToMonster = monster.update(dt, player);
+            clickedThisFrame = false;
+
+            let targetTerror = 0;
+            if (distToMonster < 400) targetTerror = 1 - (distToMonster / 400);
+            terrorLevel += (targetTerror - terrorLevel) * dt * 2; 
+            
+            const baseVignette = "radial-gradient(circle, rgba(0,0,0,0) 50%, rgba(0,0,0,0.95) 100%)";
+            const terrorVignette = `radial-gradient(circle, rgba(50,0,0,0.1) ${20 - terrorLevel*15}%, rgba(0,0,0,0.99) ${70 - terrorLevel*50}%)`;
+            vignette.style.background = terrorLevel > 0.2 ? terrorVignette : baseVignette;
+
+            if (terrorLevel > 0) {
+                heartbeatTimer -= dt;
+                const interval = 1.2 - (terrorLevel * 0.9);
+                if (heartbeatTimer <= 0) {
+                    audio.playHeartbeat(terrorLevel);
+                    heartbeatTimer = interval;
+                    globalShake += terrorLevel * 2;
+                }
+                if (terrorLevel > 0.5 && Math.random() < 0.005) {
+                    audio.playWhisper(player.x + (Math.random()-0.5)*200, player.y + (Math.random()-0.5)*200);
+                }
+                if (terrorLevel > 0.7 && Math.random() < 0.01) {
+                    audio.playFootstep(player.x + (Math.random()-0.5)*200, player.y + (Math.random()-0.5)*200, false);
+                }
+            }
+
+            if (terrorLevel > 0.6 && Math.random() < terrorLevel * 0.1) {
+                ctx.translate((Math.random()-0.5)*30, (Math.random()-0.5)*5); 
+            }
+
+            // Process Rays
+            for (let i = rays.length - 1; i >= 0; i--) {
+                const r = rays[i];
+                r.update(dt);
+                if (!r.active) {
+                    rays.splice(i, 1);
+                    continue;
+                }
+                r.draw(ctx);
+            }
+
+            // Draw Scan Points (The "LIDAR" paint)
+            for (let i = scanPoints.length - 1; i >= 0; i--) {
+                const sp = scanPoints[i];
+                sp.life -= dt;
+                if (sp.life <= 0) {
+                    scanPoints.splice(i, 1);
+                    continue;
+                }
+                sp.draw(ctx);
+            }
+
+            // Draw Exit Zone (Only visible via proximity or sound)
+            const distToExit = Math.hypot(player.x - exitZone.x, player.y - exitZone.y);
+            let exitAlpha = distToExit < 150 ? (150 - distToExit)/150 : 0;
+            // Also reveal if scan points are near
+            for(let sp of scanPoints) {
+                if (Math.hypot(sp.x - (exitZone.x+exitZone.w/2), sp.y - (exitZone.y+exitZone.h/2)) < 80) exitAlpha = Math.max(exitAlpha, sp.life/3);
+            }
+
+            if (exitAlpha > 0) {
+                // Flickering Exit Light Logic
+                // Mostly on (1.0), sometimes dims (0.2), rarely flickers out (0.0)
+                const time = Date.now() / 50;
+                let flicker = 1.0;
+                if (Math.sin(time) > 0.95) flicker = 0.2; // Rhythmic dim
+                if (Math.random() > 0.92) flicker = 0.0; // Random spark out
+
+                ctx.save();
+                
+                // Green Neon Glow
+                ctx.shadowBlur = 40 * exitAlpha * flicker;
+                ctx.shadowColor = `rgba(0, 255, 100, ${exitAlpha})`;
+
+                // Border
+                ctx.strokeStyle = `rgba(100, 255, 150, ${exitAlpha * flicker})`;
+                ctx.lineWidth = 2;
+                ctx.strokeRect(exitZone.x, exitZone.y, exitZone.w, exitZone.h);
+                
+                // Inner Fill (faint)
+                ctx.fillStyle = `rgba(0, 255, 100, ${exitAlpha * 0.1 * flicker})`;
+                ctx.fillRect(exitZone.x, exitZone.y, exitZone.w, exitZone.h);
+
+                // Text
+                ctx.fillStyle = `rgba(220, 255, 220, ${exitAlpha * flicker})`;
+                ctx.font = 'bold 24px VT323'; // Slightly larger
+                ctx.fillText("EXIT", exitZone.x + 20, exitZone.y + 45);
+                
+                ctx.restore();
+                
+                if (player.x > exitZone.x && player.x < exitZone.x + exitZone.w &&
+                    player.y > exitZone.y && player.y < exitZone.y + exitZone.h) {
+                    
+                    currentLevel++;
+                    if(currentLevel > 3) {
+                        gameState = 'VICTORY';
+                        document.getElementById('victory-screen').classList.remove('hidden');
+                        document.getElementById('sound-meter-container').classList.add('hidden');
+                    } else {
+                        document.getElementById('level-indicator').innerText = `DEPTH: ${currentLevel}`;
+                        generateLevel(currentLevel);
+                        waves = [];
+                    }
+                }
+            }
+
+            player.draw(ctx);
+            monster.draw(ctx);
+
+            ctx.restore();
+
+            requestAnimationFrame(loop);
+        }
+
+        document.getElementById('start-btn').addEventListener('click', () => {
+            audio.init();
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('level-indicator').classList.remove('hidden');
+            document.getElementById('sound-meter-container').classList.remove('hidden');
+            gameState = 'PLAYING';
+            generateLevel(1);
+            lastTime = performance.now();
+            requestAnimationFrame(loop);
+        });
+
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            audio.init(); 
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('sound-meter-container').classList.remove('hidden');
+            gameState = 'PLAYING';
+            generateLevel(1);
+            currentLevel = 1;
+            terrorLevel = 0;
+            playerNoise = 0;
+        });
+
+        document.getElementById('replay-btn').addEventListener('click', () => {
+            audio.init(); 
+            document.getElementById('victory-screen').classList.add('hidden');
+            document.getElementById('sound-meter-container').classList.remove('hidden');
+            gameState = 'PLAYING';
+            generateLevel(1);
+            currentLevel = 1;
+            terrorLevel = 0;
+            playerNoise = 0;
+        });
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Symbiosis: The Mycelium Network</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;600&display=swap');
+
+        body {
+            font-family: 'Quicksand', sans-serif;
+            overflow: hidden;
+            background-color: #050405;
+            color: #e2e8f0;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            cursor: grab;
+        }
+        #game-canvas:active {
+            cursor: grabbing;
+        }
+
+        .glass-panel {
+            background: rgba(18, 14, 20, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            pointer-events: auto;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        .resource-icon { filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.4)); }
+        
+        button { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        button:active { transform: scale(0.96); }
+
+        .tooltip {
+            visibility: hidden;
+            opacity: 0;
+            transform: translateY(10px) translateX(-50%);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        .has-tooltip:hover .tooltip {
+            visibility: visible;
+            opacity: 1;
+            transform: translateY(0) translateX(-50%);
+        }
+
+        .completed-step { color: #34d399; text-decoration: line-through; opacity: 0.6; }
+        .check-anim { transition: all 0.5s ease; }
+        
+        /* Relic Pulse */
+        @keyframes pulse-gold {
+            0% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(251, 191, 36, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Top Bar -->
+    <div class="absolute top-0 left-0 w-full p-6 z-10 pointer-events-none flex justify-center">
+        <div class="glass-panel px-10 py-5 flex gap-12 pointer-events-auto items-center">
+            <div class="text-center group relative has-tooltip cursor-help">
+                <div class="text-[10px] text-gray-500 uppercase tracking-[0.25em] mb-1 font-bold">Carbon</div>
+                <div class="text-3xl font-light text-white flex items-center justify-center gap-3">
+                    <i class="fas fa-seedling text-white resource-icon text-xl"></i>
+                    <span id="res-carbon" class="tracking-widest">0</span>
+                </div>
+            </div>
+
+            <div class="text-center group relative has-tooltip cursor-help">
+                <div class="text-[10px] text-gray-500 uppercase tracking-[0.25em] mb-1 font-bold">Minerals</div>
+                <div class="text-3xl font-light text-purple-300 flex items-center justify-center gap-3">
+                    <i class="fas fa-gem text-purple-400 resource-icon text-xl"></i>
+                    <span id="res-minerals" class="tracking-widest">0</span>
+                </div>
+            </div>
+
+            <div class="text-center group relative has-tooltip cursor-help">
+                <div class="text-[10px] text-gray-500 uppercase tracking-[0.25em] mb-1 font-bold">Water</div>
+                <div class="text-3xl font-light text-cyan-300 flex items-center justify-center gap-3">
+                    <i class="fas fa-tint text-cyan-400 resource-icon text-xl"></i>
+                    <span id="res-water" class="tracking-widest">0</span>
+                </div>
+            </div>
+            
+            <!-- Weather Status -->
+            <div id="weather-display" class="hidden flex items-center gap-2 px-4 py-2 bg-white/5 rounded-full border border-white/10 animate-pulse">
+                <i id="weather-icon" class="fas fa-cloud-rain text-cyan-400"></i>
+                <span id="weather-text" class="text-xs font-bold text-gray-200 tracking-wider">RAIN</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Buffs Panel -->
+    <div class="absolute top-28 right-6 z-10 w-64 pointer-events-none">
+        <div id="buffs-panel" class="glass-panel p-4 pointer-events-auto border-r-4 border-amber-500/50 hidden">
+            <h3 class="text-xs font-bold mb-3 text-amber-400 uppercase tracking-widest flex justify-between">
+                <span>Ancient Runes</span>
+                <i class="fas fa-star"></i>
+            </h3>
+            <ul id="active-buffs" class="space-y-2 text-[10px] font-mono text-gray-300">
+                <!-- Buffs injected here -->
+            </ul>
+        </div>
+    </div>
+
+    <!-- Tutorial / Mission Log -->
+    <div id="tutorial-panel" class="absolute top-28 left-6 z-10 w-72 pointer-events-none opacity-0 transition-opacity duration-1000">
+        <div class="glass-panel p-6 pointer-events-auto border-l-4 border-emerald-500/50">
+            <h3 class="text-xs font-bold mb-4 text-emerald-400 uppercase tracking-widest flex justify-between">
+                <span>Mission Log</span>
+                <i class="fas fa-clipboard-list"></i>
+            </h3>
+            <ul class="space-y-3 text-xs font-mono text-gray-300">
+                <li id="step-nav" class="flex items-center gap-3 check-anim p-1 rounded hover:bg-white/5">
+                    <i class="far fa-circle text-gray-500"></i> <span>Drag to Pan</span>
+                </li>
+                <li id="step-res" class="flex items-center gap-3 check-anim p-1 rounded hover:bg-white/5">
+                    <i class="far fa-circle text-gray-500"></i> <span>Connect Resource</span>
+                </li>
+                <li id="step-tree" class="flex items-center gap-3 check-anim p-1 rounded hover:bg-white/5">
+                    <i class="far fa-circle text-gray-500"></i> <span>Connect Tree</span>
+                </li>
+                <li id="step-trade" class="flex items-center gap-3 check-anim p-1 rounded hover:bg-white/5">
+                    <i class="far fa-circle text-gray-500"></i> <span>Receive Carbon Trade</span>
+                </li>
+                <li id="step-wisp" class="flex items-center gap-3 check-anim p-1 rounded hover:bg-white/5">
+                    <i class="far fa-circle text-gray-500"></i> <span>Catch a Golden Wisp</span>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="absolute bottom-8 right-8 z-10 pointer-events-none">
+        <div class="glass-panel p-6 pointer-events-auto w-80">
+            <div class="flex justify-between items-center mb-6 border-b border-gray-700/50 pb-4">
+                <h3 class="font-bold text-gray-100 tracking-widest text-xs uppercase">Evolutionary Traits</h3>
+                <span class="text-[10px] text-emerald-400 bg-emerald-950/50 border border-emerald-900 px-3 py-1 rounded-full font-mono">GEN <span id="gen-display">1</span></span>
+            </div>
+            
+            <div class="space-y-4">
+                <button id="btn-grow-range" class="w-full bg-white/5 hover:bg-white/10 active:bg-white/5 border border-white/5 hover:border-white/20 rounded-xl px-5 py-4 text-left relative overflow-hidden group">
+                    <div class="flex justify-between items-center relative z-10">
+                        <span class="text-sm font-semibold text-gray-200">Hyphal Reach <span id="lvl-reach" class="text-[9px] bg-gray-700 px-1 rounded ml-1">L1</span></span>
+                        <span class="text-xs font-bold text-emerald-400 font-mono" id="cost-range">10 C</span>
+                    </div>
+                    <div class="text-[11px] text-gray-500 mt-1 group-hover:text-gray-400 transition-colors">Extends connection distance</div>
+                    <div class="absolute bottom-0 left-0 h-1 bg-emerald-500/50 w-0 transition-all duration-500 group-hover:w-full"></div>
+                </button>
+
+                <button id="btn-absorption" class="w-full bg-white/5 hover:bg-white/10 active:bg-white/5 border border-white/5 hover:border-white/20 rounded-xl px-5 py-4 text-left relative overflow-hidden group">
+                    <div class="flex justify-between items-center relative z-10">
+                        <span class="text-sm font-semibold text-gray-200">Enzymes <span id="lvl-speed" class="text-[9px] bg-gray-700 px-1 rounded ml-1">L1</span></span>
+                        <span class="text-xs font-bold text-emerald-400 font-mono" id="cost-absorption">25 C</span>
+                    </div>
+                    <div class="text-[11px] text-gray-500 mt-1 group-hover:text-gray-400 transition-colors">Increases gathering speed</div>
+                    <div class="absolute bottom-0 left-0 h-1 bg-purple-500/50 w-0 transition-all duration-500 group-hover:w-full"></div>
+                </button>
+
+                 <button id="btn-trade" class="w-full bg-white/5 hover:bg-white/10 active:bg-white/5 border border-white/5 hover:border-white/20 rounded-xl px-5 py-4 text-left relative overflow-hidden group">
+                    <div class="flex justify-between items-center relative z-10">
+                        <span class="text-sm font-semibold text-gray-200">Symbiosis <span id="lvl-trade" class="text-[9px] bg-gray-700 px-1 rounded ml-1">L1</span></span>
+                        <span class="text-xs font-bold text-emerald-400 font-mono" id="cost-trade">50 C</span>
+                    </div>
+                    <div class="text-[11px] text-gray-500 mt-1 group-hover:text-gray-400 transition-colors">Improves trade efficiency</div>
+                    <div class="absolute bottom-0 left-0 h-1 bg-blue-500/50 w-0 transition-all duration-500 group-hover:w-full"></div>
+                </button>
+            </div>
+            
+            <div class="mt-6 pt-4 border-t border-gray-700/50 flex justify-between px-1">
+                 <button id="save-btn" class="text-[10px] text-gray-500 hover:text-emerald-400 flex items-center gap-2 font-bold tracking-wider"><i class="fas fa-save"></i> SAVE</button>
+                 <button id="toggle-sound" class="text-[10px] text-gray-500 hover:text-emerald-400 flex items-center gap-2 font-bold tracking-wider"><i class="fas fa-volume-up"></i> SOUND</button>
+                 <button id="reset-btn" class="text-[10px] text-gray-500 hover:text-red-400 flex items-center gap-2 font-bold tracking-wider"><i class="fas fa-trash"></i> RESET</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Log -->
+    <div class="absolute bottom-8 left-8 z-10 w-80 pointer-events-none hidden md:block">
+        <div class="glass-panel p-6 pointer-events-auto">
+            <h2 class="text-xs font-bold mb-3 text-emerald-500/80 uppercase tracking-widest border-b border-gray-700/50 pb-2">Mycelial Consciousness</h2>
+            <div id="log-container" class="h-32 overflow-hidden text-xs text-gray-400 space-y-2 font-mono relative leading-relaxed">
+                <div class="absolute bottom-0 w-full h-12 bg-gradient-to-t from-[rgba(18,14,20,0.9)] to-transparent pointer-events-none"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Intro -->
+    <div id="intro-modal" class="fixed inset-0 bg-black/95 z-50 flex items-center justify-center backdrop-blur-md transition-opacity duration-1000">
+        <div class="max-w-2xl p-12 glass-panel text-center border border-emerald-500/20 shadow-[0_0_100px_rgba(16,185,129,0.1)]">
+            <h1 class="text-6xl font-extralight text-emerald-400 mb-2 tracking-tighter">Symbiosis</h1>
+            <div class="text-xs text-emerald-700 uppercase tracking-[0.6em] mb-10 pl-2">The Mycelium Network</div>
+            
+            <div class="text-gray-400 mb-10 leading-relaxed space-y-6 text-sm font-light text-left mx-auto max-w-lg">
+                <p>You are the hidden intelligence of the forest.</p>
+                <div class="grid grid-cols-2 gap-6 bg-black/30 p-6 rounded-2xl border border-white/5">
+                    <div>
+                        <div class="text-emerald-400 font-bold mb-1">Explore</div>
+                        <div class="text-xs text-gray-500">The world is shrouded in fog. Discover Ancient Runes.</div>
+                    </div>
+                    <div>
+                        <div class="text-amber-400 font-bold mb-1">Weather</div>
+                        <div class="text-xs text-gray-500">Adapt to Rain and Spore Storms for big gains.</div>
+                    </div>
+                    <div>
+                        <div class="text-white font-bold mb-1">Wisps</div>
+                        <div class="text-xs text-gray-500">Catch elusive Golden Wisps for resources.</div>
+                    </div>
+                    <div>
+                        <div class="text-purple-400 font-bold mb-1">Evolve</div>
+                        <div class="text-xs text-gray-500">Nurture trees. Harvest fruit. Expand.</div>
+                    </div>
+                </div>
+            </div>
+            
+            <button id="start-btn" class="group relative px-10 py-4 bg-emerald-900/20 hover:bg-emerald-800/30 text-emerald-100 rounded-full transition-all duration-500 overflow-hidden border border-emerald-500/30 hover:border-emerald-400/50 hover:shadow-[0_0_30px_rgba(16,185,129,0.3)]">
+                <div class="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-emerald-400/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+                <span class="relative tracking-[0.2em] uppercase text-xs font-bold">Awaken</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+
+        // --- Audio Engine ---
+        class SoundManager {
+            constructor() {
+                this.ctx = null; this.masterGain = null; this.isMuted = false; this.initialized = false;
+                this.scale = [196.00, 261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33]; 
+            }
+            init() {
+                if (this.initialized) return;
+                const AC = window.AudioContext || window.webkitAudioContext;
+                this.ctx = new AC();
+                this.masterGain = this.ctx.createGain();
+                this.masterGain.gain.value = 0.25;
+                this.masterGain.connect(this.ctx.destination);
+                this.startDrone();
+                this.initialized = true;
+            }
+            startDrone() {
+                [55, 55.5, 110, 110.8].forEach(f => {
+                    const osc = this.ctx.createOscillator(); const g = this.ctx.createGain();
+                    osc.type = 'sine'; osc.frequency.value = f; g.gain.value = 0.04;
+                    osc.connect(g).connect(this.masterGain); osc.start();
+                    const lfo = this.ctx.createOscillator(); lfo.frequency.value = 0.1;
+                    const lfoG = this.ctx.createGain(); lfoG.gain.value = 2;
+                    lfo.connect(lfoG).connect(osc.frequency); lfo.start();
+                });
+            }
+            playChime(type) {
+                if (!this.ctx || this.isMuted) return;
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+                const osc = this.ctx.createOscillator(); const g = this.ctx.createGain();
+                let idx = Math.floor(Math.random() * this.scale.length);
+                if(type === 'low') idx = Math.floor(idx / 2); if(type === 'high') idx = Math.min(this.scale.length-1, idx + 3);
+                osc.frequency.value = this.scale[idx]; osc.type = 'triangle';
+                const t = this.ctx.currentTime;
+                g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.1, t + 0.1); g.gain.exponentialRampToValueAtTime(0.001, t + 4);
+                const panner = this.ctx.createStereoPanner(); panner.pan.value = (Math.random() * 2) - 1;
+                osc.connect(g).connect(panner).connect(this.masterGain); osc.start(t); osc.stop(t + 5);
+            }
+            playPop() {
+                if (!this.ctx || this.isMuted) return;
+                const osc = this.ctx.createOscillator(); const g = this.ctx.createGain();
+                osc.frequency.value = 600 + Math.random()*200; osc.type = 'sine';
+                g.gain.value = 0.05; osc.connect(g).connect(this.masterGain);
+                osc.start(); g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15); osc.stop(this.ctx.currentTime + 0.2);
+            }
+             playUpgrade() {
+                if (!this.ctx || this.isMuted) return;
+                const t = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator(); const g = this.ctx.createGain();
+                osc.frequency.setValueAtTime(200, t); osc.frequency.exponentialRampToValueAtTime(800, t+0.5);
+                g.gain.setValueAtTime(0.1, t); g.gain.linearRampToValueAtTime(0, t+0.5);
+                osc.connect(g).connect(this.masterGain); osc.start(t); osc.stop(t+0.5);
+            }
+            toggleMute() {
+                this.isMuted = !this.isMuted;
+                if(this.masterGain) this.masterGain.gain.setTargetAtTime(this.isMuted ? 0 : 0.25, this.ctx.currentTime, 0.5);
+                return this.isMuted;
+            }
+        }
+        const audio = new SoundManager();
+
+        // --- Config ---
+        const WORLD_W = 5000;
+        const WORLD_H = 5000;
+        
+        const COLORS = {
+            BG: '#050405',
+            FOG: '#000000',
+            SPORE: { hex: '#ffffff', rgb: '255,255,255' },
+            MINERAL: { hex: '#c084fc', rgb: '192,132,252' },
+            WATER: { hex: '#22d3ee', rgb: '34,211,238' },
+            TREE: { hex: '#fbbf24', rgb: '251,191,36' },
+            RELIC: { hex: '#f472b6', rgb: '244,114,182' }, // Pink
+            LINE_GROW: '#10b981',
+            LINE_DONE: 'rgba(255,255,255,0.1)'
+        };
+
+        const RELIC_TYPES = [
+            { name: "Emerald Heart", desc: "Tree Fruit grows 2x faster", id: 'fruit_spd' },
+            { name: "Abyssal Tear", desc: "Water gathering +50%", id: 'water_boost' },
+            { name: "Obsidian Shard", desc: "Mineral gathering +50%", id: 'min_boost' },
+            { name: "Starlight Map", desc: "Connection Cost -30%", id: 'cost_red' },
+            { name: "Spore Crown", desc: "Reach +150", id: 'reach_boost' }
+        ];
+
+        // --- State ---
+        const state = {
+            res: { c: 40, m: 0, w: 0 },
+            stats: { reach: 300, speed: 1, trade: 1, levels: {reach:1, speed:1, trade:1} }, 
+            costs: { reach: 10, speed: 25, trade: 50 },
+            nodes: [],
+            conns: [],
+            shockwaves: [],
+            wisps: [],
+            relicsFound: [],
+            weather: { type: 'clear', timer: 0 }, // clear, rain, storm
+            cam: { x: 0, y: 0, z: 1, tx: 0, ty: 0, tz: 1 },
+            mouse: { x: 0, y: 0, down: false, lx: 0, ly: 0 },
+            tick: 0,
+            time: 0,
+            tut: { nav: false, res: false, tree: false, trade: false, wisp: false, active: true }
+        };
+
+        // --- Pooling ---
+        const particles = {
+            pool: Array(600).fill().map(() => ({ active: false, x:0, y:0, vx:0, vy:0, life:0, color:'#fff', type:'dot', text:'' })),
+            spawn(x, y, color, type='dot', text='') {
+                const p = this.pool.find(i => !i.active) || this.pool[0];
+                p.active = true; p.x = x; p.y = y; p.color = color; p.type = type; p.text = text;
+                p.life = 1.0;
+                if(type === 'dot') {
+                    const ang = Math.random()*Math.PI*2;
+                    const spd = Math.random()*2;
+                    p.vx = Math.cos(ang)*spd; p.vy = Math.sin(ang)*spd;
+                    p.size = Math.random()*2+1;
+                } else if(type === 'rain') {
+                    p.vx = -1; p.vy = 10 + Math.random()*5; p.life = 0.5 + Math.random()*0.5; p.size = 20; // Size is len
+                } else {
+                    p.vx = 0; p.vy = -0.5;
+                }
+            },
+            update(ctx) {
+                for(let p of this.pool) {
+                    if(!p.active) continue;
+                    
+                    if(p.type === 'rain') {
+                        p.x += p.vx; p.y += p.vy;
+                        p.life -= 0.01;
+                        if(p.y > WORLD_H || p.life<=0) p.active = false;
+                        ctx.strokeStyle = 'rgba(34,211,238,0.3)';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x-2, p.y+15); ctx.stroke();
+                        continue;
+                    }
+
+                    p.life -= 0.015;
+                    p.x += p.vx; p.y += p.vy;
+                    if(p.life <= 0) { p.active = false; continue; }
+                    
+                    if(p.type === 'dot') {
+                        ctx.globalAlpha = p.life;
+                        ctx.fillStyle = p.color;
+                        ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+                    } else {
+                        ctx.globalAlpha = Math.min(1, p.life*2);
+                        ctx.fillStyle = p.color;
+                        ctx.font = 'bold 14px Quicksand';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(p.text, p.x, p.y);
+                    }
+                }
+                ctx.globalAlpha = 1;
+            }
+        };
+
+        // --- Game Entities ---
+        class Node {
+            constructor(x, y, type) {
+                this.x = x; this.y = y; this.type = type;
+                this.connected = false; this.discovered = false;
+                this.baseSize = type==='tree'?24:(type==='spore'?12:(type==='relic'?18:9));
+                this.seed = Math.random()*100;
+                this.tradeCount = 0;
+                this.fruit = 0; this.hasFruit = false;
+                
+                if(type === 'relic') {
+                    // Assign random unpicked relic
+                    const idx = Math.floor(Math.random()*RELIC_TYPES.length);
+                    this.relicData = RELIC_TYPES[idx]; // Note: duplicates possible in code but rare spawn
+                }
+            }
+            
+            draw(ctx, t) {
+                if(!this.discovered) return;
+                
+                const speedMult = this.type === 'spore' ? 1 : (state.stats.levels.speed * 0.5 + 0.5);
+                const pulse = Math.sin(t*0.003*speedMult + this.seed) * 2;
+                let sizeMod = 1;
+                if(this.type === 'tree') sizeMod = 1 + (state.stats.levels.trade * 0.1);
+                const growth = Math.min(15, this.tradeCount * 0.5);
+                const size = (this.baseSize + growth + pulse) * sizeMod;
+
+                ctx.translate(this.x, this.y);
+                
+                if(this.type === 'relic') {
+                    ctx.rotate(t*0.01);
+                    ctx.beginPath();
+                    ctx.rect(-size/2, -size/2, size, size);
+                    ctx.rotate(-t*0.01);
+                } else {
+                    ctx.beginPath();
+                    const segments = 12;
+                    for(let i=0; i<=segments; i++) {
+                        const ang = (i/segments)*Math.PI*2;
+                        const rad = size + Math.sin(ang*3 + t*0.005 + this.seed)*2;
+                        const px = Math.cos(ang)*rad; const py = Math.sin(ang)*rad;
+                        if(i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                    }
+                }
+                ctx.closePath();
+                ctx.translate(-this.x, -this.y);
+
+                let c = COLORS.SPORE;
+                if(this.type==='mineral') c = COLORS.MINERAL;
+                if(this.type==='water') c = COLORS.WATER;
+                if(this.type==='tree') c = COLORS.TREE;
+                if(this.type==='relic') c = COLORS.RELIC;
+
+                if(this.connected) {
+                    const glowSize = this.type === 'spore' ? (3 + state.stats.levels.reach * 0.5) : 2.5;
+                    const g = ctx.createRadialGradient(this.x, this.y, size*0.5, this.x, this.y, size*glowSize);
+                    g.addColorStop(0, `rgba(${c.rgb}, 0.6)`);
+                    g.addColorStop(1, 'rgba(0,0,0,0)');
+                    ctx.fillStyle = g;
+                    ctx.fill();
+                } else {
+                    ctx.fillStyle = `rgba(${c.rgb}, 0.1)`;
+                    ctx.fill();
+                }
+
+                ctx.fillStyle = c.hex;
+                // Reuse path? No, simpler to redraw core
+                ctx.beginPath();
+                if(this.type === 'relic') {
+                    ctx.rect(this.x-size*0.3, this.y-size*0.3, size*0.6, size*0.6);
+                } else {
+                    ctx.arc(this.x, this.y, size*0.4, 0, Math.PI*2);
+                }
+                ctx.fill();
+
+                if(this.type === 'tree' && this.connected) {
+                    ctx.strokeStyle = c.hex; ctx.lineWidth = 1; ctx.globalAlpha = 0.3;
+                    const rings = 1 + Math.floor(this.tradeCount/20);
+                    for(let r=0; r<Math.min(5, rings); r++) {
+                        ctx.beginPath(); ctx.arc(this.x, this.y, size + 5 + (r*4), 0, Math.PI*2); ctx.stroke();
+                    }
+                    ctx.globalAlpha = 1;
+                    if(this.hasFruit) {
+                        const fx = this.x + Math.cos(t*0.05)* (size+10);
+                        const fy = this.y + Math.sin(t*0.05)* (size+10);
+                        ctx.shadowColor = '#fff'; ctx.shadowBlur = 10; ctx.fillStyle = '#fff';
+                        ctx.beginPath(); ctx.arc(fx, fy, 4 + Math.sin(t*0.1)*2, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
+                    }
+                }
+            }
+        }
+
+        class Conn {
+            constructor(a, b) {
+                this.a = a; this.b = b; this.prog = 0; this.pkts = [];
+                this.cpX = (a.x+b.x)/2 + (Math.random()-0.5)*50; 
+                this.cpY = (a.y+b.y)/2 + (Math.random()-0.5)*50;
+            }
+            update() {
+                if(this.prog < 1) {
+                    this.prog += 0.02;
+                    if(this.prog >= 1) {
+                        this.prog = 1;
+                        if(!this.b.connected) {
+                            this.b.connected = true;
+                            // Buff logic
+                            if(this.b.type === 'relic') {
+                                activateRelic(this.b.relicData);
+                            }
+                            
+                            // Updated discovery radius to 350, + bonus from relics?
+                            const radius = 350 + (hasRelic('reach_boost') ? 150 : 0);
+                            state.nodes.forEach(n => {
+                                if(Math.hypot(n.x-this.b.x, n.y-this.b.y) < radius) n.discovered = true;
+                            });
+                            audio.playChime(this.b.type==='tree'?'low':'mid');
+                            for(let i=0;i<8;i++) particles.spawn(this.b.x, this.b.y, COLORS.SPORE.hex);
+                            checkTutorial('connect', this.b.type);
+                        }
+                    }
+                }
+                this.pkts = this.pkts.filter(p => {
+                    p.t += 0.015 * state.stats.speed; 
+                    return p.t < 1;
+                });
+            }
+            send(type) { if(this.prog >= 1) this.pkts.push({t:0, type}); }
+            draw(ctx) {
+                if(this.prog <= 0) return;
+                const ex = this.a.x + (this.b.x - this.a.x)*this.prog;
+                const ey = this.a.y + (this.b.y - this.a.y)*this.prog;
+                const ecpx = this.a.x + (this.cpX - this.a.x)*this.prog;
+                const ecpy = this.a.y + (this.cpY - this.a.y)*this.prog;
+
+                ctx.beginPath(); ctx.moveTo(this.a.x, this.a.y); ctx.quadraticCurveTo(ecpx, ecpy, ex, ey);
+                ctx.strokeStyle = this.prog<1 ? COLORS.LINE_GROW : COLORS.LINE_DONE;
+                const thickness = (this.prog<1 ? 3 : 1.5) + (state.stats.levels.reach * 0.2); 
+                ctx.lineWidth = thickness; ctx.lineCap = 'round'; ctx.stroke();
+
+                this.pkts.forEach(p => {
+                    const it = 1-p.t;
+                    const x = it*it*this.a.x + 2*it*p.t*this.cpX + p.t*p.t*this.b.x;
+                    const y = it*it*this.a.y + 2*it*p.t*this.cpY + p.t*p.t*this.b.y;
+                    ctx.fillStyle = p.type === 'min' ? COLORS.MINERAL.hex : COLORS.WATER.hex;
+                    ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 10;
+                    ctx.beginPath(); ctx.arc(x, y, 2 + state.stats.levels.speed * 0.5, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
+                });
+            }
+        }
+
+        class Wisp {
+            constructor() {
+                // Spawn within range of spore for visibility
+                const ang = Math.random()*Math.PI*2;
+                const dist = 300 + Math.random()*600;
+                this.x = state.nodes[0].x + Math.cos(ang)*dist;
+                this.y = state.nodes[0].y + Math.sin(ang)*dist;
+                this.vx = (Math.random()-0.5)*1; this.vy = (Math.random()-0.5)*1;
+                this.life = 1500; // frames
+            }
+            update() {
+                this.x += this.vx; this.y += this.vy;
+                this.life--;
+                if(this.life % 20 === 0) particles.spawn(this.x, this.y, '#fcd34d', 'dot');
+                return this.life > 0;
+            }
+            draw(ctx, t) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.fillStyle = '#fbbf24';
+                ctx.shadowColor = '#fbbf24'; ctx.shadowBlur = 20;
+                ctx.beginPath(); ctx.arc(0, 0, 5 + Math.sin(t*0.1)*2, 0, Math.PI*2); ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        class Shockwave {
+            constructor(x, y) { this.x = x; this.y = y; this.r = 0; this.alpha = 1; }
+            update(ctx) {
+                this.r += 15; this.alpha -= 0.02;
+                if(this.alpha > 0) {
+                    ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
+                    ctx.strokeStyle = `rgba(16, 185, 129, ${this.alpha})`; ctx.lineWidth = 5; ctx.stroke();
+                }
+                return this.alpha > 0;
+            }
+        }
+
+        // --- Core ---
+        function init() {
+            window.addEventListener('resize', resize);
+            resize();
+            
+            canvas.addEventListener('mousedown', e => {
+                state.mouse.down = true; state.mouse.lx = e.clientX; state.mouse.ly = e.clientY;
+                checkClick(e.clientX, e.clientY);
+            });
+            window.addEventListener('mousemove', e => {
+                state.mouse.x = e.clientX; state.mouse.y = e.clientY;
+                if(state.mouse.down) {
+                    state.cam.tx += (state.mouse.lx - e.clientX)/state.cam.z;
+                    state.cam.ty += (state.mouse.ly - e.clientY)/state.cam.z;
+                    state.mouse.lx = e.clientX; state.mouse.ly = e.clientY;
+                    checkTutorial('nav');
+                }
+            });
+            window.addEventListener('mouseup', () => state.mouse.down = false);
+            canvas.addEventListener('wheel', e => {
+                e.preventDefault(); const d = e.deltaY * 0.001;
+                state.cam.tz = Math.max(0.3, Math.min(3, state.cam.tz - d));
+                checkTutorial('nav');
+            }, {passive:false});
+            
+            canvas.addEventListener('touchstart', e => {
+                state.mouse.down = true; state.mouse.lx = e.touches[0].clientX; state.mouse.ly = e.touches[0].clientY;
+                checkClick(e.touches[0].clientX, e.touches[0].clientY);
+            }, {passive:false});
+            canvas.addEventListener('touchmove', e => {
+                e.preventDefault(); const t = e.touches[0];
+                state.cam.tx += (state.mouse.lx - t.clientX)/state.cam.z;
+                state.cam.ty += (state.mouse.ly - t.clientY)/state.cam.z;
+                state.mouse.lx = t.clientX; state.mouse.ly = t.clientY;
+                checkTutorial('nav');
+            }, {passive:false});
+            canvas.addEventListener('touchend', () => state.mouse.down = false);
+
+            genWorld();
+            
+            document.getElementById('start-btn').onclick = () => {
+                document.getElementById('intro-modal').style.opacity = 0;
+                setTimeout(()=>document.getElementById('intro-modal').style.display='none', 1000);
+                document.getElementById('tutorial-panel').style.opacity = 1; 
+                audio.init(); audio.playChime('low');
+                log("The network awakens. Grow towards the light.");
+            };
+            
+            setupUpgrades();
+            loop();
+        }
+
+        function resize() {
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            state.cam.tx = WORLD_W/2 - canvas.width/2; state.cam.ty = WORLD_H/2 - canvas.height/2;
+            state.cam.x = state.cam.tx; state.cam.y = state.cam.ty;
+        }
+
+        function genWorld() {
+            const cx = WORLD_W/2, cy = WORLD_H/2;
+            const spore = new Node(cx, cy, 'spore');
+            spore.connected = true; spore.discovered = true;
+            state.nodes.push(spore);
+            
+            // Guaranteed Start
+            const ang = Math.random()*6.28; const dist = 180;
+            const tree = new Node(cx+Math.cos(ang)*dist, cy+Math.sin(ang)*dist, 'tree');
+            tree.discovered = true; state.nodes.push(tree);
+
+            const angM = ang + 2.1; const distM = 150;
+            const min = new Node(cx+Math.cos(angM)*distM, cy+Math.sin(angM)*distM, 'mineral');
+            min.discovered = true; state.nodes.push(min);
+
+            const angW = ang - 2.1; const distW = 150;
+            const wat = new Node(cx+Math.cos(angW)*distW, cy+Math.sin(angW)*distW, 'water');
+            wat.discovered = true; state.nodes.push(wat);
+
+            // Relics (5 far ones)
+            for(let i=0; i<5; i++) {
+                let rx, ry, safe=false;
+                while(!safe) {
+                    rx = Math.random()*(WORLD_W-600)+300; ry = Math.random()*(WORLD_H-600)+300;
+                    if(Math.hypot(rx-cx, ry-cy) > 800) safe=true;
+                }
+                state.nodes.push(new Node(rx, ry, 'relic'));
+            }
+
+            for(let i=0; i<600; i++) {
+                let x = Math.random()*(WORLD_W-200)+100; let y = Math.random()*(WORLD_H-200)+100;
+                if(Math.hypot(x-cx, y-cy)<200) continue; 
+                if(state.nodes.some(n=>Math.hypot(x-n.x, y-n.y)<60)) continue;
+                const r = Math.random(); let t = 'water';
+                if(r<0.05) t='tree'; else if(r<0.5) t='mineral';
+                state.nodes.push(new Node(x, y, t));
+            }
+        }
+
+        function checkClick(sx, sy) {
+            const wx = (sx/state.cam.z) + state.cam.x;
+            const wy = (sy/state.cam.z) + state.cam.y;
+            
+            // 1. Wisp?
+            const wispIdx = state.wisps.findIndex(w => Math.hypot(w.x-wx, w.y-wy) < 30);
+            if(wispIdx !== -1) {
+                state.wisps.splice(wispIdx, 1);
+                const bonus = 30 * state.stats.levels.trade;
+                state.res.c += bonus;
+                particles.spawn(wx, wy, '#fbbf24', 'text', `WISP! +${bonus} C`);
+                audio.playUpgrade();
+                checkTutorial('wisp');
+                updateUI();
+                return;
+            }
+
+            // 2. Node?
+            const n = state.nodes.find(n => n.discovered && Math.hypot(n.x-wx, n.y-wy) < n.baseSize+20);
+            
+            // Fruit Collection
+            if(n && n.type === 'tree' && n.connected && n.hasFruit) {
+                n.hasFruit = false; n.fruit = 0;
+                const bonus = 10 * state.stats.levels.trade;
+                state.res.c += bonus;
+                particles.spawn(n.x, n.y, '#fff', 'text', `+${bonus} C`);
+                audio.playPop();
+                updateUI();
+                return;
+            }
+
+            if(n && !n.connected) {
+                let src = null, min = Infinity;
+                state.nodes.filter(x=>x.connected).forEach(x => {
+                    const d = Math.hypot(x.x-n.x, x.y-n.y);
+                    if(d<min) { min=d; src=x; }
+                });
+                
+                if(src) {
+                    if(min > state.stats.reach) {
+                        particles.spawn(n.x, n.y, '#ef4444', 'text', 'Too Far');
+                    } else {
+                        let cost = Math.floor(min/10);
+                        
+                        // Modifiers
+                        if(hasRelic('cost_red')) cost = Math.floor(cost * 0.7);
+                        if(state.weather.type === 'storm') cost = Math.floor(cost * 0.5);
+
+                        const existingType = state.nodes.some(node => node.connected && node.type === n.type);
+                        if (!existingType && ['tree','mineral','water'].includes(n.type)) cost = 0;
+
+                        if(state.res.c >= cost) {
+                            state.res.c -= cost;
+                            state.conns.push(new Conn(src, n));
+                            const label = cost === 0 ? "Free!" : `-${cost} C`;
+                            particles.spawn(n.x, n.y, '#fff', 'text', label);
+                            audio.playPop();
+                            updateUI();
+                        } else {
+                            particles.spawn(n.x, n.y, '#ef4444', 'text', 'Need Carbon');
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Logic ---
+        function hasRelic(id) { return state.relicsFound.includes(id); }
+        
+        function activateRelic(r) {
+            if(hasRelic(r.id)) return;
+            state.relicsFound.push(r.id);
+            log(`RELIC FOUND: ${r.name}`);
+            
+            // Add to UI
+            const li = document.createElement('li');
+            li.className = "flex items-center gap-2 p-2 bg-amber-500/10 rounded border border-amber-500/20";
+            li.innerHTML = `<i class="fas fa-gem text-amber-400"></i> <div><div class="font-bold text-amber-200">${r.name}</div><div class="text-[9px] text-gray-400">${r.desc}</div></div>`;
+            document.getElementById('active-buffs').appendChild(li);
+            document.getElementById('buffs-panel').classList.remove('hidden');
+            
+            particles.spawn(state.cam.x + canvas.width/2, state.cam.y + canvas.height/2, '#fbbf24', 'text', 'RELIC ACTIVATED!');
+            state.shockwaves.push(new Shockwave(state.cam.x + canvas.width/2, state.cam.y + canvas.height/2));
+        }
+
+        function updateWeather() {
+            state.weather.timer--;
+            if(state.weather.timer <= 0) {
+                // Change Weather
+                const r = Math.random();
+                if(state.weather.type !== 'clear') {
+                    state.weather.type = 'clear';
+                    state.weather.timer = 1000 + Math.random()*1000;
+                    log("The sky clears.");
+                } else {
+                    if(r < 0.5) {
+                        state.weather.type = 'rain';
+                        state.weather.timer = 600;
+                        log("A heavy rain begins.");
+                    } else {
+                        state.weather.type = 'storm';
+                        state.weather.timer = 400;
+                        log("Spore Storm incoming!");
+                    }
+                }
+                updateUI();
+            }
+        }
+
+        // --- Loop ---
+        function loop() {
+            state.tick++; state.time += 0.01;
+            updateWeather();
+            
+            // Random Wisp Spawn
+            if(state.tick % 500 === 0 && Math.random() < 0.5 && state.wisps.length < 3) {
+                state.wisps.push(new Wisp());
+            }
+
+            state.cam.x += (state.cam.tx - state.cam.x) * 0.1;
+            state.cam.y += (state.cam.ty - state.cam.y) * 0.1;
+            state.cam.z += (state.cam.tz - state.cam.z) * 0.1;
+            
+            ctx.fillStyle = COLORS.BG; ctx.fillRect(0,0,canvas.width,canvas.height);
+            ctx.save(); ctx.scale(state.cam.z, state.cam.z); ctx.translate(-state.cam.x, -state.cam.y);
+            
+            state.shockwaves = state.shockwaves.filter(s => s.update(ctx));
+            state.conns.forEach(c => { c.update(); c.draw(ctx); });
+            state.nodes.forEach(n => n.draw(ctx, state.tick));
+            state.wisps = state.wisps.filter(w => w.update());
+            state.wisps.forEach(w => w.draw(ctx, state.tick));
+            
+            // Weather FX
+            if(state.weather.type === 'rain') {
+                for(let i=0; i<5; i++) {
+                    const rx = state.cam.x + Math.random()*(canvas.width/state.cam.z);
+                    const ry = state.cam.y + Math.random()*(canvas.height/state.cam.z);
+                    particles.spawn(rx, ry, '', 'rain');
+                }
+            } else if(state.weather.type === 'storm') {
+                if(state.tick%5===0) {
+                    const rx = state.cam.x + Math.random()*(canvas.width/state.cam.z);
+                    const ry = state.cam.y + Math.random()*(canvas.height/state.cam.z);
+                    particles.spawn(rx, ry, '#10b981', 'dot');
+                }
+            }
+
+            const wx = (state.mouse.x/state.cam.z) + state.cam.x;
+            const wy = (state.mouse.y/state.cam.z) + state.cam.y;
+            const hov = state.nodes.find(n => n.discovered && Math.hypot(n.x-wx, n.y-wy) < n.baseSize+15);
+            
+            if(hov) {
+                if(hov.connected && hov.hasFruit) canvas.style.cursor = 'pointer';
+                else if (!hov.connected) {
+                    canvas.style.cursor = 'grab';
+                    let src=null, min=Infinity;
+                    state.nodes.filter(x=>x.connected).forEach(x=>{
+                        const d=Math.hypot(x.x-hov.x, x.y-hov.y);
+                        if(d<min){min=d; src=x;}
+                    });
+                    
+                    if(src) {
+                        ctx.beginPath(); ctx.moveTo(src.x, src.y); ctx.lineTo(hov.x, hov.y); ctx.setLineDash([5,5]);
+                        let dist = Math.floor(min/10);
+                        if(hasRelic('cost_red')) dist = Math.floor(dist*0.7);
+                        if(state.weather.type==='storm') dist = Math.floor(dist*0.5);
+
+                        const existingType = state.nodes.some(node => node.connected && node.type === hov.type);
+                        if (!existingType && ['tree','mineral','water'].includes(hov.type)) dist = 0;
+
+                        const valid = min <= state.stats.reach; const afford = state.res.c >= dist;
+                        ctx.strokeStyle = valid ? (afford?'rgba(255,255,255,0.5)':'rgba(251,191,36,0.5)') : 'rgba(239,68,68,0.5)';
+                        ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]);
+                        
+                        ctx.fillStyle = ctx.strokeStyle; ctx.font = 'bold 12px Quicksand'; ctx.textAlign = 'center';
+                        let label = 'Too Far'; if(valid) label = dist === 0 ? 'Free!' : `${dist} C`;
+                        ctx.fillText(label, hov.x, hov.y - 25);
+                    }
+                } else canvas.style.cursor = 'grab';
+            } else if(state.wisps.some(w => Math.hypot(w.x-wx, w.y-wy) < 30)) {
+                canvas.style.cursor = 'pointer';
+            } else canvas.style.cursor = 'grab';
+
+            particles.update(ctx);
+            ctx.restore();
+
+            if(state.tick % 60 === 0) runTick();
+            requestAnimationFrame(loop);
+        }
+
+        // --- Logic (Tick) ---
+        function runTick() {
+            let addM = 0, addW = 0;
+            state.nodes.forEach(n => {
+                if(!n.connected) return;
+                
+                // Base speed + Enzyemes + Relics
+                let speed = state.stats.speed;
+                if(hasRelic('min_boost') && n.type==='mineral') speed *= 1.5;
+                if(hasRelic('water_boost') && n.type==='water') speed *= 1.5;
+                if(state.weather.type === 'rain' && n.type==='water') speed *= 2;
+
+                if(n.type==='mineral') addM += speed;
+                if(n.type==='water') addW += speed;
+                
+                if(n.type === 'tree' && !n.hasFruit) {
+                    // Fruit growth
+                    let rate = 1;
+                    if(hasRelic('fruit_spd')) rate = 2;
+                    n.fruit += rate;
+                    if(n.fruit >= 100) {
+                        n.hasFruit = true;
+                        particles.spawn(n.x, n.y, '#fbbf24', 'dot');
+                    }
+                }
+            });
+
+            if(addM>0 || addW>0) {
+                state.conns.forEach(c => {
+                    if(Math.random()<0.3) c.send(Math.random()>0.5 ? 'min' : 'wat'); 
+                });
+            }
+
+            state.nodes.forEach(n => {
+                if(n.connected && n.type==='tree') {
+                    const cost = 5;
+                    if(state.res.m >= cost && state.res.w >= cost) {
+                        state.res.m -= cost; state.res.w -= cost;
+                        n.tradeCount++;
+                        const bonus = Math.floor(n.tradeCount / 20);
+                        const gain = Math.floor((cost * 1.5 * state.stats.trade) + bonus);
+                        state.res.c += gain;
+                        particles.spawn(n.x, n.y, COLORS.TREE.hex, 'text', `+${gain} C`);
+                        checkTutorial('trade');
+                    }
+                }
+            });
+
+            state.res.m += addM; state.res.w += addW;
+            if(state.res.c < 5 && state.res.m < 5) { state.res.c++; if(Math.random()>0.7) particles.spawn(state.nodes[0].x, state.nodes[0].y, '#fff', 'text', '+1 (Life)'); }
+            updateUI();
+        }
+
+        function updateUI() {
+            document.getElementById('res-carbon').innerText = Math.floor(state.res.c);
+            document.getElementById('res-minerals').innerText = Math.floor(state.res.m);
+            document.getElementById('res-water').innerText = Math.floor(state.res.w);
+            document.getElementById('gen-display').innerText = Math.max(state.stats.levels.reach, state.stats.levels.speed, state.stats.levels.trade);
+            
+            document.getElementById('lvl-reach').innerText = 'L'+state.stats.levels.reach;
+            document.getElementById('lvl-speed').innerText = 'L'+state.stats.levels.speed;
+            document.getElementById('lvl-trade').innerText = 'L'+state.stats.levels.trade;
+
+            const chk = (id, cost) => {
+                const el = document.getElementById(id);
+                if(state.res.c >= cost) {
+                    el.classList.remove('opacity-50','grayscale'); el.classList.add('cursor-pointer');
+                } else {
+                    el.classList.add('opacity-50','grayscale'); el.classList.remove('cursor-pointer');
+                }
+            };
+            chk('btn-grow-range', state.costs.reach);
+            chk('btn-absorption', state.costs.speed);
+            chk('btn-trade', state.costs.trade);
+
+            // Weather UI
+            const wEl = document.getElementById('weather-display');
+            if(state.weather.type !== 'clear') {
+                wEl.classList.remove('hidden');
+                document.getElementById('weather-text').innerText = state.weather.type.toUpperCase();
+                document.getElementById('weather-icon').className = state.weather.type === 'rain' ? 'fas fa-cloud-rain text-cyan-400' : 'fas fa-wind text-emerald-400';
+            } else {
+                wEl.classList.add('hidden');
+            }
+        }
+
+        // --- Tut ---
+        function checkTutorial(event, type) {
+            if (!state.tut.active) return;
+            let updated = false;
+            if (event === 'nav' && !state.tut.nav) { state.tut.nav = true; markStep('step-nav'); updated = true; }
+            if (event === 'connect') {
+                if ((type === 'mineral' || type === 'water') && !state.tut.res) { state.tut.res = true; markStep('step-res'); updated = true; }
+                if (type === 'tree' && !state.tut.tree) { state.tut.tree = true; markStep('step-tree'); updated = true; }
+            }
+            if (event === 'trade' && !state.tut.trade) { state.tut.trade = true; markStep('step-trade'); updated = true; }
+            if (event === 'wisp' && !state.tut.wisp) { state.tut.wisp = true; markStep('step-wisp'); updated = true; }
+
+            if (updated && state.tut.nav && state.tut.res && state.tut.tree && state.tut.trade && state.tut.wisp) {
+                state.tut.active = false;
+                setTimeout(() => {
+                    document.getElementById('tutorial-panel').style.opacity = 0;
+                    log("Tutorial Complete. The forest is yours.");
+                }, 2000);
+            }
+        }
+        function markStep(id) {
+            const el = document.getElementById(id);
+            if (!el) return; // Fix crash
+            el.classList.add('completed-step');
+            el.querySelector('i').className = 'fas fa-check-circle text-emerald-400';
+        }
+
+        function log(msg) {
+            const el = document.getElementById('log-container');
+            const d = document.createElement('div');
+            d.innerHTML = `<span class="text-emerald-500">➜</span> ${msg}`;
+            el.prepend(d);
+            if(el.children.length > 6) el.removeChild(el.lastChild);
+        }
+
+        function setupUpgrades() {
+            const btn = (id, key, fn) => {
+                document.getElementById(id).onclick = () => {
+                    if(state.res.c >= state.costs[key]) {
+                        state.res.c -= state.costs[key];
+                        fn(); audio.playUpgrade();
+                        state.shockwaves.push(new Shockwave(state.cam.x + canvas.width/2, state.cam.y + canvas.height/2));
+                        updateUI();
+                    }
+                };
+            };
+            btn('btn-grow-range', 'reach', () => {
+                state.stats.reach += 60; state.stats.levels.reach++;
+                state.costs.reach = Math.floor(state.costs.reach * 1.5);
+                document.getElementById('cost-range').innerText = state.costs.reach + ' C';
+                log("Mycelial threads lengthened.");
+            });
+            btn('btn-absorption', 'speed', () => {
+                state.stats.speed += 1; state.stats.levels.speed++;
+                state.costs.speed = Math.floor(state.costs.speed * 1.6);
+                document.getElementById('cost-absorption').innerText = state.costs.speed + ' C';
+                log("Enzyme secretion amplified.");
+            });
+            btn('btn-trade', 'trade', () => {
+                state.stats.trade += 0.3; state.stats.levels.trade++;
+                state.costs.trade = Math.floor(state.costs.trade * 2);
+                document.getElementById('cost-trade').innerText = state.costs.trade + ' C';
+                log("Symbiotic bond strengthened.");
+            });
+            document.getElementById('toggle-sound').onclick = (e) => {
+                const m = audio.toggleMute();
+                e.currentTarget.innerHTML = m ? '<i class="fas fa-volume-mute"></i> MUTED' : '<i class="fas fa-volume-up"></i> SOUND';
+            };
+            document.getElementById('reset-btn').onclick = () => {
+                if(confirm("Rebirth the forest?")) location.reload();
+            };
+        }
+
+        init();
+    </script>
+</body>
+</html>

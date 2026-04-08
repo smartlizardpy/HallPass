@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JJK: Domain Survival - V3 Expanded Roster</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Creepster&family=Teko:wght@400;600;700&display=swap');
+
+        body {
+            margin: 0; padding: 0; background-color: #050505;
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh; overflow: hidden; font-family: 'Teko', sans-serif; color: #fff;
+        }
+        
+        #game-wrapper {
+            position: relative; width: 100%; height: 100vh;
+            display: flex; justify-content: center; align-items: center;
+            background: radial-gradient(circle at center, #1a0033 0%, #000 100%);
+        }
+
+        canvas {
+            background-color: #000;
+            box-shadow: 0 0 50px rgba(138, 43, 226, 0.3), inset 0 0 100px #000;
+            max-width: 100%; max-height: 100vh; object-fit: contain; z-index: 1; 
+        }
+
+        /* Scanline Overlay for Arcade Feel */
+        #game-wrapper::after {
+            content: " "; display: block; position: absolute; top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 5; background-size: 100% 4px, 6px 100%; pointer-events: none;
+        }
+
+        #quiz-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(10px);
+            display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 10;
+        }
+
+        #quiz-container {
+            background: linear-gradient(135deg, #11001c 0%, #2a0033 100%);
+            border: 2px solid #ff0055; border-radius: 15px; padding: 40px; text-align: center;
+            max-width: 800px; width: 90%; box-shadow: 0 0 40px rgba(255, 0, 85, 0.4), inset 0 0 20px rgba(0,0,0,0.8);
+            position: relative; overflow: hidden;
+        }
+
+        #question-counter {
+            color: #ff0055; font-size: 20px; letter-spacing: 2px; margin-bottom: 10px;
+        }
+
+        #question-text {
+            font-size: 32px; margin-bottom: 30px; color: #fff; text-transform: uppercase;
+            letter-spacing: 2px; text-shadow: 0 0 10px #ff0055; position: relative; z-index: 1;
+        }
+
+        .answer-btn {
+            position: relative; display: block; width: 100%; background: rgba(0, 0, 0, 0.6);
+            color: #ddd; border: 1px solid #ff0055; padding: 18px; margin-bottom: 12px;
+            font-size: 22px; font-family: 'Teko', sans-serif; text-transform: uppercase;
+            letter-spacing: 1px; cursor: pointer; transition: all 0.3s ease; border-radius: 4px; z-index: 1; overflow: hidden;
+        }
+
+        .answer-btn:hover {
+            background: #ff0055; color: #fff; transform: scale(1.03) translateX(10px);
+            box-shadow: 0 0 20px rgba(255, 0, 85, 0.8); border-color: #fff;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-wrapper">
+    <canvas id="gameCanvas" width="1280" height="720"></canvas>
+    
+    <div id="quiz-overlay">
+        <div id="quiz-container">
+            <div id="question-counter">QUESTION 1 / 10</div>
+            <h1 id="question-text">Question goes here</h1>
+            <div id="answers-container"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    /**
+     * ==========================================
+     * 1. CHARACTER ROSTER & DATA
+     * ==========================================
+     */
+    const CHARACTERS = {
+        Yuji: { name: "Yuji Itadori", color: "#ff3366", aura: "#ff0055", passive: "Black Flash Prodigy", maxCE: 100, normalAttack: { name: "Divergent Fist", color: "#00ccff", type: "punch" }, miniAttack: { name: "Cursed Barrage", ceCost: 40, effect: "crit" }, domainExpansion: { name: "Cursed Womb", bgColor: "#330000", effect: "damage", visual: "blood" } },
+        Gojo: { name: "Satoru Gojo", color: "#ffffff", aura: "#0088ff", passive: "Infinity", maxCE: 200, normalAttack: { name: "Cursed Strike", color: "#0088ff", type: "energy" }, miniAttack: { name: "Hollow Purple", ceCost: 80, effect: "beam" }, domainExpansion: { name: "Unlimited Void", bgColor: "#000022", effect: "stun", visual: "space" } },
+        Megumi: { name: "Megumi Fushiguro", color: "#00ff88", aura: "#003311", passive: "Shadow Reserve", maxCE: 150, normalAttack: { name: "Martial Arts", color: "#111111", type: "punch" }, miniAttack: { name: "Divine Dog", ceCost: 50, effect: "screen_damage" }, domainExpansion: { name: "Chimera Shadow Garden", bgColor: "#001105", effect: "slow", visual: "shadows" } },
+        Nobara: { name: "Nobara Kugisaki", color: "#ff9900", aura: "#883300", passive: "Soul Resonance", maxCE: 120, normalAttack: { name: "Nail Strike", color: "#cccccc", type: "slash" }, miniAttack: { name: "Resonance", ceCost: 45, effect: "screen_damage" }, domainExpansion: { name: "Hairpin Barrage", bgColor: "#441100", effect: "stun", visual: "spikes" } },
+        Nanami: { name: "Kento Nanami", color: "#ffff00", aura: "#00aaff", passive: "Overtime (Stats boost late game)", maxCE: 100, normalAttack: { name: "Cleaver", color: "#00aaff", type: "slash" }, miniAttack: { name: "Ratio Technique", ceCost: 35, effect: "next_crit" }, domainExpansion: { name: "Overtime", bgColor: "#001133", effect: "buff", visual: "grid" } },
+        Todo: { name: "Aoi Todo", color: "#cc5500", aura: "#ff8800", passive: "Brotherhood", maxCE: 100, normalAttack: { name: "Brawn", color: "#ffcc00", type: "punch" }, miniAttack: { name: "Boogie Woogie", ceCost: 20, effect: "swap" }, domainExpansion: { name: "Idol Concert", bgColor: "#ff00aa", effect: "stun", visual: "hearts" } },
+        Yuta: { name: "Yuta Okkotsu", color: "#ffffff", aura: "#ffaaaa", passive: "Boundless CE", maxCE: 250, normalAttack: { name: "Katana", color: "#ffffff", type: "slash" }, miniAttack: { name: "Rika Manifest", ceCost: 100, effect: "massive_knockback" }, domainExpansion: { name: "Authentic Mutual Love", bgColor: "#eeddff", effect: "stun_and_damage", visual: "swords" } },
+        Maki: { name: "Maki Zenin", color: "#00aa44", aura: "#222222", passive: "Heavenly Restriction", maxCE: 0, normalAttack: { name: "Cursed Tool", color: "#00ff66", type: "slash" }, miniAttack: { name: "Playful Cloud", ceCost: 0, cooldown: 100, effect: "multi_hit" }, domainExpansion: { name: "Heavenly Restriction", bgColor: "#050505", effect: "buff", visual: "speed" } },
+        Sukuna: { name: "Ryomen Sukuna", color: "#ffaaaa", aura: "#ff0000", passive: "King of Curses", maxCE: 250, normalAttack: { name: "Cleave", color: "#ff0000", type: "slash" }, miniAttack: { name: "Dismantle", ceCost: 60, effect: "beam" }, domainExpansion: { name: "Malevolent Shrine", bgColor: "#550000", effect: "damage", visual: "shrine" } },
+        Mahito: { name: "Mahito", color: "#88ccff", aura: "#002244", passive: "Soul Manipulation", maxCE: 150, normalAttack: { name: "Transfigured", color: "#4488cc", type: "punch" }, miniAttack: { name: "Soul Touch", ceCost: 60, effect: "heal" }, domainExpansion: { name: "Self-Embodiment of Perfection", bgColor: "#000011", effect: "stun_and_damage", visual: "hands" } },
+        Choso: { name: "Choso", color: "#aa0000", aura: "#ff3333", passive: "Blood Convergence", maxCE: 120, normalAttack: { name: "Blood Edge", color: "#ff0000", type: "slash" }, miniAttack: { name: "Supernova", ceCost: 40, effect: "screen_damage" }, domainExpansion: { name: "Sea of Blood", bgColor: "#440000", effect: "damage", visual: "blood" } },
+        Inumaki: { name: "Toge Inumaki", color: "#dddddd", aura: "#9999ff", passive: "Cursed Speech", maxCE: 100, normalAttack: { name: "Throat Strike", color: "#aaaaff", type: "punch" }, miniAttack: { name: "BLAST!", ceCost: 45, effect: "beam" }, domainExpansion: { name: "Echoing Word", bgColor: "#222244", effect: "stun", visual: "grid" } },
+        Panda: { name: "Panda", color: "#ffffff", aura: "#444444", passive: "Abrupt Mutation", maxCE: 100, normalAttack: { name: "Bear Hug", color: "#aaaaaa", type: "punch" }, miniAttack: { name: "Gorilla Drum", ceCost: 35, effect: "massive_knockback" }, domainExpansion: { name: "Cursed Corpse Core", bgColor: "#003300", effect: "buff", visual: "shadows" } },
+        Toji: { name: "Toji Fushiguro", color: "#223322", aura: "#111111", passive: "Heavenly Restriction", maxCE: 0, normalAttack: { name: "Split Soul Katana", color: "#aaffaa", type: "slash" }, miniAttack: { name: "Chain of 1000 Miles", ceCost: 0, cooldown: 100, effect: "multi_hit" }, domainExpansion: { name: "Absolute Instinct", bgColor: "#050505", effect: "buff", visual: "speed" } },
+        
+        // NEW CHARACTERS
+        Geto: { name: "Suguru Geto", color: "#6600cc", aura: "#330066", passive: "Curse Manipulation", maxCE: 200, normalAttack: { name: "Playful Cloud", color: "#ff0066", type: "slash" }, miniAttack: { name: "Maximum: Uzumaki", ceCost: 80, effect: "beam" }, domainExpansion: { name: "Womb Profusion", bgColor: "#1a0033", effect: "damage", visual: "shadows" } },
+        Kashimo: { name: "Hajime Kashimo", color: "#00ffff", aura: "#00aaff", passive: "Lightning CE", maxCE: 150, normalAttack: { name: "Staff Strike", color: "#00ffff", type: "slash" }, miniAttack: { name: "Lightning Discharge", ceCost: 50, effect: "screen_damage" }, domainExpansion: { name: "Mythical Beast Amber", bgColor: "#003333", effect: "buff", visual: "space" } },
+        Hakari: { name: "Kinji Hakari", color: "#ff00ff", aura: "#ff66ff", passive: "Fever", maxCE: 100, normalAttack: { name: "Rough CE", color: "#ff00ff", type: "punch" }, miniAttack: { name: "Train Doors", ceCost: 40, effect: "multi_hit" }, domainExpansion: { name: "Idle Death Gamble", bgColor: "#ff00aa", effect: "buff", visual: "hearts" } },
+        Higuruma: { name: "Hiromi Higuruma", color: "#aaaaaa", aura: "#555555", passive: "Genius Sorcerer", maxCE: 120, normalAttack: { name: "Gavel", color: "#aaaaaa", type: "slash" }, miniAttack: { name: "Confiscation", ceCost: 40, effect: "swap" }, domainExpansion: { name: "Deadly Sentencing", bgColor: "#222222", effect: "stun", visual: "grid" } },
+        Jogo: { name: "Jogo", color: "#ff4400", aura: "#ff0000", passive: "Disaster Flames", maxCE: 180, normalAttack: { name: "Flame Burst", color: "#ff4400", type: "energy" }, miniAttack: { name: "Maximum Meteor", ceCost: 90, effect: "massive_knockback" }, domainExpansion: { name: "Coffin of the Iron Mountain", bgColor: "#440000", effect: "damage", visual: "blood" } },
+        Hanami: { name: "Hanami", color: "#00cc66", aura: "#006633", passive: "Nature's Wrath", maxCE: 150, normalAttack: { name: "Roots", color: "#00cc66", type: "slash" }, miniAttack: { name: "Cursed Buds", ceCost: 50, effect: "heal" }, domainExpansion: { name: "Ceremonial Sea of Light", bgColor: "#002211", effect: "stun_and_damage", visual: "shadows" } },
+        Naoya: { name: "Naoya Zenin", color: "#cccc00", aura: "#aaaa00", passive: "Projection Sorcery", maxCE: 120, normalAttack: { name: "24 FPS Strike", color: "#cccc00", type: "punch" }, miniAttack: { name: "Freeze Frame", ceCost: 40, effect: "next_crit" }, domainExpansion: { name: "Time Cell Moon Palace", bgColor: "#111100", effect: "stun", visual: "space" } }
+    };
+
+    /**
+     * ==========================================
+     * 2. EXPANDED QUIZ QUESTIONS (10 Total)
+     * ==========================================
+     */
+    const QUIZ_QUESTIONS = [
+        { text: "1. How do you approach a terrifying curse?", answers: [
+            { text: "Rush in and crush it!", chars: ["Yuji", "Todo", "Panda", "Hakari", "Kashimo"] }, 
+            { text: "Analyze weak points and exploit them.", chars: ["Nanami", "Megumi", "Toji", "Higuruma"] },
+            { text: "Overwhelm it with absolute power.", chars: ["Gojo", "Sukuna", "Yuta", "Jogo"] }, 
+            { text: "Strike from a calculated distance.", chars: ["Nobara", "Maki", "Mahito", "Choso", "Geto", "Hanami", "Naoya"] }
+        ]},
+        { text: "2. What drives your power?", answers: [
+            { text: "Protecting friends and allies.", chars: ["Yuji", "Yuta", "Megumi", "Choso", "Panda"] }, 
+            { text: "The burden of being the strongest.", chars: ["Gojo", "Maki", "Toji", "Geto"] },
+            { text: "Pure hedonism, thrill, or chaos.", chars: ["Sukuna", "Mahito", "Todo", "Hakari", "Kashimo", "Naoya"] }, 
+            { text: "Obligation. It's just a job/rule.", chars: ["Nanami", "Nobara", "Inumaki", "Higuruma", "Hanami", "Jogo"] }
+        ]},
+        { text: "3. Your ultimate trump card?", answers: [
+            { text: "A reality-warping Domain Expansion!", chars: ["Gojo", "Sukuna", "Mahito", "Inumaki", "Jogo", "Naoya"] }, 
+            { text: "Summoning monstrous allies.", chars: ["Megumi", "Yuta", "Todo", "Panda", "Geto"] },
+            { text: "A reality-distorting Black Flash!", chars: ["Yuji", "Nanami", "Choso", "Hakari"] }, 
+            { text: "Sheer physical violence and speed.", chars: ["Maki", "Nobara", "Toji", "Kashimo", "Higuruma"] }
+        ]},
+        { text: "4. What is your greatest flaw?", answers: [
+            { text: "Arrogance and overconfidence.", chars: ["Gojo", "Sukuna", "Naoya", "Jogo"] }, 
+            { text: "Selflessness to the point of guilt.", chars: ["Yuji", "Yuta", "Choso", "Panda"] },
+            { text: "Hot-headedness and thirst for battle.", chars: ["Todo", "Kashimo", "Hakari", "Mahito"] }, 
+            { text: "Apathy, detachment, or cynicism.", chars: ["Megumi", "Toji", "Nanami", "Maki", "Higuruma", "Geto"] }
+        ]},
+        { text: "5. How do you view the weak?", answers: [
+            { text: "They must be protected at all costs.", chars: ["Yuji", "Yuta", "Gojo", "Nanami", "Panda", "Hanami"] }, 
+            { text: "They are a nuisance to be trampled.", chars: ["Sukuna", "Naoya", "Toji", "Jogo", "Mahito"] },
+            { text: "I will lead and organize them.", chars: ["Geto", "Hakari", "Todo", "Choso"] }, 
+            { text: "Everyone has their own role to play.", chars: ["Megumi", "Maki", "Nobara", "Higuruma", "Kashimo"] }
+        ]},
+        { text: "6. What is your preferred weapon?", answers: [
+            { text: "My bare hands and pure brawn!", chars: ["Yuji", "Todo", "Hakari", "Mahito", "Panda", "Naoya"] }, 
+            { text: "A cursed tool or specialized weapon.", chars: ["Maki", "Toji", "Nobara", "Nanami", "Higuruma"] },
+            { text: "Raw, overwhelming Cursed Energy.", chars: ["Gojo", "Sukuna", "Kashimo", "Jogo", "Geto"] }, 
+            { text: "Allies, shikigami, and blood.", chars: ["Megumi", "Yuta", "Choso", "Inumaki", "Hanami"] }
+        ]},
+        { text: "7. A powerful enemy challenges you. Your response?", answers: [
+            { text: "\"Let's dance!\" (Fight immediately)", chars: ["Kashimo", "Sukuna", "Todo", "Hakari", "Yuji"] }, 
+            { text: "\"Are you sure about this?\" (Confident)", chars: ["Gojo", "Yuta", "Geto", "Panda"] },
+            { text: "\"If I must kill you, I will.\"", chars: ["Megumi", "Nanami", "Choso", "Higuruma"] }, 
+            { text: "\"I'll crush you before you blink.\"", chars: ["Naoya", "Toji", "Jogo", "Maki", "Mahito"] }
+        ]},
+        { text: "8. What role do you play in a team?", answers: [
+            { text: "The vanguard brawler taking the hits.", chars: ["Yuji", "Todo", "Panda", "Hakari", "Maki"] }, 
+            { text: "The tactician providing support.", chars: ["Megumi", "Nanami", "Nobara", "Inumaki", "Higuruma"] },
+            { text: "The lone wolf one-man army.", chars: ["Gojo", "Sukuna", "Toji", "Kashimo", "Naoya"] }, 
+            { text: "The commander leading the charge.", chars: ["Geto", "Yuta", "Jogo", "Choso", "Mahito", "Hanami"] }
+        ]},
+        { text: "9. Choose an element or aesthetic:", answers: [
+            { text: "Shadows, Spirits & Plants.", chars: ["Megumi", "Geto", "Mahito", "Hanami"] }, 
+            { text: "Fire, Lightning & Boundless Energy.", chars: ["Kashimo", "Jogo", "Gojo", "Inumaki", "Yuta"] },
+            { text: "Blood, Flesh & Raw Emotion.", chars: ["Choso", "Yuji", "Sukuna", "Todo", "Panda"] }, 
+            { text: "Steel, Speed & Precision.", chars: ["Toji", "Maki", "Naoya", "Hakari", "Nanami", "Nobara", "Higuruma"] }
+        ]},
+        { text: "10. What is your ultimate goal?", answers: [
+            { text: "Give everyone a proper death / Protect loved ones.", chars: ["Yuji", "Yuta", "Choso", "Panda", "Megumi"] }, 
+            { text: "Dismantle or reform the corrupt system.", chars: ["Gojo", "Maki", "Geto", "Higuruma", "Nanami"] },
+            { text: "Fight the strongest and live freely.", chars: ["Sukuna", "Kashimo", "Hakari", "Toji", "Todo"] }, 
+            { text: "Exterminate humanity / Rule the new world.", chars: ["Mahito", "Jogo", "Hanami", "Naoya"] }
+        ]}
+    ];
+
+    /**
+     * ==========================================
+     * 3. CORE ENGINE & GLOBALS
+     * ==========================================
+     */
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false }); 
+    
+    const STATE = { START: 0, QUIZ: 1, TRANSITION: 2, PLAYING: 3, GAMEOVER: 4 };
+    let currentState = STATE.START;
+
+    let score = 0, frames = 0, combo = 0, comboTimer = 0, maxCombo = 0;
+    let screenShakeTime = 0, screenShakeIntensity = 0;
+    let hitStopTime = 0; 
+    let activePlayerChar = null, transitionTimer = 0;
+    let isDomainActive = false, domainTimer = 0;
+    let camera = { x: 0, y: 0 };
+    
+    const GROUND_Y = canvas.height - 100;
+
+    let enemies = [], particles = [], floatingTexts = [], shockwaves = [], trails = [], slashes = [], orbs = [];
+
+    const keys = { ArrowLeft: false, ArrowRight: false, ArrowUp: false, Space: false, Shift: false, Enter: false, KeyV: false, KeyZ: false };
+
+    window.addEventListener('keydown', (e) => {
+        if (e.code === 'ArrowLeft') keys.ArrowLeft = true;
+        if (e.code === 'ArrowRight') keys.ArrowRight = true;
+        if (e.code === 'ArrowUp') keys.ArrowUp = true;
+        if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') keys.Shift = true;
+        if (e.code === 'Enter') keys.Enter = true;
+        if (e.code === 'KeyV') keys.KeyV = true; 
+        if (e.code === 'KeyZ') keys.KeyZ = true; // DASH
+        if (e.code === 'Space') {
+            keys.Space = true;
+            if (currentState === STATE.START) startQuiz();
+            else if (currentState === STATE.GAMEOVER) currentState = STATE.START;
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (e.code === 'ArrowLeft') keys.ArrowLeft = false;
+        if (e.code === 'ArrowRight') keys.ArrowRight = false;
+        if (e.code === 'ArrowUp') keys.ArrowUp = false;
+        if (e.code === 'Space') keys.Space = false;
+        if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') keys.Shift = false;
+        if (e.code === 'Enter') keys.Enter = false;
+        if (e.code === 'KeyV') keys.KeyV = false;
+        if (e.code === 'KeyZ') keys.KeyZ = false;
+    });
+
+    /**
+     * ==========================================
+     * 4. QUIZ LOGIC
+     * ==========================================
+     */
+    let currentQuestionIndex = 0, characterScores = {};
+
+    function startQuiz() {
+        currentState = STATE.QUIZ; currentQuestionIndex = 0;
+        for (let char in CHARACTERS) characterScores[char] = 0;
+        document.getElementById('quiz-overlay').style.display = 'flex';
+        renderQuestion();
+    }
+
+    function renderQuestion() {
+        const qData = QUIZ_QUESTIONS[currentQuestionIndex];
+        document.getElementById('question-counter').innerText = `QUESTION ${currentQuestionIndex + 1} / ${QUIZ_QUESTIONS.length}`;
+        document.getElementById('question-text').innerText = qData.text;
+        const answersContainer = document.getElementById('answers-container');
+        answersContainer.innerHTML = '';
+        qData.answers.forEach(answer => {
+            const btn = document.createElement('button');
+            btn.className = 'answer-btn'; btn.innerText = answer.text;
+            btn.onclick = () => handleAnswer(answer.chars);
+            answersContainer.appendChild(btn);
+        });
+    }
+
+    function handleAnswer(charsArr) {
+        charsArr.forEach(char => { if(characterScores[char] !== undefined) characterScores[char]++; });
+        currentQuestionIndex++;
+        if (currentQuestionIndex < QUIZ_QUESTIONS.length) renderQuestion();
+        else finishQuiz();
+    }
+
+    function finishQuiz() {
+        document.getElementById('quiz-overlay').style.display = 'none';
+        let topChar = "Yuji", maxScore = -1;
+        for (let char in characterScores) {
+            // Add a tiny random tiebreaker if scores are perfectly identical
+            let tiebreaker = characterScores[char] + (Math.random() * 0.1); 
+            if (tiebreaker > maxScore) { maxScore = tiebreaker; topChar = char; }
+        }
+        activePlayerChar = CHARACTERS[topChar];
+        currentState = STATE.TRANSITION; transitionTimer = 200;
+        shockwaves.push(new Shockwave(canvas.width/2, canvas.height/2, activePlayerChar.color, 2000, 50));
+    }
+
+    /**
+     * ==========================================
+     * 5. ADVANCED VFX & UTILITIES
+     * ==========================================
+     */
+    function randomRange(min, max) { return Math.random() * (max - min) + min; }
+    function checkCollision(r1, r2) { return (r1.x < r2.x + r2.width && r1.x + r1.width > r2.x && r1.y < r2.y + r2.height && r1.y + r1.height > r2.y); }
+    function triggerShake(intensity, duration) { screenShakeIntensity = intensity; screenShakeTime = duration; }
+    function triggerHitStop(duration) { hitStopTime = duration; }
+    function addCombo() {
+        combo++; comboTimer = 180; // 3 seconds to keep combo alive
+        if (combo > maxCombo) maxCombo = combo;
+        if (combo % 10 === 0) {
+            floatingTexts.push(new FloatingText(`${combo} HITS!`, canvas.width/2, 200, activePlayerChar.color, 80, 60, true));
+            triggerShake(10, 10);
+        }
+    }
+
+    class Orb {
+        constructor(x, y, type) {
+            this.x = x; this.y = y; this.type = type; // 'hp' or 'ce'
+            this.color = type === 'hp' ? '#00ff44' : '#00ccff';
+            this.vx = randomRange(-4, 4); this.vy = randomRange(-8, -4);
+            this.life = 600; this.size = 8;
+        }
+        update(player) {
+            this.vy += 0.5; // gravity
+            this.x += this.vx; this.y += this.vy;
+            if (this.y > GROUND_Y - this.size) { this.y = GROUND_Y - this.size; this.vy *= -0.5; this.vx *= 0.8; }
+            
+            // Magnetize to player
+            let dx = player.x + player.width/2 - this.x;
+            let dy = player.y + player.height/2 - this.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < 200) {
+                this.vx += (dx / dist) * 2;
+                this.vy += (dy / dist) * 2;
+            }
+
+            // Collection
+            if (dist < player.width/2 + this.size && !player.isDashing) {
+                if (this.type === 'hp') {
+                    player.health = Math.min(player.maxHealth, player.health + 10);
+                    floatingTexts.push(new FloatingText("+10 HP", this.x, this.y, this.color, 20, 30));
+                } else {
+                    player.ce = Math.min(player.maxCE, player.ce + 15);
+                    floatingTexts.push(new FloatingText("+15 CE", this.x, this.y, this.color, 20, 30));
+                }
+                for(let i=0; i<10; i++) particles.push(new Particle(this.x, this.y, this.color, 'spark'));
+                this.life = 0;
+            }
+            this.life--;
+        }
+        draw(ctx) {
+            ctx.shadowBlur = 15; ctx.shadowColor = this.color;
+            ctx.fillStyle = this.color;
+            ctx.beginPath(); ctx.arc(this.x, this.y, this.size + Math.sin(frames*0.2)*2, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(this.x - 2, this.y - 2, 3, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    class Trail {
+        constructor(x, y, width, height, color, facingRight, type="block") {
+            this.x = x; this.y = y; this.width = width; this.height = height;
+            this.color = color; this.facingRight = facingRight;
+            this.life = 1.0; this.decay = 0.08; this.type = type;
+        }
+        update() { this.life -= this.decay; }
+        draw(ctx) {
+            ctx.globalAlpha = Math.max(0, this.life * 0.5);
+            ctx.fillStyle = this.color; ctx.shadowBlur = 10; ctx.shadowColor = this.color;
+            ctx.globalCompositeOperation = 'lighter';
+            
+            if (this.type === "dash") {
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y + this.height);
+                ctx.lineTo(this.x + this.width/2, this.y);
+                ctx.lineTo(this.x + this.width, this.y + this.height);
+                ctx.fill();
+            } else {
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+            
+            ctx.globalCompositeOperation = 'source-over'; ctx.shadowBlur = 0; ctx.globalAlpha = 1.0;
+        }
+    }
+
+    class Particle {
+        constructor(x, y, color, type = 'spark') {
+            this.x = x; this.y = y; this.color = color; this.type = type;
+            this.life = 1.0; this.size = randomRange(2, 6);
+            
+            let angle = randomRange(0, Math.PI * 2);
+            let speed = randomRange(5, 15);
+            if (type === 'spark') {
+                this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
+                this.decay = randomRange(0.02, 0.05); this.gravity = 0.5; this.friction = 0.95;
+            } else if (type === 'energy') {
+                this.vx = randomRange(-2, 2); this.vy = randomRange(-10, -2);
+                this.decay = randomRange(0.01, 0.03); this.gravity = -0.1; this.friction = 0.98;
+            } else if (type === 'blood') {
+                this.vx = randomRange(-8, 8); this.vy = randomRange(-5, 5);
+                this.decay = 0.01; this.gravity = 0.8; this.friction = 0.9; this.size = randomRange(4, 10);
+            }
+        }
+        update() {
+            this.vy += this.gravity;
+            this.vx *= this.friction; this.vy *= this.friction;
+            this.x += this.vx; this.y += this.vy;
+            this.life -= this.decay;
+            if (this.y > GROUND_Y && this.type !== 'energy') { this.y = GROUND_Y; this.vy *= -0.5; this.vx *= 0.8; }
+        }
+        draw(ctx) {
+            ctx.globalAlpha = Math.max(0, this.life); ctx.fillStyle = this.color;
+            if (this.type === 'spark' || this.type === 'energy') { ctx.globalCompositeOperation = 'lighter'; ctx.shadowBlur = 10; ctx.shadowColor = this.color; }
+            ctx.beginPath();
+            if(this.type === 'spark') {
+                ctx.moveTo(this.x, this.y); ctx.lineTo(this.x - this.vx*2, this.y - this.vy*2);
+                ctx.strokeStyle = this.color; ctx.lineWidth = this.size; ctx.stroke();
+            } else {
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.globalCompositeOperation = 'source-over'; ctx.shadowBlur = 0; ctx.globalAlpha = 1.0;
+        }
+    }
+
+    class Shockwave {
+        constructor(x, y, color, maxRadius, speed) {
+            this.x = x; this.y = y; this.color = color;
+            this.radius = 1; this.maxRadius = maxRadius; this.speed = speed;
+            this.thickness = 20; this.life = 1.0;
+        }
+        update() { this.radius += this.speed; this.life = 1.0 - (this.radius / this.maxRadius); }
+        draw(ctx) {
+            ctx.globalAlpha = Math.max(0, this.life); ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.strokeStyle = this.color; ctx.lineWidth = this.thickness * this.life;
+            ctx.shadowBlur = 20; ctx.shadowColor = this.color; ctx.globalCompositeOperation = 'lighter';
+            ctx.stroke(); ctx.globalCompositeOperation = 'source-over'; ctx.shadowBlur = 0; ctx.globalAlpha = 1.0;
+        }
+    }
+
+    class SlashEffect {
+        constructor(x, y, radius, angle, color, facingRight) {
+            this.x = x; this.y = y; this.radius = radius; this.angle = angle; this.color = color;
+            this.facingRight = facingRight; this.life = 1.0; 
+            this.rotation = facingRight ? -Math.PI/2 : Math.PI/2; this.rotSpeed = facingRight ? 0.3 : -0.3;
+        }
+        update() { this.life -= 0.1; this.rotation += this.rotSpeed; this.radius += 8; }
+        draw(ctx) {
+            ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.rotation);
+            ctx.globalAlpha = Math.max(0, this.life);
+            ctx.beginPath(); ctx.arc(0, 0, this.radius, -this.angle/2, this.angle/2);
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 15 * this.life; ctx.stroke();
+            ctx.beginPath(); ctx.arc(0, 0, this.radius, -this.angle/2, this.angle/2);
+            ctx.strokeStyle = this.color; ctx.lineWidth = 30 * this.life;
+            ctx.shadowBlur = 30; ctx.shadowColor = this.color; ctx.globalCompositeOperation = 'lighter';
+            ctx.stroke(); ctx.restore();
+        }
+    }
+
+    class FloatingText {
+        constructor(text, x, y, color, size, duration, isCrit = false) {
+            this.text = text; this.x = x; this.y = y; this.color = color; this.size = size;
+            this.life = duration; this.maxLife = duration; this.vy = isCrit ? -4 : -2;
+            this.isCrit = isCrit; this.scale = isCrit ? 2.0 : 1.0;
+        }
+        update() { this.y += this.vy; this.life--; if(this.scale > 1.0) this.scale -= 0.1; }
+        draw(ctx) {
+            ctx.save(); ctx.translate(this.x, this.y); ctx.scale(this.scale, this.scale);
+            ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
+            ctx.fillStyle = this.color; ctx.font = `bold ${this.size}px Teko, sans-serif`; ctx.textAlign = 'center';
+            if (this.isCrit) { ctx.shadowBlur = 10; ctx.shadowColor = '#fff'; ctx.fillStyle = '#fff'; } 
+            else { ctx.shadowBlur = 5; ctx.shadowColor = '#000'; }
+            ctx.fillText(this.text, 0, 0); ctx.restore();
+        }
+    }
+
+    /**
+     * ==========================================
+     * 6. ENTITIES
+     * ==========================================
+     */
+    class Player {
+        constructor(charData) {
+            this.charData = charData;
+            this.width = 45; this.height = 80;
+            this.x = 300; this.y = GROUND_Y - this.height;
+            
+            this.vx = 0; this.vy = 0;
+            this.baseSpeed = charData.passive === "Heavenly Restriction" || charData.passive === "Projection Sorcery" ? 16 : 10; 
+            this.speed = this.baseSpeed;
+            this.gravity = 0.8; 
+            this.jumpPower = charData.passive === "Heavenly Restriction" ? -22 : -18;
+            this.isGrounded = false;
+            this.jumpsLeft = charData.passive === "Heavenly Restriction" ? 2 : 1;
+            
+            this.maxHealth = 100; this.health = this.maxHealth;
+            this.maxCE = charData.maxCE; this.ce = this.maxCE;
+            
+            this.zoneTimer = 0; this.infinityCooldown = 0; this.vowCooldown = 0;
+            
+            // Dash Mechanics
+            this.dashCooldown = 0; this.dashTimer = 0; this.isDashing = false;
+
+            this.facingRight = true; this.animState = 'idle'; this.animTimer = 0;
+            
+            this.isAttacking = false; this.attackFrames = 0; this.attackCooldown = 0;
+            this.hitEnemiesThisAttack = new Set();
+            this.miniCooldownMax = charData.miniAttack.cooldown || 0; this.miniCooldownTimer = 0;
+            this.ultimateMeter = 0; this.nextHitCrit = false;
+        }
+
+        update() {
+            let inZone = this.zoneTimer > 0;
+            if (inZone) {
+                this.zoneTimer--; this.speed = this.baseSpeed * 1.5;
+                if (frames % 5 === 0) particles.push(new Particle(this.x + Math.random()*this.width, this.y + Math.random()*this.height, '#000', 'energy'));
+            } else {
+                this.speed = (isDomainActive && this.charData.domainExpansion.effect === "buff") ? this.baseSpeed * 1.5 : this.baseSpeed;
+            }
+
+            if (this.charData.passive !== "Heavenly Restriction") {
+                let regenRate = inZone ? 5 : (this.charData.passive === "Shadow Reserve" || this.charData.passive === "Fever" ? 8 : 15);
+                if (frames % regenRate === 0 && this.ce < this.maxCE) this.ce++;
+            }
+            if (this.infinityCooldown > 0) this.infinityCooldown--;
+            if (this.vowCooldown > 0) this.vowCooldown--;
+            if (this.dashCooldown > 0) this.dashCooldown--;
+
+            this.animTimer++;
+
+            // Dash Logic
+            this.isDashing = this.dashTimer > 0;
+            if (this.isDashing) {
+                this.dashTimer--;
+                this.vy = 0; // suspend gravity
+                trails.push(new Trail(this.x, this.y, this.width, this.height, '#fff', this.facingRight, "dash"));
+            } else {
+                let moved = false;
+                if (keys.ArrowLeft) { this.vx = -this.speed; this.facingRight = false; moved = true; } 
+                else if (keys.ArrowRight) { this.vx = this.speed; this.facingRight = true; moved = true; } 
+                else { this.vx *= 0.6; } // Friction
+
+                // Initiate Dash
+                if (keys.KeyZ && this.dashCooldown <= 0) {
+                    this.dashTimer = this.charData.passive === "Projection Sorcery" ? 18 : 12; // Naoya gets longer dash
+                    this.dashCooldown = 45;
+                    this.vx = this.facingRight ? this.speed * 3 : -this.speed * 3;
+                    shockwaves.push(new Shockwave(this.x+this.width/2, this.y+this.height/2, '#fff', 80, 15));
+                }
+
+                if (Math.abs(this.vx) > 2 && frames % 5 === 0) {
+                    trails.push(new Trail(this.x, this.y, this.width, this.height, inZone ? '#ff0000' : this.charData.aura, this.facingRight));
+                }
+
+                // Jumping
+                if (keys.ArrowUp) {
+                    if (this.isGrounded) {
+                        this.vy = this.jumpPower; this.isGrounded = false; this.jumpsLeft--;
+                        for(let i=0; i<10; i++) particles.push(new Particle(this.x+this.width/2, this.y+this.height, '#fff', 'spark'));
+                        keys.ArrowUp = false; 
+                    } else if (this.jumpsLeft > 0 && this.vy > -5) { 
+                        this.vy = this.jumpPower * 0.8; this.jumpsLeft--;
+                        shockwaves.push(new Shockwave(this.x+this.width/2, this.y+this.height, '#fff', 50, 10));
+                        keys.ArrowUp = false;
+                    }
+                }
+                this.vy += this.gravity;
+            }
+            
+            this.x += this.vx; this.y += this.vy;
+
+            // Bounds
+            if (this.x < 0) this.x = 0;
+            if (this.y + this.height >= GROUND_Y) {
+                if(!this.isGrounded && this.vy > 5) triggerShake(3, 5); 
+                this.y = GROUND_Y - this.height; this.vy = 0; this.isGrounded = true;
+                this.jumpsLeft = this.charData.passive === "Heavenly Restriction" ? 2 : 1;
+            }
+
+            // Animation States
+            if (this.isDashing) this.animState = 'dash';
+            else if (this.isAttacking) this.animState = 'attack';
+            else if (!this.isGrounded) this.animState = this.vy < 0 ? 'jump' : 'fall';
+            else if (Math.abs(this.vx) > 1) this.animState = 'run';
+            else this.animState = 'idle';
+
+            if (this.attackCooldown > 0) this.attackCooldown--;
+            if (this.miniCooldownTimer > 0) this.miniCooldownTimer--;
+            if (this.attackFrames > 0) {
+                this.attackFrames--; this.vx *= 0.8;
+            } else { this.isAttacking = false; }
+
+            // Actions
+            if (keys.Space && this.attackCooldown <= 0 && !this.isDashing) this.performNormalAttack();
+            if (keys.Shift && this.miniCooldownTimer <= 0 && !this.isDashing) this.attemptMiniAttack();
+            if (keys.Enter && this.ultimateMeter >= 100 && !isDomainActive && !this.isDashing) this.performDomainExpansion();
+            if (keys.KeyV && this.vowCooldown <= 0 && !this.isDashing) this.performBindingVow();
+        }
+
+        addUltimate(amount) { this.ultimateMeter = Math.min(100, this.ultimateMeter + amount); }
+
+        performBindingVow() {
+            if (this.health > 35) {
+                this.health -= 30; this.ce = this.maxCE; this.ultimateMeter = 100; this.vowCooldown = 600;
+                triggerHitStop(15); triggerShake(20, 20);
+                shockwaves.push(new Shockwave(this.x+this.width/2, this.y+this.height/2, '#aa0000', canvas.width, 40));
+                floatingTexts.push(new FloatingText("BINDING VOW: LIFE FOR POWER", canvas.width/2, canvas.height/2, "#ff0000", 60, 100, true));
+            }
+        }
+
+        performNormalAttack() {
+            this.isAttacking = true; this.attackFrames = 15; this.attackCooldown = 20;
+            this.hitEnemiesThisAttack.clear(); this.animTimer = 0;
+
+            let hitBoxWidth = 100;
+            let hitBoxX = this.facingRight ? this.x + this.width : this.x - hitBoxWidth;
+            let attackRect = { x: hitBoxX, y: this.y + 10, width: hitBoxWidth, height: 70 };
+
+            if (this.charData.normalAttack.type === 'slash') {
+                slashes.push(new SlashEffect(this.facingRight ? this.x+this.width : this.x, this.y+this.height/2, 70, Math.PI, this.charData.normalAttack.color, this.facingRight));
+            } else {
+                shockwaves.push(new Shockwave(hitBoxX + hitBoxWidth/2, this.y + 45, this.charData.normalAttack.color, 90, 15));
+            }
+
+            enemies.forEach(enemy => {
+                if (!this.hitEnemiesThisAttack.has(enemy) && checkCollision(attackRect, enemy)) {
+                    this.hitEnemiesThisAttack.add(enemy);
+                    addCombo();
+                    
+                    let dmg = (this.nextHitCrit ? 60 : 25) * (1 + (combo * 0.05)); // Combo multiplier
+                    let kb = this.nextHitCrit ? 25 : 12;
+                    
+                    if (this.zoneTimer > 0) dmg *= 1.2;
+                    if (isDomainActive && this.charData.domainExpansion.effect === "buff") dmg *= 1.5;
+
+                    enemy.takeDamage(dmg, this.facingRight ? kb : -kb);
+                    this.addUltimate(8);
+                    if (this.maxCE > 0 && this.ce < this.maxCE) this.ce = Math.min(this.maxCE, this.ce + 5);
+
+                    if (this.nextHitCrit) {
+                        floatingTexts.push(new FloatingText("CRITICAL HIT!", enemy.x+25, enemy.y-30, "#ffff00", 40, 40, true));
+                        this.nextHitCrit = false; triggerShake(15, 10); triggerHitStop(8);
+                        shockwaves.push(new Shockwave(enemy.x+25, enemy.y+35, "#ffff00", 180, 25));
+                    } else {
+                        triggerShake(5, 5); triggerHitStop(3);
+                        for(let i=0; i<15; i++) particles.push(new Particle(enemy.x + 25, enemy.y + 35, this.charData.normalAttack.color, 'spark'));
+                    }
+
+                    // Black Flash
+                    let bfChance = this.charData.passive === "Black Flash Prodigy" ? 0.25 : 0.05;
+                    if (this.zoneTimer > 0) bfChance *= 1.5;
+                    
+                    if (Math.random() < bfChance) {
+                        triggerHitStop(20); triggerShake(25, 15);
+                        shockwaves.push(new Shockwave(hitBoxX+45, this.y+45, "#000000", 400, 40));
+                        shockwaves.push(new Shockwave(hitBoxX+45, this.y+45, "#ff0000", 300, 30));
+                        floatingTexts.push(new FloatingText("BLACK FLASH", hitBoxX+45, this.y-40, "#ff0000", 60, 60, true));
+                        enemy.takeDamage(dmg * 3, this.facingRight ? 30 : -30);
+                        
+                        if (this.zoneTimer <= 0) floatingTexts.push(new FloatingText("120% POTENTIAL UNLOCKED", canvas.width/2, canvas.height/2, "#fff", 60, 80, true));
+                        this.zoneTimer = 480; 
+                        if(this.maxCE > 0) this.ce = this.maxCE; 
+                    }
+                }
+            });
+        }
+
+        attemptMiniAttack() {
+            let cost = this.charData.miniAttack.ceCost;
+            if (this.zoneTimer > 0) cost = Math.floor(cost / 2);
+
+            if (this.charData.passive === "Heavenly Restriction") {
+                this.performMiniAttackEffect();
+            } else if (this.ce >= cost) {
+                this.ce -= cost; this.performMiniAttackEffect();
+            } else {
+                floatingTexts.push(new FloatingText("NOT ENOUGH CE!", this.x + 25, this.y - 20, "#ff0000", 20, 30));
+            }
+        }
+
+        performMiniAttackEffect() {
+            this.miniCooldownTimer = this.charData.passive === "Heavenly Restriction" ? this.miniCooldownMax : 10; 
+            const effect = this.charData.miniAttack.effect;
+            floatingTexts.push(new FloatingText(this.charData.miniAttack.name, this.x + 25, this.y - 50, "#00ffff", 30, 60, true));
+            let dmgMult = (this.zoneTimer > 0 ? 1.2 : 1.0) * (1 + (combo * 0.05));
+
+            if (effect === "crit") {
+                this.isAttacking = true; this.attackFrames = 20; this.hitEnemiesThisAttack.clear();
+                let rect = { x: this.facingRight ? this.x + this.width : this.x - 120, y: this.y + 10, width: 120, height: 70 };
+                shockwaves.push(new Shockwave(this.x+25, this.y+45, "#ff0055", 350, 30));
+                enemies.forEach(e => {
+                    if (checkCollision(rect, e)) {
+                        addCombo(); e.takeDamage(60 * dmgMult, this.facingRight ? 30 : -30);
+                        triggerHitStop(12); triggerShake(20, 15);
+                        for(let i=0; i<30; i++) particles.push(new Particle(e.x+25, e.y+35, '#ff0055', 'spark'));
+                        this.addUltimate(20);
+                    }
+                });
+            } 
+            else if (effect === "beam") {
+                this.isAttacking = true; this.attackFrames = 30; this.hitEnemiesThisAttack.clear();
+                triggerShake(15, 30); triggerHitStop(8);
+                let beamX = this.facingRight ? this.x + this.width : 0;
+                let beamW = this.facingRight ? canvas.width - beamX : this.x;
+                shockwaves.push(new Shockwave(this.x+25, this.y+45, this.charData.color, 250, 20));
+                
+                for(let i=0; i<80; i++) particles.push(new Particle(beamX + Math.random()*beamW, this.y + randomRange(-20, 100), this.charData.color, 'energy'));
+
+                enemies.forEach(e => {
+                    if (e.y > this.y - 120 && e.y < this.y + 120 && ((this.facingRight && e.x > this.x) || (!this.facingRight && e.x < this.x))) {
+                        addCombo(); e.takeDamage(50 * dmgMult, this.facingRight ? 20 : -20); this.addUltimate(15);
+                    }
+                });
+            }
+            else if (effect === "screen_damage") {
+                triggerShake(20, 20);
+                shockwaves.push(new Shockwave(canvas.width/2, canvas.height/2, this.charData.color, canvas.width, 50));
+                enemies.forEach(e => {
+                    addCombo(); e.takeDamage(35 * dmgMult, 0);
+                    for(let i=0; i<15; i++) particles.push(new Particle(e.x+25, e.y+35, this.charData.color, 'spark'));
+                });
+                this.addUltimate(15);
+            }
+            else if (effect === "next_crit") {
+                this.nextHitCrit = true; triggerShake(5, 10);
+                shockwaves.push(new Shockwave(this.x+25, this.y+45, "#ffff00", 120, 10));
+                for(let i=0; i<20; i++) particles.push(new Particle(this.x+25, this.y+40, "#ffff00", 'energy'));
+            }
+            else if (effect === "swap") {
+                if (enemies.length > 0) {
+                    let closest = enemies[0], minD = Math.abs(closest.x - this.x);
+                    enemies.forEach(e => { if(Math.abs(e.x - this.x) < minD) { closest = e; minD = Math.abs(e.x - this.x); } });
+                    shockwaves.push(new Shockwave(this.x+25, this.y+45, "#fff", 100, 20));
+                    shockwaves.push(new Shockwave(closest.x+25, closest.y+45, "#fff", 100, 20));
+                    let tempX = this.x; this.x = closest.x; closest.x = tempX; triggerShake(8, 5);
+                }
+            }
+            else if (effect === "massive_knockback") {
+                let rect = { x: this.facingRight ? this.x + this.width : this.x - 180, y: this.y-50, width: 180, height: 150 };
+                shockwaves.push(new Shockwave(this.x + (this.facingRight?50:-50), this.y+45, this.charData.color, 300, 25));
+                triggerShake(15, 10);
+                enemies.forEach(e => {
+                    if (checkCollision(rect, e)) { addCombo(); e.takeDamage(40 * dmgMult, this.facingRight ? 45 : -45); this.addUltimate(15); }
+                });
+            }
+            else if (effect === "multi_hit") {
+                this.isAttacking = true; this.attackFrames = 30;
+                slashes.push(new SlashEffect(this.x+25, this.y+45, 140, Math.PI*2, this.charData.color, true));
+                triggerShake(12, 15);
+                let rect = { x: this.x - 120, y: this.y-50, width: 240 + this.width, height: 150 };
+                enemies.forEach(e => {
+                    if (checkCollision(rect, e)) { 
+                        addCombo(); e.takeDamage(45 * dmgMult, this.facingRight ? 15 : -15); this.addUltimate(15); 
+                        for(let i=0; i<20; i++) particles.push(new Particle(e.x+25, e.y+35, this.charData.color, 'spark'));
+                    }
+                });
+            }
+            else if (effect === "heal") {
+                this.health = Math.min(this.maxHealth, this.health + 40);
+                shockwaves.push(new Shockwave(this.x+25, this.y+45, "#00ff88", 150, 10));
+                for(let i=0; i<30; i++) particles.push(new Particle(this.x+25, this.y+40, "#00ff88", 'energy'));
+                floatingTexts.push(new FloatingText("+40 HP", this.x + 25, this.y - 20, "#00ff88", 30, 50, true));
+            }
+        }
+
+        performDomainExpansion() {
+            this.ultimateMeter = 0; isDomainActive = true; domainTimer = 450; 
+            triggerShake(40, 40); triggerHitStop(20);
+            shockwaves.push(new Shockwave(this.x+25, this.y+45, "#ffffff", canvas.width * 2, 60));
+            floatingTexts.push(new FloatingText("DOMAIN EXPANSION", canvas.width/2, canvas.height/2 - 20, "#ffffff", 80, 80, true));
+            floatingTexts.push(new FloatingText(this.charData.domainExpansion.name, canvas.width/2, canvas.height/2 + 60, this.charData.color, 100, 100, true));
+        }
+
+        takeDamage(amount) {
+            if (this.isDashing) return; // I-frames
+            
+            if (this.charData.passive === "Infinity" && this.infinityCooldown <= 0 && this.ce >= 20) {
+                this.ce -= 20; this.infinityCooldown = 300;
+                floatingTexts.push(new FloatingText("INFINITY", this.x+25, this.y-20, "#0088ff", 30, 40, true));
+                shockwaves.push(new Shockwave(this.x+25, this.y+45, "#0088ff", 100, 10));
+                return;
+            }
+
+            this.health -= amount; combo = 0; // Break combo
+            this.addUltimate(5); triggerShake(15, 10); triggerHitStop(6);
+            for(let i=0; i<20; i++) particles.push(new Particle(this.x + 25, this.y + 40, '#ff0000', 'blood'));
+            if (this.health <= 0) currentState = STATE.GAMEOVER;
+        }
+
+        draw(ctx) {
+            ctx.save();
+            ctx.translate(this.x + this.width/2, this.y + this.height);
+
+            let bobY = 0; let rot = 0;
+            if (this.animState === 'idle') { bobY = Math.sin(this.animTimer * 0.1) * 3; }
+            else if (this.animState === 'run') { bobY = Math.abs(Math.sin(this.animTimer * 0.3)) * -10; rot = Math.sin(this.animTimer * 0.3) * 0.15; }
+            else if (this.animState === 'jump') { bobY = -5; rot = this.facingRight ? 0.1 : -0.1; }
+            else if (this.animState === 'fall') { bobY = 5; rot = this.facingRight ? -0.1 : 0.1; }
+            else if (this.animState === 'attack') { rot = this.facingRight ? 0.3 : -0.3; }
+            else if (this.animState === 'dash') { rot = this.facingRight ? 0.5 : -0.5; bobY = 10; }
+
+            ctx.translate(0, bobY - this.height); ctx.rotate(rot);
+
+            // Aura 
+            let currentAura = this.zoneTimer > 0 ? '#ff0000' : this.charData.aura;
+            ctx.shadowBlur = this.zoneTimer > 0 ? 50 : 30; ctx.shadowColor = currentAura;
+            ctx.fillStyle = currentAura; ctx.globalCompositeOperation = 'lighter';
+            let auraPulse = Math.sin(this.animTimer * 0.2) * 8;
+            ctx.beginPath(); ctx.ellipse(0, this.height/2, this.width + auraPulse, this.height/2 + 10 + auraPulse, 0, 0, Math.PI*2); ctx.fill();
+            ctx.globalCompositeOperation = 'source-over'; ctx.shadowBlur = 0;
+
+            // Scarf/Cape
+            ctx.fillStyle = this.charData.color;
+            ctx.beginPath();
+            let scarfDir = this.facingRight ? -1 : 1;
+            let wind = Math.sin(this.animTimer * 0.2) * 10 - (this.vx * 2);
+            ctx.moveTo(0, 10);
+            ctx.quadraticCurveTo(scarfDir * 30 + wind, 20, scarfDir * 50 + wind*1.5, 40 + Math.sin(this.animTimer*0.3)*10);
+            ctx.lineTo(scarfDir * 40 + wind, 45);
+            ctx.quadraticCurveTo(scarfDir * 20 + wind, 25, 0, 20);
+            ctx.fill();
+
+            // Stylized Body (Diamond/Ninja shape)
+            ctx.fillStyle = '#111';
+            ctx.beginPath();
+            ctx.moveTo(0, 0); // Head top
+            ctx.lineTo(this.width/2, 20); // Shoulder Right
+            ctx.lineTo(this.width/2 - 10, this.height - 10); // Foot Right
+            ctx.lineTo(-this.width/2 + 10, this.height - 10); // Foot Left
+            ctx.lineTo(-this.width/2, 20); // Shoulder Left
+            ctx.closePath(); ctx.fill();
+
+            // Highlights
+            ctx.fillStyle = this.charData.color;
+            ctx.beginPath(); ctx.moveTo(0, 5); ctx.lineTo(15, 25); ctx.lineTo(-15, 25); ctx.fill();
+            
+            // Eye Glow
+            ctx.shadowBlur = 15; ctx.shadowColor = this.zoneTimer > 0 ? '#ff0000' : '#fff';
+            ctx.fillStyle = this.zoneTimer > 0 ? '#ff0000' : '#fff';
+            let eyeX = this.facingRight ? 10 : -10;
+            ctx.fillRect(eyeX - 6, 8, 12, 4);
+            ctx.shadowBlur = 0;
+
+            if (this.isAttacking && this.charData.normalAttack.type === 'slash') {
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 6;
+                ctx.shadowBlur = 20; ctx.shadowColor = this.charData.normalAttack.color;
+                ctx.beginPath();
+                if(this.facingRight) { ctx.moveTo(0, 40); ctx.lineTo(80, 50); }
+                else { ctx.moveTo(0, 40); ctx.lineTo(-80, 50); }
+                ctx.stroke(); ctx.shadowBlur = 0;
+            }
+
+            ctx.restore();
+        }
+    }
+
+    class Enemy {
+        constructor() {
+            // Randomly select enemy type based on score progression
+            let rand = Math.random();
+            if (score > 10 && rand < 0.2) this.type = 'goliath';
+            else if (score > 5 && rand < 0.5) this.type = 'flyhead';
+            else this.type = 'brawler';
+
+            this.x = Math.random() > 0.5 ? canvas.width + 100 : -100; 
+
+            if (this.type === 'goliath') {
+                this.width = 100; this.height = 140; this.speed = randomRange(0.8, 1.5);
+                this.maxHealth = 150 + (score * 5); this.dmg = 25; this.color = '#330000';
+            } else if (this.type === 'flyhead') {
+                this.width = 40; this.height = 40; this.speed = randomRange(4.0, 7.0);
+                this.maxHealth = 20 + score; this.dmg = 10; this.color = '#442255';
+            } else { // brawler
+                this.width = 60; this.height = 90; this.speed = randomRange(2.0, 3.5);
+                this.maxHealth = 50 + (score * 2); this.dmg = 15; this.color = '#1a000d';
+            }
+            
+            this.health = this.maxHealth;
+            this.y = GROUND_Y - this.height;
+            this.vx = 0; this.vy = 0;
+            
+            this.attackCooldown = 0; this.isKnockedBack = false; this.knockbackTimer = 0;
+            this.stunned = false; this.animOffset = randomRange(0, 100);
+            this.eyes = [{x: randomRange(-15, 0), y: randomRange(10, 30)}, {x: randomRange(0, 15), y: randomRange(10, 30)}];
+        }
+
+        update(player) {
+            this.stunned = false;
+            if (isDomainActive) {
+                let dEffect = player.charData.domainExpansion.effect;
+                if (dEffect.includes("stun")) this.stunned = true;
+                if (dEffect.includes("damage") && frames % 15 === 0) {
+                    this.takeDamage(10, 0); 
+                    particles.push(new Particle(this.x+this.width/2, this.y+this.height/2, player.charData.color, 'energy'));
+                }
+                if (dEffect === "slow") this.speed *= 0.3;
+            }
+
+            if (this.stunned) return;
+
+            if (this.isKnockedBack) {
+                this.x += this.vx; this.vx *= 0.85; 
+                this.knockbackTimer--;
+                if (this.knockbackTimer <= 0) { this.isKnockedBack = false; this.vx = 0; }
+            } else {
+                let distToPlayerX = player.x - this.x;
+                let moveDir = distToPlayerX > 0 ? 1 : -1;
+                
+                if (this.type === 'flyhead') {
+                    // Erratic flying movement
+                    this.y = GROUND_Y - this.height - 100 + Math.sin(frames*0.1 + this.animOffset)*50;
+                    let distToPlayerY = player.y - this.y;
+                    if (Math.abs(distToPlayerX) < 40 && Math.abs(distToPlayerY) < 50) {
+                        if (this.attackCooldown <= 0) this.attack(player);
+                    } else {
+                        this.vx = moveDir * this.speed; this.x += this.vx;
+                    }
+                } else {
+                    // Ground movement
+                    if (Math.abs(distToPlayerX) < (this.width/2 + player.width/2 + 10)) {
+                        this.vx = 0;
+                        if (this.attackCooldown <= 0) this.attack(player);
+                    } else {
+                        this.vx = moveDir * this.speed; this.x += this.vx;
+                    }
+                    this.y = GROUND_Y - this.height + Math.abs(Math.sin((frames + this.animOffset) * (this.type==='goliath'?0.05:0.1))) * (this.type==='goliath'?-5:-15);
+                }
+            }
+
+            if (this.attackCooldown > 0) this.attackCooldown--;
+        }
+
+        attack(player) {
+            this.attackCooldown = this.type === 'goliath' ? 120 : (this.type === 'flyhead' ? 40 : 80);
+            
+            // Goliath Ground Slam
+            if (this.type === 'goliath') {
+                triggerShake(20, 15);
+                shockwaves.push(new Shockwave(this.x+this.width/2, this.y+this.height, '#ff0000', 200, 20));
+            }
+            
+            player.takeDamage(this.dmg);
+            this.x += (player.x > this.x ? 20 : -20);
+        }
+
+        takeDamage(amount, knockbackForce) {
+            this.health -= amount;
+            if (knockbackForce !== 0) {
+                // Goliaths take less knockback
+                this.vx = this.type === 'goliath' ? knockbackForce * 0.3 : knockbackForce;
+                this.isKnockedBack = true; this.knockbackTimer = 20;
+            }
+            floatingTexts.push(new FloatingText(Math.floor(amount).toString(), this.x + this.width/2, this.y - 10, "#fff", this.type==='goliath'?36:24, 30));
+        }
+
+        draw(ctx) {
+            ctx.save();
+            ctx.translate(this.x + this.width/2, this.y);
+
+            ctx.shadowBlur = 20; ctx.shadowColor = this.color;
+            ctx.fillStyle = this.stunned ? '#333' : this.color;
+            
+            ctx.beginPath();
+            let time = frames * 0.1 + this.animOffset;
+            
+            if (this.type === 'goliath') {
+                ctx.moveTo(-this.width/2, 20); ctx.lineTo(this.width/2, 20);
+                ctx.lineTo(this.width/2 + 20, this.height/2); ctx.lineTo(this.width/2, this.height);
+                ctx.lineTo(-this.width/2, this.height); ctx.lineTo(-this.width/2 - 20, this.height/2);
+            } else if (this.type === 'flyhead') {
+                ctx.arc(0, this.height/2, this.width/2 + Math.sin(time)*5, 0, Math.PI*2);
+            } else {
+                ctx.moveTo(-this.width/2 + Math.sin(time)*5, 0); ctx.lineTo(this.width/2 + Math.cos(time)*5, 0);
+                ctx.lineTo(this.width/2 + 10 + Math.sin(time*1.5)*5, this.height/2); ctx.lineTo(this.width/2, this.height);
+                ctx.lineTo(-this.width/2, this.height); ctx.lineTo(-this.width/2 - 10 + Math.cos(time*1.2)*5, this.height/2);
+            }
+            ctx.closePath(); ctx.fill();
+
+            ctx.shadowBlur = 15; ctx.shadowColor = '#ff0000'; ctx.fillStyle = '#ff0000';
+            this.eyes.forEach((eye, index) => {
+                if (this.type === 'goliath' && index > 0) return; // Cyclops
+                ctx.beginPath(); 
+                ctx.arc(eye.x, eye.y + (this.type==='flyhead'?this.height/2:0), this.stunned ? 2 : (this.type==='goliath'?8:4) + Math.sin(time*2)*1, 0, Math.PI*2); 
+                ctx.fill();
+            });
+
+            // HP Bar
+            let hpPercentage = Math.max(0, this.health / this.maxHealth);
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = 'rgba(255,0,0,0.3)'; ctx.fillRect(-this.width/2, -15, this.width, 6);
+            ctx.fillStyle = '#ff0055'; ctx.fillRect(-this.width/2, -15, this.width * hpPercentage, 6);
+
+            ctx.restore();
+        }
+    }
+
+    /**
+     * ==========================================
+     * 7. RENDERING & GAME LOOP
+     * ==========================================
+     */
+    function drawBackground(ctx, frames) {
+        let visual = isDomainActive ? activePlayerChar.domainExpansion.visual : "normal";
+        
+        // Base Color
+        if (visual === "space") {
+            ctx.fillStyle = '#000005'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        } else if (visual === "blood" || visual === "shrine") {
+            let grad = ctx.createLinearGradient(0,0,0,canvas.height);
+            grad.addColorStop(0, '#440000'); grad.addColorStop(1, '#000000');
+            ctx.fillStyle = grad; ctx.fillRect(0,0, canvas.width, canvas.height);
+        } else {
+            let grad = ctx.createLinearGradient(0,0,0,canvas.height);
+            grad.addColorStop(0, '#0a001a'); grad.addColorStop(1, '#111111');
+            ctx.fillStyle = grad; ctx.fillRect(0,0, canvas.width, canvas.height);
+        }
+
+        // Parallax Layer 1 (Far)
+        ctx.fillStyle = visual === "blood" ? '#110000' : '#050505';
+        for(let i=0; i<30; i++) {
+            let bx = (i * 120 - (camera.x * 0.1)) % (canvas.width + 300) - 150;
+            let bh = 300 + Math.sin(i*7)*150;
+            ctx.fillRect(bx, canvas.height - 50 - bh, 80, bh);
+        }
+
+        // Parallax Layer 2 (Mid)
+        ctx.fillStyle = visual === "blood" ? '#220000' : '#0a0a0a';
+        for(let i=0; i<20; i++) {
+            let bx = (i * 200 - (camera.x * 0.3)) % (canvas.width + 400) - 200;
+            let bh = 200 + Math.cos(i*3)*100;
+            ctx.fillRect(bx, canvas.height - 80 - bh, 120, bh);
+            // Windows
+            ctx.fillStyle = visual === "blood" ? '#550000' : '#111';
+            for(let w=0; w<4; w++) ctx.fillRect(bx + 20, canvas.height - 80 - bh + 20 + w*40, 15, 25);
+            ctx.fillStyle = visual === "blood" ? '#220000' : '#0a0a0a'; 
+        }
+
+        // Parallax Layer 3 (Foreground structures)
+        ctx.fillStyle = visual === "blood" ? '#330000' : '#111111';
+        for(let i=0; i<10; i++) {
+            let bx = (i * 400 - (camera.x * 0.6)) % (canvas.width + 800) - 400;
+            ctx.fillRect(bx, GROUND_Y - 150, 60, 150);
+            ctx.beginPath(); ctx.moveTo(bx-20, GROUND_Y-150); ctx.lineTo(bx+80, GROUND_Y-150); ctx.lineTo(bx+30, GROUND_Y-200); ctx.fill();
+        }
+
+        // Domain specific overlays
+        if (visual === "grid" || visual === "space") {
+            ctx.strokeStyle = visual === "space" ? '#fff' : '#0088ff'; 
+            ctx.lineWidth = 1; ctx.globalAlpha = visual === "space" ? 0.1 : 0.2;
+            for(let i=0; i<canvas.width; i+=60) {
+                ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
+            }
+            ctx.globalAlpha = 1.0;
+        }
+
+        // Ground
+        ctx.fillStyle = visual === "shadows" ? '#000' : '#050505';
+        ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
+        
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = isDomainActive ? activePlayerChar.color : (player && player.zoneTimer > 0 ? '#ff0000' : '#ff0055');
+        ctx.strokeStyle = ctx.shadowColor; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(0, GROUND_Y); ctx.lineTo(canvas.width, GROUND_Y); ctx.stroke();
+        ctx.shadowBlur = 0;
+    }
+
+    function drawUI(ctx, player) {
+        ctx.save();
+        
+        // Base UI Plate
+        ctx.fillStyle = 'rgba(10, 10, 15, 0.85)';
+        ctx.strokeStyle = player.zoneTimer > 0 ? '#ff0000' : '#333'; 
+        ctx.lineWidth = player.zoneTimer > 0 ? 4 : 2;
+        ctx.beginPath(); ctx.moveTo(10, 10); ctx.lineTo(420, 10); ctx.lineTo(390, 160); ctx.lineTo(10, 160);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+
+        // Character Icon
+        ctx.fillStyle = '#000'; ctx.fillRect(20, 20, 80, 80);
+        ctx.shadowBlur = 10; ctx.shadowColor = player.charData.color;
+        ctx.strokeStyle = player.charData.color; ctx.strokeRect(20, 20, 80, 80);
+        ctx.shadowBlur = 0; ctx.fillStyle = player.charData.color;
+        ctx.font = 'bold 30px Teko'; ctx.textAlign = 'center'; ctx.fillText(player.charData.name[0], 60, 75); 
+
+        // Bars
+        ctx.textAlign = 'left'; ctx.font = '22px Teko'; ctx.fillStyle = '#fff';
+        
+        // HP
+        ctx.fillText("HP", 115, 40);
+        ctx.fillStyle = '#330000'; ctx.fillRect(145, 22, 200, 18);
+        ctx.shadowBlur = 10; ctx.shadowColor = '#ff0055'; ctx.fillStyle = '#ff0055'; 
+        ctx.fillRect(145, 22, Math.max(0, player.health / player.maxHealth) * 200, 18);
+        ctx.shadowBlur = 0;
+
+        // CE
+        ctx.fillStyle = '#fff'; ctx.fillText("CE", 115, 65);
+        ctx.fillStyle = '#001133'; ctx.fillRect(145, 47, 200, 18);
+        if (player.maxCE > 0) {
+            ctx.shadowBlur = 10; ctx.shadowColor = '#00ccff'; ctx.fillStyle = '#00ccff'; 
+            ctx.fillRect(145, 47, Math.max(0, player.ce / player.maxCE) * 200, 18); ctx.shadowBlur = 0;
+        } else {
+            ctx.fillStyle = '#777'; ctx.font = '16px Teko'; ctx.fillText("RESTRICTED", 150, 60);
+        }
+
+        // ULT
+        ctx.fillStyle = '#fff'; ctx.fillText("ULT", 115, 90);
+        ctx.fillStyle = '#222'; ctx.fillRect(145, 72, 200, 18);
+        let ultReady = player.ultimateMeter >= 100;
+        ctx.fillStyle = ultReady ? '#ffff00' : '#00aaff';
+        if (ultReady) { ctx.shadowBlur = 10; ctx.shadowColor = '#ffff00'; }
+        ctx.fillRect(145, 72, (player.ultimateMeter / 100) * 200, 18); ctx.shadowBlur = 0;
+        if(ultReady) { ctx.fillStyle = '#000'; ctx.font = '16px Teko'; ctx.fillText("ENTER - DOMAIN", 150, 86); }
+
+        // Skills Text
+        ctx.font = '20px Teko'; ctx.fillStyle = '#aaa';
+        ctx.fillText(`PASSIVE: ${player.charData.passive}`, 20, 125);
+        let ceCost = player.charData.miniAttack.ceCost;
+        let miniReady = player.charData.passive === "Heavenly Restriction" ? player.miniCooldownTimer <= 0 : player.ce >= ceCost;
+        let costText = player.charData.passive === "Heavenly Restriction" ? "CD" : `CE: ${player.zoneTimer > 0 ? Math.floor(ceCost/2) : ceCost}`;
+        ctx.fillStyle = miniReady ? '#00ffaa' : '#555';
+        ctx.fillText(`[SHIFT] ${player.charData.miniAttack.name} (${costText})  |  [Z] DASH`, 20, 148);
+
+        if (player.health > 35 && player.vowCooldown <= 0) {
+            ctx.fillStyle = '#ff5555'; ctx.fillText("[V] BINDING VOW: Trade 30HP for MAX CE & ULT", 20, 180);
+        }
+
+        // COMBO UI
+        if (comboTimer > 0 && combo > 1) {
+            ctx.textAlign = 'right';
+            ctx.font = `bold ${40 + Math.min(combo, 40)}px Teko`;
+            ctx.shadowBlur = 20; ctx.shadowColor = activePlayerChar.color;
+            ctx.fillStyle = '#fff';
+            ctx.fillText(`${combo} HITS`, canvas.width - 40, 150);
+            
+            ctx.font = '24px Teko'; ctx.fillStyle = '#aaa'; ctx.shadowBlur = 0;
+            ctx.fillText(`DAMAGE +${Math.floor(combo * 5)}%`, canvas.width - 40, 180);
+
+            // Combo Bar
+            ctx.fillStyle = '#333'; ctx.fillRect(canvas.width - 240, 190, 200, 5);
+            ctx.fillStyle = activePlayerChar.color; ctx.fillRect(canvas.width - 240 + (200 - (comboTimer/180)*200), 190, (comboTimer/180)*200, 5);
+        }
+
+        // Score
+        ctx.textAlign = 'right'; ctx.font = '40px Teko'; ctx.fillStyle = '#fff';
+        ctx.shadowBlur = 10; ctx.shadowColor = '#ff0055';
+        ctx.fillText(`EXORCISED: ${score}`, canvas.width - 20, 50); ctx.shadowBlur = 0;
+        
+        // Active Domain Text
+        if (isDomainActive) {
+            ctx.textAlign = 'center'; ctx.font = 'italic 40px Teko'; ctx.fillStyle = player.charData.color;
+            ctx.shadowBlur = 20; ctx.shadowColor = player.charData.color;
+            ctx.fillText(`DOMAIN EXPANSION: ${player.charData.domainExpansion.name.toUpperCase()}`, canvas.width/2, 60);
+            ctx.fillStyle = '#fff'; ctx.fillRect(canvas.width/2 - 250, 80, 500, 6);
+            ctx.fillStyle = player.charData.color; ctx.fillRect(canvas.width/2 - 250, 80, (domainTimer/450)*500, 6);
+            ctx.shadowBlur = 0;
+        }
+
+        // Zone UI
+        if (player.zoneTimer > 0) {
+            ctx.textAlign = 'center'; ctx.font = 'italic 50px Teko';
+            ctx.shadowBlur = 30; ctx.shadowColor = '#ff0000'; ctx.fillStyle = '#fff';
+            ctx.fillText("FLOW STATE: 120% POTENTIAL", canvas.width/2, 140); ctx.shadowBlur = 0;
+        }
+
+        ctx.restore();
+    }
+
+    let player;
+
+    function initGame() {
+        player = new Player(activePlayerChar);
+        enemies = []; particles = []; floatingTexts = []; shockwaves = []; trails = []; slashes = []; orbs = [];
+        score = 0; frames = 0; combo = 0; comboTimer = 0; maxCombo = 0;
+        isDomainActive = false; domainTimer = 0; camera = {x:0, y:0};
+    }
+
+    function updateGame() {
+        frames++;
+        
+        if (hitStopTime > 0) { hitStopTime--; return; }
+
+        if (isDomainActive) { domainTimer--; if (domainTimer <= 0) isDomainActive = false; }
+        if (comboTimer > 0) { comboTimer--; if (comboTimer <= 0) combo = 0; }
+
+        player.update();
+        
+        // Smooth Camera Follow
+        let targetCamX = player.x - canvas.width/2 + player.width/2;
+        camera.x += (targetCamX - camera.x) * 0.1;
+
+        let spawnRate = Math.max(20, 90 - (score * 2)); 
+        if (frames % spawnRate === 0) enemies.push(new Enemy());
+
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            enemies[i].update(player);
+            if (enemies[i].health <= 0) {
+                triggerShake(10, 8); triggerHitStop(4);
+                for(let p=0; p<25; p++) particles.push(new Particle(enemies[i].x + enemies[i].width/2, enemies[i].y + enemies[i].height/2, '#ff0055', 'blood'));
+                shockwaves.push(new Shockwave(enemies[i].x + enemies[i].width/2, enemies[i].y + enemies[i].height/2, '#550022', 150, 20));
+                
+                // Drops
+                if (Math.random() < 0.3) orbs.push(new Orb(enemies[i].x + enemies[i].width/2, enemies[i].y, 'hp'));
+                if (Math.random() < 0.5 && player.maxCE > 0) orbs.push(new Orb(enemies[i].x + enemies[i].width/2, enemies[i].y, 'ce'));
+
+                enemies.splice(i, 1); score++; player.addUltimate(10);
+                if(player.charData.passive === "King of Curses" || player.charData.passive === "Boundless CE" || player.charData.passive === "Fever") {
+                    player.health = Math.min(player.maxHealth, player.health + 5); 
+                }
+            }
+        }
+
+        [particles, floatingTexts, shockwaves, trails, slashes, orbs].forEach(arr => {
+            for (let i = arr.length - 1; i >= 0; i--) {
+                if(arr === orbs) arr[i].update(player); else arr[i].update();
+                if (arr[i].life <= 0) arr.splice(i, 1);
+            }
+        });
+    }
+
+    function drawGame() {
+        ctx.save();
+        if (screenShakeTime > 0) {
+            ctx.translate(randomRange(-screenShakeIntensity, screenShakeIntensity), randomRange(-screenShakeIntensity, screenShakeIntensity));
+            screenShakeTime--;
+        }
+        
+        ctx.translate(-camera.x, 0);
+
+        drawBackground(ctx, frames);
+
+        trails.forEach(t => t.draw(ctx));
+        orbs.forEach(o => o.draw(ctx));
+        enemies.forEach(e => e.draw(ctx));
+        player.draw(ctx);
+        slashes.forEach(s => s.draw(ctx));
+        shockwaves.forEach(sw => sw.draw(ctx));
+        particles.forEach(p => p.draw(ctx));
+        
+        ctx.restore(); 
+        
+        floatingTexts.forEach(ft => {
+            ctx.save(); ctx.translate(-camera.x, 0); ft.draw(ctx); ctx.restore();
+        });
+        
+        drawUI(ctx, player);
+        
+        // Zone Vignette
+        if (player.zoneTimer > 0) {
+             let grad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, canvas.height/3, canvas.width/2, canvas.height/2, canvas.width);
+             grad.addColorStop(0, 'rgba(0,0,0,0)'); grad.addColorStop(1, 'rgba(255,0,0,0.4)');
+             ctx.fillStyle = grad; ctx.fillRect(0,0, canvas.width, canvas.height);
+        }
+
+        // Hit Flash
+        if(hitStopTime > 0 && frames % 2 === 0) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'; ctx.globalCompositeOperation = 'lighter';
+            ctx.fillRect(0,0, canvas.width, canvas.height); ctx.globalCompositeOperation = 'source-over';
+        }
+    }
+
+    function mainLoop() {
+        ctx.fillStyle = 'rgba(5, 5, 5, 1.0)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        switch (currentState) {
+            case STATE.START:
+                drawBackground(ctx, frames++);
+                ctx.textAlign = 'center';
+                
+                ctx.shadowBlur = 40; ctx.shadowColor = '#ff0055';
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 90px Teko'; 
+                ctx.fillText("DOMAIN SURVIVAL III", canvas.width/2, canvas.height/2 - 50); ctx.shadowBlur = 0;
+
+                ctx.globalAlpha = Math.abs(Math.sin(frames*0.05));
+                ctx.font = '35px Teko'; ctx.fillStyle = '#00ffcc';
+                ctx.fillText("PRESS [SPACE] TO ENTER THE CULLING GAMES", canvas.width/2, canvas.height/2 + 50);
+                ctx.globalAlpha = 1.0;
+                break;
+
+            case STATE.QUIZ:
+                drawBackground(ctx, frames++); 
+                break;
+
+            case STATE.TRANSITION:
+                drawBackground(ctx, frames++);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.85)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                shockwaves.forEach(sw => sw.draw(ctx));
+                for (let i = shockwaves.length - 1; i >= 0; i--) {
+                    shockwaves[i].update(); if (shockwaves[i].life <= 0) shockwaves.splice(i, 1);
+                }
+
+                ctx.textAlign = 'center'; ctx.fillStyle = '#aaa'; ctx.font = '40px Teko';
+                ctx.fillText("YOUR CURSED TECHNIQUE ALIGNS WITH...", canvas.width/2, canvas.height/2 - 60);
+                
+                ctx.shadowBlur = 50; ctx.shadowColor = activePlayerChar.color;
+                ctx.fillStyle = activePlayerChar.color; ctx.font = 'bold 120px Teko';
+                ctx.fillText(activePlayerChar.name.toUpperCase(), canvas.width/2, canvas.height/2 + 60);
+                ctx.shadowBlur = 0;
+                
+                transitionTimer--; if (transitionTimer <= 0) { initGame(); currentState = STATE.PLAYING; }
+                break;
+
+            case STATE.PLAYING:
+                updateGame(); drawGame();
+                break;
+
+            case STATE.GAMEOVER:
+                drawBackground(ctx, frames); 
+                ctx.fillStyle = 'rgba(20, 0, 0, 0.9)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.textAlign = 'center'; ctx.shadowBlur = 50; ctx.shadowColor = '#ff0000';
+                ctx.fillStyle = '#ff0000'; ctx.font = 'bold 120px Teko';
+                ctx.fillText("EXORCISED", canvas.width/2, canvas.height/2 - 40); ctx.shadowBlur = 0;
+                
+                ctx.fillStyle = '#fff'; ctx.font = '50px Teko';
+                ctx.fillText(`CURSES DEFEATED: ${score}  |  MAX COMBO: ${maxCombo}`, canvas.width/2, canvas.height/2 + 50);
+                
+                ctx.font = '35px Teko'; ctx.fillStyle = '#777';
+                ctx.fillText("PRESS [SPACE] TO REINCARNATE", canvas.width/2, canvas.height/2 + 130);
+                break;
+        }
+        requestAnimationFrame(mainLoop);
+    }
+
+    requestAnimationFrame(mainLoop);
+
+</script>
+</body>
+</html>

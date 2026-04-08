@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Tether: Overdrive</title>
+    <style>
+        :root {
+            --bg-color: #05020a;
+            --neon-blue: #00f3ff;
+            --neon-pink: #ff007c;
+            --neon-orange: #ffaa00;
+            --neon-green: #00ff66;
+            --neon-purple: #b700ff;
+            --text-color: #fff;
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background-color: var(--bg-color); color: var(--text-color);
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden; display: flex; justify-content: center; align-items: center;
+            user-select: none; -webkit-user-select: none; touch-action: none;
+        }
+
+        #game-wrapper {
+            position: relative; width: 100vw; height: 100vh;
+            max-width: 900px; max-height: 700px;
+            background: #000;
+            box-shadow: 0 0 50px rgba(0, 243, 255, 0.15), inset 0 0 100px rgba(255, 0, 124, 0.05);
+            overflow: hidden;
+        }
+
+        canvas {
+            width: 100%; height: 100%; object-fit: contain;
+            image-rendering: pixelated;
+        }
+
+        /* Enhanced CRT Scanlines & Vignette */
+        #game-wrapper::after {
+            content: ""; position: absolute; top: 0; left: 0; bottom: 0; right: 0;
+            background: 
+                radial-gradient(circle at center, transparent 50%, rgba(0,0,0,0.6) 100%),
+                linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+            background-size: 100% 100%, 100% 4px;
+            z-index: 10; pointer-events: none;
+        }
+
+        /* Screen Flash Div */
+        #flash-overlay {
+            position: absolute; top:0; left:0; width:100%; height:100%;
+            background: white; opacity: 0; z-index: 15; pointer-events: none;
+            transition: opacity 0.1s ease-out;
+        }
+
+        .ui-layer {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 20;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background: rgba(5, 2, 10, 0.85); backdrop-filter: blur(4px);
+            text-align: center; padding: 20px;
+        }
+
+        .hidden { display: none !important; }
+
+        h1 {
+            font-size: 3.5rem; margin: 0 0 10px 0; color: var(--neon-blue);
+            text-transform: uppercase; text-shadow: 4px 4px 0 var(--neon-pink), 0 0 20px var(--neon-blue);
+            letter-spacing: 4px; font-style: italic;
+        }
+
+        p { font-size: 1.1rem; max-width: 450px; line-height: 1.6; color: #ddd; margin-bottom: 30px; }
+        .highlight-pink { color: var(--neon-pink); font-weight: bold; text-shadow: 0 0 5px var(--neon-pink); }
+        .highlight-blue { color: var(--neon-blue); font-weight: bold; text-shadow: 0 0 5px var(--neon-blue); }
+        .highlight-white { color: #fff; font-weight: bold; text-shadow: 0 0 8px #fff; }
+
+        .btn {
+            padding: 15px 40px; font-size: 1.5rem; font-family: inherit; font-weight: bold;
+            text-transform: uppercase; background: rgba(0, 243, 255, 0.1);
+            color: var(--neon-blue); border: 3px solid var(--neon-blue);
+            cursor: pointer; transition: all 0.1s;
+            box-shadow: 0 0 15px rgba(0, 243, 255, 0.4), inset 0 0 10px rgba(0, 243, 255, 0.2);
+        }
+
+        .btn:hover, .btn:active {
+            background: var(--neon-blue); color: #000;
+            box-shadow: 0 0 30px rgba(0, 243, 255, 1), inset 0 0 20px rgba(255, 255, 255, 0.8);
+            transform: scale(1.05);
+        }
+
+        #hud {
+            position: absolute; top: 15px; left: 20px; right: 20px;
+            display: flex; justify-content: space-between; align-items: flex-start;
+            z-index: 5; pointer-events: none;
+        }
+
+        .score-box { font-size: 1.5rem; font-weight: bold; text-shadow: 2px 2px 0 #000, 0 0 10px var(--neon-blue); }
+        
+        #dash-meter {
+            width: 150px; height: 10px; border: 2px solid var(--neon-blue);
+            margin-top: 8px; border-radius: 5px; overflow: hidden;
+            box-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
+        }
+        #dash-fill {
+            width: 100%; height: 100%; background: var(--neon-blue);
+            box-shadow: 0 0 10px var(--neon-blue); transition: width 0.1s linear;
+        }
+        #dash-fill.ready { background: #fff; box-shadow: 0 0 15px #fff; }
+
+        #weapon-alert {
+            position: absolute; top: 30%; left: 0; right: 0; text-align: center;
+            font-size: 3rem; font-weight: bold; color: #fff; font-style: italic;
+            pointer-events: none; z-index: 25; opacity: 0;
+            transform: scale(0.5); transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #weapon-alert.show {
+            opacity: 1; transform: scale(1);
+        }
+
+        .controls-hint { color: #888; font-size: 0.9rem; margin-top: 25px; line-height: 1.5; }
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <div id="flash-overlay"></div>
+        <div id="weapon-alert">WEAPON UPGRADE</div>
+        
+        <div id="hud" class="hidden">
+            <div style="display: flex; flex-direction: column; gap: 5px;">
+                <div class="score-box">SCORE: <span id="score-val">0</span></div>
+                <div id="health-meter" style="color: var(--neon-pink); font-size: 1.5rem; letter-spacing: 2px; text-shadow: 0 0 10px var(--neon-pink);">♥♥♥</div>
+            </div>
+            <div>
+                <div style="text-align: right; font-size: 0.9rem; font-weight:bold; letter-spacing: 1px; margin-bottom: 2px; text-shadow: 1px 1px 0 #000;">DASH [SPACE]</div>
+                <div id="dash-meter"><div id="dash-fill"></div></div>
+            </div>
+        </div>
+        
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="ui-layer">
+            <h1>NEON TETHER<br><span style="font-size: 2rem; color: #fff; text-shadow: 0 0 10px #fff;">OVERDRIVE</span></h1>
+            <p>Swing the heavy <span class="highlight-pink">Flail</span> to crush enemies. Protect your <span class="highlight-blue">Core</span>.</p>
+            <p>Swing fast enough and your flail turns <span class="highlight-white">WHITE-HOT</span>, destroying Brutes instantly for double points!</p>
+            <button class="btn" id="start-btn">ENGAGE</button>
+            <div class="controls-hint">
+                <strong style="color:#fff">Desktop:</strong> WASD/Arrows to Move • SPACE to Dash<br>
+                <strong style="color:#fff">Mobile:</strong> Touch & Drag • Double-Tap to Dash
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="ui-layer hidden">
+            <h1 style="color: var(--neon-pink); text-shadow: 4px 4px 0 #000, 0 0 20px var(--neon-pink);">CORE BREACH</h1>
+            <h2 style="font-size: 2.5rem; margin-bottom: 5px; text-shadow: 0 0 10px #fff;">FINAL SCORE: <span id="final-score">0</span></h2>
+            <p id="high-score-text" style="font-size: 1.2rem; color: var(--neon-orange);">High Score: 0</p>
+            <button class="btn" style="border-color: var(--neon-pink); color: var(--neon-pink);" id="restart-btn">REBOOT</button>
+        </div>
+    </div>
+
+    <script>
+        /** NEON TETHER: OVERDRIVE ENGINE **/
+
+        // --- SETUP ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const GAME_WIDTH = 600;
+        const GAME_HEIGHT = 450;
+        canvas.width = GAME_WIDTH;
+        canvas.height = GAME_HEIGHT;
+
+        // UI
+        const screens = {
+            start: document.getElementById('start-screen'),
+            over: document.getElementById('game-over-screen'),
+            hud: document.getElementById('hud'),
+            flash: document.getElementById('flash-overlay')
+        };
+        const els = {
+            score: document.getElementById('score-val'),
+            fScore: document.getElementById('final-score'),
+            hScore: document.getElementById('high-score-text'),
+            dashFill: document.getElementById('dash-fill'),
+            weaponAlert: document.getElementById('weapon-alert'),
+            healthMeter: document.getElementById('health-meter')
+        };
+
+        function updateHealthUI() {
+            if (!els.healthMeter) return;
+            let hearts = '';
+            for(let i=0; i<player.maxHp; i++) {
+                hearts += (i < player.hp) ? '♥' : '♡';
+            }
+            els.healthMeter.innerText = hearts;
+        }
+
+        // AUDIO SYSTEM (Advanced Procedural Synth)
+        let audioCtx;
+        let bgmOsc, bgmGain, droneLfo;
+        
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playSound(type, params = {}) {
+            if (!audioCtx) return;
+            const t = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'hit') {
+                osc.type = params.whiteHot ? 'square' : 'sawtooth';
+                osc.frequency.setValueAtTime(params.whiteHot ? 400 : 150 + Math.random()*100, t);
+                osc.frequency.exponentialRampToValueAtTime(20, t + 0.2);
+                gain.gain.setValueAtTime(params.whiteHot ? 0.6 : 0.4, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+                osc.start(t); osc.stop(t + 0.2);
+            } else if (type === 'dash') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, t);
+                osc.frequency.exponentialRampToValueAtTime(100, t + 0.3);
+                gain.gain.setValueAtTime(0.5, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+                osc.start(t); osc.stop(t + 0.3);
+            } else if (type === 'die') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, t);
+                osc.frequency.exponentialRampToValueAtTime(10, t + 1.0);
+                gain.gain.setValueAtTime(0.6, t);
+                gain.gain.linearRampToValueAtTime(0.01, t + 1.0);
+                osc.start(t); osc.stop(t + 1.0);
+            }
+        }
+
+        function manageBGM(isPlaying) {
+            if (!audioCtx) return;
+            const t = audioCtx.currentTime;
+            if (isPlaying && !bgmOsc) {
+                bgmOsc = audioCtx.createOscillator();
+                bgmOsc.type = 'triangle';
+                bgmOsc.frequency.value = 55; // Low bass drone
+
+                droneLfo = audioCtx.createOscillator();
+                droneLfo.type = 'sine';
+                droneLfo.frequency.value = 2; // Pulse speed
+                const lfoGain = audioCtx.createGain();
+                lfoGain.gain.value = 10;
+                droneLfo.connect(lfoGain);
+                lfoGain.connect(bgmOsc.frequency);
+
+                bgmGain = audioCtx.createGain();
+                bgmGain.gain.setValueAtTime(0, t);
+                bgmGain.gain.linearRampToValueAtTime(0.3, t + 2); // Fade in
+                
+                bgmOsc.connect(bgmGain);
+                bgmGain.connect(audioCtx.destination);
+                
+                bgmOsc.start();
+                droneLfo.start();
+            } else if (!isPlaying && bgmOsc) {
+                bgmGain.gain.linearRampToValueAtTime(0, t + 0.5);
+                setTimeout(() => {
+                    if(bgmOsc) { bgmOsc.stop(); bgmOsc.disconnect(); bgmOsc = null; }
+                    if(droneLfo) { droneLfo.stop(); droneLfo.disconnect(); droneLfo = null; }
+                }, 600);
+            }
+        }
+
+
+        // WEAPON TIERS
+        const WEAPONS = [
+            { name: "PHOTON MACE", req: 0, color: {r:255, g:0, b:124}, count: 1, radius: 12, mass: 2.2 },
+            { name: "TWIN COMETS", req: 10, color: {r:255, g:170, b:0}, count: 2, radius: 10, mass: 1.5 },
+            { name: "GRAVITY HAMMER", req: 25, color: {r:0, g:255, b:102}, count: 1, radius: 24, mass: 4.5 },
+            { name: "SINGULARITY", req: 45, color: {r:183, g:0, b:255}, count: 1, radius: 18, mass: 3.0, gravity: true }
+        ];
+
+        // STATE & ENTITIES
+        let state = 'MENU';
+        let score = 0;
+        let highScore = localStorage.getItem('neonTetherHS_v2') || 0;
+        let frameCount = 0;
+        
+        // Juice mechanics
+        let shakeFrames = 0;
+        let hitStopFrames = 0;
+        let combo = 1;
+        let comboTimer = 0;
+        
+        let player, flails = [], tether, enemies, particles, texts, gridOffset;
+        let currentWeaponTier = 0;
+
+        function setWeaponTier(tier, isInit = false) {
+            if (currentWeaponTier === tier && !isInit) return;
+            
+            let oldPrimary = flails.length > 0 ? flails[0] : null;
+            currentWeaponTier = tier;
+            const conf = WEAPONS[tier];
+            
+            if (!isInit) {
+                els.weaponAlert.innerText = tier > 0 ? `${conf.name} UNLOCKED!` : `WEAPON RESET`;
+                els.weaponAlert.style.color = `rgb(${conf.color.r}, ${conf.color.g}, ${conf.color.b})`;
+                els.weaponAlert.style.textShadow = `0 0 20px rgb(${conf.color.r}, ${conf.color.g}, ${conf.color.b}), 4px 4px 0 #000`;
+                els.weaponAlert.classList.add('show');
+                setTimeout(() => els.weaponAlert.classList.remove('show'), 1500);
+                playSound('dash');
+                shakeFrames = 15; screenFlash();
+            }
+
+            flails = [];
+            for(let i=0; i<conf.count; i++) {
+                let startX = oldPrimary ? oldPrimary.x : player.x + 40;
+                let startY = oldPrimary ? oldPrimary.y : player.y + 40;
+                let vX = oldPrimary ? oldPrimary.vx : 0;
+                let vY = oldPrimary ? oldPrimary.vy : 0;
+
+                // Inverse second flail
+                if (i === 1) { 
+                    startX = player.x - (startX - player.x); 
+                    startY = player.y - (startY - player.y);
+                    vX = -vX; vY = -vY;
+                }
+                
+                flails.push({
+                    x: startX, y: startY, vx: vX, vy: vY,
+                    radius: conf.radius, mass: conf.mass,
+                    baseColor: conf.color, currentColor: `rgb(${conf.color.r},${conf.color.g},${conf.color.b})`,
+                    trail: [], gravity: conf.gravity
+                });
+            }
+        }
+
+        // Input
+        const keys = { w:0, a:0, s:0, d:0, ArrowUp:0, ArrowLeft:0, ArrowDown:0, ArrowRight:0, ' ':0 };
+        const touch = { active: false, x: GAME_WIDTH/2, y: GAME_HEIGHT/2, lastTap: 0 };
+
+        function initEntities() {
+            player = {
+                x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2,
+                vx: 0, vy: 0,
+                radius: 8, speed: 1.5, friction: 0.85,
+                color: '#00f3ff',
+                dashCooldown: 0, dashMax: 90, // 1.5 seconds at 60fps
+                hp: 3, maxHp: 3, invulnFrames: 0
+            };
+            updateHealthUI();
+
+            tether = { restLength: 45, stiffness: 0.1, damping: 0.95 };
+            
+            enemies = []; particles = []; texts = [];
+            gridOffset = { x: 0, y: 0 };
+            score = 0; combo = 1; comboTimer = 0; els.score.innerText = '0';
+            setWeaponTier(0, true);
+        }
+
+        // INPUT EVENT LISTENERS
+        window.addEventListener('keydown', e => { if (keys[e.key] !== undefined) keys[e.key] = 1; });
+        window.addEventListener('keyup', e => { if (keys[e.key] !== undefined) keys[e.key] = 0; });
+        
+        function updateTouch(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            touch.x = (clientX - rect.left) * (canvas.width / rect.width);
+            touch.y = (clientY - rect.top) * (canvas.height / rect.height);
+        }
+
+        canvas.addEventListener('pointerdown', e => {
+            touch.active = true; updateTouch(e);
+            // Double tap detection for dash
+            const now = Date.now();
+            if (now - touch.lastTap < 300 && player.dashCooldown <= 0 && state === 'PLAY') {
+                triggerDash();
+            }
+            touch.lastTap = now;
+        });
+        canvas.addEventListener('pointermove', e => { if (touch.active) updateTouch(e); });
+        window.addEventListener('pointerup', () => { touch.active = false; });
+
+        function triggerDash() {
+            if (player.dashCooldown > 0) return;
+            playSound('dash');
+            player.dashCooldown = player.dashMax;
+            
+            // Determine direction
+            let dx = 0, dy = 0;
+            if (touch.active) {
+                dx = touch.x - player.x; dy = touch.y - player.y;
+            } else {
+                if (keys.w || keys.ArrowUp) dy -= 1;
+                if (keys.s || keys.ArrowDown) dy += 1;
+                if (keys.a || keys.ArrowLeft) dx -= 1;
+                if (keys.d || keys.ArrowRight) dx += 1;
+            }
+            
+            if (dx === 0 && dy === 0) { dx = player.vx; dy = player.vy; } // Dash in current momentum if no input
+            if (dx === 0 && dy === 0) dx = 1; // Fallback
+            
+            const dist = Math.hypot(dx, dy);
+            // Massive velocity boost
+            player.vx = (dx / dist) * 25;
+            player.vy = (dy / dist) * 25;
+
+            // Spawn dash particles
+            spawnParticles(player.x, player.y, player.color, 15, 5, 'line');
+            shakeFrames = 8;
+        }
+
+        // EFFECTS
+        function spawnParticles(x, y, color, amount, baseSpeed, type = 'square') {
+            for (let i = 0; i < amount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * baseSpeed + 1;
+                particles.push({
+                    x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+                    life: 1.0, decay: 0.02 + Math.random() * 0.04,
+                    color, size: Math.random() * 4 + 2, type
+                });
+            }
+        }
+
+        function floatText(x, y, text, color, isBig = false) {
+            texts.push({ x, y, text, color, life: 1.0, isBig });
+        }
+
+        function screenFlash() {
+            screens.flash.style.opacity = '0.8';
+            setTimeout(() => screens.flash.style.opacity = '0', 50);
+        }
+
+        // MAIN UPDATE
+        function update() {
+            if (state !== 'PLAY') return;
+            
+            // HIT STOP - Pauses logic, keeps rendering
+            if (hitStopFrames > 0) { hitStopFrames--; return; }
+
+            frameCount++;
+
+            // --- PLAYER ---
+            if (player.invulnFrames > 0) player.invulnFrames--;
+            if (keys[' '] && player.dashCooldown <= 0) triggerDash();
+            if (player.dashCooldown > 0) player.dashCooldown--;
+
+            let px = 0, py = 0;
+            if (keys.w || keys.ArrowUp) py -= 1;
+            if (keys.s || keys.ArrowDown) py += 1;
+            if (keys.a || keys.ArrowLeft) px -= 1;
+            if (keys.d || keys.ArrowRight) px += 1;
+
+            if (px !== 0 || py !== 0) {
+                const pDist = Math.hypot(px, py);
+                player.vx += (px / pDist) * player.speed;
+                player.vy += (py / pDist) * player.speed;
+            } else if (touch.active) {
+                const tDx = touch.x - player.x, tDy = touch.y - player.y;
+                const tDist = Math.hypot(tDx, tDy);
+                if (tDist > 10) {
+                    player.vx += (tDx / tDist) * player.speed;
+                    player.vy += (tDy / tDist) * player.speed;
+                }
+            }
+
+            player.vx *= player.friction; player.vy *= player.friction;
+            player.x += player.vx; player.y += player.vy;
+
+            // Constrain Player
+            player.x = Math.max(player.radius, Math.min(GAME_WIDTH - player.radius, player.x));
+            player.y = Math.max(player.radius, Math.min(GAME_HEIGHT - player.radius, player.y));
+
+            // Grid Parallax
+            gridOffset.x = (gridOffset.x - player.vx * 0.5) % 40;
+            gridOffset.y = (gridOffset.y - player.vy * 0.5) % 40;
+
+            // --- FLAILS PHYSICS ---
+            let maxFlailVel = 0;
+            let isAnyWhiteHot = false;
+
+            for (let f of flails) {
+                const fDx = player.x - f.x, fDy = player.y - f.y;
+                const fDist = Math.hypot(fDx, fDy);
+                
+                if (fDist > 0) {
+                    const force = (fDist - tether.restLength) * tether.stiffness;
+                    f.vx += (fDx / fDist) * force / f.mass;
+                    f.vy += (fDy / fDist) * force / f.mass;
+                }
+                f.vx *= tether.damping; f.vy *= tether.damping;
+                f.x += f.vx; f.y += f.vy;
+
+                // Flail Trail
+                f.trail.push({x: f.x, y: f.y});
+                if (f.trail.length > 12) f.trail.shift();
+
+                // Flail Heat (Velocity based)
+                const flailVel = Math.hypot(f.vx, f.vy);
+                if (flailVel > maxFlailVel) maxFlailVel = flailVel;
+                
+                f.isWhiteHot = flailVel > 18;
+                if (f.isWhiteHot) isAnyWhiteHot = true;
+                
+                // Interpolate color based on speed
+                const heatRatio = Math.min(1, flailVel / 20);
+                const r = Math.floor(f.baseColor.r + (255 - f.baseColor.r) * heatRatio);
+                const g = Math.floor(f.baseColor.g + (255 - f.baseColor.g) * heatRatio);
+                const b = Math.floor(f.baseColor.b + (255 - f.baseColor.b) * heatRatio);
+                f.currentColor = `rgb(${r},${g},${b})`;
+
+                // Gravity Effect (Singularity)
+                if (f.gravity) {
+                    for (let e of enemies) {
+                        const distToF = Math.hypot(f.x - e.x, f.y - e.y);
+                        if (distToF < 150 && distToF > f.radius) {
+                            e.x += (f.x - e.x) * 0.02;
+                            e.y += (f.y - e.y) * 0.02;
+                        }
+                    }
+                }
+            }
+
+            // --- ENEMIES ---
+            const diffMult = 1 + (score / 3000);
+            const spawnRate = Math.max(10, 50 - Math.floor(score / 150));
+
+            if (frameCount % spawnRate === 0) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 450;
+                const rmd = Math.random();
+                
+                let eType = 'normal';
+                let eRad = 8;
+                let eSpeed = 0.8;
+                let eColor = '#ffaa00'; // Orange
+                let eHp = 1;
+
+                if (rmd > 0.85) { eType = 'dash'; eRad = 6; eSpeed = 2.2; eColor = '#ff003c'; } // Fast
+                else if (rmd > 0.7 && score > 500) { eType = 'brute'; eRad = 14; eSpeed = 0.4; eColor = '#b700ff'; eHp = 2; } // Heavy
+                else if (rmd > 0.5 && score > 1000) { eType = 'weaver'; eRad = 7; eSpeed = 1.0; eColor = '#00ff66'; } // Sine wave
+
+                enemies.push({
+                    x: GAME_WIDTH/2 + Math.cos(angle)*dist, y: GAME_HEIGHT/2 + Math.sin(angle)*dist,
+                    radius: eRad, speed: eSpeed * diffMult, color: eColor, type: eType, hp: eHp,
+                    offsetAngle: Math.random() * Math.PI * 2 // For weaver
+                });
+            }
+
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i];
+                
+                // Movement
+                let ex = player.x - e.x, ey = player.y - e.y;
+                const eDist = Math.hypot(ex, ey);
+                
+                if (e.type === 'weaver') {
+                    // Add sine wave perpendicular to movement vector
+                    const perpX = -ey / eDist, perpY = ex / eDist;
+                    const wave = Math.sin(frameCount * 0.1 + e.offsetAngle) * 2;
+                    e.x += ((ex/eDist) * e.speed) + (perpX * wave);
+                    e.y += ((ey/eDist) * e.speed) + (perpY * wave);
+                } else {
+                    e.x += (ex / eDist) * e.speed;
+                    e.y += (ey / eDist) * e.speed;
+                }
+
+                // Check collision with Flails
+                let hitByFlail = false;
+                for (let f of flails) {
+                    const fToE = Math.hypot(f.x - e.x, f.y - e.y);
+                    if (fToE < f.radius + e.radius) {
+                        hitByFlail = true;
+                        
+                        let dmg = f.isWhiteHot ? 2 : 1;
+                        if (WEAPONS[currentWeaponTier].name === "GRAVITY HAMMER") dmg += 1; // Heavy hitter base dmg
+                        
+                        e.hp -= dmg;
+
+                        // Knockback flail (Square root to prevent physics explosion)
+                        const kbMult = e.type === 'brute' ? 0.3 : 0.1;
+                        f.vx -= (f.x - e.x) * kbMult;
+                        f.vy -= (f.y - e.y) * kbMult;
+
+                        if (e.hp <= 0) {
+                            // Kill
+                            const basePts = (e.type === 'brute' ? 30 : e.type==='dash' ? 15 : 10);
+                            const points = basePts * combo * (f.isWhiteHot ? 2 : 1);
+                            score += points;
+                            
+                            spawnParticles(e.x, e.y, f.isWhiteHot ? '#fff' : e.color, f.isWhiteHot ? 25 : 12, maxFlailVel * 0.4, 'line');
+                            floatText(e.x, e.y, f.isWhiteHot ? `CRIT ${points}` : `+${points}`, f.isWhiteHot ? '#fff' : '#fff', f.isWhiteHot);
+                            
+                            playSound('hit', { whiteHot: f.isWhiteHot });
+                            
+                            combo++; comboTimer = 300; // 5 seconds to keep combo (easier to reach high tiers)
+                            shakeFrames = f.isWhiteHot ? 15 : Math.min(8, 3 + combo/2);
+                            if (f.isWhiteHot) { hitStopFrames = 4; screenFlash(); }
+                            else if (e.type === 'brute') { hitStopFrames = 2; }
+                            
+                            // Check for Weapon Upgrade
+                            let newTier = currentWeaponTier;
+                            for (let t = WEAPONS.length - 1; t >= 0; t--) {
+                                if (combo >= WEAPONS[t].req) { newTier = t; break; }
+                            }
+                            if (newTier !== currentWeaponTier) setWeaponTier(newTier);
+                            
+                            // Increase drone pitch based on combo
+                            if (droneLfo) droneLfo.frequency.value = Math.min(10, 2 + (combo * 0.2));
+
+                            els.score.innerText = score;
+                            enemies.splice(i, 1);
+                            break; // Stop checking flails for this dead enemy
+                        } else {
+                            // Hit but not dead (Brute)
+                            playSound('hit', { whiteHot: false });
+                            spawnParticles(e.x, e.y, e.color, 5, 2);
+                            // Knockback enemy slightly
+                            e.x -= (f.x - e.x) * 0.5;
+                            e.y -= (f.y - e.y) * 0.5;
+                        }
+                    }
+                }
+                if (hitByFlail) continue; // Skip player collision check if just hit by flail to prevent unfair trades
+
+                // Check collision with Player (DEATH or DAMAGE)
+                if (eDist < player.radius + e.radius - 2) {
+                    if (player.invulnFrames <= 0) {
+                        player.hp--;
+                        updateHealthUI();
+                        
+                        if (player.hp <= 0) {
+                            gameOver(); return;
+                        } else {
+                            // Take damage
+                            player.invulnFrames = 90; // 1.5 seconds of invulnerability
+                            shakeFrames = 20;
+                            screenFlash();
+                            playSound('hit', { whiteHot: true }); // Heavy crash sound
+                            
+                            // Knockback player AWAY from enemy
+                            player.vx += (ex / eDist) * 15;
+                            player.vy += (ey / eDist) * 15;
+                            
+                            // Destroy the enemy that hit us to clear the space
+                            spawnParticles(e.x, e.y, e.color, 15, 3);
+                            enemies.splice(i, 1);
+                        }
+                    }
+                }
+            }
+
+            // Clean up Combo, Particles, Texts
+            if (comboTimer > 0) {
+                comboTimer--;
+                if (comboTimer === 0) {
+                    combo = 1;
+                    if(droneLfo) droneLfo.frequency.value = 2; // Reset pitch
+                    setWeaponTier(0); // Lose weapon on combo drop
+                }
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx; p.y += p.vy; p.vx *= 0.95; p.vy *= 0.95; // Friction
+                p.life -= p.decay;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            for (let i = texts.length - 1; i >= 0; i--) {
+                const t = texts[i];
+                t.y -= 0.8; t.life -= 0.02;
+                if (t.life <= 0) texts.splice(i, 1);
+            }
+
+            // Update UI Dash Meter
+            els.dashFill.style.width = `${100 - (player.dashCooldown / player.dashMax * 100)}%`;
+            if(player.dashCooldown === 0) els.dashFill.classList.add('ready');
+            else els.dashFill.classList.remove('ready');
+        }
+
+        // --- DRAW ---
+        function draw() {
+            // Dark gradient clear with slight motion blur
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = 'rgba(5, 2, 10, 0.35)';
+            ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+            if (state !== 'PLAY') return;
+
+            ctx.save();
+            
+            // Screen Shake
+            if (shakeFrames > 0) {
+                const mag = (shakeFrames / 15) * 8;
+                ctx.translate((Math.random()-0.5)*mag, (Math.random()-0.5)*mag);
+                if(hitStopFrames <= 0) shakeFrames--;
+            }
+
+            // Parallax Grid Background
+            ctx.strokeStyle = 'rgba(0, 243, 255, 0.05)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for(let x = gridOffset.x - 40; x < GAME_WIDTH; x += 40) { ctx.moveTo(x, 0); ctx.lineTo(x, GAME_HEIGHT); }
+            for(let y = gridOffset.y - 40; y < GAME_HEIGHT; y += 40) { ctx.moveTo(0, y); ctx.lineTo(GAME_WIDTH, y); }
+            ctx.stroke();
+
+            // Enable glowing additive blending
+            ctx.globalCompositeOperation = 'lighter';
+
+            // Draw Flails
+            for (let f of flails) {
+                // Draw Tether
+                ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(f.x, f.y);
+                ctx.strokeStyle = `rgba(255, 255, 255, ${0.2 + (Math.hypot(f.vx, f.vy)/40)})`;
+                ctx.lineWidth = 2; ctx.stroke();
+
+                // Draw Flail Trail
+                if (f.trail.length > 1) {
+                    ctx.beginPath();
+                    ctx.moveTo(f.trail[0].x, f.trail[0].y);
+                    for (let i=1; i<f.trail.length; i++) ctx.lineTo(f.trail[i].x, f.trail[i].y);
+                    ctx.lineTo(f.x, f.y);
+                    ctx.strokeStyle = f.currentColor;
+                    ctx.lineWidth = f.radius * 1.5;
+                    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+                    // Fade out tail
+                    const gradient = ctx.createLinearGradient(f.trail[0].x, f.trail[0].y, f.x, f.y);
+                    gradient.addColorStop(0, 'rgba(0,0,0,0)');
+                    gradient.addColorStop(1, f.currentColor);
+                    ctx.strokeStyle = gradient;
+                    ctx.stroke();
+                }
+                
+                // Singularity Gravity Ring
+                if (f.gravity) {
+                    ctx.beginPath();
+                    ctx.arc(f.x, f.y, 150, 0, Math.PI*2);
+                    ctx.strokeStyle = `rgba(183, 0, 255, ${0.1 + Math.sin(frameCount * 0.1)*0.05})`;
+                    ctx.lineWidth = 1; ctx.stroke();
+                }
+
+                // Draw Flail Head
+                ctx.fillStyle = f.currentColor;
+                ctx.shadowBlur = f.isWhiteHot ? 30 : 15; 
+                ctx.shadowColor = f.currentColor;
+                ctx.beginPath(); ctx.arc(f.x, f.y, f.radius, 0, Math.PI*2); ctx.fill();
+                if (f.isWhiteHot) {
+                    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(f.x, f.y, f.radius*0.6, 0, Math.PI*2); ctx.fill();
+                }
+            }
+
+            // Draw Player Core
+            if (player.invulnFrames === 0 || frameCount % 10 < 5) {
+                ctx.fillStyle = player.color;
+                ctx.shadowBlur = 15; ctx.shadowColor = player.color;
+                ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.shadowBlur = 0;
+                ctx.beginPath(); ctx.arc(player.x, player.y, player.radius*0.4, 0, Math.PI*2); ctx.fill();
+            }
+
+            // Draw Enemies
+            for (let e of enemies) {
+                ctx.fillStyle = e.color; ctx.shadowBlur = 10; ctx.shadowColor = e.color;
+                
+                ctx.save();
+                ctx.translate(e.x, e.y);
+                if (e.type === 'brute') {
+                    // Octagon for brute
+                    ctx.rotate(frameCount * 0.02);
+                    ctx.beginPath();
+                    for(let i=0; i<8; i++) {
+                        ctx.lineTo(Math.cos(i*Math.PI/4)*e.radius, Math.sin(i*Math.PI/4)*e.radius);
+                    }
+                    ctx.closePath(); ctx.fill();
+                    // HP indicator
+                    if(e.hp === 2) { ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.arc(0,0, e.radius*0.5, 0, Math.PI*2); ctx.fill(); }
+                } else if (e.type === 'weaver') {
+                    // Triangle
+                    ctx.rotate(Math.atan2(player.y - e.y, player.x - e.x) + Math.PI/2);
+                    ctx.beginPath();
+                    ctx.moveTo(0, -e.radius); ctx.lineTo(e.radius, e.radius); ctx.lineTo(-e.radius, e.radius);
+                    ctx.closePath(); ctx.fill();
+                } else {
+                    // Diamond/Square for normal/dash
+                    ctx.rotate(frameCount * (e.type === 'dash' ? 0.1 : 0.05));
+                    ctx.fillRect(-e.radius, -e.radius, e.radius*2, e.radius*2);
+                    if (e.type === 'dash') { ctx.fillStyle = '#fff'; ctx.fillRect(-2, -2, 4, 4); }
+                }
+                ctx.restore();
+            }
+
+            // Draw Particles
+            ctx.shadowBlur = 5;
+            for (let p of particles) {
+                ctx.fillStyle = p.color; ctx.shadowColor = p.color;
+                ctx.globalAlpha = Math.max(0, p.life);
+                if (p.type === 'line') {
+                    ctx.beginPath(); ctx.moveTo(p.x, p.y);
+                    ctx.lineTo(p.x - p.vx*2, p.y - p.vy*2); // Trail based on velocity
+                    ctx.lineWidth = p.size; ctx.strokeStyle = p.color; ctx.stroke();
+                } else {
+                    ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+                }
+            }
+            ctx.globalAlpha = 1.0; ctx.globalCompositeOperation = 'source-over';
+
+            // Draw Texts
+            ctx.textAlign = "center";
+            for (let t of texts) {
+                ctx.font = t.isBig ? "bold 18px 'Courier New'" : "bold 14px 'Courier New'";
+                ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0, t.life)})`;
+                ctx.shadowBlur = 4; ctx.shadowColor = t.color;
+                ctx.fillText(t.text, t.x, t.y);
+            }
+            ctx.shadowBlur = 0;
+
+            ctx.restore();
+
+            // Overlay Combo
+            if (combo > 1) {
+                ctx.fillStyle = `rgba(0, 243, 255, ${comboTimer / 300})`;
+                ctx.font = `italic 900 ${20 + combo}px 'Courier New'`;
+                ctx.textAlign = "center";
+                
+                // Show current weapon tier name below combo
+                const wName = WEAPONS[currentWeaponTier].name;
+                const wColor = WEAPONS[currentWeaponTier].color;
+                
+                ctx.fillText(`${combo}x COMBO`, GAME_WIDTH/2, 60);
+                
+                ctx.fillStyle = `rgba(${wColor.r}, ${wColor.g}, ${wColor.b}, ${comboTimer / 300})`;
+                ctx.font = `bold 16px 'Courier New'`;
+                ctx.fillText(`[ ${wName} ]`, GAME_WIDTH/2, 85);
+            }
+        }
+
+        // --- GAME FLOW ---
+        function startGame() {
+            initAudio(); initEntities(); manageBGM(true);
+            state = 'PLAY';
+            screens.start.classList.add('hidden');
+            screens.over.classList.add('hidden');
+            screens.hud.classList.remove('hidden');
+        }
+
+        function gameOver() {
+            playSound('die'); manageBGM(false);
+            state = 'OVER';
+            shakeFrames = 30; hitStopFrames = 0;
+            spawnParticles(player.x, player.y, player.color, 50, 6, 'line');
+            for(let f of flails) spawnParticles(f.x, f.y, f.currentColor, 30, 4, 'line');
+            draw(); // Draw final explosion
+
+            if (score > highScore) { highScore = score; localStorage.setItem('neonTetherHS_v2', highScore); }
+
+            setTimeout(() => {
+                screens.hud.classList.add('hidden');
+                screens.over.classList.remove('hidden');
+                els.fScore.innerText = score;
+                els.hScore.innerText = `HIGH SCORE: ${highScore}`;
+            }, 1000);
+        }
+
+        function loop() {
+            update(); draw();
+            requestAnimationFrame(loop);
+        }
+
+        // Init
+        document.getElementById('start-btn').addEventListener('click', startGame);
+        document.getElementById('restart-btn').addEventListener('click', startGame);
+        ctx.fillStyle = '#05020a'; ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        requestAnimationFrame(loop);
+
+    </script>
+</body>
+</html>

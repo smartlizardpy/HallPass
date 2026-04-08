@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Snake: Cyber-Ascension</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,400;0,700;0,900;1,900&display=swap');
+
+        body {
+            background-color: #010205;
+            color: #e2e8f0;
+            font-family: 'Exo 2', sans-serif;
+            overflow: hidden;
+            touch-action: none;
+            user-select: none;
+            perspective: 1200px;
+        }
+
+        /* Background Grid */
+        .cyber-grid {
+            position: fixed;
+            inset: -50%;
+            width: 200%;
+            height: 200%;
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            transform-origin: center;
+            z-index: -2; /* Deep background */
+            animation: gridSpin 60s linear infinite;
+            opacity: 0.3;
+        }
+        @keyframes gridSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* UI Panels */
+        .glass-panel {
+            background: rgba(10, 15, 30, 0.85); /* Slightly more opaque for better interaction */
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        /* 3D Container */
+        #game-wrapper-3d {
+            transition: transform 0.1s cubic-bezier(0.2, 0.8, 0.2, 1);
+            transform-style: preserve-3d;
+            z-index: 0;
+        }
+
+        #game-container {
+            position: relative;
+            border-radius: 24px;
+            box-shadow: 0 20px 100px rgba(0, 0, 0, 0.8), 0 0 50px rgba(34, 211, 238, 0.1);
+            overflow: hidden;
+            transform: translateZ(0);
+        }
+
+        canvas {
+            border-radius: 24px;
+            background: radial-gradient(circle at center, #0a0e17 0%, #000000 100%);
+        }
+
+        /* HUD & Chips */
+        .hud-chip {
+            animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            text-shadow: 0 0 5px currentColor;
+        }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Shop Item Styles */
+        .shop-item {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.2s;
+        }
+        .shop-item:hover:not(:disabled) {
+            background: rgba(255,255,255,0.1);
+            transform: translateY(-2px);
+            border-color: #22d3ee;
+        }
+        .shop-item:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Achievement Animation */
+        #achievement-area {
+            position: fixed; /* Fixed to screen, not game */
+            top: 100px; left: 50%; transform: translateX(-50%);
+            width: 100%; pointer-events: none; z-index: 60;
+            display: flex; flex-direction: column; align-items: center; gap: 8px;
+        }
+        .achievement {
+            background: linear-gradient(90deg, rgba(0,0,0,0.8), rgba(16, 185, 129, 0.2), rgba(0,0,0,0.8));
+            border-top: 1px solid #22c55e; border-bottom: 1px solid #22c55e;
+            padding: 8px 32px; color: #fff; font-weight: 900; text-transform: uppercase;
+            letter-spacing: 2px; text-shadow: 0 0 10px #22c55e;
+            animation: popDown 3s forwards; opacity: 0;
+        }
+        @keyframes popDown { 0% { transform: translateY(-20px); opacity: 0; } 10% { transform: translateY(0); opacity: 1; } 90% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(-20px); opacity: 0; } }
+
+        /* XP Bar */
+        .xp-container {
+            position: absolute; bottom: 0; left: 0; right: 0; height: 4px;
+            background: rgba(255,255,255,0.05); z-index: 5;
+        }
+        .xp-fill {
+            height: 100%; background: linear-gradient(90deg, #22c55e, #38bdf8, #a855f7);
+            background-size: 200% 100%; animation: shimmer 2s infinite linear;
+            width: 0%; transition: width 0.3s ease-out; box-shadow: 0 -2px 10px #22c55e;
+        }
+        @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+
+        /* Touch Buttons */
+        .control-btn {
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.4), rgba(15, 23, 42, 0.6));
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 4px 0 rgba(0, 0, 0, 0.5);
+            transition: all 0.1s; backdrop-filter: blur(4px);
+        }
+        .control-btn:active {
+            transform: translateY(4px); box-shadow: none;
+            background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.4);
+        }
+        .neon-text { text-shadow: 0 0 10px currentColor, 0 0 20px currentColor; }
+        
+        /* Ensure UI is clickable */
+        #ui-layer {
+            position: absolute; inset: 0; z-index: 50;
+            pointer-events: none; /* Let clicks pass through empty space */
+        }
+        .interactive { pointer-events: auto; }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+
+    <!-- Top Bar -->
+    <div class="w-full max-w-[460px] flex justify-between items-end mb-4 z-50 relative">
+        <div>
+            <h1 class="text-4xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-cyan-400 to-purple-500 filter drop-shadow-[0_0_15px_rgba(34,211,238,0.3)]">
+                NEON SNAKE
+            </h1>
+            <div class="flex items-center gap-2">
+                <div class="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_#22c55e]"></div>
+                <p class="text-[10px] text-green-400/80 font-bold uppercase tracking-[0.3em]">Cyber-Ascension v14.1</p>
+            </div>
+        </div>
+        <div class="glass-panel px-5 py-2 rounded-2xl flex flex-col items-end relative overflow-hidden transition-colors">
+            <div class="flex items-center gap-4">
+                <!-- Level Display (Restored) -->
+                <div class="text-right">
+                    <span class="text-[9px] uppercase text-slate-500 font-bold tracking-widest block mb-0.5">Lvl</span>
+                    <span id="levelDisplay" class="text-xl font-black text-cyan-400 leading-none drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">1</span>
+                </div>
+                <div class="w-px h-8 bg-gradient-to-b from-transparent via-white/20 to-transparent"></div>
+                
+                <div class="text-right">
+                    <span class="text-[9px] uppercase text-slate-500 font-bold tracking-widest block mb-0.5">Bits</span>
+                    <span id="bitsDisplay" class="text-xl font-black text-yellow-400 leading-none drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]">0</span>
+                </div>
+                <div class="w-px h-8 bg-gradient-to-b from-transparent via-white/20 to-transparent"></div>
+                
+                <div class="text-right">
+                    <span class="text-[9px] uppercase text-slate-500 font-bold tracking-widest block mb-0.5">Score</span>
+                    <span id="score" class="text-3xl font-bold leading-none text-white neon-text text-green-400">000</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Powerups HUD -->
+    <div id="hudContainer" class="w-full max-w-[460px] h-12 mb-2 flex gap-2 overflow-x-auto relative z-40 no-scrollbar items-center px-1">
+        <!-- JS injects powerups here -->
+    </div>
+
+    <!-- 3D Game Wrapper -->
+    <div id="game-wrapper-3d" class="relative">
+        <div id="game-container" class="group">
+            <div class="cyber-grid"></div>
+            <canvas id="gameCanvas"></canvas>
+            <div class="xp-container"><div id="xpBar" class="xp-fill"></div></div>
+            
+            <!-- In-Game UI (Non-interactive) -->
+            <div id="comboUI" class="absolute top-8 right-8 text-right opacity-0 transition-opacity duration-300 pointer-events-none z-20 mix-blend-screen">
+                <div class="text-5xl font-black italic text-yellow-300 drop-shadow-[0_0_25px_rgba(253,224,71,0.8)] transform -skew-x-12">
+                    <span id="comboCount">1</span>x
+                </div>
+                <div class="text-xs font-bold text-yellow-100/80 uppercase tracking-widest mr-1">Combo</div>
+                <div class="w-24 h-1 bg-slate-900/50 rounded-full ml-auto mt-2 overflow-hidden">
+                    <div id="comboBar" class="h-full bg-yellow-400 w-full shadow-[0_0_15px_rgba(250,204,21,1)]"></div>
+                </div>
+            </div>
+
+            <!-- Boss Warning -->
+            <div id="bossWarning" class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0 transition-opacity duration-500 z-20">
+                <div class="bg-red-950/90 text-red-100 px-8 py-6 rounded-xl border border-red-500/50 shadow-[0_0_100px_rgba(239,68,68,0.6)] backdrop-blur-xl transform animate-bounce">
+                    <h3 class="text-4xl font-black italic tracking-tighter text-red-500 drop-shadow-[0_0_10px_red]">⚠️ ANOMALY</h3>
+                    <p class="text-center text-[10px] font-bold tracking-[0.3em] mt-2 text-white">THE GLITCH AWAKENS</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- UI LAYER (On Top of 3D) -->
+    <div id="ui-layer" class="flex flex-col items-center justify-center">
+        <!-- Achievements -->
+        <div id="achievement-area"></div>
+
+        <!-- Menu Overlay -->
+        <div id="overlay" class="interactive relative flex flex-col items-center justify-center glass-panel rounded-3xl p-8 max-w-sm w-full transition-all duration-500 m-1">
+            <h2 id="overlayTitle" class="text-6xl font-black mb-1 text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-400 italic tracking-tighter drop-shadow-xl">READY?</h2>
+            
+            <p class="text-slate-300 mb-6 text-sm font-medium text-center">
+                Bits Collected: <span id="savedBitsDisplay" class="text-yellow-400 font-bold">0</span><br>
+                <span class="text-[10px] text-slate-500 mt-1 block tracking-wide">DOUBLE TAP TO DASH // AVOID VIRUSES</span>
+            </p>
+            
+            <!-- SHOP BUTTON -->
+            <button id="shopToggleBtn" class="w-full mb-3 bg-slate-800 hover:bg-slate-700 text-cyan-400 font-bold py-3 rounded-xl border border-cyan-500/30 transition-all text-xs tracking-widest shadow-[0_0_15px_rgba(34,211,238,0.1)] active:scale-95">
+                🛠️ OPEN CYBER-MARKET
+            </button>
+
+            <div class="space-y-3 w-full">
+                <button id="startBtn" class="w-full bg-green-600 hover:bg-green-500 text-white font-black py-4 rounded-xl transition-all shadow-[0_0_40px_rgba(34,197,94,0.3)] hover:scale-[1.02] border border-green-400/30 tracking-[0.25em] active:scale-95">
+                    INITIATE
+                </button>
+                
+                <select id="difficulty" class="w-full bg-black/40 text-slate-400 py-2 rounded-lg text-[10px] font-bold outline-none cursor-pointer text-center border border-white/5 uppercase tracking-widest hover:text-white transition-colors">
+                    <option value="110">Speed: Chill</option>
+                    <option value="80" selected>Speed: Standard</option>
+                    <option value="55">Speed: Hyper</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- SHOP OVERLAY -->
+        <div id="shopOverlay" class="interactive absolute inset-4 md:inset-auto md:w-96 md:h-[500px] flex flex-col bg-slate-950/95 rounded-3xl p-6 hidden transition-all duration-300 border border-white/10 shadow-2xl">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-3xl font-black text-cyan-400 italic tracking-tighter">CYBER MARKET</h2>
+                <button id="closeShopBtn" class="text-slate-400 hover:text-white font-bold p-2">✕</button>
+            </div>
+            <div class="flex-1 overflow-y-auto space-y-3 no-scrollbar" id="shopItems">
+                <!-- Shop Items Injected Here -->
+            </div>
+            <div class="mt-4 pt-4 border-t border-white/10 flex justify-between items-center">
+                <span class="text-xs text-slate-500 uppercase tracking-widest">Available Bits</span>
+                <span id="shopBitsDisplay" class="text-xl font-bold text-yellow-400">0</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Controls -->
+    <div class="mt-6 w-full max-w-[440px] md:hidden relative z-50">
+        <div class="grid grid-cols-3 gap-3 mb-3">
+             <div class="col-start-2">
+                <button id="upBtn" class="control-btn w-full h-16 rounded-2xl text-2xl text-slate-400 active:text-white">▲</button>
+            </div>
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+            <button id="leftBtn" class="control-btn h-16 rounded-2xl text-2xl text-slate-400 active:text-white">◀</button>
+            <button id="downBtn" class="control-btn h-16 rounded-2xl text-2xl text-slate-400 active:text-white">▼</button>
+            <button id="rightBtn" class="control-btn h-16 rounded-2xl text-2xl text-slate-400 active:text-white">▶</button>
+        </div>
+        <button id="turboBtn" class="w-full mt-4 h-14 bg-red-500/5 border border-red-500/20 rounded-2xl text-red-400 font-black active:bg-red-500 active:text-white transition-all uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-2 backdrop-blur-sm shadow-lg">
+            <span>⚡ OVERDRIVE</span>
+        </button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        const hudContainer = document.getElementById('hudContainer');
+        const gameContainer = document.getElementById('game-container');
+        const gameWrapper3D = document.getElementById('game-wrapper-3d');
+        const xpBar = document.getElementById('xpBar');
+        const achievementArea = document.getElementById('achievement-area');
+        const shopOverlay = document.getElementById('shopOverlay');
+        const overlay = document.getElementById('overlay');
+
+        const GRID_SIZE = 28;
+        let TILE_COUNT;
+        
+        let playerData = {
+            bits: 0,
+            highScore: 0,
+            upgrades: {
+                dashCost: { level: 0, max: 5, cost: 100, name: "Flux Capacitor", desc: "Reduces Dash Cost" },
+                xpMult:   { level: 0, max: 5, cost: 200, name: "Neural Link", desc: "+10% XP Gain" },
+                luck:     { level: 0, max: 5, cost: 300, name: "RNG Module", desc: "Better Item Spawns" },
+                startLen: { level: 0, max: 3, cost: 500, name: "Carbon Body", desc: "Start Longer" }
+            }
+        };
+
+        const savedData = localStorage.getItem('neonSnake_v14_data');
+        if (savedData) {
+            try {
+                const parsed = JSON.parse(savedData);
+                playerData.bits = parsed.bits || 0;
+                playerData.highScore = parsed.highScore || 0;
+                if(parsed.upgrades) {
+                    for(let key in playerData.upgrades) {
+                        if(parsed.upgrades[key]) playerData.upgrades[key].level = parsed.upgrades[key].level;
+                    }
+                }
+            } catch(e) { console.error("Save data corrupt"); }
+        }
+
+        let snake = [], prevSnake = [], foods = [], particles = [], floaters = [], shockwaves = [], enemies = [], activeEffects = {};
+        let level = 1, xp = 0, nextLevelXp = 100, score = 0, combo = 0, comboTimer = 0;
+        let dx = 1, dy = 0, inputQueue = [];
+        let isPaused = true, isTurbo = false;
+        let achievements = new Set();
+        let isBotMode = false, keySequence = [];
+        const CHEAT_CODE = "D4rkBl4z3";
+        let lastTap = { key: null, time: 0 };
+        let lastTime = 0, moveTimer = 0, moveInterval = 80, lerpTime = 0;
+        let shake = 0, glitch = 0, globalTime = 0;
+        let currentBiome = 'cyber';
+        let glitchBoss = null;
+        let cameraScale = 1.0;
+
+        const BIOMES = {
+            cyber:   { bg: '#02040a', grid: 'rgba(16, 185, 129, 0.1)', snake: '#22c55e' },
+            vapor:   { bg: '#1a0b2e', grid: 'rgba(236, 72, 153, 0.15)', snake: '#f472b6' },
+            matrix:  { bg: '#000000', grid: 'rgba(34, 197, 94, 0.2)', snake: '#00ff00' },
+            inferno: { bg: '#1c0505', grid: 'rgba(239, 68, 68, 0.15)', snake: '#f87171' }
+        };
+
+        const POWERUPS = {
+            standard: { color: '#ef4444', icon: '', score: 10, xp: 10, weight: 60, type: 'food' },
+            gold:     { color: '#fbbf24', icon: '👑', score: 50, xp: 25, weight: 8, grow: 2, type: 'food' },
+            bit:      { color: '#fbbf24', icon: '💾', score: 50, xp: 5, weight: 10, grow: 0, type: 'instant', label: 'BIT' },
+            diamond:  { color: '#38bdf8', icon: '💎', score: 300, xp: 80, weight: 3, grow: 0, type: 'instant' },
+            magnet:   { color: '#a855f7', icon: '🧲', duration: 8000, weight: 6, type: 'active', label: 'MAGNET' },
+            ghost:    { color: '#22d3ee', icon: '👻', duration: 6000, weight: 5, type: 'active', label: 'PHASE' },
+            shield:   { color: '#10b981', icon: '🛡️', duration: 10000, weight: 5, type: 'active', label: 'SHIELD' },
+            x2:       { color: '#f59e0b', icon: '✖️2', duration: 10000, weight: 6, type: 'active', label: 'DOUBLE' },
+            slomo:    { color: '#6366f1', icon: '⏱️', duration: 6000, weight: 5, type: 'active', label: 'ZEN' },
+            drill:    { color: '#94a3b8', icon: '🔩', duration: 5000, weight: 4, type: 'active', label: 'DRILL' },
+            wall_hack:{ color: '#475569', icon: '🧱', duration: 10000, weight: 3, type: 'active', label: 'NO WALLS' },
+            invuln:   { color: '#fcd34d', icon: '🌟', duration: 5000, weight: 1, type: 'active', label: 'GOD MODE' },
+            blast:    { color: '#f97316', icon: '💥', weight: 5, type: 'instant', label: 'BLAST' },
+            nuke:     { color: '#ef4444', icon: '☢️', weight: 1, type: 'instant', label: 'NUKE' },
+            singularity: { color: '#8b5cf6', icon: '⚫', weight: 2, type: 'instant', label: 'BLACK HOLE' }
+        };
+
+        class WarpGrid {
+            constructor() { this.points = []; }
+            init() {
+                const spacing = 32;
+                this.cols = Math.ceil(canvas.width / spacing) + 1;
+                this.rows = Math.ceil(canvas.height / spacing) + 1;
+                this.points = [];
+                for (let x = 0; x < this.cols; x++) {
+                    for (let y = 0; y < this.rows; y++) {
+                        this.points.push({ x: x*spacing, y: y*spacing, ox: x*spacing, oy: y*spacing, vx: 0, vy: 0 });
+                    }
+                }
+            }
+            update() {
+                const head = snake[0];
+                const hx = head ? head.x * GRID_SIZE : 0;
+                const hy = head ? head.y * GRID_SIZE : 0;
+                this.points.forEach(p => {
+                    const dx = p.ox - p.x; const dy = p.oy - p.y;
+                    p.vx += dx * 0.03; p.vy += dy * 0.03;
+                    const dist = Math.hypot(p.x - hx, p.y - hy);
+                    if (dist < 150) {
+                        const ang = Math.atan2(p.y - hy, p.x - hx);
+                        const f = (150 - dist) * 0.2;
+                        p.vx += Math.cos(ang) * f; p.vy += Math.sin(ang) * f;
+                    }
+                    shockwaves.forEach(w => {
+                        const d = Math.hypot(p.x - w.x, p.y - w.y);
+                        if (Math.abs(d - w.r) < 30) {
+                            const ang = Math.atan2(p.y - w.y, p.x - w.x);
+                            p.vx += Math.cos(ang) * 5; p.vy += Math.sin(ang) * 5;
+                        }
+                    });
+                    p.x += p.vx; p.y += p.vy;
+                    p.vx *= 0.85; p.vy *= 0.85; 
+                });
+            }
+            draw(ctx, color) {
+                ctx.strokeStyle = color; ctx.lineWidth = 0.8; ctx.beginPath();
+                this.points.forEach(p => {
+                    ctx.moveTo(p.x - 2, p.y); ctx.lineTo(p.x + 2, p.y);
+                    ctx.moveTo(p.x, p.y - 2); ctx.lineTo(p.x, p.y + 2);
+                });
+                ctx.stroke();
+            }
+            explode(x, y, force) {
+                this.points.forEach(p => {
+                    const dist = Math.hypot(p.x - x, p.y - y);
+                    if (dist < 200) {
+                        const ang = Math.atan2(p.y - y, p.x - x);
+                        const f = (200 - dist) * force;
+                        p.vx += Math.cos(ang) * f; p.vy += Math.sin(ang) * f;
+                    }
+                });
+            }
+        }
+        const warpGrid = new WarpGrid();
+
+        function resize() {
+            const size = Math.min(window.innerWidth - 32, 460);
+            canvas.width = size; canvas.height = size;
+            TILE_COUNT = Math.floor(size / GRID_SIZE);
+            warpGrid.init();
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        function updateUI() {
+            document.getElementById('score').innerText = score.toString().padStart(3, '0');
+            document.getElementById('bitsDisplay').innerText = playerData.bits;
+            document.getElementById('savedBitsDisplay').innerText = playerData.bits;
+            document.getElementById('shopBitsDisplay').innerText = playerData.bits;
+        }
+        updateUI();
+
+        function saveData() {
+            localStorage.setItem('neonSnake_v14_data', JSON.stringify(playerData));
+        }
+
+        function initGame() {
+            const startLen = 3 + playerData.upgrades.startLen.level;
+            snake = [];
+            for(let i=0; i<startLen; i++) snake.push({x: 10-i, y: 10});
+            prevSnake = JSON.parse(JSON.stringify(snake));
+            foods = []; enemies = [];
+            dx = 1; dy = 0; inputQueue = [];
+            score = 0; combo = 0; activeEffects = {};
+            level = 1; xp = 0; nextLevelXp = 100;
+            currentBiome = 'cyber';
+            glitchBoss = null; achievements.clear();
+            particles = []; floaters = []; shockwaves = [];
+            
+            updateLevelUI();
+            moveInterval = parseInt(document.getElementById('difficulty').value);
+            spawnFood('standard');
+            renderHUD();
+            
+            if(isBotMode) { activeEffects.invuln = 99999999; activeEffects.wall_hack = 99999999; }
+        }
+
+        function spawnFood(forceType) {
+            let t = forceType;
+            if (!t) {
+                const r = Math.random() * 100;
+                let sum = 0;
+                for (let k in POWERUPS) {
+                    sum += POWERUPS[k].weight;
+                    if (r <= sum) { t = k; break; }
+                }
+            }
+            if (playerData.upgrades.luck.level > 0 && Math.random() < (playerData.upgrades.luck.level * 0.05)) {
+                if (t === 'standard') t = 'gold';
+            }
+            if (!t) t = 'standard';
+            let pos;
+            for(let i=0; i<100; i++) {
+                pos = { x: Math.floor(Math.random()*(TILE_COUNT-2))+1, y: Math.floor(Math.random()*(TILE_COUNT-2))+1 };
+                if (!snake.some(p => p.x === pos.x && p.y === pos.y) && !foods.some(f => f.x === pos.x && f.y === pos.y)) break;
+            }
+            foods.push({ ...pos, type: t, birth: globalTime });
+        }
+
+        function spawnEnemy() {
+            let ex, ey;
+            for(let i=0; i<50; i++) {
+                ex = Math.floor(Math.random()*(TILE_COUNT)); ey = Math.floor(Math.random()*(TILE_COUNT));
+                if (Math.hypot(snake[0].x - ex, snake[0].y - ey) > 10) break;
+            }
+            enemies.push({ x: ex, y: ey, type: 'virus', moveTimer: 0 });
+        }
+
+        // --- SHOP ---
+        function renderShop() {
+            const list = document.getElementById('shopItems');
+            list.innerHTML = '';
+            for (let key in playerData.upgrades) {
+                const item = playerData.upgrades[key];
+                const div = document.createElement('div');
+                div.className = 'shop-item p-4 rounded-xl flex justify-between items-center';
+                const isMax = item.level >= item.max;
+                const cost = isMax ? 'MAX' : item.cost * (item.level + 1);
+                const canAfford = !isMax && playerData.bits >= cost;
+                div.innerHTML = `
+                    <div>
+                        <div class="text-cyan-400 font-bold text-sm uppercase tracking-wider">${item.name}</div>
+                        <div class="text-slate-400 text-xs">${item.desc}</div>
+                        <div class="flex gap-1 mt-2">
+                            ${Array(item.max).fill(0).map((_, i) => `<div class="h-1.5 w-4 rounded-full ${i < item.level ? 'bg-green-500' : 'bg-slate-700'}"></div>`).join('')}
+                        </div>
+                    </div>
+                    <button onclick="buyUpgrade('${key}')" ${!canAfford ? 'disabled' : ''} class="px-4 py-2 rounded-lg font-bold text-xs ${canAfford ? 'bg-green-600 text-white hover:bg-green-500' : 'bg-slate-800 text-slate-500'}">
+                        ${isMax ? 'MAXED' : cost + ' BITS'}
+                    </button>
+                `;
+                list.appendChild(div);
+            }
+        }
+
+        window.buyUpgrade = (key) => {
+            const item = playerData.upgrades[key];
+            const cost = item.cost * (item.level + 1);
+            if (item.level < item.max && playerData.bits >= cost) {
+                playerData.bits -= cost; item.level++;
+                saveData(); updateUI(); renderShop();
+            }
+        };
+
+        document.getElementById('shopToggleBtn').onclick = () => { renderShop(); shopOverlay.classList.remove('hidden'); };
+        document.getElementById('closeShopBtn').onclick = () => { shopOverlay.classList.add('hidden'); };
+
+        function updateLogic() {
+            prevSnake = JSON.parse(JSON.stringify(snake));
+            if (isBotMode) runBotLogic();
+            else if (inputQueue.length > 0) {
+                const next = inputQueue.shift();
+                if (!(next.x === -dx && next.y === -dy)) { dx = next.x; dy = next.y; }
+            }
+
+            let head = { x: snake[0].x + dx, y: snake[0].y + dy };
+            let hitWall = (head.x < 0 || head.x >= TILE_COUNT || head.y < 0 || head.y >= TILE_COUNT);
+            if (hitWall && (activeEffects.drill || activeEffects.ghost || activeEffects.wall_hack)) {
+                if (head.x < 0) head.x = TILE_COUNT - 1; else if (head.x >= TILE_COUNT) head.x = 0;
+                if (head.y < 0) head.y = TILE_COUNT - 1; else if (head.y >= TILE_COUNT) head.y = 0;
+                hitWall = false;
+            }
+
+            let hitSelf = snake.some(p => p.x === head.x && p.y === head.y);
+            const godMode = activeEffects.ghost || activeEffects.invuln;
+
+            let hitEnemy = false;
+            enemies.forEach((e, i) => {
+                e.moveTimer += moveInterval;
+                if (e.moveTimer > 300) {
+                    e.moveTimer = 0;
+                    if (snake.length > 0) {
+                        const ex = e.x < snake[0].x ? 1 : (e.x > snake[0].x ? -1 : 0);
+                        const ey = e.y < snake[0].y ? 1 : (e.y > snake[0].y ? -1 : 0);
+                        if(Math.random() > 0.5) e.x += ex; else e.y += ey;
+                    }
+                }
+                if (e.x === head.x && e.y === head.y) {
+                    hitEnemy = true; createBurst(e.x, e.y, '#f00', 10); enemies.splice(i, 1);
+                }
+            });
+
+            if (hitWall || (hitSelf && !godMode)) {
+                if (activeEffects.shield) { delete activeEffects.shield; shake = 25; createShockwave(head.x, head.y); head = snake[0]; renderHUD(); return; }
+                gameOver(); return;
+            }
+
+            if (hitEnemy && !godMode) {
+                shake = 15; floatText("DATA CORRUPTED", head.x*GRID_SIZE, head.y*GRID_SIZE, '#f00');
+                score = Math.max(0, score - 100); if (snake.length > 3) snake.pop(); updateUI();
+            }
+
+            snake.unshift(head);
+
+            let ate = false;
+            if (activeEffects.magnet) {
+                foods.forEach(f => {
+                    if (Math.hypot(head.x-f.x, head.y-f.y) < 3.5) { f.x += (head.x - f.x) * 0.25; f.y += (head.y - f.y) * 0.25; }
+                });
+            }
+
+            for (let i = foods.length - 1; i >= 0; i--) {
+                const f = foods[i];
+                if (Math.hypot(head.x - f.x, head.y - f.y) <= 0.9) {
+                    handleEat(f); foods.splice(i, 1); ate = true;
+                }
+            }
+
+            if (!ate) snake.pop();
+            if (foods.length === 0) spawnFood();
+            if (Math.random() < 0.005 + (level * 0.001)) spawnEnemy();
+        }
+
+        function createShockwave(x, y) {
+            shockwaves.push({ x: x*GRID_SIZE+GRID_SIZE/2, y: y*GRID_SIZE+GRID_SIZE/2, r: 0, maxR: 300, alpha: 1.0 });
+        }
+
+        function handleEat(f) {
+            const def = POWERUPS[f.type];
+            applyEffect(f.type);
+            shake = 8; createShockwave(snake[0].x, snake[0].y);
+            let xpGain = def.xp || 10;
+            xpGain *= (1 + playerData.upgrades.xpMult.level * 0.1);
+            addXp(Math.floor(xpGain));
+            let g = def.grow !== undefined ? def.grow : 1;
+            if (g === 0) snake.pop();
+            else if (g > 1) for(let k=0; k<g-1; k++) snake.push({...snake[snake.length-1]});
+        }
+
+        function addXp(amount) {
+            xp += amount;
+            if (xp >= nextLevelXp) {
+                level++; xp = 0; nextLevelXp = Math.floor(nextLevelXp * 1.3);
+                shake = 20; warpGrid.explode(snake[0].x*GRID_SIZE, snake[0].y*GRID_SIZE, 1.5);
+                floatText("LEVEL UP!", snake[0].x*GRID_SIZE, snake[0].y*GRID_SIZE, '#fff');
+                unlockAchievement(`lvl${level}`, `LEVEL ${level} REACHED`);
+                if (level % 2 === 0) spawnEnemy();
+            }
+            updateLevelUI();
+        }
+
+        function updateLevelUI() {
+            document.getElementById('levelDisplay').innerText = level;
+            const pct = Math.min((xp / nextLevelXp) * 100, 100);
+            xpBar.style.width = `${pct}%`;
+        }
+
+        function applyEffect(type) {
+            const def = POWERUPS[type];
+            const h = snake[0];
+            if (def.type === 'instant') {
+                createBurst(h.x, h.y, def.color, 15);
+                if (type === 'bit') { playerData.bits += 5; saveData(); updateUI(); }
+                else if (type === 'blast') {
+                    for(let i=enemies.length-1; i>=0; i--) { createBurst(enemies[i].x, enemies[i].y, '#f00', 10); enemies.splice(i, 1); }
+                    shake = 20;
+                }
+                else if (type === 'singularity') {
+                    foods.forEach(f => { createBurst(f.x, f.y, POWERUPS[f.type].color, 5); handleEat(f); });
+                    foods = []; spawnFood(); createShockwave(h.x, h.y); shake = 30;
+                }
+                else if (type === 'nuke') { enemies = []; foods = []; spawnFood(); shake = 30; }
+                else if (type === 'clear') { 
+                    const bot = activeEffects.invuln > 100000; activeEffects = {}; 
+                    if(bot) { activeEffects.invuln = 99999999; activeEffects.wall_hack = 99999999; }
+                    renderHUD(); 
+                }
+            } else {
+                activeEffects[type] = def.duration; renderHUD();
+            }
+            addScore(def.score || 0, h.x, h.y, def.color);
+            if (def.type === 'active' || def.icon) floatText(def.label || type.toUpperCase(), h.x*GRID_SIZE, h.y*GRID_SIZE, def.color);
+        }
+
+        function addScore(pts, x, y, col) {
+            if(pts === 0) return;
+            comboTimer = 180; combo++;
+            let final = pts;
+            if (activeEffects.x2) final *= 2;
+            if (combo > 1) final += (combo * 5);
+            score += final;
+            if (final >= 50) { playerData.bits += 1; saveData(); }
+            updateUI();
+            if (combo > 1) {
+                const ui = document.getElementById('comboUI');
+                ui.style.opacity = '1';
+                document.getElementById('comboCount').innerText = combo;
+                ui.classList.remove('scale-125'); void ui.offsetWidth; ui.classList.add('scale-125');
+            }
+            floatText(pts > 0 ? `+${final}` : `${final}`, x*GRID_SIZE, y*GRID_SIZE, col);
+        }
+
+        function floatText(txt, x, y, col) {
+            floaters.push({ x: x+GRID_SIZE/2, y: y, text: txt, life: 1.0, color: col, vy: -1.5 });
+        }
+
+        function createBurst(gx, gy, col, count) {
+            const cx = gx * GRID_SIZE + GRID_SIZE/2, cy = gy * GRID_SIZE + GRID_SIZE/2;
+            for(let i=0; i<count; i++) {
+                const ang = Math.random() * Math.PI * 2, spd = Math.random() * 6 + 2;
+                particles.push({ x: cx, y: cy, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd, color: col, life: 1.0, size: Math.random()*3+2 });
+            }
+        }
+
+        function unlockAchievement(id, text) {
+            if (achievements.has(id)) return;
+            achievements.add(id);
+            const el = document.createElement('div');
+            el.className = 'achievement'; el.innerText = `🏆 ${text}`;
+            achievementArea.appendChild(el);
+            setTimeout(() => el.remove(), 3000);
+        }
+
+        function gameOver() {
+            isPaused = true;
+            document.getElementById('overlayTitle').innerText = "SYSTEM FAILURE";
+            document.getElementById('overlayTitle').className = "text-6xl font-black mb-2 text-red-500 italic tracking-tighter drop-shadow-[0_0_30px_red]";
+            overlay.classList.remove('opacity-0', 'pointer-events-none');
+            warpGrid.explode(canvas.width/2, canvas.height/2, 2);
+            saveData();
+        }
+
+        document.addEventListener('mousemove', (e) => {
+            const x = (e.clientX / window.innerWidth) - 0.5;
+            const y = (e.clientY / window.innerHeight) - 0.5;
+            gameWrapper3D.style.transform = `rotateY(${x * 8}deg) rotateX(${-y * 8}deg)`;
+        });
+
+        function checkDash(x, y) {
+            const now = Date.now();
+            if (lastTap.key === `${x},${y}` && now - lastTap.time < 300) {
+                const cost = Math.max(10, 50 - (playerData.upgrades.dashCost.level * 10));
+                if (score >= cost) {
+                    score -= cost; shake = 10; activeEffects.invuln = 300;
+                    snake[0].x += x*3; snake[0].y += y*3;
+                    if (snake[0].x < 0) snake[0].x += TILE_COUNT; if (snake[0].x >= TILE_COUNT) snake[0].x -= TILE_COUNT;
+                    if (snake[0].y < 0) snake[0].y += TILE_COUNT; if (snake[0].y >= TILE_COUNT) snake[0].y -= TILE_COUNT;
+                    prevSnake[0] = snake[0];
+                    warpGrid.explode(snake[0].x*GRID_SIZE, snake[0].y*GRID_SIZE, 1);
+                    floatText("DASH", snake[0].x*GRID_SIZE, snake[0].y*GRID_SIZE, '#fff');
+                    updateUI();
+                }
+            }
+            lastTap = { key: `${x},${y}`, time: now };
+        }
+
+        function queueMove(x, y) {
+            const last = inputQueue.length > 0 ? inputQueue[inputQueue.length-1] : { x: dx, y: dy };
+            if (inputQueue.length < 2 && (x !== -last.x || y !== -last.y)) inputQueue.push({x, y});
+        }
+
+        window.addEventListener('keydown', e => {
+            keySequence.push(e.key);
+            if (keySequence.length > CHEAT_CODE.length) keySequence.shift();
+            if (keySequence.join('') === CHEAT_CODE) toggleCheat();
+            let m = null;
+            if (['ArrowUp','w'].includes(e.key)) m = {x:0, y:-1};
+            if (['ArrowDown','s'].includes(e.key)) m = {x:0, y:1};
+            if (['ArrowLeft','a'].includes(e.key)) m = {x:-1, y:0};
+            if (['ArrowRight','d'].includes(e.key)) m = {x:1, y:0};
+            if (m) { checkDash(m.x, m.y); queueMove(m.x, m.y); }
+            if (e.key === ' ' || e.key === 'Shift') isTurbo = true;
+        });
+        window.addEventListener('keyup', e => { if (e.key === ' ' || e.key === 'Shift') isTurbo = false; });
+
+        const bindTouch = (id, x, y) => {
+            const el = document.getElementById(id);
+            if(!el) return;
+            const h = (e) => { e.preventDefault(); checkDash(x, y); queueMove(x, y); };
+            el.addEventListener('touchstart', h, {passive: false}); el.addEventListener('mousedown', h);
+        };
+        bindTouch('upBtn', 0, -1); bindTouch('downBtn', 0, 1); bindTouch('leftBtn', -1, 0); bindTouch('rightBtn', 1, 0);
+
+        const tb = document.getElementById('turboBtn');
+        if(tb) {
+            const st = (e) => { e.preventDefault(); isTurbo = true; tb.classList.add('bg-red-500'); };
+            const et = (e) => { e.preventDefault(); isTurbo = false; tb.classList.remove('bg-red-500'); };
+            tb.addEventListener('touchstart', st, {passive:false}); tb.addEventListener('touchend', et); tb.addEventListener('mousedown', st); tb.addEventListener('mouseup', et);
+        }
+
+        function toggleCheat() {
+            isBotMode = !isBotMode;
+            if (isBotMode) { activeEffects.invuln = 99999999; activeEffects.wall_hack = 99999999; floatText("DEV MODE", snake[0].x*GRID_SIZE, snake[0].y*GRID_SIZE, '#fff'); } 
+            else { delete activeEffects.invuln; delete activeEffects.wall_hack; }
+            renderHUD();
+        }
+
+        function runBotLogic() {
+            if (!isBotMode || foods.length === 0) return;
+            const head = snake[0]; const target = foods[0];
+            const moves = [{x:0, y:-1}, {x:0, y:1}, {x:-1, y:0}, {x:1, y:0}];
+            const safeMoves = moves.filter(m => !(m.x===-dx && m.y===-dy));
+            safeMoves.sort((a, b) => {
+                const da = Math.abs((head.x+a.x)-target.x) + Math.abs((head.y+a.y)-target.y);
+                const db = Math.abs((head.x+b.x)-target.x) + Math.abs((head.y+b.y)-target.y);
+                return da - db;
+            });
+            if(safeMoves.length>0) { dx=safeMoves[0].x; dy=safeMoves[0].y; }
+        }
+
+        function render(time) {
+            const dt = time - lastTime; lastTime = time; globalTime += dt * 0.001;
+
+            if (!isPaused) {
+                let currentInterval = moveInterval;
+                if (isTurbo || activeEffects.bolt) currentInterval /= 2.5;
+                if (activeEffects.slomo) currentInterval *= 1.5;
+                if (activeEffects.snail) currentInterval *= 2;
+                if (isBotMode) currentInterval = 40; 
+
+                moveTimer += dt; lerpTime = Math.min(moveTimer / currentInterval, 1.0);
+
+                if (moveTimer >= currentInterval) { updateLogic(); moveTimer = 0; lerpTime = 0; }
+
+                for (let k in activeEffects) {
+                    if (activeEffects[k] > 1000000) continue; 
+                    activeEffects[k] -= dt;
+                    if (activeEffects[k] <= 0) { delete activeEffects[k]; renderHUD(); }
+                }
+                if (combo > 0) {
+                    comboTimer--;
+                    document.getElementById('comboBar').style.width = (comboTimer/1.8) + '%';
+                    if (comboTimer <= 0) { combo = 0; document.getElementById('comboUI').style.opacity = '0'; }
+                }
+            }
+
+            // Camera
+            let targetScale = 1.0;
+            if (activeEffects.colossus) targetScale = 0.8;
+            if (activeEffects.micro || activeEffects.snail) targetScale = 1.2;
+            if (isTurbo) targetScale = 0.95;
+            cameraScale += (targetScale - cameraScale) * 0.05;
+
+            // Visuals
+            warpGrid.update();
+            shockwaves.forEach((w, i) => { w.r += dt*0.3; w.alpha -= dt*0.001; if(w.alpha<=0) shockwaves.splice(i,1); });
+
+            // DRAW
+            const biome = BIOMES[currentBiome];
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.fillStyle = biome.bg; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.save();
+            const cx = canvas.width/2; const cy = canvas.height/2;
+            ctx.translate(cx, cy); ctx.scale(cameraScale, cameraScale); ctx.translate(-cx, -cy);
+            
+            if (shake > 0) { ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake); shake *= 0.9; if(shake<0.5) shake=0; }
+            if (glitch > 0) { ctx.translate((Math.random()-0.5)*glitch, 0); glitch *= 0.9; if(glitch<0.5) glitch=0; }
+
+            ctx.globalCompositeOperation = 'source-over';
+            warpGrid.draw(ctx, biome.grid);
+
+            ctx.lineWidth = 3;
+            shockwaves.forEach(w => { ctx.strokeStyle=`rgba(255,255,255,${w.alpha*0.5})`; ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI*2); ctx.stroke(); });
+
+            ctx.globalCompositeOperation = 'lighter';
+
+            foods.forEach(f => {
+                const def = POWERUPS[f.type];
+                const cx = f.x*GRID_SIZE+GRID_SIZE/2, cy = f.y*GRID_SIZE+GRID_SIZE/2;
+                const pulse = Math.sin(globalTime*6)*3;
+                ctx.shadowColor = def.color; ctx.shadowBlur = 20+pulse; ctx.fillStyle = def.color;
+                if (def.icon) { ctx.font = '22px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(def.icon, cx, cy + (Math.sin(globalTime*4)*2)); }
+                else { ctx.beginPath(); ctx.arc(cx, cy, GRID_SIZE/2-4+(pulse/3), 0, Math.PI*2); ctx.fill(); }
+            });
+
+            enemies.forEach(e => {
+                const ex = e.x*GRID_SIZE+GRID_SIZE/2, ey = e.y*GRID_SIZE+GRID_SIZE/2;
+                ctx.fillStyle = '#f00'; ctx.shadowColor = '#f00'; ctx.shadowBlur = 20;
+                ctx.beginPath();
+                for(let i=0; i<5; i++) {
+                    const angle = (i/5)*Math.PI*2 + globalTime*2;
+                    const r = i%2===0 ? 12 : 6;
+                    const px = ex + Math.cos(angle)*r; const py = ey + Math.sin(angle)*r;
+                    if(i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                }
+                ctx.closePath(); ctx.fill();
+            });
+
+            if (snake.length > 0) {
+                let snakeColor = biome.snake;
+                if (activeEffects.ghost) { snakeColor = '#22d3ee'; ctx.globalAlpha = 0.5; }
+                else if (activeEffects.shield) snakeColor = '#10b981';
+                else if (activeEffects.invuln) snakeColor = '#fcd34d';
+
+                ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+                let lw = GRID_SIZE - 8;
+                if (activeEffects.colossus) lw = GRID_SIZE + 4;
+                if (activeEffects.micro) lw = 8;
+                
+                ctx.lineWidth = lw; ctx.shadowBlur = 25; ctx.shadowColor = snakeColor; ctx.strokeStyle = snakeColor;
+                
+                ctx.beginPath();
+                const h = snake[0]; const p = prevSnake[0] || h;
+                const wrap = Math.abs(h.x-p.x)+Math.abs(h.y-p.y) > 2;
+                let hx, hy;
+                if(wrap) { hx = h.x*GRID_SIZE+GRID_SIZE/2; hy = h.y*GRID_SIZE+GRID_SIZE/2; }
+                else { hx = (p.x+(h.x-p.x)*lerpTime)*GRID_SIZE+GRID_SIZE/2; hy = (p.y+(h.y-p.y)*lerpTime)*GRID_SIZE+GRID_SIZE/2; }
+                ctx.moveTo(hx, hy);
+
+                for (let i = 1; i < snake.length; i++) {
+                    const c = snake[i]; const pr = prevSnake[i] || c;
+                    const d = Math.abs(c.x-pr.x)+Math.abs(c.y-pr.y);
+                    if (d > 2) { ctx.stroke(); ctx.beginPath(); ctx.moveTo(c.x*GRID_SIZE+GRID_SIZE/2, c.y*GRID_SIZE+GRID_SIZE/2); }
+                    else { ctx.lineTo((pr.x+(c.x-pr.x)*lerpTime)*GRID_SIZE+GRID_SIZE/2, (pr.y+(c.y-pr.y)*lerpTime)*GRID_SIZE+GRID_SIZE/2); }
+                }
+                ctx.stroke();
+                
+                ctx.shadowBlur = 0; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = lw * 0.4; ctx.globalAlpha = 0.8; ctx.stroke();
+                ctx.globalAlpha = 1.0;
+
+                ctx.fillStyle = '#000';
+                if (!activeEffects.blind) {
+                    const off = 6; const sz = 3;
+                    if (dx===1) { ctx.fillRect(hx+4, hy-off, sz, sz); ctx.fillRect(hx+4, hy+off-sz, sz, sz); }
+                    else if (dx===-1) { ctx.fillRect(hx-7, hy-off, sz, sz); ctx.fillRect(hx-7, hy+off-sz, sz, sz); }
+                    else if (dy===-1) { ctx.fillRect(hx-off, hy-7, sz, sz); ctx.fillRect(hx+off-sz, hy-7, sz, sz); }
+                    else { ctx.fillRect(hx-off, hy+4, sz, sz); ctx.fillRect(hx+off-sz, hy+4, sz, sz); }
+                }
+            }
+
+            particles.forEach((p, i) => {
+                p.x += p.vx; p.y += p.vy; p.life -= 0.02; p.vx *= 0.95; p.vy *= 0.95;
+                if (p.life <= 0) particles.splice(i, 1);
+                else { ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size*p.life, 0, Math.PI*2); ctx.fill(); }
+            });
+
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = 1;
+            
+            if (activeEffects.blind) {
+                const h = snake[0]; const g = ctx.createRadialGradient(h.x*GRID_SIZE, h.y*GRID_SIZE, GRID_SIZE*2, h.x*GRID_SIZE, h.y*GRID_SIZE, GRID_SIZE*8);
+                g.addColorStop(0, "transparent"); g.addColorStop(1, "#000"); ctx.fillStyle = g; ctx.fillRect(0,0,canvas.width,canvas.height);
+            }
+            if (activeEffects.flashlight) {
+                 const h = snake[0]; const g = ctx.createRadialGradient(h.x*GRID_SIZE, h.y*GRID_SIZE, GRID_SIZE, h.x*GRID_SIZE, h.y*GRID_SIZE, GRID_SIZE*12);
+                g.addColorStop(0, "rgba(255, 255, 200, 0.05)"); g.addColorStop(1, "transparent"); ctx.fillStyle = g; ctx.fillRect(0,0,canvas.width,canvas.height);
+            }
+
+            floaters.forEach(f => {
+                f.y += f.vy; f.life -= 0.02;
+                if(f.life > 0) { ctx.globalAlpha = Math.max(0, f.life); ctx.fillStyle = f.color; ctx.shadowColor = 'black'; ctx.shadowBlur = 4; ctx.font = 'bold 16px "Exo 2"'; ctx.textAlign = 'center'; ctx.fillText(f.text, f.x, f.y); }
+            });
+            ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+
+            ctx.restore();
+            requestAnimationFrame(render);
+        }
+
+        function renderHUD() {
+            hudContainer.innerHTML = '';
+            for (let k in activeEffects) {
+                const def = POWERUPS[k] || { color: '#fff', icon: '?', label: k.toUpperCase() };
+                const div = document.createElement('div');
+                div.className = 'hud-chip flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold text-white whitespace-nowrap';
+                div.style.borderColor = def.color; div.style.boxShadow = `0 0 10px ${def.color}40`;
+                div.innerHTML = `<span class="text-lg">${def.icon}</span> <span>${def.label || k.toUpperCase()}</span>`;
+                hudContainer.appendChild(div);
+            }
+        }
+        document.getElementById('startBtn').addEventListener('click', () => {
+            initGame(); isPaused = false; overlay.classList.add('opacity-0', 'pointer-events-none');
+        });
+        requestAnimationFrame(render);
+    </script>
+</body>
+</html>

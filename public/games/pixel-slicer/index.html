@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pixel Slicer</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #0f172a; /* Dark slate background */
+            overflow: hidden;
+            touch-action: none; /* Prevent scrolling on mobile */
+            font-family: 'Courier New', Courier, monospace;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #fff;
+            pointer-events: none;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        #score {
+            font-size: 32px;
+            font-weight: bold;
+            color: #38bdf8;
+        }
+        #instructions {
+            font-size: 16px;
+            color: #94a3b8;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <div id="score">Score: 0</div>
+        <div id="instructions">Swipe to slice the pixel enemies!</div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+
+        // Game Configuration
+        let width, height;
+        const PIXEL_SIZE = 8;
+        const GRAVITY = 0.4;
+        let score = 0;
+        
+        // Resize handler
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Audio Setup
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function createSwoosh(speed) {
+            if(audioCtx.state === 'suspended') return;
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            osc.type = 'sine';
+            const startFreq = Math.min(600, 100 + speed * 5);
+            osc.frequency.setValueAtTime(startFreq, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.15);
+            
+            gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.15);
+        }
+
+        function createDing(pitchCombo = 1) {
+            if(audioCtx.state === 'suspended') return;
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            osc.type = 'sine';
+            // Higher pitch for higher combos
+            osc.frequency.setValueAtTime(440 * Math.pow(1.1, pitchCombo), audioCtx.currentTime);
+            
+            gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.3);
+        }
+
+        function createCrunch(size, isBomb=false) {
+            if(audioCtx.state === 'suspended') return;
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            if (isBomb) {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(100, audioCtx.currentTime); // Deeper boom
+                osc.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 0.6);
+                gainNode.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.6);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.6);
+                return;
+            }
+
+            osc.type = 'sawtooth';
+            const baseFreq = Math.max(150, 700 - size * 4); // Slightly deeper base
+            osc.frequency.setValueAtTime(baseFreq, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(baseFreq / 4, audioCtx.currentTime + 0.15); // Sharper pitch drop
+            
+            gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.15);
+        }
+
+        // Pixel Art Templates (1 = pixel, 0 = empty)
+        const templates = [
+            { // Space Invader
+                type: 'normal',
+                color: '#34d399', // Emerald
+                data: [
+                    "  x     x  ",
+                    "   x   x   ",
+                    "  xxxxxxx  ",
+                    " xx xxx xx ",
+                    "xxxxxxxxxxx",
+                    "x xxxxxxx x",
+                    "x x     x x",
+                    "   xx xx   "
+                ]
+            },
+            { // Skull
+                type: 'normal',
+                color: '#f87171', // Red
+                data: [
+                    "   xxxxx   ",
+                    "  xxxxxxx  ",
+                    " xxxxxxxxx ",
+                    " xxx x xxx ",
+                    " xxxxxxxxx ",
+                    "  xxx xxx  ",
+                    "   x x x   "
+                ]
+            },
+            { // Ghost
+                type: 'normal',
+                color: '#60a5fa', // Blue
+                data: [
+                    "  xxxxxxx  ",
+                    " xxxxxxxxx ",
+                    " xx x x xx ",
+                    " xxxxxxxxx ",
+                    " xxxxxxxxx ",
+                    " xxxxxxxxx ",
+                    " x x x x x "
+                ]
+            },
+            { // Sword
+                type: 'normal',
+                color: '#fbbf24', // Amber
+                data: [
+                    "    x",
+                    "   xx",
+                    "  xx ",
+                    "  xx ",
+                    " xx  ",
+                    " xx  ",
+                    "xxxxx",
+                    " xxx ",
+                    "  x  "
+                ]
+            },
+            { // Bomb
+                type: 'bomb',
+                color: '#334155', // Dark slate
+                data: [
+                    "    xx ",
+                    "   xx  ",
+                    "  xxx  ",
+                    " xxxxx ",
+                    "xxxxxxx",
+                    "xxxxxxx",
+                    " xxxxx "
+                ]
+            },
+            { // Golden
+                type: 'golden',
+                color: '#fcd34d', // Bright Gold
+                data: [
+                    "   x   ",
+                    "  xxx  ",
+                    " xxxxx ",
+                    "xxxxxxx",
+                    " xxxxx ",
+                    "  xxx  ",
+                    "   x   "
+                ]
+            },
+            { // Heavy
+                type: 'heavy',
+                color: '#94a3b8', // Slate grey
+                data: [
+                    "xxxxxxxx",
+                    "xxxxxxxx",
+                    "xxxxxxxx",
+                    "xxxxxxxx",
+                    "xxxxxxxx",
+                    "xxxxxxxx",
+                    "xxxxxxxx",
+                    "xxxxxxxx"
+                ]
+            }
+        ];
+
+        // --- Classes ---
+
+        class PixelGroup {
+            constructor(x, y, vx, vy, rotation, vr, pixels, color, flashFrames = 0, type = 'normal') {
+                this.x = x;
+                this.y = y;
+                this.vx = vx;
+                this.vy = vy;
+                this.rotation = rotation;
+                this.vr = vr;
+                this.pixels = pixels; // Array of {x, y} offsets
+                this.color = color;
+                this.type = type;
+                
+                // Calculate radius for broadphase collision
+                this.radius = 0;
+                for (let p of this.pixels) {
+                    let d = Math.hypot(p.x, p.y);
+                    if (d > this.radius) this.radius = d;
+                }
+                this.radius += PIXEL_SIZE; // Buffer
+                this.markedForDeletion = false;
+                this.flashFrames = flashFrames;
+            }
+
+            update() {
+                if (this.flashFrames > 0) this.flashFrames--;
+                this.vy += GRAVITY;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.rotation += this.vr;
+
+                // Remove if falls off screen
+                if (this.y - this.radius > height + 100) {
+                    this.markedForDeletion = true;
+                }
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                
+                // Flash white if recently hit
+                ctx.fillStyle = this.flashFrames > 0 ? '#ffffff' : this.color;
+
+                // Draw all pixels in this group
+                ctx.beginPath();
+                for (let p of this.pixels) {
+                    ctx.rect(
+                        p.x - PIXEL_SIZE / 2, 
+                        p.y - PIXEL_SIZE / 2, 
+                        PIXEL_SIZE + 0.5, // Slight overlap to prevent seam lines
+                        PIXEL_SIZE + 0.5
+                    );
+                }
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        class Dust {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 8;
+                this.vy = (Math.random() - 0.5) * 8 - 2;
+                this.color = color;
+                this.life = 1.0;
+                this.decay = Math.random() * 0.02 + 0.02;
+                this.size = Math.random() * 4 + 2;
+            }
+            update() {
+                this.vy += GRAVITY * 0.4;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= this.decay;
+            }
+            draw(ctx) {
+                ctx.globalAlpha = Math.max(0, this.life);
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.size, this.size);
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        class Spark {
+            constructor(x, y, cutVx, cutVy) {
+                this.x = x;
+                this.y = y;
+                const speed = Math.random() * 20 + 10; // Much faster sparks
+                // Angle based on the cut direction + some randomness
+                const angle = Math.atan2(cutVy, cutVx) + (Math.random() - 0.5) * 1.2;
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                this.life = 1.0;
+                this.decay = Math.random() * 0.05 + 0.02;
+            }
+            update(timeScale = 1) {
+                this.x += this.vx * timeScale;
+                this.y += this.vy * timeScale;
+                this.life -= this.decay * timeScale;
+            }
+            draw(ctx) {
+                ctx.globalAlpha = Math.max(0, this.life);
+                ctx.strokeStyle = '#fef08a'; // Bright yellow/white hot
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                // Draw a streak based on velocity
+                ctx.lineTo(this.x - this.vx * 1.5, this.y - this.vy * 1.5);
+                ctx.stroke();
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        class TrailPoint {
+            constructor(x, y, speed = 0) {
+                this.x = x;
+                this.y = y;
+                this.speed = speed;
+                this.life = 1.0;
+            }
+        }
+
+        class FloatingText {
+            constructor(x, y, text, color, size = 20) {
+                this.x = x;
+                this.y = y;
+                this.text = text;
+                this.color = color;
+                this.size = size;
+                this.life = 1.0;
+                this.vy = -4; // Jump up faster
+                this.vx = (Math.random() - 0.5) * 3; // Slight random drift
+                this.scale = 0.1; // Start tiny for a pop effect
+            }
+            update(timeScale = 1) {
+                this.x += this.vx * timeScale;
+                this.y += this.vy * timeScale;
+                this.vy += GRAVITY * 0.15 * timeScale; // Very subtle gravity
+                this.life -= 0.02 * timeScale;
+                
+                // Pop-in spring scale effect
+                if (this.scale < 1.0 && this.life > 0.2) {
+                    this.scale += (1.0 - this.scale) * 0.3 * timeScale;
+                }
+                // Shrink-out effect at the end of life
+                if (this.life < 0.2) {
+                    this.scale *= 0.85; 
+                }
+            }
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.scale(this.scale, this.scale); // Apply the juicy scaling
+                ctx.globalAlpha = Math.max(0, this.life);
+                ctx.fillStyle = this.color;
+                ctx.font = `bold ${this.size}px 'Courier New'`;
+                ctx.textAlign = 'center';
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 4;
+                ctx.strokeText(this.text, 0, 0); // Draw at 0,0 since we translated the context
+                ctx.fillText(this.text, 0, 0);
+                ctx.restore();
+            }
+        }
+
+        class Shockwave {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.radius = 10;
+                this.life = 1.0;
+                this.thickness = 15;
+            }
+            update(timeScale = 1) {
+                this.radius += 25 * timeScale;
+                this.life -= 0.04 * timeScale;
+                this.thickness *= 0.95;
+            }
+            draw(ctx) {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, this.life);
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = Math.max(0.1, this.thickness);
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        // --- Game State ---
+        
+        let groups = [];
+        let particles = [];
+        let trail = [];
+        let floatingTexts = [];
+        let shockwaves = [];
+        let isSwiping = false;
+        let lastSwipePos = null;
+        let spawnTimer = 0;
+        let currentCombo = 0;
+        let lastSwooshTime = 0;
+
+        // Juice State Variables
+        let shakeAmount = 0;
+        let freezeFrames = 0;
+        let timeScale = 1.0; // For slow motion!
+        let bgFlashColor = null;
+        let bgFlashAlpha = 0;
+        let scoreScale = 1.0;
+
+        // --- Helper Functions ---
+
+        function createEnemy() {
+            const template = templates[Math.floor(Math.random() * templates.length)];
+            const pixels = [];
+            
+            // Convert template string array into pixel coordinates
+            const rows = template.data.length;
+            const cols = template.data[0].length;
+            
+            const widthOffset = (cols * PIXEL_SIZE) / 2;
+            const heightOffset = (rows * PIXEL_SIZE) / 2;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (template.data[r][c] === 'x') {
+                        pixels.push({
+                            x: c * PIXEL_SIZE - widthOffset + PIXEL_SIZE / 2,
+                            y: r * PIXEL_SIZE - heightOffset + PIXEL_SIZE / 2
+                        });
+                    }
+                }
+            }
+
+            // Spawn at bottom
+            const x = Math.random() * (width - 200) + 100;
+            const y = height + 100;
+            
+            // Aim towards upper middle
+            const targetX = width / 2;
+            const targetY = height * 0.2;
+            
+            // Physics calculations for arc
+            let timeToPeak = 60; // frames
+            if (template.type === 'heavy') timeToPeak = 80; // Slower arc
+            if (template.type === 'golden') timeToPeak = 45; // Faster arc
+
+            const vy = -GRAVITY * timeToPeak;
+            const vx = (targetX - x) / (timeToPeak * 2); // Spread horizontally
+            const vr = (Math.random() - 0.5) * 0.1;
+
+            groups.push(new PixelGroup(x, y, vx, vy, 0, vr, pixels, template.color, 0, template.type));
+        }
+
+        function calculateCentroid(pixels) {
+            let sumX = 0, sumY = 0;
+            for (let p of pixels) {
+                sumX += p.x;
+                sumY += p.y;
+            }
+            return {
+                x: sumX / pixels.length,
+                y: sumY / pixels.length
+            };
+        }
+
+        // Distance from point p to line segment v-w
+        function distToSegment(p, v, w) {
+            const l2 = (w.x - v.x) ** 2 + (w.y - v.y) ** 2;
+            if (l2 === 0) return Math.hypot(p.x - v.x, p.y - v.y);
+            let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
+            t = Math.max(0, Math.min(1, t));
+            const projX = v.x + t * (w.x - v.x);
+            const projY = v.y + t * (w.y - v.y);
+            return Math.hypot(p.x - projX, p.y - projY);
+        }
+
+        function spawnParticles(x, y, color, cutVx, cutVy, multiplier = 1) {
+            // Spawn floating colored dust
+            for (let i = 0; i < 15 * multiplier; i++) {
+                particles.push(new Dust(x, y, color));
+            }
+            // Spawn fast directional sparks
+            for (let i = 0; i < 12 * multiplier; i++) {
+                const dir = Math.random() > 0.5 ? 1 : -1;
+                particles.push(new Spark(x, y, cutVx * dir, cutVy * dir));
+            }
+        }
+
+        function sliceGroups(p1, p2) {
+            const newGroups = [];
+            
+            for (let i = groups.length - 1; i >= 0; i--) {
+                const group = groups[i];
+                
+                // Broadphase: Is the swipe segment near this group?
+                const dist = distToSegment({x: group.x, y: group.y}, p1, p2);
+                if (dist > group.radius) continue; // Too far
+
+                // Transform swipe segment into group's local coordinate space
+                const cosR = Math.cos(-group.rotation);
+                const sinR = Math.sin(-group.rotation);
+
+                // Translate to origin, then rotate
+                const localP1 = {
+                    x: (p1.x - group.x) * cosR - (p1.y - group.y) * sinR,
+                    y: (p1.x - group.x) * sinR + (p1.y - group.y) * cosR
+                };
+                const localP2 = {
+                    x: (p2.x - group.x) * cosR - (p2.y - group.y) * sinR,
+                    y: (p2.x - group.x) * sinR + (p2.y - group.y) * cosR
+                };
+
+                // Line equation in local space: dx*(y - y1) - dy*(x - x1) = 0
+                const dx = localP2.x - localP1.x;
+                const dy = localP2.y - localP1.y;
+
+                const leftPixels = [];
+                const rightPixels = [];
+
+                for (let p of group.pixels) {
+                    const side = dx * (p.y - localP1.y) - dy * (p.x - localP1.x);
+                    if (side > 0) leftPixels.push(p);
+                    else rightPixels.push(p);
+                }
+
+                // If split was successful (both sides have pixels)
+                if (leftPixels.length > 0 && rightPixels.length > 0) {
+                    
+                    if (group.type === 'bomb') {
+                        createCrunch(0, true);
+                        shakeAmount = 50; // Massive shake
+                        bgFlashColor = '#ef4444';
+                        bgFlashAlpha = 0.8;
+                        shockwaves.push(new Shockwave(group.x, group.y, '#ef4444'));
+                        
+                        score = Math.max(0, score - 50); // Penalty
+                        scoreScale = 1.5; // Bounce score UI
+                        scoreEl.innerText = `Score: ${score}`;
+                        
+                        spawnParticles(group.x, group.y, '#ef4444', 0, 0, 5); // Massive explosion
+                        groups.splice(i, 1);
+                        currentCombo = 0;
+                        floatingTexts.push(new FloatingText(group.x, group.y, "-50", "#ef4444", 50));
+                        continue; // Skip splitting the bomb, just destroy it
+                    }
+
+                    currentCombo++;
+                    createCrunch(group.pixels.length);
+                    
+                    // Trigger MEGA Juice!
+                    shakeAmount = 20;
+                    freezeFrames = 4; // Harder hit pause
+                    bgFlashColor = group.color;
+                    bgFlashAlpha = 0.4;
+                    scoreScale = 1.5; // Bounce score UI
+
+                    // Score calculation
+                    let points = group.type === 'golden' ? 50 : 10;
+                    score += points;
+
+                    // Floating text setup
+                    let floatText = `+${points}`;
+                    let floatColor = group.color;
+                    let floatSize = 24;
+                    
+                    if (currentCombo > 1) {
+                        floatText = `COMBO x${currentCombo}!`;
+                        floatColor = '#f472b6'; // Pink
+                        floatSize = 40; // Even bigger!
+                        score += 5 * currentCombo; // Combo bonus points
+                        createDing(currentCombo); // Play ding sound!
+                        timeScale = 0.3; // SLOW MOTION for combos!
+                        shockwaves.push(new Shockwave(group.x, group.y, floatColor));
+                    }
+                    
+                    if (group.type === 'golden') {
+                        createDing(5);
+                        timeScale = 0.1; // Extreme slow-mo for golden targets
+                        shockwaves.push(new Shockwave(group.x, group.y, group.color));
+                    }
+                    
+                    scoreEl.innerText = `Score: ${score}`;
+                    floatingTexts.push(new FloatingText(group.x, group.y, floatText, floatColor, floatSize));
+
+                    // Calculate world-space cut direction for particles
+                    const cutVx = p2.x - p1.x;
+                    const cutVy = p2.y - p1.y;
+                    const cutMag = Math.hypot(cutVx, cutVy) || 1;
+
+                    // Spawn visual particles at the cut center
+                    let particleMultiplier = group.type === 'golden' ? 4 : (currentCombo > 1 ? 2 : 1);
+                    spawnParticles(
+                        (p1.x + p2.x)/2, 
+                        (p1.y + p2.y)/2, 
+                        group.color, 
+                        cutVx / cutMag,
+                        cutVy / cutMag,
+                        particleMultiplier
+                    );
+
+                    // Process each half
+                    const halves = [leftPixels, rightPixels];
+                    let sideMultiplier = 1;
+
+                    for (let halfPixels of halves) {
+                        const centroid = calculateCentroid(halfPixels);
+                        
+                        // Recenter pixels to new centroid
+                        for (let p of halfPixels) {
+                            p.x -= centroid.x;
+                            p.y -= centroid.y;
+                        }
+
+                        // Calculate world position of the new centroid
+                        const originalCos = Math.cos(group.rotation);
+                        const originalSin = Math.sin(group.rotation);
+                        
+                        const worldCX = group.x + centroid.x * originalCos - centroid.y * originalSin;
+                        const worldCY = group.y + centroid.x * originalSin + centroid.y * originalCos;
+
+                        // Give them a slight push apart based on the cut normal
+                        const normalX = -dy * sideMultiplier;
+                        const normalY = dx * sideMultiplier;
+                        
+                        // Normalize the push vector
+                        const mag = Math.hypot(normalX, normalY);
+                        let pushX = 0, pushY = 0;
+                        if (mag > 0) {
+                            const wNormalX = normalX * originalCos - normalY * originalSin;
+                            const wNormalY = normalX * originalSin + normalY * originalCos;
+                            
+                            // EXPLOSIVE gravity push! Double the force!
+                            pushX = (wNormalX / mag) * 16;
+                            pushY = (wNormalY / mag) * 16;
+                        }
+
+                        // Add angular momentum based on the split
+                        const newVr = group.vr + (Math.random() - 0.5) * 0.1;
+
+                        newGroups.push(new PixelGroup(
+                            worldCX, worldCY, 
+                            group.vx + pushX, 
+                            group.vy + pushY, 
+                            group.rotation, 
+                            newVr, 
+                            halfPixels, 
+                            group.color,
+                            3, // Hit flash for 3 frames
+                            group.type // Inherit type
+                        ));
+                        
+                        sideMultiplier = -1; // Reverse push for the other half
+                    }
+
+                    // Remove original group
+                    groups.splice(i, 1);
+                }
+            }
+
+            // Add newly formed groups
+            groups.push(...newGroups);
+        }
+
+        // --- Input Handling ---
+
+        function startSwipe(x, y) {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            isSwiping = true;
+            lastSwipePos = {x, y};
+            trail.push(new TrailPoint(x, y, 0));
+        }
+
+        function moveSwipe(x, y) {
+            if (!isSwiping) return;
+            
+            const currentPos = {x, y};
+            let speed = 0;
+            
+            // If mouse moved, check for cuts between last pos and current pos
+            if (lastSwipePos) {
+                speed = Math.hypot(x - lastSwipePos.x, y - lastSwipePos.y);
+                
+                // Throttle swoosh audio
+                const now = Date.now();
+                if (speed > 15 && now - lastSwooshTime > 80) {
+                    createSwoosh(speed);
+                    lastSwooshTime = now;
+                }
+                
+                // Only slice if moved a reasonable distance to prevent tiny accidental cuts
+                if (speed > 5) {
+                    sliceGroups(lastSwipePos, currentPos);
+                }
+            }
+
+            trail.push(new TrailPoint(x, y, speed));
+            lastSwipePos = currentPos;
+        }
+
+        function endSwipe() {
+            isSwiping = false;
+            lastSwipePos = null;
+            currentCombo = 0; // Reset combo when lifting finger
+        }
+
+        // Mouse Events
+        window.addEventListener('mousedown', e => startSwipe(e.clientX, e.clientY));
+        window.addEventListener('mousemove', e => moveSwipe(e.clientX, e.clientY));
+        window.addEventListener('mouseup', endSwipe);
+        
+        // Touch Events
+        window.addEventListener('touchstart', e => {
+            const touch = e.touches[0];
+            startSwipe(touch.clientX, touch.clientY);
+        }, {passive: false});
+        
+        window.addEventListener('touchmove', e => {
+            e.preventDefault(); // Prevent scrolling
+            const touch = e.touches[0];
+            moveSwipe(touch.clientX, touch.clientY);
+        }, {passive: false});
+        
+        window.addEventListener('touchend', endSwipe);
+
+        // --- Main Loop ---
+
+        function update() {
+            // Restore Time Scale gradually
+            timeScale += (1.0 - timeScale) * 0.05;
+            
+            // Restore Score UI Scale
+            scoreScale += (1.0 - scoreScale) * 0.15;
+            scoreEl.style.transform = `scale(${scoreScale})`;
+            scoreEl.style.transformOrigin = "top left";
+
+            // Screen flash decay
+            if (bgFlashAlpha > 0) {
+                bgFlashAlpha -= 0.05 * timeScale;
+                if (bgFlashAlpha < 0) bgFlashAlpha = 0;
+            }
+
+            // Screen shake decay
+            if (shakeAmount > 0) {
+                shakeAmount *= 0.85;
+                if (shakeAmount < 0.5) shakeAmount = 0;
+            }
+
+            // Hit Pause (Freeze Frame)
+            if (freezeFrames > 0) {
+                freezeFrames--;
+                return; // Skip updating physics/timers to freeze the game momentarily
+            }
+
+            // Spawning logic (affected by timeScale for awesome matrix effect)
+            spawnTimer += timeScale;
+            if (spawnTimer > 80) { // Spawn every ~1.3 seconds
+                createEnemy();
+                spawnTimer = 0;
+                
+                // Difficulty curve: spawn multiples sometimes
+                if (Math.random() > 0.7) {
+                    setTimeout(createEnemy, 200);
+                }
+            }
+
+            // Update bodies
+            for (let i = groups.length - 1; i >= 0; i--) {
+                // Apply timeScale to velocities manually for bodies
+                groups[i].x += groups[i].vx * (timeScale - 1);
+                groups[i].y += groups[i].vy * (timeScale - 1);
+                groups[i].rotation += groups[i].vr * (timeScale - 1);
+                
+                groups[i].update();
+                
+                if (groups[i].markedForDeletion) {
+                    groups.splice(i, 1);
+                }
+            }
+
+            // Update particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                if (particles[i].update.length > 0) { // Pass timescale if supported
+                    particles[i].update(timeScale);
+                } else {
+                    particles[i].update();
+                }
+                
+                if (particles[i].life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+            
+            // Update shockwaves
+            for (let i = shockwaves.length - 1; i >= 0; i--) {
+                shockwaves[i].update(timeScale);
+                if (shockwaves[i].life <= 0) {
+                    shockwaves.splice(i, 1);
+                }
+            }
+
+            // Update floating texts
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                floatingTexts[i].update(timeScale);
+                if (floatingTexts[i].life <= 0) {
+                    floatingTexts.splice(i, 1);
+                }
+            }
+
+            // Update trail
+            for (let i = trail.length - 1; i >= 0; i--) {
+                trail[i].life -= 0.08 * timeScale; // Fade out speed
+                if (trail[i].life <= 0) {
+                    trail.splice(i, 1);
+                }
+            }
+        }
+
+        function draw() {
+            // Clear background
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Flash Background
+            if (bgFlashAlpha > 0 && bgFlashColor) {
+                ctx.save();
+                ctx.globalAlpha = bgFlashAlpha;
+                ctx.fillStyle = bgFlashColor;
+                ctx.fillRect(0, 0, width, height);
+                ctx.restore();
+            }
+
+            ctx.save();
+            
+            // Apply Screen Shake
+            if (shakeAmount > 0) {
+                const dx = (Math.random() - 0.5) * shakeAmount;
+                const dy = (Math.random() - 0.5) * shakeAmount;
+                ctx.translate(dx, dy);
+            }
+
+            // Draw bodies
+            for (let group of groups) {
+                group.draw(ctx);
+            }
+
+            // Draw particles
+            for (let particle of particles) {
+                particle.draw(ctx);
+            }
+            
+            // Draw Shockwaves
+            for (let shock of shockwaves) {
+                shock.draw(ctx);
+            }
+
+            // Draw floating texts
+            for (let ft of floatingTexts) {
+                ft.draw(ctx);
+            }
+
+            // Draw slice trail
+            if (trail.length > 1) {
+                ctx.save();
+                ctx.lineJoin = 'round';
+                ctx.lineCap = 'round';
+                
+                // Draw multi-segmented line with fading alpha
+                for (let i = 0; i < trail.length - 1; i++) {
+                    const p1 = trail[i];
+                    const p2 = trail[i+1];
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(p1.x, p1.y);
+                    ctx.lineTo(p2.x, p2.y);
+                    
+                    // Blade Upgrades based on speed!
+                    let hue = 200; // Default blue
+                    let glow = '#38bdf8';
+                    let extraWidth = 0;
+                    
+                    if (p1.speed > 35) {
+                        hue = 15; // Hot orange/red
+                        glow = '#f97316';
+                        extraWidth = 8;
+                    } else if (p1.speed > 15) {
+                        hue = 45; // Golden yellow
+                        glow = '#facc15';
+                        extraWidth = 4;
+                    }
+                    
+                    // Width and opacity based on life and speed
+                    ctx.lineWidth = p1.life * (8 + extraWidth);
+                    ctx.strokeStyle = `hsla(${hue}, 100%, 80%, ${p1.life})`;
+                    
+                    // Add glow to the blade
+                    ctx.shadowBlur = 15 + extraWidth;
+                    ctx.shadowColor = glow;
+                    
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+
+            // Restore from screen shake
+            ctx.restore();
+        }
+
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        // Start game
+        createEnemy();
+        loop();
+
+    </script>
+</body>
+</html>

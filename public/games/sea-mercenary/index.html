@@ -1,0 +1,3037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sea Mercenary: Ocean Worker</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #001a2a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+            user-select: none;
+        }
+
+        #gameCanvas {
+            display: block;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .hud-panel {
+            background: rgba(0, 15, 30, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #4a6fa5;
+            display: inline-block;
+            pointer-events: auto;
+            box-shadow: 0 0 15px rgba(0,0,0,0.8);
+            backdrop-filter: blur(5px);
+            transition: opacity 0.5s;
+        }
+
+        /* Hide HUD when not playing */
+        .hidden { opacity: 0; pointer-events: none; }
+
+        #stats-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            min-width: 220px;
+        }
+
+        #radar-panel {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            background: rgba(0, 10, 20, 0.95);
+            border: 3px solid #00ffcc;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0, 255, 204, 0.2);
+        }
+
+        #coordinates {
+            font-size: 12px;
+            color: #00ffcc;
+            margin-top: 5px;
+            font-family: monospace;
+        }
+        
+        #weather-display {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 2px;
+            font-style: italic;
+        }
+        
+        #contract-status {
+            margin-top: 10px;
+            padding-top: 5px;
+            border-top: 1px solid #555;
+            color: #ffcc00;
+            font-size: 14px;
+            display: none;
+        }
+
+        #ability-panel {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            pointer-events: auto;
+        }
+
+        .ability-slot {
+            width: 50px;
+            height: 50px;
+            border: 2px solid #555;
+            background: rgba(0,0,0,0.6);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            font-weight: bold;
+            font-size: 20px;
+            color: #00ffcc;
+            text-shadow: 0 0 5px #00ffcc;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        
+        .ability-cd {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 16px;
+            color: white;
+            font-weight: bold;
+        }
+
+        #weapon-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 5px;
+            pointer-events: auto;
+        }
+
+        .weapon-slot {
+            width: 45px;
+            height: 45px;
+            border: 2px solid #555;
+            background: rgba(0,0,0,0.6);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .weapon-slot.active {
+            border-color: #00ffcc;
+            background: rgba(0, 255, 204, 0.15);
+            transform: scale(1.1);
+            box-shadow: 0 0 15px #00ffcc;
+        }
+
+        .weapon-key {
+            position: absolute;
+            top: 1px;
+            left: 3px;
+            font-size: 9px;
+            color: #aaa;
+        }
+
+        .weapon-icon {
+            font-size: 16px;
+            margin-bottom: 2px;
+        }
+
+        .weapon-cost {
+            font-size: 9px;
+            color: #ff6b6b;
+        }
+
+        .bar-container {
+            width: 100%;
+            height: 10px;
+            background: #111;
+            margin-top: 3px;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #555;
+            position: relative;
+        }
+
+        .bar-fill {
+            height: 100%;
+            transition: width 0.1s;
+        }
+        
+        #shield-bar { background: linear-gradient(90deg, #3498db, #2980b9); width: 0%; }
+        #health-bar { background: linear-gradient(90deg, #c0392b, #e74c3c); }
+        #boost-bar { background: linear-gradient(90deg, #f39c12, #f1c40f); width: 100%; }
+
+        h1, h2, h3, p { margin: 0; }
+        
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 2px;
+            font-size: 14px;
+        }
+
+        .currency { color: #ffd700; font-weight: bold; }
+
+        /* MODALS */
+        .modal {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 15, 30, 0.98);
+            padding: 30px;
+            text-align: center;
+            border-radius: 10px;
+            border: 2px solid #00ffcc;
+            display: none;
+            pointer-events: auto;
+            box-shadow: 0 0 50px rgba(0, 255, 204, 0.2);
+            z-index: 100;
+            min-width: 700px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        /* START SCREEN SPECIFIC */
+        #start-screen {
+            display: flex; /* Changed from block to flex for better centering */
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 10, 20, 0.95);
+            padding: 60px;
+            border: 4px solid #00ffcc;
+            min-width: 500px;
+        }
+
+        #start-screen h1 {
+            font-size: 72px;
+            color: #00ffcc;
+            text-shadow: 0 0 20px rgba(0, 255, 204, 0.6);
+            margin-bottom: 10px;
+            letter-spacing: 5px;
+        }
+
+        #start-screen h3 {
+            font-size: 24px;
+            color: #fff;
+            margin-bottom: 50px;
+            font-weight: 300;
+            letter-spacing: 2px;
+        }
+
+        #start-btn, #tut-btn {
+            font-size: 24px;
+            padding: 15px 40px;
+            margin: 10px;
+            color: #000;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            text-transform: uppercase;
+            box-shadow: 0 0 20px rgba(0, 255, 204, 0.4);
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 80%;
+        }
+        
+        #start-btn { background: linear-gradient(45deg, #00ffcc, #009999); }
+        #tut-btn { background: linear-gradient(45deg, #ffd700, #ffaa00); }
+
+        #start-btn:hover, #tut-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 40px rgba(255, 255, 255, 0.6);
+            color: #fff;
+        }
+        
+        #tutorial-box {
+            position: absolute;
+            top: 15%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 15, 30, 0.95);
+            border: 3px solid #ffd700;
+            padding: 25px;
+            border-radius: 12px;
+            color: #ffd700;
+            text-align: center;
+            font-size: 22px;
+            display: none;
+            pointer-events: none;
+            z-index: 60;
+            box-shadow: 0 0 40px rgba(255, 215, 0, 0.4);
+            max-width: 600px;
+            line-height: 1.5;
+        }
+        
+        .tut-instruction { color: white; font-size: 18px; margin-top: 10px; }
+        
+        .shop-nav {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 10px;
+        }
+        
+        .shop-tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid #444;
+            color: #aaa;
+        }
+        
+        .shop-tab.active {
+            background: #00ffcc;
+            color: #000;
+            font-weight: bold;
+        }
+        
+        .shop-section { display: none; }
+        .shop-section.active { display: block; }
+        
+        .shop-columns {
+            display: flex;
+            gap: 20px;
+            text-align: left;
+        }
+        
+        .shop-col {
+            flex: 1;
+        }
+        
+        .shop-header {
+            color: #00ffcc; 
+            border-bottom: 1px solid #444; 
+            padding-bottom: 5px; 
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .shop-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255,255,255,0.05);
+            margin: 8px 0;
+            padding: 12px;
+            border: 1px solid #444;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 14px;
+        }
+        
+        .shop-item:hover {
+            background: rgba(0, 255, 204, 0.1);
+            border-color: #00ffcc;
+        }
+
+        .shop-cost { color: #ffd700; }
+        .contract-reward { color: #00ff00; font-weight: bold; }
+        .boss-text { color: #ff3333; font-weight: bold; text-shadow: 0 0 5px red; }
+
+        button {
+            background: #00ffcc;
+            color: #001f3f;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-top: 20px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        button:hover { background: white; }
+
+        /* Floating text animation */
+        .floater {
+            position: absolute;
+            font-weight: bold;
+            animation: floatUp 1s ease-out forwards;
+            pointer-events: none;
+            text-shadow: 2px 2px 0px black;
+            font-family: monospace;
+            font-size: 20px;
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(-50px); opacity: 0; }
+        }
+
+        #notification {
+            position: absolute;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            padding: 10px 20px;
+            border-radius: 20px;
+            border: 1px solid white;
+            font-size: 14px;
+            display: none;
+            z-index: 50;
+        }
+        
+        .control-hint {
+            font-size: 10px; color: #888; text-align: right;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui-layer">
+        
+        <!-- START SCREEN -->
+        <div id="start-screen" class="modal">
+            <h1>SEA MERCENARY</h1>
+            <h3>OCEAN WORKER</h3>
+            <button id="start-btn" onclick="window.game.startGame()">DEPLOY SHIP</button>
+            <button id="tut-btn" onclick="window.game.showTutorial()">FLIGHT SCHOOL</button>
+            <div style="margin-top: 30px; font-size: 12px; color: #666;">v5.5.7 - STABLE</div>
+        </div>
+        
+        <!-- TUTORIAL OVERLAY -->
+        <div id="tutorial-box">TUTORIAL TEXT</div>
+
+        <!-- HUD (Initially Hidden) -->
+        <div id="hud-container" class="hidden">
+            <div id="stats-panel" class="hud-panel">
+                <h3>CONTRACT STATUS</h3>
+                <div class="stat-row">
+                    <span>Balance:</span>
+                    <span id="score-display" class="currency">$0</span>
+                </div>
+                
+                <div class="stat-row"><span>Shield:</span></div>
+                <div class="bar-container"><div id="shield-bar" class="bar-fill"></div></div>
+
+                <div class="stat-row"><span>Hull:</span> <span id="hp-text">100%</span></div>
+                <div id="health-bar-container" class="bar-container"><div id="health-bar" class="bar-fill"></div></div>
+                
+                <div class="stat-row" style="margin-top: 5px;"><span>Boost:</span></div>
+                <div class="bar-container"><div id="boost-bar" class="bar-fill"></div></div>
+                <div class="control-hint">Hold SHIFT</div>
+
+                <div id="coordinates">POS: 0, 0</div>
+                <div id="weather-display">Weather: Clear</div>
+                <div id="contract-status">CURRENT JOB:<br><span id="contract-desc">None</span></div>
+                <div style="font-size: 10px; color: #aaa; margin-top:5px;">Time: <span id="time-display">12:00</span></div>
+            </div>
+
+            <div id="radar-panel">
+                <canvas id="radarCanvas" width="180" height="180"></canvas>
+            </div>
+
+            <div id="notification">Notification Text</div>
+            
+            <div id="ability-panel">
+                <div class="ability-slot">
+                    <span>Q</span>
+                    <div id="cd-q" class="ability-cd" style="display:none;"></div>
+                </div>
+                <div class="ability-slot">
+                    <span>E</span>
+                    <div id="cd-e" class="ability-cd" style="display:none;"></div>
+                </div>
+            </div>
+
+            <div id="weapon-panel">
+                <div class="weapon-slot active" id="wep-1" onclick="window.game.setWeapon(0)">
+                    <span class="weapon-key">1</span>
+                    <span class="weapon-icon">💣</span>
+                    <span>Cannon</span>
+                    <span class="weapon-cost">-$5</span>
+                </div>
+                <div class="weapon-slot" id="wep-2" onclick="window.game.setWeapon(1)">
+                    <span class="weapon-key">2</span>
+                    <span class="weapon-icon">🔫</span>
+                    <span>Gatling</span>
+                    <span class="weapon-cost">-$1</span>
+                </div>
+                <div class="weapon-slot" id="wep-3" onclick="window.game.setWeapon(2)">
+                    <span class="weapon-key">3</span>
+                    <span class="weapon-icon">🚀</span>
+                    <span>Torpedo</span>
+                    <span class="weapon-cost">-$50</span>
+                </div>
+                <div class="weapon-slot" id="wep-4" onclick="window.game.setWeapon(3)">
+                    <span class="weapon-key">4</span>
+                    <span class="weapon-icon">⚫</span>
+                    <span>Mine</span>
+                    <span class="weapon-cost">-$20</span>
+                </div>
+                <div class="weapon-slot" id="wep-5" onclick="window.game.setWeapon(4)">
+                    <span class="weapon-key">5</span>
+                    <span class="weapon-icon">⚡</span>
+                    <span>Railgun</span>
+                    <span class="weapon-cost">-$30</span>
+                </div>
+                <div class="weapon-slot" id="wep-6" onclick="window.game.setWeapon(5)">
+                    <span class="weapon-key">6</span>
+                    <span class="weapon-icon">💠</span>
+                    <span>Plasma</span>
+                    <span class="weapon-cost">-$15</span>
+                </div>
+                <div class="weapon-slot" id="wep-7" onclick="window.game.setWeapon(6)">
+                    <span class="weapon-key">7</span>
+                    <span class="weapon-icon">💥</span>
+                    <span>Flak</span>
+                    <span class="weapon-cost">-$25</span>
+                </div>
+                <div class="weapon-slot" id="wep-8" onclick="window.game.setWeapon(7)">
+                    <span class="weapon-key">8</span>
+                    <span class="weapon-icon">🧿</span>
+                    <span>Ion</span>
+                    <span class="weapon-cost">-$100</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- SHOP MENU -->
+        <div id="shop-menu" class="modal">
+            <h2 style="color: #00ffcc; margin-bottom: 20px;">ADMIRALTY DRY DOCK</h2>
+            
+            <div class="shop-nav">
+                <div class="shop-tab active" onclick="window.game.switchShopTab('upgrades')">Upgrades & Crew</div>
+                <div class="shop-tab" onclick="window.game.switchShopTab('shipyard')">Shipyard (Hulls)</div>
+                <div class="shop-tab" onclick="window.game.switchShopTab('contracts')">Contracts</div>
+            </div>
+            
+            <!-- SECTION 1: UPGRADES -->
+            <div id="shop-upgrades" class="shop-section active">
+                <div class="shop-columns">
+                    <div class="shop-col">
+                        <div class="shop-header">Ship Systems</div>
+                        <div class="shop-item" onclick="window.game.buyUpgrade('repair')">
+                            <span>🔧 Emergency Repairs (+50%)</span>
+                            <span class="shop-cost" id="cost-repair">$100</span>
+                        </div>
+                        <div class="shop-item" onclick="window.game.buyUpgrade('speed')">
+                            <span>⚡ Engine Tune-up (Speed)</span>
+                            <span class="shop-cost" id="cost-speed">$200</span>
+                        </div>
+                        <div class="shop-item" onclick="window.game.buyUpgrade('armor')">
+                            <span>🛡️ Hull Plating (Max HP)</span>
+                            <span class="shop-cost" id="cost-armor">$300</span>
+                        </div>
+                        <div class="shop-item" onclick="window.game.buyUpgrade('shield')">
+                            <span>🛡️ Shield Generator (Max Shield)</span>
+                            <span class="shop-cost" id="cost-shield">$800</span>
+                        </div>
+                        <div class="shop-item" onclick="window.game.buyUpgrade('reload')">
+                            <span>⚙️ Autoloader (Fire Rate)</span>
+                            <span class="shop-cost" id="cost-reload">$400</span>
+                        </div>
+                    </div>
+                    <div class="shop-col">
+                        <div class="shop-header">Crew & Defense</div>
+                        <div class="shop-item" onclick="window.game.buyWingman()">
+                            <span>🚁 Hire Wingman (Mercenary)</span>
+                            <span class="shop-cost" id="cost-wingman">$1000</span>
+                        </div>
+                        <div class="shop-item" onclick="window.game.buyTurret()">
+                            <span>🏯 Base Sentry Turret</span>
+                            <span class="shop-cost">$2000</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 2: SHIPYARD -->
+            <div id="shop-shipyard" class="shop-section">
+                <div class="shop-header">Drydock Purchase (Replaces Current Ship)</div>
+                <div class="shop-item" onclick="window.game.buyHull('scavenger')">
+                    <div style="text-align:left;">
+                        <span style="color:#e67e22; font-weight:bold;">SCAVENGER (Standard)</span><br>
+                        <span style="font-size:12px; color:#aaa;">Balanced stats. Good for general work.</span>
+                    </div>
+                    <span class="shop-cost">$0</span>
+                </div>
+                <div class="shop-item" onclick="window.game.buyHull('viper')">
+                    <div style="text-align:left;">
+                        <span style="color:#00ffcc; font-weight:bold;">VIPER INTERCEPTOR</span><br>
+                        <span style="font-size:12px; color:#aaa;">High Speed, High Boost, Low Armor.</span>
+                    </div>
+                    <span class="shop-cost">$2000</span>
+                </div>
+                <div class="shop-item" onclick="window.game.buyHull('goliath')">
+                    <div style="text-align:left;">
+                        <span style="color:#ff3333; font-weight:bold;">GOLIATH DREADNOUGHT</span><br>
+                        <span style="font-size:12px; color:#aaa;">Massive Armor, Slow Speed. Ramming Power.</span>
+                    </div>
+                    <span class="shop-cost">$5000</span>
+                </div>
+                <div class="shop-item" onclick="window.game.buyHull('carrier')">
+                    <div style="text-align:left;">
+                        <span style="color:#f1c40f; font-weight:bold;">ADMIRAL CARRIER</span><br>
+                        <span style="font-size:12px; color:#aaa;">Spawns 4 Interceptor Drones. Passive playstyle.</span>
+                    </div>
+                    <span class="shop-cost">$10000</span>
+                </div>
+                <div class="shop-item" onclick="window.game.buyHull('titan')">
+                    <div style="text-align:left;">
+                        <span style="color:#8e44ad; font-weight:bold;">TITAN BATTLESHIP</span><br>
+                        <span style="font-size:12px; color:#aaa;">Heavy Armor, Auto-Turrets. Slow but deadly.</span>
+                    </div>
+                    <span class="shop-cost">$25000</span>
+                </div>
+            </div>
+
+            <!-- SECTION 3: CONTRACTS -->
+            <div id="shop-contracts" class="shop-section">
+                <div class="shop-header">Available Contracts</div>
+                <div id="contracts-list">
+                    <!-- Populated by JS -->
+                    <div class="shop-item">No contracts available.</div>
+                </div>
+            </div>
+
+            <button onclick="window.game.toggleShop()">Close Shop</button>
+        </div>
+
+        <!-- GAME OVER -->
+        <div id="game-over" class="modal" style="min-width: 300px;">
+            <h1 style="color: #ff3333; font-size: 40px; margin-bottom: 10px;">CONTRACT TERMINATED</h1>
+            <p>Your ship has sunk.</p>
+            <p id="final-score" style="margin: 20px 0; font-size: 24px;">Final Earnings: $0</p>
+            <button onclick="location.reload()">New Contract</button>
+        </div>
+    </div>
+
+<script>
+/**
+ * GAME ENGINE & CONFIG
+ */
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const radarCanvas = document.getElementById('radarCanvas');
+const radarCtx = radarCanvas.getContext('2d');
+
+// Game State
+const STATE = { MENU: 0, PLAYING: 1, SHOP: 2, GAMEOVER: 3, TUTORIAL: 4 };
+
+// Utils
+const rnd = (min, max) => Math.random() * (max - min) + min;
+
+// Constants
+const WEAPONS = [
+    { name: "Deck Cannon", damage: 25, speed: 12, cost: 5, cooldown: 30, color: '#333', size: 6, type: 'standard', spread: 0.1 },
+    { name: "Gatling Gun", damage: 5, speed: 18, cost: 1, cooldown: 5, color: '#ffcc00', size: 3, type: 'rapid', spread: 0.2 },
+    { name: "Torpedo", damage: 150, speed: 6, cost: 50, cooldown: 120, color: '#333333', size: 10, type: 'homing', spread: 0 },
+    { name: "Sea Mine", damage: 120, speed: 0, cost: 20, cooldown: 60, color: '#111', size: 8, type: 'mine', spread: 0 },
+    { name: "Railgun", damage: 80, speed: 30, cost: 30, cooldown: 80, color: '#00ffff', size: 4, type: 'rail', spread: 0 },
+    { name: "Plasma Caster", damage: 40, speed: 22, cost: 15, cooldown: 15, color: '#0099ff', size: 5, type: 'plasma', spread: 0.05 },
+    { name: "Flak Cannon", damage: 60, speed: 15, cost: 25, cooldown: 45, color: '#ff9900', size: 5, type: 'flak', spread: 0.1 },
+    { name: "Ion Cannon", damage: 40, speed: 6, cost: 100, cooldown: 150, color: '#a020f0', size: 20, type: 'ion', spread: 0 }
+];
+
+const HULLS = {
+    scavenger: { name: "Scavenger", hp: 1000, speed: 8, turn: 0.06, color: '#e67e22', droneCount: 0 },
+    viper: { name: "Viper", hp: 600, speed: 12, turn: 0.09, color: '#00ffcc', droneCount: 0 },
+    goliath: { name: "Goliath", hp: 2500, speed: 5, turn: 0.03, color: '#c0392b', droneCount: 0 },
+    carrier: { name: "Carrier", hp: 1500, speed: 4, turn: 0.02, color: '#f1c40f', droneCount: 4 },
+    titan: { name: "Titan", hp: 4000, speed: 3, turn: 0.02, color: '#8e44ad', droneCount: 0 }
+};
+
+class Weather {
+    constructor() {
+        this.type = 'clear'; // clear, rain, storm
+        this.timer = 0;
+        this.lightningTimer = 0;
+        this.windX = 0;
+        this.windY = 0;
+    }
+    update() {
+        this.timer++;
+        if(this.timer > 3000) { 
+            this.changeWeather();
+            this.timer = 0;
+        }
+        if(this.type === 'storm') {
+            if(Math.random() < 0.005) this.lightningTimer = 10;
+        }
+        if(this.lightningTimer > 0) this.lightningTimer--;
+    }
+    changeWeather() {
+        const r = Math.random();
+        if(r < 0.5) this.type = 'clear';
+        else if(r < 0.8) this.type = 'rain';
+        else this.type = 'storm';
+        
+        if(this.type === 'storm') {
+            this.windX = (Math.random()-0.5) * 0.05;
+            this.windY = (Math.random()-0.5) * 0.05;
+            window.game.showNotify("STORM APPROACHING!");
+        } else if (this.type === 'rain') {
+            this.windX = 0; this.windY = 0;
+            window.game.showNotify("It's starting to rain.");
+        } else {
+            this.windX = 0; this.windY = 0;
+            window.game.showNotify("Skies clearing up.");
+        }
+        document.getElementById('weather-display').innerText = "Weather: " + this.type.toUpperCase();
+    }
+    draw(ctx, w, h) {
+        if(this.type === 'clear') return;
+        
+        ctx.strokeStyle = this.type === 'storm' ? 'rgba(200, 200, 255, 0.4)' : 'rgba(200, 200, 255, 0.2)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        const count = this.type === 'storm' ? 400 : 150;
+        
+        for(let i=0; i<count; i++) {
+            const x = Math.random() * w;
+            const y = Math.random() * h;
+            const len = Math.random() * 20 + 10;
+            ctx.moveTo(x, y);
+            ctx.lineTo(x - 5 + this.windX*50, y + len); 
+        }
+        ctx.stroke();
+
+        if(this.lightningTimer > 0) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${this.lightningTimer/10 * 0.3})`;
+            ctx.fillRect(0, 0, w, h);
+        }
+    }
+}
+
+class Camera {
+    constructor() { this.x = 0; this.y = 0; this.shake = 0; }
+    follow(target) {
+        this.x += (target.x - this.x) * 0.1;
+        this.y += (target.y - this.y) * 0.1;
+        
+        // Shake dampening
+        if(this.shake > 0) {
+            this.x += (Math.random() - 0.5) * this.shake;
+            this.y += (Math.random() - 0.5) * this.shake;
+            this.shake *= 0.9;
+            if(this.shake < 0.5) this.shake = 0;
+        }
+    }
+    triggerShake(amount) {
+        this.shake = amount;
+    }
+}
+
+class DamageText {
+    constructor(x, y, amount, isCrit) {
+        this.x = x;
+        this.y = y;
+        this.amount = amount;
+        this.life = 60;
+        this.vy = -1.5;
+        this.color = isCrit ? '#ff3333' : '#ffffff';
+        this.scale = isCrit ? 24 : 16;
+        this.isCrit = isCrit;
+    }
+    update() {
+        this.y += this.vy;
+        this.vy *= 0.95;
+        this.life--;
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.globalAlpha = Math.max(0, this.life / 60);
+        ctx.fillStyle = this.color;
+        ctx.shadowColor = 'black';
+        ctx.shadowBlur = 4;
+        ctx.font = `bold ${this.scale}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(this.amount, 0, 0);
+        ctx.restore();
+        ctx.globalAlpha = 1;
+    }
+}
+
+class Debris {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.angle = rnd(0, Math.PI * 2);
+        this.w = rnd(5, 15);
+        this.h = rnd(2, 5);
+        this.life = rnd(300, 600); 
+        this.driftX = rnd(-0.2, 0.2);
+        this.driftY = rnd(-0.2, 0.2);
+        this.rotSpeed = rnd(-0.02, 0.02);
+        this.color = Math.random() < 0.5 ? '#555' : '#8B4513';
+    }
+    update() {
+        this.x += this.driftX;
+        this.y += this.driftY;
+        this.angle += this.rotSpeed;
+        this.life--;
+    }
+    draw(ctx) {
+        if(this.life <= 0) return;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+        ctx.globalAlpha = Math.min(1, this.life / 100);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(-this.w/2, -this.h/2, this.w, this.h);
+        ctx.restore();
+        ctx.globalAlpha = 1;
+    }
+}
+
+class Particle {
+    constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.type = type;
+        this.life = 1.0;
+        
+        if (type === 'wake') {
+            this.vx = 0;
+            this.vy = 0;
+            this.size = rnd(2, 6);
+            this.decay = 0.02;
+            this.color = `rgba(200, 240, 255, 0.4)`;
+        } else if (type === 'explosion') {
+            const angle = rnd(0, Math.PI * 2);
+            const speed = rnd(1, 5);
+            this.vx = Math.cos(angle) * speed;
+            this.vy = Math.sin(angle) * speed;
+            this.size = rnd(5, 20);
+            this.decay = rnd(0.03, 0.06);
+            // Flash white initially
+            this.color = `rgb(255, ${rnd(150, 255)}, 100)`;
+            this.flash = true;
+        } else if (type === 'smoke') {
+            this.vx = rnd(-0.5, 0.5);
+            this.vy = rnd(-0.5, 0.5);
+            this.size = rnd(4, 10);
+            this.decay = 0.01;
+            this.color = `rgba(30, 30, 30, 0.4)`;
+        } else if (type === 'seagull') {
+            this.vx = rnd(-1, 1);
+            this.vy = rnd(-1, 1);
+            this.life = 5.0; // Long life
+            this.decay = 0.005;
+            this.size = 2;
+        } else if (type === 'glow') {
+            this.vx = rnd(-0.2, 0.2);
+            this.vy = rnd(-0.2, 0.2);
+            this.size = rnd(1, 3);
+            this.decay = 0.005;
+            this.color = `rgba(100, 255, 200, ${rnd(0.3, 0.8)})`;
+        } else if (type === 'shockwave') {
+            this.vx = 0; this.vy = 0;
+            this.size = 1; // Growing ring
+            this.decay = 0.05;
+            this.maxSize = 50;
+            this.color = 'rgba(255, 255, 255, 0.5)';
+        }
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= this.decay;
+        
+        if(this.type === 'explosion') {
+            this.vx *= 0.9;
+            this.vy *= 0.9;
+            if(this.life < 0.8) this.flash = false;
+        }
+        if(this.type === 'shockwave') {
+            this.size += 3;
+        }
+        if(this.type === 'seagull') {
+            this.vx += (Math.random()-0.5)*0.1;
+            this.vy += (Math.random()-0.5)*0.1;
+        }
+    }
+    draw(ctx) {
+        ctx.globalAlpha = Math.max(0, Math.min(1, this.life));
+        
+        if(this.type === 'seagull') {
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(this.x-3, this.y-1);
+            ctx.lineTo(this.x, this.y+1);
+            ctx.lineTo(this.x+3, this.y-1);
+            ctx.fill();
+        } else if (this.type === 'shockwave') {
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.stroke();
+        } else if (this.type === 'explosion' && this.flash) {
+             ctx.fillStyle = '#fff'; // Flash white core
+             ctx.beginPath(); ctx.arc(this.x, this.y, this.size * 0.8, 0, Math.PI * 2); ctx.fill();
+        } else {
+            ctx.fillStyle = this.color;
+            ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+class Crate {
+    constructor(x, y, isQuest, isRepair) {
+        this.x = x; this.y = y;
+        this.radius = 15;
+        this.angle = 0;
+        this.bobOffset = Math.random() * Math.PI * 2;
+        this.isQuest = isQuest || false;
+        this.isRepair = isRepair || false;
+        this.isTutorialTarget = false;
+    }
+    update() { this.angle += 0.01; }
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+        
+        if (this.isTutorialTarget) {
+             ctx.fillStyle = '#ff3333'; 
+             ctx.fillRect(-12, -12, 24, 24); 
+             ctx.strokeStyle = '#fff';
+             ctx.lineWidth = 2;
+             ctx.strokeRect(-12, -12, 24, 24);
+        } else if (this.isRepair) {
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(-10, -10, 20, 20);
+            ctx.fillStyle = '#ff0000';
+            ctx.fillRect(-8, -3, 16, 6);
+            ctx.fillRect(-3, -8, 6, 16);
+            ctx.strokeStyle = '#aaa';
+        } else {
+            ctx.fillStyle = this.isQuest ? '#2ecc71' : '#f1c40f'; 
+            ctx.fillRect(-10, -10, 20, 20);
+            ctx.strokeStyle = '#e67e22';
+        }
+        
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-10, -10, 20, 20);
+        
+        if (!this.isRepair && !this.isTutorialTarget) {
+            ctx.beginPath(); ctx.moveTo(-10,-10); ctx.lineTo(10,10); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(10,-10); ctx.lineTo(-10,10); ctx.stroke();
+        }
+        
+        ctx.restore();
+    }
+}
+
+class Base {
+    constructor() { this.x = 0; this.y = 0; this.radius = 80; }
+    draw(ctx) {
+        ctx.save(); ctx.translate(this.x, this.y);
+        ctx.fillStyle = '#555';
+        ctx.fillRect(-60, -60, 20, 120); ctx.fillRect(40, -60, 20, 120);
+        ctx.fillRect(-60, 40, 120, 20); ctx.fillRect(-60, -60, 120, 20);
+        ctx.fillStyle = '#34495e'; ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#95a5a6'; ctx.font = 'bold 40px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('H', 0, 0);
+        const pulse = 100 + Math.sin(Date.now()/500) * 10;
+        ctx.strokeStyle = `rgba(0, 255, 204, 0.3)`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, pulse, 0, Math.PI*2); ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class Projectile {
+    constructor(x, y, angle, weaponId, owner) {
+        this.x = x; this.y = y;
+        this.angle = angle + (Math.random() - 0.5) * WEAPONS[weaponId].spread;
+        this.weaponId = weaponId;
+        this.props = WEAPONS[weaponId];
+        this.speed = this.props.speed;
+        this.vx = Math.cos(this.angle) * this.speed;
+        this.vy = Math.sin(this.angle) * this.speed;
+        this.life = 100;
+        this.owner = owner;
+        
+        if (this.props.type === 'mine') {
+            this.vx = 0; this.vy = 0;
+            this.life = 600; 
+            this.driftOffset = Math.random() * 100;
+        } else if (this.props.type === 'rail') {
+             this.life = 20; 
+        } else if (this.props.type === 'flak') {
+             this.life = 60; // Travel time before auto-burst
+        } else if (this.props.type === 'ion') {
+             this.life = 300; // Lasts 5s, slow moving
+        } else if (owner === 'player' && window.game.player) {
+            this.vx += window.game.player.vx * 0.5; this.vy += window.game.player.vy * 0.5;
+        }
+    }
+    update() {
+        this.x += this.vx; this.y += this.vy; this.life--;
+        if (this.props.type === 'homing' && this.life % 3 === 0) {
+            window.game.particles.push(new Particle(this.x, this.y, 'wake'));
+        }
+        
+        // Flak Proximity Logic
+        if(this.props.type === 'flak') {
+            let detonate = false;
+            // Check distance to enemies
+            for(let e of window.game.enemies) {
+                if(Math.hypot(e.x - this.x, e.y - this.y) < 80) {
+                    detonate = true; break;
+                }
+            }
+            if(this.life <= 0) detonate = true; // Auto burst at range
+            
+            if(detonate) {
+                this.life = 0; // kill proj
+                // Area Damage
+                window.game.camera.triggerShake(5);
+                // Visual
+                for(let i=0; i<10; i++) window.game.particles.push(new Particle(this.x + rnd(-20,20), this.y + rnd(-20,20), 'explosion'));
+                // Damage
+                for(let e of window.game.enemies) {
+                    if(Math.hypot(e.x - this.x, e.y - this.y) < 120) { // Blast radius
+                        e.damage(this.props.damage);
+                    }
+                }
+            }
+        }
+        
+        if (this.props.type === 'ion' && this.life % 5 === 0) {
+             window.game.particles.push(new Particle(this.x + rnd(-10,10), this.y + rnd(-10,10), 'glow'));
+        }
+    }
+    draw(ctx) {
+        ctx.save(); ctx.translate(this.x, this.y); 
+        
+        if (this.props.type === 'mine') {
+             const bob = Math.sin((Date.now() / 200) + this.driftOffset) * 2;
+             ctx.translate(0, bob);
+             ctx.fillStyle = '#222';
+             ctx.beginPath(); ctx.arc(0,0, 6, 0, Math.PI*2); ctx.fill();
+             ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
+             for(let i=0; i<4; i++) {
+                 ctx.rotate(Math.PI/2);
+                 ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(10,0); ctx.stroke();
+             }
+             if (Math.floor(Date.now() / 500) % 2 === 0) {
+                 ctx.fillStyle = 'red';
+                 ctx.beginPath(); ctx.arc(2, -2, 2, 0, Math.PI*2); ctx.fill();
+             }
+        } else if (this.props.type === 'rail') {
+             ctx.rotate(this.angle);
+             ctx.fillStyle = '#00ffff';
+             ctx.fillRect(-20, -2, 40, 4);
+             ctx.shadowBlur = 15; ctx.shadowColor = '#00ffff';
+        } else if (this.props.type === 'plasma') {
+             ctx.rotate(this.angle);
+             ctx.fillStyle = '#0099ff';
+             ctx.beginPath(); ctx.arc(0,0, 6, 0, Math.PI*2); ctx.fill();
+             ctx.shadowBlur = 10; ctx.shadowColor = '#0099ff';
+        } else if (this.props.type === 'flak') {
+             ctx.rotate(this.angle);
+             ctx.fillStyle = '#ff9900';
+             ctx.fillRect(-5, -3, 10, 6);
+        } else if (this.props.type === 'ion') {
+             ctx.fillStyle = 'rgba(160, 32, 240, 0.5)';
+             ctx.beginPath(); ctx.arc(0,0, 20 + Math.sin(Date.now()/100)*5, 0, Math.PI*2); ctx.fill();
+             ctx.fillStyle = '#fff';
+             ctx.beginPath(); ctx.arc(0,0, 10, 0, Math.PI*2); ctx.fill();
+             ctx.shadowBlur = 20; ctx.shadowColor = '#a020f0';
+        } else {
+            ctx.rotate(this.angle);
+            if (this.props.type === 'homing') {
+                ctx.fillStyle = '#333'; ctx.fillRect(-8, -3, 16, 6);
+                ctx.fillStyle = 'red'; ctx.fillRect(4, -3, 4, 6);
+            } else {
+                ctx.fillStyle = this.props.color;
+                ctx.beginPath(); ctx.arc(0, 0, this.props.size, 0, Math.PI * 2); ctx.fill();
+            }
+        }
+        ctx.restore();
+    }
+}
+
+class Obstacle {
+    constructor(x, y, radius) {
+        this.x = x; this.y = y; this.radius = radius;
+        this.points = [];
+        const segments = 8;
+        for(let i=0; i<segments; i++) {
+            const angle = (i / segments) * Math.PI * 2;
+            const r = radius * rnd(0.8, 1.2);
+            this.points.push({ x: Math.cos(angle) * r, y: Math.sin(angle) * r });
+        }
+    }
+    draw(ctx) {
+        ctx.save(); ctx.translate(this.x, this.y);
+        ctx.fillStyle = '#2c3e50'; 
+        ctx.strokeStyle = '#34495e'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(this.points[0].x, this.points[0].y);
+        for(let i=1; i<this.points.length; i++) ctx.lineTo(this.points[i].x, this.points[i].y);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class Whirlpool {
+    constructor(x, y) { this.x = x; this.y = y; this.radius = 150; this.angle = 0; }
+    update() { this.angle -= 0.05; }
+    draw(ctx) {
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.angle);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; ctx.lineWidth = 3;
+        for(let i=0; i<3; i++) {
+             ctx.beginPath();
+             ctx.arc(0,0, this.radius * ((i+1)/3), 0, Math.PI*1.5);
+             ctx.stroke();
+             ctx.rotate(Math.PI*0.7);
+        }
+        ctx.restore();
+    }
+}
+
+class Ship {
+    constructor(x, y, isPlayer) {
+        this.x = x; this.y = y;
+        this.angle = isPlayer ? -Math.PI/2 : rnd(0, Math.PI*2);
+        this.vx = 0; this.vy = 0;
+        this.isPlayer = isPlayer;
+        this.dead = false;
+        
+        // Defaults
+        this.hullType = 'scavenger'; 
+        this.maxHealth = 1000;
+        this.accel = 0.15;
+        this.friction = 0.96;
+        this.turnSpeed = 0.06;
+        this.maxSpeed = 8;
+        this.width = 20;
+        this.color = '#e67e22';
+
+        if (isPlayer) this.applyHullStats('scavenger');
+
+        this.health = this.maxHealth;
+        this.shield = 0; this.maxShield = 0; this.shieldRegenTimer = 0; this.hitFlash = 0;
+        this.cooldown = 0; this.reloadMod = 1.0; this.turretCooldown = 0;
+        
+        this.isTarget = false;
+        this.isWatchtower = false;
+        this.isWingman = false;
+        this.isBoss = false;
+        this.isSub = false;
+        this.isKamikaze = false;
+        this.isSupply = false;
+        this.isKraken = false;
+        this.isTurret = false;
+        this.isDrone = false;
+        
+        this.aiDisabled = false; // For dummy targets
+    }
+
+    applyHullStats(type) {
+        const stats = HULLS[type];
+        this.hullType = type;
+        this.maxHealth = stats.hp;
+        this.health = this.maxHealth;
+        this.maxSpeed = stats.speed;
+        this.turnSpeed = stats.turn;
+        this.color = stats.color;
+    }
+
+    damage(amount) {
+        if(this.isKraken) {
+            // Kraken Body only takes damage if tentacles are dead
+            if (this.tentacles && this.tentacles.length > 0) {
+                window.game.spawnDamageText(this.x, this.y, "IMMUNE", false);
+                return;
+            }
+        }
+
+        let shieldHit = false;
+        if (this.shield > 0) {
+            this.shield -= amount;
+            shieldHit = true;
+            this.shieldRegenTimer = 180; // 3 sec delay
+            if (this.shield < 0) {
+                this.health += this.shield; // bleed through
+                this.shield = 0;
+            }
+        } else {
+            this.health -= amount;
+        }
+        
+        // Visuals
+        this.hitFlash = 5; // Flash white for 5 frames
+        
+        const isCrit = Math.random() < 0.1;
+        const finalDmg = isCrit ? amount * 1.5 : amount;
+        window.game.spawnDamageText(this.x, this.y, Math.floor(finalDmg), isCrit);
+        
+        if(this.isPlayer) {
+            window.game.ui.updateHealth(this.health, this.maxHealth);
+            window.game.ui.updateShield(this.shield, this.maxShield);
+            window.game.camera.triggerShake(shieldHit ? 2 : 5);
+        }
+        
+        if(shieldHit) {
+             window.game.particles.push(new Particle(this.x, this.y, 'wake')); // simple reuse
+        }
+        
+        if (this.health <= 0) this.destroy();
+        else window.game.particles.push(new Particle(this.x + rnd(-10,10), this.y + rnd(-10,10), 'smoke'));
+    }
+
+    destroy() {
+        this.dead = true;
+        window.game.camera.triggerShake(15);
+        window.game.particles.push(new Particle(this.x, this.y, 'shockwave'));
+        
+        for(let i=0; i<20; i++) window.game.particles.push(new Particle(this.x, this.y, 'explosion'));
+        for(let i=0; i<5; i++) window.game.debris.push(new Debris(this.x, this.y));
+
+        if (this.isPlayer || this.isSupply) {
+            window.game.gameOver();
+        } else if (!this.isWingman && !this.isTurret && !this.isDrone && !this.isTentacle) {
+            let reward = this.isTarget ? 0 : this.maxHealth * 2; 
+            if (this.isWatchtower) reward = 200;
+            if (this.isBoss) reward = 2000;
+            if (this.isSub) reward = 800;
+            if (this.isKamikaze) reward = 150;
+            if (this.isKraken) reward = 5000;
+            if (this.isSerpent) reward = 4000;
+            
+            // Reduced reward for tutorial dummy
+            if (this.aiDisabled) reward = 0;
+
+            if (reward > 0) window.game.addMoney(reward, this.x, this.y);
+            
+            if(this.isTarget && window.game.contract) {
+                window.game.completeContract();
+            } else {
+                const rand = Math.random();
+                if(rand > 0.8) window.game.crates.push(new Crate(this.x, this.y, false, false));
+                else if (rand > 0.7) window.game.crates.push(new Crate(this.x, this.y, false, true));
+            }
+        }
+    }
+
+    updatePhysics() {
+        if (this.hitFlash > 0) this.hitFlash--;
+
+        if(this.isWatchtower || this.isTurret) return; 
+        
+        this.vx *= this.friction; this.vy *= this.friction;
+        this.x += this.vx; this.y += this.vy;
+        
+        // Shield Regen
+        if(this.maxShield > 0) {
+            if(this.shieldRegenTimer > 0) this.shieldRegenTimer--;
+            else if (this.shield < this.maxShield) {
+                this.shield += 0.5;
+                if(this.isPlayer) window.game.ui.updateShield(this.shield, this.maxShield);
+            }
+        }
+        
+        if(window.game.weather.type === 'storm') {
+            this.vx += window.game.weather.windX;
+            this.vy += window.game.weather.windY;
+        }
+
+        window.game.obstacles.forEach(obs => {
+            const dx = this.x - obs.x; const dy = this.y - obs.y;
+            const dist = Math.sqrt(dx*dx + dy*dy); const minDist = this.width + obs.radius;
+            if (dist < minDist) {
+                const angle = Math.atan2(dy, dx);
+                const push = (minDist - dist) + 2;
+                this.x += Math.cos(angle) * push; this.y += Math.sin(angle) * push;
+                this.vx *= -0.5; this.vy *= -0.5;
+                if(Math.abs(this.vx) > 1) this.damage(5);
+            }
+        });
+        
+        // Whirlpool Logic
+        window.game.whirlpools.forEach(wp => {
+            const dx = wp.x - this.x; const dy = wp.y - this.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if(dist < wp.radius + 100) {
+                // Pull
+                const angle = Math.atan2(dy, dx);
+                const force = (wp.radius + 100 - dist) * 0.001;
+                this.vx += Math.cos(angle) * force;
+                this.vy += Math.sin(angle) * force;
+                this.angle += 0.05; // Spin ship
+                
+                if(dist < 20) this.damage(5); // Crush damage at center
+            }
+        });
+
+        if (Math.abs(this.vx) + Math.abs(this.vy) > 1 && Math.random() > 0.5) {
+            const rearX = this.x - Math.cos(this.angle) * 20;
+            const rearY = this.y - Math.sin(this.angle) * 20;
+            window.game.particles.push(new Particle(rearX, rearY, 'wake'));
+        }
+    }
+
+    draw(ctx) {
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.angle);
+        
+        if (this.hitFlash > 0) {
+            // Flash Effect
+            ctx.globalCompositeOperation = "source-over";
+            ctx.fillStyle = "white";
+            ctx.beginPath(); ctx.arc(0,0, this.width, 0, Math.PI*2); ctx.fill();
+            ctx.restore();
+            return;
+        }
+        
+        if(this.isSub) {
+            if(this.surfaced) {
+                ctx.fillStyle = '#2c3e50';
+                ctx.beginPath(); ctx.ellipse(0, 0, 30, 10, 0, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#95a5a6'; ctx.fillRect(-5, -5, 10, 10); // Conning tower
+            } else {
+                // Shadow / Periscope only
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.beginPath(); ctx.ellipse(0, 0, 30, 10, 0, 0, Math.PI*2); ctx.fill();
+                // Ripple
+                if(Math.random() > 0.9) {
+                    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                    ctx.beginPath(); ctx.arc(0,0, 15, 0, Math.PI*2); ctx.stroke();
+                }
+            }
+            ctx.restore();
+            return;
+        }
+
+        if(!this.isKraken && !this.isSerpent && !this.isTentacle) {
+            ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(-25, 0, 50, 20); // Shadow
+        }
+        
+        if (this.isPlayer) {
+            ctx.fillStyle = this.color; 
+            
+            if (this.hullType === 'goliath') {
+                // Big Blocky Ship
+                ctx.fillRect(-30, -15, 60, 30);
+                ctx.fillStyle = '#555'; ctx.fillRect(-10, -10, 20, 20);
+            } else if (this.hullType === 'titan') {
+                ctx.fillStyle = '#4a004a';
+                ctx.fillRect(-40, -20, 80, 40); // Massive Hull
+                // Turrets
+                ctx.fillStyle = '#222';
+                ctx.beginPath(); ctx.arc(20, -15, 8, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(20, 15, 8, 0, Math.PI*2); ctx.fill();
+            } else if (this.hullType === 'carrier') {
+                // Carrier Deck
+                ctx.fillStyle = '#f1c40f'; 
+                ctx.fillRect(-40, -20, 80, 40);
+                ctx.fillStyle = '#333';
+                ctx.fillRect(-30, -5, 60, 10); // Runway
+            } else if (this.hullType === 'viper') {
+                // Sleek
+                ctx.beginPath(); ctx.moveTo(35, 0); ctx.lineTo(-20, 10); ctx.lineTo(-20, -10); ctx.closePath(); ctx.fill();
+                // Spoiler
+                ctx.fillStyle = '#333'; ctx.fillRect(-25, -12, 5, 24);
+            } else {
+                // Standard Scavenger
+                ctx.beginPath(); ctx.moveTo(30, 0); ctx.lineTo(-20, 15); ctx.lineTo(-25, 0); ctx.lineTo(-20, -15); ctx.closePath(); ctx.fill();
+            }
+            
+            // Cockpit/Details
+            ctx.fillStyle = '#ecf0f1'; ctx.fillRect(-5, -5, 10, 10);
+
+            // Lights
+            if(window.game.timeOfDay > 18 || window.game.timeOfDay < 6 || window.game.weather.type === 'storm') {
+                ctx.fillStyle = 'rgba(255, 255, 200, 0.5)';
+                ctx.beginPath(); ctx.moveTo(10, -5); ctx.lineTo(200, -50); ctx.lineTo(200, 50); ctx.closePath(); ctx.fill();
+            }
+        } else if (this.isWingman || this.isDrone) {
+            // Can be drone or full wingman
+            if (this.isDrone) {
+                ctx.fillStyle = '#00ffcc';
+                ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-5, 5); ctx.lineTo(-5, -5); ctx.closePath(); ctx.fill();
+            } else {
+                ctx.fillStyle = '#2ecc71';
+                ctx.beginPath(); ctx.moveTo(20, 0); ctx.lineTo(-15, 10); ctx.lineTo(-15, -10); ctx.closePath(); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.fillRect(-10, -5, 10, 10);
+            }
+        } else if (this.isSupply) {
+            // Supply Ship
+            ctx.fillStyle = '#95a5a6';
+            ctx.fillRect(-40, -15, 80, 30); // Big hull
+            ctx.fillStyle = '#f39c12'; // Cargo containers
+            ctx.fillRect(-30, -10, 20, 20);
+            ctx.fillRect(0, -10, 20, 20);
+            // Bridge
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(30, -8, 10, 16);
+        } else if (this.isWatchtower || this.isTurret) {
+            ctx.fillStyle = this.isTurret ? '#2ecc71' : '#333'; 
+            ctx.beginPath(); ctx.rect(-15, -15, 30, 30); ctx.fill();
+            ctx.strokeStyle = '#555'; ctx.strokeRect(-15,-15,30,30);
+            ctx.fillStyle = '#555'; ctx.beginPath(); ctx.arc(0,0, 12, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#111'; ctx.fillRect(0, -4, 25, 8);
+        } else if (this.isKamikaze) {
+            // Kamikaze - Red, sharp, with barrels
+            ctx.fillStyle = '#e74c3c';
+            ctx.beginPath(); ctx.moveTo(20, 0); ctx.lineTo(-10, 8); ctx.lineTo(-10, -8); ctx.closePath(); ctx.fill();
+            // Explosive barrels
+            ctx.fillStyle = '#f1c40f';
+            ctx.beginPath(); ctx.arc(-5, 0, 6, 0, Math.PI*2); ctx.fill();
+        } else if (this.isKraken) {
+            // Kraken Head
+            ctx.fillStyle = '#800080';
+            ctx.beginPath(); ctx.ellipse(0, 0, 40, 25, 0, 0, Math.PI*2); ctx.fill();
+            // Eyes
+            ctx.fillStyle = 'yellow';
+            ctx.beginPath(); ctx.arc(15, -10, 5, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(15, 10, 5, 0, Math.PI*2); ctx.fill();
+        } else if (this.isSerpent) {
+             ctx.fillStyle = '#27ae60';
+             ctx.beginPath(); ctx.arc(0,0, 25, 0, Math.PI*2); ctx.fill();
+             ctx.fillStyle = '#c0392b';
+             ctx.beginPath(); ctx.moveTo(10, -5); ctx.lineTo(10, 5); ctx.lineTo(30, 0); ctx.fill(); // Tongue
+        } else if (this.isTentacle) {
+             ctx.fillStyle = '#27ae60';
+             ctx.beginPath(); ctx.arc(0,0, 20, 0, Math.PI*2); ctx.fill();
+        } else {
+            // Enemy
+            if (this.isBoss) {
+                 // DREADNOUGHT VISUALS
+                 ctx.fillStyle = '#4a0000'; // Dark Red
+                 // Big Hull
+                 ctx.beginPath(); ctx.moveTo(60, 0); ctx.lineTo(-40, 25); ctx.lineTo(-40, -25); ctx.closePath(); ctx.fill();
+                 ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 3; ctx.stroke();
+                 // Turrets
+                 ctx.fillStyle = '#111';
+                 ctx.beginPath(); ctx.arc(20, 0, 10, 0, Math.PI*2); ctx.fill();
+                 ctx.beginPath(); ctx.arc(-10, 0, 12, 0, Math.PI*2); ctx.fill();
+            } else if (this.isTarget) {
+                ctx.fillStyle = '#8e44ad'; // Elite
+                ctx.beginPath(); ctx.moveTo(25, 0); ctx.lineTo(-20, 12); ctx.lineTo(-20, -12); ctx.closePath(); ctx.fill();
+            } else {
+                const level = Math.floor(this.maxHealth / 100);
+                ctx.fillStyle = level > 1 ? '#c0392b' : '#7f8c8d';
+                ctx.beginPath(); ctx.moveTo(25, 0); ctx.lineTo(-20, 12); ctx.lineTo(-20, -12); ctx.closePath(); ctx.fill();
+            }
+            
+            if(!this.isBoss) {
+                ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(-5, 0, 5, 0, Math.PI*2); ctx.fill();
+            }
+
+            if(this.isTarget) {
+                ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(0,0, this.isBoss ? 70 : 30, 0, Math.PI*2); ctx.stroke();
+            }
+        }
+        
+        // Draw Shield
+        if (this.shield > 0) {
+            ctx.strokeStyle = `rgba(0, 200, 255, ${0.3 + (this.shield/this.maxShield)*0.5})`;
+            ctx.lineWidth = 2;
+            const shieldRad = this.isBoss ? 80 : (this.isSupply ? 50 : 30);
+            ctx.beginPath(); ctx.arc(0,0, shieldRad, 0, Math.PI*2); ctx.stroke();
+        }
+        
+        ctx.restore();
+        if (!this.isPlayer && !this.isSub && !this.isKraken && !this.isSerpent && this.health < this.maxHealth) {
+            ctx.fillStyle = 'black'; ctx.fillRect(this.x - 15, this.y - 30, 30, 4);
+            ctx.fillStyle = 'red'; ctx.fillRect(this.x - 15, this.y - 30, 30 * (this.health/this.maxHealth), 4);
+        }
+    }
+}
+
+class Tentacle extends Ship {
+    constructor(parent) {
+        super(parent.x + rnd(-100,100), parent.y + rnd(-100,100), false);
+        this.parent = parent;
+        this.maxHealth = 300;
+        this.health = 300;
+        this.width = 15;
+        this.isKamikaze = false; // Reuse collision logic manually
+    }
+    
+    update() {
+        if(this.parent.dead) { this.dead = true; return; }
+        
+        // Flail around parent
+        const time = Date.now() / 500;
+        const angle = time + (this.id * 1.5);
+        const targetX = this.parent.x + Math.cos(angle) * 100;
+        const targetY = this.parent.y + Math.sin(angle) * 100;
+        
+        this.x += (targetX - this.x) * 0.05;
+        this.y += (targetY - this.y) * 0.05;
+        
+        // Hit Player
+        if(Math.hypot(this.x - window.game.player.x, this.y - window.game.player.y) < 30) {
+            window.game.player.damage(2); // Damage over time contact
+        }
+    }
+    
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.fillStyle = '#800080';
+        ctx.beginPath(); ctx.arc(0,0, 10, 0, Math.PI*2); ctx.fill();
+        // Draw limb to parent
+        ctx.strokeStyle = '#600060';
+        ctx.lineWidth = 8;
+        ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(this.parent.x - this.x, this.parent.y - this.y); ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class Kraken extends Ship {
+    constructor() {
+        super(0,0,false);
+        this.isKraken = true;
+        this.isTarget = true;
+        this.maxHealth = 5000;
+        this.health = 5000;
+        this.maxSpeed = 2;
+        this.width = 60;
+        
+        // Spawn far away
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 3000;
+        this.x = window.game.player.x + Math.cos(angle) * dist;
+        this.y = window.game.player.y + Math.sin(angle) * dist;
+        
+        this.tentacles = [];
+        for(let i=0; i<4; i++) {
+            const t = new Tentacle(this);
+            t.id = i;
+            this.tentacles.push(t);
+            window.game.enemies.push(t); // Add to hit list
+        }
+    }
+    
+    update() {
+        if(this.dead) return;
+        
+        // Move towards player
+        const dx = window.game.player.x - this.x;
+        const dy = window.game.player.y - this.y;
+        const angle = Math.atan2(dy, dx);
+        this.angle = angle;
+        
+        this.vx += Math.cos(angle) * 0.02;
+        this.vy += Math.sin(angle) * 0.02;
+        
+        this.updatePhysics();
+        
+        // Clean dead tentacles
+        this.tentacles = this.tentacles.filter(t => !t.dead);
+    }
+}
+
+class SerpentSegment extends Ship {
+    constructor(leader) {
+        super(leader.x, leader.y, false);
+        this.leader = leader;
+        this.isTentacle = true; // Use basic draw logic override
+        this.maxHealth = 400;
+        this.health = 400;
+        this.history = []; // Position history for trailing
+    }
+    
+    update() {
+        if(this.leader.dead) { this.dead = true; return; }
+        
+        // Record leader position
+        this.history.push({x: this.leader.x, y: this.leader.y});
+        if(this.history.length > 20) this.history.shift();
+        
+        // Follow
+        const target = this.history[0];
+        if(target) {
+            this.x += (target.x - this.x) * 0.1;
+            this.y += (target.y - this.y) * 0.1;
+        }
+        
+        // Collide Player
+        if(Math.hypot(this.x - window.game.player.x, this.y - window.game.player.y) < 30) {
+            window.game.player.damage(3);
+        }
+    }
+}
+
+class SerpentHead extends Ship {
+    constructor() {
+        super(0,0,false);
+        this.isSerpent = true;
+        this.isTarget = true;
+        this.maxHealth = 4000;
+        this.health = 4000;
+        this.maxSpeed = 5;
+        this.width = 40;
+        
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 3000;
+        this.x = window.game.player.x + Math.cos(angle) * dist;
+        this.y = window.game.player.y + Math.sin(angle) * dist;
+        
+        this.segments = [];
+        let prev = this;
+        for(let i=0; i<8; i++) {
+            const s = new SerpentSegment(prev);
+            this.segments.push(s);
+            window.game.enemies.push(s);
+            prev = s;
+        }
+    }
+    
+    update() {
+        if(this.dead) return;
+        
+        // Snake movement
+        const dx = window.game.player.x - this.x;
+        const dy = window.game.player.y - this.y;
+        const angle = Math.atan2(dy, dx);
+        
+        // Wiggle
+        const wiggle = Math.sin(Date.now() / 300) * 0.5;
+        this.angle = angle + wiggle;
+        
+        this.vx = Math.cos(this.angle) * 3;
+        this.vy = Math.sin(this.angle) * 3;
+        
+        this.x += this.vx;
+        this.y += this.vy;
+        
+        // Collide
+         if(Math.hypot(this.x - window.game.player.x, this.y - window.game.player.y) < 40) {
+            window.game.player.damage(5);
+        }
+        
+        this.segments = this.segments.filter(s => !s.dead);
+        this.segments.forEach(s => s.update());
+    }
+}
+
+class SupplyShip extends Ship {
+    constructor(targetX, targetY) {
+        super(window.game.player.x, window.game.player.y - 100, false);
+        this.isSupply = true;
+        this.maxHealth = 2000;
+        this.health = 2000;
+        this.targetX = targetX;
+        this.targetY = targetY;
+        this.maxSpeed = 3;
+    }
+    
+    update() {
+        if(this.dead) return;
+        
+        const dx = this.targetX - this.x;
+        const dy = this.targetY - this.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist < 100) {
+            window.game.completeContract();
+            this.dead = true; 
+            return;
+        }
+        
+        const targetAngle = Math.atan2(dy, dx);
+        let diff = targetAngle - this.angle;
+        // Normalize
+        diff = ((diff + Math.PI) % (2 * Math.PI)) - Math.PI;
+
+        this.angle += diff * 0.01;
+        
+        this.vx += Math.cos(this.angle) * 0.05;
+        this.vy += Math.sin(this.angle) * 0.05;
+        
+        this.updatePhysics();
+    }
+}
+
+class Player extends Ship {
+    constructor() {
+        super(0, 0, true);
+        this.currentWeapon = 0;
+        this.boostEnergy = 100;
+        this.maxBoost = 100;
+        this.boosting = false;
+        
+        // Abilities
+        this.cdQ = 0;
+        this.cdE = 0;
+        this.maxCdQ = 600; // 10s
+        this.maxCdE = 1200; // 20s
+        
+        this.drones = [];
+        this.droneTimer = 0;
+        
+        this.turretCooldown = 0;
+    }
+    
+    update() {
+        let currentAccel = this.accel;
+        this.boosting = false;
+        
+        // Titan Auto Turrets
+        if (this.hullType === 'titan') {
+            if(this.turretCooldown > 0) this.turretCooldown--;
+            else {
+                 // Find enemies
+                 for(let e of window.game.enemies) {
+                     if(Math.hypot(e.x - this.x, e.y - this.y) < 600) {
+                         const ang = Math.atan2(e.y - this.y, e.x - this.x);
+                         // Fire 2 shots side
+                         window.game.projectiles.push(new Projectile(this.x + Math.cos(this.angle+1.5)*20, this.y+Math.sin(this.angle+1.5)*20, ang, 0, 'player'));
+                         window.game.projectiles.push(new Projectile(this.x + Math.cos(this.angle-1.5)*20, this.y+Math.sin(this.angle-1.5)*20, ang, 0, 'player'));
+                         this.turretCooldown = 20; // Fast fire
+                         break;
+                     }
+                 }
+            }
+        }
+
+        // Carrier Drone Logic
+        if (HULLS[this.hullType].droneCount > 0) {
+            this.droneTimer++;
+            if (this.droneTimer > 120 && this.drones.length < HULLS[this.hullType].droneCount) {
+                const drone = new Wingman();
+                drone.x = this.x; drone.y = this.y;
+                drone.isDrone = true;
+                drone.maxHealth = 100;
+                drone.health = 100;
+                window.game.friendlies.push(drone);
+                this.drones.push(drone);
+                this.droneTimer = 0;
+            }
+            // Cleanup dead drones
+            this.drones = this.drones.filter(d => !d.dead);
+        }
+
+        // Abilities
+        if (this.cdQ > 0) this.cdQ--;
+        if (this.cdE > 0) this.cdE--;
+        
+        // UI Updates for CD
+        const qElem = document.getElementById('cd-q');
+        if (this.cdQ > 0) { qElem.style.display = 'flex'; qElem.innerText = Math.ceil(this.cdQ/60); }
+        else qElem.style.display = 'none';
+        
+        const eElem = document.getElementById('cd-e');
+        if (this.cdE > 0) { eElem.style.display = 'flex'; eElem.innerText = Math.ceil(this.cdE/60); }
+        else eElem.style.display = 'none';
+
+        if (window.game.keys['q'] && this.cdQ <= 0) this.useAbility('Q');
+        if (window.game.keys['e'] && this.cdE <= 0) this.useAbility('E');
+
+        if ((window.game.keys['Shift'] || window.game.keys['ShiftLeft']) && this.boostEnergy > 0) {
+            this.boosting = true;
+            currentAccel *= 2.5; 
+            this.boostEnergy -= 1;
+            if(Math.random() > 0.5 && window.game.particles.length < 200) window.game.particles.push(new Particle(this.x, this.y, 'smoke'));
+        } else if (this.boostEnergy < this.maxBoost) {
+            this.boostEnergy += 0.2; 
+        }
+        
+        window.game.ui.updateBoost(this.boostEnergy, this.maxBoost);
+
+        if (window.game.keys['ArrowUp'] || window.game.keys['w']) { 
+            this.vx += Math.cos(this.angle) * currentAccel; 
+            this.vy += Math.sin(this.angle) * currentAccel; 
+        }
+        if (window.game.keys['ArrowDown'] || window.game.keys['s']) { 
+            this.vx -= Math.cos(this.angle) * (currentAccel * 0.5); 
+            this.vy -= Math.sin(this.angle) * (currentAccel * 0.5); 
+        }
+        if (window.game.keys['ArrowLeft'] || window.game.keys['a']) { 
+            this.angle -= this.turnSpeed * (Math.min(Math.abs(this.vx) + Math.abs(this.vy), 1)); 
+        }
+        if (window.game.keys['ArrowRight'] || window.game.keys['d']) { 
+            this.angle += this.turnSpeed * (Math.min(Math.abs(this.vx) + Math.abs(this.vy), 1)); 
+        }
+        
+        for(let i=0; i<8; i++) {
+            if(window.game.keys[(i+1).toString()]) window.game.setWeapon(i);
+        }
+
+        if (this.cooldown > 0) this.cooldown--;
+        if (window.game.keys[' '] && this.cooldown <= 0) this.fire();
+
+        this.updatePhysics();
+    }
+    
+    useAbility(key) {
+        if (key === 'Q') {
+            // EMP
+            this.cdQ = this.maxCdQ;
+            window.game.camera.triggerShake(10);
+            // Visual
+            window.game.particles.push(new Particle(this.x, this.y, 'explosion')); // Reuse big blast
+            // Effect
+            window.game.enemies.forEach(e => {
+                if(Math.hypot(e.x - this.x, e.y - this.y) < 600) {
+                    e.attackCooldown = 300; // 5 seconds disable
+                    e.vx = 0; e.vy = 0; // Stop move
+                    window.game.spawnDamageText(e.x, e.y, "STUN", true);
+                }
+            });
+            window.game.showNotify("EMP BLAST ACTIVATED");
+        } else if (key === 'E') {
+            // Airstrike
+            this.cdE = this.maxCdE;
+            const mx = this.x + Math.cos(this.angle) * 400; // Aim forward simple
+            const my = this.y + Math.sin(this.angle) * 400;
+            
+            // Spawn explosions in a line
+            for(let i=0; i<10; i++) {
+                setTimeout(() => {
+                    const ex = this.x + Math.cos(this.angle) * (100 + i*60);
+                    const ey = this.y + Math.sin(this.angle) * (100 + i*60);
+                    window.game.particles.push(new Particle(ex, ey, 'explosion'));
+                    // Dmg check
+                    window.game.enemies.forEach(e => {
+                        if(Math.hypot(e.x - ex, e.y - ey) < 80) e.damage(500);
+                    });
+                }, i * 100);
+            }
+            window.game.showNotify("AIRSTRIKE CALLED");
+        }
+    }
+
+    fire() {
+        // Carriers cant use main guns except special
+        if (this.hullType === 'carrier' && this.currentWeapon !== 3) { // Allow mines
+             return;
+        }
+
+        const wep = WEAPONS[this.currentWeapon];
+        if (window.game.money >= wep.cost) {
+            window.game.addMoney(-wep.cost);
+            
+            if (wep.type === 'mine') {
+                const rearX = this.x - Math.cos(this.angle) * 30;
+                const rearY = this.y - Math.sin(this.angle) * 30;
+                window.game.projectiles.push(new Projectile(rearX, rearY, 0, this.currentWeapon, 'player'));
+            } else {
+                const noseX = this.x + Math.cos(this.angle) * 25;
+                const noseY = this.y + Math.sin(this.angle) * 25;
+                window.game.projectiles.push(new Projectile(noseX, noseY, this.angle, this.currentWeapon, 'player'));
+                if(wep.type === 'rail' || wep.type === 'flak' || wep.type === 'ion') window.game.camera.triggerShake(5);
+                this.vx -= Math.cos(this.angle) * 0.5; this.vy -= Math.sin(this.angle) * 0.5;
+            }
+            this.cooldown = wep.cooldown * this.reloadMod;
+        } else {
+            this.cooldown = 10;
+        }
+    }
+}
+
+class Submarine extends Ship {
+    constructor() {
+        super(0, 0, false);
+        this.isSub = true;
+        this.maxHealth = 200;
+        this.health = this.maxHealth;
+        this.surfaced = false;
+        this.surfaceTimer = 0;
+        this.maxSpeed = 4;
+        
+        const angle = Math.random() * Math.PI * 2;
+        const dist = rnd(1000, 2000);
+        this.x = window.game.player.x + Math.cos(angle) * dist;
+        this.y = window.game.player.y + Math.sin(angle) * dist;
+    }
+    
+    update() {
+        if (!window.game.player || window.game.player.dead) return;
+        
+        const dx = window.game.player.x - this.x;
+        const dy = window.game.player.y - this.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const targetAngle = Math.atan2(dy, dx);
+        
+        let diff = targetAngle - this.angle;
+        diff = ((diff + Math.PI) % (2 * Math.PI)) - Math.PI;
+
+        this.angle += diff * 0.03;
+        
+        if (dist > 300) {
+            this.vx += Math.cos(this.angle) * 0.05;
+            this.vy += Math.sin(this.angle) * 0.05;
+        } else {
+            this.vx *= 0.9; this.vy *= 0.9;
+        }
+        
+        if (this.surfaced) {
+            this.surfaceTimer--;
+            if (this.surfaceTimer <= 0) {
+                this.surfaced = false;
+                this.attackCooldown = 200;
+            } else if (this.surfaceTimer === 60) {
+                const noseX = this.x + Math.cos(this.angle) * 20;
+                const noseY = this.y + Math.sin(this.angle) * 20;
+                window.game.projectiles.push(new Projectile(noseX, noseY, this.angle, 2, 'enemy'));
+            }
+        } else {
+            if (this.attackCooldown > 0) this.attackCooldown--;
+            if (dist < 400 && this.attackCooldown <= 0) {
+                this.surfaced = true;
+                this.surfaceTimer = 120;
+                window.game.particles.push(new Particle(this.x, this.y, 'wake'));
+            }
+        }
+        
+        this.updatePhysics();
+    }
+}
+
+class Wingman extends Ship {
+    constructor() {
+        super(window.game.player.x - 50, window.game.player.y - 50, false);
+        this.isWingman = true;
+        this.isDrone = false; // Overridden if spawned by carrier
+        this.maxHealth = 500;
+        this.health = this.maxHealth;
+        this.accel = 0.2;
+        this.maxSpeed = 9;
+        this.shootTimer = 0;
+    }
+    update() {
+        if(window.game.player.dead) return;
+        
+        const targetX = window.game.player.x + Math.cos(window.game.player.angle + (this.isDrone ? Math.random() : 0.5)) * (this.isDrone ? 100 : 60);
+        const targetY = window.game.player.y + Math.sin(window.game.player.angle + (this.isDrone ? Math.random() : 0.5)) * (this.isDrone ? 100 : 60);
+        
+        let dx = targetX - this.x;
+        let dy = targetY - this.y;
+        
+        // Drones hunt freely
+        let closest = null;
+        let closeDist = 600;
+        for(let e of window.game.enemies) {
+            if (e.isSub && !e.surfaced) continue; 
+            const edist = Math.hypot(e.x - this.x, e.y - this.y);
+            if(edist < closeDist) {
+                closeDist = edist;
+                closest = e;
+            }
+        }
+
+        if (closest && this.isDrone) {
+            // Drones chase enemies
+            dx = closest.x - this.x;
+            dy = closest.y - this.y;
+        }
+
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const desiredAngle = Math.atan2(dy, dx);
+        
+        let diff = desiredAngle - this.angle;
+        diff = ((diff + Math.PI) % (2 * Math.PI)) - Math.PI;
+
+        this.angle += diff * 0.1;
+
+        if(dist > 50) {
+            this.vx += Math.cos(this.angle) * this.accel;
+            this.vy += Math.sin(this.angle) * this.accel;
+        } else {
+            this.vx *= 0.9; this.vy *= 0.9;
+        }
+
+        if(this.shootTimer > 0) this.shootTimer--;
+        else if (closest) {
+            const aimAngle = Math.atan2(closest.y - this.y, closest.x - this.x);
+            window.game.projectiles.push(new Projectile(this.x, this.y, aimAngle, 0, 'player'));
+            this.shootTimer = 40;
+        }
+        this.updatePhysics();
+    }
+}
+
+class Watchtower extends Ship {
+    constructor() {
+        super(0, 0, false);
+        this.isWatchtower = true;
+        this.maxHealth = 400;
+        this.health = this.maxHealth;
+        this.width = 30;
+        
+        const angle = Math.random() * Math.PI * 2;
+        const dist = rnd(800, 2000);
+        this.x = window.game.player.x + Math.cos(angle) * dist;
+        this.y = window.game.player.y + Math.sin(angle) * dist;
+    }
+    
+    update() {
+        if (!window.game.player || window.game.player.dead) return;
+        const dx = window.game.player.x - this.x; const dy = window.game.player.y - this.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const targetAngle = Math.atan2(dy, dx);
+        
+        let diff = targetAngle - this.angle;
+        diff = ((diff + Math.PI) % (2 * Math.PI)) - Math.PI;
+
+        this.angle += diff * 0.02;
+
+        if (this.attackCooldown > 0) this.attackCooldown--;
+        if (dist < 600 && Math.abs(diff) < 0.2 && this.attackCooldown <= 0) {
+            const noseX = this.x + Math.cos(this.angle) * 25;
+            const noseY = this.y + Math.sin(this.angle) * 25;
+            window.game.projectiles.push(new Projectile(noseX, noseY, this.angle, 0, 'enemy'));
+            this.attackCooldown = 80;
+        }
+    }
+}
+
+class Turret extends Ship {
+    constructor() {
+        super(0, 0, false);
+        this.isTurret = true;
+        this.maxHealth = 1000;
+        this.health = 1000;
+        this.width = 30;
+        
+        // Spawn near base
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 100; // Close to base
+        this.x = Math.cos(angle) * dist;
+        this.y = Math.sin(angle) * dist;
+    }
+    
+    update() {
+        let closest = null;
+        let closeDist = 600;
+        for(let e of window.game.enemies) {
+            const edist = Math.hypot(e.x - this.x, e.y - this.y);
+            if(edist < closeDist) {
+                closeDist = edist;
+                closest = e;
+            }
+        }
+        
+        if (closest) {
+            const targetAngle = Math.atan2(closest.y - this.y, closest.x - this.x);
+            let diff = targetAngle - this.angle;
+            diff = ((diff + Math.PI) % (2 * Math.PI)) - Math.PI;
+            
+            this.angle += diff * 0.1;
+            
+            if (this.attackCooldown > 0) this.attackCooldown--;
+            if (this.attackCooldown <= 0) {
+                window.game.projectiles.push(new Projectile(this.x, this.y, this.angle, 0, 'player'));
+                this.attackCooldown = 40;
+            }
+        }
+    }
+}
+
+class Enemy extends Ship {
+    constructor(tier, isTarget, isBoss) {
+        super(0, 0, false);
+        const angle = Math.random() * Math.PI * 2;
+        const dist = (isTarget || isBoss) ? rnd(1500, 2500) : (Math.max(canvas.width, canvas.height) / 1.5 + rnd(100, 300));
+        this.x = window.game.player.x + Math.cos(angle) * dist;
+        this.y = window.game.player.y + Math.sin(angle) * dist;
+        
+        this.tier = tier;
+        this.isTarget = isTarget || false;
+        this.isBoss = isBoss || false;
+        
+        if(this.isBoss) {
+            this.maxHealth = 2000;
+            this.maxSpeed = 3;
+            this.width = 60;
+            this.accel = 0.05;
+            this.turnSpeed = 0.02;
+        } else if(this.isTarget) {
+            this.maxHealth = 300 + (tier * 100);
+            this.maxSpeed = 5;
+            this.width = 35;
+        } else {
+            this.maxHealth = 50 + (tier * 50);
+            this.maxSpeed = Math.max(2, 5 - (tier * 0.5));
+            this.width = 25 + (tier * 5);
+        }
+        this.health = this.maxHealth;
+        this.attackCooldown = 0;
+        this.isKamikaze = false;
+    }
+    
+    makeKamikaze() {
+        this.isKamikaze = true;
+        this.maxHealth = 80;
+        this.health = 80;
+        this.maxSpeed = 9;
+        this.accel = 0.3;
+        this.width = 20;
+        return this;
+    }
+
+    update() {
+        if (!window.game.player || window.game.player.dead) return;
+        
+        // Skip AI if disabled (Tutorial Dummy)
+        if (this.aiDisabled) {
+             this.updatePhysics();
+             return;
+        }
+
+        let targetObj = window.game.player;
+        if(window.game.contract && window.game.contract.type === 'Escort' && window.game.contract.targetObj && !window.game.contract.targetObj.dead) {
+            targetObj = window.game.contract.targetObj;
+        } else if (window.game.friendlies.length > 0) {
+            // Find closest friendly
+            let closeDist = 9999;
+            for(let f of window.game.friendlies) {
+                if(f.dead) continue;
+                const d = Math.hypot(f.x - this.x, f.y - this.y);
+                if(d < closeDist) { closeDist = d; targetObj = f; }
+            }
+            // If player closer than friendly, target player
+            if (Math.hypot(window.game.player.x - this.x, window.game.player.y - this.y) < closeDist) targetObj = window.game.player;
+        } else if(window.game.wingman && !window.game.wingman.dead) {
+            if(Math.hypot(window.game.wingman.x - this.x, window.game.wingman.y - this.y) < Math.hypot(window.game.player.x - this.x, window.game.player.y - this.y)) {
+                targetObj = window.game.wingman;
+            }
+        }
+
+        const dx = targetObj.x - this.x; 
+        const dy = targetObj.y - this.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const targetAngle = Math.atan2(dy, dx);
+        
+        let diff = targetAngle - this.angle;
+        diff = ((diff + Math.PI) % (2 * Math.PI)) - Math.PI;
+
+        this.angle += diff * (this.isBoss ? 0.02 : 0.05);
+
+        if (dist > (this.isBoss ? 400 : (this.isKamikaze ? 0 : 200))) { 
+            this.vx += Math.cos(this.angle) * (this.accel * 0.5); 
+            this.vy += Math.sin(this.angle) * (this.accel * 0.5); 
+        } else { 
+            if(!this.isKamikaze) {
+                this.vx *= 0.9; this.vy *= 0.9; 
+            }
+        }
+        
+        if (this.isKamikaze && dist < 40) {
+            this.destroy();
+            targetObj.damage(200);
+            window.game.particles.push(new Particle(this.x, this.y, 'explosion'));
+            window.game.camera.triggerShake(10);
+            return;
+        }
+
+        if (this.attackCooldown > 0) this.attackCooldown--;
+        
+        const range = this.isBoss ? 700 : 500;
+        if (!this.isKamikaze && dist < range && Math.abs(diff) < 0.5 && this.attackCooldown <= 0) {
+            const noseX = this.x + Math.cos(this.angle) * (this.isBoss ? 60 : 20);
+            const noseY = this.y + Math.sin(this.angle) * (this.isBoss ? 60 : 20);
+            
+            if(this.isBoss) {
+                window.game.projectiles.push(new Projectile(noseX, noseY, this.angle, 0, 'enemy'));
+                window.game.projectiles.push(new Projectile(noseX, noseY, this.angle - 0.2, 0, 'enemy'));
+                window.game.projectiles.push(new Projectile(noseX, noseY, this.angle + 0.2, 0, 'enemy'));
+                this.attackCooldown = 60;
+            } else {
+                window.game.projectiles.push(new Projectile(noseX, noseY, this.angle, 0, 'enemy'));
+                this.attackCooldown = this.isTarget ? 40 : (100 - (this.tier * 10));
+            }
+        }
+        this.updatePhysics();
+    }
+}
+
+class Game {
+    constructor() {
+        this.state = STATE.MENU; // Start in Menu
+        this.keys = {};
+        this.money = 100;
+        this.player = new Player();
+        this.wingman = null;
+        this.friendlies = []; // Turrets, drones
+        this.base = new Base();
+        this.camera = new Camera();
+        this.weather = new Weather();
+        this.enemies = [];
+        this.projectiles = [];
+        this.particles = [];
+        this.obstacles = [];
+        this.whirlpools = [];
+        this.crates = [];
+        this.debris = [];
+        this.damageTexts = [];
+        this.waveTimer = 0;
+        this.difficulty = 1;
+        this.timeOfDay = 12;
+        this.timeSpeed = 0.005;
+        this.contract = null;
+        this.availableContracts = [];
+        this.tutorialStep = 0;
+        this.tutorialTimer = 0;
+        this.tutorialCounter = 0;
+        this.tutorialDummySpawned = false;
+        this.tutorialTarget = null; // New nav target
+
+        this.upgrades = { repair: { level: 1, cost: 100 }, speed: { level: 1, cost: 200 }, armor: { level: 1, cost: 300 }, reload: { level: 1, cost: 400 }, shield: { level: 1, cost: 800 } };
+        
+        this.ui = {
+            money: document.getElementById('score-display'),
+            health: document.getElementById('health-bar'),
+            shield: document.getElementById('shield-bar'),
+            boost: document.getElementById('boost-bar'),
+            hpText: document.getElementById('hp-text'),
+            coords: document.getElementById('coordinates'),
+            time: document.getElementById('time-display'),
+            updateMoney: (val) => { this.ui.money.innerText = "$" + Math.floor(val).toLocaleString(); },
+            updateHealth: (curr, max) => {
+                const pct = Math.max(0, (curr / max) * 100);
+                this.ui.health.style.width = pct + "%";
+                this.ui.hpText.innerText = Math.floor(pct) + "%";
+            },
+            updateShield: (curr, max) => {
+                const pct = max > 0 ? Math.max(0, (curr / max) * 100) : 0;
+                this.ui.shield.style.width = pct + "%";
+            },
+            updateBoost: (curr, max) => {
+                const pct = Math.max(0, (curr / max) * 100);
+                this.ui.boost.style.width = pct + "%";
+            },
+            updateCoords: (x, y) => { this.ui.coords.innerText = `POS: ${Math.floor(x)}, ${Math.floor(y)}`; }
+        };
+
+        window.addEventListener('resize', () => this.resize());
+        this.resize();
+        window.addEventListener('keydown', (e) => {
+            if(e.key.toLowerCase() === 'b') this.toggleShop();
+            this.keys[e.key] = true;
+            this.keys[e.code] = true; 
+        });
+        window.addEventListener('keyup', (e) => {
+            this.keys[e.key] = false;
+            this.keys[e.code] = false;
+        });
+
+        this.loop = this.loop.bind(this);
+        
+        this.ui.updateMoney(this.money);
+        for(let i=0; i<10; i++) this.spawnObstacle();
+        this.generateContracts();
+    }
+    
+    start() {
+        requestAnimationFrame(this.loop);
+    }
+    
+    showTutorial() {
+        document.getElementById('start-screen').style.display = 'none';
+        document.getElementById('hud-container').classList.remove('hidden');
+        document.getElementById('tutorial-box').style.display = 'block';
+        this.state = STATE.TUTORIAL;
+        this.startTutorial();
+    }
+    
+    startTutorial() {
+        this.tutorialStep = 0;
+        this.tutorialTimer = 0;
+        this.tutorialCounter = 0;
+        this.tutorialDummySpawned = false;
+        // Reset player
+        this.player.x = 0; this.player.y = 0; this.player.vx = 0; this.player.vy = 0;
+        this.player.health = this.player.maxHealth;
+        this.player.angle = -Math.PI/2;
+        this.enemies = [];
+        this.crates = [];
+        this.projectiles = [];
+    }
+    
+    startGame() {
+        document.getElementById('start-screen').style.display = 'none';
+        document.getElementById('hud-container').classList.remove('hidden');
+        this.state = STATE.PLAYING;
+        this.showNotify("CONTRACT STARTED");
+    }
+
+    resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+
+    setWeapon(index) {
+        this.player.currentWeapon = index;
+        document.querySelectorAll('.weapon-slot').forEach((el, i) => {
+            if (i === index) el.classList.add('active'); else el.classList.remove('active');
+        });
+    }
+
+    showNotify(text) {
+        const el = document.getElementById('notification');
+        el.innerText = text;
+        el.style.display = 'block';
+        setTimeout(() => el.style.display = 'none', 3000);
+    }
+    
+    spawnDamageText(x, y, amount, isCrit) {
+        this.damageTexts.push(new DamageText(x, y, amount, isCrit));
+    }
+    
+    generateContracts() {
+        if(this.availableContracts && Array.isArray(this.availableContracts)) {
+             this.availableContracts.splice(0, this.availableContracts.length);
+        } else {
+             this.availableContracts = [];
+        }
+        const types = ['Hunt', 'Salvage', 'Escort'];
+        for(let i=0; i<3; i++) {
+            const type = types[Math.floor(Math.random()*types.length)];
+            const reward = 300 + Math.floor(Math.random() * 500);
+            let desc = "";
+            if (type === 'Hunt') desc = "Sink the Pirate Captain";
+            else if (type === 'Salvage') desc = "Recover Stolen Cargo";
+            else desc = "Protect Supply Shipment";
+            if(type === 'Escort') reward += 500; 
+            this.availableContracts.push({ id: i, type, reward, desc });
+        }
+        this.availableContracts.push({ id: 99, type: 'Boss', reward: 5000, desc: "ELITE: HUNT THE DREADNOUGHT" });
+        this.availableContracts.push({ id: 100, type: 'Kraken', reward: 10000, desc: "LEGENDARY: SLAY THE KRAKEN" });
+        this.availableContracts.push({ id: 101, type: 'Serpent', reward: 12000, desc: "MYTHIC: SERPENT OF THE DEEP" });
+        this.updateContractUI();
+    }
+    
+    updateContractUI() {
+        const list = document.getElementById('contracts-list');
+        list.innerHTML = '';
+        if(this.contract) {
+            list.innerHTML = `<div class="shop-item" style="color:#aaa">Current Contract Active: <br>${this.contract.desc}</div>`;
+            return;
+        }
+        this.availableContracts.forEach(c => {
+            const div = document.createElement('div');
+            div.className = 'shop-item';
+            if(c.type === 'Boss' || c.type === 'Kraken' || c.type === 'Serpent') div.className += ' boss-text';
+            div.innerHTML = `<span>${c.desc}</span><span class="contract-reward">$${c.reward}</span>`;
+            div.onclick = () => this.acceptContract(c);
+            list.appendChild(div);
+        });
+    }
+    
+    acceptContract(c) {
+        if(this.contract) return;
+        if(c.type === 'Hunt') {
+            const enemy = new Enemy(2, true, false); this.enemies.push(enemy); this.contract = { ...c, targetObj: enemy };
+        } else if (c.type === 'Boss') {
+            const boss = new Enemy(5, true, true); this.enemies.push(boss); this.contract = { ...c, targetObj: boss }; this.showNotify("WARNING: DREADNOUGHT DETECTED");
+        } else if (c.type === 'Kraken') {
+            const k = new Kraken(); this.enemies.push(k); this.contract = { ...c, targetObj: k }; this.showNotify("WARNING: BIOLOGICAL HORROR DETECTED");
+        } else if (c.type === 'Serpent') {
+            const s = new SerpentHead(); this.enemies.push(s); this.contract = { ...c, targetObj: s }; this.showNotify("WARNING: MASSIVE SERPENT DETECTED");
+        } else if (c.type === 'Escort') {
+            const targetX = this.player.x + 3000; const targetY = this.player.y;
+            const supplyShip = new SupplyShip(targetX, targetY); this.contract = { ...c, targetObj: supplyShip }; this.showNotify("PROTECT THE SUPPLY SHIP!");
+        } else {
+            const angle = Math.random() * Math.PI * 2; const dist = rnd(1500, 2500);
+            const tx = this.player.x + Math.cos(angle)*dist; const ty = this.player.y + Math.sin(angle)*dist;
+            const crate = new Crate(tx, ty, true, false); this.crates.push(crate); this.contract = { ...c, targetObj: crate };
+        }
+        this.showNotify(`Contract Accepted: ${c.desc}`);
+        document.getElementById('contract-status').style.display = 'block';
+        document.getElementById('contract-desc').innerText = c.desc;
+        this.toggleShop();
+    }
+    
+    completeContract() {
+        if(!this.contract) return;
+        this.addMoney(this.contract.reward, this.player.x, this.player.y);
+        this.showNotify(`CONTRACT COMPLETE: +$${this.contract.reward}`);
+        this.contract = null;
+        document.getElementById('contract-status').style.display = 'none';
+        this.generateContracts();
+    }
+
+    toggleShop() {
+        const distToBase = Math.hypot(this.player.x, this.player.y);
+        if (distToBase > 150) { this.showNotify("Too far from Base!"); return; }
+        if (this.state === STATE.PLAYING) {
+            this.state = STATE.SHOP; this.switchShopTab('upgrades'); this.updateContractUI(); document.getElementById('shop-menu').style.display = 'block';
+        } else if (this.state === STATE.SHOP) {
+            this.state = STATE.PLAYING; document.getElementById('shop-menu').style.display = 'none';
+        }
+    }
+    
+    switchShopTab(tabId) {
+        document.querySelectorAll('.shop-section').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.shop-tab').forEach(el => el.classList.remove('active'));
+        document.getElementById('shop-' + tabId).classList.add('active');
+    }
+    
+    buyWingman() {
+        if(this.wingman && !this.wingman.dead) { this.showNotify("You already have a wingman."); return; }
+        if(this.money >= 1000) { this.addMoney(-1000); this.wingman = new Wingman(); this.showNotify("Wingman Hired!"); } 
+        else { this.showNotify("Insufficient Funds"); }
+    }
+    
+    buyTurret() {
+        if(this.money >= 2000) { this.addMoney(-2000); const t = new Turret(); this.friendlies.push(t); this.showNotify("Base Sentry Installed"); } 
+        else { this.showNotify("Insufficient Funds"); }
+    }
+    
+    buyHull(type) {
+        if (this.player.hullType === type) { this.showNotify("You already own this ship class."); return; }
+        let cost = 0; if(type === 'viper') cost = 2000; if(type === 'goliath') cost = 5000; if(type === 'carrier') cost = 10000; if(type === 'titan') cost = 25000;
+        if (this.money >= cost) { this.addMoney(-cost); this.player.applyHullStats(type); this.showNotify(`Purchased ${HULLS[type].name} Class!`); this.ui.updateHealth(this.player.health, this.player.maxHealth); } 
+        else { this.showNotify("Insufficient Funds"); }
+    }
+
+    buyUpgrade(type) {
+        const up = this.upgrades[type];
+        if (this.money >= up.cost) {
+            this.addMoney(-up.cost); up.level++;
+            if (type === 'repair') { this.player.health = Math.min(this.player.health + 500, this.player.maxHealth); this.ui.updateHealth(this.player.health, this.player.maxHealth); up.cost = 100; }
+            if (type === 'speed') { this.player.maxSpeed += 1; this.player.accel += 0.02; up.cost = Math.floor(up.cost * 1.5); }
+            if (type === 'armor') { this.player.maxHealth += 250; this.player.health += 250; this.ui.updateHealth(this.player.health, this.player.maxHealth); up.cost = Math.floor(up.cost * 1.5); }
+            if (type === 'reload') { this.player.reloadMod *= 0.85; up.cost = Math.floor(up.cost * 1.5); }
+            if (type === 'shield') { this.player.maxShield += 200; this.player.shield = this.player.maxShield; this.ui.updateShield(this.player.shield, this.player.maxShield); up.cost = Math.floor(up.cost * 1.5); }
+            document.getElementById(`cost-${type}`).innerText = "$" + up.cost; this.showNotify("Upgrade Purchased!");
+        } else { this.showNotify("Insufficient Funds"); }
+    }
+
+    addMoney(amount, worldX, worldY) {
+        this.money += amount;
+        this.ui.updateMoney(this.money);
+        if (worldX && worldY) {
+            const screenX = worldX - this.camera.x + canvas.width/2;
+            const screenY = worldY - this.camera.y + canvas.height/2;
+            if (screenX > 0 && screenX < canvas.width && screenY > 0 && screenY < canvas.height) {
+                const el = document.createElement('div');
+                el.className = 'floater';
+                el.style.left = screenX + 'px'; el.style.top = screenY + 'px';
+                el.innerText = amount >= 0 ? "+$" + amount : "-$" + Math.abs(amount);
+                el.style.color = amount >= 0 ? '#00ffcc' : '#ff3333';
+                document.body.appendChild(el);
+                setTimeout(() => el.remove(), 1000);
+            }
+        }
+    }
+    
+    // RESTORED FUNCTION
+    spawnEnemy() {
+        const rand = Math.random();
+        if (rand < 0.15) {
+             this.enemies.push(new Watchtower());
+        } else if (rand < 0.25) {
+             this.enemies.push(new Submarine());
+        } else if (rand < 0.35) {
+             this.enemies.push(new Enemy(1, false, false).makeKamikaze());
+        } else {
+            let tier = Math.floor(Math.random() * this.difficulty);
+            if (tier > 3) tier = 3;
+            this.enemies.push(new Enemy(tier, false, false));
+        }
+    }
+
+    spawnObstacle() {
+        const angle = rnd(0, Math.PI*2); const dist = rnd(500, 1500);
+        const x = this.player.x + Math.cos(angle) * dist; const y = this.player.y + Math.sin(angle) * dist;
+        if (Math.hypot(x, y) > 300) {
+            if(Math.random() > 0.8 && this.whirlpools.length < 3) { this.whirlpools.push(new Whirlpool(x,y)); } 
+            else { this.obstacles.push(new Obstacle(x, y, rnd(20, 60))); }
+        }
+    }
+
+    drawRadar() {
+        radarCtx.fillStyle = '#001a2a'; radarCtx.fillRect(0, 0, 180, 180);
+        const time = Date.now() / 1000; radarCtx.translate(90, 90); 
+        radarCtx.strokeStyle = 'rgba(0, 255, 204, 0.2)'; radarCtx.beginPath(); radarCtx.arc(0,0, 40, 0, Math.PI*2); radarCtx.stroke(); radarCtx.beginPath(); radarCtx.arc(0,0, 80, 0, Math.PI*2); radarCtx.stroke();
+
+        radarCtx.save(); radarCtx.rotate(time * 2);
+        radarCtx.strokeStyle = 'rgba(0, 255, 204, 0.5)'; radarCtx.beginPath(); radarCtx.moveTo(0,0); radarCtx.lineTo(0, -90); radarCtx.stroke();
+        radarCtx.fillStyle = 'rgba(0, 255, 204, 0.1)'; radarCtx.beginPath(); radarCtx.moveTo(0,0); radarCtx.arc(0,0, 90, -Math.PI/2, -Math.PI/2 + 0.5); radarCtx.fill();
+        radarCtx.restore();
+
+        radarCtx.fillStyle = '#00ffcc'; radarCtx.beginPath(); radarCtx.arc(0, 0, 2, 0, Math.PI*2); radarCtx.fill();
+
+        const scale = 0.02;
+        const drawBlip = (x, y, color, pulse) => {
+            const rx = (x - this.player.x) * scale; const ry = (y - this.player.y) * scale;
+            if (Math.hypot(rx, ry) < 85) {
+                radarCtx.fillStyle = color; radarCtx.fillRect(rx-1.5, ry-1.5, 3, 3);
+                if(pulse) { radarCtx.strokeStyle = color; radarCtx.beginPath(); radarCtx.arc(rx, ry, (Math.sin(time*5)+1)*2, 0, Math.PI*2); radarCtx.stroke(); }
+            }
+        };
+
+        const bx = (this.base.x - this.player.x) * scale; const by = (this.base.y - this.player.y) * scale;
+        if (Math.hypot(bx, by) < 85) { radarCtx.fillStyle = '#3498db'; radarCtx.fillRect(bx-3, by-3, 6, 6); }
+
+        this.enemies.forEach(e => drawBlip(e.x, e.y, e.isBoss ? '#fff' : (e.isKamikaze ? '#e74c3c' : (e.isSub ? '#ff0' : (e.isKraken || e.isSerpent ? '#800080' : '#f00'))), e.isSub || e.isKraken || e.isSerpent));
+        this.crates.forEach(c => drawBlip(c.x, c.y, c.isRepair ? '#fff' : (c.isQuest ? '#2ecc71' : (c.isTutorialTarget ? '#00ffff' : '#f1c40f'))));
+        this.obstacles.forEach(o => drawBlip(o.x, o.y, '#555'));
+        if(this.wingman && !this.wingman.dead) drawBlip(this.wingman.x, this.wingman.y, '#2ecc71');
+        
+        if(this.contract && this.contract.type === 'Escort' && this.contract.targetObj && !this.contract.targetObj.dead) {
+            const s = this.contract.targetObj; drawBlip(s.x, s.y, '#00ff00', true);
+        }
+        
+        // Tutorial target
+        if (this.state === STATE.TUTORIAL && this.tutorialTarget && this.tutorialTarget.active) {
+            drawBlip(this.tutorialTarget.x, this.tutorialTarget.y, '#00ff00', true);
+        }
+        
+        radarCtx.resetTransform();
+    }
+    
+    drawObjectiveArrow() {
+        let targetX = 0, targetY = 0;
+        let hasTarget = false;
+        
+        if(this.state === STATE.TUTORIAL && this.tutorialTarget && this.tutorialTarget.active) {
+            targetX = this.tutorialTarget.x;
+            targetY = this.tutorialTarget.y;
+            hasTarget = true;
+        } else if(this.contract && this.contract.targetObj) {
+            const target = this.contract.targetObj;
+            if(!((this.contract.type === 'Hunt' || this.contract.type === 'Boss' || this.contract.type === 'Kraken' || this.contract.type === 'Serpent') && target.dead)) {
+                targetX = target.x; targetY = target.y; hasTarget = true;
+            }
+        }
+        
+        if (hasTarget) {
+            const dx = targetX - this.player.x; const dy = targetY - this.player.y; const angle = Math.atan2(dy, dx); const dist = Math.sqrt(dx*dx + dy*dy);
+            if(dist > 500) {
+                const arrowDist = 100; const ax = this.player.x + Math.cos(angle) * arrowDist; const ay = this.player.y + Math.sin(angle) * arrowDist;
+                ctx.save(); ctx.translate(ax, ay); ctx.rotate(angle);
+                ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-10, 10); ctx.lineTo(-10, -10); ctx.fill(); ctx.restore();
+                ctx.fillStyle = '#2ecc71'; ctx.font = '12px monospace'; ctx.fillText(Math.floor(dist) + 'm', ax + 15, ay + 15);
+            }
+        }
+    }
+
+    update() {
+        // MENU Logic
+        if (this.state === STATE.MENU) {
+             this.weather.update();
+             // Idle spin
+             this.player.angle += 0.005;
+             return;
+        }
+
+        // TUTORIAL LOGIC
+        if (this.state === STATE.TUTORIAL) {
+            this.weather.update();
+            this.player.update();
+            this.camera.follow(this.player);
+            this.ui.updateCoords(this.player.x, this.player.y);
+            
+            const tutBox = document.getElementById('tutorial-box');
+            tutBox.style.display = 'block';
+
+            switch(this.tutorialStep) {
+                case 0:
+                    tutBox.innerHTML = "<div class='tut-instruction'>STEP 1: NAVIGATION</div><br>Sail to the <b>Green Marker</b> to calibrate engines.<br>Use <b>W A S D</b>.";
+                    if (!this.tutorialTarget) {
+                         this.tutorialTarget = {x: 0, y: -400, r: 60, active: true};
+                    }
+                    if (Math.hypot(this.player.x - this.tutorialTarget.x, this.player.y - this.tutorialTarget.y) < this.tutorialTarget.r) {
+                        this.tutorialTarget.active = false;
+                        this.tutorialStep++; 
+                        this.showNotify("Navigation Calibrated!");
+                    }
+                    break;
+                case 1:
+                    tutBox.innerHTML = "<div class='tut-instruction'>STEP 2: GUNNERY</div><br>Destroy the <b>3 Floating Crates</b>.<br>Press <b>SPACE</b> to fire.";
+                    if (this.crates.length === 0 && !this.tutorialCounter) {
+                         // Spawn crates only once
+                         for(let i=0; i<3; i++) {
+                             const a = (Math.PI*2 / 3) * i;
+                             const cx = this.player.x + Math.cos(a) * 200;
+                             const cy = this.player.y + Math.sin(a) * 200;
+                             const c = new Crate(cx, cy, false, false);
+                             c.isTutorialTarget = true; // Visuals
+                             this.crates.push(c);
+                         }
+                         this.tutorialCounter = 1; // Flag spawned
+                    }
+                    if (this.tutorialCounter === 1 && this.crates.length === 0) {
+                        this.tutorialStep++; this.showNotify("Targets Destroyed!");
+                    }
+                    break;
+                case 2:
+                    tutBox.innerHTML = "<div class='tut-instruction'>STEP 3: WEAPONS</div><br>Press <b>2</b> to equip Gatling Gun.<br>Press <b>3</b> to equip Torpedoes.";
+                    if(this.player.currentWeapon !== 0) {
+                         this.tutorialStep++; this.showNotify("Weapon Switched");
+                    }
+                    break;
+                case 3:
+                    tutBox.innerHTML = "<div class='tut-instruction'>STEP 4: COMBAT SIM</div><br>A Pirate Skiff is attacking! Destroy it!<br>Use <b>SHIFT</b> to Boost.";
+
+if (!this.tutorialDummySpawned) {
+    const dummy = new Enemy(1, false, false);
+
+    // Spawn at distance
+    dummy.x = this.player.x + 400;
+    dummy.y = this.player.y + 400;
+
+    dummy.maxHealth = 100;
+    dummy.health = 100;
+    dummy.dead = false;
+
+    // Override damage handling
+    const originalTakeDamage = dummy.takeDamage?.bind(dummy);
+    dummy.takeDamage = function(dmg) {
+        if (originalTakeDamage) originalTakeDamage(dmg);
+        else this.health -= dmg;
+
+        if (this.health <= 0) {
+            this.dead = true;
+        }
+    };
+
+    // Reduce damage output of dummy
+    dummy.fire = function() {
+        // weak / slow fire
+    };
+
+    this.enemies.push(dummy);
+    this.tutorialDummySpawned = true;
+}
+
+// 🔥 Remove dead enemies
+this.enemies = this.enemies.filter(e => !e.dead);
+
+// ✅ Tutorial progression
+if (this.enemies.length === 0 && this.tutorialDummySpawned) {
+    this.tutorialStep++;
+    this.showNotify("Enemy Neutralized!");
+}
+
+break;
+
+                case 4:
+                    tutBox.innerHTML = "<div class='tut-instruction'>TRAINING COMPLETE</div><br>You are ready for contract work.<br>Returning to HQ...";
+                    setTimeout(() => {
+                        this.state = STATE.MENU;
+                        document.getElementById('start-screen').style.display = 'flex'; // Use flex to center again
+                        document.getElementById('hud-container').classList.add('hidden');
+                        document.getElementById('tutorial-box').style.display = 'none';
+                        this.player.x = 0; this.player.y = 0; // Reset
+                        this.player.vx = 0; this.player.vy = 0;
+                    }, 4000);
+                    this.tutorialStep++;
+                    break;
+            }
+            
+            // Tutorial loop specific updates
+            for (let i = this.projectiles.length - 1; i >= 0; i--) {
+                this.projectiles[i].update();
+                
+                // Crate Hit Logic for tutorial
+                if (this.tutorialStep === 1) {
+                    let hitCrate = -1;
+                    this.crates.forEach((c, idx) => {
+                        if(Math.hypot(this.projectiles[i].x - c.x, this.projectiles[i].y - c.y) < 30) {
+                             hitCrate = idx;
+                             game.particles.push(new Particle(c.x, c.y, 'explosion'));
+                        }
+                    });
+                    if(hitCrate !== -1) {
+                        this.crates.splice(hitCrate, 1);
+                        this.projectiles.splice(i, 1);
+                        continue;
+                    }
+                }
+                
+                if (this.projectiles[i].life <= 0) this.projectiles.splice(i, 1);
+            }
+            for (let i = this.particles.length - 1; i >= 0; i--) {
+                this.particles[i].update();
+                if (this.particles[i].life <= 0) this.particles.splice(i, 1);
+            }
+            this.enemies.forEach(e => e.update());
+             for (let i = this.projectiles.length - 1; i >= 0; i--) {
+                 if(!this.projectiles[i]) continue;
+                 const p = this.projectiles[i];
+                 let hit = false;
+                 if(p.owner === 'player') {
+                     for(let e of this.enemies) {
+                         if(Math.hypot(p.x - e.x, p.y - e.y) < e.width + p.props.size) {
+                             e.damage(p.props.damage);
+                             game.particles.push(new Particle(p.x, p.y, 'smoke'));
+                             hit = true; break;
+                         }
+                     }
+                 } else if (p.owner === 'enemy') {
+                     // Dummy firing back
+                      if (Math.hypot(p.x - this.player.x, p.y - this.player.y) < 25) { 
+                        this.player.damage(5); // Low damage in tutorial
+                        hit = true;
+                    }
+                 }
+                 if(hit) this.projectiles.splice(i, 1);
+            }
+            
+            return;
+        }
+
+        if (this.state !== STATE.PLAYING) return;
+        
+        this.weather.update();
+        this.timeOfDay += this.timeSpeed;
+        if(this.timeOfDay >= 24) this.timeOfDay = 0;
+        const hour = Math.floor(this.timeOfDay);
+        const mins = Math.floor((this.timeOfDay - hour) * 60);
+        this.ui.time.innerText = `${hour.toString().padStart(2,'0')}:${mins.toString().padStart(2,'0')}`;
+
+        if (!this.player.dead) {
+            this.player.update();
+            this.camera.follow(this.player);
+            this.ui.updateCoords(this.player.x, this.player.y);
+            
+            if(Math.hypot(this.player.x, this.player.y) < 150) {
+                this.showNotify("Press 'B' for Base Services");
+            }
+            
+            // Crate Pickup
+            for(let i = this.crates.length - 1; i >= 0; i--) {
+                const c = this.crates[i];
+                c.update();
+                if(Math.hypot(c.x - this.player.x, c.y - this.player.y) < 40) {
+                    if(c.isRepair) {
+                        this.player.health = Math.min(this.player.health + 300, this.player.maxHealth);
+                        this.ui.updateHealth(this.player.health, this.player.maxHealth);
+                        this.showNotify("Ship Repaired +300 HP");
+                        this.spawnDamageText(this.player.x, this.player.y, "+300 HP", false);
+                    } else if(c.isQuest && this.contract) {
+                        this.completeContract();
+                    } else {
+                        this.addMoney(50, c.x, c.y);
+                    }
+                    this.crates.splice(i, 1);
+                }
+            }
+        }
+        
+        if(this.wingman && !this.wingman.dead) this.wingman.update();
+        
+        // Friendly Updates
+        this.friendlies.forEach(f => {
+            if(!f.dead) f.update();
+        });
+        
+        // Supply Ship Update
+        if(this.contract && this.contract.type === 'Escort' && this.contract.targetObj) {
+            const ship = this.contract.targetObj;
+            if(!ship.dead) {
+                ship.update();
+            }
+        }
+        
+        // Whirlpools
+        this.whirlpools.forEach(wp => wp.update());
+
+        // Wave Manager
+        this.waveTimer++;
+        if (this.waveTimer > 200 - (this.difficulty * 10)) {
+            if (this.enemies.length < 5 + this.difficulty) this.spawnEnemy();
+            if (this.obstacles.length < 20) this.spawnObstacle();
+            if (this.crates.length < 5) {
+                const a = Math.random() * Math.PI * 2;
+                const d = rnd(400, 1000);
+                this.crates.push(new Crate(this.player.x + Math.cos(a)*d, this.player.y + Math.sin(a)*d, false, Math.random() > 0.8));
+            }
+            
+            // Seagulls
+            if (Math.random() < 0.3) {
+                // Spawn particle around camera
+                const sx = this.camera.x + rnd(-canvas.width, canvas.width);
+                const sy = this.camera.y + rnd(-canvas.height, canvas.height);
+                // Limit particles
+                if(this.particles.length < 300) {
+                    this.particles.push(new Particle(sx, sy, 'seagull'));
+                }
+            }
+            
+            this.waveTimer = 0;
+            if (Math.random() < 0.1) this.difficulty += 0.5;
+        }
+
+        const cleanupDist = 3500;
+        this.enemies = this.enemies.filter(e => !e.dead && (e.isTarget || e.isBoss || e.isKraken || e.isSerpent || Math.hypot(e.x - this.player.x, e.y - this.player.y) < cleanupDist));
+        this.obstacles = this.obstacles.filter(o => Math.hypot(o.x - this.player.x, o.y - this.player.y) < cleanupDist);
+        this.crates = this.crates.filter(c => c.isQuest || Math.hypot(c.x - this.player.x, c.y - this.player.y) < cleanupDist);
+
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+            const p = this.projectiles[i];
+            p.update();
+            const distFromPlayer = Math.hypot(p.x - this.player.x, p.y - this.player.y);
+            
+            if (p.life <= 0 || (p.props.type !== 'mine' && distFromPlayer > 1500)) { 
+                this.projectiles.splice(i, 1); continue; 
+            }
+
+            let hit = false;
+            // Mine collision
+            if (p.props.type === 'mine') {
+                 for (let e of this.enemies) {
+                    if (Math.hypot(p.x - e.x, p.y - e.y) < e.width + 10) {
+                        e.damage(p.props.damage);
+                        game.particles.push(new Particle(p.x, p.y, 'explosion'));
+                        hit = true; break;
+                    }
+                }
+            }
+            // Standard Bullet collision
+            else if (p.owner === 'player') {
+                for (let e of this.enemies) {
+                    // Subs invincible if submerged
+                    if(e.isSub && !e.surfaced) continue;
+                    
+                    if (Math.hypot(p.x - e.x, p.y - e.y) < e.width + p.props.size) {
+                        e.damage(p.props.damage);
+                        if(p.props.type !== 'rail') hit = true; 
+                        this.particles.push(new Particle(p.x, p.y, 'smoke'));
+                        if(hit) break;
+                    }
+                }
+            } else if (p.owner === 'enemy') {
+                if (!game.player.dead && Math.hypot(p.x - game.player.x, p.y - game.player.y) < 25) { 
+                    game.player.damage(p.props.damage); hit = true;
+                }
+                if (game.wingman && !game.wingman.dead && Math.hypot(p.x - game.wingman.x, p.y - game.wingman.y) < 20) {
+                     game.wingman.damage(p.props.damage); hit = true;
+                }
+                // Hitting Supply Ship
+                if(game.contract && game.contract.type === 'Escort' && game.contract.targetObj && !game.contract.targetObj.dead) {
+                    const s = game.contract.targetObj;
+                    if (Math.hypot(p.x - s.x, p.y - s.y) < 40) {
+                        s.damage(p.props.damage); hit = true;
+                    }
+                }
+                // Hitting friendly turrets
+                game.friendlies.forEach(f => {
+                    if (!f.dead && Math.hypot(p.x - f.x, p.y - f.y) < 20) {
+                        f.damage(p.props.damage); hit = true;
+                    }
+                });
+            }
+            
+            if (!hit && p.props.type !== 'mine' && p.props.type !== 'rail') {
+                for (let o of this.obstacles) {
+                    if (Math.hypot(p.x - o.x, p.y - o.y) < o.radius) {
+                        hit = true; this.particles.push(new Particle(p.x, p.y, 'smoke')); break;
+                    }
+                }
+            }
+            if (hit) this.projectiles.splice(i, 1);
+        }
+
+        this.enemies.forEach(e => {
+            e.update();
+            if(!e.isWatchtower && !e.isKraken && !e.isSerpent && !(e.isSub && !e.surfaced)) {
+                game.obstacles.forEach(obs => {
+                    const dist = Math.hypot(e.x - obs.x, e.y - obs.y);
+                    if (dist < e.width + obs.radius) { e.vx *= -1; e.vy *= -1; }
+                });
+            }
+        });
+        
+        for (let i = this.debris.length - 1; i >= 0; i--) {
+            this.debris[i].update();
+            if(this.debris[i].life <= 0) this.debris.splice(i, 1);
+        }
+
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            this.particles[i].update();
+            if (this.particles[i].life <= 0) this.particles.splice(i, 1);
+        }
+        
+        for (let i = this.damageTexts.length - 1; i >= 0; i--) {
+            this.damageTexts[i].update();
+            if (this.damageTexts[i].life <= 0) this.damageTexts.splice(i, 1);
+        }
+    }
+
+    draw() {
+        let bg = '#001a2a'; // Deep ocean default
+        
+        // Dynamic water color based on "danger" distance from center (approx)
+        const distFromCenter = Math.hypot(this.player.x, this.player.y);
+        let waterColor = '#004060'; // Standard blue
+        
+        if (distFromCenter > 5000) waterColor = '#002200'; // Toxic Green deep
+        else if (distFromCenter > 3000) waterColor = '#2a002a'; // Purple deep
+        
+        const isNight = this.timeOfDay > 20 || this.timeOfDay < 5;
+        if (isNight) bg = '#000510';
+        else if (this.timeOfDay > 18 || this.timeOfDay < 6) bg = '#001a2a';
+        else bg = waterColor;
+        
+        if(this.weather.type === 'storm') bg = '#1a2b3c';
+        
+        // Deep water gradient
+        const grad = ctx.createLinearGradient(0,0,0,canvas.height);
+        grad.addColorStop(0, bg);
+        grad.addColorStop(1, '#000'); // Depth
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.save();
+        ctx.translate(-this.camera.x + canvas.width/2, -this.camera.y + canvas.height/2);
+
+        // --- Improved Parallax Waves ---
+        // Layer 1 (Slow, Deep)
+        ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        const waveGrid = 200;
+        let startX = Math.floor((this.camera.x - canvas.width/2)/waveGrid) * waveGrid;
+        let endX = startX + canvas.width + waveGrid;
+        let startY = Math.floor((this.camera.y - canvas.height/2)/waveGrid) * waveGrid;
+        let endY = startY + canvas.height + waveGrid;
+        
+        for(let x=startX; x<endX; x+=waveGrid) {
+            for(let y=startY; y<endY; y+=waveGrid) {
+                const move = (Date.now() / 4000) % (Math.PI*2);
+                const shift = Math.sin(move + x*0.005) * 20;
+                ctx.moveTo(x + shift, y);
+                ctx.quadraticCurveTo(x + 50 + shift, y - 20, x + 100 + shift, y);
+            }
+        }
+        ctx.stroke();
+
+        // Layer 2 (Faster, Surface)
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        startX = Math.floor((this.camera.x - canvas.width/2)/100) * 100;
+        endX = startX + canvas.width + 100;
+        startY = Math.floor((this.camera.y - canvas.height/2)/100) * 100;
+        endY = startY + canvas.height + 100;
+        
+        for(let x=startX; x<endX; x+=100) {
+            for(let y=startY; y<endY; y+=100) {
+                const offset = Math.sin(x * 0.01 + y * 0.01) * 20;
+                const move = (Date.now() / 1500) % (Math.PI*2);
+                const shift = Math.sin(move + x*0.01) * 10;
+                ctx.moveTo(x + offset + shift, y + offset);
+                ctx.quadraticCurveTo(x + offset + 20 + shift, y + offset - 5, x + offset + 40 + shift, y + offset);
+            }
+        }
+        ctx.stroke();
+        
+        // Objects
+        this.whirlpools.forEach(w => w.draw(ctx));
+        this.debris.forEach(d => d.draw(ctx));
+        this.base.draw(ctx);
+        this.obstacles.forEach(o => o.draw(ctx));
+        this.crates.forEach(c => c.draw(ctx));
+        
+        // Ships
+        if(this.contract && this.contract.type === 'Escort' && this.contract.targetObj && !this.contract.targetObj.dead) {
+            this.contract.targetObj.draw(ctx);
+        }
+        this.friendlies.forEach(f => f.draw(ctx));
+        this.particles.forEach(p => p.draw(ctx));
+        this.enemies.forEach(e => e.draw(ctx));
+        if(this.wingman && !this.wingman.dead) this.wingman.draw(ctx);
+        if (!this.player.dead) {
+            this.player.draw(ctx);
+            if(this.state === STATE.PLAYING || this.state === STATE.TUTORIAL) this.drawObjectiveArrow();
+        }
+        this.projectiles.forEach(p => p.draw(ctx));
+        
+        // Damage Texts (World Space)
+        this.damageTexts.forEach(t => t.draw(ctx));
+        
+        // Tutorial Target (World Space)
+        if(this.state === STATE.TUTORIAL && this.tutorialTarget && this.tutorialTarget.active) {
+            ctx.save();
+            ctx.translate(this.tutorialTarget.x, this.tutorialTarget.y);
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 3;
+            const pulse = 1 + Math.sin(Date.now() / 200) * 0.2;
+            ctx.scale(pulse, pulse);
+            ctx.beginPath();
+            ctx.arc(0, 0, this.tutorialTarget.r, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+            ctx.fill();
+            ctx.restore();
+        }
+        
+        ctx.restore();
+        
+        this.weather.draw(ctx, canvas.width, canvas.height);
+        
+        // Night Vignette
+        if(isNight || this.weather.type === 'storm') {
+            const grd = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 200, canvas.width/2, canvas.height/2, 800);
+            grd.addColorStop(0, "transparent");
+            grd.addColorStop(1, "rgba(0,0,0,0.85)");
+            ctx.fillStyle = grd;
+            ctx.fillRect(0,0,canvas.width, canvas.height);
+        }
+        
+        if (this.state === STATE.PLAYING || this.state === STATE.TUTORIAL) this.drawRadar();
+    }
+
+    loop() {
+        try {
+            this.update();
+            this.draw();
+        } catch (e) {
+            console.error("Game Loop Error:", e);
+        }
+        requestAnimationFrame(this.loop);
+    }
+
+    gameOver() {
+        this.state = STATE.GAMEOVER;
+        document.getElementById('game-over').style.display = 'block';
+        document.getElementById('final-score').innerText = "Final Earnings: $" + Math.floor(this.money);
+    }
+}
+
+// Start Game Logic (Fixed initialization)
+window.game = new Game();
+window.game.start();
+
+</script>
+</body>
+</html>

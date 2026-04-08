@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Velocity: HYPERDRIVE</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #020202;
+            font-family: 'Press Start 2P', cursive;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Scanline & CRT Effect */
+        body::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 3px, 3px 100%;
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        canvas { display: block; }
+
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            color: #fff;
+            text-shadow: 0 0 10px currentColor;
+            z-index: 100;
+        }
+
+        .hidden { display: none !important; }
+
+        h1 {
+            font-size: 48px;
+            margin-bottom: 10px;
+            color: #00f3ff;
+            text-shadow: 4px 4px 0px #ff00de;
+            animation: glitch 3s infinite;
+        }
+
+        @keyframes glitch {
+            0% { transform: translate(0); }
+            2% { transform: translate(-2px, 2px); }
+            4% { transform: translate(2px, -2px); }
+            6% { transform: translate(0); }
+            100% { transform: translate(0); }
+        }
+
+        .menu-box {
+            background: rgba(0, 0, 0, 0.85);
+            border: 2px solid #00f3ff;
+            padding: 20px;
+            pointer-events: auto;
+            max-width: 600px;
+            width: 90%;
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.3);
+        }
+
+        .rig-selector {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .rig-card {
+            border: 1px solid #555;
+            padding: 10px;
+            margin: 5px;
+            width: 30%;
+            min-width: 120px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .rig-card:hover, .rig-card.selected {
+            border-color: #ff00de;
+            background: rgba(255, 0, 222, 0.1);
+            transform: scale(1.05);
+        }
+
+        .rig-name { color: #fff; margin-bottom: 5px; font-size: 12px; }
+        .rig-stats { font-size: 8px; color: #aaa; line-height: 1.4; }
+
+        .btn {
+            background: #00f3ff;
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            font-family: inherit;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+            box-shadow: 4px 4px 0 #ff00de;
+            transition: transform 0.1s;
+        }
+        .btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #ff00de; }
+
+        #hud-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 10;
+        }
+
+        .hud-top {
+            position: absolute; top: 20px; left: 20px; right: 20px;
+            display: flex; justify-content: space-between;
+        }
+
+        #energy-bar-wrap {
+            width: 200px; height: 12px; background: #222; border: 1px solid #555;
+            margin-top: 5px; position: relative; skew: -10deg;
+        }
+        #energy-fill { width: 100%; height: 100%; background: #00f3ff; transition: width 0.1s; }
+        
+        #slowmo-hint {
+            position: absolute; bottom: 80px; width: 100%; text-align: center;
+            font-size: 10px; color: #00f3ff; opacity: 0.7; display: none;
+        }
+
+        /* Mobile controls overlay */
+        #mobile-controls {
+            position: absolute; bottom: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50;
+        }
+        .touch-zone {
+            position: absolute; bottom: 0; width: 50%; height: 100%; pointer-events: auto;
+        }
+        #left-zone { left: 0; }
+        #right-zone { right: 0; }
+    </style>
+</head>
+<body>
+
+    <div id="hud-container" class="hidden">
+        <div class="hud-top">
+            <div style="text-align: left;">
+                <div id="score-hud" style="font-size: 20px; color: #fff;">000000</div>
+                <div id="energy-bar-wrap"><div id="energy-fill"></div></div>
+            </div>
+            <div style="text-align: right;">
+                <div id="level-hud" style="color: #ff00de;">NEON CITY</div>
+                <div id="rig-hud" style="font-size: 10px; margin-top:5px; color:#888;">FLUX RIG</div>
+            </div>
+        </div>
+        <div id="slowmo-hint">HOLD [S] or [DOWN] FOR TIME WARP</div>
+    </div>
+
+    <div id="ui-layer">
+        <div id="menu-screen" class="menu-box">
+            <h1>NEON VELOCITY</h1>
+            <p style="color:#ff00de; letter-spacing: 2px; font-size: 10px; margin-bottom: 20px;">HYPERDRIVE UPDATE v3.0</p>
+            
+            <p style="font-size: 10px; margin-bottom: 10px;">SELECT YOUR RIG</p>
+            <div class="rig-selector">
+                <div class="rig-card selected" onclick="selectRig('FLUX')">
+                    <div class="rig-name">FLUX</div>
+                    <div class="rig-stats">BALANCED<br>Standard Grav<br>Standard Dash</div>
+                </div>
+                <div class="rig-card" onclick="selectRig('TITAN')">
+                    <div class="rig-name" style="color:#ff3333">TITAN</div>
+                    <div class="rig-stats">HEAVY<br>Start w/ Shield<br>Fast Falling</div>
+                </div>
+                <div class="rig-card" onclick="selectRig('GHOST')">
+                    <div class="rig-name" style="color:#00ff00">GHOST</div>
+                    <div class="rig-stats">AGILE<br>2x Score Mult<br>Weak Hull</div>
+                </div>
+            </div>
+
+            <button class="btn" onclick="startGame()">INITIATE</button>
+            <p style="font-size: 8px; color: #666; margin-top: 15px;">CONTROLS: SPACE/TAP to Flip. SHIFT to Dash. S/DOWN to Slow Time.</p>
+        </div>
+
+        <div id="game-over-screen" class="menu-box hidden">
+            <h1 style="color: #ff3333; font-size: 30px;">SIGNAL LOST</h1>
+            <p>SCORE: <span id="final-score" style="color: #fff">0</span></p>
+            <p style="font-size: 10px; margin-top: 10px;">RIG: <span id="final-rig">FLUX</span></p>
+            <br>
+            <button class="btn" onclick="showMenu()">SYSTEM REBOOT</button>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+(function() {
+    /** AUDIO SYSTEM - With Procedural Beat **/
+    const AudioSys = {
+        ctx: null,
+        beatTimer: null,
+        init: function() {
+            if (this.ctx) return;
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) {
+                    this.ctx = new AudioContext();
+                    this.setupCompressor();
+                }
+            } catch (e) { console.warn('Audio blocked'); }
+        },
+        setupCompressor: function() {
+            this.masterGain = this.ctx.createGain();
+            this.masterGain.gain.value = 0.5;
+            this.masterGain.connect(this.ctx.destination);
+        },
+        playTone: function(freq, type, duration, vol=0.1, slide=0) {
+            if (!this.ctx || this.ctx.state !== 'running') { if(this.ctx) this.ctx.resume(); else return; }
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            if (slide) osc.frequency.linearRampToValueAtTime(freq+slide, this.ctx.currentTime+duration);
+            gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime+duration);
+            osc.connect(gain); gain.connect(this.masterGain);
+            osc.start(); osc.stop(this.ctx.currentTime+duration);
+        },
+        // Procedural Beat
+        startMusic: function() {
+            if (!this.ctx) return;
+            let beat = 0;
+            if (this.beatTimer) clearInterval(this.beatTimer);
+            this.beatTimer = setInterval(() => {
+                if(gameState !== 'PLAYING') { clearInterval(this.beatTimer); return; }
+                const t = this.ctx.currentTime;
+                // Kick
+                if (beat % 4 === 0) {
+                    this.playTone(150, 'square', 0.1, 0.3, -100);
+                }
+                // Hi-hat
+                if (beat % 2 === 1) {
+                    this.playTone(800, 'sawtooth', 0.05, 0.05);
+                }
+                // Bass
+                if (beat % 8 === 0) {
+                    this.playTone(80, 'sine', 0.4, 0.2);
+                }
+                beat++;
+            }, 125); // ~120 BPM
+        },
+        playJump: function() { this.playTone(300, 'square', 0.1, 0.1, 100); },
+        playDash: function() { this.playTone(100, 'sawtooth', 0.2, 0.2, 300); },
+        playSlow: function() { this.playTone(400, 'sine', 0.5, 0.1, -300); },
+        playCrash: function() { this.playTone(100, 'sawtooth', 0.5, 0.4, -80); },
+        playCollect: function() { this.playTone(1200, 'sine', 0.1, 0.1); }
+    };
+
+    /** GAME ENGINE **/
+    let canvas, ctx, W, H;
+    let gameState = 'MENU';
+    let frames = 0;
+    let gameSpeed = 1;
+    let baseSpeed = 8;
+    let score = 0;
+    let displayScore = 0;
+    
+    // Rig Stats
+    const RIGS = {
+        'FLUX': { color: '#00f3ff', grav: 0.9, jump: 13, dashCost: 30, scoreMult: 1, hp: 1 },
+        'TITAN': { color: '#ff3333', grav: 1.4, jump: 15, dashCost: 20, scoreMult: 1, hp: 1, shield: true },
+        'GHOST': { color: '#00ff00', grav: 0.8, jump: 14, dashCost: 30, scoreMult: 2, hp: 1 }
+    };
+    let currentRig = 'FLUX';
+
+    // Game Objects
+    let player = {};
+    let obstacles = [];
+    let particles = [];
+    let bgLayers = [];
+    let slowMo = false;
+
+    // Background Layer Class
+    class CityLayer {
+        constructor(speedMult, color) {
+            this.speedMult = speedMult;
+            this.color = color;
+            this.buildings = [];
+            this.offset = 0;
+            // Init buildings
+            for(let i=0; i<20; i++) this.addBuilding(i * 100);
+        }
+        addBuilding(x) {
+            this.buildings.push({
+                x: x,
+                w: 50 + Math.random() * 100,
+                h: 100 + Math.random() * 300
+            });
+        }
+        update(speed) {
+            this.offset -= speed * this.speedMult;
+            if (this.buildings[0].x + this.buildings[0].w + this.offset < -200) {
+                let last = this.buildings[this.buildings.length-1];
+                this.buildings.shift();
+                this.buildings.push({
+                    x: last.x + last.w + 10 + Math.random() * 20,
+                    w: 50 + Math.random() * 100,
+                    h: 50 + Math.random() * 200
+                });
+            }
+        }
+        draw(ctx, H) {
+            ctx.fillStyle = this.color;
+            ctx.save();
+            ctx.translate(this.offset, 0);
+            for(let b of this.buildings) {
+                // Ceiling
+                ctx.fillRect(b.x, 0, b.w, b.h * 0.4); 
+                // Floor
+                ctx.fillRect(b.x, H - b.h * 0.4, b.w, b.h * 0.4);
+            }
+            ctx.restore();
+        }
+    }
+
+    // Player Class
+    class Player {
+        constructor() {
+            this.stats = RIGS[currentRig];
+            this.x = W * 0.2;
+            this.y = H / 2;
+            this.radius = 12;
+            this.dy = 0;
+            this.flipped = false;
+            this.grounded = false;
+            this.energy = 100;
+            this.shield = this.stats.shield || false;
+            this.dashing = false;
+            this.dashTimer = 0;
+            this.trailTimer = 0;
+        }
+
+        flip() {
+            if (!this.grounded && !this.dashing) return;
+            this.flipped = !this.flipped;
+            this.grounded = false;
+            this.dy = this.flipped ? -this.stats.jump : this.stats.jump;
+            AudioSys.playJump();
+            spawnParticles(this.x, this.y, this.stats.color, 10);
+        }
+
+        dash() {
+            if (this.energy >= this.stats.dashCost && !this.dashing) {
+                this.dashing = true;
+                this.energy -= this.stats.dashCost;
+                this.dashTimer = 15;
+                AudioSys.playDash();
+                spawnParticles(this.x, this.y, '#fff', 20);
+                shakeScreen(5);
+            }
+        }
+
+        update() {
+            // Slow Motion Regen logic
+            if (slowMo && this.energy > 1) {
+                this.energy -= 0.8;
+                gameSpeed = 0.3;
+            } else {
+                gameSpeed = 1;
+                if(this.energy < 100) this.energy += (currentRig === 'GHOST' ? 0.4 : 0.2);
+                slowMo = false; // Auto cancel if out of energy
+            }
+
+            // Dash Logic
+            if (this.dashing) {
+                this.dashTimer--;
+                this.dy = 0; // Anti-grav during dash
+                if (this.dashTimer <= 0) this.dashing = false;
+                spawnParticles(this.x, this.y, '#fff', 1);
+            } else {
+                // Gravity
+                this.dy += this.flipped ? -this.stats.grav : this.stats.grav;
+                this.y += this.dy;
+            }
+
+            // Bounds
+            let floorY = H - 50 - this.radius;
+            let ceilY = 50 + this.radius;
+            this.grounded = false;
+
+            if (!this.flipped && this.y >= floorY) {
+                this.y = floorY; this.dy = 0; this.grounded = true;
+            } else if (this.flipped && this.y <= ceilY) {
+                this.y = ceilY; this.dy = 0; this.grounded = true;
+            }
+
+            // Visuals
+            document.getElementById('energy-fill').style.width = this.energy + '%';
+        }
+
+        draw(ctx) {
+            // Shield
+            if (this.shield) {
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.radius+8, 0, Math.PI*2); ctx.stroke();
+            }
+            
+            ctx.shadowBlur = this.dashing ? 30 : 15;
+            ctx.shadowColor = this.stats.color;
+            ctx.fillStyle = this.dashing ? '#fff' : '#fff';
+            
+            // Draw Player Shape based on rig
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            if(this.dashing) ctx.scale(1.2, 0.8);
+            
+            ctx.beginPath();
+            if (currentRig === 'TITAN') ctx.rect(-12, -12, 24, 24); // Square
+            else if (currentRig === 'GHOST') { ctx.moveTo(0,-15); ctx.lineTo(12,10); ctx.lineTo(-12,10); } // Triangle
+            else ctx.arc(0, 0, 12, 0, Math.PI*2); // Circle
+            
+            ctx.fill();
+            ctx.restore();
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    // Particle Sys
+    function spawnParticles(x, y, color, count) {
+        for(let i=0; i<count; i++) {
+            particles.push({
+                x: x, y: y, color: color,
+                vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10,
+                life: 1.0
+            });
+        }
+    }
+
+    // Obstacles
+    class Obstacle {
+        constructor() {
+            this.w = 40; this.h = 60 + Math.random() * 60;
+            this.x = W + 100;
+            this.markedForDeletion = false;
+            this.type = Math.random() > 0.8 ? 'MINE' : 'WALL';
+            
+            this.isOnCeiling = Math.random() > 0.5;
+            this.y = this.isOnCeiling ? 50 : H - 50 - this.h;
+
+            if (this.type === 'MINE') {
+                this.w = 30; this.h = 30;
+                this.y = H/2 + (Math.random()-0.5) * (H/2);
+            }
+        }
+        update(speed) {
+            this.x -= speed;
+            if (this.x < -100) this.markedForDeletion = true;
+            
+            if (this.type === 'MINE') {
+                // Tracking
+                if (Math.abs(player.x - this.x) < 300) {
+                    if (player.y > this.y) this.y += 1;
+                    else this.y -= 1;
+                }
+            }
+        }
+        draw(ctx) {
+            ctx.fillStyle = '#ff00de';
+            ctx.shadowBlur = 10; ctx.shadowColor = '#ff00de';
+            
+            if (this.type === 'MINE') {
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y - 15);
+                ctx.lineTo(this.x + 15, this.y);
+                ctx.lineTo(this.x, this.y + 15);
+                ctx.lineTo(this.x - 15, this.y);
+                ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(this.x-5, this.y-5, 10, 10);
+            } else {
+                ctx.fillRect(this.x, this.y, this.w, this.h);
+                // Detail
+                ctx.fillStyle = '#000';
+                ctx.fillRect(this.x+5, this.y+5, this.w-10, this.h-10);
+                ctx.fillStyle = '#ff00de';
+                ctx.fillRect(this.x+15, this.y+15, this.w-30, this.h-30);
+            }
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    // Global Functions for HTML access
+    window.selectRig = function(rig) {
+        currentRig = rig;
+        document.querySelectorAll('.rig-card').forEach(el => el.classList.remove('selected'));
+        // Find element by text content (simplified) or event
+        // Re-rendering selection visually
+        const cards = document.querySelectorAll('.rig-card');
+        if(rig==='FLUX') cards[0].classList.add('selected');
+        if(rig==='TITAN') cards[1].classList.add('selected');
+        if(rig==='GHOST') cards[2].classList.add('selected');
+    };
+
+    window.startGame = function() {
+        document.getElementById('menu-screen').classList.add('hidden');
+        document.getElementById('hud-container').classList.remove('hidden');
+        document.getElementById('rig-hud').innerText = currentRig + " RIG";
+        AudioSys.init();
+        AudioSys.startMusic();
+        resetGame();
+        gameState = 'PLAYING';
+    };
+
+    window.showMenu = function() {
+        document.getElementById('game-over-screen').classList.add('hidden');
+        document.getElementById('menu-screen').classList.remove('hidden');
+        gameState = 'MENU';
+    };
+
+    function resetGame() {
+        player = new Player();
+        obstacles = [];
+        particles = [];
+        score = 0;
+        frames = 0;
+        baseSpeed = 8;
+        bgLayers = [
+            new CityLayer(0.2, '#110011'),
+            new CityLayer(0.5, '#220022')
+        ];
+    }
+
+    let shakeAmt = 0;
+    function shakeScreen(amt) { shakeAmt = amt; }
+
+    function loop() {
+        requestAnimationFrame(loop);
+        if (!canvas) return;
+
+        // Resize check
+        if (W !== window.innerWidth || H !== window.innerHeight) {
+            W = window.innerWidth; H = window.innerHeight;
+            canvas.width = W; canvas.height = H;
+        }
+
+        // Apply shake
+        ctx.save();
+        if (shakeAmt > 0) {
+            ctx.translate((Math.random()-0.5)*shakeAmt, (Math.random()-0.5)*shakeAmt);
+            shakeAmt *= 0.9;
+            if (shakeAmt < 0.5) shakeAmt = 0;
+        }
+
+        // Clear
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(0, 0, W, H);
+
+        if (gameState === 'PLAYING') {
+            frames++;
+            let actualSpeed = baseSpeed * gameSpeed;
+            score += (actualSpeed * 0.1) * RIGS[currentRig].scoreMult;
+            displayScore = Math.floor(score);
+
+            // BG
+            bgLayers.forEach(l => { l.update(actualSpeed); l.draw(ctx, H); });
+
+            // Spawning
+            if (frames % Math.floor(60/gameSpeed) === 0 && Math.random() > 0.5) {
+                // Ensure min distance
+                if (obstacles.length === 0 || W - obstacles[obstacles.length-1].x > 200) {
+                    obstacles.push(new Obstacle());
+                }
+            }
+            if (frames % 500 === 0) baseSpeed += 0.5;
+
+            // Player
+            player.update();
+            player.draw(ctx);
+
+            // Obstacles
+            obstacles.forEach(o => {
+                o.update(actualSpeed);
+                o.draw(ctx);
+                
+                // Collision
+                let dx = Math.abs((player.x) - (o.x + o.w/2));
+                let dy = Math.abs((player.y) - (o.y + o.h/2));
+                
+                // Simple hit box
+                if (dx < o.w/2 + 10 && dy < o.h/2 + 10) {
+                    if (player.dashing) {
+                        o.markedForDeletion = true;
+                        spawnParticles(o.x, o.y, '#fff', 15);
+                        shakeScreen(10);
+                        AudioSys.playCrash();
+                    } else if (player.shield) {
+                        player.shield = false;
+                        o.markedForDeletion = true;
+                        AudioSys.playCrash();
+                        shakeScreen(5);
+                    } else {
+                        // Game Over
+                        gameState = 'GAMEOVER';
+                        AudioSys.playCrash();
+                        document.getElementById('hud-container').classList.add('hidden');
+                        document.getElementById('game-over-screen').classList.remove('hidden');
+                        document.getElementById('final-score').innerText = displayScore;
+                        document.getElementById('final-rig').innerText = currentRig;
+                        document.getElementById('final-rig').style.color = RIGS[currentRig].color;
+                    }
+                }
+            });
+            obstacles = obstacles.filter(o => !o.markedForDeletion);
+
+            // Particles
+            particles.forEach(p => {
+                p.x += p.vx * gameSpeed; p.y += p.vy * gameSpeed; p.life -= 0.05;
+                ctx.globalAlpha = p.life; ctx.fillStyle = p.color;
+                ctx.beginPath(); ctx.arc(p.x, p.y, 2 + Math.random()*2, 0, Math.PI*2); ctx.fill();
+            });
+            ctx.globalAlpha = 1.0;
+
+            document.getElementById('score-hud').innerText = displayScore.toString().padStart(6, '0');
+
+        } else {
+            // Draw BG in menu too
+            bgLayers.forEach(l => l.draw(ctx, H));
+        }
+
+        // Draw Floor/Ceiling
+        ctx.fillStyle = '#00f3ff';
+        ctx.fillRect(0, 0, W, 50); ctx.fillRect(0, H-50, W, 50);
+        
+        ctx.restore();
+    }
+
+    // Input Handling
+    function handleInput(e) {
+        if (gameState !== 'PLAYING') return;
+        
+        // Time Warp (Hold)
+        if (e.type === 'keydown' && (e.code === 'KeyS' || e.code === 'ArrowDown')) slowMo = true;
+        if (e.type === 'keyup' && (e.code === 'KeyS' || e.code === 'ArrowDown')) slowMo = false;
+
+        // Dash (Shift or Right Click)
+        if ((e.type === 'keydown' && e.shiftKey) || (e.type === 'mousedown' && e.button === 2)) {
+            player.dash();
+            return;
+        }
+
+        // Flip (Space or Click)
+        if ((e.type === 'keydown' && e.code === 'Space') || (e.type === 'mousedown' && e.button === 0) || e.type === 'touchstart') {
+            player.flip();
+        }
+    }
+
+    // Init
+    window.addEventListener('load', () => {
+        canvas = document.getElementById('gameCanvas');
+        ctx = canvas.getContext('2d');
+        W = window.innerWidth; H = window.innerHeight;
+        canvas.width = W; canvas.height = H;
+        
+        window.addEventListener('keydown', handleInput);
+        window.addEventListener('keyup', handleInput);
+        window.addEventListener('mousedown', handleInput);
+        window.addEventListener('touchstart', (e) => { e.preventDefault(); handleInput(e); }, {passive:false});
+        window.addEventListener('contextmenu', e => e.preventDefault());
+
+        resetGame(); // Init BG for menu
+        loop();
+    });
+
+})();
+</script>
+</body>
+</html>

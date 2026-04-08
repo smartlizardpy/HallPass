@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S N A G: NEON ASCENSION</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+        :root {
+            --bg-color: #020205;
+            --p1-color: #00ffff;
+            --p2-color: #ff00ff;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'VT323', monospace;
+            color: white;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 100px rgba(0,0,0,0.9);
+            border: 2px solid #222;
+            cursor: none;
+            overflow: hidden;
+            background: #000;
+        }
+
+        #game-container.sudden-death {
+            border: 2px solid #ff0000;
+            box-shadow: 0 0 120px rgba(255, 0, 0, 0.6);
+            animation: pulse-border 0.2s infinite alternate;
+        }
+
+        @keyframes pulse-border {
+            from { border-color: #ff0000; }
+            to { border-color: #ffaaaa; }
+        }
+
+        canvas {
+            display: block;
+            /* Crucial for the neon look - allows additive blending to pop against dark bg */
+            background-color: var(--bg-color); 
+        }
+
+        .scanlines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.2),
+                rgba(0, 0, 0, 0.2) 1px,
+                transparent 1px,
+                transparent 2px
+            );
+            pointer-events: none;
+            z-index: 10;
+            opacity: 0.7;
+        }
+
+        .ui-layer {
+            position: absolute;
+            top: 30px;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 60px;
+            box-sizing: border-box;
+            font-size: 42px;
+            z-index: 5;
+            text-shadow: 0 0 10px currentColor;
+            pointer-events: none;
+            font-weight: bold;
+        }
+
+        #p1-score { color: var(--p1-color); }
+        #p2-score { color: var(--p2-color); }
+
+        #title-screen, #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(5px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            text-align: center;
+        }
+
+        h1 { 
+            font-size: 120px; 
+            margin: 0; 
+            letter-spacing: 20px; 
+            color: white; 
+            text-transform: uppercase; 
+            text-shadow: 0 0 20px rgba(255,255,255,0.8), 4px 4px 0px #ff00ff, -4px -4px 0px #00ffff;
+            animation: glitch-text 3s infinite;
+        }
+
+        @keyframes glitch-text {
+            0% { transform: translate(0,0); }
+            98% { transform: translate(0,0); }
+            99% { transform: translate(-2px, 2px); }
+            100% { transform: translate(2px, -2px); }
+        }
+
+        h2 { font-size: 40px; color: #888; margin-top: -20px; letter-spacing: 10px; text-shadow: 0 0 10px #888;}
+        p { font-size: 24px; color: #aaa; margin-top: 20px; text-shadow: 0 0 5px #aaa;}
+        
+        .controls { 
+            margin-top: 40px; 
+            font-size: 24px; 
+            color: #ccc; 
+            border: 1px solid #444; 
+            padding: 20px 40px; 
+            background: rgba(20,20,20,0.8); 
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            border-radius: 4px;
+        }
+        
+        .blink { animation: blinker 0.5s linear infinite alternate; margin-top: 50px; color: #ffff00; font-size: 30px; }
+        @keyframes blinker { from { opacity: 1; } to { opacity: 0.3; } }
+        
+        .hidden { display: none !important; }
+        
+        .hud-text {
+            position: absolute;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            pointer-events: none;
+            z-index: 15;
+            text-shadow: 4px 4px 0px black, 0 0 20px currentColor;
+        }
+
+        #sd-alert {
+            top: 40%;
+            color: #ff0044;
+            font-size: 80px;
+            font-weight: bold;
+            display: none;
+            text-shadow: 0 0 30px #ff0000;
+        }
+
+        #event-alert { top: 25%; display: none; }
+        .event-header { color: #ffff00; font-size: 24px; letter-spacing: 5px; margin-bottom: 5px; }
+        .event-name { color: white; font-size: 60px; font-weight: bold; text-transform: uppercase; text-shadow: 0 0 20px white; }
+
+        #map-name {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            font-size: 20px;
+            color: #555;
+            pointer-events: none;
+            z-index: 5;
+            letter-spacing: 2px;
+        }
+        
+        .active-pop { display: block; animation: popIn 2.5s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes popIn {
+            0% { transform: translate(-50%, -50%) scale(0.0); opacity: 0; }
+            15% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1.0); opacity: 0; }
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div class="ui-layer">
+        <div id="p1-score">CYAN: 0</div>
+        <div id="p2-score">MAGENTA: 0</div>
+    </div>
+    
+    <div class="hud-text" id="sd-alert">SUDDEN DEATH</div>
+    
+    <div class="hud-text" id="event-alert">
+        <div class="event-header">⚠ SYSTEM SURGE ⚠</div>
+        <div class="event-name" id="event-name-display">ICE FLOOR</div>
+    </div>
+
+    <div id="map-name">MAP: UNKNOWN</div>
+    
+    <div class="scanlines"></div>
+
+    <div id="title-screen">
+        <h1>S N A G</h1>
+        <h2>NEON ASCENSION</h2>
+        <div class="controls">
+            <span style="color:var(--p1-color); text-shadow: 0 0 10px var(--p1-color);">P1: WASD + SHIFT (Dash)</span>
+            <br><br>
+            <span style="color:var(--p2-color); text-shadow: 0 0 10px var(--p2-color);">P2: ARROWS + ENTER (Dash)</span>
+        </div>
+        <p>V5.0: Final Polish Edition</p>
+        <p class="blink">PRESS SPACE TO ASCEND</p>
+    </div>
+
+    <div id="game-over-screen" class="hidden">
+        <h1 id="winner-text">PLAYER 1 WINS</h1>
+        <p>FINAL SCORE</p>
+        <p class="blink">PRESS SPACE TO REMATCH</p>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+</div>
+
+<script>
+/**
+ * ENGINE: S N A G v5.0 (NEON ASCENSION)
+ * The definitive version.
+ * - Additive Blending (Neon Mode)
+ * - Ribbon Trails
+ * - Physics Particles (Bounce & Gravity)
+ * - Chromatic Aberration Glitch FX
+ * - Audio Low Pass Filter support
+ */
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// --- AUDIO SYSTEM V2 ---
+const Audio = {
+    ctx: null,
+    masterGain: null,
+    filter: null, // Low pass for hitstop effect
+    init: function() {
+        if (!this.ctx) {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            this.masterGain = this.ctx.createGain();
+            this.filter = this.ctx.createBiquadFilter();
+            this.filter.type = 'lowpass';
+            this.filter.frequency.value = 22000; // Open
+            
+            this.masterGain.connect(this.filter);
+            this.filter.connect(this.ctx.destination);
+        }
+    },
+    setMuffle: function(isMuffled) {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        // Smoothly transition filter
+        if (isMuffled) {
+            this.filter.frequency.setTargetAtTime(400, now, 0.05);
+        } else {
+            this.filter.frequency.setTargetAtTime(22000, now, 0.1);
+        }
+    },
+    play: function(type) {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.masterGain); // Connect to master chain
+
+        const now = this.ctx.currentTime;
+        
+        switch (type) {
+            case 'dash':
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(800, now + 0.15);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc.start(now); osc.stop(now + 0.15);
+                break;
+            case 'impact':
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(100, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc.start(now); osc.stop(now + 0.15);
+                break;
+            case 'score':
+                osc.type = 'sine';
+                // Arcade coin sound
+                osc.frequency.setValueAtTime(1200, now);
+                osc.frequency.setValueAtTime(1600, now + 0.1);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.4);
+                osc.start(now); osc.stop(now + 0.4);
+                break;
+            case 'powerup':
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.linearRampToValueAtTime(800, now + 0.1);
+                osc.frequency.linearRampToValueAtTime(1200, now + 0.2);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.4);
+                osc.start(now); osc.stop(now + 0.4);
+                break;
+             case 'clash':
+                // White noise burst logic roughly simulated
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(50, now);
+                osc.frequency.linearRampToValueAtTime(20, now + 0.4);
+                gain.gain.setValueAtTime(0.6, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc.start(now); osc.stop(now + 0.4);
+                break;
+             case 'countdown':
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(440, now);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+                break;
+             case 'go':
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(880, now);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.5);
+                osc.start(now); osc.stop(now + 0.5);
+                break;
+             case 'win':
+                 // Arpeggio
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.setValueAtTime(554, now + 0.1); // C#
+                osc.frequency.setValueAtTime(659, now + 0.2); // E
+                osc.frequency.setValueAtTime(880, now + 0.3); // A
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0, now + 1.0);
+                osc.start(now); osc.stop(now + 1.0);
+                break;
+        }
+    }
+};
+
+// --- CONSTANTS ---
+const BASE_FRICTION = 0.88; // Slightly slicker for feel
+const ICE_FRICTION = 0.985;
+const BASE_ACCEL = 1.2;
+const DASH_POWER = 14;
+
+const BASE_ROPE_LENGTH = 200;
+const SD_ROPE_LENGTH = 140; 
+const SHORT_ROPE_LENGTH = 100;
+
+const BASE_STIFFNESS = 0.12; 
+const HIGH_STIFFNESS = 0.35;
+
+const BASE_DASH_COOLDOWN = 50;
+const TURBO_DASH_COOLDOWN = 10;
+
+const PLAYER_RADIUS = 16;
+const STUN_DURATION = 90; 
+const PERFECT_DASH_FRAMES = 12; // Tighter window
+
+// --- STATE ---
+let gameState = 'TITLE';
+let winner = '';
+let isSuddenDeath = false;
+let currentMapName = "";
+let frameCount = 0;
+let hitStop = 0; 
+let countdownTimer = 0;
+let countdownNum = 3;
+
+// Camera State
+let camX = 0;
+let camY = 0;
+let camZoom = 1;
+
+// Inputs
+const keys = {
+    w: false, a: false, s: false, d: false, Shift: false,
+    ArrowUp: false, ArrowLeft: false, ArrowDown: false, ArrowRight: false, Enter: false,
+    Space: false
+};
+
+// --- EVENTS ---
+let eventTimer = 0;
+let eventActive = false;
+let currentEvent = null; 
+let eventTimeRemaining = 0;
+const EVENT_INTERVAL = 1500; // 25s
+const EVENT_DURATION = 500; // 8.3s
+
+const EVENTS = [
+    { type: 'ICE', name: '❄️ ZERO FRICTION ❄️', color: '#00ffff' },
+    { type: 'SHORT', name: '⛓️ SHORT TETHER ⛓️', color: '#ff0000' },
+    { type: 'TENSION', name: '⚡ MAX TENSION ⚡', color: '#ffff00' },
+    { type: 'TURBO', name: '🚀 HYPER SPEED 🚀', color: '#00ff00' }
+];
+
+// --- CLASSES ---
+
+class Hazard {
+    constructor(x, y, w, h, props = {}) {
+        this.baseX = x; this.baseY = y;
+        this.x = x; this.y = y;
+        this.w = w; this.h = h;
+        
+        this.moveType = props.moveType || 'STATIC'; 
+        this.speedX = props.speedX || 0;
+        this.speedY = props.speedY || 0;
+        this.range = props.range || 0;
+        this.offset = props.offset || 0;
+        
+        this.prevX = x; this.prevY = y;
+        this.dx = 0; this.dy = 0;
+    }
+
+    update() {
+        this.prevX = this.x;
+        this.prevY = this.y;
+
+        if (this.moveType === 'LINEAR') {
+            let val = Math.sin((frameCount * 0.02) + this.offset) * this.range;
+            if (this.speedX !== 0) this.x = this.baseX + val * this.speedX;
+            if (this.speedY !== 0) this.y = this.baseY + val * this.speedY;
+        }
+        
+        this.dx = this.x - this.prevX;
+        this.dy = this.y - this.prevY;
+    }
+
+    draw() {
+        // Neon Style Hazard
+        ctx.fillStyle = "#111";
+        ctx.fillRect(this.x, this.y, this.w, this.h);
+        
+        ctx.strokeStyle = "#444";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(this.x, this.y, this.w, this.h);
+        
+        // Internal Grid
+        ctx.fillStyle = "rgba(255,255,255,0.03)";
+        ctx.beginPath();
+        for(let i=0; i<this.w; i+=10) { ctx.moveTo(this.x+i, this.y); ctx.lineTo(this.x+i, this.y+this.h); }
+        for(let i=0; i<this.h; i+=10) { ctx.moveTo(this.x, this.y+i); ctx.lineTo(this.x+this.w, this.y+i); }
+        ctx.fill();
+        ctx.stroke(); // Faint grid
+        
+        // Glow Edge
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = "#333";
+        ctx.strokeRect(this.x, this.y, this.w, this.h);
+        ctx.shadowBlur = 0;
+    }
+}
+
+class PowerUp {
+    constructor() {
+        this.active = false;
+        this.x = 0; this.y = 0;
+        this.type = 'NONE';
+        this.spawnTimer = 600;
+        this.floatOffset = Math.random() * 100;
+    }
+
+    update() {
+        if (!this.active) {
+            this.spawnTimer--;
+            if (this.spawnTimer <= 0) this.spawn();
+        } else {
+            this.floatOffset += 0.1;
+            this.y += Math.sin(this.floatOffset) * 0.2;
+            
+            players.forEach(p => {
+                let dx = this.x - p.pos.x;
+                let dy = this.y - p.pos.y;
+                if (Math.sqrt(dx*dx + dy*dy) < PLAYER_RADIUS + 15) this.collect(p);
+            });
+        }
+    }
+
+    spawn() {
+        let valid = false;
+        let attempts = 0;
+        while(!valid && attempts < 50) {
+            attempts++;
+            this.x = 60 + Math.random() * (canvas.width - 120);
+            this.y = 60 + Math.random() * (canvas.height - 120);
+            valid = true;
+            for(let h of hazards) {
+                 let buffer = 50;
+                 let hminX = h.baseX - (h.moveType === 'LINEAR' ? Math.abs(h.speedX*h.range) : 0);
+                 let hmaxX = h.baseX + h.w + (h.moveType === 'LINEAR' ? Math.abs(h.speedX*h.range) : 0);
+                 let hminY = h.baseY - (h.moveType === 'LINEAR' ? Math.abs(h.speedY*h.range) : 0);
+                 let hmaxY = h.baseY + h.h + (h.moveType === 'LINEAR' ? Math.abs(h.speedY*h.range) : 0);
+                 if (this.x > hminX - buffer && this.x < hmaxX + buffer &&
+                    this.y > hminY - buffer && this.y < hmaxY + buffer) valid = false;
+            }
+        }
+        if(valid) {
+            this.type = Math.random() > 0.5 ? 'IRON' : 'GHOST';
+            this.active = true;
+            createExplosion(this.x, this.y, "white", 10);
+            Audio.play('powerup');
+        } else {
+            this.spawnTimer = 60;
+        }
+    }
+
+    collect(player) {
+        this.active = false;
+        this.spawnTimer = 900; 
+        Audio.play('powerup');
+        if (this.type === 'IRON') {
+            player.applyPowerUp('IRON', 300); 
+            showFloatingText("IRON MASS", player.pos.x, player.pos.y - 40, "#00ff00");
+        } else {
+            player.applyPowerUp('GHOST', 240); 
+            showFloatingText("PHASE SHIFT", player.pos.x, player.pos.y - 40, "#aa00ff");
+        }
+        screenshake = 5;
+        createExplosion(this.x, this.y, this.type === 'IRON' ? '#00ff00' : '#aa00ff', 15);
+    }
+
+    draw() {
+        if (!this.active) return;
+        let color = this.type === 'IRON' ? '#00ff00' : '#aa00ff';
+        
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.floatOffset * 0.05);
+        
+        ctx.fillStyle = color;
+        ctx.shadowColor = color; 
+        ctx.shadowBlur = 20;
+        
+        if (this.type === 'IRON') ctx.fillRect(-10, -10, 20, 20);
+        else {
+            ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
+        }
+        
+        ctx.strokeStyle = "white"; 
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-12, -12, 24, 24); // Box effect
+        
+        ctx.shadowBlur = 0;
+        ctx.restore();
+        
+        ctx.fillStyle = "white"; ctx.font = "bold 14px Arial"; ctx.textAlign = "center"; 
+        ctx.fillText(this.type[0], this.x, this.y + 5);
+    }
+}
+
+class Player {
+    constructor(x, y, color, id) {
+        this.pos = { x: x, y: y };
+        this.vel = { x: 0, y: 0 };
+        this.color = color;
+        this.id = id;
+        this.score = 0;
+        this.stunTimer = 0;
+        this.dashCooldown = 0;
+        this.dashActiveFrames = 0; 
+        this.trailPoints = []; // New Ribbon Trail System
+        this.powerUpType = 'NONE';
+        this.powerUpTimer = 0;
+    }
+
+    applyPowerUp(type, duration) {
+        this.powerUpType = type;
+        this.powerUpTimer = duration;
+        createExplosion(this.pos.x, this.pos.y, type === 'IRON' ? '#00ff00' : '#aa00ff', 20);
+    }
+
+    update() {
+        if (this.powerUpTimer > 0) {
+            this.powerUpTimer--;
+            if (this.powerUpTimer <= 0) this.powerUpType = 'NONE';
+        }
+
+        if (this.stunTimer > 0) {
+            this.stunTimer--;
+            this.vel.x *= 0.92; 
+            this.vel.y *= 0.92;
+            this.handleWallCollision();
+            return;
+        }
+
+        let currentCooldownMax = BASE_DASH_COOLDOWN;
+        if (isSuddenDeath) currentCooldownMax = 20;
+        if (eventActive && currentEvent.type === 'TURBO') currentCooldownMax = TURBO_DASH_COOLDOWN;
+
+        if (this.dashCooldown > 0) this.dashCooldown--;
+        if (this.dashActiveFrames > 0) this.dashActiveFrames--;
+
+        let currentFriction = BASE_FRICTION;
+        if (eventActive && currentEvent.type === 'ICE') currentFriction = ICE_FRICTION;
+        if (this.powerUpType === 'IRON') currentFriction = 0.82;
+
+        this.vel.x *= currentFriction;
+        this.vel.y *= currentFriction;
+
+        let ax = 0; let ay = 0;
+        let accel = BASE_ACCEL;
+        if (eventActive && currentEvent.type === 'ICE') accel = BASE_ACCEL * 0.2; // Less control on ice
+        if (this.powerUpType === 'IRON') accel = BASE_ACCEL * 0.8; 
+
+        if (this.id === 1) {
+            if (keys.w) ay -= accel; if (keys.s) ay += accel; if (keys.a) ax -= accel; if (keys.d) ax += accel;
+            if (keys.Shift && this.dashCooldown === 0 && (ax !== 0 || ay !== 0)) this.dash(ax, ay, currentCooldownMax);
+        } else {
+            if (keys.ArrowUp) ay -= accel; if (keys.ArrowDown) ay += accel; if (keys.ArrowLeft) ax -= accel; if (keys.ArrowRight) ax += accel;
+            if (keys.Enter && this.dashCooldown === 0 && (ax !== 0 || ay !== 0)) this.dash(ax, ay, currentCooldownMax);
+        }
+
+        this.vel.x += ax; this.vel.y += ay;
+        this.pos.x += this.vel.x; this.pos.y += this.vel.y;
+
+        // Ribbon Trail Logic
+        if (frameCount % 2 === 0 || this.dashActiveFrames > 0) {
+            this.trailPoints.unshift({x: this.pos.x, y: this.pos.y});
+            if (this.trailPoints.length > 20) this.trailPoints.pop();
+        }
+
+        this.handleWallCollision();
+    }
+
+    dash(ax, ay, cooldownTime) {
+        let len = Math.sqrt(ax*ax + ay*ay);
+        if (len > 0) {
+            let power = DASH_POWER;
+            if (this.powerUpType === 'IRON') power = DASH_POWER * 0.7; 
+            this.vel.x += (ax/len) * power;
+            this.vel.y += (ay/len) * power;
+            this.dashCooldown = cooldownTime; 
+            this.dashActiveFrames = PERFECT_DASH_FRAMES; 
+            screenshake = 5;
+            createExplosion(this.pos.x, this.pos.y, "#fff", 5);
+            Audio.play('dash');
+        }
+    }
+
+    handleWallCollision() {
+        let boundsIndent = isSuddenDeath ? 50 : PLAYER_RADIUS; 
+        const BUFFER = 0.5;
+
+        // Map Bounds
+        if (this.pos.x < boundsIndent) this.resolveCollision(boundsIndent + BUFFER, this.pos.y, 1, 0);
+        if (this.pos.x > canvas.width - boundsIndent) this.resolveCollision(canvas.width - boundsIndent - BUFFER, this.pos.y, -1, 0);
+        if (this.pos.y < boundsIndent) this.resolveCollision(this.pos.x, boundsIndent + BUFFER, 0, 1);
+        if (this.pos.y > canvas.height - boundsIndent) this.resolveCollision(this.pos.x, canvas.height - boundsIndent - BUFFER, 0, -1);
+        
+        // Hazard Collision
+        if (this.powerUpType !== 'GHOST') {
+            hazards.forEach(h => {
+                if (
+                    this.pos.x > h.x - PLAYER_RADIUS &&
+                    this.pos.x < h.x + h.w + PLAYER_RADIUS &&
+                    this.pos.y > h.y - PLAYER_RADIUS &&
+                    this.pos.y < h.y + h.h + PLAYER_RADIUS
+                ) {
+                    let hcx = h.x + h.w/2;
+                    let hcy = h.y + h.h/2;
+                    let dx = this.pos.x - hcx;
+                    let dy = this.pos.y - hcy;
+                    let widthCheck = (h.w/2) + PLAYER_RADIUS;
+                    let heightCheck = (h.h/2) + PLAYER_RADIUS;
+
+                    if (Math.abs(dx) / widthCheck > Math.abs(dy) / heightCheck) {
+                        let resolveX = (dx > 0) ? h.x + h.w + PLAYER_RADIUS + BUFFER : h.x - PLAYER_RADIUS - BUFFER;
+                        this.resolveCollision(resolveX, this.pos.y, dx > 0 ? 1 : -1, 0);
+                        this.pos.x += h.dx;
+                    } else {
+                        let resolveY = (dy > 0) ? h.y + h.h + PLAYER_RADIUS + BUFFER : h.y - PLAYER_RADIUS - BUFFER;
+                        this.resolveCollision(this.pos.x, resolveY, 0, dy > 0 ? 1 : -1);
+                        this.pos.y += h.dy;
+                    }
+                }
+            });
+        }
+    }
+    
+    resolveCollision(tx, ty, nx, ny) {
+        this.pos.x = tx;
+        this.pos.y = ty;
+
+        if (this.dashActiveFrames > 0) {
+            // TECH
+            screenshake = 10;
+            hitStop = 4; 
+            if (nx !== 0) this.vel.x = -this.vel.x * 1.5;
+            if (ny !== 0) this.vel.y = -this.vel.y * 1.5;
+            createExplosion(this.pos.x, this.pos.y, "#ffffff", 20); 
+            showFloatingText("TECH!", this.pos.x, this.pos.y - 30, "#fff");
+            Audio.play('impact');
+            this.dashActiveFrames = 0; 
+        } else {
+            let impact = Math.sqrt(this.vel.x*this.vel.x + this.vel.y*this.vel.y);
+            
+            // Friction/Slide
+            if (impact < 5) {
+                if (nx !== 0) this.vel.x = 0;
+                if (ny !== 0) this.vel.y = 0;
+            } else {
+                if (nx !== 0) this.vel.x *= -0.5;
+                if (ny !== 0) this.vel.y *= -0.5;
+            }
+            
+            if (this.powerUpType === 'IRON') return;
+
+            if (this.stunTimer === 0 && impact > 7) {
+                this.stunTimer = STUN_DURATION;
+                screenshake = 8;
+                hitStop = 4;
+                createExplosion(this.pos.x, this.pos.y, "yellow", 10);
+                showFloatingText("STUN!", this.pos.x, this.pos.y - 30, "yellow");
+                Audio.play('impact');
+            }
+        }
+    }
+
+    draw() {
+        // RIBBON TRAIL RENDERER
+        if (this.trailPoints.length > 1) {
+            ctx.beginPath();
+            ctx.moveTo(this.trailPoints[0].x, this.trailPoints[0].y);
+            for(let i=1; i<this.trailPoints.length; i++) {
+                ctx.lineTo(this.trailPoints[i].x, this.trailPoints[i].y);
+            }
+            
+            let tColor = this.color;
+            if (this.powerUpType === 'IRON') tColor = '#00ff00';
+            if (this.powerUpType === 'GHOST') tColor = '#aa00ff';
+            
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = PLAYER_RADIUS;
+            ctx.strokeStyle = tColor;
+            ctx.globalAlpha = 0.3;
+            ctx.stroke();
+            ctx.lineWidth = PLAYER_RADIUS / 2;
+            ctx.globalAlpha = 0.6;
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+        }
+
+        let color = this.color;
+        if (this.stunTimer > 0) color = (Math.floor(Date.now() / 50) % 2 === 0) ? "#fff" : "#555";
+        if (this.dashActiveFrames > 0) color = "#ffffff"; 
+        if (this.powerUpType === 'IRON') color = '#00ff00';
+        if (this.powerUpType === 'GHOST') ctx.globalAlpha = 0.5;
+
+        // GLOW
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = color;
+        
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y, PLAYER_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        
+        ctx.globalAlpha = 1.0;
+        
+        // Inner detail
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y, PLAYER_RADIUS * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        
+        if (this.stunTimer > 0) {
+            ctx.fillStyle = "yellow";
+            ctx.font = "20px VT323";
+            ctx.textAlign = "center";
+            ctx.fillText("!", this.pos.x, this.pos.y - 25);
+        }
+
+        // Dash Ring
+        if (this.dashCooldown === 0 || isSuddenDeath || (eventActive && currentEvent.type === 'TURBO')) {
+            ctx.strokeStyle = (eventActive && currentEvent.type === 'TURBO') ? "#ffff00" : (isSuddenDeath ? "rgba(255,0,0,0.5)" : "rgba(255,255,255,0.5)");
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(this.pos.x, this.pos.y, PLAYER_RADIUS + 6, 0, Math.PI*2);
+            ctx.stroke();
+        }
+    }
+}
+
+class Rope {
+    constructor() {
+        this.nodes = []; 
+        this.nodeCount = 20; 
+        this.tension = 0;
+        this.reset();
+    }
+
+    reset() {
+        this.nodes = [];
+        let p1 = players[0];
+        let p2 = players[1];
+        let dx = (p2.pos.x - p1.pos.x) / this.nodeCount;
+        let dy = (p2.pos.y - p1.pos.y) / this.nodeCount;
+        for(let i=0; i<=this.nodeCount; i++) {
+            this.nodes.push({ x: p1.pos.x + dx * i, y: p1.pos.y + dy * i, oldX: p1.pos.x + dx * i, oldY: p1.pos.y + dy * i, anchored: false });
+        }
+    }
+
+    update() {
+        let p1 = players[0];
+        let p2 = players[1];
+        
+        this.nodes[0].x = p1.pos.x;
+        this.nodes[0].y = p1.pos.y;
+        this.nodes[this.nodeCount].x = p2.pos.x;
+        this.nodes[this.nodeCount].y = p2.pos.y;
+
+        for (let i = 1; i < this.nodeCount; i++) {
+            let node = this.nodes[i];
+            let friction = node.anchored ? 0.5 : 0.92; // Slightly better air friction
+            let vx = (node.x - node.oldX) * friction; 
+            let vy = (node.y - node.oldY) * friction;
+            node.oldX = node.x;
+            node.oldY = node.y;
+            node.x += vx;
+            node.y += vy;
+            node.anchored = false; 
+        }
+
+        let currentStiffness = BASE_STIFFNESS;
+        if (eventActive && currentEvent.type === 'TENSION') currentStiffness = HIGH_STIFFNESS;
+        let currentLen = isSuddenDeath ? SD_ROPE_LENGTH : BASE_ROPE_LENGTH;
+        if (eventActive && currentEvent.type === 'SHORT') currentLen = SHORT_ROPE_LENGTH;
+
+        let segLen = currentLen / this.nodeCount;
+        for (let iter = 0; iter < 25; iter++) { 
+            for (let i = 0; i < this.nodeCount; i++) {
+                let n1 = this.nodes[i];
+                let n2 = this.nodes[i+1];
+                let dx = n2.x - n1.x;
+                let dy = n2.y - n1.y;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+                let diff = segLen - dist;
+                if (dist === 0) continue;
+                let percent = (diff / dist) / 2;
+                let offsetX = dx * percent;
+                let offsetY = dy * percent;
+                if (i !== 0) { n1.x -= offsetX; n1.y -= offsetY; }
+                if (i + 1 !== this.nodeCount) { n2.x += offsetX; n2.y += offsetY; }
+            }
+        }
+        
+        let dxTotal = p2.pos.x - p1.pos.x;
+        let dyTotal = p2.pos.y - p1.pos.y;
+        let distTotal = Math.sqrt(dxTotal*dxTotal + dyTotal*dyTotal);
+        
+        this.tension = Math.max(0, (distTotal - currentLen) / 100);
+
+        if (distTotal > currentLen) {
+            let springForce = (distTotal - currentLen) * currentStiffness;
+            if (this.tension > 0.8) {
+                springForce *= 1.5; 
+                screenshake = Math.max(screenshake, 2); 
+                if (Math.random() > 0.8) createExplosion((p1.pos.x + p2.pos.x)/2, (p1.pos.y + p2.pos.y)/2, "orange", 1);
+            }
+            let fx = (dxTotal / distTotal) * springForce;
+            let fy = (dyTotal / distTotal) * springForce;
+
+            let p1Mass = p1.powerUpType === 'IRON' ? 3.0 : 1.0;
+            let p2Mass = p2.powerUpType === 'IRON' ? 3.0 : 1.0;
+
+            p1.vel.x += fx / p1Mass;
+            p1.vel.y += fy / p1Mass;
+            p2.vel.x -= fx / p2Mass;
+            p2.vel.y -= fy / p2Mass;
+        }
+
+        for (let i = 1; i < this.nodeCount; i++) {
+            let n = this.nodes[i];
+            hazards.forEach(h => {
+                 if (n.x > h.x - 4 && n.x < h.x + h.w + 4 && n.y > h.y - 4 && n.y < h.y + h.h + 4) {
+                     let cx = h.x + h.w/2;
+                     let cy = h.y + h.h/2;
+                     n.anchored = true;
+                     if (Math.abs(n.x - cx) > Math.abs(n.y - cy)) n.x = (n.x > cx) ? h.x + h.w + 4 : h.x - 4;
+                     else n.y = (n.y > cy) ? h.y + h.h + 4 : h.y - 4;
+                     
+                     if (h.dx !== 0) n.x += h.dx;
+                     if (h.dy !== 0) n.y += h.dy;
+                 }
+            });
+        }
+    }
+
+    draw() {
+        let rColor = "white";
+        let shadowCol = "white";
+        if (this.tension > 0.3) { rColor = "#ffcc00"; shadowCol = "#ffaa00"; } 
+        if (this.tension > 0.7) { rColor = "#ff0000"; shadowCol = "#ff0000"; }
+        if (eventActive && currentEvent.type === 'TENSION') { rColor = "#ffff00"; shadowCol = "yellow"; }
+
+        ctx.strokeStyle = rColor;
+        ctx.lineWidth = this.tension > 0.7 ? 4 : 2;
+        ctx.lineCap = "round";
+        
+        let shake = this.tension > 0.5 ? 2 : 0;
+        if (eventActive && currentEvent.type === 'TENSION') shake = 4;
+
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = shadowCol;
+
+        ctx.beginPath();
+        ctx.moveTo(this.nodes[0].x, this.nodes[0].y);
+        for (let i = 1; i <= this.nodeCount; i++) {
+            // Cubic bezier could be nice, but linear with high node count feels tighter for this game
+            let nx = this.nodes[i].x + (Math.random() - 0.5) * shake;
+            let ny = this.nodes[i].y + (Math.random() - 0.5) * shake;
+            ctx.lineTo(nx, ny);
+        }
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+    }
+}
+
+class Goal {
+    constructor(fixedOwner) {
+        this.owner = fixedOwner;
+        this.color = this.owner === 1 ? '#00ffff' : '#ff00ff';
+        this.pulse = 0;
+        this.reset();
+    }
+
+    reset() {
+        let valid = false;
+        let attempts = 0;
+        let boundsIndent = isSuddenDeath ? 80 : 40;
+
+        while (!valid && attempts < 50) {
+            attempts++;
+            this.x = boundsIndent + Math.random() * (canvas.width - boundsIndent*2);
+            this.y = boundsIndent + Math.random() * (canvas.height - boundsIndent*2);
+            valid = true;
+            for(let h of hazards) {
+                 let buffer = 40;
+                 let hminX = h.baseX - (h.moveType === 'LINEAR' ? Math.abs(h.speedX*h.range) : 0);
+                 let hmaxX = h.baseX + h.w + (h.moveType === 'LINEAR' ? Math.abs(h.speedX*h.range) : 0);
+                 let hminY = h.baseY - (h.moveType === 'LINEAR' ? Math.abs(h.speedY*h.range) : 0);
+                 let hmaxY = h.baseY + h.h + (h.moveType === 'LINEAR' ? Math.abs(h.speedY*h.range) : 0);
+                 
+                 if (this.x > hminX - buffer && this.x < hmaxX + buffer &&
+                    this.y > hminY - buffer && this.y < hmaxY + buffer) valid = false;
+            }
+            if (Math.abs(this.x - canvas.width/2) < 80 && Math.abs(this.y - canvas.height/2) < 80) valid = false;
+        }
+
+        if (!valid) {
+            this.x = canvas.width / 2;
+            this.y = canvas.height / 2 - 100;
+        }
+
+        createExplosion(this.x, this.y, this.color, 15);
+    }
+
+    update() {
+        this.pulse += 0.08;
+        let p = players[this.owner - 1];
+        let dx = this.x - p.pos.x;
+        let dy = this.y - p.pos.y;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist < PLAYER_RADIUS + 15) {
+            p.score++;
+            screenshake = 8;
+            hitStop = 6;
+            createExplosion(this.x, this.y, this.color, 30);
+            createExplosion(this.x, this.y, "white", 10);
+            updateScores();
+            Audio.play('score');
+            checkWinCondition();
+            this.reset();
+        }
+    }
+
+    draw() {
+        let offset = Math.sin(this.pulse) * 6;
+        ctx.fillStyle = this.color;
+        
+        // Glowy Core
+        ctx.shadowColor = this.color; 
+        ctx.shadowBlur = 20;
+        
+        ctx.beginPath();
+        // Diamond shape
+        ctx.moveTo(this.x, this.y - 15 - offset);
+        ctx.lineTo(this.x + 15 + offset, this.y);
+        ctx.lineTo(this.x, this.y + 15 + offset);
+        ctx.lineTo(this.x - 15 - offset, this.y);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Inner Stroke
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "black"; ctx.font = "bold 20px Arial"; ctx.textAlign = "center";
+        ctx.fillText(this.owner === 1 ? "1" : "2", this.x, this.y + 7);
+    }
+}
+
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        let angle = Math.random() * Math.PI * 2;
+        let speed = Math.random() * 6 + 2;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+        this.life = 1.0;
+        this.decay = Math.random() * 0.03 + 0.01;
+        this.size = Math.random() * 4 + 2;
+        this.gravity = 0.2;
+    }
+    update() {
+        this.vy += this.gravity;
+        this.x += this.vx;
+        this.y += this.vy;
+        
+        // Bounce off floor
+        if (this.y > canvas.height) {
+            this.y = canvas.height;
+            this.vy *= -0.6;
+        }
+
+        this.life -= this.decay;
+    }
+    draw() {
+        ctx.globalAlpha = this.life;
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.size, this.size);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+// --- GLOBALS ---
+let players = [];
+let rope;
+let hazards = []; 
+let goals = []; 
+let particles = [];
+let floatingTexts = [];
+let powerUp;
+let screenshake = 0;
+
+function createExplosion(x, y, color, count) {
+    for(let i=0; i<count; i++) particles.push(new Particle(x, y, color));
+}
+
+function showFloatingText(text, x, y, color) {
+    floatingTexts.push({text, x, y, color, life: 1.0});
+}
+
+function generateMap() {
+    hazards = [];
+    const maps = ['CLASSIC', 'PISTONS', 'TRAFFIC'];
+    const selected = maps[Math.floor(Math.random() * maps.length)];
+    currentMapName = selected;
+    document.getElementById('map-name').innerText = "MAP: " + selected;
+
+    if (selected === 'CLASSIC') {
+        hazards.push(new Hazard(canvas.width/2 - 25, canvas.height/2 - 75, 50, 150)); 
+        hazards.push(new Hazard(100, 100, 80, 80)); 
+        hazards.push(new Hazard(canvas.width - 180, 100, 80, 80)); 
+        hazards.push(new Hazard(100, canvas.height - 180, 80, 80)); 
+        hazards.push(new Hazard(canvas.width - 180, canvas.height - 180, 80, 80)); 
+        hazards.push(new Hazard(0, canvas.height/2 - 30, 40, 60)); 
+        hazards.push(new Hazard(canvas.width - 40, canvas.height/2 - 30, 40, 60)); 
+    } 
+    else if (selected === 'PISTONS') {
+        hazards.push(new Hazard(canvas.width/2 - 40, canvas.height/2 - 40, 80, 80)); 
+        hazards.push(new Hazard(0, 150, 60, 300, { moveType: 'LINEAR', speedX: 1, range: 100, offset: 0 }));
+        hazards.push(new Hazard(canvas.width - 60, 150, 60, 300, { moveType: 'LINEAR', speedX: -1, range: 100, offset: 0 }));
+    }
+    else if (selected === 'TRAFFIC') {
+        hazards.push(new Hazard(100, 100, 60, 400)); 
+        hazards.push(new Hazard(canvas.width - 160, 100, 60, 400)); 
+        hazards.push(new Hazard(canvas.width/2 - 30, 100, 60, 60, { moveType: 'LINEAR', speedY: 1, range: 150, offset: 0 }));
+        hazards.push(new Hazard(canvas.width/2 - 30, 400, 60, 60, { moveType: 'LINEAR', speedY: -1, range: 150, offset: Math.PI }));
+    }
+}
+
+function initGame() {
+    Audio.init(); 
+    generateMap();
+    
+    players = [
+        new Player(200, canvas.height/2, '#00ffff', 1),
+        new Player(canvas.width - 200, canvas.height/2, '#ff00ff', 2)
+    ];
+    rope = new Rope();
+    goals = [new Goal(1), new Goal(2)];
+    powerUp = new PowerUp();
+    
+    isSuddenDeath = false;
+    eventActive = false;
+    eventTimer = 0;
+    frameCount = 0;
+    countdownTimer = 180; 
+    countdownNum = 3;
+    camX = 0; camY = 0; camZoom = 1;
+    
+    document.getElementById('game-container').classList.remove('sudden-death');
+    document.getElementById('sd-alert').style.display = 'none';
+    
+    updateScores();
+    
+    gameState = 'COUNTDOWN';
+    document.getElementById('title-screen').classList.add('hidden');
+    document.getElementById('game-over-screen').classList.add('hidden');
+}
+
+function updateScores() {
+    document.getElementById('p1-score').innerText = 'CYAN: ' + players[0].score;
+    document.getElementById('p2-score').innerText = 'MAGENTA: ' + players[1].score;
+}
+
+function checkWinCondition() {
+    if (players[0].score >= 4 && players[1].score >= 4 && !isSuddenDeath) {
+        startSuddenDeath();
+    }
+    if (players[0].score >= 5) { winner = 'CYAN'; endGame(); } 
+    else if (players[1].score >= 5) { winner = 'MAGENTA'; endGame(); }
+}
+
+function startSuddenDeath() {
+    isSuddenDeath = true;
+    document.getElementById('game-container').classList.add('sudden-death');
+    document.getElementById('sd-alert').style.display = 'block';
+    screenshake = 20;
+    players[0].vel.x = -10;
+    players[1].vel.x = 10;
+    Audio.play('clash');
+}
+
+function endGame() {
+    gameState = 'GAMEOVER';
+    document.getElementById('winner-text').innerText = winner + " WINS!";
+    document.getElementById('winner-text').style.color = winner === 'CYAN' ? '#00ffff' : '#ff00ff';
+    document.getElementById('game-over-screen').classList.remove('hidden');
+    Audio.play('win');
+    // Confetti
+    for(let i=0; i<100; i++) {
+        let col = Math.random() > 0.5 ? '#00ffff' : '#ff00ff';
+        createExplosion(canvas.width/2, canvas.height/2, col, 1);
+    }
+}
+
+// --- EVENT SYSTEM ---
+function updateEvents() {
+    if (gameState !== 'PLAYING') return;
+    if (eventActive) {
+        eventTimeRemaining--;
+        if (eventTimeRemaining <= 0) endEvent();
+    } else {
+        eventTimer++;
+        if (eventTimer > EVENT_INTERVAL) triggerEvent();
+    }
+}
+
+function triggerEvent() {
+    eventActive = true;
+    eventTimeRemaining = EVENT_DURATION;
+    currentEvent = EVENTS[Math.floor(Math.random() * EVENTS.length)];
+    document.getElementById('event-name-display').innerText = currentEvent.name;
+    const alertBox = document.getElementById('event-alert');
+    alertBox.style.display = 'none'; 
+    void alertBox.offsetWidth; 
+    alertBox.style.display = 'block';
+    alertBox.classList.add('active-pop');
+    screenshake = 15;
+    Audio.play('clash');
+}
+
+function endEvent() {
+    eventActive = false;
+    currentEvent = null;
+    eventTimer = 0;
+    document.getElementById('event-alert').style.display = 'none';
+}
+
+// --- CAMERA ---
+function updateCamera() {
+    if (gameState !== 'PLAYING') {
+        camZoom = 1; camX = 0; camY = 0;
+        return;
+    }
+    // Zoom out based on player distance
+    let dist = Math.sqrt(Math.pow(players[0].pos.x - players[1].pos.x, 2) + Math.pow(players[0].pos.y - players[1].pos.y, 2));
+    let targetZoom = 1;
+    if (dist > 500) targetZoom = 0.9; 
+    else if (dist < 150) targetZoom = 1.05; 
+
+    camZoom += (targetZoom - camZoom) * 0.05;
+
+    // Center midpoint
+    let midX = (players[0].pos.x + players[1].pos.x) / 2;
+    let midY = (players[0].pos.y + players[1].pos.y) / 2;
+    
+    let targetX = (canvas.width/2 - midX) * 0.1;
+    let targetY = (canvas.height/2 - midY) * 0.1;
+
+    camX += (targetX - camX) * 0.1;
+    camY += (targetY - camY) * 0.1;
+}
+
+// --- MAIN LOOP ---
+
+function update() {
+    // AUDIO FILTER LOGIC FOR HITSTOP
+    if (hitStop > 0) Audio.setMuffle(true);
+    else Audio.setMuffle(false);
+
+    if (hitStop > 0) {
+        hitStop--;
+        return;
+    }
+
+    if (screenshake > 0) screenshake *= 0.9;
+    if (screenshake < 0.5) screenshake = 0;
+    frameCount++;
+
+    if (gameState === 'COUNTDOWN') {
+        countdownTimer--;
+        if (countdownTimer % 60 === 0 && countdownTimer > 0) Audio.play('countdown');
+        if (countdownTimer <= 0) {
+            gameState = 'PLAYING';
+            Audio.play('go');
+        }
+        return;
+    }
+
+    if (gameState === 'PLAYING') {
+        updateCamera();
+        updateEvents();
+        hazards.forEach(h => h.update());
+        players.forEach(p => p.update());
+        rope.update();
+        goals.forEach(g => g.update()); 
+        powerUp.update();
+
+        // Dash Clash Check
+        if (players[0].dashActiveFrames > 0 && players[1].dashActiveFrames > 0) {
+             let dx = players[0].pos.x - players[1].pos.x;
+             let dy = players[0].pos.y - players[1].pos.y;
+             if (Math.sqrt(dx*dx + dy*dy) < PLAYER_RADIUS * 3) {
+                 screenshake = 40;
+                 hitStop = 15;
+                 showFloatingText("CLASH!!", (players[0].pos.x+players[1].pos.x)/2, players[0].pos.y-50, "white");
+                 // Massive Knockback
+                 players[0].vel.x = dx * 3; players[0].vel.y = dy * 3;
+                 players[1].vel.x = -dx * 3; players[1].vel.y = -dy * 3;
+                 players[0].dashActiveFrames = 0;
+                 players[1].dashActiveFrames = 0;
+                 Audio.play('clash');
+                 
+                 // Particle Burst
+                 createExplosion((players[0].pos.x+players[1].pos.x)/2, (players[0].pos.y+players[1].pos.y)/2, "#fff", 30);
+             }
+        }
+        
+        if (isSuddenDeath && Math.random() > 0.9) screenshake += 2;
+    }
+    
+    particles.forEach((p, i) => {
+        p.update();
+        if (p.life <= 0) particles.splice(i, 1);
+    });
+    
+    floatingTexts.forEach((t, i) => {
+        t.y -= 1;
+        t.life -= 0.02;
+        if (t.life <= 0) floatingTexts.splice(i, 1);
+    });
+}
+
+function draw() {
+    // 1. CLEAR
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg-color');
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    
+    // 2. CAMERA & SHAKE
+    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.scale(camZoom, camZoom);
+    ctx.translate(-canvas.width/2 + camX, -canvas.height/2 + camY);
+
+    if (screenshake > 0) {
+        // CHROMATIC ABERRATION SIMULATION: DRAW RED CHANNEL OFFSET
+        if (screenshake > 5) {
+            ctx.translate((Math.random() - 0.5) * screenshake * 2, (Math.random() - 0.5) * screenshake * 2);
+            ctx.globalAlpha = 0.5;
+            ctx.fillStyle = "#ff0000"; // Red Tint
+            // Just draw hazards as a glitch layer
+            hazards.forEach(h => h.draw());
+            ctx.globalAlpha = 1.0;
+        }
+        ctx.translate((Math.random() - 0.5) * screenshake, (Math.random() - 0.5) * screenshake);
+    }
+
+    // 3. SWITCH TO NEON MODE
+    ctx.globalCompositeOperation = 'lighter'; // ADDITIVE BLENDING
+
+    // Dynamic Grid
+    ctx.strokeStyle = "rgba(40, 40, 60, 0.2)";
+    ctx.lineWidth = 1;
+    for(let i=0; i<canvas.width; i+=40) {
+        ctx.beginPath();
+        for(let j=0; j<canvas.height; j+=40) {
+            let x = i; let y = j;
+            if (gameState === 'PLAYING') {
+                players.forEach(p => {
+                    let dx = x - p.pos.x; let dy = y - p.pos.y;
+                    let d = Math.sqrt(dx*dx + dy*dy);
+                    if (d < 120) {
+                        let force = (120 - d) / 120;
+                        x -= dx * force * 0.3;
+                        y -= dy * force * 0.3;
+                    }
+                });
+            }
+            if (j===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        }
+        ctx.stroke();
+    }
+
+    if (isSuddenDeath) {
+        ctx.fillStyle = "rgba(255, 0, 0, 0.1)";
+        ctx.fillRect(0, 0, 50, canvas.height);
+        ctx.fillRect(canvas.width-50, 0, 50, canvas.height);
+        ctx.fillRect(0, 0, canvas.width, 50);
+        ctx.fillRect(0, canvas.height-50, canvas.width, 50);
+        ctx.strokeStyle = "red"; ctx.lineWidth=3;
+        ctx.strokeRect(50, 50, canvas.width-100, canvas.height-100);
+    }
+    
+    // Event Tint
+    if (eventActive) {
+        ctx.fillStyle = currentEvent.color;
+        ctx.globalAlpha = 0.05;
+        ctx.fillRect(0,0, canvas.width, canvas.height);
+        ctx.globalAlpha = 1.0;
+    }
+
+    // Draw Game Objects
+    // Note: Hazards are usually drawn normally, but in 'lighter' mode they will glow if colors match
+    hazards.forEach(h => h.draw());
+
+    if (gameState === 'PLAYING' || gameState === 'COUNTDOWN' || gameState === 'GAMEOVER') {
+        powerUp.draw();
+        goals.forEach(g => g.draw()); 
+        rope.draw();
+        players.forEach(p => p.draw());
+        particles.forEach(p => p.draw());
+        
+        // Text
+        ctx.globalCompositeOperation = 'source-over'; // Switch back for crisp text
+        floatingTexts.forEach(t => {
+            ctx.globalAlpha = t.life;
+            ctx.fillStyle = t.color;
+            ctx.font = "bold 24px VT323";
+            ctx.fillText(t.text, t.x, t.y);
+        });
+        ctx.globalAlpha = 1.0;
+    }
+
+    // Countdown UI
+    if (gameState === 'COUNTDOWN') {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = "white";
+        ctx.font = "120px VT323";
+        ctx.textAlign = "center";
+        let num = Math.ceil(countdownTimer / 60);
+        ctx.fillText(num, canvas.width/2 - camX, canvas.height/2 - camY);
+    }
+
+    ctx.restore();
+}
+
+function loop(timestamp) {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+// --- INPUT ---
+window.addEventListener('keydown', e => {
+    if(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(e.code) > -1) e.preventDefault();
+    if (e.code === 'Space') { keys.Space = true; if (gameState === 'TITLE' || gameState === 'GAMEOVER') initGame(); }
+    
+    // Case-insensitive WASD
+    if (e.key.toLowerCase() === 'w') keys.w = true;
+    if (e.key.toLowerCase() === 'a') keys.a = true;
+    if (e.key.toLowerCase() === 's') keys.s = true;
+    if (e.key.toLowerCase() === 'd') keys.d = true;
+    
+    if (e.code === 'ShiftLeft') keys.Shift = true;
+    if (e.code === 'ArrowUp') keys.ArrowUp = true;
+    if (e.code === 'ArrowLeft') keys.ArrowLeft = true;
+    if (e.code === 'ArrowDown') keys.ArrowDown = true;
+    if (e.code === 'ArrowRight') keys.ArrowRight = true;
+    if (e.code === 'Enter') keys.Enter = true;
+});
+
+window.addEventListener('keyup', e => {
+    if (e.code === 'Space') keys.Space = false;
+    
+    if (e.key.toLowerCase() === 'w') keys.w = false;
+    if (e.key.toLowerCase() === 'a') keys.a = false;
+    if (e.key.toLowerCase() === 's') keys.s = false;
+    if (e.key.toLowerCase() === 'd') keys.d = false;
+    
+    if (e.code === 'ShiftLeft') keys.Shift = false;
+    if (e.code === 'ArrowUp') keys.ArrowUp = false;
+    if (e.code === 'ArrowLeft') keys.ArrowLeft = false;
+    if (e.code === 'ArrowDown') keys.ArrowDown = false;
+    if (e.code === 'ArrowRight') keys.ArrowRight = false;
+    if (e.code === 'Enter') keys.Enter = false;
+});
+
+requestAnimationFrame(loop);
+
+</script>
+</body>
+</html>

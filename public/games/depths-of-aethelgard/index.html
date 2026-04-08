@@ -1,0 +1,2438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>The Depths of Aethelgard: Remastered</title>
+    <style>
+        :root {
+            --bg-color: #050505;
+            --ui-bg: rgba(0, 0, 0, 0.8);
+            --accent: #c3073f;
+            --text: #ffffff;
+            --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            overflow: hidden;
+            font-family: var(--font-main);
+            color: var(--text);
+            touch-action: none;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+        }
+
+        canvas {
+            image-rendering: pixelated;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            background: #0b0b0d;
+        }
+
+        /* UI Overlays */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 900px;
+            margin: 0 auto;
+            text-shadow: 2px 2px 0 #000;
+            position: relative;
+            z-index: 10;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.9), rgba(0,0,0,0));
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .stats-cluster { display: flex; flex-direction: column; gap: 5px; }
+        .bar-container { width: 220px; height: 18px; background: #111; border: 2px solid #333; position: relative; border-radius: 4px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+        
+        .hp-bar { 
+            width: 100%; height: 100%; 
+            background: linear-gradient(90deg, #c0392b, #e74c3c); 
+            box-shadow: 0 0 10px rgba(231, 76, 60, 0.4);
+            transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
+        }
+        
+        .xp-bar { width: 220px; height: 6px; background: #111; border: 1px solid #333; margin-top: 2px; border-radius: 2px; overflow: hidden; }
+        .xp-fill { height: 100%; background: linear-gradient(90deg, #f39c12, #f1c40f); width: 0%; transition: width 0.5s; }
+        
+        .weapon-display { text-align: right; }
+        .weapon-name { font-weight: bold; color: #f1c40f; font-size: 1.3rem; letter-spacing: 1px; text-transform: uppercase; text-shadow: 0 0 10px rgba(241, 196, 15, 0.3); }
+
+        /* BOSS BAR */
+        #boss-hud {
+            position: absolute;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60%;
+            max-width: 600px;
+            opacity: 0;
+            transition: opacity 0.5s;
+            pointer-events: none;
+        }
+        
+        .boss-name {
+            text-align: center;
+            color: #e74c3c;
+            font-size: 1.2rem;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-bottom: 5px;
+            text-shadow: 0 0 10px #000;
+            font-weight: bold;
+        }
+
+        .boss-bar-bg {
+            width: 100%; height: 12px;
+            background: #111;
+            border: 2px solid #500;
+            position: relative;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 0 15px rgba(192, 57, 43, 0.3);
+        }
+
+        .boss-bar-fill {
+            width: 100%; height: 100%;
+            background: linear-gradient(90deg, #900, #f00);
+            transition: width 0.1s;
+        }
+
+        /* Menus */
+        .menu {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: radial-gradient(circle at center, rgba(10,10,12,0.95), #000);
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            pointer-events: auto; z-index: 100;
+            text-align: center;
+            backdrop-filter: blur(5px);
+        }
+
+        .hidden { display: none !important; }
+
+        h1 { font-size: 4rem; margin-bottom: 5px; color: var(--accent); text-transform: uppercase; letter-spacing: 8px; text-shadow: 0 0 30px var(--accent); }
+        h2 { color: #95a5a6; margin-bottom: 40px; letter-spacing: 4px; font-size: 1.2rem; text-transform: uppercase; }
+        
+        button {
+            background: rgba(0,0,0,0.5);
+            color: var(--text);
+            border: 1px solid #444;
+            padding: 15px 50px;
+            font-size: 1.2rem;
+            font-family: var(--font-main);
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+        button:hover { background: var(--accent); color: #000; border-color: var(--accent); box-shadow: 0 0 30px var(--accent); transform: scale(1.05); }
+
+        .arena-btn {
+            border-color: #f1c40f;
+            color: #f1c40f;
+        }
+        .arena-btn:hover {
+            background: #f1c40f;
+            color: #000;
+            box-shadow: 0 0 30px #f1c40f;
+        }
+
+        #mobile-controls {
+            position: absolute; bottom: 30px; left: 0;
+            width: 100%; height: 150px;
+            pointer-events: none;
+            display: none;
+            justify-content: space-between;
+            padding: 0 30px;
+            box-sizing: border-box;
+        }
+
+        .control-area {
+            pointer-events: auto;
+            width: 100px; height: 100px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.1);
+            position: relative;
+            backdrop-filter: blur(5px);
+        }
+
+        .stick {
+            width: 40px; height: 40px;
+            background: rgba(255, 255, 255, 0.4);
+            border-radius: 50%;
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        
+        #btn-group { display: flex; gap: 20px; }
+
+        .action-btn {
+            pointer-events: auto;
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            background: rgba(195, 7, 63, 0.2);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 30px; color: white; border: 1px solid rgba(195, 7, 63, 0.5);
+            backdrop-filter: blur(4px);
+        }
+
+        #dash-btn { background: rgba(52, 152, 219, 0.2); border-color: rgba(52, 152, 219, 0.5); font-size: 20px; }
+
+        .msg-log {
+            position: absolute; bottom: 180px; left: 50%;
+            transform: translateX(-50%);
+            text-align: center; width: 100%; pointer-events: none;
+        }
+        
+        .log-entry {
+            color: #fff; text-shadow: 0 0 5px #000;
+            padding: 5px; font-size: 18px; font-weight: bold;
+            opacity: 1; transition: opacity 1s;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="ui-layer">
+        <div class="hud-top">
+            <div class="stats-cluster">
+                <div style="font-weight:bold; letter-spacing: 2px; font-size: 0.8rem; color:#888;">FLOOR <span id="floor-display" style="color:#f1c40f; font-size:1rem;">1</span></div>
+                <div class="bar-container"><div class="hp-bar" id="hp-bar"></div></div>
+                <div class="xp-bar"><div class="xp-fill" id="xp-fill"></div></div>
+                <div style="font-size: 0.8rem; color:#666; margin-top:2px;">LVL <span id="level-display" style="color:#fff;">1</span></div>
+            </div>
+            <div class="weapon-display">
+                <div class="weapon-name" id="weapon-name">Rusty Sword</div>
+                <div style="font-size: 0.8rem; color: #aaa; font-style:italic;" id="weapon-desc">Basic melee attack</div>
+            </div>
+        </div>
+
+        <div id="boss-hud">
+            <div class="boss-name" id="boss-name-display">BOSS NAME</div>
+            <div class="boss-bar-bg"><div class="boss-bar-fill" id="boss-hp-fill"></div></div>
+        </div>
+        
+        <div class="msg-log" id="msg-log"></div>
+
+        <div id="mobile-controls">
+            <div class="control-area" id="joystick-area"><div class="stick" id="joystick-stick"></div></div>
+            <div id="btn-group">
+                <div class="action-btn" id="dash-btn">⚡</div>
+                <div class="action-btn" id="attack-btn">⚔️</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="menu" id="start-menu">
+        <h1>Depths of Aethelgard</h1>
+        <h2>Ascension</h2>
+        <button onclick="game.start('normal')">ENTER DUNGEON</button>
+        <button class="arena-btn" onclick="game.start('arena')">ARENA MODE</button>
+        <button onclick="game.resetData()" style="font-size: 0.9rem; border:none; color:#555; background:transparent; margin-top:20px;">RESET SAVE DATA</button>
+        <div style="margin-top:30px; color:#666; font-size:0.8rem; line-height: 1.8;">
+            <span style="color:#ccc">WASD / ARROWS</span> to Move<br>
+            <span style="color:#c3073f">SPACE / CLICK</span> to Attack<br>
+            <span style="color:#3498db">SHIFT</span> to Dash<br>
+        </div>
+    </div>
+
+    <div class="menu hidden" id="death-menu">
+        <h1 style="color: #c0392b;">SLAIN</h1>
+        <h2 id="death-stats">Floor: 1</h2>
+        <button onclick="game.start(game.mode)">RESURRECT</button>
+    </div>
+</div>
+
+<script>
+/** ---------------- CONFIG & DB ---------------- **/
+const TILE = 48; 
+const CAM_LERP = 0.08;
+
+const WEAPONS = {
+    0: { name: "Rusty Sword", desc: "Reliable", color: "#bdc3c7", damage: 15, cooldown: 25, type: "melee", look: "sword" },
+    2: { name: "Troll Club", desc: "Stun & Shockwave", color: "#8d6e63", damage: 30, cooldown: 50, type: "melee", stun: 60, knockback: 40, shockwave: true, look: "hammer" },
+    4: { name: "Flint Dagger", desc: "Bleed effect", color: "#e67e22", damage: 12, cooldown: 10, type: "melee", poison: true, look: "dagger" },
+    6: { name: "Venom Bow", desc: "Poison arrows", color: "#27ae60", damage: 18, cooldown: 25, type: "projectile", speed: 11, poison: true, look: "bow" },
+    8: { name: "Quartz Shield", desc: "Defensive Bash", color: "#ecf0f1", damage: 20, cooldown: 40, type: "melee", knockback: 60, stun: 20, look: "shield" },
+    10: { name: "Slime Staff", desc: "Splits on impact", color: "#2ecc71", damage: 15, cooldown: 35, type: "projectile", speed: 8, split: true, look: "staff" },
+    12: { name: "Frost Wand", desc: "Creates Ice Field", color: "#3498db", damage: 18, cooldown: 45, type: "projectile", speed: 9, zone: 'ice', look: "wand" },
+    14: { name: "Spiked Gauntlets", desc: "Mach Punch", color: "#c0392b", damage: 10, cooldown: 5, type: "melee", look: "fist" },
+    16: { name: "Titan Hammer", desc: "Earthquake", color: "#7f8c8d", damage: 50, cooldown: 80, type: "melee", shockwave: true, shake: 20, zone: 'void', look: "hammer" },
+    18: { name: "Necro Staff", desc: "Seeking Souls", color: "#9b59b6", damage: 20, cooldown: 25, type: "projectile", speed: 6, lifesteal: true, homing: true, look: "staff_skull" },
+    20: { name: "Bone Reaver", desc: "Returning Blade", color: "#ecf0f1", damage: 35, cooldown: 50, type: "boomerang", speed: 12, look: "bone" },
+    22: { name: "Crystal Shard", desc: "Shotgun Blast", color: "#e91e63", damage: 12, cooldown: 45, type: "projectile", speed: 14, count: 5, look: "shard" },
+    24: { name: "Wind Blade", desc: "360 Spin Slash", color: "#1abc9c", damage: 25, cooldown: 30, type: "spin", range: 70, look: "sword_blue" },
+    26: { name: "Storm Javelin", desc: "Chain Lightning", color: "#3498db", damage: 40, cooldown: 55, type: "projectile", speed: 13, chain: true, look: "spear" },
+    28: { name: "Molten Axe", desc: "Leaves Fire", color: "#d35400", damage: 55, cooldown: 65, type: "melee", zone: 'fire', look: "axe" },
+    30: { name: "Inferno Wand", desc: "Explosive Fire", color: "#e74c3c", damage: 45, cooldown: 60, type: "projectile", speed: 10, trail: "fire", explode: true, look: "wand" },
+    32: { name: "Emerald Saber", desc: "Guaranteed Crits", color: "#2ecc71", damage: 35, cooldown: 15, type: "melee", critChance: 1.0, look: "saber" },
+    34: { name: "Thunder Hammer", desc: "Lightning Smash", color: "#f1c40f", damage: 70, cooldown: 90, type: "melee", chain: true, shockwave: true, look: "hammer_gold" },
+    36: { name: "Vampire Blade", desc: "Heals on Kill", color: "#8e44ad", damage: 30, cooldown: 18, type: "melee", lifesteal: true, execute: true, look: "sword_red" },
+    38: { name: "Ninja Kunai", desc: "Fan of Knives", color: "#34495e", damage: 12, cooldown: 15, type: "projectile", speed: 16, count: 5, look: "dagger" },
+    40: { name: "Void Scythe", desc: "Dash & Void Zone", color: "#9b59b6", damage: 60, cooldown: 50, type: "spin", dash: true, trail: "void", zone: 'void', look: "scythe" },
+    42: { name: "Spectral Bow", desc: "Ghost Homing", color: "#ecf0f1", damage: 45, cooldown: 25, type: "projectile", speed: 12, pierce: true, homing: true, look: "bow_ghost" },
+    44: { name: "Gravity Mace", desc: "Black Hole Slam", color: "#2c3e50", damage: 55, cooldown: 70, type: "melee", pull: true, zone: 'void', look: "mace" },
+    46: { name: "Plasma Rifle", desc: "Ricochet Lasers", color: "#00d2d3", damage: 25, cooldown: 12, type: "projectile", speed: 15, bounces: 4, look: "gun" },
+    48: { name: "Laser Katana", desc: "Hyper Dash", color: "#ff0055", damage: 90, cooldown: 35, type: "dash", look: "saber_red" },
+    50: { name: "Godslayer", desc: "Orbital Defense", color: "#f1c40f", damage: 200, cooldown: 40, type: "orbital", look: "sword_gold" },
+    52: { name: "Chaos Orb", desc: "Pure Chaos", color: "#9b59b6", damage: 60, cooldown: 25, type: "projectile", speed: 7, bounces: 5, chaos: true, split: true, look: "orb" },
+    54: { name: "Infinity Edge", desc: "Screen Slice", color: "#fff", damage: 120, cooldown: 55, type: "melee", range: 160, look: "sword_white" },
+    56: { name: "Nova Staff", desc: "Supernova", color: "#e67e22", damage: 250, cooldown: 110, type: "nova", look: "staff_sun" },
+    58: { name: "Time Dagger", desc: "Time Freeze", color: "#3498db", damage: 45, cooldown: 30, type: "melee", stun: 150, look: "dagger_blue" },
+    60: { name: "Reality Ender", desc: "DEATH BEAM", color: "#000", damage: 1000, cooldown: 100, type: "beam", look: "void_blade" }
+};
+
+const BOSS_NAMES = {
+    2: "Troll King", 4: "Stone Golem", 6: "Broodmother", 8: "Obsidian Knight",
+    10: "King Slime", 12: "Ice Queen", 14: "Berserker Chief", 16: "Titan Construct",
+    18: "Necromancer", 20: "Lich Lord", 22: "Crystal Golem", 24: "Wind Spirit",
+    26: "Storm Drake", 28: "Molten Giant", 30: "Magma Guardian", 32: "Emerald Dragon",
+    34: "Thunder God", 36: "Nosferatu", 38: "Shadow Assassin", 40: "Void Walker",
+    42: "Spectral Beast", 44: "Gravity Lord", 46: "Omega Unit", 48: "Cyber Samurai",
+    50: "The Architect", 52: "Chaos Spawn", 54: "Celestial Guardian", 56: "Sun Eater",
+    58: "Time Keeper", 60: "Cosmic Devourer"
+};
+
+/** ---------------- ENGINE & AUDIO ---------------- **/
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let width, height;
+
+const AudioSys = {
+    ctx: new (window.AudioContext || window.webkitAudioContext)(),
+    play: function(freq, type, len, vol=0.1) {
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + len);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + len);
+    },
+    sfx: {
+        hit: () => AudioSys.play(100, 'sawtooth', 0.1),
+        swing: () => AudioSys.play(200, 'triangle', 0.1),
+        kill: () => AudioSys.play(50, 'square', 0.2),
+        locked: () => AudioSys.play(100, 'square', 0.3),
+        levelup: () => { AudioSys.play(400, 'sine', 0.2); setTimeout(()=>AudioSys.play(600, 'sine', 0.4), 200); },
+        powerup: () => AudioSys.play(600, 'sine', 0.3),
+        boss: () => AudioSys.play(80, 'sawtooth', 1.5),
+        dash: () => AudioSys.play(300, 'triangle', 0.1),
+        crit: () => AudioSys.play(800, 'sawtooth', 0.2),
+        laser: () => AudioSys.play(1000, 'sine', 0.1)
+    }
+};
+
+const Utils = {
+    rand: (min, max) => Math.floor(Math.random() * (max - min + 1)) + min,
+    rectIntersect: (r1, r2) => !(r2.x >= r1.x + r1.w || r2.x + r2.w <= r1.x || r2.y >= r1.y + r1.h || r2.y + r2.h <= r1.y),
+    dist: (e1, e2) => Math.sqrt(Math.pow(e2.x - e1.x, 2) + Math.pow(e2.y - e1.y, 2)),
+    checkCollide: (rect, walls) => {
+        for(let w of walls) {
+            if(Utils.rectIntersect(rect, {x: w.x*TILE, y: w.y*TILE, w: TILE, h: TILE})) return true;
+        }
+        return false;
+    }
+};
+
+/** ---------------- RENDERING HELPERS ---------------- **/
+const Drawer = {
+    shadow: (ctx, w) => {
+        let g = ctx.createRadialGradient(w/2, 5, 1, w/2, 5, w/2);
+        g.addColorStop(0, 'rgba(0,0,0,0.6)');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g; 
+        ctx.beginPath(); ctx.ellipse(w/2, 5, w/2, 6, 0, 0, Math.PI*2); ctx.fill();
+    },
+    weapon: (ctx, type, color) => {
+        ctx.save();
+        
+        // Glow for high tier/special weapons
+        if (['sword_gold', 'void_blade', 'staff_sun', 'saber_red', 'saber', 'scythe'].includes(type)) {
+            ctx.shadowBlur = 10; ctx.shadowColor = color;
+        }
+
+        if (type.includes("sword") || type.includes("saber")) {
+            // Hilt
+            ctx.fillStyle = '#444'; ctx.fillRect(4, -6, 4, 12); 
+            ctx.fillStyle = '#222'; ctx.fillRect(0, -2, 6, 4); 
+            // Gem
+            ctx.fillStyle = color; ctx.beginPath(); ctx.arc(6, 0, 2, 0, Math.PI*2); ctx.fill();
+
+            // Blade Gradient
+            let grad = ctx.createLinearGradient(0, -2, 32, 2);
+            grad.addColorStop(0, '#555'); grad.addColorStop(0.4, color); grad.addColorStop(1, '#fff');
+            ctx.fillStyle = grad; 
+            
+            ctx.beginPath();
+            if (type === 'sword_white') { // Infinity Edge (Long Katana)
+                ctx.moveTo(8, -2); ctx.lineTo(45, -1); ctx.lineTo(48, 0); ctx.lineTo(45, 1); ctx.lineTo(8, 2);
+            } else if (type === 'sword_red') { // Vampire (Serrated)
+                ctx.moveTo(8, -4); ctx.lineTo(36, 0); ctx.lineTo(8, 4);
+                ctx.lineTo(12, 2); ctx.lineTo(8, 0); ctx.lineTo(12, -2); ctx.lineTo(8, -4);
+            } else if (type === 'sword_blue') { // Wind (Curved Scimitar)
+                ctx.moveTo(8, -2); ctx.quadraticCurveTo(20, -10, 36, -5); ctx.lineTo(38, 0); ctx.quadraticCurveTo(20, 5, 8, 4);
+            } else { // Standard
+                ctx.moveTo(8, -3); ctx.lineTo(36, 0); ctx.lineTo(8, 3);
+            }
+            ctx.fill();
+
+            // Guard Details
+            if (type === 'sword_gold') {
+                 ctx.fillStyle = '#f1c40f'; ctx.fillRect(6, -8, 2, 16); // Crossguard
+            }
+
+        } else if (type.includes("dagger") || type === "shard") {
+            ctx.fillStyle = color; ctx.beginPath(); 
+            if(type === 'dagger_blue') { // Time Dagger (Clock hands)
+                ctx.moveTo(0,0); ctx.lineTo(20, 0); ctx.stroke(); ctx.moveTo(15,0); ctx.lineTo(15, -5); ctx.stroke();
+            }
+            ctx.moveTo(0,0); ctx.lineTo(18, -3); ctx.lineTo(24, 0); ctx.lineTo(18, 3); ctx.fill();
+            ctx.fillStyle = '#333'; ctx.fillRect(0, -2, 6, 4);
+
+        } else if (type === "fist") {
+            ctx.fillStyle = color;
+            ctx.beginPath(); ctx.arc(10, 0, 8, 0, Math.PI*2); ctx.fill(); // Hand
+            ctx.fillStyle = '#555'; // Spikes
+            ctx.beginPath(); ctx.moveTo(16, -4); ctx.lineTo(22, 0); ctx.lineTo(16, 4); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(14, -8); ctx.lineTo(18, -10); ctx.lineTo(16, -4); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(14, 8); ctx.lineTo(18, 10); ctx.lineTo(16, 4); ctx.fill();
+
+        } else if (type === "hammer" || type === "mace" || type === "hammer_gold") {
+            ctx.fillStyle = '#5d4037'; ctx.fillRect(0, -3, 22, 6); // Handle
+            
+            let headGrad = ctx.createRadialGradient(24, 0, 2, 24, 0, 15);
+            headGrad.addColorStop(0, color); headGrad.addColorStop(1, '#111');
+            ctx.fillStyle = headGrad;
+            
+            if(type === 'mace') { // Spiked ball
+                ctx.beginPath(); ctx.arc(24, 0, 10, 0, Math.PI*2); ctx.fill();
+                // Spikes
+                ctx.fillStyle = '#888';
+                for(let i=0; i<8; i++) {
+                    let a = i * Math.PI/4;
+                    ctx.beginPath(); ctx.moveTo(24 + Math.cos(a)*8, Math.sin(a)*8); 
+                    ctx.lineTo(24 + Math.cos(a)*16, Math.sin(a)*16); 
+                    ctx.lineTo(24 + Math.cos(a+0.3)*8, Math.sin(a+0.3)*8); ctx.fill();
+                }
+            } else { // Block hammer
+                ctx.fillRect(18, -12, 14, 24);
+                ctx.strokeStyle = '#222'; ctx.lineWidth = 2; ctx.strokeRect(18, -12, 14, 24);
+                if (type === 'hammer_gold') {
+                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.moveTo(20, -8); ctx.lineTo(28, 0); ctx.lineTo(22, 8); ctx.stroke();
+                }
+            }
+
+        } else if (type.includes("staff") || type.includes("wand")) {
+            ctx.fillStyle = '#5d4037'; ctx.fillRect(0, -2, 32, 4); // Stick
+            
+            // Gem/Head
+            ctx.shadowBlur = 15; ctx.shadowColor = color;
+            ctx.fillStyle = color; 
+            
+            if(type==="staff_skull") {
+                ctx.fillStyle='#eee'; ctx.beginPath(); ctx.arc(32, -2, 8, 0, Math.PI*2); ctx.fill(); 
+                ctx.fillStyle='#000'; ctx.beginPath(); ctx.arc(30, -4, 2, 0, Math.PI*2); ctx.arc(34, -4, 2, 0, Math.PI*2); ctx.fill();
+                ctx.fillRect(30, 2, 4, 3);
+            } else if(type==="staff_sun") {
+                ctx.beginPath(); ctx.arc(32, 0, 6, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = color; ctx.lineWidth=2;
+                for(let i=0; i<8; i++) {
+                    let a = Date.now()/300 + i * Math.PI/4;
+                    ctx.beginPath(); ctx.moveTo(32,0); ctx.lineTo(32+Math.cos(a)*14, Math.sin(a)*14); ctx.stroke();
+                }
+            } else {
+                 ctx.beginPath(); ctx.moveTo(32, 0); ctx.lineTo(40, -6); ctx.lineTo(40, 6); ctx.fill();
+            }
+            ctx.shadowBlur = 0;
+
+        } else if (type === "scythe") {
+            ctx.fillStyle = '#333'; ctx.fillRect(0, -2, 36, 4); 
+            ctx.fillStyle = color; 
+            ctx.beginPath(); ctx.arc(34, 15, 22, Math.PI * 1.1, Math.PI * 1.8); 
+            ctx.lineWidth = 4; ctx.strokeStyle = color; ctx.stroke();
+            // Blade Tip
+            ctx.beginPath(); ctx.moveTo(34 + Math.cos(Math.PI*1.1)*22, 15 + Math.sin(Math.PI*1.1)*22);
+            ctx.lineTo(20, -10); ctx.fill();
+
+        } else if (type === "spear") {
+            ctx.fillStyle = '#5d4037'; ctx.fillRect(0, -2, 35, 4);
+            ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(35, -5); ctx.lineTo(55, 0); ctx.lineTo(35, 5); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.fillRect(35, -1, 15, 2);
+
+        } else if (type === "gun") {
+            ctx.fillStyle = '#333'; ctx.fillRect(6, 2, 8, 8); // Handle
+            ctx.fillStyle = '#555'; ctx.fillRect(4, -6, 24, 8); // Barrel
+            ctx.fillStyle = color; ctx.fillRect(10, -5, 12, 6); // Energy chamber
+            ctx.fillStyle = '#0ff'; ctx.globalAlpha = 0.5 + Math.sin(Date.now()/100)*0.5;
+            ctx.fillRect(28, -5, 4, 6); // Tip glow
+            ctx.globalAlpha = 1;
+
+        } else if (type === "bow" || type.includes("bow")) {
+            ctx.lineWidth = 3; ctx.strokeStyle = '#5d4037';
+            ctx.beginPath(); ctx.arc(12, 0, 18, -Math.PI/2.5, Math.PI/2.5); ctx.stroke();
+            ctx.lineWidth = 1; ctx.strokeStyle = '#eee';
+            ctx.beginPath(); ctx.moveTo(12 + Math.cos(-Math.PI/2.5)*18, Math.sin(-Math.PI/2.5)*18); 
+            ctx.lineTo(12 + Math.cos(Math.PI/2.5)*18, Math.sin(Math.PI/2.5)*18); ctx.stroke();
+            
+            // Arrow
+            if (color) {
+                ctx.fillStyle = color; ctx.fillRect(10, -1, 20, 2);
+                ctx.beginPath(); ctx.moveTo(30, -3); ctx.lineTo(34, 0); ctx.lineTo(30, 3); ctx.fill();
+            }
+
+        } else if (type === "shield") {
+            let grad = ctx.createRadialGradient(10, 0, 0, 10, 0, 15);
+            grad.addColorStop(0, color); grad.addColorStop(1, '#222');
+            ctx.fillStyle = grad;
+            ctx.beginPath(); ctx.arc(10, 0, 14, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(10, 0, 4, 0, Math.PI*2); ctx.fill();
+
+        } else if (type === "orb") {
+            let grad = ctx.createRadialGradient(15, 0, 2, 15, 0, 10);
+            grad.addColorStop(0, '#fff'); grad.addColorStop(0.5, color); grad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = grad; 
+            ctx.beginPath(); ctx.arc(15, 0, 10, 0, Math.PI*2); ctx.fill();
+            
+            // Floating rings
+            ctx.strokeStyle = color; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.ellipse(15, 0, 14, 4, Date.now()/500, 0, Math.PI*2); ctx.stroke();
+            ctx.beginPath(); ctx.ellipse(15, 0, 14, 4, -Date.now()/400, 0, Math.PI*2); ctx.stroke();
+
+        } else if (type === "axe") {
+            ctx.fillStyle = '#5d4037'; ctx.fillRect(0, -3, 24, 6);
+            ctx.fillStyle = color; 
+            ctx.beginPath(); ctx.arc(22, -6, 14, 0, Math.PI, true); ctx.lineTo(22, 6); ctx.fill();
+            ctx.fillStyle = '#aaa'; ctx.beginPath(); ctx.moveTo(22, -6); ctx.lineTo(34, -14); ctx.lineTo(30, 0); ctx.fill();
+
+        } else if (type === "void_blade") {
+            ctx.shadowBlur = 15; ctx.shadowColor = '#9b59b6';
+            ctx.fillStyle = '#000'; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(40, 0); ctx.lineTo(32, 10); ctx.fill(); 
+            ctx.strokeStyle = '#fff'; ctx.lineWidth=1; ctx.stroke();
+            ctx.shadowBlur = 0;
+
+        } else {
+            // Default
+            ctx.fillStyle = color; ctx.fillRect(5, -2, 20, 4);
+        }
+        ctx.restore();
+    }
+};
+
+/** ---------------- ENTITIES ---------------- **/
+class Zone {
+    constructor(x, y, type) {
+        this.x = x; this.y = y; this.type = type;
+        this.life = 180; // 3 seconds
+        this.r = 10;
+        this.maxR = (type === 'void' || type === 'fire') ? 70 : 50;
+        this.animOffset = Math.random() * 100;
+    }
+    update() {
+        this.life--;
+        if(this.r < this.maxR) this.r += 1;
+        
+        // Spawn particles for flavor
+        if (Math.random() < 0.1) {
+            let col = this.type === 'fire' ? '#e74c3c' : (this.type === 'void' ? '#8e44ad' : '#3498db');
+            game.createParticles(this.x + Utils.rand(-this.r, this.r), this.y + Utils.rand(-this.r, this.r), col, 1, this.type === 'fire' ? 1 : 0);
+        }
+
+        if(this.life % 10 === 0) {
+            game.enemies.forEach(e => {
+                if(e.active && Utils.dist(e, this) < this.r) {
+                    if(this.type === 'fire') { e.hit(3); game.createParticles(e.x, e.y, '#e74c3c', 1, 1); }
+                    if(this.type === 'ice') { e.frozenTimer = 30; }
+                    if(this.type === 'void') { e.hit(5); e.x += (this.x - e.x)*0.1; e.y += (this.y - e.y)*0.1; }
+                }
+            });
+        }
+    }
+    draw(ctx, cx, cy) {
+        ctx.save();
+        ctx.translate(this.x - cx, this.y - cy);
+        
+        let t = (Date.now() / 200) + this.animOffset;
+
+        if(this.type === 'fire') { 
+            // Flickering Flame Circle
+            let pulse = 1 + Math.sin(t*2) * 0.1;
+            let grad = ctx.createRadialGradient(0, 0, this.r * 0.2, 0, 0, this.r * pulse);
+            grad.addColorStop(0, 'rgba(231, 76, 60, 0.2)'); grad.addColorStop(1, 'rgba(231, 76, 60, 0.6)');
+            ctx.fillStyle = grad;
+            
+            ctx.beginPath();
+            for(let a=0; a<Math.PI*2; a+=0.2) {
+                let rOff = this.r + Math.sin(a*5 + t*5) * 5;
+                ctx.lineTo(Math.cos(a)*rOff, Math.sin(a)*rOff);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 2; ctx.stroke();
+
+        }
+        else if(this.type === 'ice') {
+            // Crystalline Snowflake
+            ctx.fillStyle = 'rgba(52, 152, 219, 0.3)';
+            ctx.beginPath();
+            let spikes = 8;
+            for(let i=0; i<spikes*2; i++) {
+                let r = (i%2===0) ? this.r : this.r/2;
+                let a = i * Math.PI / spikes + t * 0.5;
+                ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#a9cce3'; ctx.lineWidth = 2; ctx.stroke();
+        }
+        else if(this.type === 'void') {
+            // Swirling Vortex
+            ctx.rotate(t);
+            let grad = ctx.createRadialGradient(0, 0, 5, 0, 0, this.r);
+            grad.addColorStop(0, '#000'); grad.addColorStop(1, 'rgba(142, 68, 173, 0.5)');
+            ctx.fillStyle = grad;
+            
+            ctx.beginPath();
+            for(let i=0; i<3; i++) {
+                 ctx.rotate(Math.PI*2/3);
+                 ctx.moveTo(0,0);
+                 ctx.quadraticCurveTo(this.r, this.r, 0, this.r);
+            }
+            ctx.fill();
+            ctx.strokeStyle = '#8e44ad'; ctx.lineWidth = 1; ctx.stroke();
+        }
+        
+        ctx.restore();
+    }
+}
+
+class FloatingText {
+    constructor(x, y, text, color, size = 16) {
+        this.x = x; this.y = y; 
+        this.text = text; this.color = color;
+        this.life = 60; 
+        this.size = size;
+        // Physics for bouncing text
+        this.vx = (Math.random() - 0.5) * 4;
+        this.vy = -3 - Math.random() * 3;
+        this.grav = 0.2;
+    }
+    update() { 
+        if(this.life === Infinity) return; 
+        
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += this.grav;
+        this.life--; 
+    }
+    draw(ctx, cx, cy) {
+        let alpha = (this.life === Infinity) ? 1 : Math.max(0, this.life / 30);
+        ctx.save();
+        ctx.globalAlpha = alpha; 
+        ctx.fillStyle = this.color; 
+        ctx.shadowColor = 'black'; ctx.shadowBlur = 4;
+        ctx.font = `bold ${this.size}px Courier New`; 
+        ctx.fillText(this.text, this.x - cx, this.y - cy); 
+        ctx.restore();
+    }
+}
+
+class Particle {
+    constructor(x, y, color, count, type=0) {
+        this.x = x; this.y = y;
+        this.z = Utils.rand(10, 20); 
+        this.vx = (Math.random() - 0.5) * 6; this.vy = (Math.random() - 0.5) * 6; this.vz = Utils.rand(3, 7); 
+        this.life = Utils.rand(20, 50); this.maxLife = this.life;
+        this.color = color; this.size = Utils.rand(2, 5);
+        this.isBlood = color === '#e74c3c' || color === '#c0392b' || color === '#eee';
+        this.isDust = type === 3;
+        if(this.isDust) { this.z = Utils.rand(5, 40); this.vx*=0.1; this.vy*=0.1; this.vz=0; this.size=2; this.life=100; }
+        
+        // Weather types
+        this.isSnow = type === 4;
+        this.isAsh = type === 5;
+        this.isSpore = type === 6;
+
+        if (this.isSnow) { this.life = 100; this.vy = 2; this.vx = 1; this.z = 200; this.size = 3; }
+        if (this.isAsh) { this.life = 80; this.vy = -1; this.vx = Math.random()-0.5; this.z = Math.random()*50; this.size=2; }
+        if (this.isSpore) { this.life = 150; this.vy = -0.2; this.vx = (Math.random()-0.5)*0.5; this.z = Math.random()*50; this.size=2; }
+
+        this.landed = false; this.isFire = type === 1; this.isVoid = type === 2; 
+    }
+    update() {
+        if (this.isSnow) { this.x += this.vx; this.y += this.vy; this.z -= 2; if(this.z <= 0) this.life = 0; return; }
+        if (this.isAsh || this.isSpore || this.isDust) { this.x += this.vx; this.y += this.vy; this.life-=0.5; return; }
+        
+        if (this.landed) { if (this.isFire || this.isVoid) this.life--; else this.life -= 0.1; return; }
+        this.x += this.vx; this.y += this.vy; this.z += this.vz; this.vz -= 0.6; 
+        if (this.z <= 0) { this.z = 0; this.landed = true; this.vx = 0; this.vy = 0; }
+        if (!this.isBlood && !this.landed) this.life--;
+    }
+    draw(ctx, cx, cy) {
+        let s = this.size;
+        let alpha = Math.max(0, this.life / this.maxLife);
+        
+        ctx.save();
+        ctx.globalAlpha = alpha;
+
+        if (this.isDust || this.isSnow || this.isAsh || this.isSpore) { 
+            ctx.fillStyle = this.color; 
+            ctx.fillRect(this.x - cx, this.y - cy - this.z, s, s); 
+        }
+        else {
+            if (!this.landed) { 
+                ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(this.x - cx, this.y - cy, s, s); // Shadow
+            }
+            ctx.fillStyle = this.color;
+            if (this.landed && this.isBlood) ctx.globalAlpha = 0.5;
+            if (this.isFire) ctx.globalAlpha = Math.random();
+            
+            // Draw rotated particle
+            ctx.translate(this.x - cx, this.y - cy - this.z);
+            ctx.rotate(this.life * 0.1);
+            ctx.fillRect(-s/2, -s/2, s, s);
+        }
+        ctx.restore();
+    }
+}
+
+class Projectile {
+    constructor(x, y, vx, vy, isPlayer, config, owner = null) {
+        this.x = x; this.y = y; this.w = 12; this.h = 12;
+        this.vx = vx; this.vy = vy;
+        this.isPlayer = isPlayer;
+        this.cfg = config;
+        this.owner = owner;
+        this.life = 100;
+        this.active = true;
+        this.state = 0;
+        this.hitList = [];
+        this.bouncesLeft = config.bounces || 0;
+        this.grace = 5; // Prevent instant wall collision on spawn
+    }
+    
+    die() {
+        this.active = false;
+        // Zone creation on death
+        if (this.cfg.zone) {
+            game.zones.push(new Zone(this.x, this.y, this.cfg.zone));
+            AudioSys.sfx.powerup();
+        }
+        // Slime Staff / Split Logic
+        if (this.cfg.split) {
+            AudioSys.sfx.powerup();
+            for(let i=0; i<4; i++) {
+                let ang = (Math.PI*2/4) * i;
+                let spd = 6;
+                // Create mini bouncing projectiles
+                let p = new Projectile(this.x, this.y, Math.cos(ang)*spd, Math.sin(ang)*spd, this.isPlayer, 
+                    { ...this.cfg, split: false, zone: null, damage: this.cfg.damage/2, bounces: 2, color: this.cfg.color });
+                p.life = 40;
+                game.projectiles.push(p);
+            }
+        }
+    }
+
+    update(map, enemies, player) {
+        this.x += this.vx; this.y += this.vy;
+        this.life--;
+        if (this.grace > 0) this.grace--;
+
+        if (this.cfg.trail === 'fire' && this.life % 3 === 0) game.createParticles(this.x, this.y, '#f39c12', 1, 1);
+        
+        // Homing Logic
+        if (this.cfg.homing && this.isPlayer) {
+            let closest = null;
+            let minD = 300;
+            for(let e of enemies) {
+                if(!e.active) continue;
+                let d = Utils.dist(this, e);
+                if(d < minD) { minD = d; closest = e; }
+            }
+            if(closest) {
+                let dx = closest.x - this.x;
+                let dy = closest.y - this.y;
+                let ang = Math.atan2(dy, dx);
+                // Steer towards target
+                let currAng = Math.atan2(this.vy, this.vx);
+                let newAng = currAng + (ang - currAng) * 0.1; 
+                let spd = this.cfg.speed;
+                this.vx = Math.cos(ang) * spd; // Simple homing for now
+                this.vy = Math.sin(ang) * spd;
+            }
+        }
+
+        if (this.cfg.type === 'boomerang') {
+            if (this.life < 80 && this.state === 0) { this.state = 1; this.hitList = []; }
+            if (this.state === 1) {
+                let target = this.isPlayer ? player : this.owner;
+                if (!target || (target.hp !== undefined && target.hp <= 0)) { this.active = false; return; }
+                let dx = target.x - this.x, dy = target.y - this.y;
+                let ang = Math.atan2(dy, dx);
+                let spd = this.cfg.speed + 4;
+                this.vx = Math.cos(ang) * spd; this.vy = Math.sin(ang) * spd;
+                if (Utils.dist(this, target) < 30) { this.active = false; if(this.isPlayer) player.cooldown = 0; else if(this.owner) this.owner.atkTimer = 20; }
+            }
+        }
+
+        // Collision Check - Only if grace period is over
+        if (this.grace <= 0 && Utils.checkCollide(this, map.walls)) {
+            if (this.bouncesLeft > 0) {
+                if (!Utils.checkCollide({x: this.x-this.vx, y: this.y, w:this.w, h:this.h}, map.walls)) this.vx = -this.vx; else this.vy = -this.vy;
+                this.bouncesLeft--; this.cfg.damage *= 0.8; 
+            } else if (this.cfg.bounce) {
+                if (!Utils.checkCollide({x: this.x-this.vx, y: this.y, w:this.w, h:this.h}, map.walls)) this.vx = -this.vx; else this.vy = -this.vy;
+            } else if (this.cfg.explode) {
+                game.explode(this.x, this.y, 80, this.cfg.damage); this.active = false;
+            } else if (this.cfg.type !== 'boomerang') {
+                this.die(); // Triggers split/zone
+            }
+        }
+
+        if (this.isPlayer) {
+            for(let e of enemies) {
+                if (e.active && !this.hitList.includes(e) && Utils.rectIntersect(this, e)) {
+                    e.hit(this.cfg.damage);
+                    this.hitList.push(e);
+                    if (this.cfg.lifesteal) player.heal(2);
+                    if (this.cfg.freeze) e.frozenTimer = this.cfg.freeze;
+                    if (this.cfg.poison) e.poisonTimer = 300;
+                    if (this.cfg.chaos) {
+                        let r = Math.random();
+                        if(r<0.33) e.frozenTimer = 60;
+                        else if(r<0.66) e.poisonTimer = 300;
+                        else game.explode(e.x, e.y, 60, this.cfg.damage);
+                    }
+                    if (this.cfg.chain) {
+                        let closest = null; let minD = 200;
+                        enemies.forEach(ne => { let d = Utils.dist(e, ne); if(ne !== e && d < minD) { minD = d; closest = ne; } });
+                        if(closest) { closest.hit(this.cfg.damage * 0.7); game.createParticles((e.x+closest.x)/2, (e.y+closest.y)/2, '#00d2d3', 5); }
+                    }
+                    if (!this.cfg.pierce && this.cfg.type !== 'boomerang') this.die(); // Triggers split/zone
+                    if (this.cfg.explode) { game.explode(this.x, this.y, 80, this.cfg.damage); this.active = false; }
+                }
+            }
+        } else {
+             if (Utils.rectIntersect(this, player)) {
+                 player.hit(this.cfg.damage);
+                 if (!this.cfg.pierce && this.cfg.type !== 'boomerang') this.active = false;
+                 if (this.cfg.explode) { game.explode(this.x, this.y, 80, this.cfg.damage); this.active = false; }
+             }
+        }
+        if (this.life <= 0) this.active = false;
+    }
+    draw(ctx, cx, cy) {
+        ctx.save();
+        ctx.translate(this.x - cx + 6, this.y - cy + 6);
+        
+        // Dynamic visuals
+        if (this.cfg.chaos) {
+            this.cfg.color = `hsl(${Date.now() % 360}, 100%, 50%)`;
+        }
+
+        // Rotation
+        if(this.cfg.look === "bone" || this.cfg.look === "axe" || this.cfg.look === "dagger" || this.cfg.look === "shard") {
+            ctx.rotate(Date.now() / (this.cfg.look==='shard' ? 200 : 80));
+        } else {
+            ctx.rotate(Math.atan2(this.vy, this.vx));
+        }
+
+        if (this.cfg.look === "bow" || this.cfg.look === "bow_ghost") {
+            ctx.fillStyle = '#eee'; ctx.fillRect(-6, -1, 12, 2);
+            ctx.fillStyle = this.cfg.color; 
+            // Arrowhead
+            ctx.beginPath(); ctx.moveTo(6, -3); ctx.lineTo(12, 0); ctx.lineTo(6, 3); ctx.fill();
+            // Fletching
+            ctx.fillStyle = '#ccc'; ctx.beginPath(); ctx.moveTo(-6, -3); ctx.lineTo(-2, 0); ctx.lineTo(-6, 3); ctx.fill();
+        } 
+        else if (this.cfg.look === "bone") {
+            ctx.fillStyle = '#ecf0f1'; 
+            ctx.beginPath(); ctx.moveTo(-8, -2); ctx.lineTo(8, -2); ctx.lineTo(8, 2); ctx.lineTo(-8, 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(-8, -3, 3, 0, Math.PI*2); ctx.arc(-8, 3, 3, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(8, -3, 3, 0, Math.PI*2); ctx.arc(8, 3, 3, 0, Math.PI*2); ctx.fill();
+        }
+        else if (this.cfg.look === "shard") {
+            ctx.fillStyle = this.cfg.color; 
+            ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(4, 0); ctx.lineTo(0, 6); ctx.lineTo(-4, 0); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(2, 0); ctx.lineTo(0, 6); ctx.fill();
+        }
+        else if (this.cfg.look === "orb") {
+             let grad = ctx.createRadialGradient(0, 0, 2, 0, 0, 7);
+             grad.addColorStop(0, '#fff'); grad.addColorStop(0.5, this.cfg.color); grad.addColorStop(1, 'rgba(0,0,0,0)');
+             ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI*2); ctx.fill();
+             // Chaos pulses
+             if(this.cfg.chaos) {
+                 ctx.strokeStyle = this.cfg.color; ctx.lineWidth = 1;
+                 ctx.beginPath(); ctx.arc(0, 0, 8 + Math.sin(Date.now()/50)*2, 0, Math.PI*2); ctx.stroke();
+             }
+        }
+        else if (this.cfg.look === "staff") { // Slime ball
+            ctx.fillStyle = this.cfg.color; 
+            ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.beginPath(); ctx.arc(-2, -2, 2, 0, Math.PI*2); ctx.fill();
+        }
+        else if (this.cfg.look === "gun") { // Plasma bolt
+            ctx.fillStyle = this.cfg.color;
+            ctx.shadowBlur = 10; ctx.shadowColor = this.cfg.color;
+            ctx.beginPath(); ctx.roundRect(-8, -3, 16, 6, 3); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.fillRect(-4, -1, 8, 2);
+            ctx.shadowBlur = 0;
+        }
+        else if (this.cfg.look === "axe") {
+            ctx.fillStyle = '#5d4037'; ctx.fillRect(-2, -6, 4, 12); 
+            ctx.fillStyle = this.cfg.color; 
+            ctx.beginPath(); ctx.arc(0, -4, 8, 0, Math.PI, true); ctx.lineTo(0, 6); ctx.fill(); 
+        }
+        else if (this.cfg.look === "dagger") {
+            ctx.fillStyle = '#333'; ctx.fillRect(-6, -1, 4, 2); 
+            ctx.fillStyle = this.cfg.color; ctx.beginPath(); ctx.moveTo(-2, -2); ctx.lineTo(8, 0); ctx.lineTo(-2, 2); ctx.fill();
+        }
+        else if (this.cfg.look === "spear") {
+            ctx.fillStyle = '#5d4037'; ctx.fillRect(-12, -1, 24, 2); 
+            ctx.fillStyle = this.cfg.color; ctx.beginPath(); ctx.moveTo(8, -3); ctx.lineTo(16, 0); ctx.lineTo(8, 3); ctx.fill(); 
+            // Lightning arc for storm javelin
+            if(this.cfg.chain && Math.random() < 0.3) {
+                 ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Utils.rand(-5,5), Utils.rand(-5,5)); ctx.stroke();
+            }
+        }
+        else if (this.cfg.look === "wand") {
+            ctx.fillStyle = this.cfg.color; 
+            ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(4, 0); ctx.lineTo(0, 6); ctx.lineTo(-4, 0); ctx.fill();
+            ctx.shadowBlur = 8; ctx.shadowColor = this.cfg.color; ctx.fill(); ctx.shadowBlur = 0;
+        }
+        else {
+             ctx.fillStyle = this.cfg.color; ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI*2); ctx.fill();
+        }
+        
+        ctx.restore();
+    }
+}
+
+class Enemy {
+    constructor(x, y, floor, isBoss = false) {
+        this.x = x + (TILE-35)/2; this.y = y + (TILE-35)/2;
+        this.floor = floor;
+        this.w = isBoss ? 80 : 35; this.h = isBoss ? 80 : 35;
+        this.isBoss = isBoss;
+        if(isBoss) { this.x = x; this.y = y; }
+        
+        this.type = "goblin";
+        if (floor > 5 && Math.random() > 0.5) this.type = "skeleton";
+        if (floor > 10 && Math.random() > 0.7) this.type = "slime";
+        if (floor > 20 && Math.random() > 0.8) this.type = "bat";
+        
+        if (isBoss) {
+            this.maxHp = 150 + (floor * 30);
+            this.dmg = 6 + (floor * 0.8);
+            this.speed = 1.3 + Math.min(floor * 0.03, 2.0); 
+        } else {
+            let scale = 1 + (floor * 0.1);
+            this.maxHp = 35 * scale;
+            this.dmg = 3 + (floor * 0.4);
+            this.speed = 1.5 + Math.min(floor * 0.03, 3.0);
+        }
+        
+        this.hp = this.maxHp;
+        this.active = true;
+        this.atkTimer = 0;
+        this.name = isBoss ? (BOSS_NAMES[floor] || "Abyssal Horror") : this.type.toUpperCase();
+        this.anim = 0; this.atkAnim = 0; this.moving = false;
+        this.poisonTimer = 0; this.frozenTimer = 0;
+        this.flash = 0;
+    }
+
+    update(player, map) {
+        if (!this.active) return;
+        if (this.flash > 0) this.flash--;
+        
+        this.anim += 0.1;
+        if(this.atkAnim > 0) this.atkAnim -= 0.1;
+
+        if (this.frozenTimer > 0) {
+            this.frozenTimer--;
+            if (Math.random() < 0.1) game.createParticles(this.x + this.w/2, this.y, '#3498db', 1);
+            return; 
+        }
+
+        if (this.poisonTimer > 0) {
+            this.poisonTimer--;
+            if (this.poisonTimer % 60 === 0) this.hit(3); 
+            if (Math.random() < 0.1) game.createParticles(this.x + this.w/2, this.y, '#27ae60', 1);
+        }
+
+        game.particles.forEach(p => {
+            if(p.landed && p.isFire && Utils.dist(p, this) < 20) { if(Math.random()<0.1) this.hit(1); }
+        });
+
+        if (this.isBoss && this.active) {
+            game.bossActive = true; game.bossHp = this.hp; game.bossMaxHp = this.maxHp; game.bossName = this.name;
+        }
+
+        let dist = Utils.dist(this, player);
+        this.moving = false;
+
+        if (dist < 600) {
+            let dx = player.x - this.x, dy = player.y - this.y;
+            let ang = Math.atan2(dy, dx);
+            
+            let weapon = null;
+            if(this.isBoss) {
+                let weaponId = this.floor;
+                if(weaponId > 60) weaponId = 60;
+                if(weaponId % 2 !== 0) weaponId -= 1; 
+                weapon = WEAPONS[weaponId] || WEAPONS[0];
+            }
+            
+            let stopDist = 30;
+            if (this.isBoss && weapon && weapon.type !== 'melee' && weapon.type !== 'dash') stopDist = 200;
+
+            if (dist > stopDist) {
+                let vx = Math.cos(ang) * this.speed;
+                let vy = Math.sin(ang) * this.speed;
+                if (!Utils.checkCollide({x: this.x+vx, y: this.y, w:this.w, h:this.h}, map.walls)) this.x += vx;
+                if (!Utils.checkCollide({x: this.x, y: this.y+vy, w:this.w, h:this.h}, map.walls)) this.y += vy;
+                this.moving = true;
+            }
+
+            if (this.atkTimer > 0) this.atkTimer--;
+            
+            if (this.isBoss && this.atkTimer === 0 && weapon) {
+                let atkRange = (weapon.type === 'melee' || weapon.type === 'dash') ? 100 : 400;
+                if (dist < atkRange) {
+                    this.atkTimer = weapon.cooldown + 60;
+                    if(weapon.type === 'melee') { 
+                         game.createParticles(player.x, player.y, weapon.color, 10);
+                         player.hit(this.dmg); AudioSys.sfx.swing();
+                         this.atkAnim = 1.0;
+                         if (weapon.shockwave) game.effects.push({x: this.x+this.w/2, y: this.y+this.h/2, r: 10, maxR: 100, damage: this.dmg});
+                    } else if (weapon.type === 'orbital') {
+                         game.effects.push({type:'orbital', owner:this, r:0, damage:this.dmg});
+                         AudioSys.sfx.laser();
+                    } else if (weapon.type === 'nova') {
+                         game.effects.push({x: this.x+this.w/2, y: this.y+this.h/2, r: 10, maxR: 150, damage: this.dmg});
+                    } else {
+                         let count = weapon.count || 1;
+                         for(let i=0; i<count; i++) {
+                             let spread = (i - (count-1)/2) * 0.3;
+                             game.projectiles.push(new Projectile(this.x+this.w/2, this.y+this.h/2, Math.cos(ang+spread)*weapon.speed, Math.sin(ang+spread)*weapon.speed, false, weapon, this));
+                         }
+                    }
+                }
+            } else if (!this.isBoss && this.atkTimer === 0 && dist < 40) {
+                player.hit(this.dmg); this.atkTimer = 60; this.atkAnim = 1.0;
+            }
+        }
+    }
+
+    hit(dmg, isCrit=false) {
+        this.hp -= dmg;
+        this.flash = 5;
+        game.createParticles(this.x+this.w/2, this.y+this.h/2, (this.type==='skeleton'?'#eee':'#c0392b'), 8); 
+        game.addText(this.x, this.y, "-" + Math.floor(dmg) + (isCrit ? "!" : ""), isCrit ? "#f1c40f" : "#fff", isCrit ? 24 : 16);
+        if (isCrit) { game.shake = 6; AudioSys.sfx.crit(); } else game.shake = 3;
+        
+        let ang = Math.atan2(this.y - game.player.y, this.x - game.player.x);
+        this.x += Math.cos(ang) * 10; this.y += Math.sin(ang) * 10;
+
+        if (this.hp <= 0) {
+            this.active = false; AudioSys.sfx.kill(); game.player.xp += this.isBoss ? 100 : 20;
+            game.player.checkLevelUp();
+            // Drop logic: Use this.floor to ensure correct boss weapon drops
+            if (this.isBoss) { game.drop(this.x, this.y, this.floor); game.bossActive = false; game.log("BOSS DEFEATED"); } 
+            else if (Math.random() < 0.05) game.pickups.push({x:this.x, y:this.y, w:20, h:20, type:'hp'});
+        }
+    }
+
+    draw(ctx, cx, cy) {
+        if (!this.active) return;
+        let s = this.w; 
+        
+        ctx.save();
+        
+        let lungeX = 0, lungeY = 0;
+        if(this.atkAnim > 0) {
+            let player = game.player;
+            let ang = Math.atan2(player.y - this.y, player.x - this.x);
+            let force = Math.sin((1-this.atkAnim)*Math.PI) * 15;
+            lungeX = Math.cos(ang) * force; lungeY = Math.sin(ang) * force;
+        }
+
+        ctx.translate(this.x - cx + this.w/2 + lungeX, this.y - cy + this.h + lungeY);
+        
+        // Face player
+        let isLeft = game.player.x < this.x;
+        if(isLeft) ctx.scale(-1, 1);
+
+        Drawer.shadow(ctx, this.w * 0.6);
+        
+        if (this.flash > 0) {
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = 'rgba(255,255,255,0.8)';
+            ctx.beginPath(); ctx.arc(0, -s/2, s, 0, Math.PI*2); ctx.fill();
+            ctx.restore();
+            return;
+        }
+
+        // Animation states
+        let bounce = Math.abs(Math.sin(this.anim)) * 3;
+        let walk = this.moving ? Math.sin(this.anim * 2) * 3 : 0;
+
+        // Optimized: Removed Filters, using overlays instead
+        if (this.poisonTimer > 0) {
+             ctx.save(); ctx.globalAlpha=0.3; ctx.fillStyle='#2ecc71'; ctx.beginPath(); ctx.arc(0,-s/2, s, 0, Math.PI*2); ctx.fill(); ctx.restore();
+        }
+        if (this.frozenTimer > 0) {
+             ctx.save(); ctx.globalAlpha=0.3; ctx.fillStyle='#3498db'; ctx.beginPath(); ctx.arc(0,-s/2, s, 0, Math.PI*2); ctx.fill(); ctx.restore();
+        }
+
+        if (this.isBoss) {
+            const f = this.floor;
+            
+            // Get Weapon for color matching
+            let weaponId = f;
+            if(weaponId > 60) weaponId = 60;
+            if(weaponId % 2 !== 0) weaponId -= 1;
+            let w = WEAPONS[weaponId] || WEAPONS[0];
+
+            // 1. SPIDER QUEEN (Broodmother - Floor 6)
+            if (f === 6) {
+                ctx.translate(0, bounce);
+                ctx.fillStyle = '#2c3e50';
+                // Legs
+                ctx.lineWidth = 4; ctx.strokeStyle = '#2c3e50';
+                for(let i=0; i<4; i++) {
+                    let legX = (i < 2 ? -1 : 1) * (20 + i*5);
+                    ctx.beginPath(); ctx.moveTo(0, -30); 
+                    ctx.quadraticCurveTo(legX, -60, legX + (i<2?-10:10), -10 + Math.abs(Math.sin(this.anim*2+i))*10); 
+                    ctx.stroke();
+                }
+                // Abdomen
+                ctx.beginPath(); ctx.arc(0, -30, 25, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#e74c3c'; // Hourglass mark
+                ctx.beginPath(); ctx.moveTo(-5, -35); ctx.lineTo(5, -35); ctx.lineTo(0, -25); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(-5, -20); ctx.lineTo(5, -20); ctx.lineTo(0, -25); ctx.fill();
+                // Head
+                ctx.fillStyle = '#2c3e50'; ctx.beginPath(); ctx.arc(0, -10, 12, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = 'red'; ctx.fillRect(-4, -12, 2, 2); ctx.fillRect(2, -12, 2, 2); 
+                ctx.fillRect(-6, -16, 2, 2); ctx.fillRect(4, -16, 2, 2); 
+            }
+            // 2. SLIMES (10, 30)
+            else if ([10, 30].includes(f)) { 
+                let stretch = Math.sin(this.anim * 2) * 0.1; ctx.scale(1 + stretch, 1 - stretch);
+                ctx.fillStyle = f===10 ? '#3498db' : '#c0392b';
+                // Body
+                ctx.beginPath(); ctx.arc(0, -40, 40, Math.PI, 0); ctx.lineTo(40,0); ctx.quadraticCurveTo(0, 10, -40, 0); ctx.fill();
+                // Face
+                ctx.fillStyle = '#fff'; ctx.fillRect(-15, -50, 10, 10); ctx.fillRect(5, -50, 10, 10);
+                // Crown
+                ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.moveTo(-20, -70); ctx.lineTo(-10, -50); ctx.lineTo(0, -75); ctx.lineTo(10, -50); ctx.lineTo(20, -70); ctx.lineTo(20, -40); ctx.lineTo(-20, -40); ctx.fill();
+            }
+            // 3. CONSTRUCTS (4, 8, 16, 22, 44, 46)
+            else if ([4, 8, 16, 22, 44, 46].includes(f)) { 
+                // Legs
+                ctx.fillStyle = '#555'; ctx.fillRect(-25, -20, 15, 20); ctx.fillRect(10, -20, 15, 20);
+                
+                // Body Color Logic
+                let bodyCol = '#7f8c8d';
+                if(f === 8) bodyCol = '#2c3e50'; // Obsidian
+                if(f === 22) bodyCol = '#e91e63'; // Crystal
+                if(f === 46) bodyCol = '#fff'; // Omega (Tech)
+
+                ctx.fillStyle = bodyCol;
+                if (f === 22) { // Crystal Shape
+                    ctx.beginPath(); ctx.moveTo(0, -90); ctx.lineTo(30, -50); ctx.lineTo(0, -10); ctx.lineTo(-30, -50); ctx.fill();
+                } else { // Blocky Shape
+                    ctx.fillRect(-30, -70, 60, 50); 
+                }
+
+                // Core / Eye
+                ctx.fillStyle = w.color; 
+                ctx.shadowBlur=10; ctx.shadowColor=w.color;
+                if (f === 46) { // Cyclops Visor for Omega
+                    ctx.fillRect(-25, -60, 50, 5);
+                } else {
+                    ctx.beginPath(); ctx.arc(0, -45, 8, 0, Math.PI*2); ctx.fill();
+                }
+                ctx.shadowBlur=0;
+
+                // Shoulders
+                ctx.fillStyle = '#444'; ctx.fillRect(-40, -70, 15, 20); ctx.fillRect(25, -70, 15, 20);
+            }
+            // 4. UNDEAD LORDS (18, 20, 36)
+            else if ([18, 20, 36].includes(f)) { 
+                ctx.translate(0, Math.sin(this.anim)*5); 
+                // Robe
+                ctx.fillStyle = '#2c3e50'; 
+                if(f===36) ctx.fillStyle = '#000'; // Vampire is black
+                
+                ctx.beginPath(); ctx.moveTo(0, -80); ctx.lineTo(-25, 0); ctx.lineTo(25, 0); ctx.fill(); 
+                
+                // Vampire Wings (36)
+                if(f === 36) {
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath(); ctx.moveTo(-20, -60); ctx.lineTo(-60, -80); ctx.lineTo(-30, -20); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(20, -60); ctx.lineTo(60, -80); ctx.lineTo(30, -20); ctx.fill();
+                }
+
+                // Hood/Head
+                ctx.fillStyle = f===36 ? '#fff' : (f===20 ? '#3498db' : '#8e44ad'); 
+                if(f===36) { // Pale vampire head
+                     ctx.beginPath(); ctx.arc(0, -70, 10, 0, Math.PI*2); ctx.fill();
+                } else { // Hood
+                     ctx.beginPath(); ctx.arc(0, -70, 20, Math.PI, 0); ctx.lineTo(20, -50); ctx.lineTo(-20, -50); ctx.fill();
+                }
+
+                // Skull face
+                if(f !== 36) {
+                    ctx.fillStyle = '#ecf0f1'; ctx.fillRect(-10, -70, 20, 15);
+                    ctx.fillStyle = '#000'; ctx.fillRect(-5, -68, 3, 3); ctx.fillRect(2, -68, 3, 3);
+                }
+            }
+            // 5. DIVINE / ELEMENTAL SPIRITS (24, 34, 50, 54, 56)
+            else if ([24, 34, 50, 54, 56].includes(f)) { 
+                ctx.translate(0, Math.sin(this.anim)*5);
+                
+                let auraCol = w.color;
+                if(f === 24) { // Wind Spirit (Tornado)
+                    ctx.fillStyle = 'rgba(26, 188, 156, 0.5)';
+                    for(let i=0; i<5; i++) {
+                        let w = 40 - i*8;
+                        ctx.fillRect(-w/2, -i*15, w, 10);
+                    }
+                    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, -70, 10, 0, Math.PI*2); ctx.fill();
+                    return; // Return early for tornado
+                }
+
+                // Halo / Sun
+                if(f === 56) { // Sun Eater
+                    ctx.fillStyle = '#e67e22'; 
+                    for(let i=0; i<8; i++) {
+                        ctx.rotate(Math.PI/4); ctx.fillRect(-5, -60, 10, 30);
+                    }
+                    ctx.rotate(0);
+                } else {
+                    ctx.strokeStyle = auraCol; ctx.lineWidth=3;
+                    ctx.beginPath(); ctx.ellipse(0, -90, 30, 10, 0, 0, Math.PI*2); ctx.stroke();
+                }
+
+                // Robes
+                ctx.fillStyle = '#ecf0f1'; ctx.beginPath(); ctx.moveTo(0, -80); ctx.lineTo(-30, 0); ctx.lineTo(30, 0); ctx.fill();
+                // Head
+                ctx.fillStyle = '#ffccaa'; ctx.beginPath(); ctx.arc(0, -70, 12, 0, Math.PI*2); ctx.fill();
+            }
+            // 6. BEASTS & DRAGONS (26, 28, 32, 42, 52, 60)
+            else if ([26, 28, 32, 42, 52, 60].includes(f)) { 
+                ctx.translate(0, -20 + Math.sin(this.anim)*5);
+                ctx.fillStyle = w.color; 
+
+                // FIX: Cosmic Devourer (Floor 60) Visibility
+                if (f === 60) {
+                    ctx.shadowBlur = 20; ctx.shadowColor = '#fff'; ctx.fillStyle = '#111'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+                }
+
+                let wingY = Math.sin(this.anim*4)*10;
+                
+                // Wings
+                ctx.beginPath(); ctx.moveTo(0,-40); ctx.lineTo(-60, -60+wingY); ctx.lineTo(-20, -20); ctx.fill();
+                if(f===60) ctx.stroke();
+                
+                ctx.beginPath(); ctx.moveTo(0,-40); ctx.lineTo(60, -60+wingY); ctx.lineTo(20, -20); ctx.fill();
+                if(f===60) ctx.stroke();
+
+                // Body
+                ctx.fillRect(-20, -40, 40, 40);
+                if(f===60) ctx.strokeRect(-20, -40, 40, 40);
+                
+                // Snout
+                ctx.fillRect(15, -45, 15, 15);
+                if(f===60) ctx.strokeRect(15, -45, 15, 15);
+
+                ctx.fillStyle = 'white'; ctx.fillRect(20, -50, 5, 5); // Eye
+                ctx.shadowBlur = 0; 
+            }
+            // 7. HUMANOIDS (Knights/Warriors/Trolls)
+            else { 
+                ctx.translate(0, bounce); 
+                
+                // TROLL (Floor 2) - Green skin
+                if(f === 2) {
+                    ctx.fillStyle = '#5d4037'; ctx.fillRect(-15, -20, 10, 20); ctx.fillRect(5, -20, 10, 20); // Legs
+                    ctx.fillStyle = '#27ae60'; ctx.fillRect(-20, -70, 40, 50); // Body
+                    ctx.fillStyle = '#8d6e63'; ctx.fillRect(-20, -40, 40, 10); // Loincloth
+                    ctx.fillStyle = '#27ae60'; ctx.beginPath(); ctx.arc(0, -75, 15, 0, Math.PI*2); ctx.fill(); // Head
+                    // Tusks
+                    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(-10, -70); ctx.lineTo(-10, -85); ctx.lineTo(-5, -70); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(10, -70); ctx.lineTo(10, -85); ctx.lineTo(5, -70); ctx.fill();
+                } 
+                else { // Default Knights
+                    // Legs
+                    ctx.fillStyle = '#34495e'; ctx.fillRect(-10, -20, 8, 20); ctx.fillRect(2, -20, 8, 20);
+                    // Body
+                    ctx.fillStyle = w.color; ctx.fillRect(-15, -60, 30, 40); 
+                    // Head
+                    ctx.fillStyle = '#2c3e50'; ctx.beginPath(); ctx.arc(0, -65, 12, 0, Math.PI*2); ctx.fill();
+                    // Eyes
+                    ctx.fillStyle = 'red'; ctx.fillRect(0, -68, 8, 3);
+                }
+            }
+
+            ctx.save(); ctx.translate(25, -40); ctx.rotate(Math.sin(this.anim)*0.1); 
+            if(this.atkAnim > 0) ctx.rotate(-Math.sin((1-this.atkAnim)*Math.PI)*2);
+            Drawer.weapon(ctx, w.look, w.color); ctx.restore();
+
+        } else {
+            // Regular Enemies Visuals
+            if (this.type === 'slime') {
+                let stretch = Math.sin(this.anim * 2) * 0.15; ctx.scale(1 + stretch, 1 - stretch); ctx.translate(0, -stretch * 10);
+                ctx.globalAlpha = 0.8;
+                ctx.fillStyle = '#2ecc71'; 
+                ctx.beginPath(); ctx.arc(0, -s/2, s/2, Math.PI, 0); ctx.lineTo(s/2, 0); ctx.quadraticCurveTo(0, 5, -s/2, 0); ctx.fill();
+                ctx.globalAlpha = 1;
+                // Core
+                ctx.fillStyle = '#27ae60'; ctx.beginPath(); ctx.arc(0, -s/2, s/4, 0, Math.PI*2); ctx.fill();
+                // Shine
+                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-s/4, -s/1.5, 3, 0, Math.PI*2); ctx.fill();
+            } 
+            else if (this.type === 'skeleton') {
+                ctx.translate(0, bounce); 
+                ctx.fillStyle = '#ecf0f1';
+                // Legs
+                ctx.fillRect(-6 + walk, 0, 4, 10); ctx.fillRect(2 - walk, 0, 4, 10);
+                // Ribs
+                ctx.fillRect(-6, -24, 12, 14);
+                ctx.fillStyle = '#111'; ctx.fillRect(-4, -22, 8, 2); ctx.fillRect(-4, -18, 8, 2);
+                // Head
+                ctx.fillStyle = '#ecf0f1'; ctx.beginPath(); ctx.arc(0, -30, 8, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(-3, -30, 2, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(3, -30, 2, 0, Math.PI*2); ctx.fill();
+            }
+            else if (this.type === 'bat') {
+                let fly = Math.sin(this.anim*3) * 5;
+                ctx.translate(0, -25 + fly);
+                ctx.fillStyle = '#2c3e50';
+                // Wings
+                ctx.beginPath(); 
+                ctx.moveTo(0, 0); ctx.lineTo(-18, -12); ctx.lineTo(-8, 8); ctx.lineTo(0, 0);
+                ctx.moveTo(0, 0); ctx.lineTo(18, -12); ctx.lineTo(8, 8); ctx.lineTo(0, 0);
+                ctx.fill();
+                // Body
+                ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI*2); ctx.fill();
+                // Eyes
+                ctx.fillStyle = 'red'; ctx.fillRect(-2, -1, 1, 1); ctx.fillRect(1, -1, 1, 1);
+            }
+            else { // Goblin
+                ctx.translate(0, bounce); 
+                // Feet
+                ctx.fillStyle = '#5d4037'; ctx.fillRect(-6+walk, -2, 4, 4); ctx.fillRect(2-walk, -2, 4, 4);
+                // Body
+                ctx.fillStyle = '#27ae60'; ctx.fillRect(-7, -22, 14, 16);
+                // Loincloth
+                ctx.fillStyle = '#8d6e63'; ctx.fillRect(-7, -12, 14, 6);
+                // Head
+                ctx.fillStyle = '#27ae60'; ctx.beginPath(); ctx.arc(0, -26, 8, 0, Math.PI*2); ctx.fill();
+                // Ears
+                ctx.beginPath(); ctx.moveTo(-7, -28); ctx.lineTo(-14, -32); ctx.lineTo(-6, -24); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(7, -28); ctx.lineTo(14, -32); ctx.lineTo(6, -24); ctx.fill();
+                // Eyes
+                ctx.fillStyle = '#f1c40f'; ctx.fillRect(-3, -28, 2, 2); ctx.fillRect(1, -28, 2, 2);
+                
+                // Dagger
+                ctx.save(); ctx.translate(10, -15); ctx.rotate(Math.sin(this.anim));
+                ctx.fillStyle='#95a5a6'; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(4, -8); ctx.lineTo(-4,-8); ctx.fill();
+                ctx.restore();
+            }
+        }
+        ctx.filter = 'none';
+        ctx.restore();
+
+        if (!this.isBoss && this.hp < this.maxHp) {
+            ctx.fillStyle = 'red'; ctx.fillRect(this.x - cx, this.y - cy - 10, this.w * (this.hp/this.maxHp), 4);
+        }
+    }
+}
+
+class Player {
+    constructor() {
+        this.x = 0; this.y = 0; this.w = 30; this.h = 30;
+        this.maxHp = 100; this.hp = 100;
+        this.speed = 4.5;
+        this.weaponId = 0;
+        this.cooldown = 0; this.invuln = 0;
+        this.facing = 0; this.xp = 0;
+        this.level = 1; this.nextLvl = 100;
+        this.anim = 0; this.moving = false;
+        this.atkAnim = 0;
+        this.dashTimer = 0; this.dashCooldown = 0;
+    }
+
+    checkLevelUp() {
+        while (this.xp >= this.nextLvl) {
+            this.xp -= this.nextLvl;
+            this.level++;
+            this.nextLvl = Math.floor(this.nextLvl * 1.2); 
+            this.maxHp += 10; 
+            this.hp = this.maxHp; 
+            game.addText(this.x, this.y - 30, "LEVEL UP!", "#f1c40f", 20);
+            AudioSys.sfx.levelup();
+        }
+    }
+
+    update(input, map) {
+        let dx = 0, dy = 0;
+        if (input.keys['w'] || input.keys['ArrowUp'] || input.joystick.y < -0.2) dy = -1;
+        if (input.keys['s'] || input.keys['ArrowDown'] || input.joystick.y > 0.2) dy = 1;
+        if (input.keys['a'] || input.keys['ArrowLeft'] || input.joystick.x < -0.2) dx = -1;
+        if (input.keys['d'] || input.keys['ArrowRight'] || input.joystick.x > 0.2) dx = 1;
+
+        if (this.dashCooldown > 0) this.dashCooldown--;
+        if (this.dashTimer > 0) {
+            this.dashTimer--;
+            let speed = 15;
+            let nx = this.x + Math.cos(this.facing) * speed;
+            let ny = this.y + Math.sin(this.facing) * speed;
+            if (!Utils.checkCollide({x:nx, y:this.y, w:this.w, h:this.h}, map.walls)) this.x = nx;
+            if (!Utils.checkCollide({x:this.x, y:ny, w:this.w, h:this.h}, map.walls)) this.y = ny;
+            game.createParticles(this.x+15, this.y+25, '#fff', 1);
+            
+            const w = WEAPONS[this.weaponId];
+            if (w && w.trail === 'void') game.createParticles(this.x+15, this.y+15, '#9b59b6', 2, 2);
+            return; 
+        }
+
+        if ((input.keys['Shift'] || input.dash) && this.dashCooldown <= 0 && (dx!==0 || dy!==0)) {
+            this.dashTimer = 10; this.dashCooldown = 60; input.dash = false;
+            AudioSys.sfx.dash();
+            game.createParticles(this.x+15, this.y+15, '#3498db', 10);
+        }
+
+        this.moving = (dx !== 0 || dy !== 0);
+        if (this.moving) {
+            let len = Math.sqrt(dx*dx + dy*dy);
+            dx /= len; dy /= len;
+            this.facing = Math.atan2(dy, dx);
+            let nx = this.x + dx * this.speed;
+            let ny = this.y + dy * this.speed;
+            if (!Utils.checkCollide({x:nx, y:this.y, w:this.w, h:this.h}, map.walls)) this.x = nx;
+            if (!Utils.checkCollide({x:this.x, y:ny, w:this.w, h:this.h}, map.walls)) this.y = ny;
+            this.anim += 0.2;
+            
+            // Footprints
+            if (Math.floor(this.anim * 10) % 5 === 0) {
+                game.footprints.push({x: this.x+15, y: this.y+28, life: 100});
+            }
+        } else {
+            this.anim = 0;
+        }
+
+        if (this.cooldown > 0) this.cooldown--;
+        if (this.invuln > 0) this.invuln--;
+        if (this.atkAnim > 0) this.atkAnim -= 0.1;
+
+        if ((input.keys[' '] || input.atk) && this.cooldown <= 0) {
+            this.attack(); input.atk = false; 
+        }
+
+        // Portal Interaction (Arena Hub)
+        if (game.mode === 'arena' && game.inHub && map.portals) {
+            for(let p of map.portals) {
+                if (Utils.rectIntersect(this, p)) {
+                    game.loadBoss(p.dest);
+                    return;
+                }
+            }
+        }
+
+        if (Utils.rectIntersect(this, map.stairs)) {
+            let enemiesAlive = game.enemies.filter(e => e.active).length;
+            if (enemiesAlive === 0) game.nextFloor();
+            else if (Math.random() < 0.05) { game.log(`LOCKED! Kill ${enemiesAlive} enemies.`); AudioSys.sfx.locked(); }
+        }
+
+        for (let i = game.pickups.length - 1; i >= 0; i--) {
+            let p = game.pickups[i];
+            if (Utils.rectIntersect(this, p)) {
+                if (p.type === 'wep') {
+                    this.weaponId = p.id; game.log(`Equipped: ${WEAPONS[p.id].name}`); AudioSys.sfx.levelup();
+                } else {
+                    this.heal(30); AudioSys.sfx.powerup();
+                }
+                game.pickups.splice(i, 1);
+            }
+        }
+    }
+
+    attack() {
+        const w = WEAPONS[this.weaponId] || WEAPONS[0];
+        this.cooldown = w.cooldown; 
+        this.atkAnim = 1.0;
+        AudioSys.sfx.swing();
+
+        let dmg = w.damage + (this.level * 2);
+        let isCrit = Math.random() < (w.critChance || 0.15);
+        if (isCrit) dmg *= 2;
+
+        // SPIN ATTACK LOGIC (Void Scythe, Wind Blade)
+        if (w.type === 'spin') {
+             game.effects.push({x: this.x+this.w/2, y: this.y+this.h/2, r: 10, maxR: w.range || 80, damage: dmg, type: 'spin', color: w.color});
+             if (w.dash) {
+                 this.x += Math.cos(this.facing) * 60;
+                 this.y += Math.sin(this.facing) * 60;
+             }
+             // Spawns zone on spin
+             if (w.zone) game.zones.push(new Zone(this.x+this.w/2, this.y+this.h/2, w.zone));
+             return;
+        }
+
+        // BEAM LOGIC (Reality Ender)
+        if (w.type === 'beam') {
+            game.shake = 10;
+            AudioSys.sfx.laser();
+            // Raycast check against all enemies
+            let bx = this.x + this.w/2;
+            let by = this.y + this.h/2;
+            let range = 800;
+            let ex = bx + Math.cos(this.facing) * range;
+            let ey = by + Math.sin(this.facing) * range;
+            
+            game.effects.push({type: 'beam', x1: bx, y1: by, x2: ex, y2: ey, life: 10, color: w.color});
+            
+            // Simple line collision with enemies
+            for(let e of game.enemies) {
+                if(!e.active) continue;
+                // Distance from point to line segment
+                let A = bx - e.x; let B = by - e.y;
+                let C = ex - bx; let D = ey - by;
+                let dot = A * C + B * D;
+                let len_sq = C * C + D * D;
+                let param = -dot / len_sq;
+                let xx, yy;
+                if (param < 0) { xx = bx; yy = by; }
+                else if (param > 1) { xx = ex; yy = ey; }
+                else { xx = bx + param * C; yy = by + param * D; }
+                let dx = e.x - xx; let dy = e.y - yy;
+                if ((dx * dx + dy * dy) < (e.w * e.w)) {
+                    e.hit(dmg, true);
+                    game.createParticles(e.x, e.y, w.color, 5);
+                }
+            }
+            return;
+        }
+
+        if (w.type === 'melee' || w.type === 'dash') {
+            let range = w.range || 50;
+            let hx = this.x + this.w/2 + Math.cos(this.facing) * range - 20;
+            let hy = this.y + this.h/2 + Math.sin(this.facing) * range - 20;
+            
+            // Melee Zone creation
+            if (w.zone) game.zones.push(new Zone(hx+20, hy+20, w.zone));
+
+            if (w.type === 'dash') {
+                this.x += Math.cos(this.facing) * 100;
+                this.y += Math.sin(this.facing) * 100;
+                game.createParticles(this.x, this.y, w.color, 5, 2);
+            }
+
+            if (w.shockwave) {
+                game.effects.push({x: this.x+this.w/2, y: this.y+this.h/2, r: 10, maxR: 100, damage: dmg});
+                game.shake = w.shake;
+                return;
+            }
+
+            for(let e of game.enemies) {
+                if (e.active && Utils.rectIntersect({x:hx, y:hy, w:40, h:40}, e)) {
+                    if (w.execute && e.hp < e.maxHp * 0.3) {
+                        e.hit(9999, true); 
+                        game.addText(e.x, e.y, "EXECUTED", "#c0392b", 20);
+                        this.heal(10);
+                    } else {
+                        e.hit(dmg, isCrit);
+                        if(w.poison) e.poisonTimer = 300; 
+                        if(w.freeze || w.stun) e.frozenTimer = (w.freeze || w.stun);
+                        if(w.pull) {
+                             e.x -= Math.cos(this.facing) * 15; 
+                             e.y -= Math.sin(this.facing) * 15;
+                        } else if (w.knockback) {
+                             e.x += Math.cos(this.facing) * w.knockback;
+                             e.y += Math.sin(this.facing) * w.knockback;
+                        }
+                    }
+                    if (w.lifesteal) this.heal(2);
+                }
+            }
+            if (w.shake) game.shake = isCrit ? w.shake * 1.5 : w.shake;
+        } 
+        else if (w.type === 'orbital') {
+            game.effects.push({type:'orbital', owner:this, r:0, damage:dmg});
+            AudioSys.sfx.laser();
+        }
+        else if (w.type === 'nova') {
+            game.effects.push({x: this.x+this.w/2, y: this.y+this.h/2, r: 10, maxR: 150, damage: dmg});
+        }
+        else {
+            let count = w.count || 1;
+            for(let i=0; i<count; i++) {
+                let spread = (i - (count-1)/2) * 0.2; 
+                let p = new Projectile(this.x + this.w/2, this.y + this.h/2, Math.cos(this.facing+spread) * w.speed, Math.sin(this.facing+spread) * w.speed, true, w);
+                p.cfg.damage = dmg;
+                game.projectiles.push(p);
+            }
+        }
+    }
+
+    hit(dmg) {
+        if (this.dashTimer > 0) return; 
+        if (this.invuln > 0) return;
+        this.hp -= dmg; this.invuln = 30; game.shake = 8;
+        game.addText(this.x, this.y, "-" + dmg, "#e74c3c");
+        game.createParticles(this.x+15, this.y+15, '#c0392b', 5);
+        AudioSys.sfx.hit();
+        if (this.hp <= 0) game.over();
+    }
+
+    heal(amt) {
+        let actual = Math.min(this.hp + amt, this.maxHp) - this.hp;
+        this.hp += actual;
+        if(actual > 0) game.addText(this.x, this.y, "+" + actual, "#2ecc71");
+    }
+
+    draw(ctx, cx, cy) {
+        if (this.invuln > 0 && Math.floor(Date.now()/50)%2===0) return;
+        
+        let x = this.x - cx + this.w/2;
+        let y = this.y - cy + this.h;
+        
+        // Dash trail
+        if (this.dashTimer > 0) {
+             ctx.globalAlpha = 0.3;
+             ctx.fillStyle = '#3498db'; 
+             ctx.beginPath(); ctx.arc(x, y-15, 20, 0, Math.PI*2); ctx.fill();
+             ctx.globalAlpha = 1;
+        }
+
+        let bounce = Math.abs(Math.sin(this.anim)) * 3;
+        let walk = Math.sin(this.anim * 2);
+
+        ctx.save();
+        ctx.translate(x, y);
+        
+        // Shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.4)'; 
+        ctx.beginPath(); ctx.ellipse(0, 0, 12, 6, 0, 0, Math.PI*2); ctx.fill();
+
+        // Scale/Breathing
+        ctx.scale(1, 1 - Math.sin(Date.now()/200)*0.02);
+
+        // Cape (Red)
+        ctx.fillStyle = '#c0392b';
+        ctx.beginPath();
+        ctx.moveTo(-6, -25-bounce);
+        ctx.lineTo(6, -25-bounce);
+        ctx.lineTo(8 + (walk*2), -5);
+        ctx.lineTo(-8 + (walk*2), -5);
+        ctx.fill();
+
+        // Legs
+        ctx.fillStyle = '#34495e';
+        ctx.fillRect(-6 + (walk*4), -10, 4, 10); // L
+        ctx.fillRect(2 - (walk*4), -10, 4, 10);  // R
+
+        // Body Armor
+        ctx.fillStyle = '#7f8c8d'; // Grey plate
+        ctx.fillRect(-8, -28 - bounce, 16, 20);
+        ctx.fillStyle = '#95a5a6'; // Lighter chest
+        ctx.fillRect(-6, -26 - bounce, 12, 10);
+        
+        // Belt
+        ctx.fillStyle = '#2c3e50';
+        ctx.fillRect(-8, -16 - bounce, 16, 4);
+        ctx.fillStyle = '#f1c40f'; // Buckle
+        ctx.fillRect(-2, -16 - bounce, 4, 4);
+
+        // Head/Helmet
+        ctx.fillStyle = '#95a5a6';
+        ctx.beginPath(); ctx.arc(0, -32 - bounce, 9, 0, Math.PI*2); ctx.fill();
+        // Visor
+        ctx.fillStyle = '#111';
+        ctx.fillRect(-5, -34 - bounce, 10, 3);
+
+        // Melee Swoosh Trail
+        if(this.atkAnim > 0) {
+            ctx.save();
+            ctx.translate(0, -25 - bounce);
+            ctx.rotate(this.facing);
+            const w = WEAPONS[this.weaponId] || WEAPONS[0];
+            if (w.type === 'melee' || w.type === 'spin') {
+                ctx.beginPath();
+                ctx.arc(0, 0, 40, -1, 1);
+                ctx.strokeStyle = 'rgba(255, 255, 255, ' + this.atkAnim + ')';
+                ctx.lineWidth = 15 * this.atkAnim;
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        // Weapon Rotation Logic
+        ctx.save();
+        ctx.translate(0, -20 - bounce);
+        
+        let swing = 0;
+        if(this.atkAnim > 0) swing = -Math.sin((1-this.atkAnim) * Math.PI) * 2.0; 
+
+        ctx.rotate(this.facing + swing);
+        const w = WEAPONS[this.weaponId] || WEAPONS[0];
+        Drawer.weapon(ctx, w.look, w.color);
+        ctx.restore();
+
+        ctx.restore();
+    }
+}
+
+class MapGen {
+    constructor(floor) {
+        this.w = Math.min(25 + Math.floor(floor), 50);
+        this.h = Math.min(20 + Math.floor(floor), 50);
+        this.grid = []; this.walls = [];
+        this.stairs = {x:0, y:0, w:TILE, h:TILE};
+        this.gridDecor = []; 
+        this.portals = [];
+        this.lights = []; // New Light System
+        
+        this.biome = this.getBiome(floor);
+
+        // ARENA HUB
+        if (game.mode === 'arena' && game.inHub) {
+            this.w = 34; this.h = 40;
+            this.biome = this.getBiome(0);
+            this.grid = Array(this.h).fill().map(()=>Array(this.w).fill(1));
+            this.gridDecor = Array(this.h).fill().map(()=>Array(this.w).fill(0));
+            
+            // Clear Hall
+            for(let y=2; y<this.h-2; y++) {
+                for(let x=2; x<this.w-2; x++) {
+                    this.grid[y][x] = 0;
+                    this.gridDecor[y][x] = Math.random(); 
+                }
+            }
+            
+            // Hub Lights
+            this.lights.push({x: this.w/2 * TILE, y: (this.h-6) * TILE, r: 300, c: '#f1c40f'});
+            
+            game.spawn(this.w/2, this.h-6, 'player');
+
+            let bossFloors = Object.keys(BOSS_NAMES).map(Number).sort((a,b)=>a-b);
+            let colCount = 5;
+            let startX = 4; let startY = 4; let gapX = 6; let gapY = 6;
+
+            bossFloors.forEach((f, i) => {
+                let r = Math.floor(i / colCount);
+                let c = i % colCount;
+                let px = startX + c * gapX;
+                let py = startY + r * gapY;
+                
+                this.portals.push({x: px*TILE, y: py*TILE, w: TILE, h: TILE, dest: f});
+                
+                let name = BOSS_NAMES[f].split(' ')[0];
+                let lvlTxt = new FloatingText(px*TILE + TILE/2, py*TILE - 15, `LVL ${f}`, '#aaa', 10);
+                lvlTxt.life = Infinity; lvlTxt.vy = 0;
+                game.texts.push(lvlTxt);
+
+                let nameTxt = new FloatingText(px*TILE + TILE/2, py*TILE - 30, name.toUpperCase(), '#f1c40f', 12);
+                nameTxt.life = Infinity; nameTxt.vy = 0;
+                game.texts.push(nameTxt);
+            });
+            this.stairs = {x: -100, y: -100, w: 0, h: 0};
+
+        } else {
+            // NORMAL GEN
+            for(let y=0; y<this.h; y++) { 
+                let r=[]; let d=[];
+                for(let x=0; x<this.w; x++) { r.push(1); d.push(Math.random()); } 
+                this.grid.push(r); this.gridDecor.push(d);
+            }
+
+            let isBossFloor = (game.mode === 'arena') || (floor % 2 === 0);
+
+            if (floor === 1 && game.mode === 'normal') {
+                for(let y=6; y<14; y++) for(let x=5; x<this.w-5; x++) this.grid[y][x] = 0;
+                game.spawn(6, 10, 'player');
+                // Tutorial Lights
+                this.lights.push({x: 6*TILE, y: 10*TILE, r: 200, c: '#e67e22'});
+                
+                const addTutText = (x, y, txt, col) => {
+                    let t = new FloatingText(x*TILE, y*TILE, txt, col, 20); t.life = Infinity; t.vy = 0; game.texts.push(t);
+                };
+                addTutText(6, 8, "WASD to Move", "#fff"); 
+                addTutText(14, 8, "SPACE to Attack", "#e74c3c"); 
+                addTutText(22, 8, "SHIFT to Dash", "#3498db");
+                let dummy = new Enemy(14*TILE, 10*TILE, 1, false);
+                dummy.type = "slime"; dummy.name = "Dummy"; dummy.speed = 0; dummy.dmg = 0; dummy.maxHp = 100; dummy.hp = 100;
+                game.enemies.push(dummy);
+                this.stairs = {x:(this.w-7)*TILE, y:10*TILE, w:TILE, h:TILE};
+
+            } else if (isBossFloor) {
+                for(let y=5; y<this.h-5; y++) for(let x=5; x<this.w-5; x++) this.grid[y][x] = 0;
+                game.spawn(6, 6, 'player');
+                game.spawn(this.w/2, this.h/2, 'enemy', true);
+                this.stairs = {x:(this.w-6)*TILE, y:Math.floor(this.h/2)*TILE, w:TILE, h:TILE};
+                // Boss Arena Lights
+                this.lights.push({x: this.w/2 * TILE, y: this.h/2 * TILE, r: 400, c: this.biome.light});
+            } else {
+                let x = Math.floor(this.w/2), y = Math.floor(this.h/2);
+                let steps = this.w * this.h * 2.5;
+                let floorTiles = [];
+                while(steps > 0) {
+                    this.grid[y][x] = 0;
+                    let dir = Utils.rand(0, 3);
+                    if(dir===0 && x<this.w-2) x++; else if(dir===1 && x>1) x--; else if(dir===2 && y<this.h-2) y++; else if(dir===3 && y>1) y--;
+                    steps--;
+                }
+                for(let Y=0; Y<this.h; Y++) for(let X=0; X<this.w; X++) if(this.grid[Y][X]===0) floorTiles.push({x:X,y:Y});
+                
+                let startIdx = Math.floor(Math.random() * (floorTiles.length / 4)); 
+                let startTile = floorTiles[startIdx];
+                game.spawn(startTile.x, startTile.y, 'player');
+
+                let exit = floorTiles[floorTiles.length-1];
+                this.stairs.x = exit.x*TILE; this.stairs.y = exit.y*TILE;
+                // Exit Light
+                this.lights.push({x: this.stairs.x + TILE/2, y: this.stairs.y + TILE/2, r: 150, c: '#f1c40f'});
+
+                let count = 4 + Math.floor(floor/2);
+                for(let i=0; i<count; i++) {
+                    let t = floorTiles[Utils.rand(0, floorTiles.length-1)];
+                    if(Utils.dist({x:t.x*TILE, y:t.y*TILE}, game.player) > 300) game.spawn(t.x, t.y, 'enemy', false);
+                }
+            }
+        }
+
+        // Walls & Torch Generation
+        for(let y=0; y<this.h; y++) {
+            for(let x=0; x<this.w; x++) {
+                if(this.grid[y][x]===1) {
+                    // Check for wall logic
+                    if((x>0 && this.grid[y][x-1]===0) || (x<this.w-1 && this.grid[y][x+1]===0) || (y>0 && this.grid[y-1][x]===0) || (y<this.h-1 && this.grid[y+1][x]===0)) {
+                        this.walls.push({x,y});
+                        
+                        // Random Wall Torch (10% chance if there is a floor below it)
+                        if (y < this.h-1 && this.grid[y+1][x] === 0 && Math.random() < 0.1) {
+                            this.lights.push({
+                                x: x*TILE + TILE/2, 
+                                y: y*TILE + TILE, 
+                                r: 180, 
+                                c: this.biome.torchColor || '#e67e22',
+                                flicker: true
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    getBiome(f) {
+        if (f >= 40) return { // Void
+            floor: '#0a0011', floorAlt: '#1a0522',
+            wallTop: '#311b92', wallFront: '#220033',
+            light: 'rgba(200, 100, 255, 0.2)',
+            dust: '#9b59b6', shadow: '#000',
+            torchColor: '#9b59b6', type: 'void'
+        };
+        if (f >= 28) return { // Magma
+            floor: '#210b05', floorAlt: '#3e1c10',
+            wallTop: '#5d4037', wallFront: '#3e2723',
+            light: 'rgba(255, 80, 20, 0.2)',
+            dust: '#e74c3c', shadow: '#1a0000',
+            torchColor: '#e74c3c', type: 'magma'
+        };
+        if (f >= 12) return { // Ice
+            floor: '#102027', floorAlt: '#1c2d36',
+            wallTop: '#455a64', wallFront: '#263238',
+            light: 'rgba(100, 220, 255, 0.2)',
+            dust: '#b3e5fc', shadow: '#001',
+            torchColor: '#00d2d3', type: 'ice'
+        };
+        // Dungeon
+        return { 
+            floor: '#111827', floorAlt: '#1f2937',
+            wallTop: '#475569', wallFront: '#334155',
+            light: 'rgba(255, 200, 120, 0.15)',
+            dust: '#aaa', shadow: '#000',
+            torchColor: '#e67e22', type: 'dungeon'
+        };
+    }
+
+    draw(ctx, cx, cy) {
+        let sc = Math.floor(cx/TILE), ec = sc + (width/TILE)+2;
+        let sr = Math.floor(cy/TILE), er = sr + (height/TILE)+2;
+        const b = this.biome;
+
+        for(let y=sr; y<er; y++) {
+            for(let x=sc; x<ec; x++) {
+                if(y>=0 && y<this.h && x>=0 && x<this.w) {
+                    let px = x*TILE - cx;
+                    let py = y*TILE - cy;
+
+                    // FLOOR
+                    if (this.grid[y][x] === 0) {
+                        let decor = this.gridDecor[y][x];
+                        ctx.fillStyle = ((x+y)%2===0) ? b.floor : b.floorAlt;
+                        ctx.fillRect(px, py, TILE, TILE);
+                        
+                        // PROPS based on Biome
+                        if (decor > 0.7) {
+                            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                            if (b.type === 'magma') { // Lava cracks
+                                if (decor > 0.9) {
+                                    ctx.fillStyle = '#c0392b';
+                                    ctx.shadowBlur=5; ctx.shadowColor='#e74c3c';
+                                    ctx.beginPath(); ctx.arc(px+TILE/2, py+TILE/2, decor*5, 0, Math.PI*2); ctx.fill();
+                                    ctx.shadowBlur=0;
+                                } else {
+                                    ctx.fillStyle = '#3e1c10';
+                                    ctx.fillRect(px + decor*10, py + decor*10, 8, 8);
+                                }
+                            } else if (b.type === 'ice') { // Ice shards
+                                ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                                ctx.beginPath(); ctx.moveTo(px+10, py+20); ctx.lineTo(px+20, py+10); ctx.lineTo(px+25, py+25); ctx.fill();
+                            } else if (b.type === 'void') { // Runes
+                                ctx.fillStyle = '#4a148c';
+                                ctx.fillRect(px + decor*20, py + decor*10, 4, 12);
+                                ctx.fillRect(px + decor*20 - 4, py + decor*10 + 4, 12, 4);
+                            } else { // Dungeon stones
+                                ctx.fillStyle = '#222';
+                                ctx.beginPath(); ctx.arc(px + decor*30, py + decor*20, 3, 0, Math.PI*2); ctx.fill();
+                                if(decor > 0.9) ctx.fillRect(px+5, py+5, 2, 2);
+                            }
+                        }
+                    }
+                    // WALL
+                    else if (this.grid[y][x] === 1) {
+                        // Shadow below wall
+                        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                        ctx.fillRect(px, py + TILE, TILE, 12);
+
+                        // Front Face
+                        ctx.fillStyle = b.wallFront;
+                        ctx.fillRect(px, py + 12, TILE, TILE-12);
+                        
+                        // Brick Texture
+                        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                        if (y%2===0) { ctx.fillRect(px+10, py+12, 2, 10); ctx.fillRect(px+30, py+28, 2, 10); }
+                        else { ctx.fillRect(px+20, py+15, 2, 10); }
+
+                        // Top Face (Depth)
+                        ctx.fillStyle = b.wallTop;
+                        ctx.fillRect(px, py - 12, TILE, 24);
+                        
+                        // Top Highlight
+                        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+                        ctx.fillRect(px, py - 12, TILE, 2);
+                    }
+                }
+            }
+        }
+
+        // Draw Lights (Additive Blending)
+        ctx.globalCompositeOperation = 'lighter';
+        for(let l of this.lights) {
+            let lx = l.x - cx;
+            let ly = l.y - cy;
+            // Cull offscreen lights
+            if (lx < -l.r || lx > width+l.r || ly < -l.r || ly > height+l.r) continue;
+
+            let flicker = l.flicker ? Math.sin(Date.now()/100 + l.x) * 5 : 0;
+            let r = l.r + flicker;
+            
+            let g = ctx.createRadialGradient(lx, ly, 0, lx, ly, r);
+            g.addColorStop(0, l.c);
+            g.addColorStop(1, 'rgba(0,0,0,0)');
+            
+            ctx.fillStyle = g;
+            ctx.beginPath(); ctx.arc(lx, ly, r, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+
+        // Draw Portals
+        if (game.mode === 'arena' && game.inHub) {
+            for(let p of this.portals) {
+                let px = p.x - cx, py = p.y - cy;
+                let pulse = Math.sin(Date.now()/300) * 3;
+                ctx.fillStyle = 'rgba(52, 152, 219, 0.2)';
+                ctx.beginPath(); ctx.arc(px + TILE/2, py + TILE/2, 25 + pulse, 0, Math.PI*2); ctx.fill();
+                
+                ctx.fillStyle = '#2980b9'; ctx.fillRect(px+5, py+5, TILE-10, TILE-10);
+                ctx.fillStyle = '#0f172a'; ctx.fillRect(px+10, py+10, TILE-20, TILE-20);
+                ctx.fillStyle = '#3498db'; ctx.fillRect(px+15, py+15, TILE-30, TILE-30);
+            }
+        }
+
+        let isLocked = game.enemies.length > 0;
+        let sx = this.stairs.x - cx, sy = this.stairs.y - cy;
+        
+        // Don't draw regular stairs in Hub
+        if (!(game.mode === 'arena' && game.inHub)) {
+            // Draw Stairs with depth
+            ctx.fillStyle = '#000'; ctx.fillRect(sx+5, sy+5, TILE-10, TILE-10); 
+            for(let i=0; i<4; i++) {
+                 ctx.fillStyle = isLocked ? '#522' : '#666';
+                 ctx.fillRect(sx+8, sy+8+(i*8), TILE-16, 4);
+                 ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                 ctx.fillRect(sx+8, sy+12+(i*8), TILE-16, 4);
+            }
+            if (isLocked) {
+                ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 4;
+                ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx+TILE, sy+TILE); ctx.moveTo(sx+TILE, sy); ctx.lineTo(sx, sy+TILE); ctx.stroke();
+            }
+        }
+    }
+}
+
+/** ---------------- MAIN GAME ---------------- **/
+const game = {
+    floor: 1, state: 'start', mode: 'normal', inHub: false, player: null, map: null,
+    enemies: [], projectiles: [], particles: [], texts: [], pickups: [], effects: [], zones: [], footprints: [],
+    cam: {x:0, y:0}, shake: 0,
+    bossActive: false, bossHp: 0, bossMaxHp: 100, bossName: "",
+    lightOffset: {x:0, y:0}, // For swinging torch light
+
+    spawn: function(gx, gy, type, param) {
+        if (type === 'player') {
+            this.player.x = gx * TILE;
+            this.player.y = gy * TILE;
+        } else if (type === 'enemy') {
+            this.enemies.push(new Enemy(gx * TILE, gy * TILE, this.floor, param));
+        }
+    },
+
+    start: function(mode='normal') {
+        this.mode = mode;
+        this.load();
+        document.getElementById('start-menu').classList.add('hidden');
+        document.getElementById('death-menu').classList.add('hidden');
+        if(('ontouchstart' in window)) document.getElementById('mobile-controls').style.display='flex';
+        if(AudioSys.ctx.state === 'suspended') AudioSys.ctx.resume();
+        this.state = 'play';
+        if(!this.player || this.player.hp <= 0) {
+            this.player = new Player();
+        }
+        if (mode === 'arena') this.loadHub();
+        else { this.inHub = false; this.floor = 1; this.newFloor(); }
+        this.loop();
+    },
+
+    loadHub: function() {
+        this.inHub = true;
+        this.floor = 0; 
+        this.newFloor();
+        this.log("ARENA HUB - CHOOSE YOUR FATE");
+    },
+
+    loadBoss: function(f) {
+        this.inHub = false;
+        this.floor = f;
+        this.newFloor();
+    },
+
+    newFloor: function() {
+        this.enemies=[]; this.projectiles=[]; this.pickups=[]; this.particles=[]; this.texts=[]; this.effects=[]; this.zones=[]; this.footprints=[];
+        this.map = new MapGen(this.floor);
+        this.bossActive = false;
+        if (this.mode === 'normal') this.save(); 
+        if (this.inHub) {
+            document.getElementById('floor-display').innerText = "HUB";
+        } else {
+            this.log(`Entered Floor ${this.floor}`);
+            this.updateUI();
+        }
+    },
+
+    drop: function(x, y, floor) {
+        let id = 0;
+        const keys = Object.keys(WEAPONS).map(Number).sort((a,b)=>a-b);
+        for(let k of keys) { if(k <= floor) id = k; }
+        this.pickups.push({x,y,w:20,h:20,type:'wep',id:id});
+    },
+
+    explode: function(x, y, r, dmg) {
+        this.createParticles(x, y, '#e74c3c', 20);
+        this.enemies.forEach(e => { if(Utils.dist(e, {x,y}) < r) e.hit(dmg); });
+        if (Utils.dist(this.player, {x,y}) < r) this.player.hit(dmg);
+    },
+
+    createParticles: function(x, y, c, n, type=0) {
+        if(this.particles.length > 200) return;
+        for(let i=0; i<n; i++) this.particles.push(new Particle(x, y, c, 1, type));
+    },
+
+    addText: function(x, y, text, color, size) {
+        this.texts.push(new FloatingText(x, y, text, color, size));
+    },
+
+    nextFloor: function() {
+        if (this.mode === 'arena') {
+            if (!this.inHub) {
+                this.loadHub();
+                AudioSys.sfx.levelup();
+            }
+        } else {
+            this.floor++; AudioSys.sfx.levelup(); this.newFloor();
+        }
+    },
+
+    log: function(m) {
+        const d = document.createElement('div');
+        d.className = 'log-entry'; d.innerText = m;
+        document.getElementById('msg-log').prepend(d);
+        setTimeout(() => { d.style.opacity=0; setTimeout(()=>d.remove(), 500); }, 2000);
+    },
+
+    updateUI: function() {
+        if(this.inHub) document.getElementById('floor-display').innerText = "HUB";
+        else document.getElementById('floor-display').innerText = this.floor;
+        document.getElementById('level-display').innerText = this.player.level;
+
+        let hp = this.player.hp || 0;
+        let maxHp = this.player.maxHp || 100;
+        let xp = this.player.xp || 0;
+        let nextLvl = this.player.nextLvl || 100;
+
+        const hpPct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
+        document.getElementById('hp-bar').style.width = hpPct + "%";
+        
+        const xpPct = Math.max(0, Math.min(100, (xp / nextLvl) * 100));
+        document.getElementById('xp-fill').style.width = xpPct + "%";
+
+        const w = WEAPONS[this.player.weaponId] || WEAPONS[0];
+        document.getElementById('weapon-name').innerText = w.name;
+        document.getElementById('weapon-name').style.color = w.color;
+        document.getElementById('weapon-desc').innerText = w.desc;
+
+        const bossHud = document.getElementById('boss-hud');
+        if (this.bossActive && this.bossHp > 0) {
+            bossHud.style.opacity = 1;
+            document.getElementById('boss-name-display').innerText = this.bossName;
+            const bossPct = Math.max(0, (this.bossHp / this.bossMaxHp) * 100);
+            document.getElementById('boss-hp-fill').style.width = bossPct + "%";
+        } else {
+            bossHud.style.opacity = 0;
+        }
+    },
+
+    over: function() {
+        this.state = 'over';
+        localStorage.removeItem('aethelgard_save'); 
+        document.getElementById('death-menu').classList.remove('hidden');
+        document.getElementById('death-stats').innerText = "Floor: " + this.floor;
+    },
+
+    save: function() {
+        if (this.player.hp <= 0) return; 
+        const d = { f: this.floor, p: { l: this.player.level, xp: this.player.xp, nl: this.player.nextLvl, mh: this.player.maxHp, h: this.player.hp, w: this.player.weaponId }};
+        localStorage.setItem('aethelgard_save', JSON.stringify(d));
+    },
+
+    load: function() {
+        const s = localStorage.getItem('aethelgard_save');
+        if(s) {
+            try {
+                const d = JSON.parse(s);
+                if (!d || !d.p || d.p.h <= 0) { 
+                    this.resetData(); 
+                    return; 
+                }
+                this.floor = d.f; 
+                this.player = new Player();
+                this.player.level = d.p.l || 1; 
+                this.player.xp = d.p.xp || 0; 
+                this.player.nextLvl = d.p.nl || 100;
+                this.player.maxHp = d.p.mh || 100; 
+                this.player.hp = d.p.h || 100; 
+                this.player.weaponId = d.p.w || 0;
+            } catch(e) {
+                console.error("Save file corrupted, resetting.");
+                this.resetData();
+            }
+        }
+    },
+    
+    resetData: function() { 
+        localStorage.removeItem('aethelgard_save'); 
+    },
+
+    loop: function() {
+        if(game.state !== 'play') return;
+        
+        // Spawn dust/ambient particles
+        if (Math.random() < 0.1) {
+            game.createParticles(
+                game.cam.x + Math.random()*width, 
+                game.cam.y + Math.random()*height, 
+                game.map.biome.dust, 
+                1, 3
+            );
+        }
+        
+        // Weather
+        if (game.map.biome.type === 'ice' && Math.random() < 0.3) {
+             game.createParticles(game.cam.x + Math.random()*width, game.cam.y + Math.random()*height, '#fff', 1, 4); // Snow
+        }
+        if (game.map.biome.type === 'magma' && Math.random() < 0.3) {
+             game.createParticles(game.cam.x + Math.random()*width, game.cam.y + height + 10, '#fff', 1, 5); // Ash rising
+        }
+        if (game.map.biome.type === 'void' && Math.random() < 0.2) {
+             game.createParticles(game.cam.x + Math.random()*width, game.cam.y + Math.random()*height, '#fff', 1, 6); // Spores
+        }
+
+        game.player.update(input, game.map);
+        game.enemies.forEach(e => e.update(game.player, game.map));
+        game.projectiles.forEach(p => p.update(game.map, game.enemies, game.player));
+        game.particles.forEach(p => p.update());
+        game.texts.forEach(t => t.update());
+        game.zones.forEach(z => z.update());
+        
+        for(let i=game.effects.length-1; i>=0; i--) {
+            let ef = game.effects[i];
+            
+            if (ef.type === 'beam') {
+                ef.life--;
+                if(ef.life <= 0) game.effects.splice(i, 1);
+                continue;
+            }
+
+            if(ef.type === 'orbital') {
+                ef.r += 0.2; 
+                for(let j=0; j<3; j++) {
+                    let ang = ef.r + j * (Math.PI*2/3);
+                    let ex = ef.owner.x + ef.owner.w/2 + Math.cos(ang)*60;
+                    let ey = ef.owner.y + ef.owner.h/2 + Math.sin(ang)*60;
+                    
+                    ctx.save();
+                    ctx.translate(ex-game.cam.x, ey-game.cam.y);
+                    ctx.rotate(ang + Math.PI/2);
+                    ctx.shadowBlur = 10; ctx.shadowColor = '#f1c40f';
+                    Drawer.weapon(ctx, 'sword_gold', '#f1c40f');
+                    ctx.shadowBlur = 0;
+                    ctx.restore();
+
+                    game.enemies.forEach(e => {
+                        if(Utils.dist({x:ex, y:ey}, e) < 30) {
+                             e.hit(ef.damage * 0.1);
+                             e.x += Math.cos(ang)*5; e.y += Math.sin(ang)*5;
+                        }
+                    });
+                }
+                if(ef.r > 10) game.effects.splice(i, 1);
+            }
+            else { 
+                ef.r += 5;
+                if(ef.r >= ef.maxR) game.effects.splice(i, 1);
+                else {
+                    game.enemies.forEach(e => {
+                        if(Utils.dist(e, ef) < ef.r && Utils.dist(e, ef) > ef.r-15) e.hit(ef.damage);
+                    });
+                }
+            }
+        }
+
+        game.enemies = game.enemies.filter(e => e.active);
+        game.projectiles = game.projectiles.filter(p => p.active);
+        game.particles = game.particles.filter(p => p.life > 0 || (p.isBlood && p.life > -1000));
+        game.texts = game.texts.filter(t => t.life > 0);
+        game.zones = game.zones.filter(z => z.life > 0);
+        
+        // Update footprints
+        for(let i=game.footprints.length-1; i>=0; i--) {
+            game.footprints[i].life--;
+            if(game.footprints[i].life <= 0) game.footprints.splice(i,1);
+        }
+
+        game.updateUI();
+
+        let tx = game.player.x - width/2, ty = game.player.y - height/2;
+        game.cam.x += (tx - game.cam.x) * CAM_LERP;
+        game.cam.y += (ty - game.cam.y) * CAM_LERP;
+
+        if (game.shake > 0) {
+            let sx = (Math.random()-0.5)*game.shake; let sy = (Math.random()-0.5)*game.shake;
+            game.shake *= 0.9; if(game.shake < 0.5) game.shake = 0;
+            game.cam.x += sx; game.cam.y += sy;
+        }
+
+        let cx = game.cam.x, cy = game.cam.y;
+
+        ctx.fillStyle = game.map.biome.floorAlt; ctx.fillRect(0,0,width,height);
+        game.map.draw(ctx, cx, cy);
+        
+        // Render Footprints
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        game.footprints.forEach(fp => {
+            let alpha = fp.life / 100;
+            ctx.globalAlpha = alpha;
+            ctx.beginPath(); ctx.ellipse(fp.x-cx, fp.y-cy, 4, 2, 0, 0, Math.PI*2); ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+
+        game.zones.forEach(z => z.draw(ctx, cx, cy));
+        game.particles.filter(p => p.landed && p.isBlood).forEach(p => p.draw(ctx, cx, cy));
+
+        game.pickups.forEach(p => {
+            let bounce = Math.sin(Date.now()/200)*3;
+            if(p.type==='wep') {
+                let w = WEAPONS[p.id];
+                ctx.save(); ctx.translate(p.x-cx+10, p.y-cy+10+bounce); ctx.rotate(-Math.PI/4);
+                Drawer.weapon(ctx, w.look, w.color);
+                ctx.restore();
+            } else {
+                ctx.fillStyle = '#e74c3c';
+                ctx.beginPath(); ctx.arc(p.x-cx+10, p.y-cy+10+bounce, 6, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.fillRect(p.x-cx+8, p.y-cy+6+bounce, 4, 8); ctx.fillRect(p.x-cx+6, p.y-cy+8+bounce, 8, 4);
+            }
+        });
+
+        game.particles.filter(p => p.landed && (p.isFire || p.isVoid)).forEach(p => p.draw(ctx, cx, cy));
+
+        game.enemies.forEach(e => e.draw(ctx, cx, cy));
+        game.player.draw(ctx, cx, cy);
+        
+        // Use Additive Blending for Glowing Projectiles
+        ctx.globalCompositeOperation = 'lighter';
+        game.particles.filter(p => !p.landed).forEach(p => p.draw(ctx, cx, cy));
+        game.projectiles.forEach(p => p.draw(ctx, cx, cy));
+        ctx.globalCompositeOperation = 'source-over';
+        
+        game.texts.forEach(t => t.draw(ctx, cx, cy));
+
+        game.effects.forEach(ef => {
+            if (ef.type === 'beam') {
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.strokeStyle = ef.color;
+                ctx.lineWidth = 15 + Math.sin(Date.now()/50)*5;
+                ctx.lineCap = 'round';
+                ctx.shadowBlur = 30; ctx.shadowColor = ef.color;
+                ctx.beginPath(); ctx.moveTo(ef.x1-cx, ef.y1-cy); ctx.lineTo(ef.x2-cx, ef.y2-cy); ctx.stroke();
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; ctx.shadowBlur = 0; ctx.stroke();
+                ctx.globalCompositeOperation = 'source-over';
+            }
+            else if (ef.type === 'spin') {
+                 ctx.strokeStyle = ef.color; ctx.lineWidth = 4; 
+                 ctx.globalAlpha = 1 - (ef.r / ef.maxR);
+                 ctx.beginPath(); ctx.arc(ef.x-cx, ef.y-cy, ef.r, 0, Math.PI*2); ctx.stroke();
+                 ctx.fillStyle = ef.color; ctx.globalAlpha = 0.2 * (1 - (ef.r / ef.maxR));
+                 ctx.fill(); ctx.globalAlpha = 1;
+            }
+            else if (ef.type !== 'orbital') { 
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.globalAlpha = 0.6;
+                ctx.beginPath(); ctx.arc(ef.x-cx, ef.y-cy, ef.r, 0, Math.PI*2); ctx.stroke(); 
+                ctx.globalAlpha = 1;
+            }
+        });
+
+        const px = game.player.x - cx + game.player.w/2;
+        const py = game.player.y - cy + game.player.h/2;
+        
+        // Swinging lantern effect
+        let swingX = Math.cos(Date.now()/500) * 10 - (game.player.moving ? Math.cos(game.player.facing)*20 : 0);
+        let swingY = Math.sin(Date.now()/500) * 5 - (game.player.moving ? Math.sin(game.player.facing)*20 : 0);
+        game.lightOffset.x += (swingX - game.lightOffset.x) * 0.1;
+        game.lightOffset.y += (swingY - game.lightOffset.y) * 0.1;
+
+        let flicker = 150 + Math.sin(Date.now()/100) * 5; 
+        const lx = px + game.lightOffset.x;
+        const ly = py + game.lightOffset.y;
+
+        const grd = ctx.createRadialGradient(lx, ly, flicker, lx, ly, 750);
+        grd.addColorStop(0, 'rgba(0,0,0,0)');
+        grd.addColorStop(0.3, game.map.biome.shadow || 'rgba(0,0,0,0.4)');
+        grd.addColorStop(1, 'rgba(0,0,0,0.98)');
+        ctx.fillStyle = grd;
+        ctx.fillRect(0,0,width,height);
+
+        // Player Lantern (Color matches biome)
+        const glow = ctx.createRadialGradient(lx, ly, 10, lx, ly, 120);
+        glow.addColorStop(0, game.map.biome.light);
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = glow;
+        ctx.fillRect(0,0,width,height);
+        ctx.globalCompositeOperation = 'source-over';
+
+        requestAnimationFrame(game.loop);
+    }
+};
+
+/** ---------------- INPUT ---------------- **/
+const input = { keys: {}, joystick: {x:0, y:0}, atk: false, dash: false };
+window.onkeydown = e => input.keys[e.key] = true;
+window.onkeyup = e => { input.keys[e.key] = false; if(e.key===' ') input.atk=false; };
+
+if(('ontouchstart' in window) || navigator.maxTouchPoints > 0) {
+    const j = document.getElementById('joystick-area'), s = document.getElementById('joystick-stick');
+    let js = {x:0, y:0};
+    j.ontouchstart = e => { e.preventDefault(); js = {x:e.touches[0].clientX, y:e.touches[0].clientY}; s.style.transition='none'; };
+    j.ontouchmove = e => {
+        e.preventDefault();
+        let dx = e.touches[0].clientX - js.x, dy = e.touches[0].clientY - js.y;
+        let d = Math.sqrt(dx*dx+dy*dy);
+        if(d>35) { dx=(dx/d)*35; dy=(dy/d)*35; }
+        s.style.transform=`translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+        input.joystick = {x:dx/35, y:dy/35};
+    };
+    j.ontouchend = e => { e.preventDefault(); input.joystick={x:0,y:0}; s.style.transform='translate(-50%,-50%)'; };
+    const b = document.getElementById('attack-btn');
+    b.ontouchstart = e => { e.preventDefault(); input.atk = true; };
+    b.ontouchend = e => { e.preventDefault(); input.atk = false; };
+    const d = document.getElementById('dash-btn');
+    d.ontouchstart = e => { e.preventDefault(); input.dash = true; };
+    d.ontouchend = e => { e.preventDefault(); input.dash = false; };
+} else {
+    window.onmousedown = () => input.atk = true;
+    window.onmouseup = () => input.atk = false;
+}
+
+function resize() { width=window.innerWidth; height=window.innerHeight; canvas.width=width; canvas.height=height; }
+window.onresize = resize; resize();
+</script>
+</body>
+</html>

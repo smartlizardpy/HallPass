@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Evolution v7.0 (The Living Web)</title>
+    <style>
+        /* --- CORE VARIABLES --- */
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #000000;
+            --link-color: #0000EE;
+            --panel-bg: transparent;
+            --border-style: none;
+            --font-main: "Times New Roman", Times, serif;
+            --btn-bg: #f0f0f0;
+            --btn-border: 1px solid #999;
+            --btn-radius: 0px;
+            --shadow: none;
+            --container-width: 900px;
+            --accent-color: #0000EE;
+        }
+
+        body {
+            margin: 0;
+            height: 100vh;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-main);
+            transition: background-color 1.0s ease-in-out, color 0.5s;
+            user-select: none;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* --- VISUAL ERAS (THEMES) --- */
+
+        /* ERA 1: 1991 */
+        body.theme-1991 { --bg-color: #ffffff; --text-color: #000000; --link-color: #0000EE; --font-main: "Times New Roman", Times, serif; --btn-bg: #efefef; --btn-border: 1px solid #000; }
+        
+        /* ERA 2: 1995 (Added Tiled Background Pattern) */
+        body.theme-1995 { 
+            --bg-color: #c0c0c0; --text-color: #000000; --panel-bg: #c0c0c0; --border-style: outset 3px #ffffff; --font-main: Arial, Helvetica, sans-serif; --btn-bg: #c0c0c0; --btn-border: outset 2px #ffffff; 
+            background-image: linear-gradient(45deg, #b0b0b0 25%, transparent 25%, transparent 75%, #b0b0b0 75%, #b0b0b0), linear-gradient(45deg, #b0b0b0 25%, transparent 25%, transparent 75%, #b0b0b0 75%, #b0b0b0);
+            background-size: 20px 20px;
+            background-position: 0 0, 10px 10px;
+        }
+        
+        /* ERA 3: 2000 */
+        body.theme-2000 { --bg-color: #000000; --text-color: #00ff00; --link-color: #ff00ff; --panel-bg: rgba(0,0,50,0.9); --border-style: solid 1px #00ff00; --font-main: "Courier New", Courier, monospace; --btn-bg: #000000; --btn-border: 1px dashed #ffff00; }
+        
+        /* ERA 4: 2005 */
+        body.theme-2005 { --bg-color: #e0f2f1; --text-color: #333333; --panel-bg: linear-gradient(to bottom, #ffffff, #e6e6e6); --border-style: solid 1px #cccccc; --font-main: Verdana, sans-serif; --btn-bg: linear-gradient(to bottom, #74b9ff, #0984e3); --btn-border: 1px solid #0984e3; --btn-radius: 4px; --shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        body.theme-2005 #game-container { border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        
+        /* ERA 5: 2012 */
+        body.theme-2012 { --bg-color: #2c3e50; --text-color: #ecf0f1; --panel-bg: #34495e; --border-style: none; --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; --btn-bg: #e74c3c; --btn-border: none; --btn-radius: 0px; --shadow: none; }
+        
+        /* ERA 6: 2020 */
+        body.theme-2020 { --bg-color: #121212; --text-color: #ffffff; --panel-bg: #1e1e1e; --border-style: 1px solid #333; --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; --btn-bg: #bb86fc; --btn-border: none; --btn-radius: 12px; --shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        body.theme-2020 #game-container { border-radius: 16px; }
+        
+        /* ERA 7: 2030 */
+        body.theme-2030 { --bg-color: #000000; --text-color: #00f3ff; --panel-bg: rgba(255, 255, 255, 0.05); --border-style: 1px solid rgba(0, 243, 255, 0.3); --font-main: 'Courier New', monospace; --btn-bg: rgba(0, 243, 255, 0.1); --btn-border: 1px solid #00f3ff; --btn-radius: 20px; --shadow: 0 0 20px rgba(0, 243, 255, 0.2); }
+        body.theme-2030 #game-container { backdrop-filter: blur(10px); box-shadow: 0 0 50px rgba(0,243,255,0.1); }
+        
+        /* Future Eras */
+        body.theme-2100 { --bg-color: #0a1f0a; --text-color: #7aff7a; --panel-bg: rgba(20, 50, 20, 0.3); --border-style: 2px dashed #40ff40; --font-main: 'Trebuchet MS', sans-serif; --btn-bg: #1a3f1a; --btn-border: 1px solid #7aff7a; --btn-radius: 50% 10% 50% 10%; --shadow: 0 0 15px rgba(64, 255, 64, 0.2); }
+        body.theme-2300 { --bg-color: #080810; --text-color: #ffcc00; --panel-bg: radial-gradient(circle, #2a2a00 0%, #000000 100%); --border-style: 2px solid #ffaa00; --font-main: 'Impact', sans-serif; --btn-bg: linear-gradient(45deg, #ff8800, #ffcc00); --btn-border: 2px solid #ffffff; --btn-radius: 0px; --shadow: 0 0 30px #ffaa00; }
+        body.theme-2600 { --bg-color: #000510; --text-color: #b0c0ff; --panel-bg: rgba(0, 10, 40, 0.6); --border-style: 1px solid #5070ff; --font-main: 'Lucida Console', monospace; --btn-bg: rgba(80, 112, 255, 0.2); --btn-border: 1px solid #a0b0ff; --btn-radius: 5px; --shadow: 0 0 10px #5070ff; }
+        body.theme-2600::before { content: " . . + . . * . . + . * . . + . . * ."; position: absolute; top:0; left:0; width:100%; height:100%; color: white; opacity: 0.3; pointer-events: none; overflow: hidden; font-size: 20px; }
+        body.theme-2800 { --bg-color: #200020; --text-color: #ff00ff; --panel-bg: rgba(50, 0, 50, 0.4); --border-style: 2px solid cyan; --font-main: 'Courier New', monospace; --btn-bg: #000000; --btn-border: 2px double #ff00ff; --btn-radius: 0px; --shadow: 5px 5px 0px cyan; }
+        body.theme-3000 { --bg-color: #ffffff; --text-color: #888888; --panel-bg: rgba(255, 255, 255, 0.8); --border-style: 1px solid #eeeeee; --font-main: 'Helvetica Neue', Helvetica, Arial, sans-serif; --btn-bg: #ffffff; --btn-border: 1px solid #eeeeee; --btn-radius: 100px; --shadow: 0 0 60px rgba(255, 215, 0, 0.5); }
+        body.theme-3000 #execute-btn { color: #d4af37; border: 1px solid #d4af37; }
+
+        /* --- LAYOUT --- */
+        #game-container { width: 90%; max-width: var(--container-width); height: 90vh; border: var(--border-style); padding: 20px; background: var(--panel-bg); display: grid; grid-template-rows: auto auto 1fr auto; gap: 15px; position: relative; z-index: 10; transition: all 0.5s ease; }
+        #header-bar { border-bottom: var(--border-style); padding-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-end; }
+        h1 { margin: 0; font-size: 28px; font-weight: bold; }
+        #stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        .stat-box { border: var(--border-style); background: rgba(255,255,255,0.05); padding: 15px; border-radius: var(--btn-radius); box-shadow: var(--shadow); text-align: center; display:flex; flex-direction:column; justify-content:center;}
+        .stat-label { font-size: 0.8em; opacity: 0.7; text-transform: uppercase; margin-bottom: 5px; display: block;}
+        .stat-value { font-size: 1.8em; font-weight: bold; }
+        
+        /* Control Area */
+        #main-controls { display: flex; justify-content: center; align-items: center; padding: 20px; gap: 20px; }
+        
+        #execute-btn { padding: 20px 40px; font-size: 1.2em; background: var(--btn-bg); border: var(--btn-border); color: var(--text-color); border-radius: var(--btn-radius); cursor: pointer; font-family: inherit; font-weight: bold; box-shadow: var(--shadow); transition: transform 0.1s, box-shadow 0.3s; min-width: 200px; }
+        
+        /* Ability Button */
+        #ability-btn {
+            padding: 20px 30px; font-size: 1em; background: transparent; border: var(--btn-border); color: var(--text-color); border-radius: var(--btn-radius); cursor: pointer; font-family: inherit; font-weight: bold; opacity: 0.5;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 150px;
+        }
+        #ability-btn.ready { opacity: 1; border-color: var(--text-color); background: rgba(255,255,255,0.1); }
+        #ability-btn.active { animation: pulse 1s infinite; background: var(--text-color); color: var(--bg-color); }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+
+        /* Sound Toggle */
+        #sound-toggle { position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 20px; opacity: 0.5; }
+        #sound-toggle:hover { opacity: 1; }
+
+        /* Specific Theme Button Tweaks */
+        body.theme-1991 #execute-btn { text-decoration: underline; color: blue; border: none; background: none; font-size: 1.5em; }
+        body.theme-1995 #execute-btn { background: #d0d0d0; color: black; border: outset 3px #fff; }
+        body.theme-2005 #execute-btn { color: white; text-shadow: 0 -1px 0 rgba(0,0,0,0.2); }
+        body.theme-2012 #execute-btn { color: white; text-transform: uppercase; }
+        body.theme-2030 #execute-btn:hover { box-shadow: 0 0 30px var(--text-color); text-shadow: 0 0 10px var(--text-color); }
+        body.theme-2800 #execute-btn { animation: glitch 0.5s infinite; }
+        
+        @keyframes glitch { 0% { transform: translate(0,0); } 20% { transform: translate(-2px,2px); } 40% { transform: translate(-2px,-2px); } 60% { transform: translate(2px,2px); } 80% { transform: translate(2px,-2px); } 100% { transform: translate(0,0); } }
+        #execute-btn:active { transform: scale(0.98); }
+
+        #upgrades-container { border-top: var(--border-style); overflow-y: auto; padding-top: 15px; }
+        #upgrades-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+        
+        .upgrade-card { border: var(--border-style); padding: 12px; background: rgba(128,128,128,0.1); border-radius: var(--btn-radius); cursor: pointer; text-align: left; transition: all 0.2s; display: flex; flex-direction: column; justify-content: space-between; min-height: 80px; position: relative; }
+        .upgrade-card:hover:not(:disabled) { background: rgba(128,128,128,0.2); transform: translateY(-2px); }
+        .upgrade-card:disabled { opacity: 0.5; cursor: not-allowed; }
+        .u-name { font-weight: bold; font-size: 1em; margin-bottom: 5px; display: block; }
+        .u-desc { font-size: 0.8em; opacity: 0.8; font-style: italic; }
+        .u-cost { font-size: 0.9em; margin-top: 8px; font-weight: bold; display: block; }
+        .u-year { position: absolute; top: 5px; right: 5px; font-size: 0.7em; opacity: 0.5; background: rgba(0,0,0,0.1); padding: 2px 4px; border-radius: 4px; }
+
+        #timeline-container { margin-top: 10px; width: 100%; height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; overflow: hidden; }
+        #timeline-fill { height: 100%; width: 0%; background: var(--text-color); transition: width 0.5s; }
+
+        #footer-log { font-size: 0.8em; opacity: 0.6; border-top: 1px dotted var(--text-color); padding-top: 5px; font-family: monospace; height: 60px; overflow: hidden; display: flex; flex-direction: column-reverse; }
+
+        .hidden { display: none !important; }
+        
+        /* Marquee for 1995 */
+        .marquee-container { width: 100%; overflow: hidden; white-space: nowrap; display: none; }
+        body.theme-1995 .marquee-container { display: block; background: navy; color: yellow; padding: 2px; }
+
+        /* --- VISUAL ARTIFACTS --- */
+        .floating-text {
+            position: absolute; pointer-events: none; font-weight: bold; font-size: 1.2em;
+            color: var(--text-color); animation: floatUp 1s forwards; z-index: 100;
+        }
+        @keyframes floatUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-30px); } }
+
+        #inline-img-artifact { display: none; width: 50px; height: 50px; background: #ddd; border: 1px solid #000; margin-left: 10px; vertical-align: middle; text-align: center; line-height: 50px; font-size: 10px; color: #555; }
+        #gif-artifact { display: none; margin: 10px auto; width: 200px; text-align: center; border: 2px dashed orange; background: yellow; color: red; font-weight: bold; padding: 5px; animation: blink 1s infinite; }
+        @keyframes blink { 0% {opacity:1;} 50% {opacity:0.5;} 100% {opacity:1;} }
+
+        .trail-dot { position: fixed; width: 8px; height: 8px; background: var(--link-color); border-radius: 50%; pointer-events: none; opacity: 0.7; z-index: 9999; transition: opacity 0.5s; }
+
+        #hologram-artifact { display: none; position: absolute; top: 20%; right: 5%; width: 100px; height: 100px; pointer-events: none; transform-style: preserve-3d; animation: spin 5s infinite linear; border: 1px solid var(--text-color); }
+        @keyframes spin { 0% {transform: rotateX(0) rotateY(0);} 100% {transform: rotateX(360deg) rotateY(360deg);} }
+
+        /* Canvas Background (for Matrix/Starfield) */
+        #bg-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: -1; opacity: 0.3; }
+
+    </style>
+</head>
+<body class="theme-1991">
+
+    <canvas id="bg-canvas"></canvas>
+    
+    <div id="game-container">
+        
+        <div id="sound-toggle">🔊</div>
+
+        <!-- Header -->
+        <div id="header-bar">
+            <div style="display:flex; align-items:center;">
+                <div>
+                    <h1 id="site-title">My Website</h1>
+                    <div id="site-subtitle" style="font-size: 0.9em;">Under Construction...</div>
+                </div>
+                <!-- Inline Image Artifact -->
+                <div id="inline-img-artifact">[IMG]</div>
+            </div>
+            <div style="text-align: right; width: 200px;">
+                <div style="font-size: 0.7em; margin-bottom: 5px;">WEB EVOLUTION</div>
+                <div id="timeline-container"><div id="timeline-fill"></div></div>
+                <div id="timeline-text" style="font-size: 0.7em; margin-top: 2px;">1991</div>
+            </div>
+        </div>
+
+        <div class="marquee-container">
+            <marquee>WELCOME TO THE WORLD WIDE WEB! BEST VIEWED IN NETSCAPE NAVIGATOR 3.0!</marquee>
+        </div>
+
+        <!-- GIF Artifact -->
+        <div id="gif-artifact">WORK IN PROGRESS<br>🚧 🚧 🚧</div>
+
+        <!-- Hologram Artifact -->
+        <div id="hologram-artifact"></div>
+
+        <!-- Stats -->
+        <div id="stats-grid" class="hidden">
+            <div class="stat-box">
+                <span class="stat-label">Total Visitors</span>
+                <span id="pp-val" class="stat-value">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Page Views / Click</span>
+                <span id="cpc-val" class="stat-value">1</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Traffic / Sec</span>
+                <span id="auto-val" class="stat-value">0</span>
+            </div>
+        </div>
+        
+        <!-- Multiplier Display -->
+        <div id="prestige-display" class="hidden" style="text-align: center; color: gold; font-weight: bold; font-size: 0.8em; margin-top: 5px;">
+            New Universe+ Multiplier: x<span id="mult-val">1.0</span>
+        </div>
+
+        <!-- Controls -->
+        <div id="main-controls">
+            <button id="execute-btn">Refresh Page</button>
+            <button id="ability-btn" class="hidden">
+                <span id="ability-name">Ability</span>
+                <span id="ability-timer" style="font-size: 0.8em; opacity: 0.8;">READY</span>
+            </button>
+        </div>
+
+        <!-- Upgrade Tree -->
+        <div id="upgrades-container">
+            <div id="upgrades-grid">
+                <!-- Injected via JS -->
+            </div>
+        </div>
+
+        <!-- Footer Log -->
+        <div id="footer-log">
+            <div>> Connecting to 127.0.0.1...</div>
+        </div>
+
+    </div>
+
+<script>
+    /* * WEB DESIGN EVOLUTION v7.0 (The Living Web)
+     * Added: Prestige, Abilities, Sound, Visual Polish
+     */
+
+    // --- GAME STATE ---
+    const defaultState = {
+        visitors: 0,
+        totalVisitors: 0,
+        lifetimeVisitors: 0, // For Prestige
+        prestigeMult: 1.0,
+        progress: 0, 
+        clickPower: 1,
+        autoRate: 0,
+        bought: [],
+        currentEra: '1991',
+        startTime: Date.now(),
+        lastAbility: 0,
+        soundEnabled: true
+    };
+    
+    let state = JSON.parse(JSON.stringify(defaultState));
+    let lastTick = Date.now();
+    let trailActive = false;
+    let abilityActive = false;
+    let abilityDuration = 0;
+    
+    // Audio Context
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioContext();
+
+    // Canvas
+    const canvas = document.getElementById('bg-canvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+
+    // Ability Config
+    const ABILITY_COOLDOWN = 60000; // 60s
+    const ABILITY_DURATION = 15000; // 15s
+
+    // --- UPGRADE DATA ---
+    const upgrades = [
+        // ERA 1: 1991
+        { id: 0, name: "HTML Tags", cost: 10, type: "feature", effect: "unlock_ui", desc: "Allows structured content." },
+        { id: 1, name: "Hyperlinks", cost: 25, type: "mech", click: 1, desc: "Connect pages (+1 View)." },
+        { id: 2, name: "Line Breaks", cost: 50, type: "mech", click: 2, desc: "Readable text (+2 Views)." },
+        { id: 3, name: "Inline Images", cost: 100, type: "visual-artifact", effect: "show_img", desc: "Shows an image placeholder." },
+        { id: 4, name: "Email Link", cost: 200, type: "mech", auto: 1, desc: "mailto: links (+1 Traffic)." },
+
+        // ERA 2: 1995
+        { id: 5, name: "Table Layouts", cost: 400, type: "visual", era: "theme-1995", desc: "Visuals: Grey & Tables." },
+        { id: 6, name: "Background Color", cost: 600, type: "mech", click: 5, desc: "No more white screens (+5)." },
+        { id: 7, name: "Marquee Tag", cost: 800, type: "mech", auto: 3, desc: "Moving text (+3 Traffic)." },
+        { id: 8, name: "Hit Counter", cost: 1200, type: "mech", auto: 5, desc: "Show stats (+5 Traffic)." },
+        { id: 9, name: "Animated GIFs", cost: 1800, type: "visual-artifact", effect: "show_gif", desc: "Under Construction sign." },
+        { id: 10, name: "Frameset", cost: 2500, type: "mech", auto: 10, desc: "Persistent nav (+10 Traffic)." },
+
+        // ERA 3: 2000
+        { id: 11, name: "CSS 1.0", cost: 4000, type: "visual", era: "theme-2000", desc: "Visuals: Stylesheets." },
+        { id: 12, name: "Flash Intro", cost: 6000, type: "mech", click: 25, desc: "Skip Intro (+25 Views)." },
+        { id: 13, name: "Guestbook", cost: 8500, type: "mech", auto: 20, desc: "Sign my guestbook (+20)." },
+        { id: 14, name: "JavaScript Alerts", cost: 12000, type: "mech", click: 50, desc: "Annoying popups (+50)." },
+        { id: 15, name: "Cursor Trail", cost: 16000, type: "visual-artifact", effect: "show_trail", desc: "Sparkles follow mouse." },
+        { id: 16, name: "MIDI Music", cost: 22000, type: "mech", auto: 50, desc: "Auto-play audio (+50)." },
+
+        // ERA 4: 2005
+        { id: 17, name: "XHTML Strict", cost: 35000, type: "visual", era: "theme-2005", desc: "Visuals: Glossy." },
+        { id: 18, name: "AJAX", cost: 50000, type: "mech", click: 100, desc: "No reloads (+100 Views)." },
+        { id: 19, name: "RSS Feed", cost: 70000, type: "mech", auto: 100, desc: "Subscribers (+100 Traffic)." },
+        { id: 20, name: "Rounded Corners", cost: 100000, type: "mech", click: 150, desc: "border-radius (+150)." },
+        { id: 21, name: "Beta Badge", cost: 140000, type: "mech", auto: 200, desc: "Perpetual beta (+200)." },
+        { id: 22, name: "Blog Comments", cost: 200000, type: "mech", auto: 300, desc: "Engagement (+300)." },
+
+        // ERA 5: 2012
+        { id: 23, name: "HTML5", cost: 350000, type: "visual", era: "theme-2012", desc: "Visuals: Flat Design." },
+        { id: 24, name: "Responsive Grid", cost: 500000, type: "mech", click: 500, desc: "Mobile friendly (+500)." },
+        { id: 25, name: "CSS3 Transitions", cost: 750000, type: "mech", auto: 600, desc: "Smooth animations (+600)." },
+        { id: 26, name: "Hamburger Menu", cost: 1000000, type: "mech", click: 800, desc: "Hidden nav (+800)." },
+        { id: 27, name: "Hero Image", cost: 1500000, type: "mech", auto: 1000, desc: "Big photos (+1k Traffic)." },
+        { id: 28, name: "Parallax", cost: 2200000, type: "mech", click: 1500, desc: "Depth effect (+1.5k)." },
+
+        // ERA 6: 2020
+        { id: 29, name: "React.js", cost: 3500000, type: "visual", era: "theme-2020", desc: "Visuals: Dark Mode." },
+        { id: 30, name: "Dark Mode", cost: 5000000, type: "mech", auto: 2500, desc: "Save battery (+2.5k)." },
+        { id: 31, name: "Flexbox", cost: 7500000, type: "mech", click: 3000, desc: "Centering (+3k Views)." },
+        { id: 32, name: "PWA Support", cost: 11000000, type: "mech", auto: 5000, desc: "Installable (+5k Traffic)." },
+        { id: 33, name: "Tailwind CSS", cost: 16000000, type: "mech", click: 6000, desc: "Utilities (+6k Views)." },
+        { id: 34, name: "Skeleton Load", cost: 24000000, type: "mech", auto: 8000, desc: "Performance (+8k)." },
+
+        // ERA 7: 2030
+        { id: 35, name: "WebAssembly", cost: 40000000, type: "visual", era: "theme-2030", desc: "Visuals: Spatial UI." },
+        { id: 36, name: "AI Layouts", cost: 60000000, type: "mech", auto: 15000, desc: "Dynamic UI (+15k)." },
+        { id: 37, name: "Neural DOM", cost: 90000000, type: "mech", click: 20000, desc: "Thought Nav (+20k)." },
+        { id: 38, name: "Holograms", cost: 150000000, type: "visual-artifact", effect: "show_hologram", desc: "3D Visuals (+30k Traffic)." },
+        { id: 39, name: "Quantum Serve", cost: 250000000, type: "mech", auto: 50000, desc: "Instant load (+50k)." },
+        { id: 40, name: "Metaverse", cost: 500000000, type: "mech", click: 100000, desc: "Immersion (+100k)." },
+
+        // ERA 8: 2100
+        { id: 41, name: "Bio-Link API", cost: 1000000000, type: "visual", era: "theme-2100", desc: "Visuals: Organic UI." },
+        { id: 42, name: "DNA Storage", cost: 2000000000, type: "mech", auto: 200000, desc: "Infinite Cache (+200k)." },
+        { id: 43, name: "Retinal Display", cost: 5000000000, type: "mech", click: 500000, desc: "Eye Tracking (+500k)." },
+        { id: 44, name: "Dream Adverts", cost: 10000000000, type: "mech", auto: 1000000, desc: "Sleep Traffic (+1M)." },
+        { id: 45, name: "Synapse Upload", cost: 25000000000, type: "mech", click: 2000000, desc: "Direct Brain I/O (+2M)." },
+
+        // ERA 9: 2300
+        { id: 46, name: "Solar Net", cost: 100000000000, type: "visual", era: "theme-2300", desc: "Visuals: Solar System." },
+        { id: 47, name: "Mars Servers", cost: 250000000000, type: "mech", auto: 5000000, desc: "Red Planet Hosting (+5M)." },
+        { id: 48, name: "Light-Speed Ping", cost: 500000000000, type: "mech", click: 10000000, desc: "0ms Latency (+10M)." },
+        { id: 49, name: "Sun-Power CSS", cost: 1000000000000, type: "mech", auto: 20000000, desc: "Fusion Backend (+20M)." },
+        { id: 50, name: "Orbital WiFi", cost: 5000000000000, type: "mech", auto: 50000000, desc: "Global Coverage (+50M)." },
+
+        // ERA 10: 2600
+        { id: 51, name: "Galactic Web", cost: 25000000000000, type: "visual", era: "theme-2600", desc: "Visuals: Deep Space." },
+        { id: 52, name: "Alien Fonts", cost: 50000000000000, type: "mech", click: 100000000, desc: "Universal Text (+100M)." },
+        { id: 53, name: "Dyson Hosting", cost: 100000000000000, type: "mech", auto: 200000000, desc: "Star Energy (+200M)." },
+        { id: 54, name: "Wormhole VPN", cost: 250000000000000, type: "mech", auto: 500000000, desc: "Tunnel Traffic (+500M)." },
+        { id: 55, name: "Dark Matter DB", cost: 500000000000000, type: "mech", click: 1000000000, desc: "Invisible Data (+1B)." },
+
+        // ERA 11: 2800
+        { id: 56, name: "Time-Net", cost: 1000000000000000, type: "visual", era: "theme-2800", desc: "Visuals: Glitch/Time." },
+        { id: 57, name: "Pre-Click", cost: 5000000000000000, type: "mech", click: 5000000000, desc: "Loads before click (+5B)." },
+        { id: 58, name: "Loop Caching", cost: 10000000000000000, type: "mech", auto: 2000000000, desc: "Infinite Visits (+2B)." },
+        { id: 59, name: "Paradox 404", cost: 50000000000000000, type: "mech", auto: 5000000000, desc: "Error correction (+5B)." },
+        { id: 60, name: "Undo Button", cost: 100000000000000000, type: "mech", click: 20000000000, desc: "Edit History (+20B)." },
+
+        // ERA 12: 3000
+        { id: 61, name: "The Source", cost: 500000000000000000, type: "visual", era: "theme-3000", desc: "Visuals: Pure Energy." },
+        { id: 62, name: "Omni-Presence", cost: 1000000000000000000, type: "mech", auto: 100000000000, desc: "Everywhere at once (+100B)." },
+        { id: 63, name: "Reality Edit", cost: 10000000000000000000, type: "mech", click: 500000000000, desc: "Change Code (+500B)." },
+        { id: 64, name: "Infinite Scroll", cost: 100000000000000000000, type: "mech", auto: 1000000000000, desc: "Never ends (+1T)." },
+        { id: 65, name: "New Universe+", cost: 1000000000000000000000, type: "feature", desc: "Reset Existence." }
+    ];
+
+    // --- UTILS ---
+    function format(num) {
+        if (num < 1000) return Math.floor(num);
+        const suffixes = ["", "k", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"];
+        const suffixNum = Math.floor(("" + Math.floor(num)).length / 3);
+        if (suffixNum >= suffixes.length) return "INF";
+        let shortValue = parseFloat((suffixNum !== 0 ? (num / Math.pow(1000, suffixNum)) : num).toPrecision(3));
+        return shortValue + suffixes[suffixNum];
+    }
+
+    function playSound(type) {
+        if (!state.soundEnabled) return;
+        
+        try {
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            const now = audioCtx.currentTime;
+            
+            if (type === 'click') {
+                // High pitch short blip
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(300, now + 0.1);
+                gainNode.gain.setValueAtTime(0.1, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            } 
+            else if (type === 'buy') {
+                // Positive chord
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.setValueAtTime(554, now + 0.1); // C#
+                gainNode.gain.setValueAtTime(0.05, now);
+                gainNode.gain.linearRampToValueAtTime(0, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            }
+            else if (type === 'ability') {
+                 // Power up sound
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.linearRampToValueAtTime(800, now + 0.5);
+                gainNode.gain.setValueAtTime(0.1, now);
+                gainNode.gain.linearRampToValueAtTime(0, now + 0.5);
+                osc.start(now);
+                osc.stop(now + 0.5);
+            }
+        } catch(e) { console.error(e); }
+    }
+
+    // --- ENGINE ---
+    function init() {
+        loadGame();
+        
+        // Setup Ability Button
+        document.getElementById('ability-btn').addEventListener('click', activateAbility);
+        document.getElementById('sound-toggle').addEventListener('click', toggleSound);
+        
+        renderUpgrades();
+        updateUI();
+        checkVisualArtifacts();
+
+        document.getElementById('execute-btn').addEventListener('mousedown', manualClick);
+        window.addEventListener('mousemove', (e) => {
+            if(trailActive) spawnTrail(e.clientX, e.clientY);
+        });
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    function toggleSound() {
+        state.soundEnabled = !state.soundEnabled;
+        document.getElementById('sound-toggle').innerText = state.soundEnabled ? "🔊" : "🔇";
+    }
+
+    function manualClick(e) {
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        
+        let power = state.clickPower * state.prestigeMult;
+        if (abilityActive && getAbilityType() === 'click_boost') power *= 5;
+
+        state.visitors += power;
+        state.totalVisitors += power;
+        state.lifetimeVisitors += power;
+        
+        playSound('click');
+        
+        // Floating Text
+        const text = document.createElement('div');
+        text.className = 'floating-text';
+        text.innerText = `+${format(power)}`;
+        text.style.left = `${e.clientX}px`;
+        text.style.top = `${e.clientY - 20}px`;
+        document.body.appendChild(text);
+        setTimeout(() => text.remove(), 1000);
+        
+        // Canvas Particles (Matrix effect)
+        if(state.currentEra === 'theme-2000' || state.currentEra === 'theme-3000') {
+            spawnMatrixChar(e.clientX, e.clientY);
+        }
+    }
+
+    function spawnTrail(x, y) {
+        if(Math.random() > 0.3) return;
+        const dot = document.createElement('div');
+        dot.className = 'trail-dot';
+        dot.style.left = `${x}px`;
+        dot.style.top = `${y}px`;
+        document.body.appendChild(dot);
+        setTimeout(() => {
+            dot.style.opacity = 0;
+            setTimeout(() => dot.remove(), 500);
+        }, 100);
+    }
+    
+    // --- ABILITY SYSTEM ---
+    function getAbilityType() {
+        if(state.bought.length < 10) return "none"; // Locked early
+        if(state.currentEra.includes('199') || state.currentEra.includes('2000')) return "click_boost"; // Dial Up
+        if(state.currentEra.includes('200') || state.currentEra.includes('201') || state.currentEra.includes('202')) return "auto_surge"; // Viral
+        return "time_warp"; // Future
+    }
+    
+    function getAbilityName(type) {
+        if(type === 'click_boost') return "Dial-Up Boost";
+        if(type === 'auto_surge') return "Viral Surge";
+        if(type === 'time_warp') return "Time Warp";
+        return "Locked";
+    }
+
+    function activateAbility() {
+        const type = getAbilityType();
+        if (type === 'none') return;
+
+        const now = Date.now();
+        if (now - state.lastAbility < ABILITY_COOLDOWN) return;
+
+        state.lastAbility = now;
+        abilityActive = true;
+        abilityDuration = ABILITY_DURATION;
+        playSound('ability');
+        
+        const btn = document.getElementById('ability-btn');
+        btn.classList.add('active');
+        
+        // Immediate Effects
+        if(type === 'time_warp') {
+            // Instantly gain 60s of production
+            const gain = state.autoRate * state.prestigeMult * 60;
+            state.visitors += gain;
+            state.totalVisitors += gain;
+            state.lifetimeVisitors += gain;
+            
+            const float = document.createElement('div');
+            float.className = 'floating-text';
+            float.innerText = `WARP: +${format(gain)}`;
+            float.style.left = '50%'; float.style.top = '50%';
+            document.body.appendChild(float);
+        }
+    }
+
+    function buyUpgrade(id) {
+        const u = upgrades[id];
+        if (state.visitors >= u.cost) {
+            playSound('buy');
+            state.visitors -= u.cost;
+            state.bought.push(id);
+            state.progress = state.bought.length;
+
+            if (u.type === 'mech') {
+                if (u.click) state.clickPower += u.click;
+                if (u.auto) state.autoRate += u.auto;
+            } else if (u.type === 'visual') {
+                applyTheme(u.era);
+            } else if (u.type === 'visual-artifact') {
+                checkVisualArtifacts();
+            } else if (u.type === 'feature') {
+                if(u.effect === 'unlock_ui') {
+                    document.getElementById('stats-grid').classList.remove('hidden');
+                    document.getElementById('ability-btn').classList.remove('hidden');
+                }
+                if(u.name === 'New Universe+') prestige();
+            }
+
+            saveGame();
+            updateUI();
+            renderUpgrades(); 
+        }
+    }
+    
+    function prestige() {
+        if(!confirm("REBOOT UNIVERSE? You will lose upgrades/visitors but gain a permanent multiplier based on lifetime visits.")) return;
+        
+        // Calculate Mult
+        const bonus = Math.sqrt(state.lifetimeVisitors / 1000000);
+        const newMult = state.prestigeMult + bonus;
+        
+        // Reset State but keep some things
+        const oldLifetime = state.lifetimeVisitors;
+        state = JSON.parse(JSON.stringify(defaultState));
+        state.prestigeMult = newMult;
+        state.lifetimeVisitors = oldLifetime; // Keep tracking lifetime
+        
+        saveGame();
+        location.reload();
+    }
+
+    function checkVisualArtifacts() {
+        if (state.bought.includes(3)) document.getElementById('inline-img-artifact').style.display = 'inline-block';
+        if (state.bought.includes(9)) document.getElementById('gif-artifact').style.display = 'block';
+        if (state.bought.includes(15)) trailActive = true;
+        if (state.bought.includes(38)) document.getElementById('hologram-artifact').style.display = 'block';
+    }
+
+    function gameLoop() {
+        const now = Date.now();
+        const dt = (now - lastTick) / 1000;
+        lastTick = now;
+        
+        // Ability Logic
+        if (abilityActive) {
+            abilityDuration -= (dt * 1000);
+            if(abilityDuration <= 0) {
+                abilityActive = false;
+                document.getElementById('ability-btn').classList.remove('active');
+            }
+        }
+
+        // Auto Production
+        let rate = state.autoRate * state.prestigeMult;
+        if (abilityActive && getAbilityType() === 'auto_surge') rate *= 10;
+        
+        if (rate > 0) {
+            const gain = rate * dt;
+            state.visitors += gain;
+            state.totalVisitors += gain;
+            state.lifetimeVisitors += gain;
+        }
+        
+        // Canvas Effects
+        drawCanvas();
+
+        updateUI();
+        if (now % 2000 < 20) saveGame();
+        requestAnimationFrame(gameLoop);
+    }
+    
+    // --- CANVAS FX ---
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    
+    function spawnMatrixChar(x, y) {
+        particles.push({x: x, y: y, char: String.fromCharCode(0x30A0 + Math.random() * 96), life: 1.0});
+    }
+    
+    function drawCanvas() {
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        
+        if(state.currentEra === 'theme-2000') {
+            ctx.fillStyle = '#0F0';
+            ctx.font = '14px monospace';
+            for(let i=particles.length-1; i>=0; i--) {
+                let p = particles[i];
+                ctx.globalAlpha = p.life;
+                ctx.fillText(p.char, p.x, p.y);
+                p.y += 2;
+                p.life -= 0.02;
+                if(p.life <= 0) particles.splice(i,1);
+            }
+        }
+    }
+
+    function updateUI() {
+        document.getElementById('pp-val').innerText = format(state.visitors);
+        document.getElementById('cpc-val').innerText = format(state.clickPower * state.prestigeMult);
+        document.getElementById('auto-val').innerText = format(state.autoRate * state.prestigeMult);
+        
+        if(state.prestigeMult > 1) {
+            document.getElementById('prestige-display').classList.remove('hidden');
+            document.getElementById('mult-val').innerText = state.prestigeMult.toFixed(2);
+        }
+
+        // Timeline Bar
+        const pct = (state.progress / 65) * 100;
+        document.getElementById('timeline-fill').style.width = `${pct}%`;
+        
+        // Update Year Text & Theme
+        const yearMap = {
+            'theme-1991': '1991', 'theme-1995': '1995', 'theme-2000': '2000',
+            'theme-2005': '2005', 'theme-2012': '2012', 'theme-2020': '2020', 'theme-2030': '2030',
+            'theme-2100': '2100', 'theme-2300': '2300', 'theme-2600': '2600',
+            'theme-2800': '2800', 'theme-3000': '3000'
+        };
+        document.getElementById('timeline-text').innerText = yearMap[state.currentEra] || '1991';
+
+        // Update Button Text
+        const btn = document.getElementById('execute-btn');
+        const textMap = {
+            'theme-1991': "Click Here", 'theme-1995': "Add Hit", 'theme-2000': "Enter Site",
+            'theme-2005': "Submit Query", 'theme-2012': "Load More", 'theme-2020': "Refresh Feed",
+            'theme-2030': "Execute", 'theme-2100': "Upload DNA", 'theme-2300': "Ping Mars",
+            'theme-2600': "Warp Speed", 'theme-2800': "Pre-Click", 'theme-3000': "Transcend"
+        };
+        btn.innerText = textMap[state.currentEra] || "Execute";
+        
+        // Update Ability Button
+        const abilBtn = document.getElementById('ability-btn');
+        const abilType = getAbilityType();
+        if(abilType === 'none') {
+            abilBtn.classList.add('hidden');
+        } else {
+            abilBtn.classList.remove('hidden');
+            document.getElementById('ability-name').innerText = getAbilityName(abilType);
+            
+            const now = Date.now();
+            const cd = ABILITY_COOLDOWN - (now - state.lastAbility);
+            
+            if (abilityActive) {
+                document.getElementById('ability-timer').innerText = "ACTIVE!";
+                abilBtn.className = "active";
+            } else if (cd > 0) {
+                document.getElementById('ability-timer').innerText = `${Math.ceil(cd/1000)}s`;
+                abilBtn.className = "";
+            } else {
+                document.getElementById('ability-timer').innerText = "READY";
+                abilBtn.className = "ready";
+            }
+        }
+        
+        upgrades.forEach(u => {
+             const el = document.getElementById(`u-${u.id}`);
+             if(el) el.disabled = state.visitors < u.cost;
+        });
+    }
+
+    function renderUpgrades() {
+        const grid = document.getElementById('upgrades-grid');
+        grid.innerHTML = '';
+        
+        // Filter: Only show unbought, and only show next 4 available
+        const unbought = upgrades.filter(u => !state.bought.includes(u.id));
+        const show = unbought.slice(0, 4);
+
+        show.forEach(u => {
+            const btn = document.createElement('button');
+            btn.id = `u-${u.id}`;
+            btn.className = 'upgrade-card';
+            btn.onclick = () => buyUpgrade(u.id);
+            
+            // Year tag logic
+            let year = "1991";
+            if (u.id > 4) year = "1995";
+            if (u.id > 10) year = "2000";
+            if (u.id > 16) year = "2005";
+            if (u.id > 22) year = "2012";
+            if (u.id > 28) year = "2020";
+            if (u.id > 34) year = "2030";
+            if (u.id > 40) year = "2100";
+            if (u.id > 45) year = "2300";
+            if (u.id > 50) year = "2600";
+            if (u.id > 55) year = "2800";
+            if (u.id > 60) year = "3000";
+
+            btn.innerHTML = `
+                <span class="u-year">${year}</span>
+                <span class="u-name">${u.name}</span>
+                <span class="u-desc">${u.desc}</span>
+                <span class="u-cost">${format(u.cost)}</span>
+            `;
+            grid.appendChild(btn);
+        });
+    }
+
+    function applyTheme(theme) {
+        state.currentEra = theme;
+        document.body.className = theme;
+        
+        const title = document.getElementById('site-title');
+        const sub = document.getElementById('site-subtitle');
+        
+        const contentMap = {
+            'theme-1991': ["My Home Page", "Welcome to my link collection."],
+            'theme-1995': ["Cool Links Central", "Best viewed in Netscape."],
+            'theme-2000': ["xX_CyberZone_Xx", "Loading Flash Plugin..."],
+            'theme-2005': ["Web 2.0 Beta", "Share with friends!"],
+            'theme-2012': ["Startup Landing", "Simple. Clean. Responsive."],
+            'theme-2020': ["App Dashboard", "Dark mode enabled."],
+            'theme-2030': ["Neural Interface", "Connected to Hive."],
+            'theme-2100': ["Bio-Digital Link", "Syncing DNA..."],
+            'theme-2300': ["Solar Wide Web", "Ping: 45min (Mars)"],
+            'theme-2600': ["Galactic Federation", "Universal Translator Active"],
+            'theme-2800': ["Time-Net Portal", "You visited this tomorrow."],
+            'theme-3000': ["The Source", "We are one."]
+        };
+        
+        if (contentMap[theme]) {
+            title.innerText = contentMap[theme][0];
+            sub.innerText = contentMap[theme][1];
+        }
+    }
+
+    function log(msg) {
+        const c = document.getElementById('footer-log');
+        const d = document.createElement('div');
+        d.innerText = `> ${msg}`;
+        c.prepend(d);
+        if(c.children.length > 5) c.lastChild.remove();
+    }
+
+    function saveGame() {
+        localStorage.setItem('web_evo_v7', JSON.stringify(state));
+    }
+
+    function loadGame() {
+        const saved = localStorage.getItem('web_evo_v7');
+        if (saved) {
+            // Migration logic
+            const loaded = JSON.parse(saved);
+            state = { ...defaultState, ...loaded };
+            applyTheme(state.currentEra);
+        }
+    }
+
+    window.onload = init;
+
+</script>
+</body>
+</html>

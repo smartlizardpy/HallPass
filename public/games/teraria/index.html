@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terraria Lite: Stable Edition</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        canvas {
+            display: block;
+            image-rendering: pixelated;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #hud-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            width: 100%;
+            pointer-events: none;
+        }
+
+        #hearts-container {
+            display: flex;
+            gap: 4px;
+            filter: drop-shadow(2px 2px 0 #000);
+        }
+
+        .heart {
+            width: 24px;
+            height: 24px;
+            background-color: #d32f2f;
+            transform: rotate(45deg);
+            position: relative;
+            margin: 0 5px;
+            box-shadow: inset -2px -2px 0 rgba(0,0,0,0.3);
+        }
+        .heart::before, .heart::after {
+            content: '';
+            width: 24px;
+            height: 24px;
+            background-color: #d32f2f;
+            border-radius: 50%;
+            position: absolute;
+            box-shadow: inset -2px -2px 0 rgba(0,0,0,0.3);
+        }
+        .heart::before { top: -12px; left: 0; }
+        .heart::after { left: -12px; top: 0; }
+        .heart.lost { background-color: #444; }
+        .heart.lost::before, .heart.lost::after { background-color: #444; }
+
+        #hotbar {
+            pointer-events: auto;
+            display: flex;
+            gap: 6px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px;
+            border-radius: 8px;
+            border: 3px solid #5d4037;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        .slot {
+            width: 44px;
+            height: 44px;
+            background: #3e3e42;
+            border: 2px solid #6b6b6b;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.1s;
+        }
+
+        .slot.active {
+            border-color: #ffd700;
+            background: #505054;
+            transform: scale(1.05);
+            box-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
+            z-index: 10;
+        }
+
+        .slot-key {
+            position: absolute;
+            top: 2px;
+            left: 4px;
+            font-size: 10px;
+            color: #aaa;
+            font-weight: bold;
+        }
+
+        .slot-count {
+            position: absolute;
+            bottom: 2px;
+            right: 4px;
+            font-size: 12px;
+            color: #fff;
+            font-weight: bold;
+            text-shadow: 1px 1px 0 #000;
+        }
+
+        /* Icons */
+        .icon-sword { width: 10px; height: 28px; background: #ddd; box-shadow: 2px 2px 0 #000; transform: rotate(45deg); border: 1px solid #000; }
+        .icon-pickaxe { width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 24px solid #ffd700; transform: rotate(-45deg); filter: drop-shadow(1px 1px 0 #000); }
+        .icon-bow { width: 10px; height: 28px; border: 2px solid #8d6e63; border-radius: 50% 0 0 50%; border-right: none; transform: rotate(45deg); }
+        .icon-arrow { width: 20px; height: 4px; background: #fff; box-shadow: 1px 1px 0 #000; transform: rotate(-45deg); }
+        .icon-block { width: 24px; height: 24px; border: 1px solid rgba(0,0,0,0.3); box-shadow: 2px 2px 5px rgba(0,0,0,0.3); }
+        
+        .icon-dirt { background-color: #5d4037; }
+        .icon-stone { background-color: #757575; }
+        .icon-wood { background-color: #795548; }
+        .icon-sand { background-color: #fdd835; }
+        .icon-cactus { background-color: #43a047; border: 2px solid #1b5e20; }
+        .icon-iron { background-color: #a1887f; border: 2px solid #d7ccc8; }
+        .icon-gold { background-color: #ffb300; border: 2px solid #ffecb3; }
+        .icon-torch { background-color: #ff5722; width: 8px; height: 20px; box-shadow: 0 0 8px #ff5722; border-radius: 2px; }
+        .icon-wood_wall { background-color: #4e342e; border: 1px dashed #795548; }
+        .icon-stone_brick { background-color: #616161; border: 2px solid #9e9e9e; }
+        .icon-snow { background-color: #e3f2fd; }
+        .icon-ice { background-color: #81d4fa; opacity: 0.8; }
+        .icon-gel { width: 16px; height: 14px; background: #2196f3; border-radius: 50%; opacity: 0.8; box-shadow: 0 0 5px #2196f3; }
+        .icon-door, .icon-door_open { width: 16px; height: 32px; background: #795548; border: 1px solid #3e2723; }
+        .icon-workbench { width: 24px; height: 16px; background: #795548; border-top: 4px solid #5d4037; }
+        .icon-suspicious_eye { width: 20px; height: 20px; background: #fff; border-radius: 50%; border: 2px solid #b71c1c; position:relative; }
+        .icon-suspicious_eye::after { content:''; position:absolute; top:5px; left:5px; width:6px; height:6px; background:#000; border-radius:50%; }
+
+        #craft-btn {
+            pointer-events: auto;
+            background: linear-gradient(to bottom, #ff9800, #f57c00);
+            color: white;
+            border: 2px solid #fff;
+            padding: 0;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            margin-left: 10px;
+            box-shadow: 0 4px 0 #e65100, 0 5px 10px rgba(0,0,0,0.3);
+            transition: transform 0.1s;
+        }
+        #craft-btn:active { transform: translateY(4px); box-shadow: 0 0 0 #e65100; }
+
+        #crafting-menu {
+            pointer-events: auto;
+            position: absolute;
+            top: 90px;
+            left: 20px;
+            background: rgba(30, 30, 30, 0.95);
+            border: 2px solid #5d4037;
+            padding: 10px;
+            border-radius: 8px;
+            display: none;
+            flex-direction: column;
+            gap: 5px;
+            color: white;
+            min-width: 240px;
+            max-height: 400px;
+            overflow-y: auto;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+        }
+        .recipe {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255,255,255,0.05);
+            padding: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .recipe:hover { background: rgba(255,255,255,0.15); }
+        .recipe.disabled { opacity: 0.4; cursor: not-allowed; filter: grayscale(100%); }
+        .recipe-req { font-size: 10px; color: #aaa; margin-left: auto; }
+
+        #boss-bar-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60%;
+            height: 20px;
+            background: #222;
+            border: 2px solid #555;
+            display: none;
+            box-shadow: 0 0 10px rgba(0,0,0,0.8);
+        }
+        #boss-bar-fill { width: 100%; height: 100%; background: #d32f2f; transition: width 0.1s; }
+        #boss-name { position: absolute; top: -25px; left: 50%; transform: translateX(-50%); color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000; }
+
+        #save-msg {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 20px;
+            border-radius: 20px;
+            color: #4caf50;
+            font-weight: bold;
+            text-shadow: 1px 1px 0 #000;
+            opacity: 0;
+            transition: opacity 1s;
+        }
+
+        #loading {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            z-index: 100;
+            transition: opacity 0.5s;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading">Generating World...</div>
+    <div id="save-msg">Game Saved</div>
+    <div id="boss-bar-container"><div id="boss-name">Eye of Doom</div><div id="boss-bar-fill"></div></div>
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui-layer">
+        <div id="hud-top">
+            <div style="display:flex; align-items:flex-start;">
+                <div id="hotbar"></div>
+                <div id="craft-btn" onclick="toggleCrafting()">🛠️</div>
+            </div>
+            <div id="hearts-container"></div>
+        </div>
+        
+        <div id="crafting-menu">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+
+    <script>
+        /** * TERRARIA LITE - STABLE EDITION
+         */
+
+        // --- Configuration ---
+        const TILE_SIZE = 32;
+        const WORLD_WIDTH = 350; 
+        const WORLD_HEIGHT = 128; 
+        const GRAVITY = 0.5;
+        const TERMINAL_VELOCITY = 15;
+        const PLAYER_SPEED = 5;
+        const JUMP_FORCE = 10;
+        const REACH = 6 * TILE_SIZE; 
+
+        // IDs
+        const TILE = {
+            AIR: 0, DIRT: 1, GRASS: 2, STONE: 3, WOOD: 4, LEAVES: 5,
+            IRON: 6, GOLD: 7, STONE_BRICK: 8, TORCH: 9,
+            SNOW: 10, ICE: 11, SAND: 12, CACTUS: 13,
+            WORKBENCH: 14, DOOR_CLOSED: 15, DOOR_OPEN: 16,
+            BEDROCK: 99
+        };
+
+        const WALL = { NONE: 0, WOOD: 1, STONE: 2 };
+        const ITEM = { GEL: 'Gel', ARROW: 'Arrow', BOW: 'Bow', SUSPICIOUS_EYE: 'Suspicious_Eye' };
+
+        // --- Audio System ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+        let audioResumed = false;
+
+        function resumeAudio() {
+            if (!audioResumed && audioCtx.state === 'suspended') {
+                audioCtx.resume().then(() => audioResumed = true);
+            }
+        }
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') return;
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            const t = audioCtx.currentTime;
+            
+            if (type === 'jump') {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(150, t); osc.frequency.linearRampToValueAtTime(300, t+0.1);
+                gainNode.gain.setValueAtTime(0.1, t); gainNode.gain.exponentialRampToValueAtTime(0.01, t+0.1);
+                osc.start(); osc.stop(t+0.1);
+            } else if (type === 'mine') {
+                osc.type = 'square'; osc.frequency.setValueAtTime(100+Math.random()*20, t);
+                gainNode.gain.setValueAtTime(0.05, t); gainNode.gain.exponentialRampToValueAtTime(0.01, t+0.05);
+                osc.start(); osc.stop(t+0.05);
+            } else if (type === 'hit') {
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(200, t); osc.frequency.linearRampToValueAtTime(100, t+0.1);
+                gainNode.gain.setValueAtTime(0.1, t); gainNode.gain.exponentialRampToValueAtTime(0.01, t+0.1);
+                osc.start(); osc.stop(t+0.1);
+            } else if (type === 'shoot') {
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(600, t); osc.frequency.exponentialRampToValueAtTime(100, t+0.2);
+                gainNode.gain.setValueAtTime(0.1, t); gainNode.gain.linearRampToValueAtTime(0, t+0.2);
+                osc.start(); osc.stop(t+0.2);
+            } else if (type === 'roar') {
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, t); osc.frequency.linearRampToValueAtTime(50, t+1.0);
+                gainNode.gain.setValueAtTime(0.2, t); gainNode.gain.linearRampToValueAtTime(0, t+1.0);
+                osc.start(); osc.stop(t+1.0);
+            } else if (type === 'pop') {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(800, t); osc.frequency.exponentialRampToValueAtTime(400, t+0.1);
+                gainNode.gain.setValueAtTime(0.05, t); gainNode.gain.exponentialRampToValueAtTime(0.01, t+0.1);
+                osc.start(); osc.stop(t+0.1);
+            } else if (type === 'craft') {
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(400, t); osc.frequency.linearRampToValueAtTime(600, t+0.1);
+                gainNode.gain.setValueAtTime(0.1, t); gainNode.gain.exponentialRampToValueAtTime(0.01, t+0.2);
+                osc.start(); osc.stop(t+0.2);
+            }
+        }
+
+        // --- Textures ---
+        const textures = {};
+        const wallTextures = {};
+
+        function createTexture(renderFn) {
+            const c = document.createElement('canvas');
+            c.width = TILE_SIZE; c.height = TILE_SIZE;
+            const ctx = c.getContext('2d');
+            renderFn(ctx);
+            return c;
+        }
+
+        function generateTextures() {
+            const noise = (ctx, color, density = 0.2) => {
+                ctx.fillStyle = color;
+                for(let i=0; i<32*32*density; i++) ctx.fillRect(Math.random()*32, Math.random()*32, 1, 1);
+            };
+
+            textures[TILE.DIRT] = createTexture(ctx => { ctx.fillStyle = '#5d4037'; ctx.fillRect(0,0,32,32); noise(ctx, '#3e2723', 0.4); });
+            textures[TILE.STONE] = createTexture(ctx => { ctx.fillStyle = '#757575'; ctx.fillRect(0,0,32,32); noise(ctx, '#424242', 0.2); });
+            textures[TILE.SAND] = createTexture(ctx => { ctx.fillStyle = '#fdd835'; ctx.fillRect(0,0,32,32); noise(ctx, '#fbc02d', 0.1); });
+            textures[TILE.SNOW] = createTexture(ctx => { ctx.fillStyle = '#e1f5fe'; ctx.fillRect(0,0,32,32); noise(ctx, '#b3e5fc', 0.1); });
+            textures[TILE.ICE] = createTexture(ctx => { ctx.fillStyle = '#81d4fa'; ctx.fillRect(0,0,32,32); ctx.fillStyle='rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.moveTo(0,32); ctx.lineTo(32,0); ctx.stroke(); });
+            textures[TILE.WOOD] = createTexture(ctx => { ctx.fillStyle = '#795548'; ctx.fillRect(0,0,32,32); ctx.fillStyle='#4e342e'; for(let i=0;i<4;i++) ctx.fillRect(i*8,0,1,32); });
+            textures[TILE.CACTUS] = createTexture(ctx => { ctx.fillStyle = '#43a047'; ctx.fillRect(4,0,24,32); ctx.fillStyle='#1b5e20'; for(let i=0;i<50;i++) ctx.fillRect(4+Math.random()*24, Math.random()*32, 2, 2); });
+            textures[TILE.LEAVES] = createTexture(ctx => { ctx.fillStyle = '#2e7d32'; ctx.fillRect(0,0,32,32); noise(ctx, '#1b5e20', 0.4); });
+            textures[TILE.BEDROCK] = createTexture(ctx => { ctx.fillStyle = '#000'; ctx.fillRect(0,0,32,32); noise(ctx, '#212121', 0.8); });
+            
+            textures[TILE.GRASS] = createTexture(ctx => { 
+                ctx.drawImage(textures[TILE.DIRT],0,0); ctx.fillStyle='#43a047'; ctx.fillRect(0,0,32,6); 
+                for(let i=0;i<32;i+=4) ctx.fillRect(i,6,2,Math.random()*4);
+            });
+
+            textures[TILE.STONE_BRICK] = createTexture(ctx => {
+                ctx.fillStyle = '#616161'; ctx.fillRect(0,0,32,32); ctx.fillStyle='#424242';
+                ctx.fillRect(0,15,32,2); ctx.fillRect(15,0,2,15); ctx.fillRect(0,31,32,1); ctx.fillRect(31,15,2,17);
+            });
+
+            textures[TILE.WORKBENCH] = createTexture(ctx => {
+                ctx.fillStyle = '#795548'; ctx.fillRect(2,10,28,22); ctx.fillStyle='#5d4037'; ctx.fillRect(0,6,32,8); 
+                ctx.fillStyle='#3e2723'; ctx.fillRect(4,10,4,22); ctx.fillRect(24,10,4,22);
+            });
+
+            textures[TILE.DOOR_CLOSED] = createTexture(ctx => {
+                ctx.fillStyle = '#795548'; ctx.fillRect(0,0,32,32); ctx.strokeStyle='#3e2723'; ctx.strokeRect(0,0,32,32);
+                ctx.beginPath(); ctx.rect(4,4,10,10); ctx.rect(4,18,10,10); ctx.stroke();
+                ctx.fillStyle = '#ffd700'; ctx.beginPath(); ctx.arc(26,16,2,0,Math.PI*2); ctx.fill();
+            });
+
+            // Ores
+            const oreGen = (base, color) => createTexture(ctx => { ctx.drawImage(base, 0, 0); ctx.fillStyle=color; for(let i=0;i<5;i++) { ctx.beginPath(); ctx.arc(Math.random()*24+4,Math.random()*24+4,Math.random()*3+2,0,Math.PI*2); ctx.fill(); }});
+            textures[TILE.IRON] = oreGen(textures[TILE.STONE], '#d7ccc8');
+            textures[TILE.GOLD] = oreGen(textures[TILE.STONE], '#ffd54f');
+
+            wallTextures[WALL.WOOD] = createTexture(ctx => { ctx.fillStyle='#3e2723'; ctx.fillRect(0,0,32,32); ctx.fillStyle='#281a16'; ctx.fillRect(0,8,32,1); ctx.fillRect(0,16,32,1); ctx.fillRect(0,24,32,1); });
+            wallTextures[WALL.STONE] = createTexture(ctx => { ctx.fillStyle='#212121'; ctx.fillRect(0,0,32,32); noise(ctx,'#000',0.3); });
+        }
+
+        // --- State ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        const uiHotbar = document.getElementById('hotbar');
+        const uiHearts = document.getElementById('hearts-container');
+        const loadingScreen = document.getElementById('loading');
+        const bossBar = document.getElementById('boss-bar-container');
+        const bossBarFill = document.getElementById('boss-bar-fill');
+        
+        const lightCanvas = document.createElement('canvas');
+        const lightCtx = lightCanvas.getContext('2d');
+        
+        let width, height;
+        let world = [], walls = [], stars = [];
+        let camera = { x: 0, y: 0 };
+        let mouse = { x: 0, y: 0, worldX: 0, worldY: 0, leftDown: false };
+        let keys = {};
+        let shake = 0;
+        
+        let inventory = [
+            { id: 'sword', name: 'Sword', type: 'weapon', dmg: 25, count: 1 },
+            { id: 'pickaxe', name: 'Pickaxe', type: 'tool', dmg: 5, count: 1 },
+            { id: TILE.TORCH, name: 'Torch', type: 'item', placeable: true, tileId: TILE.TORCH, count: 10 },
+            { id: TILE.WOOD, name: 'Wood', type: 'block', count: 0 },
+            { id: TILE.WORKBENCH, name: 'Workbench', type: 'block', count: 1 },
+            { id: TILE.DOOR_CLOSED, name: 'Door', type: 'block', count: 0, tileId: TILE.DOOR_CLOSED },
+            { id: ITEM.BOW, name: 'Bow', type: 'weapon', count: 0 },
+            { id: ITEM.ARROW, name: 'Arrow', type: 'ammo', count: 0 },
+            { id: TILE.DIRT, name: 'Dirt', type: 'block', count: 0 },
+        ];
+        let selectedSlot = 0;
+
+        let player = {
+            x: 0, y: 0, width: 20, height: 48,
+            vx: 0, vy: 0, grounded: false, facingRight: true,
+            maxHp: 100, hp: 100, invulnerable: 0, animTimer: 0
+        };
+
+        let enemies = [], drops = [], particles = [], projectiles = [];
+        let boss = null;
+        let gameTime = 12000;
+        const DAY_LENGTH = 24000;
+
+        // --- Crafting Recipes ---
+        const RECIPES = [
+            { out: { id: TILE.TORCH, count: 3, name: 'Torch' }, in: [ { id: TILE.WOOD, count: 1 }, { id: ITEM.GEL, count: 1 } ] },
+            { out: { id: TILE.WORKBENCH, count: 1, name: 'Workbench' }, in: [ { id: TILE.WOOD, count: 10 } ] },
+            { out: { id: TILE.DOOR_CLOSED, count: 1, name: 'Door' }, in: [ { id: TILE.WOOD, count: 6 } ] },
+            { out: { id: WALL.WOOD, count: 4, name: 'Wood_Wall' }, in: [ { id: TILE.WOOD, count: 1 } ] },
+            { out: { id: ITEM.BOW, count: 1, name: 'Bow' }, in: [ { id: TILE.WOOD, count: 8 } ] },
+            { out: { id: ITEM.ARROW, count: 3, name: 'Arrow' }, in: [ { id: TILE.WOOD, count: 1 }, { id: TILE.STONE, count: 1 } ] },
+            { out: { id: TILE.STONE_BRICK, count: 1, name: 'Stone_Brick' }, in: [ { id: TILE.STONE, count: 1 } ] },
+            { out: { id: ITEM.SUSPICIOUS_EYE, count: 1, name: 'Suspicious_Eye' }, in: [ { id: ITEM.GEL, count: 6 } ], reqStation: true },
+        ];
+
+        // --- Initialization ---
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            lightCanvas.width = width; lightCanvas.height = height;
+            ctx.imageSmoothingEnabled = false;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        function initUI() {
+            uiHotbar.innerHTML = '';
+            inventory.forEach((item, index) => {
+                const slot = document.createElement('div');
+                slot.className = `slot ${index === selectedSlot ? 'active' : ''}`;
+                slot.onclick = () => selectSlot(index);
+                
+                const key = document.createElement('div'); key.className = 'slot-key'; key.innerText = index + 1;
+                const count = document.createElement('div'); count.className = 'slot-count'; count.id = `slot-count-${index}`; count.innerText = item.count > 1 ? item.count : '';
+                
+                const icon = document.createElement('div');
+                if (item.type === 'weapon') icon.className = `icon-${item.name.toLowerCase()}`;
+                else if (item.type === 'tool') icon.className = 'icon-pickaxe';
+                else if (item.id === ITEM.ARROW) icon.className = 'icon-arrow';
+                else if (item.id === ITEM.GEL) icon.className = 'icon-gel';
+                else if (item.id === ITEM.SUSPICIOUS_EYE) icon.className = 'icon-suspicious_eye';
+                else icon.className = `icon-block icon-${item.name.toLowerCase()}`;
+
+                slot.appendChild(key); slot.appendChild(icon); slot.appendChild(count);
+                uiHotbar.appendChild(slot);
+            });
+            updateHealthUI();
+        }
+
+        function updateInventoryUI() {
+            inventory.forEach((item, index) => {
+                const el = document.getElementById(`slot-count-${index}`);
+                if(el) el.innerText = item.count > 1 || (item.type === 'block' && item.count > 0) || item.type === 'wall' || item.type === 'item' || item.type === 'ammo' ? item.count : '';
+                const slot = el.parentElement;
+                slot.style.opacity = (item.count <= 0 && item.type !== 'tool' && item.type !== 'weapon') ? '0.5' : '1.0';
+            });
+            renderCraftingMenu();
+        }
+
+        function updateHealthUI() {
+            uiHearts.innerHTML = '';
+            const heartCount = Math.ceil(player.maxHp / 20);
+            const currentHearts = Math.ceil(player.hp / 20);
+            for(let i=0; i<heartCount; i++) {
+                const h = document.createElement('div'); h.className = `heart ${i < currentHearts ? '' : 'lost'}`;
+                uiHearts.appendChild(h);
+            }
+        }
+
+        function selectSlot(index) {
+            if (index < 0 || index >= inventory.length) return;
+            selectedSlot = index;
+            document.querySelectorAll('.slot').forEach((el, i) => el.classList.toggle('active', i === index));
+        }
+
+        function addToInventory(id, amount = 1) {
+            let item = inventory.find(i => i.id === id || i.tileId === id);
+            if (item) {
+                item.count += amount;
+                updateInventoryUI();
+                return true;
+            } else {
+                let empty = inventory.find(i => i.count === 0 && i.type !== 'tool' && i.type !== 'weapon');
+                if(empty) {
+                    empty.id = id;
+                    empty.tileId = id;
+                    if(id === ITEM.GEL) { empty.name = 'Gel'; empty.type='item'; }
+                    else if(id === TILE.ICE) { empty.name = 'Ice'; empty.type='block'; }
+                    else if(id === TILE.SNOW) { empty.name = 'Snow'; empty.type='block'; }
+                    else if(id === TILE.SAND) { empty.name = 'Sand'; empty.type='block'; }
+                    else if(id === TILE.CACTUS) { empty.name = 'Cactus'; empty.type='block'; }
+                    else if(id === ITEM.ARROW) { empty.name = 'Arrow'; empty.type='ammo'; }
+                    else if(id === ITEM.SUSPICIOUS_EYE) { empty.name = 'Suspicious_Eye'; empty.type='item'; }
+                    else if(id === ITEM.BOW) { empty.name = 'Bow'; empty.type='weapon'; }
+                    else if(id === TILE.WORKBENCH) { empty.name = 'Workbench'; empty.type='block'; }
+                    else if(id === TILE.DOOR_CLOSED) { empty.name = 'Door'; empty.type='block'; empty.tileId = TILE.DOOR_CLOSED; }
+                    else { empty.name = 'Block'; empty.type='block'; }
+                    empty.count = amount;
+                    initUI(); 
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function removeFromInventory(id, amount = 1) {
+            let item = inventory.find(i => i.id === id || i.tileId === id);
+            if(item && item.count >= amount) { item.count -= amount; updateInventoryUI(); return true; }
+            return false;
+        }
+
+        function hasItem(id, amount) {
+            let item = inventory.find(i => i.id === id || i.tileId === id);
+            return item && item.count >= amount;
+        }
+
+        // --- Crafting ---
+
+        function toggleCrafting() {
+            const menu = document.getElementById('crafting-menu');
+            menu.style.display = (menu.style.display === 'flex') ? 'none' : 'flex';
+            if (menu.style.display === 'flex') renderCraftingMenu();
+        }
+        
+        window.addEventListener('keydown', e => { 
+            resumeAudio();
+            if(e.key.toLowerCase() === 'c') toggleCrafting(); 
+        });
+
+        function isNearWorkbench() {
+            const tx = Math.floor((player.x + player.width/2)/TILE_SIZE);
+            const ty = Math.floor((player.y + player.height/2)/TILE_SIZE);
+            for(let x = tx-3; x <= tx+3; x++) {
+                for(let y = ty-3; y <= ty+3; y++) {
+                    if (getTile(x, y) === TILE.WORKBENCH) return true;
+                }
+            }
+            return false;
+        }
+
+        function renderCraftingMenu() {
+            const menu = document.getElementById('crafting-menu');
+            menu.innerHTML = '<h3>Crafting</h3>';
+            const nearBench = isNearWorkbench();
+            
+            RECIPES.forEach(recipe => {
+                const canCraft = recipe.in.every(ing => hasItem(ing.id, ing.count)) && (!recipe.reqStation || nearBench);
+                
+                const div = document.createElement('div');
+                div.className = `recipe ${canCraft ? '' : 'disabled'}`;
+                let reqText = recipe.reqStation && !nearBench ? '<span class="recipe-req">(Need Workbench)</span>' : '';
+                
+                div.innerHTML = `<div class="icon-block icon-${recipe.out.name.toLowerCase()}"></div> <b>${recipe.out.name}</b> x${recipe.out.count} ${reqText}`;
+                div.onclick = () => {
+                    if (canCraft) {
+                        recipe.in.forEach(ing => removeFromInventory(ing.id, ing.count));
+                        addToInventory(recipe.out.id, recipe.out.count);
+                        playSound('craft');
+                        renderCraftingMenu();
+                    }
+                };
+                menu.appendChild(div);
+            });
+        }
+
+        // --- World Gen ---
+
+        let seed = Math.random() * 10000;
+        function noise(x) { x += seed; return Math.sin(x) * 10 + Math.sin(x * 2.5) * 5 + Math.sin(x * 0.5) * 20; }
+
+        function generateWorld() {
+            generateTextures();
+            const json = localStorage.getItem('terraria_lite_save');
+            if(json) {
+                try {
+                    const data = JSON.parse(json);
+                    world = data.world.map(col => new Uint8Array(col));
+                    walls = data.walls.map(col => new Uint8Array(col));
+                    player = data.player; inventory = data.inventory; gameTime = data.gameTime;
+                    camera = data.camera || {x:0, y:0};
+                    enemies = (data.enemies || []).filter(e => e); // Filter invalid entities
+                    drops = (data.drops || []).filter(d => d);
+                    boss = data.boss || null;
+                    if(boss) bossBar.style.display = 'block';
+                    for(let i=0; i<100; i++) stars.push({x: Math.random()*width, y: Math.random()*height/2, size: Math.random()*2, blink: Math.random()});
+                    loadingScreen.style.display = 'none'; initUI(); return;
+                } catch(e) {}
+            }
+
+            for (let x = 0; x < WORLD_WIDTH; x++) { world[x] = new Uint8Array(WORLD_HEIGHT); walls[x] = new Uint8Array(WORLD_HEIGHT); }
+
+            const surfaceHeight = Math.floor(WORLD_HEIGHT * 0.4);
+            const snowLimit = Math.floor(WORLD_WIDTH * 0.2);
+            const sandStart = Math.floor(WORLD_WIDTH * 0.8);
+            
+            for (let x = 0; x < WORLD_WIDTH; x++) {
+                const isSnow = x < snowLimit;
+                const isSand = x > sandStart;
+                const h = Math.floor(noise(x * 0.05) + surfaceHeight);
+                
+                for (let y = 0; y < WORLD_HEIGHT; y++) {
+                    if (y > h + 5) walls[x][y] = WALL.STONE;
+                    if (y < h) world[x][y] = TILE.AIR;
+                    else if (y === h) world[x][y] = isSnow ? TILE.SNOW : (isSand ? TILE.SAND : TILE.GRASS);
+                    else if (y > h && y < h + 10) world[x][y] = isSnow ? TILE.SNOW : (isSand ? TILE.SAND : TILE.DIRT);
+                    else if (y >= h + 10 && y < WORLD_HEIGHT - 2) {
+                        const rand = Math.random();
+                        if (rand < 0.02) world[x][y] = TILE.GOLD;
+                        else if (rand < 0.05) world[x][y] = TILE.IRON;
+                        else if (rand > 0.12) world[x][y] = isSnow && y < h+30 ? TILE.ICE : TILE.STONE;
+                        else world[x][y] = TILE.AIR; 
+                    } else world[x][y] = TILE.BEDROCK;
+                }
+                
+                if (x > 5 && x < WORLD_WIDTH - 5 && Math.random() < 0.05) {
+                    if(world[x][h] === TILE.GRASS || world[x][h] === TILE.SNOW) generateTree(x, h, isSnow);
+                    else if(world[x][h] === TILE.SAND) generateCactus(x, h);
+                }
+            }
+
+            for(let i=0; i<100; i++) stars.push({x: Math.random()*width, y: Math.random()*height/2, size: Math.random()*2, blink: Math.random()});
+            player.x = (WORLD_WIDTH / 2) * TILE_SIZE;
+            let spawnY = 0; while(world[Math.floor(WORLD_WIDTH/2)][spawnY] === TILE.AIR) spawnY++;
+            player.y = (spawnY - 3) * TILE_SIZE;
+            loadingScreen.style.opacity = 0; setTimeout(() => loadingScreen.style.display = 'none', 500);
+            initUI();
+        }
+
+        function generateTree(x, groundY, isSnow) {
+            const h = Math.floor(Math.random() * 5) + 5;
+            for (let i = 1; i <= h; i++) if (groundY - i >= 0) world[x][groundY - i] = TILE.WOOD;
+            for (let lx = x - 2; lx <= x + 2; lx++) {
+                for (let ly = groundY - h - 2; ly <= groundY - h; ly++) {
+                    if (lx >= 0 && lx < WORLD_WIDTH && ly >= 0 && Math.random() > 0.3) world[lx][ly] = isSnow ? TILE.SNOW : TILE.LEAVES;
+                }
+            }
+        }
+
+        function generateCactus(x, groundY) {
+            const h = Math.floor(Math.random() * 3) + 3;
+            for (let i = 1; i <= h; i++) if (groundY - i >= 0) world[x][groundY - i] = TILE.CACTUS;
+            if(groundY - h + 1 >= 0 && x-1>=0) world[x-1][groundY - h + 1] = TILE.CACTUS;
+            if(groundY - h - 1 >= 0 && x+1<WORLD_WIDTH) world[x+1][groundY - h - 1] = TILE.CACTUS;
+        }
+
+        // --- Logic ---
+
+        function getTile(x, y) {
+            if (x < 0 || x >= WORLD_WIDTH || y < 0 || y >= WORLD_HEIGHT) return TILE.BEDROCK;
+            return world[x][y];
+        }
+        function checkCollisionRect(x, y, w, h) {
+            const startX = Math.floor(x / TILE_SIZE);
+            const endX = Math.floor((x + w) / TILE_SIZE);
+            const startY = Math.floor(y / TILE_SIZE);
+            const endY = Math.floor((y + h) / TILE_SIZE);
+            for (let ty = startY; ty <= endY; ty++) {
+                for (let tx = startX; tx <= endX; tx++) {
+                    const t = getTile(tx, ty);
+                    if (t !== TILE.AIR && t !== TILE.TORCH && !(t === TILE.LEAVES) && t !== TILE.WORKBENCH && t !== TILE.DOOR_OPEN) return true;
+                }
+            }
+            return false;
+        }
+
+        function updatePlayer() {
+            let moving = false;
+            if (keys['KeyA'] || keys['ArrowLeft']) { player.vx -= 0.5; player.facingRight = false; moving=true; }
+            else if (keys['KeyD'] || keys['ArrowRight']) { player.vx += 0.5; player.facingRight = true; moving=true; }
+            else player.vx *= 0.8;
+            
+            if(moving && player.grounded) player.animTimer += 0.2; else player.animTimer = 0;
+
+            if ((keys['Space'] || keys['KeyW'] || keys['ArrowUp']) && player.grounded) {
+                player.vy = -JUMP_FORCE; player.grounded = false; playSound('jump');
+            }
+
+            player.vy += GRAVITY;
+            player.vx = Math.max(-PLAYER_SPEED, Math.min(PLAYER_SPEED, player.vx));
+            player.vy = Math.max(-TERMINAL_VELOCITY, Math.min(TERMINAL_VELOCITY, player.vy));
+
+            if (!checkCollisionRect(player.x + player.vx, player.y, player.width, player.height)) player.x += player.vx;
+            else player.vx = 0;
+
+            if (!checkCollisionRect(player.x, player.y + player.vy, player.width, player.height)) {
+                player.y += player.vy; player.grounded = false;
+            } else {
+                if (player.vy > 0) player.grounded = true;
+                player.vy = 0; player.y = Math.round(player.y);
+            }
+            if (player.y > WORLD_HEIGHT * TILE_SIZE) respawn();
+            if (player.invulnerable > 0) player.invulnerable--;
+        }
+        
+        function respawn() {
+            player.x = (WORLD_WIDTH / 2) * TILE_SIZE; player.y = 100; player.hp = player.maxHp; player.vx = 0; player.vy = 0;
+            enemies = []; boss = null; bossBar.style.display = 'none'; updateHealthUI();
+        }
+
+        function spawnParticle(x, y, color) { particles.push({x: x, y: y, vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4, life: 1.0, color: color}); }
+        function spawnDrop(x, y, id) { drops.push({x: x, y: y, id: id, vy: -4, vx: (Math.random()-0.5)*4}); }
+        function spawnProjectile(x, y, vx, vy) { projectiles.push({x: x, y: y, vx: vx, vy: vy, life: 100}); }
+
+        function updateLogic() {
+            gameTime++; if (gameTime >= DAY_LENGTH) gameTime = 0;
+            if (shake > 0) { camera.x += (Math.random()-0.5)*shake; camera.y += (Math.random()-0.5)*shake; shake *= 0.9; if(shake<0.5) shake=0; }
+
+            // Projectiles
+            for(let i=projectiles.length-1; i>=0; i--) {
+                const p = projectiles[i];
+                p.x += p.vx; p.y += p.vy; p.vy += 0.2; // Gravity
+                p.life--;
+                
+                // Hit Enemies
+                let hit = false;
+                for(let e of enemies) {
+                     if(p.x > e.x && p.x < e.x+e.width && p.y > e.y && p.y < e.y+e.height) {
+                         e.hp -= 15; e.vx = Math.sign(p.vx)*4; e.vy = -3;
+                         playSound('hit'); spawnParticle(p.x, p.y, '#fff'); hit=true; break;
+                     }
+                }
+                if(boss && p.x > boss.x && p.x < boss.x+boss.width && p.y > boss.y && p.y < boss.y+boss.height) {
+                    boss.hp -= 10; spawnParticle(p.x, p.y, '#f00'); hit=true;
+                    if(boss.hp <= 0) { bossBar.style.display = 'none'; boss=null; shake=20; }
+                }
+
+                if (hit || checkCollisionRect(p.x, p.y, 4, 4) || p.life <= 0) projectiles.splice(i, 1);
+            }
+
+            // Drops
+            for (let i = drops.length - 1; i >= 0; i--) {
+                const d = drops[i];
+                if (!d) continue; // Safety check
+                d.vy += GRAVITY; d.x += d.vx; d.y += d.vy; d.vx *= 0.95;
+                if (checkCollisionRect(d.x, d.y, 16, 16)) { d.y -= d.vy; d.vy = 0; }
+                const dx = (player.x + player.width/2) - d.x, dy = (player.y + player.height/2) - d.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                if (dist < 100) { d.x += dx * 0.1; d.y += dy * 0.1; }
+                if (dist < 30) {
+                    // Try to add to inventory
+                    if(addToInventory(d.id, 1)) {
+                        playSound('pop'); 
+                        drops.splice(i, 1);
+                    }
+                }
+            }
+
+            // Spawning
+            if (enemies.length < 5 && Math.random() < 0.01 && !boss) {
+                const isNight = gameTime > 13000 && gameTime < 23000;
+                spawnEnemy(isNight);
+            }
+
+            // Boss AI
+            if (boss) {
+                // Day Despawn
+                const cycle = Math.sin((gameTime / DAY_LENGTH) * Math.PI * 2);
+                if (cycle > 0.1) { // Sun is up
+                    boss.vy -= 0.5; // Fly up away
+                    if(boss.y < -500) { boss = null; bossBar.style.display='none'; }
+                } else {
+                    // Fight Logic
+                    const dx = player.x - boss.x, dy = player.y - boss.y;
+                    const dist = Math.sqrt(dx*dx+dy*dy);
+                    if (boss.mode === 'hover') {
+                         boss.vx += (dx * 0.01 - boss.vx) * 0.05;
+                         boss.vy += ((dy - 150) * 0.01 - boss.vy) * 0.05;
+                         if(Math.random() < 0.01) { boss.mode = 'charge'; playSound('roar'); }
+                    } else {
+                         boss.vx += (dx * 0.05 - boss.vx) * 0.1;
+                         boss.vy += (dy * 0.05 - boss.vy) * 0.1;
+                         if(dist < 50 || Math.random() < 0.02) boss.mode = 'hover';
+                    }
+                    
+                    if(player.invulnerable===0 && player.x < boss.x+boss.width && player.x+player.width > boss.x && player.y < boss.y+boss.height && player.y+player.height > boss.y) {
+                        player.hp -= 30; player.invulnerable = 60; player.vx = Math.sign(dx)*10; player.vy = -5;
+                        playSound('hit'); updateHealthUI(); shake = 10;
+                    }
+                }
+                if(boss) {
+                    boss.x += boss.vx; boss.y += boss.vy;
+                    bossBarFill.style.width = (boss.hp / boss.maxHp * 100) + '%';
+                }
+            }
+
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i];
+                if (!e) { enemies.splice(i, 1); continue; } // FIX: Remove bad entity safely
+                e.vy += GRAVITY; e.x += e.vx; e.y += e.vy;
+                if(e.grounded && Math.random()<0.02) { e.vy = -7; e.grounded = false; }
+                if(e.type==='zombie' && e.grounded) { e.vx = Math.sign(player.x - e.x)*1.5; }
+                else if (e.type==='slime' && e.grounded) { e.vx = 0; if(Math.random()<0.05) { e.vx = Math.sign(player.x-e.x)*2; e.vy=-6; e.grounded=false; } }
+
+                 if (checkCollisionRect(e.x, e.y, e.width, e.height)) {
+                    if (e.vy > 0) { e.y = Math.floor(e.y/32)*32 - e.height; e.vy=0; e.grounded=true; }
+                    else if (e.vy < 0) { e.y = Math.floor(e.y/32)*32+32; e.vy=0; }
+                    if (checkCollisionRect(e.x, e.y, e.width, e.height)) e.x -= e.vx;
+                }
+
+                if (player.invulnerable === 0 && player.x < e.x + e.width && player.x + player.width > e.x && player.y < e.y + e.height && player.y + player.height > e.y) {
+                    player.hp -= 15; player.invulnerable = 60; player.vx = (player.x - e.x > 0 ? 1 : -1) * 8; player.vy = -5;
+                    playSound('hit'); spawnParticle(player.x, player.y, '#f00'); updateHealthUI();
+                    if(player.hp <= 0) respawn();
+                }
+                if (e.hp <= 0) {
+                    spawnParticle(e.x, e.y, e.color);
+                    if(e.type === 'slime') spawnDrop(e.x, e.y, ITEM.GEL);
+                    enemies.splice(i, 1);
+                }
+            }
+
+            // Building/Interaction
+            mouse.worldX = mouse.x + camera.x;
+            mouse.worldY = mouse.y + camera.y;
+            const tileX = Math.floor(mouse.worldX / TILE_SIZE);
+            const tileY = Math.floor(mouse.worldY / TILE_SIZE);
+            
+            if (mouse.leftDown) {
+                const item = inventory[selectedSlot];
+                const playerRect = {x:player.x, y:player.y, w:player.width, h:player.height};
+                const tileRect = {x:tileX*32, y:tileY*32, w:32, h:32};
+                const dist = Math.hypot(mouse.worldX - (player.x+10), mouse.worldY - (player.y+24));
+                
+                // Ranged Combat
+                if (item.id === ITEM.BOW) {
+                    // Simple cooldown check
+                    if (!player.bowCooldown) {
+                         if (hasItem(ITEM.ARROW, 1)) {
+                             removeFromInventory(ITEM.ARROW, 1);
+                             const angle = Math.atan2(mouse.worldY - (player.y+24), mouse.worldX - (player.x+10));
+                             spawnProjectile(player.x+10, player.y+24, Math.cos(angle)*15, Math.sin(angle)*15);
+                             playSound('shoot');
+                             player.bowCooldown = 30; // 0.5s
+                         }
+                    }
+                }
+                if (player.bowCooldown > 0) player.bowCooldown--;
+
+                // Boss Summon
+                if (item.id === ITEM.SUSPICIOUS_EYE && !boss && (gameTime > 13000 && gameTime < 23000)) {
+                    item.count--;
+                    updateInventoryUI();
+                    boss = { x: player.x, y: player.y - 300, width: 64, height: 64, hp: 1000, maxHp: 1000, vx:0, vy:0, mode:'hover' };
+                    bossBar.style.display = 'block';
+                    playSound('roar');
+                    shake = 20;
+                }
+
+                if (dist <= REACH) {
+                    // Doors
+                    if(world[tileX]?.[tileY] === TILE.DOOR_CLOSED || world[tileX]?.[tileY] === TILE.DOOR_OPEN) {
+                         // Only toggle if clicked cleanly (simple toggle)
+                         if(world[tileX][tileY] === TILE.DOOR_CLOSED) world[tileX][tileY] = TILE.DOOR_OPEN;
+                         else world[tileX][tileY] = TILE.DOOR_CLOSED;
+                         mouse.leftDown = false; // Prevent spam
+                         playSound('mine');
+                    }
+
+                    if (item.type === 'tool' || item.type === 'weapon') {
+                        let hit = false;
+                        enemies.forEach(e => {
+                            if(mouse.worldX > e.x && mouse.worldX < e.x+e.width && mouse.worldY > e.y && mouse.worldY < e.y+e.height) {
+                                e.hp -= item.dmg; e.vx = Math.sign(e.x-player.x)*5; e.vy = -3;
+                                hit = true; mouse.leftDown = false; playSound('hit'); spawnParticle(e.x+e.width/2, e.y+e.height/2, '#fff');
+                            }
+                        });
+                        if (boss && mouse.worldX > boss.x && mouse.worldX < boss.x+boss.width && mouse.worldY > boss.y && mouse.worldY < boss.y+boss.height) {
+                             boss.hp -= item.dmg; hit=true; mouse.leftDown=false; playSound('hit'); spawnParticle(boss.x+32, boss.y+32, '#f00');
+                             if(boss.hp <= 0) { bossBar.style.display = 'none'; boss=null; shake=20; }
+                        }
+                        
+                        if (!hit && item.id === 'pickaxe') {
+                            if (world[tileX]?.[tileY] !== TILE.AIR && world[tileX]?.[tileY] !== TILE.BEDROCK) {
+                                let drop = world[tileX][tileY];
+                                if(drop === TILE.GRASS) drop = TILE.DIRT; 
+                                if(drop === TILE.DOOR_OPEN || drop === TILE.DOOR_CLOSED) drop = TILE.DOOR_CLOSED; // Drop item
+                                spawnDrop(tileX*32+8, tileY*32+8, drop);
+                                for(let i=0; i<3; i++) spawnParticle(tileX*32+16, tileY*32+16, '#888');
+                                world[tileX][tileY] = TILE.AIR;
+                                playSound('mine');
+                            }
+                        }
+                    } else if (item.count > 0 && (item.type === 'block' || (item.type === 'item' && item.placeable))) {
+                        if (world[tileX]?.[tileY] === TILE.AIR) {
+                             if (item.tileId === TILE.TORCH || item.tileId === TILE.WORKBENCH || item.tileId === TILE.DOOR_CLOSED ||
+                                 !(playerRect.x < tileRect.x + tileRect.w && playerRect.x + playerRect.w > tileRect.x &&
+                                   playerRect.y < tileRect.y + tileRect.h && playerRect.y + playerRect.h > tileRect.y)) {
+                                 
+                                 let hasNeighbor = false;
+                                 [[0,1],[0,-1],[1,0],[-1,0]].forEach(n=> { if(world[tileX+n[0]]?.[tileY+n[1]] !== TILE.AIR) hasNeighbor=true; });
+                                 if(walls[tileX]?.[tileY] !== WALL.NONE) hasNeighbor = true;
+
+                                 if(hasNeighbor) {
+                                     world[tileX][tileY] = item.tileId || item.id;
+                                     item.count--;
+                                     updateInventoryUI();
+                                     playSound('mine');
+                                 }
+                             }
+                        }
+                    } else if (item.count > 0 && item.type === 'wall') {
+                        if (walls[tileX]) { walls[tileX][tileY] = item.id; item.count--; updateInventoryUI(); playSound('mine'); }
+                    }
+                }
+            } else { player.bowCooldown = 0; }
+        }
+
+        function spawnEnemy(isNight) {
+            const side = Math.random() > 0.5 ? 1 : -1;
+            const sx = player.x + (side * (width/1.5 + 50));
+            const tx = Math.floor(sx / TILE_SIZE);
+            if (tx <= 0 || tx >= WORLD_WIDTH) return;
+            let ty = 0; while (ty < WORLD_HEIGHT && world[tx][ty] === TILE.AIR) ty++;
+            if (ty < WORLD_HEIGHT) {
+                enemies.push({
+                    x: tx*32, y: (ty-2)*32, vx:0, vy:0, grounded:false,
+                    type: isNight ? 'zombie' : 'slime',
+                    width: isNight ? 24 : 32, height: isNight ? 48 : 24,
+                    hp: isNight ? 60 : 30, maxHp: isNight ? 60 : 30,
+                    color: isNight ? '#2e7d32' : '#76ff03'
+                });
+            }
+        }
+
+        function saveGame() {
+            const data = { 
+                world: Array.from(world).map(col => Array.from(col)), 
+                walls: Array.from(walls).map(col => Array.from(col)), 
+                player: player, 
+                inventory: inventory, 
+                gameTime: gameTime, 
+                camera: camera,
+                enemies: enemies,
+                drops: drops,
+                boss: boss
+            };
+            try { localStorage.setItem('terraria_lite_save', JSON.stringify(data)); const msg = document.getElementById('save-msg'); msg.style.opacity = 1; setTimeout(() => msg.style.opacity = 0, 2000); } catch(e) {}
+        }
+        setInterval(saveGame, 10000);
+
+        // --- Rendering ---
+        function drawBackground() {
+            const cycle = Math.sin((gameTime / DAY_LENGTH) * Math.PI * 2);
+            let r, g, b;
+            if (cycle > 0) { const br = 0.5 + (cycle * 0.5); r=100*br; g=180*br; b=255*br; } 
+            else { const dk = 0.2 + ((cycle+1)*0.1); r=10*dk; g=10*dk; b=40; }
+            const grd = ctx.createLinearGradient(0, 0, 0, height);
+            grd.addColorStop(0, `rgb(${r*0.5},${g*0.5},${b*0.8})`); grd.addColorStop(1, `rgb(${r},${g},${b})`);
+            ctx.fillStyle = grd; ctx.fillRect(0, 0, width, height);
+
+            if (cycle < 0.2) {
+                ctx.fillStyle = '#fff';
+                stars.forEach(s => {
+                    ctx.globalAlpha = Math.max(0, -cycle * 2) * Math.abs(Math.sin(gameTime*0.01 + s.blink));
+                    ctx.fillRect(s.x, s.y, s.size, s.size);
+                });
+                ctx.globalAlpha = 1;
+            }
+
+            const centerX = width/2, centerY = height + 100, radius = width * 0.45;
+            const sunX = centerX + Math.cos((gameTime/DAY_LENGTH)*Math.PI*2 + Math.PI/2) * radius;
+            const sunY = centerY + Math.sin((gameTime/DAY_LENGTH)*Math.PI*2 + Math.PI/2) * radius * 0.8;
+            
+            ctx.fillStyle = cycle > -0.1 ? '#FDB813' : '#F4F6F0';
+            ctx.beginPath(); ctx.arc(sunX, sunY, 30, 0, Math.PI*2); ctx.fill();
+
+            // Parallax
+            ctx.fillStyle = `rgba(${r*0.6}, ${g*0.7}, ${b*0.7}, 0.5)`;
+            ctx.beginPath(); ctx.moveTo(0, height);
+            for(let i=0; i<=width; i+=10) ctx.lineTo(i, height - 200 - Math.abs(Math.sin((i+camera.x*0.2)*0.005))*150);
+            ctx.lineTo(width, height); ctx.fill();
+        }
+
+        function drawEntities() {
+            // Projectiles
+            ctx.fillStyle = '#fff';
+            projectiles.forEach(p => ctx.fillRect(p.x - camera.x, p.y - camera.y, 4, 4));
+
+            drops.forEach(d => {
+                const dx = d.x - camera.x, dy = d.y - camera.y, float = Math.sin(gameTime*0.1) * 3;
+                if(textures[d.id]) ctx.drawImage(textures[d.id], dx+8, dy+8+float, 16, 16);
+                else {
+                     if(d.id === ITEM.GEL) { ctx.fillStyle = '#2196f3'; ctx.beginPath(); ctx.arc(dx+8, dy+8+float, 6, 0, Math.PI*2); ctx.fill(); }
+                     else { ctx.fillStyle = '#fff'; ctx.fillRect(dx+8, dy+8+float, 16, 16); }
+                }
+            });
+            
+            particles.forEach(p => {
+                ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
+                ctx.fillRect(p.x - camera.x, p.y - camera.y, 4, 4); ctx.globalAlpha = 1;
+            });
+
+            // Player & Arm
+            const px = Math.floor(player.x - camera.x), py = Math.floor(player.y - camera.y);
+            if (player.invulnerable % 4 < 2) { 
+                ctx.fillStyle = '#ffcc80'; ctx.fillRect(px, py, player.width, player.height);
+                ctx.fillStyle = '#00bcd4'; ctx.fillRect(px, py + 12, player.width, 20); 
+                ctx.fillStyle = '#3f51b5';
+                const legOffset = Math.sin(player.animTimer) * 5;
+                ctx.fillRect(px + 4 + legOffset, py + 32, 6, 16); ctx.fillRect(px + 10 - legOffset, py + 32, 6, 16);
+                const lookDir = player.facingRight ? 1 : 0;
+                ctx.fillStyle = '#fff'; ctx.fillRect(px + 4 + (lookDir*8), py + 6, 4, 4);
+                ctx.fillStyle = '#000'; ctx.fillRect(px + 6 + (lookDir*8), py + 6, 2, 4);
+
+                const item = inventory[selectedSlot];
+                if (item.type === 'weapon' || item.type === 'tool') {
+                    ctx.save(); ctx.translate(px + 10, py + 24);
+                    let angle = Math.atan2(mouse.y - (py+24), mouse.x - (px+10));
+                    if (mouse.leftDown) angle += Math.sin(gameTime * 0.5) * 0.5;
+                    ctx.rotate(angle);
+                    ctx.fillStyle = '#00bcd4'; ctx.fillRect(0, -4, 12, 8);
+                    ctx.fillStyle = '#ffcc80'; ctx.fillRect(12, -4, 4, 8);
+                    ctx.translate(12, 0); ctx.rotate(Math.PI/2); 
+                    if (item.id === ITEM.BOW) {
+                         ctx.lineWidth=2; ctx.strokeStyle='#5d4037'; ctx.beginPath(); ctx.arc(0,0,12,0,Math.PI); ctx.stroke();
+                         ctx.strokeStyle='#fff'; ctx.beginPath(); ctx.moveTo(-12,0); ctx.lineTo(12,0); ctx.stroke();
+                    } else {
+                        ctx.fillStyle = '#ccc';
+                        if (item.id === 'pickaxe') { ctx.fillStyle = '#8B4513'; ctx.fillRect(-2, 0, 4, 15); ctx.fillStyle = '#ffd700'; ctx.beginPath(); ctx.moveTo(-6,-4); ctx.lineTo(10,-4); ctx.lineTo(2,4); ctx.fill(); } 
+                        else { ctx.fillStyle = '#8B4513'; ctx.fillRect(-2, 0, 4, 8); ctx.fillStyle = '#ccc'; ctx.fillRect(-2, -20, 4, 20); }
+                    }
+                    ctx.restore();
+                }
+            }
+
+            // Boss
+            if (boss) {
+                const bx = boss.x - camera.x, by = boss.y - camera.y;
+                // White Eye
+                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(bx+32, by+32, 32, 0, Math.PI*2); ctx.fill();
+                // Iris
+                ctx.fillStyle = '#b71c1c'; ctx.beginPath(); ctx.arc(bx+32, by+32, 16, 0, Math.PI*2); ctx.fill();
+                // Pupil (Looks at player)
+                const dx = player.x - boss.x, dy = player.y - boss.y;
+                const ang = Math.atan2(dy, dx);
+                ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(bx+32 + Math.cos(ang)*8, by+32 + Math.sin(ang)*8, 8, 0, Math.PI*2); ctx.fill();
+                // Veins
+                ctx.strokeStyle = '#e57373'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(bx+32, by); ctx.lineTo(bx+32, by+10); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(bx, by+32); ctx.lineTo(bx+10, by+32); ctx.stroke();
+            }
+
+            enemies.forEach(e => {
+                const ex = e.x - camera.x, ey = e.y - camera.y, bounce = e.grounded ? 0 : Math.sin(gameTime*0.2)*2;
+                ctx.fillStyle = e.color;
+                if(e.type === 'slime') { ctx.beginPath(); ctx.ellipse(ex + 16, ey + 16 - bounce, 12 + bounce, 12 - bounce, 0, 0, Math.PI*2); ctx.fill(); } 
+                else ctx.fillRect(ex, ey, e.width, e.height);
+                ctx.fillStyle = '#444'; ctx.fillRect(ex, ey-10, e.width, 4); ctx.fillStyle = '#f00'; ctx.fillRect(ex, ey-10, (e.hp/e.maxHp)*e.width, 4);
+            });
+        }
+
+        function drawLighting() {
+            if (width <= 0 || height <= 0) return;
+            const cycle = Math.sin((gameTime / DAY_LENGTH) * Math.PI * 2);
+            let ambientDarkness = cycle <= 0 ? 0.9 : 0;
+            const playerDepth = player.y / TILE_SIZE;
+            if (playerDepth > 40) ambientDarkness = Math.max(ambientDarkness, Math.min(0.98, (playerDepth-40)*0.05));
+
+            lightCtx.globalCompositeOperation = 'source-over'; lightCtx.clearRect(0,0,width,height);
+            lightCtx.fillStyle = `rgba(0, 5, 20, ${ambientDarkness})`; lightCtx.fillRect(0,0,width,height);
+            lightCtx.globalCompositeOperation = 'destination-out';
+            
+            const px = player.x - camera.x + player.width/2, py = player.y - camera.y + player.height/2;
+            const pGrad = lightCtx.createRadialGradient(px, py, 20, px, py, 200);
+            pGrad.addColorStop(0, 'rgba(255,255,255,1)'); pGrad.addColorStop(1, 'rgba(255,255,255,0)');
+            lightCtx.fillStyle = pGrad; lightCtx.beginPath(); lightCtx.arc(px, py, 200, 0, Math.PI*2); lightCtx.fill();
+
+            const startCol = Math.floor(camera.x / TILE_SIZE);
+            const endCol = startCol + (width / TILE_SIZE) + 1;
+            const startRow = Math.floor(camera.y / TILE_SIZE);
+            const endRow = startRow + (height / TILE_SIZE) + 1;
+            
+            for (let c = startCol; c <= endCol; c++) {
+                if(c < 0 || c >= WORLD_WIDTH) continue;
+                for (let r = startRow; r <= endRow; r++) {
+                     if(r < 0 || r >= WORLD_HEIGHT) continue;
+                     if(world[c][r] === TILE.TORCH) {
+                        const tx = (c * TILE_SIZE) - camera.x + 16, ty = (r * TILE_SIZE) - camera.y + 16;
+                        const tGrad = lightCtx.createRadialGradient(tx, ty, 5, tx, ty, 150 + Math.random()*5);
+                        tGrad.addColorStop(0, 'rgba(255, 200, 150, 1)'); tGrad.addColorStop(1, 'rgba(255, 200, 150, 0)');
+                        lightCtx.fillStyle = tGrad; lightCtx.beginPath(); lightCtx.arc(tx, ty, 155, 0, Math.PI*2); lightCtx.fill();
+                     }
+                }
+            }
+            ctx.drawImage(lightCanvas, 0, 0);
+        }
+
+        function loop() {
+            updatePlayer(); updateLogic();
+            camera.x += (player.x - width/2 - camera.x) * 0.1; camera.y += (player.y - height/2 - camera.y) * 0.1;
+            camera.x = Math.max(0, Math.min(camera.x, WORLD_WIDTH * TILE_SIZE - width));
+            camera.y = Math.max(0, Math.min(camera.y, WORLD_HEIGHT * TILE_SIZE - height));
+
+            drawBackground();
+            // Draw World
+            const startCol = Math.floor(camera.x / TILE_SIZE);
+            const endCol = startCol + (width / TILE_SIZE) + 1;
+            const startRow = Math.floor(camera.y / TILE_SIZE);
+            const endRow = startRow + (height / TILE_SIZE) + 1;
+
+            for (let c = startCol; c <= endCol; c++) {
+                if(c < 0 || c >= WORLD_WIDTH) continue;
+                for (let r = startRow; r <= endRow; r++) {
+                    if(r < 0 || r >= WORLD_HEIGHT) continue;
+                    const x = Math.floor((c * TILE_SIZE) - camera.x), y = Math.floor((r * TILE_SIZE) - camera.y);
+                    const wall = walls[c][r];
+                    if (wall && wallTextures[wall]) { ctx.drawImage(wallTextures[wall], x, y); ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(x,y,32,32); }
+                    const tile = world[c][r];
+                    if (tile !== TILE.AIR) {
+                        if (tile === TILE.TORCH) {
+                            ctx.fillStyle = '#ff5722'; ctx.fillRect(x + 14, y + 10, 4, 12);
+                            ctx.fillStyle = `rgba(255, 200, 0, ${0.5 + Math.random()*0.5})`; ctx.fillRect(x + 12, y + 6, 8, 8); 
+                        } else if(textures[tile]) ctx.drawImage(textures[tile], x, y);
+                        else { ctx.fillStyle = '#000'; ctx.fillRect(x,y,TILE_SIZE,TILE_SIZE); }
+                    }
+                }
+            }
+
+            drawEntities(); drawLighting();
+            const cx = Math.floor(mouse.worldX / TILE_SIZE) * TILE_SIZE - camera.x;
+            const cy = Math.floor(mouse.worldY / TILE_SIZE) * TILE_SIZE - camera.y;
+            ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth=2; ctx.strokeRect(cx, cy, TILE_SIZE, TILE_SIZE);
+            requestAnimationFrame(loop);
+        }
+
+        window.addEventListener('keydown', e => { 
+            resumeAudio();
+            keys[e.code] = true;
+            if(e.key.toLowerCase() === 'c') toggleCrafting();
+            if (e.key >= '1' && e.key <= '9') selectSlot(parseInt(e.key) - 1);
+        });
+
+        window.addEventListener('mousedown', e => { 
+            if(e.button === 0) mouse.leftDown = true; 
+            resumeAudio(); 
+        });
+        window.addEventListener('mouseup', e => { if (e.button === 0) mouse.leftDown = false; });
+        window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+        window.addEventListener('keyup', e => keys[e.code] = false);
+
+        generateWorld();
+        requestAnimationFrame(loop);
+
+    </script>
+</body>
+</html>
