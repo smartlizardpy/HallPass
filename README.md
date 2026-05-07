@@ -22,7 +22,6 @@ app/
   game-html/[slug]/     server route: streams Blob HTML, 307s to static fallback
   games-version/        version endpoint the SW polls (head().uploadedAt.getTime())
   admin/html/           password-gated admin: upload / paste / clear game HTML in Blob
-  api/n7k2f9x3m8p4q6/   obfuscated eBay marketplace-account-deletion webhook
   components/
     Arcade.tsx          catalog UI
     PWA.tsx             SW registration + offline pill + version polling
@@ -113,8 +112,6 @@ Derived from `process.env.*` references in the codebase. Configure these in Verc
 | `POSTHOG_API_HOST` | `app/lib/stats.ts` | Defaults to `https://eu.posthog.com`. |
 | `POSTHOG_PROJECT_ID` | `app/lib/stats.ts` | PostHog project numeric id. |
 | `POSTHOG_PERSONAL_API_KEY` | `app/lib/stats.ts` | Personal API key with read access for play-count queries. |
-| `EBAY_VERIFICATION_TOKEN` | `app/api/n7k2f9x3m8p4q6/route.ts` | Token eBay sends on the marketplace-account-deletion challenge. |
-| `EBAY_ENDPOINT_URL` | `app/api/n7k2f9x3m8p4q6/route.ts` | The full public URL of that obfuscated route. |
 
 ## Scripts
 
@@ -134,7 +131,6 @@ Vercel auto-deploys from the `main` branch. After a merge: Vercel runs `next bui
 - The service worker only registers in production builds. `next dev` will look like a non-PWA.
 - Adding a new game requires a redeploy; updating an existing game's HTML does not.
 - A user who installs the PWA, goes offline before ever opening game X online, and then opens game X will see the static fallback baseline — which lags Blob until you run `sync-games.sh` and redeploy.
-- The `/api/n7k2f9x3m8p4q6/` route is an obfuscated eBay marketplace-account-deletion webhook. The path is registered with eBay; do not rename it.
 - `public/sw-manifest.js` is auto-generated. Do not hand-edit it; regenerate via `npm run build`.
 
 ## License
