@@ -1,26 +1,105 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Poki-inspired palette */
+  --background: #f4f4f7;
+  --foreground: #1c1c28;
+  --surface: #ffffff;
+  --surface-2: #ececf3;
+  --border: #e4e4ec;
+  --muted: #6b6b7b;
+
+  --brand: #7c2eef;        /* poki purple */
+  --brand-600: #6920d6;
+  --brand-50: #f1e9ff;
+  --brand-100: #e4d4ff;
+
+  --accent-yellow: #ffc700;
+  --accent-pink: #ff4f8b;
+  --accent-cyan: #00cfd6;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand-600: var(--brand-600);
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-accent-yellow: var(--accent-yellow);
+  --color-accent-pink: var(--accent-pink);
+  --color-accent-cyan: var(--accent-cyan);
+  --font-sans: var(--font-nunito);
+  --font-display: var(--font-nunito);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+body {
+  font-family: var(--font-nunito), system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  min-height: 100vh;
+}
+
+/* Card hover lift */
+.card {
+  position: relative;
+  isolation: isolate;
+  transition:
+    transform 0.25s cubic-bezier(0.2, 0.9, 0.2, 1),
+    box-shadow 0.25s ease;
+}
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 16px 30px -12px rgba(124, 46, 239, 0.28),
+    0 6px 14px -6px rgba(28, 28, 40, 0.08);
+}
+.card:hover .card-art {
+  transform: scale(1.05);
+}
+.card-art {
+  transition: transform 0.6s cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+/* Pulse for the LIVE / NEW pip */
+@keyframes pulse-pip {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+.pip {
+  animation: pulse-pip 1.6s ease-in-out infinite;
+}
+
+/* Marquee for the ticker */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.marquee-track {
+  animation: marquee 40s linear infinite;
+}
+
+/* Custom scrollbar (webkit) */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: #d4d4dc;
+  border-radius: 999px;
+  border: 2px solid var(--background);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--brand); }
+
+/* Selection */
+::selection {
+  background: rgba(124, 46, 239, 0.25);
+  color: #1c1c28;
 }
