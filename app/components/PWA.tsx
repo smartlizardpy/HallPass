@@ -91,7 +91,8 @@ export function PWA() {
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none fixed bottom-3 left-1/2 z-50 -translate-x-1/2 rounded-full border border-white/10 bg-black/80 px-3 py-1 text-xs font-semibold text-white shadow-lg backdrop-blur"
+      className="pointer-events-none fixed left-1/2 z-50 -translate-x-1/2 rounded-full border border-white/10 bg-black/80 px-3 py-1 text-xs font-semibold text-white shadow-lg backdrop-blur"
+      style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
     >
       Offline · cached games still playable
     </div>

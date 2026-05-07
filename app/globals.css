@@ -47,6 +47,35 @@ body {
   font-family: var(--font-nunito), system-ui, sans-serif;
   font-feature-settings: "ss01", "cv11";
   min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Prevent iOS Safari from zooming on input focus (font-size must be >=16px) */
+@media (max-width: 767px) {
+  input[type="search"],
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* Disable hover lift on touch devices — looks janky on tap */
+@media (hover: none) {
+  .card:hover {
+    transform: none;
+    box-shadow: none;
+  }
+  .card:hover .card-art {
+    transform: none;
+  }
+}
+
+/* Active state feedback on touch */
+.card:active {
+  transform: scale(0.98);
 }
 
 /* Card hover lift */
