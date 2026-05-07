@@ -1,0 +1,1880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nuclear Reactor Manager</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            background-color: #050505;
+            color: #33ff33;
+            font-family: 'VT323', monospace;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            box-shadow: 0 0 30px rgba(51, 255, 51, 0.3);
+            border: 4px solid #113311;
+            image-rendering: pixelated;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+        }
+
+        /* CRT Scanline Effect */
+        #crt-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* Screen Flicker */
+        #crt-overlay::before {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 10;
+            background-size: 100% 4px, 3px 100%;
+            pointer-events: none;
+            opacity: 0.3;
+            animation: flicker 0.15s infinite;
+        }
+
+        @keyframes flicker {
+            0% { opacity: 0.1; }
+            50% { opacity: 0.2; }
+            100% { opacity: 0.1; }
+        }
+
+        #alarm-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 0, 0, 0.3);
+            pointer-events: none;
+            z-index: 5;
+            display: none;
+            animation: alarmFlash 1s infinite;
+        }
+
+        @keyframes alarmFlash {
+            0% { opacity: 0; }
+            50% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        /* --- MOBILE CONTROLS --- */
+        #mobile-controls {
+            position: absolute;
+            bottom: 30px;
+            left: 0;
+            width: 100%;
+            display: none; /* Shown dynamically if touch detected */
+            justify-content: space-between;
+            padding: 0 30px;
+            box-sizing: border-box;
+            z-index: 20;
+        }
+
+        .mobile-group {
+            display: flex;
+            gap: 15px;
+        }
+
+        .m-btn {
+            background: rgba(10, 50, 10, 0.7);
+            border: 2px solid #33ff33;
+            color: #33ff33;
+            font-family: 'VT323', monospace;
+            font-size: 28px;
+            border-radius: 8px;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            user-select: none;
+            touch-action: none; /* Prevents zooming/panning on double tap */
+            box-shadow: 0 0 10px rgba(51, 255, 51, 0.2);
+            cursor: pointer;
+            transition: transform 0.05s ease;
+        }
+
+        .m-btn.wide {
+            width: 100px;
+        }
+
+        .m-btn:active, .m-btn.active {
+            background: rgba(51, 255, 51, 0.4);
+            box-shadow: 0 0 20px rgba(51, 255, 51, 0.6);
+            color: #fff;
+            transform: scale(0.95);
+        }
+
+        /* Responsive scaling for mobile screens */
+        @media (max-width: 800px) {
+            #game-container {
+                width: 100vw;
+                height: 75vw; /* Maintain 4:3 aspect ratio roughly */
+            }
+            .m-btn {
+                width: 50px; height: 50px; font-size: 20px;
+            }
+            .m-btn.wide { width: 80px; }
+            #mobile-controls { bottom: 10px; padding: 0 10px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="crt-overlay"></div>
+        <div id="alarm-overlay"></div>
+
+        <!-- Mobile Control Overlay -->
+        <div id="mobile-controls">
+            <div class="mobile-group">
+                <div id="btn-left" class="m-btn">◀</div>
+                <div id="btn-right" class="m-btn">▶</div>
+            </div>
+            <div class="mobile-group">
+                <div id="btn-q" class="m-btn">Q</div>
+                <div id="btn-w" class="m-btn wide">JUMP</div>
+                <div id="btn-e" class="m-btn">E</div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const alarmOverlay = document.getElementById('alarm-overlay');
+
+    // Disable smoothing for crisp pixel art
+    ctx.imageSmoothingEnabled = false;
+
+    // --- GAME CONSTANTS ---
+    const GAME_WIDTH = 800;
+    const GAME_HEIGHT = 600;
+    const WORLD_WIDTH = 2800; // Massively expanded for the ultimate facility
+    const FLOOR_Y = 520;
+    const MAX_HEAT = 1000;
+    const TARGET_DAYS = 20;
+
+    // --- PROCEDURAL TEXTURES (Complex Pixel Art Generation) ---
+    const textures = {};
+    
+    function generateTextures() {
+        // 1. Concrete Texture
+        let c = document.createElement('canvas');
+        c.width = 64; c.height = 64;
+        let cCtx = c.getContext('2d');
+        cCtx.fillStyle = '#222';
+        cCtx.fillRect(0, 0, 64, 64);
+        for(let i=0; i<400; i++) {
+            cCtx.fillStyle = Math.random() > 0.5 ? '#2a2a2a' : '#1a1a1a';
+            cCtx.fillRect(Math.random()*64, Math.random()*64, 2, 2);
+        }
+        // Panel lines
+        cCtx.fillStyle = '#111';
+        cCtx.fillRect(0, 62, 64, 2);
+        cCtx.fillRect(62, 0, 2, 64);
+        textures.concrete = ctx.createPattern(c, 'repeat');
+
+        // 2. Hazard Stripes
+        let h = document.createElement('canvas');
+        h.width = 40; h.height = 40;
+        let hCtx = h.getContext('2d');
+        hCtx.fillStyle = '#ffaa00';
+        hCtx.fillRect(0, 0, 40, 40);
+        hCtx.fillStyle = '#111';
+        hCtx.beginPath();
+        hCtx.moveTo(0, 0); hCtx.lineTo(20, 0); hCtx.lineTo(0, 20);
+        hCtx.moveTo(40, 0); hCtx.lineTo(40, 20); hCtx.lineTo(20, 40); hCtx.lineTo(0, 40);
+        hCtx.fill();
+        textures.hazard = ctx.createPattern(h, 'repeat');
+        
+        // 3. Metal Grate
+        let g = document.createElement('canvas');
+        g.width = 16; g.height = 16;
+        let gCtx = g.getContext('2d');
+        gCtx.fillStyle = '#151515';
+        gCtx.fillRect(0, 0, 16, 16);
+        gCtx.fillStyle = '#333';
+        gCtx.fillRect(0, 0, 14, 2);
+        gCtx.fillRect(0, 0, 2, 14);
+        textures.grate = ctx.createPattern(g, 'repeat');
+    }
+    generateTextures();
+
+    // --- INPUT HANDLING ---
+    const keys = { a: false, d: false, w: false, q: false, e: false, space: false, t: false, enter: false };
+    window.addEventListener('keydown', (e) => {
+        const key = e.key.toLowerCase();
+        if (keys.hasOwnProperty(key)) keys[key] = true;
+        if (e.code === 'Space') keys.space = true;
+        if (e.code === 'Enter') keys.enter = true;
+    });
+    window.addEventListener('keyup', (e) => {
+        const key = e.key.toLowerCase();
+        if (keys.hasOwnProperty(key)) keys[key] = false;
+        if (e.code === 'Space') keys.space = false;
+        if (e.code === 'Enter') keys.enter = false;
+    });
+
+    // --- MOBILE TOUCH CONTROLS ---
+    let isTouchDevice = false;
+
+    function bindMobileBtn(id, keyProps) {
+        const btn = document.getElementById(id);
+        const press = (e) => { 
+            if(e.cancelable) e.preventDefault(); 
+            keyProps.forEach(k => keys[k] = true); 
+            btn.classList.add('active');
+        };
+        const release = (e) => { 
+            if(e.cancelable) e.preventDefault(); 
+            keyProps.forEach(k => keys[k] = false); 
+            btn.classList.remove('active');
+        };
+        
+        // Touch events for mobile screens
+        btn.addEventListener('touchstart', press, { passive: false });
+        btn.addEventListener('touchend', release, { passive: false });
+        btn.addEventListener('touchcancel', release, { passive: false });
+        
+        // Mouse events for desktop/preview window clicking
+        btn.addEventListener('mousedown', press);
+        btn.addEventListener('mouseup', release);
+        btn.addEventListener('mouseleave', release);
+    }
+
+    // Auto-detect touch device or small screen and enable mobile controls
+    function enableMobileControls() {
+        isTouchDevice = true;
+        document.getElementById('mobile-controls').style.display = 'flex';
+    }
+
+    window.addEventListener('touchstart', function onFirstTouch() {
+        enableMobileControls();
+        window.removeEventListener('touchstart', onFirstTouch, false);
+    }, { passive: true });
+
+    // Ensure buttons appear if we are on a smaller screen even without touch
+    if (window.innerWidth <= 800) {
+        enableMobileControls();
+    }
+
+    // Bind physical virtual buttons to the key state
+    bindMobileBtn('btn-left', ['a']);
+    bindMobileBtn('btn-right', ['d']);
+    bindMobileBtn('btn-q', ['q']);
+    bindMobileBtn('btn-w', ['w', 'space']); // Jump also acts as "Space" for menus
+    bindMobileBtn('btn-e', ['e', 'enter']); // E also acts as "Enter" for menus
+
+    // --- GAME STATE ---
+    let gameState = 'START'; 
+    let lastTime = 0;
+    let daysSurvived = 0;
+    let dayTimer = 0;
+    let failReason = "";
+    let camX = 0;
+    let particles = [];
+    let tutorialStep = 0;
+
+    let isEndless = false;
+    let costs = { pipe: 3000, eng: 4000, pr: 5000, it: 6000, maint: 7000, guard: 8000, janitor: 9000 };
+
+    // Weather and World State
+    let weather = 'clear'; // clear, rain, storm
+    let weatherTimer = 30;
+    let timeOfDay = 8; // Start at 8 AM
+
+    // Educational Information Array (Expanded with historical/safety context)
+    const eduFacts = [
+        "INFO: 1 Uranium pellet (size of a gummy bear) holds as much energy as 1 ton of coal.",
+        "INFO: Nuclear energy emits zero greenhouse gases or smog-producing pollutants during operation.",
+        "INFO: Control rods use materials like boron or cadmium to absorb neutrons and safely regulate the fission rate.",
+        "INFO: Water in a reactor acts as both a coolant and a 'moderator' to sustain the reaction safely.",
+        "INFO: Nuclear power provides about 10% of the world's electricity, running 24/7.",
+        "INFO: Modern Generation III+ reactors feature passive, gravity-based safety systems that work without electricity.",
+        "INFO: Spent nuclear fuel is safely stored in massive, impenetrable concrete and steel dry casks.",
+        "INFO: Replacing coal with nuclear power has statistically saved millions of lives from respiratory illnesses.",
+        "INFO: After Fukushima, the global industry implemented strict 'FLEX' safety protocols for extreme external events.",
+        "INFO: Nuclear has the highest 'capacity factor' of any energy source, operating at maximum power >92% of the time.",
+        "INFO: Modern Small Modular Reactors (SMRs) are designed to shut down and cool themselves without human intervention.",
+        "INFO: Up to 96% of the energy content remains in 'spent' nuclear fuel and can be recycled in advanced reactors.",
+        "INFO: Advanced reactors use natural heat circulation to provide emergency cooling without needing electrical pumps.",
+        "INFO: The first commercial nuclear power plant opened in Obninsk in 1954.",
+        "INFO: All the commercial nuclear waste generated in the US since the 1950s could fit on a single football field."
+    ];
+    let currentFactIdx = 0;
+    let tickerX = 800;
+
+    const reactor = {
+        heat: 200, controlRods: 80, pumpPower: 50, money: 5000, trust: 100, energyOutput: 0,
+        turbineCondition: 100, wasteLevel: 0,
+        pressure: 0, shares: 0, stockPrice: 100,
+        co2Avoided: 0, 
+        livesSaved: 0 // New Metric: Lives saved vs coal air pollution
+    };
+
+    const GRAVITY = 1200;
+    const JUMP_FORCE = -550; // Increased jump force for better mobility
+
+    const player = {
+        x: 200, y: FLOOR_Y, vy: 0, w: 24, h: 48, speed: 300, 
+        facing: 'right', interactText: "", repairProgress: 0, frame: 0,
+        isMoving: false, isGrounded: true, squash: 1, stretch: 1, speedBoostTimer: 0,
+        prCooldown: 0
+    };
+
+    const upgrades = {
+        pipeDurability: 1,
+        pumpEfficiency: 1
+    };
+    let npcs = []; // Replaces "engineers" array to hold multiple types of staff
+    let shakeTimer = 0;
+    let earthquakeTimer = 100; // Pushed the first earthquake back even further
+    let scramFlash = 0; // Screen flash for emergency
+    let isScrambled = false;
+    let scrambleEventTimer = 60;
+    let rebootProgress = 0;
+    let stockTimer = 5;
+
+    // Added "fact" parameter to all terminals for contextual education
+    const terminals = [
+        { id: 'coffee', x: 80, y: FLOOR_Y, w: 50, h: 70, label: 'BREAK ROOM', desc: '[E] Drink Coffee (Free)', type: 'coffee', fact: 'Operator fatigue management is critical for safety.' },
+        { id: 'security', x: 200, y: FLOOR_Y, w: 80, h: 90, label: 'SECURITY', desc: '[Q] Hire Guard [E] Bribe Rioters', type: 'desk', fact: 'Nuclear plants have some of the strictest security perimeters on Earth.' },
+        { id: 'pr', x: 380, y: FLOOR_Y, w: 100, h: 80, label: 'PR DEPT', desc: '[Q] Hire PR [E] Townhall', type: 'desk', fact: 'Transparency builds trust; modern plants share data publicly.' },
+        { id: 'stocks', x: 550, y: FLOOR_Y, w: 120, h: 110, label: 'URANIUM STOCKS', desc: '[Q] Buy 10 [E] Sell 10', type: 'stocks', fact: 'Fuel costs are a tiny fraction of nuclear operating expenses.' },
+        { id: 'mainframe', x: 750, y: FLOOR_Y, w: 80, h: 90, label: 'MAINFRAME', desc: 'SYSTEMS ONLINE', type: 'server', fact: 'Critical reactor systems are air-gapped from the public internet.' },
+        { id: 'upgrades', x: 920, y: FLOOR_Y, w: 140, h: 90, label: 'ENGINEERING', desc: '[Q] Pipes [E] Hire Eng', type: 'console', fact: 'Redundancy: Plants have multiple backup systems for every critical pipe.' },
+        { id: 'turbine', x: 1150, y: FLOOR_Y, w: 180, h: 100, label: 'STEAM TURBINE', desc: '[Q] Hire Maint [E] Lube', type: 'turbine', fact: 'Reactor heat turns water to steam, spinning turbines to make electricity.' },
+        { id: 'rods', x: 1400, y: FLOOR_Y, w: 120, h: 100, label: 'ROD CONTROL', desc: '[Q] Insert [E] Withdraw', type: 'console', fact: 'Rods drop via gravity instantly during a loss of power to halt fission.' },
+        { id: 'filters', x: 1600, y: FLOOR_Y, w: 80, h: 120, label: 'WASTE FILTERS', desc: '[Q] Hire Janitor [E] Flush', type: 'tank', fact: 'All nuclear waste ever produced globally would fit on a single football field.' },
+        { id: 'pumps', x: 1750, y: FLOOR_Y, w: 90, h: 90, label: 'COOLANT PUMPS', desc: '[Q] Decrease [E] Increase', type: 'pipes', fact: 'Coolant carries heat away from the core to prevent fuel damage.' },
+        { id: 'vents', x: 1920, y: FLOOR_Y, w: 80, h: 140, label: 'VENTILATION', desc: '[E] Hold to Release Pressure', type: 'vent', fact: 'Containment domes use filtered vents to safely manage extreme pressure.' },
+        { id: 'scram', x: 2150, y: FLOOR_Y, w: 80, h: 80, label: 'SCRAM', desc: '[E] EMERGENCY SHUTDOWN ($10k)', type: 'scram', fact: 'SCRAM: Safety Control Rod Axe Man. An instant emergency core shutdown.' }
+    ];
+
+    const reactorCore = { x: 2300, y: FLOOR_Y, w: 450, h: 380 };
+    let leaks = [];
+    let nextLeakTimer = 5;
+
+    // --- ENHANCED PARTICLE & FEEDBACK SYSTEM ---
+    let floatingTexts = [];
+
+    function spawnFloatingText(x, y, text, color) {
+        floatingTexts.push({ x, y, text, color, life: 2.0, maxLife: 2.0, vy: -20 });
+    }
+
+    function spawnSteam(x, y) {
+        particles.push({
+            type: 'steam',
+            x: x + Math.random() * 20 - 10,
+            y: y,
+            vx: Math.random() * 30 - 15,
+            vy: -60 - Math.random() * 60,
+            life: 1.0,
+            maxLife: 1.0 + Math.random() * 0.5,
+            size: 8 + Math.random() * 12
+        });
+    }
+
+    function spawnSpark(x, y) {
+        particles.push({
+            type: 'spark',
+            x: x + Math.random() * 10 - 5,
+            y: y + Math.random() * 10 - 5,
+            vx: (Math.random() - 0.5) * 200,
+            vy: -50 - Math.random() * 150,
+            life: 1.5,
+            maxLife: 1.5,
+            size: 2 + Math.random() * 3
+        });
+    }
+
+    function spawnDust(x, y) {
+        for(let i=0; i<3; i++) {
+            particles.push({
+                type: 'dust',
+                x: x + (Math.random() - 0.5) * 20,
+                y: y - 5 + Math.random() * 5,
+                vx: (Math.random() - 0.5) * 60,
+                vy: -10 - Math.random() * 20,
+                life: 0.5,
+                maxLife: 0.5 + Math.random() * 0.3,
+                size: 4 + Math.random() * 5
+            });
+        }
+    }
+
+    function spawnRain(camX) {
+        particles.push({
+            type: 'rain',
+            x: camX + Math.random() * GAME_WIDTH * 1.5 - 200, // Spawn across visible screen
+            y: 50,
+            vx: 150 + Math.random() * 50, // Angled rain
+            vy: 600 + Math.random() * 200,
+            life: 1.5,
+            maxLife: 1.5,
+            size: 2
+        });
+    }
+
+    function updateParticles(dt) {
+        for (let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i];
+            if (p.type === 'spark') {
+                p.vy += GRAVITY * 0.5 * dt; // Sparks have gravity
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                if (p.y >= FLOOR_Y) { p.y = FLOOR_Y; p.vy *= -0.5; p.vx *= 0.8; } // Bounce
+            } else if (p.type === 'rain') {
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                if (p.y >= FLOOR_Y) {
+                    p.life = 0; // splash
+                    spawnDust(p.x, p.y); // reuse dust for water splash
+                }
+            } else if (p.type === 'dust') {
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.size += 5 * dt;
+            } else {
+                // Steam
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.size += 15 * dt;
+            }
+            p.life -= dt;
+            if (p.life <= 0) particles.splice(i, 1);
+        }
+
+        for (let i = floatingTexts.length - 1; i >= 0; i--) {
+            let ft = floatingTexts[i];
+            ft.y += ft.vy * dt;
+            ft.life -= dt;
+            if (ft.life <= 0) floatingTexts.splice(i, 1);
+        }
+    }
+
+    // --- GAME LOGIC ---
+    function resetGame() {
+        reactor.heat = 150; reactor.controlRods = 90; reactor.pumpPower = 50;
+        reactor.money = 8000; reactor.trust = 100;
+        reactor.turbineCondition = 100; reactor.wasteLevel = 0; reactor.pressure = 0;
+        reactor.shares = 0; reactor.stockPrice = 100; reactor.co2Avoided = 0; reactor.livesSaved = 0;
+        player.x = 200; player.y = FLOOR_Y; player.vy = 0; player.prCooldown = 0; daysSurvived = 0; dayTimer = 0;
+        leaks = []; particles = []; floatingTexts = []; 
+        nextLeakTimer = 25 + Math.random() * 10;
+        
+        upgrades.pipeDurability = 1; upgrades.pumpEfficiency = 1;
+        npcs = [];
+        shakeTimer = 0; earthquakeTimer = 100;
+        isScrambled = false; scrambleEventTimer = 60; rebootProgress = 0; stockTimer = 5;
+        
+        weather = 'clear'; weatherTimer = 45; timeOfDay = 8;
+        tickerX = 800; currentFactIdx = Math.floor(Math.random() * eduFacts.length);
+
+        isEndless = false;
+        costs = { pipe: 3000, eng: 4000, pr: 5000, it: 6000, maint: 7000, guard: 8000, janitor: 9000 };
+
+        gameState = 'PLAY'; alarmOverlay.style.display = 'none';
+    }
+
+    function spawnLeak() {
+        const lx = reactorCore.x + 50 + Math.random() * (reactorCore.w - 100);
+        // Constrain leak spawn height so the player can always reach it with a jump
+        const ly = FLOOR_Y - 40 - Math.random() * 120; 
+        leaks.push({ x: lx, y: ly, w: 40, h: 40, fixed: false, repairAmount: 0 });
+    }
+
+    function update(dt) {
+        if (gameState !== 'PLAY' && gameState !== 'TUTORIAL') {
+            // Keep particles and floating text animating even on Win/Loss screens!
+            if (gameState === 'GAMEOVER' || gameState === 'WIN') {
+                updateParticles(dt);
+                if (shakeTimer > 0) shakeTimer -= dt;
+            }
+
+            // Restart after Game Over or Win
+            if (keys.space && (gameState === 'GAMEOVER' || gameState === 'WIN')) {
+                resetGame(); keys.space = false; keys.w = false;
+            }
+
+            // ENTER ENDLESS OVERTIME from Win Screen
+            if (keys.enter && gameState === 'WIN') {
+                isEndless = true;
+                gameState = 'PLAY';
+                reactor.trust = 100; // Fresh PR start for overtime
+                keys.enter = false; keys.e = false;
+                spawnFloatingText(player.x, player.y - player.h - 60, "OVERTIME INITIATED!", "#ff3333");
+            }
+            
+            // Start Tutorial from Main Menu
+            if (keys.space && gameState === 'START') {
+                gameState = 'TUTORIAL';
+                tutorialStep = 0;
+                reactor.heat = 150; reactor.controlRods = 90; reactor.pumpPower = 50; reactor.trust = 100; reactor.money = 8000;
+                reactor.turbineCondition = 100; reactor.wasteLevel = 0; reactor.pressure = 0; isScrambled = false;
+                reactor.co2Avoided = 0; reactor.livesSaved = 0;
+                player.x = 200; player.y = FLOOR_Y; player.vy = 0; player.prCooldown = 0; leaks = []; particles = []; floatingTexts = []; npcs = [];
+                keys.space = false; keys.w = false;
+            }
+
+            // Skip Tutorial from Main Menu
+            if (keys.enter && gameState === 'START') {
+                resetGame(); keys.enter = false; keys.e = false;
+            }
+            return;
+        }
+
+        if (gameState === 'TUTORIAL') {
+            // Tutorial Movement
+            player.isMoving = false;
+            if (keys.a) { player.x -= player.speed * dt; player.facing = 'left'; player.isMoving = true; }
+            if (keys.d) { player.x += player.speed * dt; player.facing = 'right'; player.isMoving = true; }
+            
+            if ((keys.w || keys.space) && player.isGrounded) {
+                player.vy = JUMP_FORCE;
+                player.isGrounded = false;
+                player.stretch = 1.3; player.squash = 0.7;
+            }
+
+            player.vy += GRAVITY * dt;
+            player.y += player.vy * dt;
+
+            if (player.y >= FLOOR_Y) {
+                if (!player.isGrounded) {
+                    player.squash = 1.4; player.stretch = 0.6;
+                }
+                player.y = FLOOR_Y;
+                player.vy = 0;
+                player.isGrounded = true;
+            }
+
+            player.squash += (1 - player.squash) * 10 * dt;
+            player.stretch += (1 - player.stretch) * 10 * dt;
+
+            if (player.x < 50) player.x = 50;
+            if (player.x > WORLD_WIDTH - 50) player.x = WORLD_WIDTH - 50;
+            if (player.isMoving) player.frame += dt * 10; else player.frame = 0;
+
+            let targetCamX = player.x - GAME_WIDTH / 2;
+            targetCamX = Math.max(0, Math.min(targetCamX, WORLD_WIDTH - GAME_WIDTH));
+            camX += (targetCamX - camX) * 5 * dt;
+
+            player.interactText = "";
+            
+            // Terminal interactions during tutorial
+            for (let t of terminals) {
+                if (Math.abs(player.x - (t.x + t.w/2)) < t.w/2 + 40) {
+                    player.interactText = t.desc;
+                    if (tutorialStep === 1 && t.id === 'rods') {
+                        if (keys.q && reactor.controlRods < 100) reactor.controlRods += 20 * dt;
+                        if (keys.e && reactor.controlRods > 0) reactor.controlRods -= 20 * dt;
+                    } else if (tutorialStep === 2 && t.id === 'pumps') {
+                        if (keys.q && reactor.pumpPower > 0) reactor.pumpPower -= 20 * dt;
+                        if (keys.e && reactor.pumpPower < 100) reactor.pumpPower += 20 * dt;
+                    } else if (tutorialStep === 4 && t.id === 'pr') {
+                        if (keys.e && player.prCooldown <= 0) {
+                            reactor.trust = Math.min(100, reactor.trust + 15);
+                            player.prCooldown = 1.0;
+                            tutorialStep = 5; // advance instantly
+                        }
+                    }
+                }
+            }
+            
+            if (player.prCooldown > 0) {
+                player.prCooldown -= dt;
+            } else {
+                player.prCooldown = 0;
+            }
+
+            // Leak interaction
+            if (tutorialStep === 3) {
+                let nearLeak = false;
+                for (let i = leaks.length - 1; i >= 0; i--) {
+                    let l = leaks[i];
+                    spawnSteam(l.x + l.w/2, l.y + l.h/2);
+                    let dist = Math.abs(player.x - (l.x + l.w/2));
+                    if (dist < 80) {
+                        nearLeak = true;
+                        player.interactText = "[E] Hold to Repair Pipe";
+                        if (keys.e) {
+                            l.repairAmount = (l.repairAmount || 0) + dt;
+                            player.repairProgress = l.repairAmount;
+                            if (l.repairAmount >= 2) {
+                                leaks.splice(i, 1);
+                                player.repairProgress = 0;
+                                tutorialStep = 4;
+                                reactor.trust = 35; // Lower trust to teach PR
+                            }
+                        } else {
+                            player.repairProgress = 0;
+                        }
+                    }
+                }
+                if (!nearLeak) player.repairProgress = 0;
+            }
+
+            updateParticles(dt);
+
+            // Fake reactor math to look alive but safe (won't explode)
+            if (tutorialStep >= 1) {
+                let reactionRate = 100 - reactor.controlRods;
+                let heatDelta = (reactionRate * 1.5) - (reactor.pumpPower * 1.2);
+                reactor.heat = Math.max(200, Math.min(800, reactor.heat + heatDelta * dt)); 
+                reactor.energyOutput = (reactionRate * (reactor.heat / 500));
+            }
+
+            // Progression
+            if (tutorialStep === 0 && Math.abs(player.x - 200) > 50) tutorialStep = 1;
+            else if (tutorialStep === 1 && reactor.controlRods < 60) tutorialStep = 2;
+            else if (tutorialStep === 2 && reactor.pumpPower > 70) {
+                tutorialStep = 3;
+                leaks.push({ x: reactorCore.x + 100, y: FLOOR_Y - 50, w: 40, h: 40, fixed: false, repairAmount: 0 });
+            } else if (tutorialStep === 5 && keys.space) {
+                resetGame(); keys.space = false; keys.w = false;
+            }
+
+            alarmOverlay.style.display = (reactor.heat > 850 || reactor.trust < 15) ? 'block' : 'none';
+            return;
+        }
+
+        // Time & Win / Endless scaling
+        dayTimer += dt;
+        timeOfDay = (8 + (daysSurvived * 24) + (dayTimer / 5) * 24) % 24; // 5 real seconds = 1 day
+
+        if (dayTimer >= 5) {
+            daysSurvived++; dayTimer = 0;
+            
+            // Trigger Massive Explosion Fake-Out at Year 20!
+            if (daysSurvived >= TARGET_DAYS && !isEndless && gameState !== 'WIN') {
+                gameState = 'WIN';
+                shakeTimer = 5.0; // Massive 5-second earthquake
+                // Spawn giant cinematic explosion of steam and sparks
+                for(let i=0; i<100; i++) {
+                    spawnSteam(reactorCore.x + Math.random() * reactorCore.w, reactorCore.y - Math.random() * reactorCore.h);
+                    spawnSpark(reactorCore.x + Math.random() * reactorCore.w, reactorCore.y - Math.random() * reactorCore.h);
+                }
+                return; // Stop updating game logic this frame
+            }
+        }
+
+        // --- ENDLESS DIFFICULTY MODIFIER ---
+        let difficulty = isEndless ? 1.0 + ((daysSurvived - 20) * 0.08) : 1.0;
+
+        // Earthquakes
+        earthquakeTimer -= dt;
+        if (earthquakeTimer <= 0) {
+            shakeTimer = 2.0;
+            spawnLeak(); spawnLeak(); spawnLeak();
+            earthquakeTimer = 45 + Math.random() * 30;
+        }
+        if (shakeTimer > 0) shakeTimer -= dt;
+        if (scramFlash > 0) scramFlash -= dt;
+
+        // Weather System
+        weatherTimer -= dt;
+        if (weatherTimer <= 0) {
+            let r = Math.random();
+            if (r < 0.5) weather = 'clear';
+            else if (r < 0.8) weather = 'rain';
+            else weather = 'storm';
+            weatherTimer = 20 + Math.random() * 30;
+        }
+        if (weather === 'rain' || weather === 'storm') {
+            for(let i=0; i<3; i++) spawnRain(camX);
+        }
+        if (weather === 'storm' && Math.random() < 0.01) {
+            scramFlash = 0.8; // Lightning!
+            if (Math.random() < 0.05 && !isScrambled) {
+                isScrambled = true; // Lightning EMP!
+                spawnFloatingText(player.x, player.y - player.h - 50, "LIGHTNING EMP!", "#ff0000");
+            }
+        }
+
+        // Stock Market Updates
+        stockTimer -= dt;
+        if (stockTimer <= 0) {
+            reactor.stockPrice += (Math.random() - 0.5) * 60; // Wild fluctuations
+            if (reactor.stockPrice < 10) reactor.stockPrice = 10;
+            if (reactor.stockPrice > 300) reactor.stockPrice = 300;
+            stockTimer = 3;
+        }
+
+        // Player Movement (Side-scrolling)
+        if (player.speedBoostTimer > 0) player.speedBoostTimer -= dt;
+        let currentSpeed = player.speed * (player.speedBoostTimer > 0 ? 2.5 : 1.0); // Extreme zoom!
+
+        player.isMoving = false;
+        if (keys.a) { player.x -= currentSpeed * dt; player.facing = 'left'; player.isMoving = true; }
+        if (keys.d) { player.x += currentSpeed * dt; player.facing = 'right'; player.isMoving = true; }
+        
+        if ((keys.w || keys.space) && player.isGrounded) {
+            player.vy = JUMP_FORCE;
+            player.isGrounded = false;
+            player.stretch = 1.3; player.squash = 0.7;
+        }
+
+        player.vy += GRAVITY * dt;
+        player.y += player.vy * dt;
+
+        if (player.y >= FLOOR_Y) {
+            if (!player.isGrounded) {
+                player.squash = 1.4; player.stretch = 0.6;
+                spawnDust(player.x, player.y); // Dust on landing
+            }
+            player.y = FLOOR_Y;
+            player.vy = 0;
+            player.isGrounded = true;
+        }
+
+        player.squash += (1 - player.squash) * 10 * dt;
+        player.stretch += (1 - player.stretch) * 10 * dt;
+
+        // Walking dust
+        if (player.isMoving && player.isGrounded && Math.random() < 0.1) {
+            spawnDust(player.x, player.y);
+        }
+
+        // Bounds
+        if (player.x < 50) player.x = 50;
+        if (player.x > WORLD_WIDTH - 50) player.x = WORLD_WIDTH - 50;
+
+        if (player.isMoving) player.frame += dt * 10;
+        else player.frame = 0;
+
+        // Camera Update
+        let targetCamX = player.x - GAME_WIDTH / 2;
+        targetCamX = Math.max(0, Math.min(targetCamX, WORLD_WIDTH - GAME_WIDTH));
+        camX += (targetCamX - camX) * 5 * dt;
+
+        // NPCs AI
+        for (let npc of npcs) {
+            let targetX = null;
+            let targetObj = null;
+
+            if (npc.type === 'engineer') {
+                if (leaks.length > 0) { targetX = leaks[0].x + leaks[0].w/2; targetObj = leaks[0]; }
+            } else if (npc.type === 'pr') {
+                reactor.trust = Math.min(100, reactor.trust + 0.5 * dt); // Passive PR!
+                if (npc.x < 250 || npc.x > 450) npc.vx *= -1; // Roam PR area
+            } else if (npc.type === 'it') {
+                if (isScrambled) { targetX = 790; } // Mainframe X
+                else if (npc.x < 650 || npc.x > 850) npc.vx *= -1; // Roam Mainframe area
+            } else if (npc.type === 'maintenance') {
+                if (reactor.turbineCondition < 70) { targetX = 1240; targetObj = 'turbine'; }
+                else if (npc.x < 1100 || npc.x > 1350) npc.vx *= -1; // Roam Turbine area
+            } else if (npc.type === 'guard') {
+                if (npc.x < 100 || npc.x > 500) npc.vx *= -1; // Patrol front gates
+            } else if (npc.type === 'janitor') {
+                reactor.pressure = Math.max(0, reactor.pressure - 2 * dt); // Passive pressure relief!
+                if (reactor.wasteLevel > 30) { targetX = 1640; targetObj = 'waste'; }
+                else if (npc.x < 50 || npc.x > WORLD_WIDTH - 50) npc.vx *= -1; // Roams everywhere
+            }
+
+            if (targetX !== null) {
+                let dist = targetX - npc.x;
+                if (Math.abs(dist) > 40) {
+                    npc.x += Math.sign(dist) * 100 * dt;
+                    npc.frame += dt * 10;
+                    npc.facing = dist > 0 ? 'right' : 'left';
+                } else {
+                    npc.frame = 0; // Working
+                    if (npc.type === 'engineer' && targetObj) {
+                        targetObj.repairAmount += dt * 0.5; // Repair slowly
+                        spawnSteam(targetObj.x + targetObj.w/2, targetObj.y + targetObj.h/2);
+                        if (targetObj.repairAmount >= 2) {
+                            leaks.splice(leaks.indexOf(targetObj), 1);
+                        }
+                    } else if (npc.type === 'it' && isScrambled) {
+                        rebootProgress += dt * 0.5;
+                        if (rebootProgress >= 2.0) { 
+                            isScrambled = false; rebootProgress = 0; 
+                            spawnFloatingText(npc.x, npc.y - 50, "SYSTEM RESTORED!", "#33ff33"); 
+                        }
+                    } else if (npc.type === 'maintenance') {
+                        if (targetObj === 'turbine') {
+                            reactor.turbineCondition = Math.min(100, reactor.turbineCondition + 20 * dt);
+                            if (Math.random() < 0.1) spawnSpark(npc.x, npc.y - 20);
+                        }
+                    } else if (npc.type === 'janitor') {
+                        if (targetObj === 'waste') {
+                            reactor.wasteLevel = Math.max(0, reactor.wasteLevel - 15 * dt);
+                            if (Math.random() < 0.2) spawnSteam(npc.x, npc.y - 30, 'rgba(100, 255, 100,');
+                        }
+                    }
+                }
+            } else {
+                // Wander
+                npc.x += npc.vx * dt;
+                npc.frame += dt * 5;
+                if (npc.x < 80 || npc.x > WORLD_WIDTH - 80 || Math.random() < 0.01) {
+                    npc.vx *= -1;
+                    npc.facing = npc.vx > 0 ? 'right' : 'left';
+                }
+            }
+        }
+
+        // Interaction Check
+        player.interactText = "";
+
+        // Update terminal text dynamically for infinite scaling costs
+        let upTerminal = terminals.find(t => t.id === 'upgrades');
+        if (upTerminal) upTerminal.desc = `[Q] Pipes ($${Math.floor(costs.pipe/1000)}k) [E] Eng ($${Math.floor(costs.eng/1000)}k)`;
+        
+        let prTerminal = terminals.find(t => t.id === 'pr');
+        if (prTerminal) prTerminal.desc = `[Q] PR ($${Math.floor(costs.pr/1000)}k) [E] Townhall ($2k)`;
+        
+        let mfTerminal = terminals.find(t => t.id === 'mainframe');
+        if (mfTerminal) mfTerminal.desc = isScrambled ? "[E] Hold to Reboot OS!" : `[Q] Hire IT ($${Math.floor(costs.it/1000)}k)`;
+        
+        let turbTerminal = terminals.find(t => t.id === 'turbine');
+        if (turbTerminal) turbTerminal.desc = `[Q] Hire Maint ($${Math.floor(costs.maint/1000)}k) [E] Lube`;
+
+        let secTerminal = terminals.find(t => t.id === 'security');
+        if (secTerminal) secTerminal.desc = `[Q] Guard ($${Math.floor(costs.guard/1000)}k) [E] Bribe ($1k)`;
+
+        let filtTerminal = terminals.find(t => t.id === 'filters');
+        if (filtTerminal) filtTerminal.desc = `[Q] Janitor ($${Math.floor(costs.janitor/1000)}k) [E] Flush`;
+
+        let stockTerminal = terminals.find(t => t.id === 'stocks');
+        if (stockTerminal) stockTerminal.desc = `[Q] Buy 10 ($${Math.floor(reactor.stockPrice * 10)}) [E] Sell 10`;
+
+        for (let t of terminals) {
+            t.isNear = false; // Reset glow state
+            if (Math.abs(player.x - (t.x + t.w/2)) < t.w/2 + 40) {
+                player.interactText = t.desc;
+                t.isNear = true; // Enable glowing outline
+
+                if (t.id === 'rods' && !isScrambled) {
+                    if (keys.q && reactor.controlRods < 100) reactor.controlRods += 20 * dt;
+                    if (keys.e && reactor.controlRods > 0) reactor.controlRods -= 20 * dt;
+                } else if (t.id === 'pumps' && !isScrambled) {
+                    if (keys.q && reactor.pumpPower > 0) reactor.pumpPower -= 20 * dt;
+                    if (keys.e && reactor.pumpPower < 100) reactor.pumpPower += 20 * dt;
+                } else if (t.id === 'vents') {
+                    if (keys.e && reactor.pressure > 0) {
+                        reactor.pressure = Math.max(0, reactor.pressure - 50 * dt);
+                        spawnSteam(t.x + t.w/2, t.y - t.h);
+                    }
+                } else if (t.id === 'stocks') {
+                    if (keys.q && player.prCooldown <= 0) {
+                        let cost = Math.floor(reactor.stockPrice * 10);
+                        if (reactor.money >= cost) {
+                            reactor.money -= cost; reactor.shares += 10; player.prCooldown = 0.5;
+                            spawnFloatingText(t.x + t.w/2, t.y - t.h - 20, "BOUGHT!", "#33ff33");
+                        } else {
+                            spawnFloatingText(player.x, player.y - player.h - 40, "INSUFFICIENT FUNDS!", "#ff3333");
+                            player.prCooldown = 0.5;
+                        }
+                    }
+                    if (keys.e && player.prCooldown <= 0) {
+                        if (reactor.shares >= 10) {
+                            reactor.money += Math.floor(reactor.stockPrice * 10); reactor.shares -= 10; player.prCooldown = 0.5;
+                            spawnFloatingText(t.x + t.w/2, t.y - t.h - 20, "SOLD!", "#ffff00");
+                        } else {
+                            spawnFloatingText(player.x, player.y - player.h - 40, "NOT ENOUGH SHARES!", "#ff3333");
+                            player.prCooldown = 0.5;
+                        }
+                    }
+                } else if (t.id === 'security') {
+                    if (keys.q && player.prCooldown <= 0) {
+                        if (reactor.money >= costs.guard) {
+                            reactor.money -= costs.guard;
+                            npcs.push({ type: 'guard', x: 200, y: FLOOR_Y, w: 24, h: 48, vx: 60, facing: 'right', frame: 0 });
+                            player.prCooldown = 1.0;
+                            spawnFloatingText(t.x + t.w/2, t.y - t.h - 20, `-$${costs.guard}`, "#ff3333");
+                            spawnFloatingText(player.x, player.y - player.h - 40, "+GUARD HIRED", "#33ff33");
+                            costs.guard += 2000;
+                        } else {
+                            spawnFloatingText(player.x, player.y - player.h - 40, `NEED $${costs.guard}!`, "#ff3333");
+                            player.prCooldown = 0.5;
+                        }
+                    }
+                    if (keys.e && player.prCooldown <= 0) {
+                        if (reactor.money >= 1000) {
+                            reactor.money -= 1000; reactor.trust = Math.min(100, reactor.trust + 5); player.prCooldown = 0.5;
+                            spawnFloatingText(t.x + t.w/2, t.y - t.h - 20, "-$1000", "#ff3333");
+                            spawnFloatingText(player.x, player.y - player.h - 40, "BRIBED!", "#ffff00");
+                        }
+                    }
+                } else if (t.id === 'turbine') {
+                    if (keys.q && player.prCooldown <= 0) {
+                        if (reactor.money >= costs.maint) {
+                            reactor.money -= costs.maint;
+                            npcs.push({ type: 'maintenance', x: 650, y: FLOOR_Y, w: 24, h: 48, vx: 50, facing: 'right', frame: 0 });
+                            player.prCooldown = 1.0;
+                            spawnFloatingText(t.x + t.w/2, t.y - t.h - 20, `-$${costs.maint}`, "#ff3333");
+                            spawnFloatingText(player.x, player.y - player.h - 40, "+MAINTENANCE HIRED", "#33ff33");
+                            costs.maint += 2000;
+                        } else {
+                            spawnFloatingText(player.x, player.y - player.h - 40, `NEED $${costs.maint}!`, "#ff3333");
+                            player.prCooldown = 0.5;
+                        }
+                    }
+                    if (keys.e) {
+                        reactor.turbineCondition = Math.min(100, reactor.turbineCondition + 30 * dt);
+                        if (Math.random() < 0.2) spawnSpark(t.x + t.w/2, t.y - t.h/2);
+                    }
+                } else if (t.id === 'filters') {
+                    if (keys.q && player.prCooldown <= 0) {
+                        if (reactor.money >= costs.janitor) {
+                            reactor.money -= costs.janitor;
+                            npcs.push({ type: 'janitor', x: 1050, y: FLOOR_Y, w: 24, h: 48, vx: 50, facing: 'right', frame: 0 });
+                            player.prCooldown = 1.0;
+                            spawnFloatingText(t.x + t.w/2, t.y - t.h - 20, `-$${costs.janitor}`, "#ff3333");
+                            spawnFloatingText(player.x, player.y - player.h - 40, "+JANITOR HIRED", "#33ff33");
+                            costs.janitor += 2000;
+                        } else {
+                            spawnFloatingText(player.x, player.y - player.h - 40, `NEED $${costs.janitor}!`, "#ff3333");
+                            player.prCooldown = 0.5;
+                        }
+                    }
+                    if (keys.e && reactor.wasteLevel > 0) {
+                        reactor.wasteLevel = Math.max(0, reactor.wasteLevel - 40 * dt);
+                        if (Math.random() < 0.3) spawnSteam(t.x + t.w/2, t.y - t.h, 'rgba(100, 255, 100,');
+                    }
+                } else if (t.id === 'mainframe') {
+                    if (keys.e && isScrambled) {
+                        rebootProgress += dt;
+                        player.repairProgress = rebootProgress;
+                        if (rebootProgress >= 2.0) {
+                            isScrambled = false;
+                            rebootProgress = 0;
+                            player.repairProgress = 0;
+                            spawnFloatingText(t.x + t.w/2, t.y - t.h - 20, "SYSTEM RESTORED!", "#33ff33");
+                        }
+                    } else if (!isScrambled) {
+                        rebootProgress = 0;
+                        if (keys.q && player.prCooldown <= 0) {
+                            if (reactor.money >= costs.it) {
+                                reactor.money -= costs.it;
+                                npcs.push({ type: 'it', x: 330, y: FLOOR_Y, w: 24, h: 48, vx: 50, facing: 'right', frame: 0 });
+                                player.prCooldown = 1.0;
+                                spawnFloatingText(t.x + t.w/2, t.y - t.h - 20, `-$${costs.it}`, "#ff3333");
+                                spawnFloatingText(player.x, player.y - player.h - 40, "+IT SPEC HIRED", "#33ff33");
+                                costs.it += 2000;
+                            } else {
+                                spawnFloatingText(player.x, player.y - player.h - 40, `NEED $${costs.it}!`, "#ff3333");
+                                player.prCooldown = 0.5;
+                            }
+                        }
+                    }
+                } else if (t.id === 'pr') {
+                    if (keys.q && player.prCooldown <= 0) {
+                        if (reactor.money >= costs.pr) {
+                            reactor.money -= costs.pr;
+                            npcs.push({ type: 'pr', x: 200, y: FLOOR_Y, w: 24, h: 48, vx: 50, facing: 'right', frame: 0 });
+                            player.prCooldown = 1.0;
+                            spawnFloatingText(t.x + t.w/2, t.y - t.h - 20, `-$${costs.pr}`, "#ff3333");
+                            spawnFloatingText(player.x, player.y - player.h - 40, "+PR AGENT HIRED", "#33ff33");
+                            costs.pr += 2000;
+                        } else {
+                            spawnFloatingText(player.x, player.y - player.h - 40, `NEED $${costs.pr}!`, "#ff3333");
+                            player.prCooldown = 0.5;
+                        }
+                    }
+                    if (keys.e && player.prCooldown <= 0) {
+                        if (reactor.money >= 2000) {
+                            reactor.money -= 2000;
+                            reactor.trust = Math.min(100, reactor.trust + 15);
+                            player.prCooldown = 1.0;
+                            spawnFloatingText(t.x + t.w/2, t.y - t.h - 20, "-$2000", "#ff3333");
+                            spawnFloatingText(player.x, player.y - player.h - 40, "+TRUST!", "#33ff33");
+                        } else {
+                            spawnFloatingText(player.x, player.y - player.h - 40, "NEED $2000!", "#ff3333");
+                            player.prCooldown = 0.5; // Short cooldown on failure
+                        }
+                    }
+                } else if (t.id === 'upgrades') {
+                    if (keys.q && player.prCooldown <= 0) {
+                        if (reactor.money >= costs.pipe) {
+                            reactor.money -= costs.pipe;
+                            upgrades.pipeDurability *= 1.5;
+                            player.prCooldown = 1.0;
+                            spawnFloatingText(t.x + t.w/2, t.y - t.h - 20, `-$${costs.pipe}`, "#ff3333");
+                            spawnFloatingText(player.x, player.y - player.h - 40, "PIPES UPGRADED!", "#33ff33");
+                            costs.pipe += 2000; // Increase cost for endless play!
+                        } else {
+                            spawnFloatingText(player.x, player.y - player.h - 40, `NEED $${costs.pipe}!`, "#ff3333");
+                            player.prCooldown = 0.5;
+                        }
+                    }
+                    if (keys.e && player.prCooldown <= 0) {
+                        if (reactor.money >= costs.eng) {
+                            reactor.money -= costs.eng;
+                            npcs.push({ type: 'engineer', x: 500, y: FLOOR_Y, w: 24, h: 48, vx: 50, facing: 'right', frame: 0 });
+                            player.prCooldown = 1.0;
+                            spawnFloatingText(t.x + t.w/2, t.y - t.h - 20, `-$${costs.eng}`, "#ff3333");
+                            spawnFloatingText(player.x, player.y - player.h - 40, "+ENGINEER HIRED", "#33ff33");
+                            costs.eng += 2000; // Increase cost for endless play!
+                        } else {
+                            spawnFloatingText(player.x, player.y - player.h - 40, `NEED $${costs.eng}!`, "#ff3333");
+                            player.prCooldown = 0.5;
+                        }
+                    }
+                } else if (t.id === 'coffee') {
+                    if (keys.e && player.prCooldown <= 0) {
+                        player.speedBoostTimer = 5.0; // 5 seconds of extreme speed
+                        player.prCooldown = 1.0;
+                        spawnFloatingText(player.x, player.y - player.h - 40, "CAFFEINE RUSH!", "#ffff00");
+                        for(let s=0; s<5; s++) spawnSpark(player.x, player.y - player.h/2);
+                    }
+                } else if (t.id === 'scram') {
+                    if (keys.e && player.prCooldown <= 0) {
+                        if (reactor.money >= 10000) {
+                            reactor.money -= 10000;
+                            reactor.heat = 200; // Insta-cool
+                            reactor.controlRods = 100; // All in
+                            reactor.pumpPower = 100; // Max pumps
+                            reactor.trust -= 40; // People panic
+                            shakeTimer = 3.0;
+                            scramFlash = 1.0;
+                            player.prCooldown = 2.0;
+                            for(let i=0; i<30; i++) spawnSteam(reactorCore.x + Math.random() * reactorCore.w, reactorCore.y - Math.random() * reactorCore.h);
+                            spawnFloatingText(t.x + t.w/2, t.y - t.h - 20, "-$10000", "#ff3333");
+                            spawnFloatingText(reactorCore.x + reactorCore.w/2, reactorCore.y - reactorCore.h - 50, "SCRAM INITIATED!", "#ff3333");
+                        } else {
+                            spawnFloatingText(player.x, player.y - player.h - 40, "NEED $10k FOR SCRAM!", "#ff3333");
+                            player.prCooldown = 0.5;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (player.prCooldown > 0) {
+            player.prCooldown -= dt;
+        } else {
+            player.prCooldown = 0; // Prevent floating point negative numbers from breaking inputs
+        }
+
+        // Leak Interaction
+        let nearLeak = false;
+        for (let i = leaks.length - 1; i >= 0; i--) {
+            let l = leaks[i];
+            spawnSteam(l.x + l.w/2, l.y + l.h/2); // Visual effect
+            
+            let dx = player.x - (l.x + l.w/2);
+            let dy = (player.y - player.h/2) - (l.y + l.h/2);
+            let dist = Math.sqrt(dx*dx + dy*dy);
+
+            if (dist < 80) {
+                nearLeak = true;
+                player.interactText = "[E] Hold to Repair Pipe";
+                if (keys.e) {
+                    l.repairAmount = (l.repairAmount || 0) + dt;
+                    player.repairProgress = l.repairAmount;
+                    if (l.repairAmount >= 2) {
+                        leaks.splice(i, 1);
+                        player.repairProgress = 0;
+                        spawnFloatingText(l.x + l.w/2, l.y - 20, "FIXED!", "#33ff33");
+                        for(let s=0; s<10; s++) spawnSpark(l.x + l.w/2, l.y + l.h/2); // Celebration sparks
+                    }
+                } else {
+                    player.repairProgress = 0;
+                }
+                break;
+            }
+        }
+        if (!nearLeak) player.repairProgress = 0;
+
+        // Particles
+        updateParticles(dt);
+
+        // --- NEW REACTOR MATH (Turbine, Filters, & Pressure) ---
+        let reactionRate = 100 - reactor.controlRods;
+        let coolingEfficiency = Math.max(0, 1.0 - (leaks.length * 0.15));
+        let effectiveCooling = reactor.pumpPower * coolingEfficiency * upgrades.pumpEfficiency;
+        
+        let heatDelta = ((reactionRate * 1.5) * difficulty) - (effectiveCooling * 1.2);
+        
+        // Pressure buildup based on pump power and heat
+        reactor.pressure += ((reactor.pumpPower * 0.1) + (reactor.heat > 500 ? 5 : 0)) * difficulty * dt;
+        if (reactor.pressure >= 100) {
+            reactor.pressure = 50; // Blows off half pressure
+            reactor.trust -= 10;
+            spawnFloatingText(reactorCore.x + 100, FLOOR_Y - 200, "PRESSURE RUPTURE!", "#ff0000");
+            shakeTimer = 2.0; scramFlash = 0.8;
+            spawnLeak(); spawnLeak(); // Instant punishment
+        }
+
+        // Waste limits cooling capacity if ignored
+        reactor.wasteLevel = Math.min(100, reactor.wasteLevel + (reactionRate * 0.05 * difficulty * dt));
+        if (reactor.wasteLevel > 80) heatDelta += 15 * dt; // Heat spikes if waste is full!
+
+        reactor.heat = Math.max(0, reactor.heat + heatDelta * dt);
+
+        // Turbine degrades as it spins
+        reactor.turbineCondition = Math.max(0, reactor.turbineCondition - (reactionRate * 0.08 * difficulty * dt));
+        
+        // Actual output is bottlenecked by the physical turbine's condition
+        reactor.energyOutput = (reactionRate * (reactor.heat / 500)) * (reactor.turbineCondition / 100); 
+        if (reactor.heat < 200) reactor.energyOutput *= 0.1;
+
+        reactor.money += (reactor.energyOutput * 2 - reactor.pumpPower * 0.5) * dt;
+        
+        // Educational metric: Nuclear prevents ~1 ton of CO2 per MW compared to coal over time
+        reactor.co2Avoided += (reactor.energyOutput * 0.8) * dt;
+        // Educational metric: Statistical lives saved by avoiding air pollution (respiratory issues from coal)
+        reactor.livesSaved += (reactor.energyOutput * 0.005) * dt;
+
+        // Trust decay (Scales up in Endless, accelerates if waste is overflowing)
+        let trustDecay = (0.25 * difficulty) * dt;
+        if (reactor.heat > 800) trustDecay += (5 * difficulty) * dt;
+        if (reactor.wasteLevel >= 100) trustDecay += (8 * difficulty) * dt;
+        if (leaks.length > 0) trustDecay += (leaks.length * 2 * difficulty) * dt;
+        
+        // Guard logic for slowing
+        let hasGuard = npcs.some(n => n.type === 'guard');
+        player.speed = (reactor.trust < 30 && !hasGuard) ? 120 : 300;
+        reactor.trust -= trustDecay;
+
+        // Visual flavor: Danger Sparks
+        if (reactor.heat > 800 && Math.random() < 0.2) {
+            spawnSpark(reactorCore.x + Math.random() * reactorCore.w, reactorCore.y - Math.random() * reactorCore.h);
+        }
+        if (reactor.turbineCondition < 40 && Math.random() < 0.3) {
+            let t = terminals.find(x => x.id === 'turbine');
+            spawnSpark(t.x + Math.random() * t.w, t.y - Math.random() * t.h);
+        }
+
+        // Leak spawning (Spawns faster in Endless)
+        nextLeakTimer -= dt;
+        if (nextLeakTimer <= 0) {
+            spawnLeak();
+            nextLeakTimer = ((12 + Math.random() * 15) * upgrades.pipeDurability) / difficulty;
+        }
+
+        // Game Over Conditions
+        if (reactor.heat >= MAX_HEAT) { gameState = 'GAMEOVER'; failReason = "CRITICAL MELTDOWN."; }
+        else if (reactor.trust <= 0) { gameState = 'GAMEOVER'; failReason = "TRUST HIT 0%. PLANT SHUT DOWN."; }
+        else if (reactor.money < -5000) { gameState = 'GAMEOVER'; failReason = "BANKRUPT. BOARD REVOKED LICENSE."; }
+
+        alarmOverlay.style.display = (reactor.heat > 850 || reactor.trust < 15 || shakeTimer > 0) ? 'block' : 'none';
+
+        // Update Educational Ticker
+        tickerX -= 120 * dt; // Scroll speed
+    }
+
+    // --- COMPLEX DRAWING ROUTINES ---
+    function drawPixelRect(x, y, w, h, color) {
+        ctx.fillStyle = color;
+        ctx.fillRect(Math.floor(x), Math.floor(y), Math.floor(w), Math.floor(h));
+    }
+
+    function drawText(text, x, y, size, color, align = 'left') {
+        ctx.fillStyle = color;
+        ctx.font = `${size}px 'VT323', monospace`;
+        ctx.textAlign = align;
+        ctx.textBaseline = 'top';
+        ctx.fillText(text, Math.floor(x), Math.floor(y));
+    }
+
+    function drawPipe(x, y, w, h, isVertical) {
+        drawPixelRect(x, y, w, h, '#444');
+        if (isVertical) {
+            drawPixelRect(x, y, 4, h, '#666'); // Highlight
+            drawPixelRect(x + w - 4, y, 4, h, '#222'); // Shadow
+        } else {
+            drawPixelRect(x, y, w, 4, '#666');
+            drawPixelRect(x, y + h - 4, w, 4, '#222');
+        }
+    }
+
+    function drawBackgroundParallax() {
+        // LAYER -1: Day/Night Sky Color
+        let skyColor = '#050a05'; // Default Night
+        if (timeOfDay > 6 && timeOfDay < 18) skyColor = '#1a221a'; // Day
+        else if (timeOfDay >= 5 && timeOfDay <= 6) skyColor = '#221a10'; // Dawn
+        else if (timeOfDay >= 18 && timeOfDay <= 19) skyColor = '#221010'; // Dusk
+        ctx.fillStyle = skyColor;
+        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+        // LAYER 0: Distant Walls & Giant Fans (Moves slowest)
+        ctx.save();
+        ctx.translate(-camX * 0.2, 0);
+        ctx.fillStyle = textures.concrete;
+        // Make the wall slightly transparent to let sky show through top windows
+        ctx.globalAlpha = 0.8;
+        ctx.fillRect(0, 100, WORLD_WIDTH * 1.2, FLOOR_Y - 100);
+        ctx.globalAlpha = 1.0;
+        
+        // Distant spinning fans
+        for(let i=300; i<WORLD_WIDTH*1.2; i+=600) {
+            ctx.save();
+            ctx.translate(i, 250);
+            drawPixelRect(-80, -80, 160, 160, '#111'); // Fan housing
+            ctx.rotate(Date.now() / 500);
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(-70, -10, 140, 20);
+            ctx.fillRect(-10, -70, 20, 140);
+            ctx.restore();
+        }
+        ctx.restore();
+
+        // LAYER 1: Midground Server Racks and Pipes (Moves medium)
+        ctx.save();
+        ctx.translate(-camX * 0.5, 0);
+        
+        for(let i=100; i<WORLD_WIDTH; i+=400) {
+            // Server rack silhouette
+            drawPixelRect(i, FLOOR_Y - 200, 100, 200, '#1a1a1a');
+            drawPixelRect(i+5, FLOOR_Y - 195, 90, 190, '#111');
+            // Blinking lights
+            for(let y=FLOOR_Y-180; y<FLOOR_Y-20; y+=20) {
+                if (Math.random() > 0.8) drawPixelRect(i+10, y, 10, 10, '#00ff00');
+                if (Math.random() > 0.9) drawPixelRect(i+30, y, 10, 10, '#ff0000');
+            }
+        }
+
+        // Horizontal massive pipes
+        drawPipe(0, 150, WORLD_WIDTH * 1.5, 30, false);
+        drawPipe(0, 190, WORLD_WIDTH * 1.5, 20, false);
+        
+        // Shadows of protesters if trust is low
+        if (reactor.trust < 30) {
+            ctx.fillStyle = 'rgba(255, 50, 50, 0.1)';
+            ctx.fillRect(0, 100, WORLD_WIDTH * 1.5, FLOOR_Y - 100);
+            for(let i=0; i<WORLD_WIDTH; i+=50) {
+                let bob = Math.sin(Date.now()/200 + i) * 10;
+                drawPixelRect(i + (camX*0.5)%50, FLOOR_Y - 60 + bob, 20, 60, '#050000');
+                if(Math.random()>0.95) drawText("LIARS!", i, FLOOR_Y-100+bob, 20, '#ff0000');
+            }
+        }
+        ctx.restore();
+    }
+
+    function drawTerminals() {
+        for (let t of terminals) {
+            let tx = t.x;
+            let ty = t.y - t.h;
+
+            // Clean dashed highlight if player is near
+            if (t.isNear) {
+                ctx.strokeStyle = '#33ff33';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([10, 5]);
+                ctx.lineDashOffset = -(Date.now() / 30) % 15;
+                ctx.strokeRect(tx - 5, ty - 5, t.w + 10, t.h + 10);
+                ctx.setLineDash([]);
+                
+                // Bouncy indicator arrow
+                drawText("▼", tx + t.w/2, ty - 25 + Math.sin(Date.now()/150)*5, 24, '#33ff33', 'center');
+
+                // Educational Contextual Fact
+                if (t.fact) {
+                    drawText(`INFO: ${t.fact}`, tx + t.w/2, ty - 85, 18, '#aaddff', 'center');
+                }
+            }
+
+            if (t.type === 'desk') {
+                drawPixelRect(tx, ty, t.w, t.h, '#333');
+                drawPixelRect(tx-10, ty, t.w+20, 10, '#555'); // Desk top
+                drawPixelRect(tx+20, ty-30, 40, 30, '#222'); // Monitor base
+                drawPixelRect(tx+25, ty-25, 30, 20, '#111'); // Screen
+                if(Math.random()>0.5) drawPixelRect(tx+25, ty-25, 30, 20, 'rgba(0,255,0,0.2)'); // screen flicker
+            } else if (t.type === 'console') {
+                drawPixelRect(tx, ty, t.w, t.h, '#2a2a2a');
+                // Slanted face (simulated via stepped rectangles)
+                drawPixelRect(tx+10, ty-20, t.w-20, 20, '#333');
+                drawPixelRect(tx+20, ty-40, t.w-40, 20, '#3a3a3a');
+                // Rod indicators
+                let rodH = (reactor.controlRods / 100) * 40;
+                drawPixelRect(tx+30, ty-35, 10, 40, '#111'); drawPixelRect(tx+30, ty-35+rodH, 10, 40-rodH, '#0f0');
+                drawPixelRect(tx+50, ty-35, 10, 40, '#111'); drawPixelRect(tx+50, ty-35+rodH, 10, 40-rodH, '#0f0');
+                drawPixelRect(tx+70, ty-35, 10, 40, '#111'); drawPixelRect(tx+70, ty-35+rodH, 10, 40-rodH, '#0f0');
+            } else if (t.type === 'pipes') {
+                drawPipe(tx+20, ty-100, 20, t.h+100, true);
+                drawPipe(tx+50, ty-100, 20, t.h+100, true);
+                drawPixelRect(tx, ty, t.w, t.h, '#444');
+                // Pressure dial
+                drawPixelRect(tx+25, ty+20, 40, 40, '#111');
+                let angle = (reactor.pumpPower / 100) * Math.PI - Math.PI/2;
+                ctx.strokeStyle = '#f00'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(tx+45, ty+40); 
+                ctx.lineTo(tx+45 + Math.sin(angle)*15, ty+40 - Math.cos(angle)*15); ctx.stroke();
+            } else if (t.type === 'coffee') {
+                drawPixelRect(tx, ty, t.w, t.h, '#222');
+                drawPixelRect(tx+10, ty-15, t.w-20, 15, '#555'); // Machine top
+                drawPixelRect(tx+15, ty+20, 20, 20, '#111'); // Cup alcove
+                drawPixelRect(tx+20, ty+30, 10, 10, '#fff'); // Coffee cup
+                if (Math.random() > 0.5) spawnSteam(tx+25, ty+30); // Hot coffee!
+            } else if (t.type === 'server') {
+                drawPixelRect(tx, ty, t.w, t.h, '#1a1a1a');
+                drawPixelRect(tx+5, ty+5, t.w-10, t.h-10, '#0a0a0a');
+                // Blinking Mainframe Lights
+                for(let r=15; r<t.h-10; r+=15) {
+                    for(let c=15; c<t.w-15; c+=15) {
+                        if(Math.random() > 0.3) drawPixelRect(tx+c, ty+r, 6, 6, isScrambled ? '#ff0000' : '#00ff00');
+                    }
+                }
+            } else if (t.type === 'vent') {
+                drawPipe(tx+20, ty, 40, t.h, true);
+                drawPixelRect(tx, ty, t.w, 30, '#444');
+                // Valve wheel
+                drawPixelRect(tx+t.w/2-15, ty+10, 30, 10, '#f00');
+                if (reactor.pressure > 80 && Math.random() < 0.5) spawnSteam(tx+t.w/2, ty);
+            } else if (t.type === 'stocks') {
+                drawPixelRect(tx, ty, t.w, t.h, '#222');
+                drawPixelRect(tx+10, ty+10, t.w-20, t.h-40, '#051105');
+                // Fake graph line
+                ctx.strokeStyle = '#0f0'; ctx.lineWidth = 2; ctx.beginPath();
+                for(let i=0; i<t.w-20; i+=10) {
+                    if (i===0) ctx.moveTo(tx+10+i, ty+t.h-40 - Math.random()*40);
+                    else ctx.lineTo(tx+10+i, ty+t.h-40 - Math.random()*40);
+                }
+                ctx.stroke();
+            } else if (t.type === 'turbine') {
+                drawPixelRect(tx, ty+20, t.w, t.h-20, '#333');
+                drawPixelRect(tx-10, ty+10, 20, t.h, '#444');
+                drawPixelRect(tx+t.w-10, ty+10, 20, t.h, '#444');
+                // Spinning blades illusion
+                let spinSpeed = (reactor.energyOutput / 5);
+                let spin = (Date.now() / (100 - spinSpeed)) % 30;
+                for(let s=0; s<t.w-20; s+=30) {
+                    drawPixelRect(tx + 10 + s + (spin%30 > 15 ? 15 : 0), ty+30, 15, t.h-40, '#222');
+                }
+            } else if (t.type === 'tank') {
+                drawPixelRect(tx, ty, t.w, t.h, '#222');
+                drawPixelRect(tx+5, ty+5, t.w-10, t.h-10, '#051105');
+                // Sludge fill level
+                let fillH = (reactor.wasteLevel / 100) * (t.h - 10);
+                drawPixelRect(tx+5, ty+t.h-5-fillH, t.w-10, fillH, '#00ff00');
+                // Toxic Bubbles
+                if (reactor.wasteLevel > 10 && Math.random() > 0.5) {
+                    drawPixelRect(tx+10+Math.random()*(t.w-20), ty+t.h-5-Math.random()*fillH, 4, 4, '#aaffaa');
+                }
+            } else if (t.type === 'scram') {
+                drawPixelRect(tx, ty, t.w, t.h, '#331111');
+                // Giant red button
+                let btnY = ty + 20 + (t.isNear && keys.e ? 10 : 0); // Push down effect
+                drawPixelRect(tx+15, btnY, t.w-30, 40, '#ff0000');
+                drawPixelRect(tx+20, btnY+5, t.w-40, 10, '#ff5555'); // Button highlight
+            }
+
+            // Hazard floor tape
+            ctx.fillStyle = textures.hazard;
+            ctx.fillRect(tx - 20, FLOOR_Y, t.w + 40, 10);
+            
+            drawText(t.label, tx + t.w/2, ty - 60, 20, '#ccc', 'center');
+        }
+    }
+
+    function drawReactor() {
+        let rx = reactorCore.x;
+        let ry = reactorCore.y - reactorCore.h;
+        let rw = reactorCore.w;
+        let rh = reactorCore.h;
+
+        // Visual Control Rods plugging into the top of the core
+        let rodDepth = (reactor.controlRods / 100) * 80;
+        for (let i = 1; i <= 5; i++) {
+            let rodX = rx + (rw / 6) * i;
+            drawPixelRect(rodX - 10, ry - 150, 20, 150, '#111'); // Rod housing
+            drawPixelRect(rodX - 6, ry - 150 + rodDepth, 12, 150, '#00ff00'); // The glowing rod itself
+            drawPixelRect(rodX - 6, ry - 150 + rodDepth, 12, 20, '#fff'); // Rod cap
+        }
+
+        // Base Structure
+        drawPixelRect(rx, ry, rw, rh, '#222');
+        drawPipe(rx-20, ry+50, 20, rh-50, true);
+        drawPipe(rx+rw, ry+50, 20, rh-50, true);
+
+        // Armor Plating
+        for(let i=0; i<rw; i+=50) {
+            for(let j=0; j<rh; j+=50) {
+                drawPixelRect(rx+i+2, ry+j+2, 46, 46, '#333');
+                drawPixelRect(rx+i+4, ry+j+4, 42, 42, '#2a2a2a');
+                drawPixelRect(rx+i+6, ry+j+6, 4, 4, '#111'); // Rivets
+                drawPixelRect(rx+i+40, ry+j+6, 4, 4, '#111');
+                drawPixelRect(rx+i+6, ry+j+40, 4, 4, '#111');
+                drawPixelRect(rx+i+40, ry+j+40, 4, 4, '#111');
+            }
+        }
+
+        // Core Observation Window (Glowing based on heat)
+        let coreColor = '#33ff33';
+        if (reactor.heat > 500) coreColor = '#ffff00';
+        if (reactor.heat > 800) coreColor = '#ff3333';
+        
+        let pulse = Math.sin(Date.now() / (1000 - reactor.heat)) * 0.5 + 0.5;
+        let winX = rx + rw/2 - 80;
+        let winY = ry + rh/2 - 80;
+        
+        drawPixelRect(winX - 10, winY - 10, 180, 180, '#111'); // Bezel
+        drawPixelRect(winX, winY, 160, 160, '#0a2a0a'); // Glass bg
+        
+        ctx.globalAlpha = 0.4 + (pulse * 0.6);
+        drawPixelRect(winX, winY, 160, 160, coreColor);
+        
+        // Cherenkov radiation bubbling
+        ctx.fillStyle = '#fff';
+        for(let i=0; i<5; i++) {
+            let bubY = (Date.now() / 10 + i * 30) % 160;
+            drawPixelRect(winX + 20 + i*30, winY + 160 - bubY, 10, 10+Math.random()*10, '#fff');
+        }
+        ctx.globalAlpha = 1.0;
+
+        // Warning Lights
+        if (reactor.heat > 800) {
+            let alarmBlink = Math.floor(Date.now() / 250) % 2 === 0;
+            if (alarmBlink) {
+                drawPixelRect(rx + 20, ry - 30, 30, 30, '#ff0000');
+                drawPixelRect(rx + rw - 50, ry - 30, 30, 30, '#ff0000');
+            }
+        }
+
+        drawText("RBMK-1000 PRIMARY CORE", rx + rw/2, ry - 40, 24, '#fff', 'center');
+    }
+
+    function drawPlayer() {
+        // Draw speed trails if boosted
+        if (player.speedBoostTimer > 0 && player.isMoving) {
+            for (let i = 1; i <= 3; i++) {
+                ctx.save();
+                // Extrapolate past positions simply
+                let trailX = player.x - (player.facing === 'right' ? i*15 : -i*15);
+                ctx.translate(trailX, player.y);
+                ctx.scale(player.squash, player.stretch);
+                ctx.scale(player.facing === 'right' ? 1 : -1, 1);
+                
+                let px = -player.w/2; let py = -player.h;
+                let bobY = Math.abs(Math.sin(player.frame - i*0.5)) * 4;
+                
+                ctx.globalAlpha = 0.4 - (i * 0.1);
+                drawPixelRect(px, py + 16 - bobY, player.w, 20, '#ffff00');
+                drawPixelRect(px - 2, py - bobY, player.w + 4, 16, '#ffff00');
+                ctx.globalAlpha = 1.0;
+                ctx.restore();
+            }
+        }
+
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        ctx.scale(player.squash, player.stretch);
+
+        let px = -player.w/2;
+        let py = -player.h;
+
+        // Shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.beginPath(); ctx.ellipse(0, 0, 15, 5, 0, 0, Math.PI*2); ctx.fill();
+
+        // Animation Bobbing
+        let bobY = player.isMoving ? Math.abs(Math.sin(player.frame)) * 4 : 0;
+        
+        // Torso (Hazmat Suit)
+        drawPixelRect(px, py + 16 - bobY, player.w, 20, '#dddd00');
+        drawPixelRect(px+4, py + 16 - bobY, player.w-8, 20, '#ffff33'); // Highlight
+        
+        // Legs
+        let legOffset = player.isMoving ? Math.sin(player.frame) * 8 : 0;
+        drawPixelRect(px + 4 - legOffset, py + 36, 6, 12, '#aa5500'); // Back leg
+        drawPixelRect(px + 14 + legOffset, py + 36, 6, 12, '#884400'); // Front leg
+
+        // Head / Helmet
+        drawPixelRect(px - 2, py - bobY, player.w + 4, 16, '#dddd00');
+        // Visor
+        let visorX = player.facing === 'right' ? px + 8 : px - 2;
+        drawPixelRect(visorX, py + 4 - bobY, 16, 8, '#111');
+        drawPixelRect(visorX+2, py + 4 - bobY, 4, 4, '#444'); // Visor reflection
+
+        ctx.restore();
+
+        // Interaction UI (Drawn outside scaling to prevent distortion)
+        if (player.interactText !== "") {
+            drawText(player.interactText, player.x, player.y - player.h - 30, 20, '#fff', 'center');
+        }
+        if (player.repairProgress > 0) {
+            drawPixelRect(player.x - player.w/2 - 10, player.y - player.h - 15, 44, 6, '#000');
+            drawPixelRect(player.x - player.w/2 - 8, player.y - player.h - 13, 40 * (player.repairProgress / 2), 2, '#33ff33');
+        }
+    }
+
+    function drawNPCs() {
+        for (let npc of npcs) {
+            ctx.save();
+            ctx.translate(npc.x, npc.y);
+
+            let px = -npc.w/2;
+            let py = -npc.h;
+            
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.beginPath(); ctx.ellipse(0, 0, 15, 5, 0, 0, Math.PI*2); ctx.fill();
+
+            let bobY = Math.abs(Math.sin(npc.frame)) * 4;
+            
+            // Custom visual styles per NPC role
+            let colorMain, colorSec, pants, headExtra = null, glasses = false;
+            if (npc.type === 'engineer') {
+                colorMain = '#ffffff'; colorSec = '#eeeeee'; pants = '#222';
+            } else if (npc.type === 'pr') {
+                colorMain = '#222233'; colorSec = '#111122'; pants = '#111'; // Suit
+            } else if (npc.type === 'it') {
+                colorMain = '#555555'; colorSec = '#444444'; pants = '#224488'; glasses = true; // Hoodie/Jeans
+            } else if (npc.type === 'maintenance') {
+                colorMain = '#3366cc'; colorSec = '#2255bb'; pants = '#3366cc'; headExtra = '#ddcc00'; // Overalls/Hard-hat
+            } else if (npc.type === 'guard') {
+                colorMain = '#111111'; colorSec = '#222222'; pants = '#0a0a0a'; headExtra = '#111111'; // Security uniform
+            } else if (npc.type === 'janitor') {
+                colorMain = '#226622'; colorSec = '#115511'; pants = '#113311'; // Green jumpsuit
+            }
+            
+            drawPixelRect(px, py + 16 - bobY, npc.w, 24, colorMain); // Coat/Body
+            drawPixelRect(px+4, py + 16 - bobY, npc.w-8, 24, colorSec); 
+            
+            if (npc.type === 'pr') { // Red Tie for PR Agent
+                drawPixelRect(px + npc.w/2 - 2, py + 16 - bobY, 4, 12, '#cc2222');
+            }
+
+            let legOffset = Math.sin(npc.frame) * 8;
+            drawPixelRect(px + 4 - legOffset, py + 40, 6, 8, pants); 
+            drawPixelRect(px + 14 + legOffset, py + 40, 6, 8, pants); 
+
+            drawPixelRect(px - 2, py - bobY + 4, npc.w + 4, 12, '#ffccaa'); // Face
+            drawPixelRect(px - 2, py - bobY, npc.w + 4, 6, '#553311'); // Hair
+
+            if (headExtra) { // Hard hat
+                drawPixelRect(px - 4, py - bobY - 4, npc.w + 8, 8, headExtra);
+                drawPixelRect(px - 2, py - bobY - 8, npc.w + 4, 4, headExtra);
+            }
+            
+            let glassX = npc.facing === 'right' ? px + 10 : px;
+            if (npc.type === 'engineer') {
+                drawPixelRect(glassX, py + 6 - bobY, 12, 4, '#000');
+                drawPixelRect(glassX+2, py + 6 - bobY, 3, 3, '#0ff'); // Glowing visor
+            } else if (glasses) {
+                drawPixelRect(glassX, py + 6 - bobY, 6, 4, '#111'); // Glasses
+                drawPixelRect(glassX+8, py + 6 - bobY, 6, 4, '#111');
+            } else {
+                drawPixelRect(glassX + 2, py + 6 - bobY, 4, 4, '#111'); // Simple eye
+            }
+
+            ctx.restore();
+        }
+    }
+
+    function drawLeaksAndParticles() {
+        // Leaks
+        for (let l of leaks) {
+            drawPixelRect(l.x, l.y, l.w, l.h, '#111'); // Hole
+            drawPixelRect(l.x+2, l.y+2, l.w-4, l.h-4, '#000');
+            drawText("! RUPTURE !", l.x + l.w/2, l.y - 20, 16, '#ff3333', 'center');
+        }
+
+        // Particles
+        for (let p of particles) {
+            let alpha = p.life / p.maxLife;
+            if (p.type === 'steam') {
+                ctx.fillStyle = `rgba(200, 220, 255, ${alpha * alpha})`;
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+            } else if (p.type === 'spark') {
+                ctx.fillStyle = `rgba(255, 200, 50, ${alpha})`;
+                drawPixelRect(p.x, p.y, p.size, p.size, '#ffaa00');
+                drawPixelRect(p.x+1, p.y+1, p.size-2, p.size-2, '#ffffff'); // Hot center
+            } else if (p.type === 'dust') {
+                ctx.fillStyle = `rgba(100, 100, 100, ${alpha * 0.5})`;
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+            }
+        }
+
+        // Floating Combat Text
+        for (let ft of floatingTexts) {
+            let alpha = ft.life / ft.maxLife;
+            // Add a popping scale effect!
+            let scale = 1.0;
+            if (ft.life > ft.maxLife - 0.2) scale = 1.0 + ((ft.maxLife - ft.life) * 5); // Pop in
+            
+            ctx.save();
+            ctx.translate(Math.floor(ft.x), Math.floor(ft.y));
+            ctx.scale(scale, scale);
+
+            ctx.globalAlpha = alpha;
+            // Draw stroke for readability
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#000';
+            ctx.font = `bold 24px 'VT323', monospace`;
+            ctx.textAlign = 'center';
+            ctx.strokeText(ft.text, 0, 0);
+            
+            drawText(ft.text, 0, 0, 24, ft.color, 'center');
+            ctx.globalAlpha = 1.0;
+            ctx.restore();
+        }
+    }
+
+    function draw() {
+        // Clear Screen
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+        if (gameState === 'START') {
+            drawText("REAKTÖR 01: OPERATOR CONSOLE", GAME_WIDTH/2, 160, 50, '#d4ff00', 'center'); // Matching image color
+            
+            // Mission Briefing style text
+            drawText("TWENTY YEARS. ONE REACTOR. MILLIONS OF LIVES.", GAME_WIDTH/2, 230, 24, '#33ff33', 'center');
+            drawText("Survive real-world operating conditions.", GAME_WIDTH/2, 270, 20, '#aaa', 'center');
+            drawText("Make the right call during seismic events & demand spikes.", GAME_WIDTH/2, 300, 20, '#aaa', 'center');
+            drawText("Track CO₂ avoided and lives saved vs. fossil fuels.", GAME_WIDTH/2, 330, 20, '#aaa', 'center');
+            drawText("Learn what changed in safety protocols after Fukushima.", GAME_WIDTH/2, 360, 20, '#aaa', 'center');
+            
+            // Controls
+            drawText("CONTROLS: [A/D] Walk | [W] Jump | [Q/E] Operate Terminals", GAME_WIDTH/2, 420, 18, '#888', 'center');
+            
+            // Adapt prompt text for Mobile
+            drawText(isTouchDevice ? "TAP [JUMP] TO START MISSION (TUTORIAL)" : "PRESS [SPACE] TO START MISSION (TUTORIAL)", GAME_WIDTH/2, 480, 24, '#33ff33', 'center');
+            drawText(isTouchDevice ? "TAP [E] TO DEPLOY IMMEDIATELY (SKIP)" : "PRESS [ENTER] TO DEPLOY IMMEDIATELY (SKIP)", GAME_WIDTH/2, 520, 24, '#d4ff00', 'center');
+            return;
+        }
+
+        // --- DRAW GAME WORLD (With Camera Translation) ---
+        drawBackgroundParallax();
+
+        ctx.save();
+        
+        // Advanced Shake logic
+        let currentCamX = camX;
+        let currentCamY = 0;
+        let totalShake = shakeTimer;
+        
+        // Add cinematic heat shudder
+        if (reactor.heat > 850) {
+            totalShake += (reactor.heat - 850) / 50; // The hotter it gets, the harder it shakes
+        }
+
+        if (totalShake > 0) {
+            currentCamX += (Math.random() * 10 * totalShake - 5 * totalShake);
+            currentCamY += (Math.random() * 10 * totalShake - 5 * totalShake);
+        }
+        
+        ctx.translate(-Math.floor(currentCamX), Math.floor(currentCamY));
+
+        // Floor Grating
+        ctx.fillStyle = textures.grate;
+        ctx.fillRect(0, FLOOR_Y, WORLD_WIDTH, GAME_HEIGHT - FLOOR_Y);
+        // Floor Edge highlight
+        drawPixelRect(0, FLOOR_Y, WORLD_WIDTH, 4, '#555');
+
+        drawTerminals();
+        drawReactor();
+        drawLeaksAndParticles();
+        drawNPCs();
+        drawPlayer();
+
+        // Edge walls
+        drawPixelRect(0, 100, 50, GAME_HEIGHT, '#222');
+        drawPixelRect(WORLD_WIDTH-50, 100, 50, GAME_HEIGHT, '#222');
+
+        // Dynamic Lighting Overlay
+        ctx.fillStyle = 'rgba(0, 5, 10, 0.4)';
+        if (weather === 'storm') ctx.fillStyle = 'rgba(0, 0, 5, 0.6)'; // Darker in storms
+        ctx.fillRect(0, 0, WORLD_WIDTH, GAME_HEIGHT);
+
+        // SCRAM / Emergency Flash Effect
+        if (scramFlash > 0) {
+            ctx.fillStyle = `rgba(255, 0, 0, ${scramFlash * 0.6})`;
+            ctx.fillRect(0, 0, WORLD_WIDTH, GAME_HEIGHT);
+        }
+        
+        ctx.globalCompositeOperation = 'lighter';
+        let playerGradient = ctx.createRadialGradient(player.x, player.y - 20, 10, player.x, player.y - 20, 150);
+        playerGradient.addColorStop(0, 'rgba(255, 255, 200, 0.15)');
+        playerGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = playerGradient;
+        ctx.beginPath(); ctx.arc(player.x, player.y - 20, 150, 0, Math.PI*2); ctx.fill();
+
+        let heatGlow = reactor.heat / MAX_HEAT;
+        let coreColorRGB = reactor.heat > 800 ? '255, 50, 50' : (reactor.heat > 500 ? '255, 255, 0' : '50, 255, 50');
+        let coreGradient = ctx.createRadialGradient(reactorCore.x + 200, reactorCore.y - 150, 50, reactorCore.x + 200, reactorCore.y - 150, 400);
+        coreGradient.addColorStop(0, `rgba(${coreColorRGB}, ${0.3 + heatGlow * 0.4})`);
+        coreGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = coreGradient;
+        ctx.beginPath(); ctx.arc(reactorCore.x + 200, reactorCore.y - 150, 400, 0, Math.PI*2); ctx.fill();
+        
+        ctx.globalCompositeOperation = 'source-over';
+
+        ctx.restore();
+
+        // --- DRAW HUD (Fixed to Screen) ---
+        if (shakeTimer > 0) {
+            drawPixelRect(0, 110, GAME_WIDTH, 40, 'rgba(255, 0, 0, 0.8)');
+            drawText("WARNING: SEISMIC EVENT DETECTED - MULTIPLE RUPTURES", GAME_WIDTH/2, 120, 24, '#fff', 'center');
+        }
+
+        // Expanded HUD to fit Educational Ticker
+        drawPixelRect(0, 0, GAME_WIDTH, 110, '#0a0a0a');
+        drawPixelRect(0, 110, GAME_WIDTH, 4, '#33ff33');
+
+        // Scrambler function for HUD
+        const sc = (val) => {
+            if (!isScrambled) return Math.floor(val);
+            const chars = '!@#$%&*?';
+            return chars[Math.floor(Math.random()*chars.length)] + chars[Math.floor(Math.random()*chars.length)] + chars[Math.floor(Math.random()*chars.length)];
+        };
+
+        // 1. Time & Money & Stocks
+        drawText(`TIME: ${Math.floor(timeOfDay)}:00 | DAY: ${daysSurvived}${isEndless ? '+' : '/' + TARGET_DAYS}`, 20, 10, 24, '#33ff33');
+        let moneyColor = reactor.money < 0 ? '#ff3333' : '#33ff33';
+        drawText(`FUNDS: $${Math.floor(reactor.money)}`, 20, 35, 24, moneyColor);
+        drawText(`SHARES: ${reactor.shares} @ $${Math.floor(reactor.stockPrice)}`, 20, 60, 20, '#00ff00');
+
+        // 2. Heat & Pressure (Center)
+        let coreColor = reactor.heat > 800 ? '#ff3333' : (reactor.heat > 500 ? '#ffff00' : '#33ff33');
+        drawText(`CORE TEMP: ${sc(reactor.heat)}°C`, 260, 10, 24, isScrambled ? '#ff3333' : coreColor);
+        drawPixelRect(260, 35, 180, 12, '#222');
+        if (!isScrambled) drawPixelRect(260, 35, (reactor.heat / MAX_HEAT) * 180, 12, coreColor);
+        
+        let pressColor = reactor.pressure > 80 ? '#ff3333' : '#aaddff';
+        drawText(`PRESSURE: ${sc(reactor.pressure)}%`, 260, 55, 20, isScrambled ? '#ff3333' : pressColor);
+        drawPixelRect(260, 75, 180, 8, '#222');
+        if (!isScrambled) drawPixelRect(260, 75, (reactor.pressure / 100) * 180, 8, pressColor);
+
+        // 3. Systems (Mid-Right)
+        drawText(`RODS: ${sc(reactor.controlRods)}%`, 460, 10, 20, isScrambled ? '#ff3333' : '#33ff33');
+        drawText(`PUMPS: ${sc(reactor.pumpPower)}%`, 460, 30, 20, isScrambled ? '#ff3333' : '#33ff33');
+        drawText(`OUTPUT: ${sc(reactor.energyOutput)} MW`, 460, 50, 20, '#ffff00');
+        
+        let turbColor = reactor.turbineCondition < 50 ? '#ff3333' : '#33ff33';
+        drawText(`TURBINE: ${sc(reactor.turbineCondition)}%`, 460, 70, 20, turbColor);
+
+        // 4. Trust & Waste (Far Right)
+        let trustColor = reactor.trust > 50 ? '#33ff33' : (reactor.trust > 25 ? '#ffb000' : '#ff3333');
+        drawText(`PUBLIC TRUST: ${Math.floor(reactor.trust)}%`, 620, 10, 20, trustColor);
+        drawPixelRect(620, 30, 150, 15, '#222');
+        drawPixelRect(620, 30, (reactor.trust / 100) * 150, 15, trustColor);
+        
+        // Educational Impact Metrics
+        drawText(`CO2 AVOIDED: ${Math.floor(reactor.co2Avoided)}t`, 620, 50, 20, '#aaddff'); 
+        drawText(`LIVES SAVED: ${Math.floor(reactor.livesSaved)}`, 620, 70, 20, '#aaddff'); 
+
+        // 5. Educational News Ticker (Bottom of HUD)
+        drawPixelRect(0, 90, GAME_WIDTH, 20, '#112211');
+        ctx.font = `20px 'VT323', monospace`;
+        let factWidth = ctx.measureText(eduFacts[currentFactIdx]).width;
+        if (tickerX < -factWidth) {
+            tickerX = GAME_WIDTH;
+            currentFactIdx = (currentFactIdx + 1) % eduFacts.length;
+        }
+        drawText(eduFacts[currentFactIdx], tickerX, 92, 20, '#00ff00');
+
+        // --- CINEMATIC OVERLAYS (Drawn over the frozen world) ---
+
+        if (gameState === 'GAMEOVER') {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+            drawText("INCIDENT REPORT", GAME_WIDTH/2, 160, 60, '#ff3333', 'center');
+            drawText(failReason, GAME_WIDTH/2, 230, 24, '#fff', 'center');
+            
+            drawText(`Years Survived: ${daysSurvived}${isEndless ? '' : ' / ' + TARGET_DAYS}`, GAME_WIDTH/2, 280, 24, '#33ff33', 'center');
+            
+            // Impact Readout
+            drawText(`Impact: ${Math.floor(reactor.co2Avoided)} Tons CO2 Prevented`, GAME_WIDTH/2, 320, 24, '#aaddff', 'center');
+            drawText(`Impact: ${Math.floor(reactor.livesSaved)} Lives Saved vs. Coal`, GAME_WIDTH/2, 350, 24, '#aaddff', 'center');
+            
+            drawText(`FACT: ${eduFacts[currentFactIdx].replace("INFO: ", "")}`, GAME_WIDTH/2, 420, 20, '#00ff00', 'center');
+            
+            drawText(isTouchDevice ? "TAP [JUMP] TO RESTART" : "PRESS [SPACE] TO RESTART", GAME_WIDTH/2, 480, 30, '#ffff00', 'center');
+        }
+
+        if (gameState === 'WIN') {
+            // Intense flashing red cinematic overlay!
+            let flashAlpha = Math.abs(Math.sin(Date.now() / 150)) * 0.4 + 0.3;
+            ctx.fillStyle = `rgba(255, 0, 0, ${flashAlpha})`;
+            ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+            // Dark backdrop for text readability
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 150, GAME_WIDTH, 350);
+
+            drawText("CRITICAL: 20 YEARS SURVIVED", GAME_WIDTH/2, 170, 50, '#ff3333', 'center');
+            drawText("THE CORE IS OVERLOADING!", GAME_WIDTH/2, 230, 30, '#fff', 'center');
+            
+            // Final Educational Readout
+            drawText(`TOTAL CO2 PREVENTED: ${Math.floor(reactor.co2Avoided)} Tons`, GAME_WIDTH/2, 280, 24, '#aaddff', 'center');
+            drawText(`TOTAL LIVES SAVED: ${Math.floor(reactor.livesSaved)}`, GAME_WIDTH/2, 310, 24, '#aaddff', 'center');
+
+            drawText(isTouchDevice ? "TAP [JUMP] TO SECURE RETIREMENT (RESTART)" : "PRESS [SPACE] TO SECURE RETIREMENT (RESTART)", GAME_WIDTH/2, 380, 24, '#ffff00', 'center');
+            drawText(isTouchDevice ? "TAP [E] TO INITIATE ENDLESS OVERTIME!" : "PRESS [ENTER] TO INITIATE ENDLESS OVERTIME!", GAME_WIDTH/2, 420, 24, '#33ff33', 'center');
+        }
+
+        // --- TUTORIAL OVERLAY ---
+        if (gameState === 'TUTORIAL') {
+            let prompt = "";
+            if (tutorialStep === 0) prompt = isTouchDevice ? "Welcome! Use [◀] and [▶] to move, and [JUMP] to jump." : "Welcome! Use [A] and [D] to move, and [W] to jump.";
+            else if (tutorialStep === 1) prompt = "Walk right to ROD CONTROL. Hold [E] to withdraw rods and heat the core.";
+            else if (tutorialStep === 2) prompt = "Core is heating! Walk to COOLANT PUMPS. Hold [E] to increase cooling.";
+            else if (tutorialStep === 3) prompt = "A pipe burst! Walk to the RUPTURE near the core and hold [E] to fix it.";
+            else if (tutorialStep === 4) prompt = "Leaks ruin Public Trust. Walk left to the PR DEPT and press [E] for a Townhall.";
+            else if (tutorialStep === 5) prompt = isTouchDevice ? "Great! Keep Core Temp OPTIMAL. Tap [JUMP] to start!" : "Great! Keep Core Temp OPTIMAL to earn money. Press [SPACE] to start the real game!";
+
+            drawPixelRect(GAME_WIDTH/2 - 380, 110, 760, 50, 'rgba(0, 30, 0, 0.85)');
+            ctx.strokeStyle = '#33ff33'; ctx.lineWidth = 2; ctx.strokeRect(GAME_WIDTH/2 - 380, 110, 760, 50);
+            drawText("TUTORIAL: " + prompt, GAME_WIDTH/2, 125, 22, '#ffff00', 'center');
+        }
+    }
+
+    const TIME_STEP = 1 / 60; // Fixed 60 FPS update rate for smooth physics
+    let accumulator = 0;
+
+    function gameLoop(timestamp) {
+        if (!lastTime) lastTime = timestamp;
+        let frameTime = (timestamp - lastTime) / 1000;
+        lastTime = timestamp;
+        
+        // Prevent "Spiral of Death" if the player tabs out or causes massive lag
+        if (frameTime > 0.25) frameTime = 0.25;
+
+        accumulator += frameTime;
+
+        // Fixed timestep loop
+        while (accumulator >= TIME_STEP) {
+            update(TIME_STEP);
+            accumulator -= TIME_STEP;
+        }
+
+        draw();
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    requestAnimationFrame(gameLoop);
+
+</script>
+</body>
+</html>

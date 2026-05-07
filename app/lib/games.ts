@@ -332,6 +332,19 @@ export const games: Game[] = [
     art: "glitch",
     plays: 28722,
   },
+  {
+    slug: "nuclear-reactor-manager",
+    title: "Nuclear Reactor Manager",
+    tagline: "Don't let it melt down",
+    description:
+      "Run a CRT-styled reactor: balance control rods, coolant, and load before the core goes critical.",
+    category: "Simulation",
+    tags: ["Simulation", "Retro", "Strategy"],
+    gradient: ["#33ff33", "#050505"],
+    accent: "#33ff33",
+    art: "glitch",
+    isNew: true,
+  },
 ];
 
 export const categories = Array.from(
