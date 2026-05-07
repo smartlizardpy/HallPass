@@ -21,6 +21,7 @@ export function Arcade({
   const [category, setCategoryState] = useState(initialCategory);
   const [query, setQuery] = useState("");
   const [playing, setPlayingState] = useState<string | null>(initialPlaying);
+  const [navOpen, setNavOpen] = useState(false);
 
   const setCategory = (cat: string) => {
     posthog.capture("category_selected", { category: cat });
@@ -86,23 +87,55 @@ export function Arcade({
 
   return (
     <div className="flex min-h-screen flex-1">
-      <Sidebar active={category} onSelect={setCategory} />
+      <Sidebar
+        active={category}
+        onSelect={setCategory}
+        mobileOpen={navOpen}
+        onMobileClose={() => setNavOpen(false)}
+      />
 
       <main className="flex-1 overflow-x-hidden">
         {/* Top bar */}
-        <header className="sticky top-0 z-40 flex h-20 items-center gap-4 bg-background/85 px-5 backdrop-blur-xl sm:px-8">
+        <header
+          className="sticky top-0 z-40 flex h-16 items-center gap-2 bg-background/85 px-3 backdrop-blur-xl sm:h-20 sm:gap-4 sm:px-8"
+          style={{ paddingTop: "env(safe-area-inset-top)" }}
+        >
+          {/* Mobile hamburger */}
+          <button
+            type="button"
+            onClick={() => setNavOpen(true)}
+            aria-label="Open menu"
+            aria-expanded={navOpen}
+            aria-controls="mobile-nav"
+            style={{ touchAction: "manipulation" }}
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-zinc-800 transition hover:text-brand lg:hidden"
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              className="pointer-events-none"
+            >
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
+          </button>
+
           {/* Mobile logo */}
           <a href="#" className="flex items-baseline gap-0.5 lg:hidden">
-            <span className="text-2xl font-black tracking-tight text-brand">
+            <span className="text-xl font-black tracking-tight text-brand sm:text-2xl">
               hallpass
             </span>
             <span className="h-1.5 w-1.5 rounded-full bg-accent-yellow" />
           </a>
 
           {/* Search */}
-          <div className="relative flex-1 max-w-2xl">
+          <div className="relative ml-1 min-w-0 flex-1 max-w-2xl sm:ml-0">
             <svg
-              className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-muted"
+              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted sm:left-5"
               width="18"
               height="18"
               viewBox="0 0 16 16"
@@ -115,6 +148,8 @@ export function Arcade({
             </svg>
             <input
               type="search"
+              inputMode="search"
+              autoComplete="off"
               value={query}
               onChange={(e) => {
                 const newQuery = e.target.value;
@@ -124,17 +159,21 @@ export function Arcade({
                 }
               }}
               placeholder="Search games"
-              className="w-full rounded-full bg-white py-3.5 pl-12 pr-5 text-[15px] font-semibold text-zinc-900 placeholder:text-muted outline-none transition focus:ring-4 focus:ring-brand/20"
+              aria-label="Search games"
+              className="h-11 w-full rounded-full bg-white pl-11 pr-4 text-base font-semibold text-zinc-900 placeholder:text-muted outline-none transition focus:ring-4 focus:ring-brand/20 sm:h-auto sm:py-3.5 sm:pl-12 sm:pr-5 sm:text-[15px]"
             />
           </div>
 
-          <div className="ml-auto flex items-center gap-2">
-            <button className="hidden h-11 w-11 items-center justify-center rounded-full bg-white text-zinc-700 transition hover:text-brand sm:flex">
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <button
+              aria-label="Notifications"
+              className="hidden h-11 w-11 items-center justify-center rounded-full bg-white text-zinc-700 transition hover:text-brand sm:flex"
+            >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
             </button>
-            <button className="flex h-11 items-center gap-2 rounded-full bg-brand px-5 text-sm font-extrabold text-white shadow-lg shadow-brand/30 transition hover:bg-brand-600">
+            <button className="hidden h-11 items-center gap-2 rounded-full bg-brand px-4 text-sm font-extrabold text-white shadow-lg shadow-brand/30 transition hover:bg-brand-600 sm:flex sm:px-5">
               Sign in
             </button>
           </div>
@@ -202,8 +241,8 @@ export function Arcade({
         {category === "All" && !query && <AdRow index={3} />}
 
         {/* Footer */}
-        <footer className="mt-16 px-5 py-10 sm:px-8">
-          <div className="flex flex-col items-start justify-between gap-4 rounded-3xl bg-white p-8 sm:flex-row sm:items-center">
+        <footer className="mt-16 px-3 py-10 sm:px-8" style={{ paddingBottom: "calc(2.5rem + env(safe-area-inset-bottom))" }}>
+          <div className="flex flex-col items-start justify-between gap-4 rounded-3xl bg-white p-6 sm:flex-row sm:items-center sm:p-8">
             <div className="flex items-baseline gap-0.5">
               <span className="text-2xl font-black tracking-tight text-brand">
                 hallpass
@@ -238,7 +277,7 @@ function FeaturedBanner({
   onPlay: (slug: string) => void;
 }) {
   return (
-    <section className="px-5 pt-2 sm:px-8">
+    <section className="px-3 pt-2 sm:px-8">
       <button
         type="button"
         onClick={() => {
@@ -255,8 +294,8 @@ function FeaturedBanner({
             "radial-gradient(circle at 85% 20%, rgba(255,199,0,0.25), transparent 50%), radial-gradient(circle at 15% 90%, rgba(255,79,139,0.35), transparent 55%)",
         }}
       >
-        <div className="relative z-10 flex flex-col justify-center gap-4 p-8 sm:p-12">
-          <div className="flex items-center gap-2">
+        <div className="relative z-10 flex flex-col justify-center gap-3 p-6 sm:gap-4 sm:p-12">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-accent-yellow px-3 py-1 text-[11px] font-black uppercase tracking-wider text-zinc-900">
               ★ Featured
             </span>
@@ -264,14 +303,14 @@ function FeaturedBanner({
               {game.category}
             </span>
           </div>
-          <h2 className="max-w-xl text-4xl font-black leading-[1.05] tracking-tight text-white sm:text-6xl">
+          <h2 className="max-w-xl break-words text-3xl font-black leading-[1.05] tracking-tight text-white sm:text-6xl">
             {game.title}
           </h2>
-          <p className="max-w-md text-base font-semibold text-white/85 sm:text-lg">
+          <p className="max-w-md text-sm font-semibold text-white/85 sm:text-lg">
             {game.tagline}
           </p>
-          <div className="mt-2 flex items-center gap-4">
-            <span className="inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-base font-extrabold text-brand shadow-2xl transition group-hover:scale-105">
+          <div className="mt-1 flex items-center gap-4 sm:mt-2">
+            <span className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-7 py-3.5 text-base font-extrabold text-brand shadow-2xl transition group-hover:scale-105">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
                 <path d="M3 1.5v11l10-5.5z" />
               </svg>
@@ -368,7 +407,7 @@ function AdStrip({ ad }: { ad: Ad }) {
       ) : (
         <span className="text-lg">{ad.emoji}</span>
       )}
-      <span className="text-[11px] font-black uppercase tracking-wider text-muted">
+      <span className="hidden text-[11px] font-black uppercase tracking-wider text-muted sm:inline">
         {ad.placeholder ? "Slot" : "Ad"}
       </span>
       <span className="hidden h-4 w-px bg-border sm:block" />
@@ -388,7 +427,7 @@ function AdStrip({ ad }: { ad: Ad }) {
 
 function FrenchlyAd() {
   return (
-    <section className="px-5 pt-6 sm:px-8">
+    <section className="px-3 pt-6 sm:px-8">
       <AdStrip ad={ADS[0]} />
     </section>
   );
@@ -397,7 +436,7 @@ function FrenchlyAd() {
 function AdRow({ index }: { index: number }) {
   const ad = ADS[index % ADS.length];
   return (
-    <section className="px-5 pt-8 sm:px-8">
+    <section className="px-3 pt-8 sm:px-8">
       <AdStrip ad={ad} />
     </section>
   );
@@ -412,7 +451,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="px-5 pt-10 sm:px-8">
+    <section className="px-3 pt-10 sm:px-8">
       <div className="mb-5 flex items-center justify-between">
         <h2 className="text-2xl font-black tracking-tight text-zinc-900 sm:text-[28px]">
           {title}
