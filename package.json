@@ -5,8 +5,10 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node scripts/build-sw-manifest.mjs",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "sync-games": "bash scripts/sync-games.sh"
   },
   "dependencies": {
     "@vercel/blob": "^2.3.3",

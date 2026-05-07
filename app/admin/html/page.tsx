@@ -7,7 +7,22 @@ import {
   logoutHtmlAdmin,
 } from "@/app/lib/admin-html-auth";
 import { blobPathForSlug } from "@/app/lib/game-html-blob";
+import { GAMES_VERSION_BLOB_PATH } from "@/app/lib/games-version-blob";
 import { games } from "@/app/lib/games";
+
+async function bumpGamesVersion() {
+  try {
+    await put(GAMES_VERSION_BLOB_PATH, String(Date.now()), {
+      access: "public",
+      contentType: "text/plain; charset=utf-8",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      cacheControlMaxAge: 0,
+    });
+  } catch {
+    // best-effort; offline-refresh polling will lag until next successful bump
+  }
+}
 
 type Params = Promise<{ ok?: string | string[]; error?: string | string[] }>;
 
@@ -31,6 +46,7 @@ async function writeHtml(slug: string, html: string) {
     allowOverwrite: true,
     cacheControlMaxAge: 60,
   });
+  await bumpGamesVersion();
 }
 
 async function uploadHtml(formData: FormData) {
@@ -90,6 +106,7 @@ async function clearHtml(formData: FormData) {
   } catch {
     // already gone — treat as success
   }
+  await bumpGamesVersion();
 
   redirect(`/admin/html?ok=${encodeURIComponent(`Cleared HTML for ${slug}`)}`);
 }

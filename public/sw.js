@@ -1,0 +1,250 @@
+// HALLPASS service worker — offline-first PWA.
+// Generated manifest provides BUILD_ID + URL list.
+self.importScripts("/sw-manifest.js");
+
+const BUILD_ID = self.__SW_BUILD_ID || "dev";
+const PRECACHE_URLS = self.__SW_PRECACHE || [];
+const STATIC_CACHE = `hp-static-${BUILD_ID}`;
+// Runtime + meta caches are intentionally NOT keyed by BUILD_ID: they must
+// survive deploys so the games-version sentinel + warm runtime entries persist.
+const RUNTIME_CACHE = "hp-runtime";
+const META_CACHE = "hp-meta";
+// Absolute sentinel URL — relative strings resolve against the SW origin and
+// could collide with a real route.
+const GAMES_VERSION_KEY = "https://hallpass.local/__sw__/games-version";
+
+// A response is safe to cache.put only if it's a non-redirected,
+// same-origin (basic/default) success. Avoids redirect-poisoning the cache —
+// some browsers refuse to serve redirected responses for iframe src.
+function isCacheable(res) {
+  return !!(
+    res &&
+    res.ok &&
+    !res.redirected &&
+    (res.type === "basic" || res.type === "default")
+  );
+}
+
+// ---------- install: precache everything we can. ----------
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(STATIC_CACHE);
+      await Promise.allSettled(
+        PRECACHE_URLS.map(async (url) => {
+          try {
+            const isGameHtml = url.startsWith("/game-html/");
+            const res = await fetch(url, {
+              cache: "reload",
+              credentials: "same-origin",
+              // Game-html routes 307 to /games/{slug}/index.html when Blob is
+              // missing — never cache that redirected response.
+              redirect: isGameHtml ? "manual" : "follow",
+            });
+            if (isCacheable(res)) await cache.put(url, res.clone());
+          } catch {
+            /* best-effort */
+          }
+        }),
+      );
+      await self.skipWaiting();
+    })(),
+  );
+});
+
+// ---------- activate: drop old caches, claim clients. ----------
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    (async () => {
+      const keys = await caches.keys();
+      // Only sweep stale per-deploy static caches. Leave hp-runtime + hp-meta.
+      await Promise.all(
+        keys
+          .filter((k) => k.startsWith("hp-static-") && k !== STATIC_CACHE)
+          .map((k) => caches.delete(k)),
+      );
+      await self.clients.claim();
+    })(),
+  );
+  // Fire-and-forget: don't block activation on N upstream fetches.
+  event.waitUntil(
+    refreshAllGameHtml().catch(() => {}),
+  );
+});
+
+// ---------- fetch: same-origin only. ----------
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  if (req.method !== "GET") return;
+
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return; // PostHog/ads/etc.
+
+  // Never intercept admin/dashboard/api — those need the network.
+  if (
+    url.pathname.startsWith("/admin") ||
+    url.pathname.startsWith("/dashboard") ||
+    url.pathname.startsWith("/api/") ||
+    url.pathname === "/games-version"
+  ) {
+    return;
+  }
+
+  // Game iframe: network-first, fall back to cached, then static fallback.
+  if (url.pathname.startsWith("/game-html/")) {
+    event.respondWith(networkFirstWithStaticFallback(req));
+    return;
+  }
+
+  // HTML navigations: network-first so updates land when online.
+  if (req.mode === "navigate" || req.headers.get("accept")?.includes("text/html")) {
+    event.respondWith(networkFirst(req));
+    return;
+  }
+
+  // Hashed/static assets: cache-first.
+  event.respondWith(cacheFirst(req));
+});
+
+// ---------- strategies ----------
+async function cacheFirst(req) {
+  const cached = await caches.match(req);
+  if (cached) return cached;
+  try {
+    const res = await fetch(req);
+    if (isCacheable(res)) {
+      const cache = await caches.open(RUNTIME_CACHE);
+      await cache.put(req, res.clone()).catch(() => {});
+    }
+    return res;
+  } catch {
+    return cached || new Response(null, { status: 504 });
+  }
+}
+
+async function networkFirst(req) {
+  try {
+    const res = await fetch(req);
+    if (isCacheable(res)) {
+      const cache = await caches.open(RUNTIME_CACHE);
+      await cache.put(req, res.clone()).catch(() => {});
+    }
+    return res;
+  } catch {
+    const cached = await caches.match(req);
+    if (cached) return cached;
+    const home = await caches.match("/");
+    if (home) return home;
+    // Synthesized offline page — Response.error() shows the browser's hard
+    // network error and breaks back-button navigation.
+    return new Response(
+      '<!doctype html><meta charset="utf-8"><title>Offline</title><body style="font-family:system-ui;padding:2rem"><h1>You\'re offline</h1><p>This page isn\'t cached yet. Reconnect and reload.</p>',
+      {
+        status: 503,
+        headers: { "content-type": "text/html; charset=utf-8" },
+      },
+    );
+  }
+}
+
+async function networkFirstWithStaticFallback(req) {
+  const url = new URL(req.url);
+  const slug = url.pathname.replace(/^\/game-html\//, "").replace(/\/$/, "");
+  const staticUrl = `/games/${slug}/index.html`;
+
+  try {
+    const res = await fetch(req, { cache: "no-store", redirect: "manual" });
+    if (isCacheable(res)) {
+      const cache = await caches.open(RUNTIME_CACHE);
+      await cache.put(req, res.clone()).catch(() => {});
+      return res;
+    }
+    // Redirect or non-ok → fall through to static fallback chain.
+    throw new Error(`upstream ${res?.status || res?.type}`);
+  } catch {
+    // caches.match searches all caches (static + runtime + meta).
+    const cached = await caches.match(req);
+    if (cached) return cached;
+    const fallback = await caches.match(staticUrl);
+    if (fallback) return fallback;
+    try {
+      const res = await fetch(staticUrl);
+      if (isCacheable(res)) {
+        const cache = await caches.open(RUNTIME_CACHE);
+        await cache.put(staticUrl, res.clone()).catch(() => {});
+      }
+      return res;
+    } catch {
+      return new Response(
+        '<!doctype html><meta charset="utf-8"><title>Offline</title><body style="font-family:system-ui;padding:2rem"><h1>Game unavailable offline</h1><p>Reconnect and reload to play.</p>',
+        {
+          status: 503,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        },
+      );
+    }
+  }
+}
+
+// ---------- games-version polling: refresh cache when admin uploads. ----------
+async function refreshAllGameHtml() {
+  const cache = await caches.open(RUNTIME_CACHE);
+  const tasks = PRECACHE_URLS.filter((u) => u.startsWith("/game-html/")).map(
+    async (url) => {
+      try {
+        const res = await fetch(url, {
+          cache: "no-store",
+          credentials: "same-origin",
+          redirect: "manual",
+        });
+        if (isCacheable(res)) await cache.put(url, res.clone());
+      } catch {
+        /* ignore */
+      }
+    },
+  );
+  await Promise.allSettled(tasks);
+}
+
+self.addEventListener("message", (event) => {
+  const data = event.data || {};
+  if (data.type === "CHECK_GAMES_VERSION") {
+    event.waitUntil(checkGamesVersion(data.version));
+  } else if (data.type === "SYNC_NOW") {
+    event.waitUntil(refreshAllGameHtml());
+  } else if (data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
+async function checkGamesVersion(reportedVersion) {
+  if (!reportedVersion) return;
+  try {
+    const stored = await readGamesVersion();
+    if (stored === reportedVersion) return;
+    await writeGamesVersion(reportedVersion);
+    // Always refresh on mismatch — the previous "skip on first install" guard
+    // was unreachable anyway because the meta cache survives deploys now,
+    // but more importantly: a real version mismatch means stale HTML.
+    await refreshAllGameHtml();
+  } catch {
+    /* ignore */
+  }
+}
+
+async function readGamesVersion() {
+  const cache = await caches.open(META_CACHE);
+  const res = await cache.match(GAMES_VERSION_KEY);
+  if (!res) return null;
+  return (await res.text()) || null;
+}
+
+async function writeGamesVersion(value) {
+  const cache = await caches.open(META_CACHE);
+  await cache.put(
+    GAMES_VERSION_KEY,
+    new Response(value, {
+      headers: { "content-type": "text/plain" },
+    }),
+  );
+}
