@@ -140,6 +140,14 @@
             osc.stop(audioCtx.currentTime + 0.15);
         }
 
+        // Haptics
+        const hapticsSupported = typeof navigator !== 'undefined'
+            && typeof navigator.vibrate === 'function';
+        function haptic(pattern) {
+            if (!hapticsSupported) return;
+            try { navigator.vibrate(pattern); } catch (_) {}
+        }
+
         // Pixel Art Templates (1 = pixel, 0 = empty)
         const templates = [
             { // Space Invader
@@ -575,6 +583,7 @@
                     
                     if (group.type === 'bomb') {
                         createCrunch(0, true);
+                        haptic([60, 40, 120]); // Heavy bomb buzz
                         shakeAmount = 50; // Massive shake
                         bgFlashColor = '#ef4444';
                         bgFlashAlpha = 0.8;
@@ -593,7 +602,8 @@
 
                     currentCombo++;
                     createCrunch(group.pixels.length);
-                    
+                    haptic(12); // Light tick on every slice
+
                     // Trigger MEGA Juice!
                     shakeAmount = 20;
                     freezeFrames = 4; // Harder hit pause
@@ -616,12 +626,14 @@
                         floatSize = 40; // Even bigger!
                         score += 5 * currentCombo; // Combo bonus points
                         createDing(currentCombo); // Play ding sound!
+                        haptic([20, 30, Math.min(80, 20 + currentCombo * 10)]); // Combo buzz scales
                         timeScale = 0.3; // SLOW MOTION for combos!
                         shockwaves.push(new Shockwave(group.x, group.y, floatColor));
                     }
                     
                     if (group.type === 'golden') {
                         createDing(5);
+                        haptic([30, 25, 30, 25, 90]); // Golden flourish
                         timeScale = 0.1; // Extreme slow-mo for golden targets
                         shockwaves.push(new Shockwave(group.x, group.y, group.color));
                     }
