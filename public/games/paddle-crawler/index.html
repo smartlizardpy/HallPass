@@ -1,0 +1,1969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Paddle Crawler</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: #030305;
+            overflow: hidden;
+            font-family: 'Courier New', Courier, monospace;
+            color: #fff;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #030305;
+        }
+
+        /* Authentic CRT Scanline Overlay */
+        #game-container::after {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 3px, 3px 100%;
+            z-index: 5;
+            pointer-events: none;
+            opacity: 0.4;
+        }
+
+        /* Scaled canvas for clean, pixelated low-res graphics */
+        #gameCanvas {
+            max-width: 100%;
+            max-height: 100%;
+            aspect-ratio: 16 / 9;
+            object-fit: contain;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            display: block;
+            border: 4px solid #1a1a2e;
+            box-shadow: 0 0 40px rgba(138, 43, 226, 0.5), 0 0 10px rgba(0, 255, 238, 0.3);
+            z-index: 1;
+        }
+
+        /* Immersive responsive UI layers */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Let touches pass through the empty areas */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-sizing: border-box;
+            z-index: 10;
+        }
+
+        /* Force UI elements to be clickable over the canvas */
+        .hud-top, .gadget-list, .btn, .choice-card, #audio-toggle {
+            pointer-events: auto !important;
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            text-transform: uppercase;
+            text-shadow: 2px 0px 0px #00ffee, -2px 0px 0px #ff0055;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .hud-bottom {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 5px;
+            text-shadow: 1px 1px 0px #000;
+        }
+
+        .gadget-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-size: 0.8rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .gadget-item {
+            background: rgba(138, 43, 226, 0.2);
+            border: 1px solid #8a2be2;
+            padding: 3px 8px;
+            border-radius: 4px;
+            box-shadow: 0 0 5px rgba(138, 43, 226, 0.5);
+            color: #00ffee;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s, background 0.1s;
+        }
+
+        .gadget-item:hover {
+            background: rgba(138, 43, 226, 0.5);
+            transform: scale(1.05);
+        }
+
+        .gadget-item.selected {
+            border-color: #ffea00;
+            box-shadow: 0 0 8px #ffea00;
+            color: #ffea00;
+            background: rgba(255, 234, 0, 0.25);
+        }
+
+        #gadget-info {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(10, 10, 20, 0.95);
+            border: 2px solid #ffea00;
+            padding: 12px;
+            border-radius: 6px;
+            max-width: 250px;
+            box-shadow: 0 0 15px rgba(255, 234, 0, 0.4);
+            display: none;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .info-title {
+            color: #ffea00;
+            font-weight: bold;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+        }
+
+        .info-desc {
+            color: #ddd;
+            font-size: 0.75rem;
+            line-height: 1.4;
+        }
+
+        /* Game State Screens */
+        .screen-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(5, 5, 10, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 30;
+            pointer-events: auto;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin: 0 0 10px 0;
+            text-shadow: 4px 0px 0px #00ffee, -4px 0px 0px #ff0055, 0 0 20px #ff0055;
+            letter-spacing: 4px;
+            animation: pulse 1.5s infinite alternate;
+        }
+
+        @keyframes pulse {
+            from { transform: scale(0.98); }
+            to { transform: scale(1.02); }
+        }
+
+        .subtitle {
+            font-size: 1rem;
+            color: #8a2be2;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 4px;
+            text-shadow: 0 0 10px #8a2be2;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #ff0055 0%, #8a2be2 100%);
+            border: 2px solid #00ffee;
+            color: #fff;
+            padding: 12px 30px;
+            font-size: 1.1rem;
+            font-family: inherit;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 0 15px rgba(255, 0, 85, 0.5);
+            transition: transform 0.1s, box-shadow 0.1s;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 25px #00ffee;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        /* Choice Grid */
+        .choice-grid {
+            display: flex;
+            gap: 20px;
+            max-width: 800px;
+            width: 100%;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .choice-card {
+            background: rgba(13, 13, 25, 0.9);
+            border: 2px solid #8a2be2;
+            padding: 15px;
+            border-radius: 8px;
+            width: 180px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .choice-card:hover {
+            border-color: #00ffee;
+            transform: translateY(-5px);
+            box-shadow: 0 0 20px rgba(0, 255, 238, 0.3);
+        }
+
+        .choice-title {
+            color: #ffea00;
+            font-size: 1rem;
+            font-weight: bold;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .choice-desc {
+            font-size: 0.75rem;
+            color: #bbb;
+            text-align: center;
+            line-height: 1.3;
+            margin-bottom: 12px;
+            flex-grow: 1;
+        }
+
+        .choice-stack {
+            font-size: 0.7rem;
+            color: #8a2be2;
+            text-transform: uppercase;
+        }
+
+        .stats-summary {
+            font-size: 1.2rem;
+            margin: 15px 0;
+            line-height: 1.6;
+        }
+
+        .text-neon-pink { color: #ff0055; }
+        .text-neon-blue { color: #00ffee; }
+        .text-neon-yellow { color: #ffea00; }
+        
+        #audio-toggle {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #fff;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="480" height="270"></canvas>
+
+        <div id="menu-screen" class="screen-overlay">
+            <h1>PADDLE CRAWLER</h1>
+            <div class="subtitle">ULTRA EDITION</div>
+            <p style="color: #bbb; max-width: 400px; font-size: 0.85rem; margin-bottom: 25px; line-height: 1.5;">
+                Destroy neon grids. Build Combos. Stack up to 8 unique rogue gadgets from an arsenal of 100+ powers.
+            </p>
+            <button class="btn" id="start-btn">BOOT CRAWLER</button>
+            <div style="margin-top: 15px; font-size: 0.75rem; color: #666;">
+                Arrows / Mouse / Touch to steer. SHIFT to Dash.
+            </div>
+        </div>
+
+        <div id="choice-screen" class="screen-overlay hidden">
+            <h2 style="font-size: 1.8rem; text-shadow: 2px 2px #000; color: #ffea00; margin: 0;">GRID SYSTEM PURIFIED</h2>
+            <div style="color: #00ffee; font-size: 0.9rem; margin-bottom: 15px; text-transform: uppercase; font-weight: bold;" id="draft-subtitle">
+                Select a sub-routing upgrade card:
+            </div>
+            <div class="choice-grid" id="choice-container"></div>
+        </div>
+
+        <div id="gameover-screen" class="screen-overlay hidden">
+            <h1 class="text-neon-pink" style="font-size: 2.5rem;">PULSE FLATTENED</h1>
+            <div class="subtitle">System Offline</div>
+            <div class="stats-summary">
+                Level Reached: <span class="text-neon-blue" id="final-level">1</span><br>
+                Final Score: <span class="text-neon-yellow" id="final-score">000000</span><br>
+                Max Combo: <span class="text-neon-pink" id="final-combo">0</span>
+            </div>
+            <button class="btn" id="restart-btn" style="margin-top: 15px;">REBOOT SYSTEM</button>
+        </div>
+
+        <div id="ui-layer">
+            <div class="hud-top">
+                <div id="scoreDisplay">SCORE: 000000</div>
+                <div id="comboDisplay" style="color: #ffea00;">COMBO: x0</div>
+                <button id="audio-toggle">SOUND: ON</button>
+                <div id="livesDisplay" style="color: #00ff66;">LIVES: 3</div>
+                <div id="ballDisplay">BALLS: 1</div>
+            </div>
+            <div class="hud-bottom">
+                <div style="font-weight: bold; margin-bottom: 4px; color: #00ffee; font-size: 0.75rem;">ACTIVE SUBSYSTEMS (Click for info):</div>
+                <ul class="gadget-list" id="gadgetList"></ul>
+            </div>
+
+            <div id="gadget-info">
+                <div class="info-title" id="info-title">NAME</div>
+                <div class="info-desc" id="info-desc">DESC</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. ENGINE CONSTANTS & RETRO SOUND SYNTH
+        // ==========================================
+        const GAME_WIDTH = 480;
+        const GAME_HEIGHT = 270;
+        const MAX_UNIQUE_GADGETS = 8;
+        
+        const PALETTE = {
+            bg: '#040407',
+            paddle: '#00ffee',
+            ball: '#ffffff',
+            brickColors: ['#00ffee', '#ffea00', '#ff0055', '#8a2be2'], 
+            trail: ['#ff0055', '#ffea00', '#00ffee'],
+            tesla: '#00ffee',
+            graviton: '#8a2be2',
+            wave: '#ffea00',
+            shield: '#00ff66'
+        };
+
+        class AudioSynth {
+            constructor() { this.ctx = null; this.enabled = true; }
+            init() { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+            playTone(freq, duration, type = 'sine', slideTo = 0) {
+                if (!this.enabled) return;
+                this.init();
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gainNode = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    if (slideTo > 0) osc.frequency.exponentialRampToValueAtTime(slideTo, this.ctx.currentTime + duration);
+                    gainNode.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                    osc.connect(gainNode); gainNode.connect(this.ctx.destination);
+                    osc.start(); osc.stop(this.ctx.currentTime + duration);
+                } catch (e) {}
+            }
+            playNoise(duration, lowPassFreq = 1000) {
+                if (!this.enabled) return;
+                this.init();
+                try {
+                    const bufferSize = this.ctx.sampleRate * duration;
+                    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                    const data = buffer.getChannelData(0);
+                    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+                    const noise = this.ctx.createBufferSource();
+                    noise.buffer = buffer;
+                    const filter = this.ctx.createBiquadFilter();
+                    filter.type = 'lowpass'; filter.frequency.value = lowPassFreq;
+                    const gain = this.ctx.createGain();
+                    gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                    noise.connect(filter); filter.connect(gain); gain.connect(this.ctx.destination);
+                    noise.start();
+                } catch(e) {}
+            }
+            sndPaddle() { this.playTone(150, 0.1, 'square', 250); }
+            sndBrickHit() { this.playTone(400, 0.08, 'triangle', 200); }
+            sndBrickDestroy() { this.playNoise(0.2, 1200); this.playTone(300, 0.15, 'triangle', 80); }
+            sndLightning() { this.playTone(1200, 0.2, 'sawtooth', 300); this.playNoise(0.15, 3000); }
+            sndDash() { this.playTone(80, 0.25, 'sine', 350); }
+            sndUpgrade() { this.playTone(300, 0.15, 'sine', 600); setTimeout(() => this.playTone(450, 0.2, 'sine', 900), 100); }
+            sndGameOver() { this.playTone(300, 0.3, 'sawtooth', 60); }
+        }
+        const sfx = new AudioSynth();
+
+        // ==========================================
+        // 2. DATA POOLS (ZERO GC & OPTIMIZED)
+        // ==========================================
+        class ObjectPool {
+            constructor(createFn, resetFn, initialSize = 100) {
+                this.createFn = createFn; this.resetFn = resetFn; this.pool = [];
+                for (let i = 0; i < initialSize; i++) this.pool.push(this.createFn());
+            }
+            get() {
+                const obj = this.pool.length > 0 ? this.pool.pop() : this.createFn();
+                if(this.resetFn) this.resetFn(obj);
+                return obj;
+            }
+            release(obj) { this.pool.push(obj); }
+        }
+
+        function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
+        
+        function circleAABB(cx, cy, cr, rx, ry, rw, rh) {
+            let closestX = clamp(cx, rx, rx + rw);
+            let closestY = clamp(cy, ry, ry + rh);
+            let distX = cx - closestX, distY = cy - closestY;
+            let distanceSq = distX * distX + distY * distY;
+
+            if (distanceSq > 0) {
+                let distance = Math.sqrt(distanceSq);
+                if (distance <= cr) return { hit: true, nx: distX / distance, ny: distY / distance, pen: cr - distance };
+                return { hit: false };
+            } 
+            
+            let dl = cx - rx, dr = (rx + rw) - cx, dt = cy - ry, db = (ry + rh) - cy; 
+            let minDistance = Math.min(dl, dr, dt, db);
+            let nx = 0, ny = 0, pen = minDistance + cr;
+
+            if (minDistance === dl) nx = -1; else if (minDistance === dr) nx = 1; else if (minDistance === dt) ny = -1; else ny = 1;
+            return { hit: true, nx: nx, ny: ny, pen: pen };
+        }
+
+        // ==========================================
+        // 3. GAME OBJECTS
+        // ==========================================
+        class Paddle {
+            constructor() {
+                this.w = 64; this.h = 8; this.x = GAME_WIDTH / 2 - this.w / 2; this.y = GAME_HEIGHT - 20;
+                this.speed = 320; this.dashMultiplier = 2.4; this.dashTime = 0; this.dashCooldown = 0;
+                this.color = PALETTE.paddle; this.vx = 0;
+            }
+            update(dt, input) {
+                let currentSpeed = this.speed;
+                let oldX = this.x;
+                if (this.dashTime > 0) { this.dashTime -= dt; currentSpeed *= this.dashMultiplier; }
+                if (this.dashCooldown > 0) this.dashCooldown -= dt;
+
+                if (input.dash && this.dashCooldown <= 0) {
+                    this.dashTime = 0.15; this.dashCooldown = 0.6; input.dash = false;
+                    game.addTrauma(0.2); sfx.sndDash();
+                    for (let i = 0; i < 8; i++) {
+                        let p = game.particlePool.get();
+                        p.x = this.x + Math.random() * this.w; p.y = this.y + Math.random() * this.h;
+                        p.vx = (Math.random() - 0.5) * 50; p.vy = (Math.random() - 0.5) * 50;
+                        p.life = 0.25; p.maxLife = 0.25; p.color = this.color; p.size = 2; game.particles.push(p);
+                    }
+                }
+
+                if (input.left) this.x -= currentSpeed * dt;
+                if (input.right) this.x += currentSpeed * dt;
+                if (input.mouseX !== null && !input.left && !input.right) this.x = input.mouseX - this.w / 2;
+
+                this.x = clamp(this.x, 0, GAME_WIDTH - this.w);
+                this.vx = (this.x - oldX) / dt; // for parallax
+            }
+            draw(ctx) {
+                ctx.fillStyle = this.color;
+                if (this.dashTime > 0) {
+                    ctx.globalAlpha = 0.4; ctx.fillRect(this.x - 12, this.y, this.w, this.h); ctx.fillRect(this.x + 12, this.y, this.w, this.h); ctx.globalAlpha = 1.0;
+                }
+                ctx.fillRect(this.x, this.y, this.w, this.h);
+                ctx.fillStyle = '#ffffff'; ctx.fillRect(this.x, this.y, this.w, 2);
+            }
+        }
+
+        class Brick {
+            constructor(x, y, maxHp) {
+                this.x = x; this.y = y; this.w = 18; this.h = 10;
+                this.maxHp = maxHp; this.hp = maxHp; this.active = true;
+                this.slimed = false; this.infected = 0; this.leeched = 0;
+            }
+            damage(amt) { this.hp -= amt; if(this.hp <= 0) { this.active = false; return true; } return false; }
+            draw(ctx) {
+                if (!this.active) return;
+                let idx = clamp(this.hp - 1, 0, PALETTE.brickColors.length - 1);
+                ctx.fillStyle = PALETTE.brickColors[idx];
+                
+                if (this.slimed) ctx.fillStyle = '#22c55e';
+                else if (this.infected > 0) ctx.fillStyle = '#e11d48';
+                else if (this.leeched > 0) ctx.fillStyle = '#a855f7';
+                
+                ctx.fillRect(this.x, this.y, this.w, this.h);
+                ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.fillRect(this.x, this.y, this.w, 1);
+                ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(this.x, this.y + this.h - 1, this.w, 1);
+
+                if (this.hp < this.maxHp) {
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; ctx.lineWidth = 1; ctx.beginPath();
+                    if (this.hp === 1) { ctx.moveTo(this.x + 3, this.y + 1); ctx.lineTo(this.x + 9, this.y + 8); ctx.lineTo(this.x + 15, this.y + 3); } 
+                    else { ctx.moveTo(this.x + 5, this.y + 2); ctx.lineTo(this.x + 12, this.y + 7); }
+                    ctx.stroke();
+                }
+            }
+        }
+
+        // ==========================================
+        // 4. MODULAR UPGRADE GADGETS SYSTEM (100+ GADGETS)
+        // ==========================================
+        class Gadget {
+            constructor(name, desc, maxStacks = 10) { this.name = name; this.desc = desc; this.stacks = 0; this.maxStacks = maxStacks; }
+            onUpdate(ball, dt) {} onBrickHit(ball, brick) {} onPaddleHit(ball, paddle) {} onWallHit(ball) {}
+        }
+
+        // --- CORE & ACTION GADGET DEFINITIONS ---
+        class MitosisChip extends Gadget { constructor() { super("Mitosis Chip", "15% chance (+15%/stack) to clone the ball upon destroying a brick.", 10); } onBrickHit(ball, brick) { if (Math.random() < 0.15 * this.stacks && game.activeBalls.length < 200) { let angleOffset = (Math.random() - 0.5) * 0.4; let speed = Math.max(0.001, Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy)); let angle = Math.atan2(ball.vy, ball.vx); game.spawnBall(ball.x, ball.y, Math.cos(angle + angleOffset) * speed, Math.sin(angle + angleOffset) * speed); game.addTrauma(0.08); } } }
+        class PlasmaTrail extends Gadget { constructor() { super("Plasma Trail", "Spawns plasma particles. The extreme heat occasionally damages a random brick.", 10); this.timer = 0; } onUpdate(ball, dt) { this.timer += dt; if (this.timer >= 0.06 / Math.max(1, this.stacks * 0.5)) { this.timer = 0; let p = game.particlePool.get(); p.x = ball.x + (Math.random()*4-2); p.y = ball.y + (Math.random()*4-2); p.vx = -ball.vx * 0.08 + (Math.random()*15-7.5); p.vy = -ball.vy * 0.08 + (Math.random()*15-7.5); p.life = 0.2 + (0.08 * this.stacks); p.maxLife = p.life; p.color = PALETTE.trail[Math.floor(Math.random() * PALETTE.trail.length)]; p.size = 1.5 + (this.stacks * 0.4); game.particles.push(p); if (Math.random() < 0.01 * this.stacks) { let b = game.bricks.filter(x=>x.active).sort(()=>0.5-Math.random())[0]; if (b) game.damageBrick(b, 1); } } } }
+        class TeslaCoil extends Gadget { constructor() { super("Tesla Coil", "Every 1.1s (-0.1s/stack), zaps 1 (+1/stack) brick within 100px.", 10); this.timer = 0; } onUpdate(ball, dt) { this.timer += dt; if (this.timer >= Math.max(0.15, 1.1 - (0.1 * this.stacks))) { this.timer = 0; let targets = game.getClosestBricks(ball.x, ball.y, 1 + this.stacks, 100); if (targets.length > 0) { targets.forEach(b => { game.damageBrick(b, 1); game.addLightning(ball.x, ball.y, b.x + b.w/2, b.y + b.h/2); }); sfx.sndLightning(); game.addTrauma(0.1); } } } }
+        
+        class GravitonCore extends Gadget { constructor() { super("Graviton Core", "Paddle continuously pulls balls within 250px towards center with 1200 (+600/stack) force.", 10); } onUpdate(ball, dt) { let force = 1200 + (this.stacks * 600); let pCenterX = game.paddle.x + game.paddle.w/2; let dx = pCenterX - ball.x, dy = game.paddle.y - ball.y; let distSq = dx*dx + dy*dy; if (distSq < 62500) { let dist = Math.max(1, Math.sqrt(distSq)); ball.vx += (dx / dist) * force * dt; ball.vy += (dy / dist) * force * dt; } if(Math.random() < 0.05 * this.stacks) game.addLightning(pCenterX - 18, game.paddle.y, pCenterX + 18, game.paddle.y, PALETTE.graviton); } }
+        class ShockwaveRing extends Gadget { constructor() { super("Shockwave Ring", "Paddle hits zap 2 (+2/stack) bricks within a 180px radius.", 5); } onPaddleHit(ball, paddle) { let targets = game.getClosestBricks(paddle.x + paddle.w/2, paddle.y, this.stacks * 2, 180); if(targets.length > 0) { targets.forEach(b => { game.damageBrick(b, 1); game.addLightning(paddle.x + paddle.w/2, paddle.y, b.x + b.w/2, b.y + b.h/2, PALETTE.wave); }); sfx.sndLightning(); } } }
+        class Railgun extends Gadget { constructor() { super("Railgun", "Dashing fires a massive vertical beam that pierces all bricks above the paddle.", 3); } onUpdate(ball, dt) { if(game.input.dash && game.paddle.dashCooldown <= 0 && this.stacks > 0) { let px = game.paddle.x + game.paddle.w/2; game.addLightning(px, game.paddle.y, px, 0, '#00ffee'); game.bricks.forEach(b => { if(b.active && px >= b.x && px <= b.x+b.w) { game.damageBrick(b, 2 * this.stacks); } }); game.flash = 0.3; } } }
+        class ClusterBomb extends Gadget { constructor() { super("Cluster Bomb", "10% chance per stack on brick hit to release 3 explosive micro-bombs.", 5); } onBrickHit(ball, brick) { if(Math.random() < 0.1 * this.stacks && game.activeBalls.length < 150) { for(let i=0; i<3; i++) { let b = game.ballPool.get(); b.x = brick.x + brick.w/2; b.y = brick.y + brick.h/2; b.vx = (Math.random()-0.5)*200; b.vy = -100 - Math.random()*100; b.r = 2; b.ghost = true; b.color = '#ffea00'; game.activeBalls.push(b); } } } }
+        class TeslaShield extends Gadget { constructor() { super("Tesla Shield", "Paddle hits heavily electrify the ball. Next brick hit deals massive area damage.", 5); } onPaddleHit(ball, paddle) { ball.electrified = this.stacks; game.addLightning(paddle.x, paddle.y, ball.x, ball.y, '#00ffee'); } onBrickHit(ball, brick) { if(ball.electrified > 0) { game.getClosestBricks(brick.x, brick.y, 2 * ball.electrified, 60).forEach(b => { game.damageBrick(b, 1); game.addLightning(brick.x, brick.y, b.x, b.y, '#00ffee'); }); ball.electrified = 0; } } }
+        class PlasmaNova extends Gadget { constructor() { super("Plasma Nova", "Dashing triggers a plasma explosion from the paddle, destroying nearby bricks.", 3); } onUpdate(ball, dt) { if(game.input.dash && game.paddle.dashCooldown <= 0 && this.stacks > 0) { game.getClosestBricks(game.paddle.x+game.paddle.w/2, game.paddle.y, 5 * this.stacks, 120).forEach(b => { game.damageBrick(b, 1); game.addLightning(game.paddle.x+game.paddle.w/2, game.paddle.y, b.x+b.w/2, b.y+b.h/2, '#ff0055'); }); } } }
+        class CyberStrike extends Gadget { constructor() { super("Cyber Strike", "10% chance per stack on wall hit to fire a horizontal laser sweep.", 5); } onWallHit(ball) { if(Math.random() < 0.1 * this.stacks) { let y = ball.y; game.bricks.forEach(b => { if(b.active && Math.abs(b.y+b.h/2 - y) < 20) { game.damageBrick(b, 1); } }); game.addLightning(0, y, GAME_WIDTH, y, '#00ffee'); } } }
+        class Starfall extends Gadget { constructor() { super("Starfall", "10% chance per stack on wall hit to call down falling stars.", 5); } onWallHit(ball) { if(Math.random() < 0.1 * this.stacks) { for(let i=0; i<3; i++) { let b = game.ballPool.get(); b.x = Math.random() * GAME_WIDTH; b.y = 0; b.vx = 0; b.vy = 250; b.r = 2; b.ghost = true; b.color = '#ffea00'; game.activeBalls.push(b); } } } }
+        class ChainLightning extends Gadget { constructor() { super("Chain Lightning", "10% chance per stack on brick hit to chain electricity to 3 nearby bricks.", 5); } onBrickHit(ball, brick) { if(Math.random() < 0.1 * this.stacks) { let targets = game.getClosestBricks(brick.x, brick.y, 3, 100); let lastX = brick.x + brick.w/2, lastY = brick.y + brick.h/2; targets.forEach(b => { game.damageBrick(b, 1); game.addLightning(lastX, lastY, b.x+b.w/2, b.y+b.h/2, '#ffea00'); lastX = b.x+b.w/2; lastY = b.y+b.h/2; }); } } }
+        class Earthquake extends Gadget { constructor() { super("Earthquake", "10% chance per stack on paddle hit to shake down the lowest active row of bricks.", 5); } onPaddleHit(ball, paddle) { if(Math.random() < 0.1 * this.stacks) { let active = game.bricks.filter(b=>b.active); if(active.length > 0) { let maxY = Math.max(...active.map(b=>b.y)); active.forEach(b => { if(b.y === maxY) { game.damageBrick(b, 1); game.spawnDebris(b.x+b.w/2, b.y+b.h, '#fff'); } }); game.addTrauma(0.2); } } } }
+        class MeteorShower extends Gadget { constructor() { super("Meteor Shower", "5% chance per stack on wall hit to drop a flaming meteor from the ceiling.", 5); } onWallHit(ball) { if(Math.random() < 0.05 * this.stacks) { let b = game.ballPool.get(); b.x = ball.x; b.y = 0; b.vx = 0; b.vy = 300; b.r = 4; b.ghost = true; b.color = '#ff0055'; game.activeBalls.push(b); } } }
+        class SuperhotBall extends Gadget { constructor() { super("Superhot Ball", "2% chance per stack every frame for the ball to erupt, melting nearby bricks.", 5); } onUpdate(ball, dt) { if(Math.random() < 0.02 * this.stacks) { let targets = game.getClosestBricks(ball.x, ball.y, 4, 40); targets.forEach(b => game.damageBrick(b, 1)); if(targets.length > 0) game.addLightning(ball.x, ball.y, ball.x + (Math.random()-0.5)*20, ball.y + (Math.random()-0.5)*20, '#ff0055'); } } }
+        class WormholeDash extends Gadget { constructor() { super("Wormhole Dash", "Dashing instantly teleports paddle to your cursor position, bypassing space.", 1); } onUpdate(ball, dt) { if(game.input.dash && game.paddle.dashCooldown <= 0) { game.paddle.x = clamp(game.input.mouseX - game.paddle.w/2, 0, GAME_WIDTH - game.paddle.w); game.addLightning(game.paddle.x, game.paddle.y, game.paddle.x+game.paddle.w, game.paddle.y, '#ff0055'); } } }
+        class LaserCannon extends Gadget { constructor() { super("Laser Cannon", "20% chance per stack on paddle hit to fire a laser at a brick directly above.", 10); } onPaddleHit(ball, paddle) { if (Math.random() < 0.2 * this.stacks) { let targets = game.bricks.filter(b => b.active && Math.abs((b.x + b.w/2) - (paddle.x + paddle.w/2)) < 20); if (targets.length > 0) { game.damageBrick(targets[targets.length-1], 1); game.addLightning(paddle.x + paddle.w/2, paddle.y, targets[targets.length-1].x + targets[targets.length-1].w/2, targets[targets.length-1].y, '#ff0055'); } } } }
+        class MeteorStrike extends Gadget { constructor() { super("Meteor Strike", "10% chance per stack on paddle hit to instantly smite a random active brick.", 10); } onPaddleHit(ball, paddle) { if(Math.random() < 0.1 * this.stacks) { let b = game.bricks.filter(x=>x.active).sort(()=>0.5-Math.random())[0]; if(b){ game.damageBrick(b,1); game.addLightning(b.x+b.w/2, 0, b.x+b.w/2, b.y, '#ffea00'); } } } }
+        
+        class GravityWell extends Gadget { constructor() { super("Gravity Well", "10% chance per stack on wall hit to spawn a black hole curving ball trajectories.", 5); this.wells = []; } onWallHit(ball) { if(Math.random() < 0.1 * this.stacks) this.wells.push({x: ball.x, y: ball.y, life: 2.0}); } onUpdate(ball, dt) { for(let i = this.wells.length-1; i>=0; i--) { let w = this.wells[i]; w.life -= dt; if(w.life <= 0) { this.wells.splice(i,1); continue; } let dx = w.x - ball.x, dy = w.y - ball.y; let distSq = dx*dx + dy*dy; if(distSq < 22500) { let dist = Math.sqrt(distSq); ball.vx += (dx/dist)*200*dt*this.stacks; ball.vy += (dy/dist)*200*dt*this.stacks; } if(Math.random()<0.2) { let p = game.particlePool.get(); p.x = w.x+(Math.random()-0.5)*20; p.y = w.y+(Math.random()-0.5)*20; p.vx=0; p.vy=0; p.life=0.2; p.maxLife=0.2; p.color='#8a2be2'; p.size=2; game.particles.push(p); } } } }
+        class PrismBurst extends Gadget { constructor() { super("Prism Burst", "5% chance per stack on wall hit to spawn 2 temporary ghost balls that shatter on impact.", 5); } onWallHit(ball) { if(!ball.ghost && Math.random() < 0.05 * this.stacks && game.activeBalls.length < 150) { for(let i=0; i<2; i++) { let b = game.ballPool.get(); b.x = ball.x; b.y = ball.y; b.vx = ball.vx + (Math.random()-0.5)*150; b.vy = ball.vy + (Math.random()-0.5)*150; b.ghost = true; b.color = '#00ffee'; game.activeBalls.push(b); } } } }
+        class PhantomStrike extends Gadget { constructor() { super("Phantom Strike", "0.2% chance per stack every frame to instantly zap a random active brick.", 10); } onUpdate(ball, dt) { if(Math.random() < 0.002 * this.stacks) { let b = game.bricks.filter(x=>x.active).sort(()=>0.5-Math.random())[0]; if(b) { game.damageBrick(b,1); game.addLightning(ball.x, ball.y, b.x+b.w/2, b.y+b.h/2, '#fff'); } } } }
+        class EMPBlast extends Gadget { constructor() { super("EMP Blast", "20% chance per stack on paddle hit to zap the lowest active brick on the screen.", 5); } onPaddleHit(ball, paddle) { if(Math.random() < 0.2 * this.stacks) { let b = game.bricks.filter(x=>x.active).sort((a,c)=>c.y-a.y)[0]; if(b) { game.damageBrick(b,1); game.addLightning(paddle.x+paddle.w/2, paddle.y, b.x+b.w/2, b.y+b.h/2, '#0ff'); } } } }
+        class VoidEater extends Gadget { constructor() { super("Void Eater", "5% chance per stack on brick hit to instantly destroy up to 3 bricks within 50px.", 5); } onBrickHit(ball, brick) { if(Math.random() < 0.05 * this.stacks) { game.getClosestBricks(brick.x, brick.y, 3, 50).forEach(b => game.damageBrick(b,1)); } } }
+        class PaddleCannon extends Gadget { constructor() { super("Paddle Cannon", "2% chance per stack on paddle hit to fire an additional ball upwards.", 5); } onPaddleHit(ball, paddle) { if(Math.random() < 0.02 * this.stacks && game.activeBalls.length < 150) game.spawnBall(paddle.x+paddle.w/2, paddle.y-10, (Math.random()-0.5)*100, -200); } }
+        
+        class QuasarWave extends Gadget { constructor() { super("Quasar Wave", "Wall hits emit a powerful shockwave violently repelling all other balls.", 5); } onWallHit(ball) { let rangeSq = Math.pow(200 * this.stacks, 2); game.activeBalls.forEach(other => { if(other === ball) return; let dx = other.x - ball.x, dy = other.y - ball.y; let distSq = dx*dx + dy*dy; if(distSq > 1 && distSq < rangeSq) { let dist = Math.sqrt(distSq); other.vx += (dx/dist)*150; other.vy += (dy/dist)*150; } }); game.addTrauma(0.1); } }
+        class GlitchRift extends Gadget { constructor() { super("Glitch Rift", "10% chance per stack on brick hit to randomly shift the ball's position by up to 20px.", 5); } onBrickHit(ball, brick) { if(Math.random() < 0.1*this.stacks) { ball.x += (Math.random()-0.5)*40; ball.y += (Math.random()-0.5)*40; } } }
+        class FractalSplit extends Gadget { constructor() { super("Fractal Split", "2% chance per stack on wall hit to duplicate the ball moving the opposite way.", 5); } onWallHit(ball) { if(Math.random() < 0.02 * this.stacks && game.activeBalls.length < 150) game.spawnBall(ball.x, ball.y, -ball.vx, ball.vy); } }
+        class SniperRifle extends Gadget { constructor() { super("Sniper Rifle", "15% chance per stack on paddle hit to zap the brick with highest remaining HP.", 5); } onPaddleHit(ball, paddle) { if(Math.random() < 0.15*this.stacks) { let b = game.bricks.filter(x=>x.active).sort((a,c)=>c.hp-a.hp)[0]; if(b){ game.damageBrick(b,1); game.addLightning(paddle.x+paddle.w/2, paddle.y, b.x+b.w/2, b.y+b.h/2, '#fff'); } } } }
+        class ScatterShot extends Gadget { constructor() { super("Scatter Shot", "10% chance per stack on brick hit to zap up to 4 bricks within an 80px radius.", 5); } onBrickHit(ball, brick) { if(Math.random() < 0.1*this.stacks) { game.getClosestBricks(brick.x, brick.y, 4, 80).forEach(b => { game.damageBrick(b,1); game.addLightning(brick.x, brick.y, b.x, b.y, '#ffea00'); }); } } }
+        class ZephyrDash extends Gadget { constructor() { super("Zephyr Dash", "While dashing, 10% chance per stack every frame to zap a random active brick.", 5); } onUpdate(ball, dt) { if(game.paddle.dashTime > 0 && Math.random() < 0.1*this.stacks) { let b = game.bricks.filter(x=>x.active).sort(()=>0.5-Math.random())[0]; if(b){ game.damageBrick(b,1); game.addLightning(game.paddle.x, game.paddle.y, b.x, b.y, '#0ff'); } } } }
+        class StasisField extends Gadget { constructor() { super("Stasis Field", "Creates aura around the paddle that massively slows balls, allowing precise aiming.", 5); } onUpdate(ball, dt) { let pCenterX = game.paddle.x + game.paddle.w/2; let distSq = Math.pow(ball.x - pCenterX, 2) + Math.pow(ball.y - game.paddle.y, 2); if(distSq < Math.pow(60 + 10*this.stacks, 2)) { ball.vx *= 0.95; ball.vy *= 0.95; } } }
+        class MagmaCore extends Gadget { constructor() { super("Magma Core", "15% chance per stack on brick hit to instantly deal 1 damage to another random brick.", 5); } onBrickHit(ball, brick) { if(Math.random() < 0.15*this.stacks) { let b = game.bricks.filter(x=>x.active).sort(()=>0.5-Math.random())[0]; if(b) game.damageBrick(b,1); } } }
+        class EchoStrike extends Gadget { constructor() { super("Echo Strike", "10% chance per stack on brick hit to trigger a secondary impact on the same brick.", 5); } onBrickHit(ball, brick) { if(Math.random() < 0.1*this.stacks && brick.active) game.damageBrick(brick,1); } }
+        class Tornado extends Gadget { constructor() { super("Tornado", "Paddle continuously sucks in visual debris within 150px with a force of 500 per stack.", 5); } onUpdate(ball, dt) { let force = (500*dt*this.stacks) / Math.max(1, game.activeBalls.length); game.debris.forEach(d => { let dx = (game.paddle.x+game.paddle.w/2)-d.x; let dy = game.paddle.y-d.y; let distSq = dx*dx+dy*dy; if(distSq > 1 && distSq < 22500){ let dist = Math.sqrt(distSq); d.vx += (dx/dist)*force; d.vy += (dy/dist)*force; } }); } }
+        class CometTail extends Gadget { constructor() { super("Comet Tail", "Balls leave white comet trails and gradually accelerate continuously.", 5); } onUpdate(ball, dt) { ball.vx *= (1 + 0.05 * dt * this.stacks); ball.vy *= (1 + 0.05 * dt * this.stacks); if(Math.random() < 0.2*this.stacks) { let p = game.particlePool.get(); p.x = ball.x; p.y = ball.y; p.vx = -ball.vx*0.1; p.vy = -ball.vy*0.1; p.life = 0.3; p.maxLife = 0.3; p.color = '#fff'; p.size = 2; game.particles.push(p); } } }
+        class PrismaticLaser extends Gadget { constructor() { super("Prismatic Laser", "10% chance per stack on paddle hit to fire 3 prismatic lasers at random bricks.", 5); } onPaddleHit(ball, paddle) { if(Math.random() < 0.1*this.stacks) { for(let i=0;i<3;i++){ let b = game.bricks.filter(x=>x.active).sort(()=>0.5-Math.random())[0]; if(b){ game.damageBrick(b,1); game.addLightning(paddle.x+paddle.w/2, paddle.y, b.x+b.w/2, b.y+b.h/2, PALETTE.brickColors[i]); } } } } }
+        class BlackHole extends Gadget { constructor() { super("Black Hole", "20% chance per stack on brick hit to violently pull nearby debris into impact point.", 5); } onBrickHit(ball, brick) { if(Math.random() < 0.2*this.stacks) { game.debris.forEach(d => { let dx = brick.x-d.x; let dy = brick.y-d.y; let distSq = dx*dx+dy*dy; if(distSq > 1 && distSq < 10000){ let dist = Math.sqrt(distSq); d.vx += (dx/dist)*100; d.vy += (dy/dist)*100; } }); } } }
+        class RippleEffect extends Gadget { constructor() { super("Ripple Effect", "10% chance per stack on wall hit to zap 1 brick within a 200px radius.", 5); } onWallHit(ball) { if(Math.random() < 0.1*this.stacks) { let b = game.getClosestBricks(ball.x, ball.y, 1, 200)[0]; if(b){ game.damageBrick(b,1); game.addLightning(ball.x, ball.y, b.x+b.w/2, b.y+b.h/2, '#0ff'); } } } }
+        class PhaseShift extends Gadget { constructor() { super("Phase Shift", "5% chance per stack to invert velocity on brick hit, effectively piercing through.", 5); } onBrickHit(ball, brick) { if(Math.random() < 0.05*this.stacks) { ball.vx *= -1; ball.vy *= -1; } } }
+        class Supernova extends Gadget { constructor() { super("Supernova", "If active balls < 3, 10% chance per stack on paddle hit to spawn a rescue ball.", 5); } onPaddleHit(ball, paddle) { if(game.activeBalls.length < 3 && Math.random() < 0.1*this.stacks) game.spawnBall(paddle.x+paddle.w/2, paddle.y-10, (Math.random()-0.5)*100, -200); } }
+        class KineticTether extends Gadget { constructor() { super("Kinetic Tether", "Dashing snaps an energy tether between paddle and balls, dealing damage to bricks in the line.", 5); } onUpdate(ball, dt) { if(game.input.dash && game.paddle.dashCooldown <= 0 && this.stacks > 0) { let px = game.paddle.x + game.paddle.w/2, py = game.paddle.y; game.addLightning(px, py, ball.x, ball.y, '#ff00ff'); game.bricks.forEach(b => { if (b.active) { let minX = Math.min(px, ball.x) - 10, maxX = Math.max(px, ball.x) + 10, minY = Math.min(py, ball.y) - 10, maxY = Math.max(py, ball.y) + 10; if (b.x + b.w > minX && b.x < maxX && b.y + b.h > minY && b.y < maxY && Math.random() < 0.2 * this.stacks) game.damageBrick(b, 1); } }); } } }
+        class GammaRay extends Gadget { constructor() { super("Gamma Ray", "15% chance per stack on brick hit to penetrate and zap the brick directly above it.", 5); } onBrickHit(ball, brick) { if(Math.random() < 0.15*this.stacks) { let targets = game.bricks.filter(b => b.active && Math.abs(b.x - brick.x) < 5 && b.y < brick.y); if(targets.length>0){ game.damageBrick(targets[targets.length-1], 1); game.addLightning(brick.x+brick.w/2, brick.y, targets[targets.length-1].x+targets[targets.length-1].w/2, targets[targets.length-1].y+targets[targets.length-1].h, '#8a2be2'); } } } }
+        class PaintSplash extends Gadget { constructor() { super("Paint Splash", "Wall hits paint the ball. Matching a brick's color triggers a massive cross explosion.", 5); } onWallHit(ball) { ball.color = PALETTE.brickColors[Math.floor(Math.random()*4)]; } onBrickHit(ball, brick) { let colorIdx = clamp(brick.hp - 1, 0, PALETTE.brickColors.length - 1); if(ball.color === PALETTE.brickColors[colorIdx] && Math.random() < 0.2*this.stacks) { game.bricks.forEach(b => { if(b.active && (Math.abs(b.x - brick.x) < 25 || Math.abs(b.y - brick.y) < 25)) { game.damageBrick(b, 1); game.addLightning(brick.x+brick.w/2, brick.y+brick.h/2, b.x+b.w/2, b.y+b.h/2, ball.color); } }); } } }
+        class QuantumEntanglement extends Gadget { constructor() { super("Quantum Entanglement", "10% chance per stack on brick hit to mirror damage to opposite side of screen.", 5); } onBrickHit(ball, brick) { if(Math.random() < 0.1*this.stacks) { let mirrorX = GAME_WIDTH - brick.x; let b = game.getClosestBricks(mirrorX, brick.y, 1, 30)[0]; if(b) game.damageBrick(b,1); } } }
+        class RadiantAura extends Gadget { constructor() { super("Radiant Aura", "5% chance per stack every frame to zap a brick within 30px of the ball.", 5); } onUpdate(ball, dt) { if(Math.random() < 0.05*this.stacks) { let b = game.getClosestBricks(ball.x, ball.y, 1, 30)[0]; if(b){ game.damageBrick(b,1); game.addLightning(ball.x, ball.y, b.x+b.w/2, b.y+b.h/2, '#ffea00'); } } } }
+        class Hyperdrive extends Gadget { constructor() { super("Hyperdrive", "10% chance per stack on paddle hit to warp the ball forward by 10% of velocity vector.", 5); } onPaddleHit(ball, paddle) { if(Math.random() < 0.1*this.stacks) { ball.x += (ball.vx*0.1); ball.y += (ball.vy*0.1); } } }
+        class SporeColony extends Gadget { constructor() { super("Spore Colony", "10% chance per stack on brick hit to spawn upward-drilling micro-balls.", 5); } onBrickHit(ball, brick) { if(Math.random() < 0.1 * this.stacks && game.activeBalls.length < 150) { for(let i=0; i<2; i++) { let b = game.ballPool.get(); b.x = brick.x + brick.w/2; b.y = brick.y - 5; b.vx = (Math.random()-0.5)*100; b.vy = -150 - Math.random()*100; b.r = 2; b.ghost = true; b.color = '#0f0'; game.activeBalls.push(b); } } } }
+        class Singularity extends Gadget { constructor() { super("Singularity", "Paddle hits pull all balls AND debris forcefully toward the exact screen center.", 5); } onPaddleHit(ball, paddle) { if(Math.random() < 0.05*this.stacks) { let cx = GAME_WIDTH/2, cy = GAME_HEIGHT/2; game.activeBalls.forEach(b => { let dx = cx-b.x, dy = cy-b.y; let distSq = dx*dx+dy*dy; if(distSq>1){ let dist = Math.sqrt(distSq); b.vx += (dx/dist)*300; b.vy += (dy/dist)*300; } }); game.debris.forEach(d => { let dx = cx-d.x, dy = cy-d.y; let distSq = dx*dx+dy*dy; if(distSq>1){ let dist = Math.sqrt(distSq); d.vx += (dx/dist)*400; d.vy += (dy/dist)*400; } }); game.addTrauma(0.2); } } }
+        class FinalFlash extends Gadget { constructor() { super("Final Flash", "2% chance per stack on brick hit to unleash a massive blast, zapping 3 random bricks.", 5); } onBrickHit(ball, brick) { if(Math.random() < 0.02*this.stacks) { game.bricks.filter(x=>x.active).sort(()=>0.5-Math.random()).slice(0,3).forEach(b => { game.damageBrick(b,1); game.addLightning(brick.x, brick.y, b.x, b.y, '#fff'); }); game.flash = 0.5; } } }
+        class TimeWarp extends Gadget { constructor() { super("Time Warp", "10% chance per stack on paddle hit to reverse gravity on debris, turning them into projectiles.", 5); } onPaddleHit(ball, paddle) { if(Math.random() < 0.1 * this.stacks) { game.debris.forEach(d => { d.vy = -300; d.lethal = true; }); game.addTrauma(0.2); } } } 
+        class AegisShield extends Gadget { constructor() { super("Aegis Shield", "If the ball falls below the paddle, 5% chance per stack to magically bounce it back up.", 5); } onUpdate(ball, dt) { if(ball.y > GAME_HEIGHT - 15 && ball.vy > 0 && Math.random() < 0.05*this.stacks) { ball.vy *= -1; game.addLightning(ball.x-20, GAME_HEIGHT-5, ball.x+20, GAME_HEIGHT-5, '#00ff66'); } } }
+        class OrbitalStrike extends Gadget { constructor() { super("Orbital Strike", "10% chance per stack on paddle hit to call an orbital laser strike on a random brick.", 5); } onPaddleHit(ball, paddle) { if(Math.random() < 0.1*this.stacks) { let b = game.bricks.filter(x=>x.active).sort(()=>0.5-Math.random())[0]; if(b){ game.damageBrick(b,1); game.addLightning(b.x+b.w/2, 0, b.x+b.w/2, b.y, '#8a2be2'); } } } }
+        class MirrorImage extends Gadget { constructor() { super("Mirror Image", "5% chance per stack on wall hit to inflict 1 damage to a random active brick.", 5); } onWallHit(ball) { if(Math.random() < 0.05*this.stacks) { let b = game.bricks.filter(x=>x.active).sort(()=>0.5-Math.random())[0]; if(b) game.damageBrick(b,1); } } }
+        class CryoBlast extends Gadget { constructor() { super("Cryo Blast", "Wall hits freeze the ball. Frozen balls shatter on impact, firing downward ice shards.", 5); } onWallHit(ball) { if(Math.random() < 0.2 * this.stacks) { ball.frozen = true; ball.color = '#00ffff'; } } onBrickHit(ball, brick) { if(ball.frozen) { ball.frozen = false; ball.color = PALETTE.ball; for(let i=0; i<3; i++) { let b = game.ballPool.get(); b.x = ball.x; b.y = ball.y; b.vx = (Math.random()-0.5)*150; b.vy = 150 + Math.random()*100; b.r = 2; b.ghost = true; b.color = '#00ffff'; game.activeBalls.push(b); } } } }
+        class OmegaBeam extends Gadget { constructor() { super("Omega Beam", "5% chance per stack on paddle hit to fire a dual-beam laser at the closest brick within 300px.", 5); } onPaddleHit(ball, paddle) { if(Math.random() < 0.05*this.stacks) { let b = game.getClosestBricks(paddle.x+paddle.w/2, paddle.y, 1, 300)[0]; if(b){ game.damageBrick(b,1); game.addLightning(paddle.x+paddle.w/2, paddle.y, b.x+b.w/2, b.y+b.h/2, '#ff0055'); game.addLightning(paddle.x+paddle.w/2, paddle.y, b.x+b.w/2, b.y+b.h/2, '#ff0055'); } } } }
+
+        // --- LEGENDARY POWERS ---
+        class LifeBringer extends Gadget { constructor() { super("Life Bringer", "0.5% chance per stack on paddle hit to magically grant an Extra Life (Max 9).", 5); } onPaddleHit(ball, paddle) { if(game.lives < 9 && Math.random() < 0.005 * this.stacks) { game.lives++; sfx.sndUpgrade(); } } }
+        class OrbitalDrones extends Gadget { constructor() { super("Orbital Drones", "Continuously fires auto-aiming green lasers from the paddle.", 5); } onUpdate(ball, dt) { if (Math.random() < (0.05 * this.stacks * dt * 60) / Math.max(1, game.activeBalls.length)) { let b = game.getClosestBricks(game.paddle.x + game.paddle.w/2, game.paddle.y, 1, 400)[0]; if(b) { game.damageBrick(b, 1); game.addLightning(game.paddle.x + Math.random()*game.paddle.w, game.paddle.y, b.x+b.w/2, b.y+b.h/2, '#00ff66'); } } } }
+        class Polymorph extends Gadget { constructor() { super("Polymorph", "10% chance per stack on brick hit to convert the destroyed brick directly into a new active ball.", 5); } onBrickHit(ball, brick) { if (Math.random() < 0.1 * this.stacks) { game.spawnBall(brick.x + brick.w/2, brick.y + brick.h/2, (Math.random()-0.5)*150, -150); } } }
+        class DiscoInferno extends Gadget { constructor() { super("Disco Inferno", "20% chance per stack on wall hit to trigger a rainbow dance party, zapping 5 random bricks.", 5); } onWallHit(ball) { if (Math.random() < 0.2 * this.stacks) { game.bricks.filter(x=>x.active).sort(()=>0.5-Math.random()).slice(0,5).forEach(b => { game.damageBrick(b, 1); game.addLightning(ball.x, ball.y, b.x+b.w/2, b.y+b.h/2, PALETTE.brickColors[Math.floor(Math.random()*4)]); }); } } }
+        class TimeBomb extends Gadget { constructor() { super("Time Bomb", "If a ball falls off the screen, 20% chance per stack to explosively wipe out bottom row.", 5); } onUpdate(ball, dt) { if (ball.y > GAME_HEIGHT && ball.y < GAME_HEIGHT + 15) { if (Math.random() < 0.2 * this.stacks) { let lowest = game.bricks.filter(x=>x.active).sort((a,c)=>c.y - a.y).slice(0, 8); lowest.forEach(b => { game.damageBrick(b, 1); game.addLightning(ball.x, GAME_HEIGHT, b.x+b.w/2, b.y+b.h/2, '#ff0055'); }); game.flash = 0.5; } } } }
+
+        // --- 40 FINAL ULTRA GADGETS ---
+        class ComboMaster extends Gadget { constructor() { super("Combo Master", "Grants +10% bonus score per Combo Multiplier stack.", 5); } onBrickHit(ball, brick) { game.score += 10 * game.combo * this.stacks; } }
+        class Starweaver extends Gadget { 
+            constructor() { super("Starweaver", "Paddle hits spawn shooting stars. Spawns extra stars for every 5th combo step.", 5); } 
+            onPaddleHit(ball, paddle) { 
+                let starsToSpawn = 1;
+                if (game.combo >= 5) starsToSpawn += Math.floor(game.combo / 5);
+                for(let i=0; i<starsToSpawn; i++) {
+                    if(Math.random() < 0.1 * this.stacks) { 
+                        let targets = game.bricks.filter(b=>b.active); 
+                        if(targets.length > 0) { 
+                            let lowest = targets.reduce((a, b) => a.y > b.y ? a : b); 
+                            let s = game.ballPool.get(); 
+                            s.x = paddle.x + paddle.w/2 + (i * 8 - 4); 
+                            s.y = paddle.y - 5; 
+                            let dx = lowest.x+lowest.w/2 - s.x, dy = lowest.y+lowest.h/2 - s.y; 
+                            let dist = Math.max(1, Math.sqrt(dx*dx+dy*dy)); 
+                            s.vx = (dx/dist)*250; s.vy = (dy/dist)*250; s.ghost = true; s.color = '#fbbf24'; 
+                            game.activeBalls.push(s); 
+                        } 
+                    }
+                }
+            } 
+        }
+        class VoidWalker extends Gadget { constructor() { super("Void Walker", "Balls bouncing off walls retain vertical momentum but gain 10% speed boost.", 5); } onWallHit(ball) { ball.vy *= (1 + 0.1 * this.stacks); } }
+        class PlasmaBurst extends Gadget { constructor() { super("Plasma Burst", "5% chance per stack on wall hit to shoot a plasma ball to the screen center.", 5); } onWallHit(ball) { if(Math.random() < 0.05 * this.stacks) { let pb = game.ballPool.get(); pb.x = ball.x; pb.y = ball.y; pb.vx = (GAME_WIDTH/2 - ball.x); pb.vy = (GAME_HEIGHT/2 - ball.y); pb.ghost = true; pb.color = '#ec4899'; game.activeBalls.push(pb); } } }
+        class ShockwaveDash extends Gadget { constructor() { super("Shockwave Dash", "Dashing pushes all active balls forcefully upwards away from the paddle.", 5); } onUpdate(ball, dt) { if(game.input.dash && game.paddle.dashCooldown <= 0 && this.stacks > 0) { ball.vy -= 150 * this.stacks; } } }
+        class GravityAnchor extends Gadget { constructor() { super("Gravity Anchor", "Moving the mouse heavily influences balls toward the horizontal cursor position.", 5); } onUpdate(ball, dt) { if(game.input.mouseX !== null) { ball.vx += (game.input.mouseX - ball.x) * 5 * dt * this.stacks; } } }
+        class NeonRicochet extends Gadget { constructor() { super("Neon Burst", "Wall hits emit cyan flares that permanently reveal block health.", 5); } onWallHit(ball) { if(Math.random() < 0.2 * this.stacks) { game.spawnDebris(ball.x, ball.y, '#0ff'); let targets = game.bricks.filter(b => b.active && Math.abs(b.y - ball.y) < 20); if(targets.length > 0) { let target = targets[Math.floor(Math.random() * targets.length)]; game.damageBrick(target, 1); game.addLightning(ball.x, ball.y, target.x+target.w/2, target.y+target.h/2, '#0ff'); } } } }
+        class PhantomBlade extends Gadget { constructor() { super("Phantom Blade", "Dashing creates a static vertical energy blade at the paddle's start position.", 5); } onUpdate(ball, dt) { if(game.input.dash && game.paddle.dashCooldown <= 0) { let px = game.paddle.x; game.addLightning(px, 0, px, GAME_HEIGHT, '#8b5cf6'); game.bricks.forEach(b => { if(b.active && Math.abs(b.x - px) < 20) game.damageBrick(b, 1); }); } } }
+        class CyberNet extends Gadget { constructor() { super("Cyber Net", "Brick hits have a chance to damage all bricks in the exact same vertical column.", 5); } onBrickHit(ball, brick) { if(Math.random() < 0.05 * this.stacks) { game.bricks.forEach(b => { if(b.active && b.x === brick.x) game.damageBrick(b, 1); }); game.addLightning(brick.x+brick.w/2, 0, brick.x+brick.w/2, GAME_HEIGHT, '#2dd4bf'); } } }
+        class ChronoSurge extends Gadget { constructor() { super("Chrono Surge", "Falling below mid-screen slows balls down by 5% per stack, aiding recovery.", 5); } onUpdate(ball, dt) { if(ball.y > GAME_HEIGHT * 0.6 && ball.vy > 0) { ball.vy *= (1 - 0.05 * dt * this.stacks); } } }
+        class MagmaPlume extends Gadget { constructor() { super("Magma Plume", "Brick hits have a chance to shoot a fireball straight upwards.", 5); } onBrickHit(ball, brick) { if(Math.random() < 0.1 * this.stacks) { let fb = game.ballPool.get(); fb.x = brick.x+brick.w/2; fb.y = brick.y; fb.vx = 0; fb.vy = -200; fb.ghost = true; fb.color = '#f97316'; game.activeBalls.push(fb); } } }
+        class CryoAura extends Gadget { constructor() { super("Cryo Aura", "Drastically slows down all falling debris when they get near the paddle.", 5); } onUpdate(ball, dt) { game.debris.forEach(d => { if(d.y > game.paddle.y - 100) d.vy *= (1 - 0.5 * dt * this.stacks); }); } }
+        
+        class VoltWhip extends Gadget { 
+            constructor() { super("Volt Whip", "Paddle hits snap electric zaps directly to the highest active brick. Lightnings shift color on high combo.", 5); } 
+            onPaddleHit(ball, paddle) { 
+                if(Math.random() < 0.2 * this.stacks) { 
+                    let active = game.bricks.filter(b=>b.active); 
+                    if(active.length>0) { 
+                        let highest = active.reduce((a, b) => a.y < b.y ? a : b); 
+                        game.damageBrick(highest, 1); 
+                        let zapColor = '#fde047'; 
+                        if (game.combo >= 15) { zapColor = '#ffffff'; } else if (game.combo >= 6) { zapColor = '#00ffee'; }
+                        game.addLightning(paddle.x+paddle.w/2, paddle.y, highest.x+highest.w/2, highest.y+highest.h/2, zapColor); 
+                    } 
+                } 
+            } 
+        }
+        
+        class AstroStrike extends Gadget { constructor() { super("Astro Strike", "Periodically calls down a huge meteor directly on the paddle's current X position.", 5); this.timer = 0; } onUpdate(ball, dt) { this.timer += dt; if(this.timer >= 5.0 / Math.max(1, this.stacks)) { this.timer = 0; let m = game.ballPool.get(); m.x = game.paddle.x + game.paddle.w/2; m.y = 0; m.vx = 0; m.vy = 350; m.r = 6; m.ghost = true; m.color = '#e11d48'; game.activeBalls.push(m); } } }
+        class NanoSwarm extends Gadget { constructor() { super("Nano Swarm", "Catching debris with the paddle instantly resets your Dash cooldown.", 5); } onUpdate(ball, dt) { game.debris.forEach(d => { if(d.y >= game.paddle.y && d.y <= game.paddle.y+game.paddle.h && d.x >= game.paddle.x && d.x <= game.paddle.x+game.paddle.w) { game.paddle.dashCooldown = 0; d.life = 0; } }); } }
+        class GlitchStep extends Gadget { constructor() { super("Glitch Step", "Balls have a 1% chance every frame to jump 15px forward instantly.", 5); } onUpdate(ball, dt) { if(Math.random() < 0.01 * this.stacks) { ball.x += ball.vx * 0.05; ball.y += ball.vy * 0.05; } } }
+        class Wireframe extends Gadget { constructor() { super("Wireframe", "While the paddle is actively dashing, ALL bricks take double damage.", 5); } onBrickHit(ball, brick) { if(game.paddle.dashTime > 0) { game.damageBrick(brick, 1 * this.stacks); } } }
+        class BitFlip extends Gadget { constructor() { super("Bit Flip", "Wall hits have a 5% chance per stack to entirely swap the ball's X and Y velocities.", 5); } onWallHit(ball) { if(Math.random() < 0.05 * this.stacks) { let temp = ball.vx; ball.vx = ball.vy; ball.vy = temp; } } }
+        class Rootkit extends Gadget { constructor() { super("Rootkit", "Brick hits have a chance to infect and deal 1 damage to all 4 adjacent neighbors.", 5); } onBrickHit(ball, brick) { if(Math.random() < 0.1 * this.stacks) { game.bricks.forEach(b => { if(b.active && Math.abs(b.x - brick.x) <= 25 && Math.abs(b.y - brick.y) <= 15) game.damageBrick(b, 1); }); } } }
+        class LogicBomb extends Gadget { constructor() { super("Logic Bomb", "Reaching a Combo of 10 triggers a massive explosion at the 10th brick.", 5); } onBrickHit(ball, brick) { if(game.combo === 10 && this.stacks > 0) { game.getClosestBricks(brick.x, brick.y, 8, 120).forEach(b => game.damageBrick(b, 2)); game.addLightning(brick.x, brick.y, brick.x, brick.y-50, '#34d399'); game.flash = 0.4; } } }
+
+        // MISSING CLASSES RESTORED BELOW
+        class Overvolt extends Gadget { constructor() { super("Overvolt", "Balls infinitely gain speed over time, resetting safely back to normal on paddle hit.", 5); } onUpdate(ball, dt) { ball.vx *= (1 + 0.1 * dt * this.stacks); ball.vy *= (1 + 0.1 * dt * this.stacks); } onPaddleHit(ball, paddle) { let speed = Math.max(0.001, Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy)); if(speed > 400) { ball.vx = (ball.vx/speed)*400; ball.vy = (ball.vy/speed)*400; } } }
+        class TerraFirma extends Gadget { constructor() { super("Terra Firma", "The lowest active row of bricks takes double damage from all impacts.", 5); } onBrickHit(ball, brick) { let active = game.bricks.filter(b=>b.active); if(active.length>0) { let maxY = Math.max(...active.map(b=>b.y)); if(brick.y === maxY) game.damageBrick(brick, 1 * this.stacks); } } }
+        class AeroBlast extends Gadget { constructor() { super("Aero Blast", "Paddle hits inject a massive burst of upward vertical velocity.", 5); } onPaddleHit(ball, paddle) { ball.vy -= 100 * this.stacks; } }
+        class AquaShield extends Gadget { constructor() { super("Aqua Shield", "Creates a persistent holographic water shield at the bottom of the screen (1-use).", 1); this.used = false; } onUpdate(ball, dt) { if(!this.used && ball.y > GAME_HEIGHT - 5) { ball.vy *= -1; this.used = true; game.addLightning(0, GAME_HEIGHT-5, GAME_WIDTH, GAME_HEIGHT-5, '#3b82f6'); } } }
+        class IonSurge extends Gadget { constructor() { super("Ion Surge", "Constant tiny lightning links zap between all active balls, damaging bricks between them.", 5); } onUpdate(ball, dt) { game.activeBalls.forEach(other => { if(ball !== other && Math.random() < 0.05 * this.stacks) { game.addLightning(ball.x, ball.y, other.x, other.y, '#60a5fa'); game.bricks.forEach(b => { if(b.active && b.x > Math.min(ball.x, other.x) && b.x < Math.max(ball.x, other.x) && b.y > Math.min(ball.y, other.y) && b.y < Math.max(ball.y, other.y)) game.damageBrick(b, 1); }); } }); } }
+        class Entropy extends Gadget { constructor() { super("Entropy", "Randomly shifts ball speed by +/- 10% on every single wall bounce.", 5); } onWallHit(ball) { let shift = 1.0 + (Math.random() * 0.2 - 0.1) * this.stacks; ball.vx *= shift; ball.vy *= shift; } }
+        class Equilibrium extends Gadget { constructor() { super("Equilibrium", "Gently normalizes the speed of all active balls towards the average.", 5); } onUpdate(ball, dt) { if(game.activeBalls.length > 1) { let avgSpeed = game.activeBalls.reduce((sum, b) => sum + Math.sqrt(b.vx*b.vx + b.vy*b.vy), 0) / game.activeBalls.length; let mySpeed = Math.max(0.001, Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy)); let correction = (avgSpeed - mySpeed) * 0.5 * dt * this.stacks; ball.vx += (ball.vx/mySpeed)*correction; ball.vy += (ball.vy/mySpeed)*correction; } } }
+        class SingularityWhip extends Gadget { constructor() { super("Singularity Whip", "Wall hits pull the absolute closest piece of visual debris directly to the ball.", 5); } onWallHit(ball) { if(game.debris.length > 0 && Math.random() < 0.2 * this.stacks) { let closest = game.debris.reduce((a, b) => (Math.pow(a.x - ball.x, 2) + Math.pow(a.y - ball.y, 2)) < (Math.pow(b.x - ball.x, 2) + Math.pow(b.y - ball.y, 2)) ? a : b); closest.x = ball.x; closest.y = ball.y; closest.lethal = true; } } }
+        class TachyonField extends Gadget { constructor() { super("Tachyon Field", "Dashing makes the paddle temporarily 50% wider.", 5); } onUpdate(ball, dt) { game.paddle.w = game.paddle.dashTime > 0 ? 64 + (32 * this.stacks) : 64; } }
+        class WarpCore extends Gadget { constructor() { super("WarpCore", "Balls hitting the bottom wall have a 10% chance to warp to the top instead of dying.", 5); } onUpdate(ball, dt) { if(ball.y > GAME_HEIGHT + 5 && Math.random() < 0.1 * this.stacks) { ball.y = 10; ball.vy = Math.abs(ball.vy); game.addLightning(ball.x, GAME_HEIGHT, ball.x, 10, '#d946ef'); } } }
+        class MirrorMatch extends Gadget { constructor() { super("Mirror Match", "Spawns a purely visual fake ball mirrored on the X axis to distract and occasionally damage.", 5); } onUpdate(ball, dt) { if(Math.random() < 0.05 * this.stacks) { let mirrorX = GAME_WIDTH - ball.x; let p = game.particlePool.get(); p.x = mirrorX; p.y = ball.y; p.vx=0; p.vy=0; p.life=0.1; p.maxLife=0.1; p.color='#c084fc'; p.size=4; game.particles.push(p); game.bricks.forEach(b => { if(b.active && Math.abs(b.x - mirrorX) < 10 && Math.abs(b.y - ball.y) < 10) game.damageBrick(b,1); }); } } }
+        class Phalanx extends Gadget { constructor() { super("Phalanx", "2% chance per stack to spawn 3 micro-balls in a shotgun spread on paddle hit.", 5); } onPaddleHit(ball, paddle) { if(Math.random() < 0.02 * this.stacks) { for(let i=-1; i<=1; i++) { let mb = game.ballPool.get(); mb.x = paddle.x + paddle.w/2; mb.y = paddle.y - 5; mb.vx = i * 100; mb.vy = -200; mb.r = 2; mb.ghost = true; mb.color = '#38bdf8'; game.activeBalls.push(mb); } } } }
+        class OmegaProtocol extends Gadget { constructor() { super("Omega Protocol", "When exactly at 1 Life, all balls deal double damage and leave red trails.", 5); } onBrickHit(ball, brick) { if(game.lives === 1) game.damageBrick(brick, 1 * this.stacks); } onUpdate(ball, dt) { if(game.lives === 1 && Math.random() < 0.2) { let p = game.particlePool.get(); p.x = ball.x; p.y = ball.y; p.vx = 0; p.vy = 0; p.life = 0.2; p.maxLife = 0.2; p.color = '#ef4444'; p.size = 3; game.particles.push(p); } } }
+        class Starforge extends Gadget { constructor() { super("Starforge", "Wall hits spawn a stationary star trap that heavily damages any bricks it touches.", 5); } onWallHit(ball) { if(Math.random() < 0.1 * this.stacks) { let s = game.ballPool.get(); s.x = ball.x; s.y = ball.y; s.vx = 0; s.vy = 0; s.r = 8; s.ghost = true; s.color = '#facc15'; game.activeBalls.push(s); setTimeout(() => s.y = GAME_HEIGHT + 100, 2000); } } }
+        class NebulaWeaver extends Gadget { constructor() { super("Nebula Weaver", "Paddle hits leave a damaging nebula cloud stationary at the paddle's impact point.", 5); } onPaddleHit(ball, paddle) { if(Math.random() < 0.2 * this.stacks) { let cloudX = paddle.x + paddle.w/2, cloudY = paddle.y - 20; game.bricks.forEach(b => { if(b.active && Math.abs(b.x - cloudX) < 40 && Math.abs(b.y - cloudY) < 40) game.damageBrick(b, 1); }); game.addLightning(cloudX-20, cloudY, cloudX+20, cloudY, '#c084fc'); } } }
+        class CosmicRay extends Gadget { constructor() { super("Cosmic Ray", "Maintains a constant vertical damage laser perfectly locked to the center of the screen.", 5); } onUpdate(ball, dt) { if(Math.random() < 0.1 * this.stacks) { let cx = GAME_WIDTH / 2; game.addLightning(cx, 0, cx, GAME_HEIGHT, '#818cf8'); game.bricks.forEach(b => { if(b.active && Math.abs(b.x + b.w/2 - cx) < 10) game.damageBrick(b, 1); }); } } }
+        class VoidRift extends Gadget { constructor() { super("Void Rift", "Top ceiling hits have a chance to instantly suck all active balls to the top center.", 5); } onWallHit(ball) { if(ball.y < 10 && Math.random() < 0.1 * this.stacks) { game.activeBalls.forEach(b => { b.x = GAME_WIDTH/2; b.y = 15; b.vx = (Math.random()-0.5)*200; b.vy = 100; game.addLightning(b.x, b.y, GAME_WIDTH/2, 0, '#000'); }); game.flash = 0.3; } } }
+        class StellarWind extends Gadget { constructor() { super("Stellar Wind", "Constantly applies a gentle sweeping horizontal wind to all balls and debris.", 5); this.wind = 50; } onUpdate(ball, dt) { ball.vx += this.wind * dt * this.stacks; if(Math.random() < 0.01) this.wind *= -1; game.debris.forEach(d => d.vx += this.wind * dt * this.stacks); } }
+        class QuarkDrive extends Gadget { constructor() { super("Quark Drive", "Balls traveling above 400 speed leave a hyper-damaging micro-trail.", 5); } onUpdate(ball, dt) { let speed = Math.max(0.001, Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy)); if(speed > 400 && Math.random() < 0.2 * this.stacks) { game.bricks.forEach(b => { if(b.active && Math.abs(b.x - ball.x) < 20 && Math.abs(b.y - ball.y) < 20) game.damageBrick(b, 1); }); } } }
+        class GalacticForge extends Gadget { constructor() { super("Galactic Forge", "Clearing a level grants +1000 score multiplied by the number of active balls saved.", 5); } }
+        class AstralProject extends Gadget { constructor() { super("Astral Project", "Clone holographic paddle mirroring movements further up screen.", 5); } onUpdate(ball, dt) { let hY = GAME_HEIGHT * 0.3; if(ball.y >= hY && ball.y <= hY + 8 && ball.vy > 0 && ball.x >= game.paddle.x && ball.x <= game.paddle.x + game.paddle.w) { ball.vy *= -1; game.addLightning(ball.x, ball.y, ball.x, ball.y + 40, '#a855f7'); } } }
+        class ZeroGravity extends Gadget { constructor() { super("Zero Gravity", "Gravity on debris is disabled; they drift and deal damage.", 5); } onUpdate(ball, dt) { game.debris.forEach(d => { d.vy -= 500 * dt; d.lethal = true; }); } }
+        class QuantumEntangler extends Gadget { constructor() { super("Quantum Entangler", "If multiple balls exist, their speeds synchronize to the fastest one.", 5); } onUpdate(ball, dt) { if (game.activeBalls.length > 1) { let maxSpeed = Math.max(...game.activeBalls.map(b => Math.sqrt(b.vx*b.vx + b.vy*b.vy))); let speed = Math.max(0.001, Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy)); if (speed < maxSpeed) { ball.vx += (ball.vx/speed) * (maxSpeed - speed) * dt * this.stacks; ball.vy += (ball.vy/speed) * (maxSpeed - speed) * dt * this.stacks; } } } }
+        class PaddleCrawler extends Gadget { constructor() { super("Paddle Crawler", "10% chance per stack on paddle hit to unleash a homing digital centipede that slithers through the grid, rapidly devouring bricks.", 5); } onPaddleHit(ball, paddle) { if(Math.random() < 0.1 * this.stacks) { game.crawlers.push({ x: paddle.x + paddle.w/2, y: paddle.y - 10, vx: (Math.random() - 0.5) * 400, vy: -250, life: 3.0 + (0.5 * this.stacks), history: [] }); game.spawnText(paddle.x + paddle.w/2, paddle.y - 10, "CRAWLER OUT!", '#00ff66'); } } }
+
+
+        // ==========================================
+        // 5. MASTER GAME CONTROLLER
+        // ==========================================
+        const game = {
+            canvas: document.getElementById('gameCanvas'),
+            ctx: document.getElementById('gameCanvas').getContext('2d', { alpha: false }),
+            
+            state: 'MENU', 
+            level: 1,
+            score: 0,
+            combo: 0,
+            maxCombo: 0,
+            lives: 3,
+            lastTime: 0,
+            hitStop: 0,
+            trauma: 0,
+            flash: 0, 
+            infoTimeout: null,
+            activeInfoGadget: null,
+            
+            paddle: new Paddle(),
+            bricks: [],
+            activeBalls: [],
+            particles: [],
+            debris: [],
+            lightningLines: [],
+            floatingTexts: [],
+            stars: [],
+            crawlers: [],
+            
+            _lastScore: -1, _lastLives: -1, _lastBalls: -1, _lastCombo: -1,
+
+            registry: [
+                new MitosisChip(), new PlasmaTrail(), new TeslaCoil(), new GravitonCore(), new ShockwaveRing(),
+                new Railgun(), new ClusterBomb(), new TeslaShield(), new PlasmaNova(), new CyberStrike(),
+                new Starfall(), new ChainLightning(), new Earthquake(), new MeteorShower(), new SuperhotBall(),
+                new LaserCannon(), new MeteorStrike(), new GravityWell(), new PrismBurst(), new PhantomStrike(),
+                new EMPBlast(), new VoidEater(), new WormholeDash(), new PaddleCannon(), new QuasarWave(), 
+                new GlitchRift(), new FractalSplit(), new SniperRifle(), new ScatterShot(), new ZephyrDash(), 
+                new StasisField(), new MagmaCore(), new EchoStrike(), new Tornado(), new CometTail(), 
+                new PrismaticLaser(), new BlackHole(), new RippleEffect(), new PhaseShift(), new Supernova(), 
+                new KineticTether(), new GammaRay(), new PaintSplash(), new QuantumEntanglement(), new RadiantAura(), 
+                new Hyperdrive(), new SporeColony(), new Singularity(), new FinalFlash(), new TimeWarp(), 
+                new AegisShield(), new OrbitalStrike(), new MirrorImage(), new CryoBlast(), new OmegaBeam(), 
+                new LifeBringer(), new OrbitalDrones(), new Polymorph(), new DiscoInferno(), new TimeBomb(), 
+                new ComboMaster(), new Starweaver(), new VoidWalker(), new PlasmaBurst(), new ShockwaveDash(),
+                new GravityAnchor(), new NeonRicochet(), new PhantomBlade(), new CyberNet(), new ChronoSurge(),
+                new MagmaPlume(), new CryoAura(), new VoltWhip(), new AstroStrike(), new NanoSwarm(),
+                new GlitchStep(), new Wireframe(), new BitFlip(), new Rootkit(), new LogicBomb(),
+                new Overvolt(), new TerraFirma(), new AeroBlast(), new AquaShield(), new IonSurge(),
+                new Entropy(), new Equilibrium(), new SingularityWhip(), new TachyonField(), new WarpCore(),
+                new MirrorMatch(), new Phalanx(), new OmegaProtocol(), new Starforge(), new NebulaWeaver(),
+                new CosmicRay(), new VoidRift(), new StellarWind(), new QuarkDrive(), new GalacticForge(),
+                new AstralProject(), new ZeroGravity(), new QuantumEntangler(), new PaddleCrawler()
+            ],
+            
+            ballPool: null, particlePool: null, debrisPool: null, textPool: null,
+            input: { left: false, right: false, dash: false, mouseX: null },
+
+            init() {
+                this.ballPool = new ObjectPool(
+                    () => ({ x:0, y:0, vx:0, vy:0, r:3.5, active:false, color: PALETTE.ball, ghost: false, electrified: 0, frozen: false, pierce: false, polar: false, heavy: false }),
+                    (b) => { b.active = true; b.r = 3.5; b.color = PALETTE.ball; b.ghost = false; b.electrified = 0; b.frozen = false; b.pierce = false; b.polar = false; b.heavy = false; }
+                );
+                this.particlePool = new ObjectPool(
+                    () => ({ x:0, y:0, vx:0, vy:0, life:1, maxLife:1, color:'#fff', size:2 }),
+                    (p) => { p.life = 1; }
+                );
+                this.debrisPool = new ObjectPool(
+                    () => ({ x:0, y:0, vx:0, vy:0, rv:0, angle:0, life:1, color:'#fff', size:3, lethal: false, binary: false }),
+                    (d) => { d.life = 1; d.angle = Math.random() * Math.PI * 2; d.lethal = false; d.binary = false; }
+                );
+                this.textPool = new ObjectPool(
+                    () => ({ x:0, y:0, text:"", life:1, maxLife:1, color:'#ffea00' }),
+                    (t) => { t.life = 1; }
+                );
+
+                this.stars = Array.from({length: 40}, () => ({
+                    x: Math.random() * GAME_WIDTH,
+                    y: Math.random() * GAME_HEIGHT,
+                    speed: 2 + Math.random() * 15,
+                    size: Math.random() * 1.5
+                }));
+
+                this.bindInputs();
+                this.updateUI();
+                this.updateScoreUI();
+                
+                requestAnimationFrame(t => this.loop(t));
+            },
+
+            bindInputs() {
+                window.addEventListener('keydown', e => {
+                    if (this.state !== 'PLAYING') return;
+                    if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.input.left = true;
+                    if (e.code === 'ArrowRight' || e.code === 'KeyD') this.input.right = true;
+                    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.input.dash = true;
+                });
+                
+                window.addEventListener('keyup', e => {
+                    if (this.state !== 'PLAYING') return;
+                    if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.input.left = false;
+                    if (e.code === 'ArrowRight' || e.code === 'KeyD') this.input.right = false;
+                    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.input.dash = false;
+                });
+
+                const updatePointer = (clientX) => {
+                    if (this.state !== 'PLAYING') return;
+                    let rect = this.canvas.getBoundingClientRect();
+                    let scaleX = this.canvas.width / rect.width;
+                    this.input.mouseX = (clientX - rect.left) * scaleX;
+                };
+
+                window.addEventListener('mousemove', e => updatePointer(e.clientX));
+                window.addEventListener('touchstart', e => { if (e.touches.length > 0) updatePointer(e.touches[0].clientX); }, { passive: true });
+                window.addEventListener('touchmove', e => { if (e.touches.length > 0) updatePointer(e.touches[0].clientX); }, { passive: true });
+
+                document.getElementById('start-btn').addEventListener('pointerdown', () => this.startGame());
+                document.getElementById('restart-btn').addEventListener('pointerdown', () => this.startGame());
+                
+                document.getElementById('audio-toggle').addEventListener('pointerdown', (e) => {
+                    e.stopPropagation();
+                    sfx.enabled = !sfx.enabled;
+                    document.getElementById('audio-toggle').innerText = `SOUND: ${sfx.enabled ? 'ON' : 'OFF'}`;
+                });
+            },
+
+            startGame() {
+                sfx.init();
+                this.score = 0;
+                this.combo = 0;
+                this.maxCombo = 0;
+                this.level = 1;
+                this.lives = 3;
+                this.paddle = new Paddle(); 
+                this.registry.forEach(r => r.stacks = 0);
+
+                const randomIndex = Math.floor(Math.random() * this.registry.length);
+                this.registry[randomIndex].stacks = 1;
+
+                this.hideScreens();
+                this.state = 'PLAYING';
+                this.loadLevel();
+            },
+
+            getGadget(name) { return this.registry.find(g => g.name === name); },
+
+            hideScreens() {
+                document.getElementById('menu-screen').classList.add('hidden');
+                document.getElementById('choice-screen').classList.add('hidden');
+                document.getElementById('gameover-screen').classList.add('hidden');
+            },
+
+            loadLevel() {
+                this.bricks = [];
+                this.activeBalls.forEach(b => this.ballPool.release(b));
+                this.activeBalls = [];
+                this.particles.forEach(p => this.particlePool.release(p));
+                this.particles = [];
+                this.debris.forEach(d => this.debrisPool.release(d));
+                this.debris = [];
+                this.floatingTexts.forEach(t => this.textPool.release(t));
+                this.floatingTexts = [];
+                this.crawlers = [];
+                this.combo = 0;
+
+                const cols = 21;
+                const rows = 6 + clamp(Math.floor(this.level / 2), 0, 6); 
+                const startX = 25;
+                const startY = 30;
+                const paddingX = 2;
+                const paddingY = 2;
+
+                const patternType = Math.floor(Math.random() * 5); 
+
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        let skip = false;
+                        
+                        if (patternType === 1 && (r + c) % 2 === 0) skip = true;
+                        if (patternType === 2 && Math.abs(c - Math.floor(cols/2)) > r + 1) skip = true;
+                        if (patternType === 3 && c % 2 !== 0) skip = true;
+                        if (patternType === 4 && r > 1 && r < rows-2 && c > 2 && c < cols-3) skip = true;
+
+                        if (!skip) {
+                            let rowHp = 1 + Math.floor((rows - r) / 3) + Math.floor(this.level / 5);
+                            let maxHp = clamp(rowHp, 1, 4);
+                            let b = new Brick(startX + c * (18 + paddingX), startY + r * (10 + paddingY), maxHp);
+                            this.bricks.push(b);
+                        }
+                    }
+                }
+                
+                if(this.bricks.length < 15) {
+                    this.loadLevel(); 
+                    return;
+                }
+
+                this.spawnBall(GAME_WIDTH / 2, GAME_HEIGHT - 35, 140, -180);
+                this.updateUI();
+            },
+
+            spawnBall(x, y, vx, vy) {
+                let b = this.ballPool.get();
+                b.x = x; b.y = y; b.vx = vx; b.vy = vy;
+                this.activeBalls.push(b);
+            },
+
+            addTrauma(amount) { this.trauma = clamp(this.trauma + amount, 0, 1.0); },
+            triggerHitStop(frames) { this.hitStop = frames; },
+
+            spawnDebris(x, y, color) {
+                let count = 4 + Math.floor(Math.random() * 6);
+                for (let i = 0; i < count; i++) {
+                    let d = this.debrisPool.get();
+                    d.x = x; d.y = y;
+                    d.vx = (Math.random() - 0.5) * 180;
+                    d.vy = (Math.random() - 1.0) * 160; 
+                    d.rv = (Math.random() - 0.5) * 12;
+                    d.color = color;
+                    d.size = 2.0 + Math.random() * 2;
+                    d.life = 0.4 + Math.random() * 0.4;
+                    this.debris.push(d);
+                }
+            },
+
+            spawnText(x, y, text, color = '#ffea00') {
+                let t = this.textPool.get();
+                t.x = x; t.y = y; t.text = text; t.color = color;
+                this.floatingTexts.push(t);
+            },
+
+            addLightning(x1, y1, x2, y2, color = PALETTE.tesla) {
+                this.lightningLines.push({ x1, y1, x2, y2, color });
+            },
+
+            getClosestBricks(x, y, count, range) {
+                let rangeSq = range * range;
+                return this.bricks
+                    .filter(b => b.active)
+                    .map(b => {
+                        let bx = b.x + b.w / 2;
+                        let by = b.y + b.h / 2;
+                        let distSq = (bx - x) ** 2 + (by - y) ** 2;
+                        return { brick: b, distSq };
+                    })
+                    .filter(item => item.distSq <= rangeSq)
+                    .sort((a, b) => a.distSq - b.distSq)
+                    .slice(0, count)
+                    .map(item => item.brick);
+            },
+
+            damageBrick(brick, amt) {
+                if (!brick.active || this.state !== 'PLAYING') return;
+                
+                let destroyed = brick.damage(amt);
+                this.addTrauma(0.12);
+                this.combo++;
+                if(this.combo > this.maxCombo) this.maxCombo = this.combo;
+                
+                if (destroyed) {
+                    let pts = brick.maxHp * 150 + (this.combo * 10);
+                    this.score += pts;
+                    this.spawnDebris(brick.x + brick.w / 2, brick.y + brick.h / 2, brick.color || '#fff');
+                    this.spawnText(brick.x + brick.w / 2, brick.y, `+${pts}`, '#fff');
+                    sfx.sndBrickDestroy();
+                    this.triggerHitStop(2); 
+                    this.checkLevelProgress();
+                } else {
+                    let pts = 25 + (this.combo * 5);
+                    this.score += pts;
+                    this.spawnText(brick.x + brick.w / 2, brick.y, `+${pts}`, '#ffea00');
+                    sfx.sndBrickHit();
+                }
+            },
+
+            checkLevelProgress() {
+                if (this.state !== 'PLAYING') return; 
+                let activeBricks = this.bricks.filter(b => b.active).length;
+                if (activeBricks === 0) {
+                    let forge = this.getGadget("Galactic Forge");
+                    if(forge && forge.stacks > 0) {
+                        this.score += 1000 * this.activeBalls.length * forge.stacks;
+                        this.spawnText(GAME_WIDTH/2, GAME_HEIGHT/2 + 50, "GALACTIC FORGE BONUS", '#ffea00');
+                    }
+                    this.state = 'LEVEL_CLEAR';
+                    sfx.sndUpgrade();
+                    setTimeout(() => {
+                        this.state = 'CHOICE';
+                        this.presentUpgrades();
+                    }, 1800); 
+                }
+            },
+
+            presentUpgrades() {
+                const choiceScreen = document.getElementById('choice-screen');
+                choiceScreen.classList.remove('hidden');
+                
+                const container = document.getElementById('choice-container');
+                container.innerHTML = '';
+
+                let activeGadgets = this.registry.filter(g => g.stacks > 0);
+                let available = [];
+
+                if (activeGadgets.length >= MAX_UNIQUE_GADGETS) {
+                    available = activeGadgets.filter(g => g.stacks < g.maxStacks);
+                    document.getElementById('draft-subtitle').innerText = `SYSTEM CAPPED (${MAX_UNIQUE_GADGETS}/${MAX_UNIQUE_GADGETS}). UPGRADE EXISTING MODULES:`;
+                    document.getElementById('draft-subtitle').style.color = '#ff0055';
+                } else {
+                    available = this.registry.filter(g => g.stacks < g.maxStacks);
+                    document.getElementById('draft-subtitle').innerText = `SELECT A SUB-ROUTING UPGRADE CARD (${activeGadgets.length}/${MAX_UNIQUE_GADGETS} SLOTS):`;
+                    document.getElementById('draft-subtitle').style.color = '#00ffee';
+                }
+
+                let shuffled = [...available].sort(() => 0.5 - Math.random());
+                let selected = shuffled.slice(0, 3);
+
+                if (selected.length === 0) {
+                    let card = document.createElement('div');
+                    card.className = 'choice-card';
+                    card.style.borderColor = '#00ff66';
+                    card.innerHTML = `
+                        <div class="choice-title" style="color:#00ff66">System Optimizer</div>
+                        <div class="choice-desc">All subsystems maximized. Restore 1 Life and gain 10,000 Score.</div>
+                        <div class="choice-stack">Consumable</div>
+                    `;
+                    card.addEventListener('pointerdown', (e) => {
+                        e.stopPropagation();
+                        if(this.lives < 9) this.lives++;
+                        this.score += 10000;
+                        this.level++;
+                        choiceScreen.classList.add('hidden');
+                        this.state = 'PLAYING';
+                        this.loadLevel();
+                    });
+                    container.appendChild(card);
+                    return;
+                }
+
+                selected.forEach(gadget => {
+                    let card = document.createElement('div');
+                    card.className = 'choice-card';
+                    card.innerHTML = `
+                        <div class="choice-title">${gadget.name}</div>
+                        <div class="choice-desc">${gadget.desc}</div>
+                        <div class="choice-stack">Stacks: ${gadget.stacks} / ${gadget.maxStacks}</div>
+                    `;
+                    card.addEventListener('pointerdown', (e) => {
+                        e.stopPropagation();
+                        if (gadget.stacks < gadget.maxStacks) {
+                            gadget.stacks++;
+                        }
+                        this.level++;
+                        choiceScreen.classList.add('hidden');
+                        this.state = 'PLAYING';
+                        this.loadLevel();
+                    });
+                    container.appendChild(card);
+                });
+            },
+
+            handleGameOver() {
+                if (this.state !== 'PLAYING') return;
+                sfx.sndGameOver();
+                this.state = 'GAMEOVER';
+                
+                document.getElementById('final-level').innerText = this.level;
+                document.getElementById('final-score').innerText = Math.floor(this.score).toString().padStart(6, '0');
+                document.getElementById('final-combo').innerText = this.maxCombo;
+                document.getElementById('gameover-screen').classList.remove('hidden');
+            },
+
+            updateScoreUI() {
+                let sc = Math.floor(this.score);
+                if(this._lastScore !== sc) {
+                    document.getElementById('scoreDisplay').innerText = `SCORE: ${sc.toString().padStart(6, '0')}`;
+                    this._lastScore = sc;
+                }
+                if(this._lastLives !== this.lives) {
+                    document.getElementById('livesDisplay').innerText = `LIVES: ${this.lives}`;
+                    this._lastLives = this.lives;
+                }
+                if(this._lastBalls !== this.activeBalls.length) {
+                    document.getElementById('ballDisplay').innerText = `BALLS: ${this.activeBalls.length}`;
+                    this._lastBalls = this.activeBalls.length;
+                }
+                if(this._lastCombo !== this.combo) {
+                    document.getElementById('comboDisplay').innerText = `COMBO: x${this.combo}`;
+                    this._lastCombo = this.combo;
+                }
+            },
+
+            updateUI() {
+                const gList = document.getElementById('gadgetList');
+                gList.innerHTML = '';
+                this.registry.forEach(g => {
+                    if (g.stacks > 0) {
+                        let li = document.createElement('li');
+                        li.className = 'gadget-item';
+                        if(this.activeInfoGadget === g) li.className += ' selected';
+                        li.innerText = `${g.name} x${g.stacks}`;
+                        
+                        li.addEventListener('pointerdown', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            this.showGadgetInfo(g);
+                        });
+                        
+                        gList.appendChild(li);
+                    }
+                });
+            },
+
+            showGadgetInfo(gadget) {
+                this.activeInfoGadget = gadget;
+                this.updateUI(); 
+                const infoBox = document.getElementById('gadget-info');
+                document.getElementById('info-title').innerText = `${gadget.name} [x${gadget.stacks}]`;
+                document.getElementById('info-desc').innerText = gadget.desc;
+                infoBox.style.display = 'flex';
+                
+                if (this.infoTimeout) clearTimeout(this.infoTimeout);
+                
+                this.infoTimeout = setTimeout(() => {
+                    infoBox.style.display = 'none';
+                    this.activeInfoGadget = null;
+                    this.updateUI();
+                }, 4000); 
+            },
+
+            loop(time) {
+                let dt = (time - this.lastTime) / 1000;
+                this.lastTime = time;
+                if (dt > 0.1) dt = 0.1; 
+
+                if (this.state === 'PLAYING' || this.state === 'LEVEL_CLEAR') {
+                    if (this.hitStop > 0) {
+                        this.hitStop--;
+                    } else {
+                        this.update(dt);
+                    }
+                    this.updateScoreUI();
+                }
+                
+                this.draw();
+                requestAnimationFrame(t => this.loop(t));
+            },
+
+            update(dt) {
+                this.stars.forEach(s => {
+                    s.y += s.speed * dt;
+                    s.x -= this.paddle.vx * 0.05 * dt; 
+                    if(s.x < 0) s.x = GAME_WIDTH;
+                    if(s.x > GAME_WIDTH) s.x = 0;
+                    if(s.y > GAME_HEIGHT) { s.y = 0; s.x = Math.random() * GAME_WIDTH; }
+                });
+
+                if (this.state === 'LEVEL_CLEAR') {
+                    let px = this.paddle.x + this.paddle.w/2;
+                    let py = this.paddle.y;
+                    for (let i = this.activeBalls.length - 1; i >= 0; i--) {
+                        let ball = this.activeBalls[i];
+                        let dx = px - ball.x, dy = py - ball.y;
+                        let distSq = dx*dx + dy*dy;
+                        if(distSq < 100) {
+                            this.ballPool.release(ball);
+                            this.activeBalls.splice(i, 1);
+                        } else {
+                            let dist = Math.sqrt(distSq);
+                            ball.vx += (dx/dist)*800*dt;
+                            ball.vy += (dy/dist)*800*dt;
+                            ball.x += ball.vx * dt;
+                            ball.y += ball.vy * dt;
+                        }
+                    }
+                    this.updateParticles(dt);
+                    return;
+                }
+
+                this.paddle.update(dt, this.input);
+                let activeGadgets = this.registry.filter(g => g.stacks > 0);
+
+                // --- CONSOLIDATED GLOBAL PASSIVE BUFFS ---
+                let slime = this.getGadget("Slime Mold");
+                if (slime && slime.stacks > 0) {
+                    slime.timer += dt;
+                    if (slime.timer > (2.0 / Math.max(1, slime.stacks))) {
+                        slime.timer = 0;
+                        let unslimed = this.bricks.filter(x => x.active && !x.slimed);
+                        if (unslimed.length > 0) unslimed[Math.floor(Math.random() * unslimed.length)].slimed = true;
+                    }
+                }
+
+                let virus = this.getGadget("Glitch Virus");
+                let tickVirus = false;
+                if (virus && virus.stacks > 0) {
+                    virus.timer += dt;
+                    if (virus.timer > 0.1) {
+                        tickVirus = true;
+                        virus.timer = 0;
+                    }
+                }
+
+                let leech = this.getGadget("Leech Spores");
+                let hasLeech = (leech && leech.stacks > 0);
+
+                this.bricks.forEach(b => {
+                    if (!b.active) return;
+                    
+                    if (b.slimed) {
+                        if (Math.random() < 0.05) this.spawnDebris(b.x+b.w/2, b.y+b.h, '#0f0');
+                        if (Math.random() < 0.01 * slime.stacks) this.damageBrick(b, 1);
+                    }
+
+                    if (b.infected > 0 && tickVirus) {
+                        b.infected -= 0.1;
+                        if (Math.random() < 0.3) {
+                            let p = this.particlePool.get();
+                            p.x = b.x + b.w/2; p.y = b.y + b.h/2;
+                            p.vx = 0; p.vy = 0; p.life = 0.2; p.maxLife = 0.2; p.color = '#fff'; p.size = 4;
+                            this.particles.push(p);
+                        }
+                        if (b.infected <= 0) {
+                            this.damageBrick(b, b.hp);
+                            this.getClosestBricks(b.x, b.y, 2, 40).forEach(nb => { if(!nb.infected) nb.infected = 2.0; });
+                        }
+                    }
+
+                    if (b.leeched > 0 && hasLeech) {
+                        if (Math.random() < 0.01 * leech.stacks) {
+                            this.damageBrick(b, 1);
+                            b.leeched--;
+                            this.addLightning(b.x+b.w/2, b.y+b.h/2, b.x+b.w/2, b.y-10, '#ff0055');
+                        }
+                    }
+                });
+                // --- END GLOBAL PASSIVE BUFFS ---
+
+                for (let i = this.activeBalls.length - 1; i >= 0; i--) {
+                    if (this.state !== 'PLAYING') return; 
+
+                    let ball = this.activeBalls[i];
+                    
+                    activeGadgets.forEach(g => g.onUpdate(ball, dt));
+
+                    if (Math.abs(ball.vy) < 35 && Math.abs(ball.vx) > 50) {
+                        ball.vy = ball.vy < 0 ? -35 : 35;
+                    }
+
+                    let speed = Math.max(0.001, Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy));
+                    const MAX_SPEED = 750;
+                    if(speed > MAX_SPEED) {
+                        ball.vx = (ball.vx / speed) * MAX_SPEED;
+                        ball.vy = (ball.vy / speed) * MAX_SPEED;
+                    }
+
+                    ball.x += ball.vx * dt;
+                    ball.y += ball.vy * dt;
+
+                    let hitWall = false;
+                    if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; hitWall = true; }
+                    if (ball.x + ball.r > GAME_WIDTH) { ball.x = GAME_WIDTH - ball.r; ball.vx *= -1; hitWall = true; }
+                    if (ball.y - ball.r < 0) { ball.y = ball.r; ball.vy *= -1; hitWall = true; }
+                    
+                    if (hitWall) {
+                        sfx.sndBrickHit();
+                        activeGadgets.forEach(g => g.onWallHit(ball));
+                    }
+
+                    if (ball.y > GAME_HEIGHT + 10) {
+                        this.ballPool.release(ball);
+                        this.activeBalls.splice(i, 1);
+                        if (this.activeBalls.length === 0 && this.state === 'PLAYING') {
+                            this.combo = 0; 
+                            if (this.lives > 0) {
+                                this.lives--;
+                                this.addTrauma(0.5);
+                                this.flash = 0.5;
+                                sfx.sndBrickDestroy();
+                                this.paddle.x = GAME_WIDTH / 2 - this.paddle.w / 2;
+                                this.paddle.dashTime = 0;
+                                this.paddle.dashCooldown = 0;
+                                this.spawnBall(GAME_WIDTH / 2, GAME_HEIGHT - 35, 140, -180);
+                                this.updateScoreUI();
+                            } else {
+                                this.handleGameOver();
+                            }
+                        }
+                        continue;
+                    }
+
+                    let pCol = circleAABB(ball.x, ball.y, ball.r, this.paddle.x, this.paddle.y, this.paddle.w, this.paddle.h);
+                    if (pCol.hit) {
+                        ball.x += pCol.nx * pCol.pen;
+                        ball.y += pCol.ny * pCol.pen;
+                        
+                        let hitLoc = (ball.x - (this.paddle.x + this.paddle.w / 2)) / (this.paddle.w / 2);
+                        ball.vx = hitLoc * 240;
+                        ball.vy = -Math.abs(ball.vy);
+                        
+                        let bSpeed = Math.max(0.001, Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy));
+                        if(bSpeed < 420) {
+                            ball.vx *= 1.04;
+                            ball.vy *= 1.04;
+                        }
+
+                        this.combo = 0; 
+                        sfx.sndPaddle();
+                        this.addTrauma(0.08);
+                        activeGadgets.forEach(g => g.onPaddleHit(ball, this.paddle));
+
+                        for (let j = 0; j < 3; j++) {
+                            let p = this.particlePool.get();
+                            p.x = ball.x; p.y = ball.y;
+                            p.vx = (Math.random() - 0.5) * 60; p.vy = (Math.random() - 1.0) * 60;
+                            p.life = 0.35; p.maxLife = 0.35; p.color = '#fff'; p.size = 1.5;
+                            this.particles.push(p);
+                        }
+                    }
+
+                    if (this.state !== 'PLAYING') return;
+
+                    let ghostHit = false;
+
+                    for (let b of this.bricks) {
+                        if (!b.active) continue;
+                        let bCol = circleAABB(ball.x, ball.y, ball.r, b.x, b.y, b.w, b.h);
+                        if (bCol.hit) {
+                            ball.x += bCol.nx * bCol.pen;
+                            ball.y += bCol.ny * bCol.pen;
+                            
+                            let dot = ball.vx * bCol.nx + ball.vy * bCol.ny;
+                            if (dot < 0) {
+                                ball.vx = ball.vx - 2 * dot * bCol.nx;
+                                ball.vy = ball.vy - 2 * dot * bCol.ny;
+                            }
+
+                            this.damageBrick(b, 1);
+                            if (ball.ghost) ghostHit = true;
+                            if (this.state !== 'PLAYING') return; 
+
+                            activeGadgets.forEach(g => g.onBrickHit(ball, b));
+                            break; 
+                        }
+                    }
+
+                    if (ghostHit) {
+                        ball.y = GAME_HEIGHT + 100; // Will be properly cleaned up next frame
+                    }
+                }
+
+                this.updateParticles(dt);
+            },
+
+            updateParticles(dt) {
+                // Crawler updates
+                for(let i = this.crawlers.length - 1; i >= 0; i--) {
+                    let c = this.crawlers[i];
+                    c.life -= dt;
+                    c.history.unshift({x: c.x, y: c.y});
+                    if(c.history.length > 20) c.history.pop(); 
+
+                    let targets = this.bricks.filter(b => b.active);
+                    if(targets.length > 0) {
+                        let closest = targets.reduce((a, b) => (Math.pow(a.x+a.w/2 - c.x, 2) + Math.pow(a.y+a.h/2 - c.y, 2)) < (Math.pow(b.x+b.w/2 - c.x, 2) + Math.pow(b.y+b.h/2 - c.y, 2)) ? a : b);
+                        let dx = closest.x+closest.w/2 - c.x;
+                        let dy = closest.y+closest.h/2 - c.y;
+                        let distSq = dx*dx + dy*dy;
+                        let dist = Math.max(1, Math.sqrt(distSq));
+                        c.vx += (dx/dist) * 1200 * dt;
+                        c.vy += (dy/dist) * 1200 * dt;
+                        
+                        let speed = Math.max(0.001, Math.sqrt(c.vx*c.vx + c.vy*c.vy));
+                        if(speed > 400) { c.vx = (c.vx/speed)*400; c.vy = (c.vy/speed)*400; }
+                    }
+
+                    c.x += c.vx * dt;
+                    c.y += c.vy * dt;
+
+                    if (c.x < 0) { c.x = 0; c.vx *= -1; }
+                    if (c.x > GAME_WIDTH) { c.x = GAME_WIDTH; c.vx *= -1; }
+                    if (c.y < 0) { c.y = 0; c.vy *= -1; }
+
+                    this.bricks.forEach(b => {
+                        if(b.active && c.x > b.x - 5 && c.x < b.x+b.w + 5 && c.y > b.y - 5 && c.y < b.y+b.h + 5) {
+                            this.damageBrick(b, 2);
+                            this.addLightning(c.x, c.y, c.x + (Math.random()-0.5)*30, c.y + (Math.random()-0.5)*30, '#00ff66');
+                            
+                            // JUICE: Segment Splitting! 
+                            if (Math.random() < 0.05 && this.crawlers.length < 12) {
+                                this.crawlers.push({
+                                    x: c.x,
+                                    y: c.y,
+                                    vx: -c.vx + (Math.random() - 0.5) * 100,
+                                    vy: -c.vy + (Math.random() - 0.5) * 100,
+                                    life: c.life * 0.7, // Shorter life for split offshoots
+                                    history: []
+                                });
+                                this.spawnText(c.x, c.y, "CRAWLER MITOSIS!", '#22c55e');
+                            }
+                        }
+                    });
+
+                    if(c.life <= 0) this.crawlers.splice(i, 1);
+                }
+
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    let p = this.particles[i];
+                    p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
+                    if (p.life <= 0) { this.particlePool.release(p); this.particles.splice(i, 1); }
+                }
+
+                for (let i = this.debris.length - 1; i >= 0; i--) {
+                    let d = this.debris[i];
+                    d.vy += 500 * dt; d.x += d.vx * dt; d.y += d.vy * dt; d.angle += d.rv * dt; d.life -= dt;
+                    
+                    if(d.binary && d.y >= game.paddle.y && d.y <= game.paddle.y + game.paddle.h && d.x >= game.paddle.x && d.x <= game.paddle.x + game.paddle.w) {
+                        d.life = 0; game.score += 500; game.spawnText(d.x, d.y, "+500", '#00ff66'); sfx.sndUpgrade();
+                    }
+
+                    if (d.lethal) {
+                        game.bricks.forEach(b => {
+                            if (b.active && d.x > b.x - 5 && d.x < b.x + b.w + 5 && d.y > b.y - 5 && d.y < b.y + b.h + 5) {
+                                game.damageBrick(b, 1);
+                                d.life = 0;
+                                game.addLightning(d.x, d.y, d.x + (Math.random()-0.5)*20, d.y + (Math.random()-0.5)*20, '#ff0055');
+                            }
+                        });
+                    }
+
+                    if (d.life <= 0 || d.y > GAME_HEIGHT) { this.debrisPool.release(d); this.debris.splice(i, 1); }
+                }
+
+                for(let i = this.floatingTexts.length - 1; i >= 0; i--) {
+                    let t = this.floatingTexts[i];
+                    t.y -= 40 * dt; t.life -= dt;
+                    if(t.life <= 0) { this.textPool.release(t); this.floatingTexts.splice(i, 1); }
+                }
+
+                if (this.trauma > 0) { this.trauma -= dt * 1.0; if (this.trauma < 0) this.trauma = 0; }
+                if (this.flash > 0) { this.flash -= dt * 2.0; if (this.flash < 0) this.flash = 0; }
+            },
+
+            draw() {
+                this.ctx.fillStyle = PALETTE.bg;
+                this.ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+                this.ctx.save();
+                
+                if (this.trauma > 0) {
+                    let intensity = this.trauma * this.trauma * 14;
+                    let dx = (Math.random() - 0.5) * intensity;
+                    let dy = (Math.random() - 0.5) * intensity;
+                    this.ctx.translate(dx, dy);
+                }
+
+                // Background Stars Layer
+                this.ctx.fillStyle = '#ffffff';
+                this.stars.forEach(s => {
+                    this.ctx.globalAlpha = 0.1 + (s.speed / 50); 
+                    this.ctx.fillRect(s.x, s.y, s.size, s.size);
+                });
+                this.ctx.globalAlpha = 1.0;
+
+                // Neon Grid Background Layer
+                this.ctx.strokeStyle = 'rgba(0, 255, 238, 0.03)';
+                this.ctx.lineWidth = 1;
+                for(let i=0; i<GAME_WIDTH; i+=25) {
+                    this.ctx.beginPath(); this.ctx.moveTo(i, 0); this.ctx.lineTo(i, GAME_HEIGHT); this.ctx.stroke();
+                }
+                for(let i=0; i<GAME_HEIGHT; i+=25) {
+                    this.ctx.beginPath(); this.ctx.moveTo(0, i); this.ctx.lineTo(GAME_WIDTH, i); this.ctx.stroke();
+                }
+
+                let astral = this.getGadget("Astral Project");
+                if (astral && astral.stacks > 0) {
+                    this.ctx.fillStyle = 'rgba(168, 85, 247, 0.4)';
+                    this.ctx.fillRect(this.paddle.x, GAME_HEIGHT * 0.3, this.paddle.w, this.paddle.h);
+                }
+
+                // Bricks Layer
+                this.bricks.forEach(b => b.draw(this.ctx));
+
+                // Lightning Effect Layer
+                if (this.lightningLines.length > 0) {
+                    this.lightningLines.forEach(l => {
+                        this.ctx.shadowBlur = 10;
+                        this.ctx.shadowColor = l.color;
+                        this.ctx.strokeStyle = l.color; this.ctx.lineWidth = 2; this.ctx.beginPath(); this.ctx.moveTo(l.x1, l.y1);
+                        
+                        let midX = (l.x1 + l.x2) / 2 + (Math.random() - 0.5) * 12;
+                        let midY = (l.y1 + l.y2) / 2 + (Math.random() - 0.5) * 12;
+                        
+                        this.ctx.lineTo(midX, midY);
+                        this.ctx.lineTo(l.x2, l.y2);
+                        this.ctx.stroke();
+
+                        this.ctx.strokeStyle = '#ffffff';
+                        this.ctx.lineWidth = 1;
+                        this.ctx.stroke();
+                        this.ctx.shadowBlur = 0; // reset
+                    });
+                    this.lightningLines = [];
+                }
+
+                // Additive blending for gorgeous glowing particle overlapping
+                this.ctx.globalCompositeOperation = 'lighter';
+                this.particles.forEach(p => {
+                    this.ctx.fillStyle = p.color;
+                    this.ctx.globalAlpha = clamp(p.life / p.maxLife, 0, 1.0);
+                    this.ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+                });
+                this.ctx.globalAlpha = 1.0;
+                this.ctx.globalCompositeOperation = 'source-over'; // Reset blend mode
+
+                // Debris Layer
+                this.debris.forEach(d => {
+                    this.ctx.save(); this.ctx.translate(d.x, d.y); this.ctx.rotate(d.angle); this.ctx.fillStyle = d.color;
+                    if(d.binary) {
+                        this.ctx.font = "8px 'Courier New'";
+                        this.ctx.fillText(Math.random() < 0.5 ? "1" : "0", 0, 0);
+                    } else {
+                        this.ctx.fillRect(-d.size/2, -d.size/2, d.size, d.size);
+                    }
+                    this.ctx.restore();
+                });
+
+                // Render Digital Centipedes (Paddle Crawlers)
+                if(this.crawlers && this.crawlers.length > 0) {
+                    this.ctx.shadowBlur = 15;
+                    this.ctx.shadowColor = '#00ff66';
+                    this.crawlers.forEach(c => {
+                        this.ctx.fillStyle = '#ffffff';
+                        this.ctx.beginPath(); this.ctx.arc(c.x, c.y, 5, 0, Math.PI*2); this.ctx.fill();
+                        
+                        // Draw slithering tail
+                        c.history.forEach((pos, idx) => {
+                            this.ctx.fillStyle = `rgba(0, 255, 102, ${1 - idx/20})`;
+                            this.ctx.beginPath(); this.ctx.arc(pos.x, pos.y, Math.max(1, 5 - (idx/3)), 0, Math.PI*2); this.ctx.fill();
+                        });
+                    });
+                    this.ctx.shadowBlur = 0;
+                }
+
+                // Balls Layer with Bloom
+                this.activeBalls.forEach(b => {
+                    this.ctx.fillStyle = b.color || PALETTE.ball;
+                    
+                    this.ctx.shadowBlur = 15;
+                    this.ctx.shadowColor = b.color || PALETTE.ball;
+                    
+                    // Outer glow bloom
+                    this.ctx.globalAlpha = 0.3;
+                    this.ctx.beginPath();
+                    this.ctx.arc(b.x, b.y, b.r + 2.5, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    
+                    // Solid core
+                    this.ctx.globalAlpha = 1.0;
+                    this.ctx.beginPath();
+                    this.ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    
+                    this.ctx.shadowBlur = 0;
+                });
+
+                // Paddle Layer
+                this.ctx.shadowBlur = 20;
+                this.ctx.shadowColor = this.paddle.color;
+                this.paddle.draw(this.ctx);
+                this.ctx.shadowBlur = 0;
+
+                // Floating Text Layer
+                this.ctx.font = "bold 12px 'Courier New'";
+                this.ctx.textAlign = "center";
+                this.floatingTexts.forEach(t => {
+                    this.ctx.fillStyle = t.color;
+                    this.ctx.globalAlpha = clamp(t.life / t.maxLife, 0, 1.0);
+                    this.ctx.fillText(t.text, t.x, t.y);
+                });
+                this.ctx.globalAlpha = 1.0;
+
+                // Level Cleared Overlay Text
+                if (this.state === 'LEVEL_CLEAR') {
+                    this.ctx.font = "bold 24px 'Courier New'";
+                    this.ctx.textAlign = "center";
+                    this.ctx.fillStyle = '#ffea00';
+                    this.ctx.fillText("SYSTEM PURGED", GAME_WIDTH/2, GAME_HEIGHT/2);
+                    this.ctx.font = "12px 'Courier New'";
+                    this.ctx.fillStyle = '#00ffee';
+                    this.ctx.fillText("PREPARING UPLINK...", GAME_WIDTH/2, GAME_HEIGHT/2 + 20);
+                }
+
+                // Dramatic cinematic screen flash
+                if (this.flash > 0) {
+                    this.ctx.fillStyle = `rgba(255, 255, 255, ${this.flash})`;
+                    this.ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+                }
+
+                this.ctx.restore();
+            }
+        };
+
+        window.onload = () => { game.init(); };
+    </script>
+</body>
+</html> <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Paddle Crawler</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: #030305;
+            overflow: hidden;
+            font-family: 'Courier New', Courier, monospace;
+            color: #fff;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #030305;
+        }
+
+        /* Authentic CRT Scanline Overlay */
+        #game-container::after {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 3px, 3px 100%;
+            z-index: 5;
+            pointer-events: none;
+            opacity: 0.4;
+        }
+
+        /* Scaled canvas for clean, pixelated low-res graphics */
+        #gameCanvas {
+            max-width: 100%;
+            max-height: 100%;
+            aspect-ratio: 16 / 9;
+            object-fit: contain;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            display: block;
+            border: 4px solid #1a1a2e;
+            box-shadow: 0 0 40px rgba(138, 43, 226, 0.5), 0 0 10px rgba(0, 255, 238, 0.3);
+            z-index: 1;
+        }
+
+        /* Immersive responsive UI layers */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Let touches pass through the empty areas */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-sizing: border-box;
+            z-index: 10;
+        }
+
+        /* Force UI elements to be clickable over the canvas */
+        .hud-top, .gadget-list, .btn, .choice-card, #audio-toggle {
+            pointer-events: auto !important;
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            text-transform: uppercase;
+            text-shadow: 2px 0px 0px #00ffee, -2px 0px 0px #ff0055;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .hud-bottom {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 5px;
+            text-shadow: 1px 1px 0px #000;
+        }
+
+        .gadget-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-size: 0.8rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .gadget-item {
+            background: rgba(138, 43, 226, 0.2);
+            border: 1px solid #8a2be2;
+            padding: 3px 8px;
+            border-radius: 4px;
+            box-shadow: 0 0 5px rgba(138, 43, 226, 0.5);
+            color: #00ffee;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s, background 0.1s;
+        }
+
+        .gadget-item:hover {
+            background: rgba(138, 43, 226, 0.5);
+            transform: scale(1.05);
+        }
+
+        .gadget-item.selected {
+            border-color: #ffea00;
+            box-shadow: 0 0 8px #ffea00;
+            color: #ffea00;
+            background: rgba(255, 234, 0, 0.25);
+        }
+
+        #gadget-info {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(10, 10, 20, 0.95);
+            border: 2px solid #ffea00;
+            padding: 12px;
+            border-radius: 6px;
+            max-width: 250px;
+            box-shadow: 0 0 15px rgba(255, 234, 0, 0.4);
+            display: none;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .info-title {
+            color: #ffea00;
+            font-weight: bold;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+        }
+
+        .info-desc {
+            color: #ddd;
+            font-size: 0.75rem;
+            line-height: 1.4;
+        }
+
+        /* Game State Screens */
+        .screen-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(5, 5, 10, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 30;
+            pointer-events: auto;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin: 0 0 10px 0;
+            text-shadow: 4px 0px 0px #00ffee, -4px 0px 0px #ff0055, 0 0 20px #ff0055;
+            letter-spacing: 4px;
+            animation: pulse 1.5s infinite alternate;
+        }
+
+        @keyframes pulse {
+            from { transform: scale(0.98); }
+            to { transform: scale(1.02); }
+        }
+
+        .subtitle {
+            font-size: 1rem;
+            color: #8a2be2;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 4px;
+            text-shadow: 0 0 10px #8a2be2;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #ff0055 0%, #8a2be2 100%);
+            border: 2px solid #00ffee;
+            color: #fff;
+            padding: 12px 30px;
+            font-size: 1.1rem;
+            font-family: inherit;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 0 15px rgba(255, 0, 85, 0.5);
+            transition: transform 0.1s, box-shadow 0.1s;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 25px #00ffee;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        /* Choice Grid */
+        .choice-grid {
+            display: flex;
+            gap: 20px;
+            max-width: 800px;
+            width: 100%;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .choice-card {
+            background: rgba(13, 13, 25, 0.9);
+            border: 2px solid #8a2be2;
+            padding: 15px;
+            border-radius: 8px;
+            width: 180px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .choice-card:hover {
+            border-color: #00ffee;
+            transform: translateY(-5px);
+            box-shadow: 0 0 20px rgba(0, 255, 238, 0.3);
+        }
+
+        .choice-title {
+            color: #ffea00;
+            font-size: 1rem;
+            font-weight: bold;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .choice-desc {
+            font-size: 0.75rem;
+            color: #bbb;
+            text-align: center;
+            line-height: 1.3;
+            margin-bottom: 12px;
+            flex-grow: 1;
+        }
+
+        .choice-stack {
+            font-size: 0.7rem;
+            color: #8a2be2;
+            text-transform: uppercase;
+        }
+
+        .stats-summary {
+            font-size: 1.2rem;
+            margin: 15px 0;
+            line-height: 1.6;
+        }
+
+        .text-neon-pink { color: #ff0055; }
+        .text-neon-blue { color: #00ffee; }
+        .text-neon-yellow { color: #ffea00; }
+        
+        #audio-toggle {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #fff;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="480" height="270"></canvas>
+
+        <div id="menu-screen" class="screen-overlay">
+            <h1>PADDLE CRAWLER</h1>
+            <div class="subtitle">ULTRA EDITION</div>
+            <p style="color: #bbb; max-width: 400px; font-size: 0.85rem; margin-bottom: 25px; line-height: 1.5;">
+                Destroy neon grids. Build Combos. Stack up to 8 unique rogue gadgets from an arsenal of 100+ powers.
+            </p>
+            <button class="btn" id="start-btn">BOOT CRAWLER</button>
+            <div style="margin-top: 15px; font-size: 0.75rem; color: #666;">
+                Arrows / Mouse / Touch to steer. SHIFT to Dash.
+            </div>
+        </div>
+
+        <div id="choice-screen" class="screen-overlay hidden">
+            <h2 style="font-size: 1.8rem; text-shadow: 2px 2px #000; color: #ffea00; margin: 0;">GRID SYSTEM PURIFIED</h2>
+            <div style="color: #00ffee; font-size: 0.9rem; margin-bottom: 15px; text-transform: uppercase; font-weight: bold;" id="draft-subtitle">
+                Select a sub-routing upgrade card:
+            </div>
+            <div class="choice-grid" id="choice-container"></div>
+        </div>
+
+        <div id="gameover-screen" class="screen-overlay hidden">
+            <h1 class="text-neon-pink" style="font-size: 2.5rem;">PULSE FLATTENED</h1>
+            <div class="subtitle">System Offline</div>
+            <div class="stats-summary">
+                Level Reached: <span class="text-neon-blue" id="final-level">1</span><br>
+                Final Score: <span class="text-neon-yellow" id="final-score">000000</span><br>
+                Max Combo: <span class="text-neon-pink" id="final-combo">0</span>
+            </div>
+            <button class="btn" id="restart-btn" style="margin-top: 15px;">REBOOT SYSTEM</button>
+        </div>
+
+        <div id="ui-layer">
+            <div class="hud-top">
+                <div id="scoreDisplay">SCORE: 000000</div>
+                <div id="comboDisplay" style="color: #ffea00;">COMBO: x0</div>
+                <button id="audio-toggle">SOUND: ON</button>
+                <div id="livesDisplay" style="color: #00ff66;">LIVES: 3</div>
+                <div id="ballDisplay">BALLS: 1</div>
+            </div>
+            <div class="hud-bottom">
+                <div style="font-weight: bold; margin-bottom: 4px; color: #00ffee; font-size: 0.75rem;">ACTIVE SUBSYSTEMS (Click for info):</div>
+                <ul class="gadget-list" id="gadgetList"></ul>
+            </div>
+
+            <div id="gadget-info">
+                <div class="info-title" id="info-title">NAME</div>
+                <div class="info-desc" id="info-desc">DESC</div>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

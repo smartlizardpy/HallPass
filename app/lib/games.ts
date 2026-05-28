@@ -345,6 +345,19 @@ export const games: Game[] = [
     art: "glitch",
     isNew: true,
   },
+  {
+    slug: "paddle-crawler",
+    title: "Paddle Crawler",
+    tagline: "Ultra Edition — break the grid",
+    description:
+      "Neon brick-breaker meets roguelike. Stack up to 8 gadgets from an arsenal of 100+ powers and chain combos until the grid shatters.",
+    category: "Arcade",
+    tags: ["Arcade", "Roguelike", "Neon"],
+    gradient: ["#ff0055", "#00ffee"],
+    accent: "#ff0055",
+    art: "glitch",
+    isNew: true,
+  },
 ];
 
 export const categories = Array.from(
