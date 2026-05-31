@@ -358,6 +358,19 @@ export const games: Game[] = [
     art: "glitch",
     isNew: true,
   },
+  {
+    slug: "rhythm-hell-harmonic-flash",
+    title: "Rhythm Hell: Harmonic Flash",
+    tagline: "Parry the beat. Expand your domain.",
+    description:
+      "A rhythm-driven bullet hell. Parry bullets on the frame they hit to trigger Black Flash, freeze time to draw a melodic slash, and survive 20 phases to the boss's Infinite Resonance.",
+    category: "Arcade",
+    tags: ["Arcade", "Bullet Hell", "Rhythm", "Neon"],
+    gradient: ["#00f3ff", "#ff007f"],
+    accent: "#00f3ff",
+    art: "slash",
+    isNew: true,
+  },
 ];
 
 export const categories = Array.from(
