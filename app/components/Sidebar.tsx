@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { categories } from "../lib/games";
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -105,6 +106,28 @@ export function Sidebar({
       <div className="mx-4 my-4 h-px bg-border" />
 
       <ul className="flex flex-col gap-1">
+        <li>
+          <Link
+            href="/scoreboard"
+            onClick={() => onMobileClose?.()}
+            className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] font-bold text-zinc-700 transition hover:bg-surface-2 hover:text-zinc-900 lg:py-2.5"
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0"
+            >
+              <path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0zM7 5H4v2a3 3 0 0 0 3 3M17 5h3v2a3 3 0 0 1-3 3" />
+            </svg>
+            Leaderboards
+          </Link>
+        </li>
         {[
           { label: "Library", icon: <path d="M4 4h6v16H4zM14 4h6v16h-6z" /> },
           { label: "Recent", icon: <path d="M12 8v4l3 2M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20z" /> },

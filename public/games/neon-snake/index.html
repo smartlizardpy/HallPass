@@ -270,6 +270,8 @@
         </button>
     </div>
 
+    <!-- HallPass leaderboard SDK (served same-origin). Never throws; a dead board can't break the game. -->
+    <script src="/sdk/v1/hallpass.js" data-game="neon-snake"></script>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d', { alpha: false });
@@ -691,6 +693,9 @@
             overlay.classList.remove('opacity-0', 'pointer-events-none');
             warpGrid.explode(canvas.width/2, canvas.height/2, 2);
             saveData();
+            // Submit final score to the HallPass leaderboard. Fire-and-forget;
+            // the SDK never throws, so this can never break game over.
+            try { window.HallPass && window.HallPass.submitScore(score); } catch (e) {}
         }
 
         document.addEventListener('mousemove', (e) => {
