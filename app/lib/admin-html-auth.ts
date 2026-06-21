@@ -52,3 +52,16 @@ export async function logoutHtmlAdmin(): Promise<void> {
   const store = await cookies();
   store.delete(COOKIE_NAME);
 }
+
+/**
+ * Verify an admin-password attempt supplied as a raw string (e.g. from an
+ * `X-Admin-Password` or `Authorization` header). Used by API route handlers
+ * that need to authenticate non-browser callers (such as an AI agent) without
+ * relying on the admin cookie. Returns false if no password is configured.
+ */
+export function verifyAdminPassword(passwordAttempt: string | null | undefined): boolean {
+  const password = process.env.ADMIN_HTML_PASSWORD?.trim();
+  if (!password) return false;
+  if (!passwordAttempt) return false;
+  return safeEqual(passwordAttempt.trim(), password);
+}

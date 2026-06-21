@@ -13,6 +13,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "daily",
       priority: 1,
     },
+    {
+      url: `${BASE}/scoreboard`,
+      lastModified: now,
+      changeFrequency: "daily",
+      priority: 0.7,
+    },
   ];
 
   const categoryPages: MetadataRoute.Sitemap = [
