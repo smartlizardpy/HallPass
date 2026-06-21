@@ -138,6 +138,13 @@ export async function POST(
 
   const result = await appendScore(slug, entry);
   if (!result.ok) {
+    if (result.reason === "rate-limited") {
+      return json(
+        { error: "Leaderboard is busy right now — try again in a moment" },
+        503,
+        { "Retry-After": "3" }
+      );
+    }
     return json({ error: "Could not record score, try again" }, 502);
   }
 

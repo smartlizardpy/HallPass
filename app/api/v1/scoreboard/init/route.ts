@@ -77,11 +77,17 @@ export async function POST(req: NextRequest) {
   }
 
   const created = await createBoard(slug);
-  if (!created) {
-    return Response.json(
-      { error: "Failed to create board" },
-      { status: 502 }
-    );
+  if (!created.ok) {
+    if (created.rateLimited) {
+      return Response.json(
+        {
+          error:
+            "Leaderboard backend is rate-limited right now. Try again in a few seconds.",
+        },
+        { status: 503, headers: { "Retry-After": "3" } }
+      );
+    }
+    return Response.json({ error: "Failed to create board" }, { status: 502 });
   }
 
   return Response.json({ ok: true });

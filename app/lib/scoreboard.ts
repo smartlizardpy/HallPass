@@ -76,6 +76,60 @@ function basketUrl(name: string): string {
   return `${PANTRY_BASE}/${pantryId()}/basket/${encodeURIComponent(name)}`;
 }
 
+/** Redact the pantry id from a URL before logging (never log the secret). */
+function redact(url: string): string {
+  return url.replace(/pantry\/[^/]+/, "pantry/***");
+}
+
+/** Small backoff (ms) before each write retry when Pantry replies 429. */
+const WRITE_429_BACKOFF_MS = [250, 600];
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+type WriteOutcome =
+  | { ok: true; res: Response }
+  | { ok: false; rateLimited: boolean };
+
+/**
+ * POST/PUT to Pantry with small backoff specifically on HTTP 429 — Pantry's
+ * shared free-tier rate limit, which is the real write ceiling for the
+ * scoreboard. Distinguishes a transient 429 ("busy, retry") from a hard failure
+ * so routes can answer with 503 + Retry-After instead of a misleading 502.
+ * Never throws.
+ */
+async function pantryWrite(
+  url: string,
+  init: RequestInit
+): Promise<WriteOutcome> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(url, {
+        ...init,
+        cache: "no-store",
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) return { ok: true, res };
+      if (res.status === 429) {
+        if (attempt < WRITE_429_BACKOFF_MS.length) {
+          await sleep(WRITE_429_BACKOFF_MS[attempt]);
+          continue;
+        }
+        console.warn(
+          `[scoreboard] Pantry rate-limited (429) after ${attempt + 1} tries: ${redact(url)}`
+        );
+        return { ok: false, rateLimited: true };
+      }
+      console.warn(`[scoreboard] Pantry write failed: HTTP ${res.status}`);
+      return { ok: false, rateLimited: false };
+    } catch {
+      // network error / timeout — not a rate-limit; don't retry.
+      return { ok: false, rateLimited: false };
+    }
+  }
+}
+
 /**
  * Read a basket's contents. Returns null if the basket is missing or Pantry is
  * unreachable/unconfigured — callers treat null as "empty / not initialized".
@@ -169,63 +223,61 @@ export function clampLimit(limit: number | undefined): number {
   return Math.min(100, Math.max(1, Math.floor(limit as number)));
 }
 
+export type CreateResult = { ok: true } | { ok: false; rateLimited: boolean };
+
 /**
  * Initialize a board by creating an empty basket. POST creates-or-replaces, so
  * calling this on an existing board would wipe it — the API layer guards against
- * re-init by checking boardExists first. Returns true on success.
+ * re-init by checking boardExists first. Retries on Pantry 429 and reports
+ * whether a failure was rate-limiting so the route can say "try again".
  */
-export async function createBoard(slug: string): Promise<boolean> {
-  if (!pantryId()) return false;
-  try {
-    const res = await fetch(basketUrl(basketForSlug(slug)), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scores: [] }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(5000),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
+export async function createBoard(slug: string): Promise<CreateResult> {
+  if (!pantryId()) return { ok: false, rateLimited: false };
+  const outcome = await pantryWrite(basketUrl(basketForSlug(slug)), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scores: [] }),
+  });
+  return outcome.ok
+    ? { ok: true }
+    : { ok: false, rateLimited: outcome.rateLimited };
 }
 
 export type AppendResult =
   | { ok: true; rank: number }
-  | { ok: false; reason: "not-configured" | "write-failed" };
+  | { ok: false; reason: "not-configured" | "rate-limited" | "write-failed" };
 
 /**
  * Append a single score via PUT (deep-merge append — race-safe, no read first).
  * Pantry echoes the full merged basket in the PUT response, so we derive the
- * new entry's rank from that body without an extra read.
+ * new entry's rank from that body without an extra read. Retries on Pantry 429.
  */
 export async function appendScore(
   slug: string,
   entry: ScoreEntry
 ): Promise<AppendResult> {
   if (!pantryId()) return { ok: false, reason: "not-configured" };
-  try {
-    const res = await fetch(basketUrl(basketForSlug(slug)), {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scores: [entry] }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) return { ok: false, reason: "write-failed" };
-
-    // PUT returns the full merged basket; use it to compute rank exactly.
-    let rank = 1;
-    try {
-      const merged = (await res.json()) as BasketContents;
-      rank = rankForScore(normalizeScores(merged), entry.s);
-    } catch {
-      // Fall back to optimistic rank 1 if the body can't be parsed.
-    }
-    return { ok: true, rank };
-  } catch {
-    return { ok: false, reason: "write-failed" };
+  const outcome = await pantryWrite(basketUrl(basketForSlug(slug)), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scores: [entry] }),
+  });
+  if (!outcome.ok) {
+    return {
+      ok: false,
+      reason: outcome.rateLimited ? "rate-limited" : "write-failed",
+    };
   }
+
+  // PUT returns the full merged basket; use it to compute rank exactly.
+  let rank = 1;
+  try {
+    const merged = (await outcome.res.json()) as BasketContents;
+    rank = rankForScore(normalizeScores(merged), entry.s);
+  } catch {
+    // Fall back to optimistic rank 1 if the body can't be parsed.
+  }
+  return { ok: true, rank };
 }
 
 /**
@@ -237,17 +289,12 @@ async function compactBoard(slug: string, entries: ScoreEntry[]): Promise<void> 
   const kept = [...entries]
     .sort((a, b) => b.s - a.s || a.t - b.t)
     .slice(0, COMPACT_KEEP);
-  try {
-    await fetch(basketUrl(basketForSlug(slug)), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scores: kept }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(5000),
-    });
-  } catch {
-    // best-effort
-  }
+  // Best-effort; pantryWrite handles 429 backoff and never throws.
+  await pantryWrite(basketUrl(basketForSlug(slug)), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scores: kept }),
+  });
 }
 
 /** Fetch pantry-level details (which boards exist, fullness, etc.). */
