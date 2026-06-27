@@ -3,14 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "npm run build:sdk",
     "dev": "next dev",
+    "prebuild": "npm run build:sdk",
     "build": "next build",
     "postbuild": "node scripts/build-sw-manifest.mjs",
     "start": "next start",
     "lint": "eslint",
+    "build:sdk": "tsup --config sdk/tsup.config.ts",
+    "dev:sdk": "tsup --config sdk/tsup.config.ts --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "sync-games": "bash scripts/sync-games.sh"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "@vercel/blob": "^2.3.3",
     "next": "16.2.1",
     "posthog-js": "^1.365.5",
@@ -24,7 +31,10 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
+    "jsdom": "^29.1.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "tsup": "^8.5.1",
+    "typescript": "^5",
+    "vitest": "^4.1.9"
   }
 }
