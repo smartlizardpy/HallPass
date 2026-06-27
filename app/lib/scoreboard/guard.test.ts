@@ -14,12 +14,18 @@ import {
 import { GLOBAL_MAX_SCORE } from "./config";
 
 const ORIGINAL_ADMIN_SECRET = process.env.SCOREBOARD_ADMIN_SECRET;
+const ORIGINAL_ADMIN_HTML_PASSWORD = process.env.ADMIN_HTML_PASSWORD;
 
 afterEach(() => {
   if (ORIGINAL_ADMIN_SECRET === undefined) {
     delete process.env.SCOREBOARD_ADMIN_SECRET;
   } else {
     process.env.SCOREBOARD_ADMIN_SECRET = ORIGINAL_ADMIN_SECRET;
+  }
+  if (ORIGINAL_ADMIN_HTML_PASSWORD === undefined) {
+    delete process.env.ADMIN_HTML_PASSWORD;
+  } else {
+    process.env.ADMIN_HTML_PASSWORD = ORIGINAL_ADMIN_HTML_PASSWORD;
   }
 });
 
@@ -105,8 +111,9 @@ describe("clientKeyFromHeaders", () => {
 });
 
 describe("verifyAdminSecret", () => {
-  it("returns 'unconfigured' when no secret is set", () => {
+  it("returns 'unconfigured' when neither secret nor admin password is set", () => {
     delete process.env.SCOREBOARD_ADMIN_SECRET;
+    delete process.env.ADMIN_HTML_PASSWORD;
     expect(verifyAdminSecret(new Headers())).toBe("unconfigured");
   });
 
@@ -137,5 +144,23 @@ describe("verifyAdminSecret", () => {
     process.env.SCOREBOARD_ADMIN_SECRET = "  s3cr3t  ";
     const headers = new Headers({ authorization: "Bearer s3cr3t" });
     expect(verifyAdminSecret(headers)).toBe("ok");
+  });
+
+  it("falls back to ADMIN_HTML_PASSWORD when no dedicated secret is set", () => {
+    delete process.env.SCOREBOARD_ADMIN_SECRET;
+    process.env.ADMIN_HTML_PASSWORD = "site-admin-pw";
+    const headers = new Headers({ authorization: "Bearer site-admin-pw" });
+    expect(verifyAdminSecret(headers)).toBe("ok");
+  });
+
+  it("prefers SCOREBOARD_ADMIN_SECRET over ADMIN_HTML_PASSWORD when both are set", () => {
+    process.env.SCOREBOARD_ADMIN_SECRET = "dedicated";
+    process.env.ADMIN_HTML_PASSWORD = "site-admin-pw";
+    expect(
+      verifyAdminSecret(new Headers({ authorization: "Bearer dedicated" })),
+    ).toBe("ok");
+    expect(
+      verifyAdminSecret(new Headers({ authorization: "Bearer site-admin-pw" })),
+    ).toBe("unauthorized");
   });
 });

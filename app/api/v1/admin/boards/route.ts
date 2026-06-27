@@ -4,7 +4,7 @@
  * Server-to-server / operator surface, NOT a browser endpoint: there are
  * deliberately NO CORS headers here. Every request is gated by
  * `verifyAdminSecret`, which distinguishes three outcomes:
- *   - unconfigured (no `SCOREBOARD_ADMIN_SECRET`) → 503, the feature is not
+ *   - unconfigured (no admin secret/password set) → 503, the feature is not
  *     provisioned (a server condition, not a client error);
  *   - unauthorized (missing/wrong secret) → 401;
  *   - ok → proceed.

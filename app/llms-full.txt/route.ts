@@ -55,18 +55,18 @@ only step that requires the admin secret.
 
 Trust model:
 - Submitting and reading scores are PUBLIC and unauthenticated.
-- The admin secret only PROVISIONS a board. It is never shipped in the game.
+- The admin password only PROVISIONS a board. It is never shipped in the game.
 - The game ships only the public slug (data-game="<slug>"), never the secret.
 
 The slug MUST be a game already registered on this site (see the list in
 section 9). The admin endpoint returns 404 for an unknown slug — registering a
 brand-new game on the site is a separate step from provisioning its board.
 
-Ask the human operator for the scoreboard admin secret (SCOREBOARD_ADMIN_SECRET),
-then create the board:
+Ask the human operator for their admin password (the same password used for this
+site's admin — env ADMIN_HTML_PASSWORD), then create the board:
 
   POST ${base}/api/v1/admin/boards
-  Authorization: Bearer <SCOREBOARD_ADMIN_SECRET>
+  Authorization: Bearer <ADMIN_PASSWORD>
   Content-Type: application/json
 
   {
@@ -84,7 +84,7 @@ true on first creation and false on every repeat.
 Ready-to-run curl (for any agent or human that cannot POST from a chat):
 
   curl -X POST ${base}/api/v1/admin/boards \\
-    -H "Authorization: Bearer $SCOREBOARD_ADMIN_SECRET" \\
+    -H "Authorization: Bearer $ADMIN_PASSWORD" \\
     -H "Content-Type: application/json" \\
     -d '{"slug":"${exampleSlug}","title":"Display Title","sort":"desc"}'
 

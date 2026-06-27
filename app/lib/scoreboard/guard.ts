@@ -13,8 +13,9 @@
  *    sides to a fixed-length sha256 hex digest first, then `timingSafeEqual`,
  *    so a length mismatch can never throw and timing cannot leak the secret.
  *  - IPs are never stored in the clear: `hashIp` salts with a dedicated salt
- *    (falling back to the admin secret) before hashing, so the `scores.ip_hash`
- *    column is a one-way pseudonym used only for rate-limit bucketing.
+ *    (falling back to the admin secret/password) before hashing, so the
+ *    `scores.ip_hash` column is a one-way pseudonym used only for rate-limit
+ *    bucketing.
  */
 
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -94,14 +95,15 @@ export function clientKeyFromHeaders(headers: Headers): string {
 
 /**
  * One-way hash of a client key for the `scores.ip_hash` column. Salts with
- * `SCOREBOARD_IP_SALT`, falling back to `SCOREBOARD_ADMIN_SECRET`, then to a
- * constant app pepper, so the digest is never a bare `sha256(ip)` that a
- * precomputed table could reverse.
+ * `SCOREBOARD_IP_SALT`, falling back to `SCOREBOARD_ADMIN_SECRET`, then
+ * `ADMIN_HTML_PASSWORD`, then a constant app pepper, so the digest is never a
+ * bare `sha256(ip)` that a precomputed table could reverse.
  */
 export function hashIp(ip: string): string {
   const salt =
     process.env.SCOREBOARD_IP_SALT ||
     process.env.SCOREBOARD_ADMIN_SECRET ||
+    process.env.ADMIN_HTML_PASSWORD ||
     IP_HASH_FALLBACK_PEPPER;
   return sha256Hex(ip + salt);
 }
@@ -125,14 +127,20 @@ function presentedSecret(headers: Headers): string | null {
 }
 
 /**
- * Gate the admin board endpoints.
- *  - `"unconfigured"` — `SCOREBOARD_ADMIN_SECRET` is unset; the caller should
- *    answer 503 (the feature is not provisioned, not a client error).
+ * Gate the admin board endpoints. The accepted secret is `SCOREBOARD_ADMIN_SECRET`
+ * if set, otherwise the site admin password `ADMIN_HTML_PASSWORD` — so an operator
+ * can provision boards with the same password they already use for this site's
+ * admin, without juggling a second secret. Set `SCOREBOARD_ADMIN_SECRET` only to
+ * decouple the two.
+ *  - `"unconfigured"` — neither secret nor admin password is set; the caller
+ *    should answer 503 (the feature is not provisioned, not a client error).
  *  - `"unauthorized"` — a secret is required but missing or wrong (→ 401).
  *  - `"ok"` — presented secret matches in constant time.
  */
 export function verifyAdminSecret(headers: Headers): AdminAuthResult {
-  const expected = process.env.SCOREBOARD_ADMIN_SECRET?.trim();
+  const expected = (
+    process.env.SCOREBOARD_ADMIN_SECRET || process.env.ADMIN_HTML_PASSWORD
+  )?.trim();
   if (!expected) return "unconfigured";
   const presented = presentedSecret(headers);
   if (!presented) return "unauthorized";

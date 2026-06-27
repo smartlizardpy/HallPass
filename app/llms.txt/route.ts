@@ -40,8 +40,9 @@ on a real origin, the same SDK lights up "live" and scores start flowing.
 
 ## Integrate in 3 steps
 1. Provision a board once (admin): POST ${base}/api/v1/admin/boards with header
-   Authorization: Bearer <SCOREBOARD_ADMIN_SECRET> and JSON body { slug, title }.
-   Idempotent — re-creating a board returns the existing one and never wipes scores.
+   Authorization: Bearer <ADMIN_PASSWORD> (ask the operator for the site admin
+   password) and JSON body { slug, title }. Idempotent — re-creating a board
+   returns the existing one and never wipes scores.
 2. Paste the snippet near </body>, set data-game="<slug>", and load
    ${base}/sdk/v1/hallpass.js. A tiny stub guarantees window.HallPass exists
    immediately, so the game never breaks even if the SDK script is blocked.
@@ -58,8 +59,8 @@ on a real origin, the same SDK lights up "live" and scores start flowing.
   plus .mode and .version. Every method resolves; none throw.
 
 ## Trust model
-Submitting and reading scores are public and unauthenticated. The admin secret
-only PROVISIONS a board; the game ships only the public slug, never the secret.
+Submitting and reading scores are public and unauthenticated. The admin password
+only PROVISIONS a board; the game ships only the public slug, never the password.
 
 ## Full machine-readable guide
 ${base}/llms-full.txt  (covers provisioning, the verbatim snippet, the HTTP and
