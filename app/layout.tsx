@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Nunito } from "next/font/google";
 import { PWA } from "./components/PWA";
+import { WelcomeToast } from "./components/WelcomeToast";
 import "./globals.css";
 
 export const viewport: Viewport = {
@@ -62,9 +63,6 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
-  icons: {
-    icon: "/favicon.ico",
-  },
 };
 
 export default function RootLayout({
@@ -79,6 +77,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         {children}
+        <WelcomeToast />
         <PWA />
       </body>
     </html>

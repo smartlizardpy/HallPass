@@ -8,9 +8,12 @@
  *  - An `AbortController` caps every request at ~6s; on timeout/abort/failure we
  *    resolve `{ ok: false, status: 0 }` (status 0 = "never reached the server",
  *    which the client maps to the `network` reason).
- *  - `mode: "cors"` + `credentials: "omit"` because the SDK runs embedded on
- *    third-party game pages and talks cross-origin to the HallPass API. (The
- *    server vertical must send permissive CORS headers for this to land.)
+ *  - `mode: "cors"` + `credentials: "omit"` by DEFAULT because the SDK runs
+ *    embedded on third-party game pages and talks cross-origin to the public
+ *    leaderboard API. (The server vertical must send permissive CORS headers for
+ *    this to land.) The same-origin identity endpoints (`/api/v1/me*`) opt into
+ *    `credentials: "include"` via `RequestOptions` so the session cookie rides
+ *    along; cross-origin those calls simply fail CORS and degrade to anonymous.
  *  - We swallow JSON parse errors: `data` is simply left `undefined`.
  */
 
@@ -22,33 +25,58 @@ export interface TransportResult {
   error?: string;
 }
 
+/** Per-call transport knobs. */
+export interface RequestOptions {
+  /**
+   * Credential mode. Defaults to `"omit"` (cross-origin public API calls). The
+   * same-origin identity endpoints pass `"include"` to send the session cookie.
+   */
+  credentials?: RequestCredentials;
+}
+
 /** Hard ceiling for any single request. */
 const TIMEOUT_MS = 6000;
 
 /** GET `url` expecting JSON. Always resolves. */
-export function getJSON(url: string): Promise<TransportResult> {
-  return request(url, { method: "GET", headers: { Accept: "application/json" } });
+export function getJSON(url: string, opts?: RequestOptions): Promise<TransportResult> {
+  return request(
+    url,
+    { method: "GET", headers: { Accept: "application/json" } },
+    opts?.credentials,
+  );
 }
 
 /** POST `body` as JSON to `url`. Always resolves. */
-export function postJSON(url: string, body: unknown): Promise<TransportResult> {
+export function postJSON(
+  url: string,
+  body: unknown,
+  opts?: RequestOptions,
+): Promise<TransportResult> {
   let payload: string;
   try {
     payload = JSON.stringify(body ?? {});
   } catch {
     payload = "{}";
   }
-  return request(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
+  return request(
+    url,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: payload,
     },
-    body: payload,
-  });
+    opts?.credentials,
+  );
 }
 
-async function request(url: string, init: RequestInit): Promise<TransportResult> {
+async function request(
+  url: string,
+  init: RequestInit,
+  credentials: RequestCredentials = "omit",
+): Promise<TransportResult> {
   if (typeof fetch === "undefined") {
     return { ok: false, status: 0, error: "fetch unavailable" };
   }
@@ -78,7 +106,7 @@ async function request(url: string, init: RequestInit): Promise<TransportResult>
       const res = await fetch(url, {
         ...init,
         mode: "cors",
-        credentials: "omit",
+        credentials,
         signal: controller ? controller.signal : undefined,
       });
 

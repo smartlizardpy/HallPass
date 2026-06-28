@@ -1,10 +1,15 @@
 import type { MetadataRoute } from "next";
-import { games, categories } from "./lib/games";
+import { resolveGames, resolveCategories } from "@/app/lib/games-store";
 
 const BASE = "https://hallpass.gg";
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
+
+  const [games, categories] = await Promise.all([
+    resolveGames(),
+    resolveCategories(),
+  ]);
 
   const staticPages: MetadataRoute.Sitemap = [
     {

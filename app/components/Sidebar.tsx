@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-import { categories } from "../lib/games";
 
 const ICONS: Record<string, React.ReactNode> = {
   All: <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />,
@@ -44,11 +43,13 @@ function CategoryIcon({ name }: { name: string }) {
 }
 
 export function Sidebar({
+  categories,
   active,
   onSelect,
   mobileOpen = false,
   onMobileClose,
 }: {
+  categories: string[];
   active: string;
   onSelect: (cat: string) => void;
   mobileOpen?: boolean;

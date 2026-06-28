@@ -3,25 +3,32 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
-import { games as allGames, findGame, type Game } from "../lib/games";
+import { type Game } from "../lib/games";
 import { GameCard } from "./GameCard";
 import { Sidebar } from "./Sidebar";
 import { PlayerOverlay } from "./PlayerOverlay";
+import { AccountMenu } from "./AccountMenu";
 
 export function Arcade({
+  games,
+  categories,
   initialCategory = "All",
   initialPlaying = null,
   playCounts = {},
 }: {
+  games: Game[];
+  categories: string[];
   initialCategory?: string;
   initialPlaying?: string | null;
   playCounts?: Record<string, number>;
-} = {}) {
+}) {
   const router = useRouter();
   const [category, setCategoryState] = useState(initialCategory);
   const [query, setQuery] = useState("");
   const [playing, setPlayingState] = useState<string | null>(initialPlaying);
   const [navOpen, setNavOpen] = useState(false);
+
+  const findGame = (slug: string) => games.find((g) => g.slug === slug);
 
   const setCategory = (cat: string) => {
     posthog.capture("category_selected", { category: cat });
@@ -53,17 +60,17 @@ export function Arcade({
     else router.push("/");
   };
 
-  const featured = allGames.find((g) => g.isFeatured) ?? allGames[0];
+  const featured = games.find((g) => g.isFeatured) ?? games[0];
   const playsFor = (g: Game) => playCounts[g.slug] ?? g.plays ?? 0;
   const trending = useMemo(
-    () => [...allGames].sort((a, b) => playsFor(b) - playsFor(a)).slice(0, 6),
+    () => [...games].sort((a, b) => playsFor(b) - playsFor(a)).slice(0, 6),
     [playCounts]
   );
-  const newGames = useMemo(() => allGames.filter((g) => g.isNew), []);
+  const newGames = useMemo(() => games.filter((g) => g.isNew), []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return allGames.filter((g) => {
+    return games.filter((g) => {
       if (category === "New" && !g.isNew) return false;
       if (category === "Trending" && !trending.includes(g)) return false;
       if (
@@ -88,6 +95,7 @@ export function Arcade({
   return (
     <div className="flex min-h-screen flex-1">
       <Sidebar
+        categories={categories}
         active={category}
         onSelect={setCategory}
         mobileOpen={navOpen}
@@ -173,9 +181,7 @@ export function Arcade({
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
             </button>
-            <button className="hidden h-11 items-center gap-2 rounded-full bg-brand px-4 text-sm font-extrabold text-white shadow-lg shadow-brand/30 transition hover:bg-brand-600 sm:flex sm:px-5">
-              Sign in
-            </button>
+            <AccountMenu />
           </div>
         </header>
 

@@ -11,7 +11,10 @@ function getQueryEndpoint(projectSelector: string) {
   return `${API_HOST}/api/projects/${projectSelector}/query/`;
 }
 
-async function hogql<T = unknown>(sql: string): Promise<T[]> {
+async function hogql<T = unknown>(
+  sql: string,
+  tag = "posthog-stats",
+): Promise<T[]> {
   if (!API_KEY) return [];
   let lastError: Error | undefined;
 
@@ -23,8 +26,8 @@ async function hogql<T = unknown>(sql: string): Promise<T[]> {
         Authorization: `Bearer ${API_KEY}`,
       },
       body: JSON.stringify({ query: { kind: "HogQLQuery", query: sql } }),
-      next: { revalidate: 3600, tags: ["posthog-stats"] },
-      signal: AbortSignal.timeout(5000),
+      next: { revalidate: 3600, tags: [tag] },
+      signal: AbortSignal.timeout(8000),
     });
 
     if (res.ok) {
@@ -38,7 +41,7 @@ async function hogql<T = unknown>(sql: string): Promise<T[]> {
 
     if (projectNotFound && selector !== "@current") {
       lastError = new Error(
-        `PostHog project ${selector} is not accessible with this API key; retrying with @current`
+        `PostHog project ${selector} is not accessible with this API key; retrying with @current`,
       );
       continue;
     }
@@ -49,82 +52,191 @@ async function hogql<T = unknown>(sql: string): Promise<T[]> {
   throw lastError ?? new Error("PostHog query failed");
 }
 
-export type DailyPlays = { date: string; plays: number };
-export type CategoryCount = { category: string; plays: number };
+/** Run a secondary panel query that must NEVER blank the whole dashboard. */
+function safe<T>(p: Promise<T[]>): Promise<T[]> {
+  return p.catch(() => [] as T[]);
+}
+
+// Events that count as "a play".
+const PLAY_EVENTS = "('game_started', 'featured_game_played')";
+
+export type Delta = {
+  /** Current-period value. */
+  value: number;
+  /** Previous equal-length period value. */
+  prev: number;
+  /** Percent change vs. the previous period; `null` when there is no baseline. */
+  pct: number | null;
+};
+
+function delta(value: number, prev: number): Delta {
+  const pct = prev > 0 ? ((value - prev) / prev) * 100 : null;
+  return { value, prev, pct };
+}
+
+export type DailyPlays = { date: string; plays: number; visitors: number; searches: number };
+export type LabeledCount = { label: string; value: number };
+export type TopGame = { slug: string; plays: number };
+
 export type DashboardStats = {
   totalPlays: number;
   uniqueVisitors: number;
-  topGames: { slug: string; plays: number }[];
+  searches: number;
+  adClicks: number;
+  playsDelta: Delta;
+  visitorsDelta: Delta;
+  searchesDelta: Delta;
+  topGames: TopGame[];
   daily: DailyPlays[];
+  categories: LabeledCount[];
+  searchTerms: LabeledCount[];
+  countries: LabeledCount[];
+  devices: LabeledCount[];
   configured: boolean;
   unavailable: boolean;
   unavailableReason?: string;
 };
 
+const EMPTY_STATS: DashboardStats = {
+  totalPlays: 0,
+  uniqueVisitors: 0,
+  searches: 0,
+  adClicks: 0,
+  playsDelta: { value: 0, prev: 0, pct: null },
+  visitorsDelta: { value: 0, prev: 0, pct: null },
+  searchesDelta: { value: 0, prev: 0, pct: null },
+  topGames: [],
+  daily: [],
+  categories: [],
+  searchTerms: [],
+  countries: [],
+  devices: [],
+  configured: false,
+  unavailable: false,
+};
+
 export async function getDashboardStats(): Promise<DashboardStats> {
-  if (!API_KEY) {
-    return {
-      totalPlays: 0,
-      uniqueVisitors: 0,
-      topGames: [],
-      daily: [],
-      configured: false,
-      unavailable: false,
-      unavailableReason: undefined,
-    };
-  }
+  if (!API_KEY) return { ...EMPTY_STATS, configured: false };
+
+  // One headline query computes every KPI for both the current 30-day window and
+  // the preceding 30-day window (for deltas) via conditional aggregation.
+  const kpiSql = `
+    SELECT
+      countIf(event IN ${PLAY_EVENTS} AND timestamp >= now() - INTERVAL 30 DAY) AS plays_now,
+      countIf(event IN ${PLAY_EVENTS} AND timestamp >= now() - INTERVAL 60 DAY AND timestamp < now() - INTERVAL 30 DAY) AS plays_prev,
+      count(DISTINCT if(event IN ${PLAY_EVENTS} AND timestamp >= now() - INTERVAL 30 DAY, distinct_id, NULL)) AS visitors_now,
+      count(DISTINCT if(event IN ${PLAY_EVENTS} AND timestamp >= now() - INTERVAL 60 DAY AND timestamp < now() - INTERVAL 30 DAY, distinct_id, NULL)) AS visitors_prev,
+      countIf(event = 'game_searched' AND timestamp >= now() - INTERVAL 30 DAY) AS searches_now,
+      countIf(event = 'game_searched' AND timestamp >= now() - INTERVAL 60 DAY AND timestamp < now() - INTERVAL 30 DAY) AS searches_prev,
+      countIf(event = 'ad_clicked' AND timestamp >= now() - INTERVAL 30 DAY) AS ad_clicks
+    FROM events
+    WHERE timestamp >= now() - INTERVAL 60 DAY
+      AND event IN ('game_started', 'featured_game_played', 'game_searched', 'ad_clicked')
+  `;
+
+  const dailySql = `
+    SELECT toString(toDate(timestamp)) AS date,
+      countIf(event IN ${PLAY_EVENTS}) AS plays,
+      count(DISTINCT if(event IN ${PLAY_EVENTS}, distinct_id, NULL)) AS visitors,
+      countIf(event = 'game_searched') AS searches
+    FROM events
+    WHERE event IN ('game_started', 'featured_game_played', 'game_searched')
+      AND timestamp >= now() - INTERVAL 30 DAY
+    GROUP BY date ORDER BY date ASC
+  `;
+
+  const topSql = `
+    SELECT properties.game_slug AS slug, count() AS plays
+    FROM events
+    WHERE event IN ${PLAY_EVENTS} AND properties.game_slug IS NOT NULL
+      AND timestamp >= now() - INTERVAL 30 DAY
+    GROUP BY slug ORDER BY plays DESC LIMIT 8
+  `;
+
+  const catSql = `
+    SELECT properties.game_category AS category, count() AS plays
+    FROM events
+    WHERE event IN ${PLAY_EVENTS} AND properties.game_category IS NOT NULL
+      AND timestamp >= now() - INTERVAL 30 DAY
+    GROUP BY category ORDER BY plays DESC LIMIT 8
+  `;
+
+  const searchSql = `
+    SELECT properties.query AS term, count() AS n
+    FROM events
+    WHERE event = 'game_searched' AND properties.query IS NOT NULL
+      AND timestamp >= now() - INTERVAL 30 DAY
+    GROUP BY term ORDER BY n DESC LIMIT 8
+  `;
+
+  const countrySql = `
+    SELECT properties.$geoip_country_name AS country, count(DISTINCT distinct_id) AS visitors
+    FROM events
+    WHERE event IN ${PLAY_EVENTS} AND properties.$geoip_country_name IS NOT NULL
+      AND timestamp >= now() - INTERVAL 30 DAY
+    GROUP BY country ORDER BY visitors DESC LIMIT 6
+  `;
+
+  const deviceSql = `
+    SELECT properties.$device_type AS device, count() AS plays
+    FROM events
+    WHERE event IN ${PLAY_EVENTS} AND properties.$device_type IS NOT NULL
+      AND timestamp >= now() - INTERVAL 30 DAY
+    GROUP BY device ORDER BY plays DESC LIMIT 4
+  `;
 
   try {
-    const [totals, top, daily] = await Promise.all([
-      hogql<[number, number]>(`
-        SELECT count() AS plays, count(DISTINCT distinct_id) AS visitors
-        FROM events
-        WHERE event IN ('game_started', 'featured_game_played')
-          AND timestamp >= now() - INTERVAL 30 DAY
-      `),
-      hogql<[string, number]>(`
-        SELECT properties.game_slug AS slug, count() AS plays
-        FROM events
-        WHERE event IN ('game_started', 'featured_game_played')
-          AND properties.game_slug IS NOT NULL
-          AND timestamp >= now() - INTERVAL 30 DAY
-        GROUP BY slug
-        ORDER BY plays DESC
-        LIMIT 10
-      `),
-      hogql<[string, number]>(`
-        SELECT toString(toDate(timestamp)) AS date, count() AS plays
-        FROM events
-        WHERE event IN ('game_started', 'featured_game_played')
-          AND timestamp >= now() - INTERVAL 14 DAY
-        GROUP BY date
-        ORDER BY date ASC
-      `),
+    // The KPI query is critical (its failure marks the dashboard unavailable);
+    // every secondary panel degrades to empty on its own without taking the
+    // others down.
+    const [kpi, daily, top, cats, searches, countries, devices] = await Promise.all([
+      hogql<[number, number, number, number, number, number, number]>(kpiSql),
+      safe(hogql<[string, number, number, number]>(dailySql)),
+      safe(hogql<[string, number]>(topSql)),
+      safe(hogql<[string, number]>(catSql)),
+      safe(hogql<[string, number]>(searchSql)),
+      safe(hogql<[string, number]>(countrySql)),
+      safe(hogql<[string, number]>(deviceSql)),
     ]);
 
-    const [totalPlays = 0, uniqueVisitors = 0] = totals[0] ?? [];
+    const [
+      playsNow = 0,
+      playsPrev = 0,
+      visitorsNow = 0,
+      visitorsPrev = 0,
+      searchesNow = 0,
+      searchesPrev = 0,
+      adClicks = 0,
+    ] = kpi[0] ?? [];
+
+    const num = (v: unknown) => Number(v) || 0;
+
     return {
-      totalPlays: Number(totalPlays) || 0,
-      uniqueVisitors: Number(uniqueVisitors) || 0,
-      topGames: top.map(([slug, plays]) => ({ slug, plays: Number(plays) || 0 })),
-      daily: daily.map(([date, plays]) => ({ date, plays: Number(plays) || 0 })),
+      totalPlays: num(playsNow),
+      uniqueVisitors: num(visitorsNow),
+      searches: num(searchesNow),
+      adClicks: num(adClicks),
+      playsDelta: delta(num(playsNow), num(playsPrev)),
+      visitorsDelta: delta(num(visitorsNow), num(visitorsPrev)),
+      searchesDelta: delta(num(searchesNow), num(searchesPrev)),
+      topGames: top.map(([slug, plays]) => ({ slug, plays: num(plays) })),
+      daily: daily.map(([date, plays, visitors, searches]) => ({
+        date,
+        plays: num(plays),
+        visitors: num(visitors),
+        searches: num(searches),
+      })),
+      categories: cats.map(([label, value]) => ({ label, value: num(value) })),
+      searchTerms: searches.map(([label, value]) => ({ label, value: num(value) })),
+      countries: countries.map(([label, value]) => ({ label, value: num(value) })),
+      devices: devices.map(([label, value]) => ({ label, value: num(value) })),
       configured: true,
       unavailable: false,
-      unavailableReason: undefined,
     };
   } catch (error) {
-    const reason =
-      error instanceof Error ? error.message : "Unknown PostHog error";
+    const reason = error instanceof Error ? error.message : "Unknown PostHog error";
     console.error("Failed to load dashboard stats:", reason);
-    return {
-      totalPlays: 0,
-      uniqueVisitors: 0,
-      topGames: [],
-      daily: [],
-      configured: true,
-      unavailable: true,
-      unavailableReason: reason,
-    };
+    return { ...EMPTY_STATS, configured: true, unavailable: true, unavailableReason: reason };
   }
 }
 
@@ -137,7 +249,7 @@ export async function getGamePlayCounts(): Promise<PlayCounts> {
       query: `
         SELECT properties.game_slug AS slug, count() AS plays
         FROM events
-        WHERE event IN ('game_started', 'featured_game_played')
+        WHERE event IN ${PLAY_EVENTS}
           AND properties.game_slug IS NOT NULL
           AND timestamp >= now() - INTERVAL 30 DAY
         GROUP BY slug
@@ -145,35 +257,37 @@ export async function getGamePlayCounts(): Promise<PlayCounts> {
     },
   };
 
-  for (const selector of QUERY_ENDPOINT_SELECTORS) {
-    const res = await fetch(getQueryEndpoint(selector), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${API_KEY}`,
-      },
-      body: JSON.stringify(query),
-      next: { revalidate: 3600, tags: ["game-play-counts"] },
-      signal: AbortSignal.timeout(5000),
-    });
+  try {
+    for (const selector of QUERY_ENDPOINT_SELECTORS) {
+      const res = await fetch(getQueryEndpoint(selector), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${API_KEY}`,
+        },
+        body: JSON.stringify(query),
+        next: { revalidate: 3600, tags: ["game-play-counts"] },
+        signal: AbortSignal.timeout(8000),
+      });
 
-    if (res.ok) {
-      const data = (await res.json()) as { results?: [string, number][] };
-      const counts: PlayCounts = {};
-      for (const [slug, plays] of data.results ?? []) {
-        if (slug) counts[slug] = Number(plays) || 0;
+      if (res.ok) {
+        const data = (await res.json()) as { results?: [string, number][] };
+        const counts: PlayCounts = {};
+        for (const [slug, plays] of data.results ?? []) {
+          if (slug) counts[slug] = Number(plays) || 0;
+        }
+        return counts;
       }
-      return counts;
+
+      const errorText = await res.text();
+      const projectNotFound =
+        res.status === 404 && errorText.toLowerCase().includes("project not found");
+
+      if (projectNotFound && selector !== "@current") continue;
+      return {};
     }
-
-    const errorText = await res.text();
-    const projectNotFound =
-      res.status === 404 && errorText.toLowerCase().includes("project not found");
-
-    if (projectNotFound && selector !== "@current") {
-      continue;
-    }
-
+  } catch {
+    // Never let the home page's play-count enrichment throw — degrade to none.
     return {};
   }
 

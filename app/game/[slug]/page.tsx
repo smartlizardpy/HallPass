@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Arcade } from "../../components/Arcade";
-import { findGame, games } from "../../lib/games";
+import { games } from "../../lib/games";
+import { resolveCategories, resolveGame, resolveGames } from "../../lib/games-store";
 import { getGamePlayCounts } from "../../lib/stats";
 
 export function generateStaticParams() {
@@ -14,7 +15,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const game = findGame(slug);
+  const game = await resolveGame(slug);
   if (!game) return { title: "Game not found" };
   const cover = `/games/${game.slug}/cover.png`;
   const title = `Play ${game.title} free`;
@@ -45,8 +46,20 @@ export default async function GamePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const game = findGame(slug);
+  const game = await resolveGame(slug);
   if (!game) notFound();
-  const playCounts = await getGamePlayCounts();
-  return <Arcade initialPlaying={slug} initialCategory={game.category} playCounts={playCounts} />;
+  const [games, categories, playCounts] = await Promise.all([
+    resolveGames(),
+    resolveCategories(),
+    getGamePlayCounts(),
+  ]);
+  return (
+    <Arcade
+      games={games}
+      categories={categories}
+      initialPlaying={slug}
+      initialCategory={game.category}
+      playCounts={playCounts}
+    />
+  );
 }

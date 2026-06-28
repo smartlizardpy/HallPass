@@ -1,18 +1,20 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Arcade } from "../../components/Arcade";
-import { categories } from "../../lib/games";
+import { resolveCategories, resolveGames } from "../../lib/games-store";
 import { getGamePlayCounts } from "../../lib/stats";
 
 const VIRTUAL = ["New", "Trending"];
 
-export function generateStaticParams() {
+export async function generateStaticParams() {
+  const categories = await resolveCategories();
   return [...VIRTUAL, ...categories].map((c) => ({
     category: c.toLowerCase(),
   }));
 }
 
-function resolveCategory(slug: string): string | null {
+/** Validate a URL slug against the VIRTUAL + RESOLVED category list. */
+function resolveCategory(slug: string, categories: string[]): string | null {
   const lower = slug.toLowerCase();
   const virtual = VIRTUAL.find((c) => c.toLowerCase() === lower);
   if (virtual) return virtual;
@@ -25,7 +27,7 @@ export async function generateMetadata({
   params: Promise<{ category: string }>;
 }): Promise<Metadata> {
   const { category } = await params;
-  const resolved = resolveCategory(category);
+  const resolved = resolveCategory(category, await resolveCategories());
   if (!resolved) return { title: "Category not found" };
   const title = `${resolved} games`;
   const description = `Play free unblocked ${resolved} games on HALLPASS.`;
@@ -53,8 +55,19 @@ export default async function CategoryPage({
   params: Promise<{ category: string }>;
 }) {
   const { category } = await params;
-  const resolved = resolveCategory(category);
+  const [games, categories, playCounts] = await Promise.all([
+    resolveGames(),
+    resolveCategories(),
+    getGamePlayCounts(),
+  ]);
+  const resolved = resolveCategory(category, categories);
   if (!resolved) notFound();
-  const playCounts = await getGamePlayCounts();
-  return <Arcade initialCategory={resolved} playCounts={playCounts} />;
+  return (
+    <Arcade
+      games={games}
+      categories={categories}
+      initialCategory={resolved}
+      playCounts={playCounts}
+    />
+  );
 }
