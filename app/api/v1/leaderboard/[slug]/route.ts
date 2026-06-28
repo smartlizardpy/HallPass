@@ -3,9 +3,10 @@
  *
  * This is the only scoreboard surface games talk to from the browser, so every
  * response carries permissive CORS headers (it is public, read-mostly data; no
- * credentials are involved). The `<slug>` is validated against the static
- * `games` list — an unknown slug is a 404 before any database work, so the API
- * never provisions or queries boards for games that do not exist.
+ * credentials are involved). The `<slug>` path param is the BOARD ID (boards are
+ * decoupled from games); an id with no provisioned board answers 409 ("Board not
+ * initialized") rather than a 404, so the API never queries scores for a board
+ * that does not exist.
  *
  * Caching: the GET response sets `s-maxage=15, stale-while-revalidate=45` so the
  * CDN can absorb bursty reads while a board still feels live. Route handlers are
@@ -13,7 +14,6 @@
  * `force-static` — each request reads the database at request time.
  */
 
-import { games } from "@/app/lib/games";
 import {
   store,
   sanitizeHandle,
@@ -24,6 +24,9 @@ import {
   normalizePeriod,
   DEFAULT_LIMIT,
 } from "@/app/lib/scoreboard";
+import { auth } from "@/app/lib/auth";
+import { getPublicIdentity, upsertPlayerOnLogin } from "@/app/lib/players";
+import type { Session } from "next-auth";
 import type {
   ApiError,
   LeaderboardResponse,
@@ -50,18 +53,11 @@ function jsonResponse(
   return Response.json(body, { status, headers: { ...CORS_HEADERS, ...extra } });
 }
 
-function isKnownGame(slug: string): boolean {
-  return games.some((game) => game.slug === slug);
-}
-
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ slug: string }> },
 ): Promise<Response> {
   const { slug } = await params;
-  if (!isKnownGame(slug)) {
-    return jsonResponse({ error: "Unknown game" } satisfies ApiError, 404);
-  }
 
   const url = new URL(req.url);
   const limitParam = url.searchParams.get("limit");
@@ -105,9 +101,6 @@ export async function POST(
   } catch {
     return jsonResponse({ error: "Invalid JSON body" } satisfies ApiError, 400);
   }
-  if (!isKnownGame(slug)) {
-    return jsonResponse({ error: "Unknown game" } satisfies ApiError, 404);
-  }
   const { score, handle } = (payload ?? {}) as { score?: unknown; handle?: unknown };
 
   let board;
@@ -133,14 +126,56 @@ export async function POST(
   // erroring as a 503 on insert.
   const intScore = Math.trunc(score);
 
-  const cleanHandle = sanitizeHandle(typeof handle === "string" ? handle : undefined);
   const ipHash = hashIp(clientKeyFromHeaders(req.headers));
+
+  // Resolve the verified player identity from the SAME-ORIGIN session cookie, if
+  // any. Reading auth() must NEVER break this public endpoint: any failure (no
+  // cookie, malformed token, a cross-origin request that carries none) collapses
+  // to "no session" and the submission proceeds anonymously, exactly as before.
+  let session: Session | null = null;
+  try {
+    session = await auth();
+  } catch (error) {
+    console.error(`leaderboard POST auth() failed for ${slug}:`, error);
+    session = null;
+  }
+
+  // Default: anonymous — the sanitised submitted handle, no player id. A verified
+  // session overrides the handle with the player's effective display and tags the
+  // score with their id. The player-resolution DB calls are wrapped so a transient
+  // identity-store hiccup degrades to the submitted handle (still tagged by id)
+  // rather than failing an otherwise-valid submission.
+  let playerId: string | null = null;
+  let cleanHandle = sanitizeHandle(typeof handle === "string" ? handle : undefined);
+
+  const sessionPlayerId = session?.user?.playerId;
+  if (sessionPlayerId) {
+    playerId = sessionPlayerId;
+    try {
+      const email = session?.user?.email;
+      if (email) {
+        // Defensively refresh the player row (the login-time upsert may have been
+        // missed). Skipped when no email is present — the NOT NULL/UNIQUE column
+        // would reject it — but the score still tags the existing row by id.
+        await upsertPlayerOnLogin({
+          id: sessionPlayerId,
+          email,
+          name: session?.user?.name,
+          image: session?.user?.image,
+        });
+      }
+      const ident = await getPublicIdentity(sessionPlayerId);
+      if (ident) cleanHandle = ident.handle;
+    } catch (error) {
+      console.error(`leaderboard POST player resolve failed for ${slug}:`, error);
+    }
+  }
 
   let result;
   try {
     result = await store.appendScore(
       slug,
-      { handle: cleanHandle, score: intScore, ipHash },
+      { handle: cleanHandle, score: intScore, ipHash, playerId },
       board.sort,
     );
   } catch (error) {

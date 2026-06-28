@@ -25,11 +25,13 @@ function e(n){return function(){var a=[].slice.call(arguments);
 return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
 w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
 submitScore:e("submitScore"),getScores:e("getScores"),
+getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
+signIn:function(){},signOut:function(){},
 getHandle:function(){return null},setHandle:function(v){return v},
 on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
 off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
 setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
-q.splice(0).forEach(function(c){c.r(c.n==="getScores"?[]:{ok:false,reason:"inert"})})},2000)})(window);
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:{ok:false,reason:"inert"})})},2000)})(window);
 </script>
 <script src="https://hallpass.gg/sdk/v1/hallpass.js" data-game="YOUR-SLUG" defer></script>
 ```
@@ -88,6 +90,28 @@ async function renderLeaderboard() {
 renderLeaderboard();
 ```
 
+### Sign in (optional, same-origin)
+
+Players can stay anonymous (the handle prompt above) or sign in with Google so
+their scores carry a verified identity (display name + avatar). Sign-in is
+same-origin only — it works on game pages served from the HallPass catalog.
+
+```js
+const player = await HallPass.getPlayer(); // { id, name, image, handle } | null
+if (player) {
+  console.log("Signed in as", player.handle);
+  // Let the player rename themselves on the leaderboard:
+  await HallPass.setPlayerHandle("ZK");
+} else {
+  // Anonymous — offer a sign-in button:
+  signInButton.onclick = () => HallPass.signIn();
+}
+```
+
+`getPlayer()` returns `null` for anonymous or cross-origin embeds (no session
+cookie) — never an error. EMAIL is never exposed. `signIn`/`signOut` navigate the
+browser within the same origin and are no-ops in an inert preview.
+
 ### React to events
 
 ```js
@@ -107,6 +131,10 @@ HallPass
 | `getScores(opts?)`              | `Promise<ScoreEntry[]>`  | `opts`: `{ limit?(1–100), period?("all"\|"day"\|"week"), game? }`. `[]` on failure. |
 | `getHandle()`                   | `string \| null`         | The stored player handle.                                             |
 | `setHandle(handle)`             | `string`                 | Sanitises to `[A-Za-z0-9 _-]{1,12}` and persists; returns the result. |
+| `getPlayer()`                   | `Promise<PlayerIdentity \| null>` | Signed-in player's PUBLIC identity (`{ id, name, image, handle }`), else `null`. Same-origin, credentialed. Cached in memory. EMAIL is never exposed. |
+| `signIn(opts?)`                 | `void`                   | Redirect to `/play/signin` (`opts.redirectTo` → `callbackUrl`, default current URL). No-op when inert. |
+| `signOut(opts?)`                | `void`                   | Redirect to `/play/signout`. No-op when inert.                        |
+| `setPlayerHandle(handle)`       | `Promise<PlayerIdentity \| null>` | Persist the signed-in player's chosen handle; resolves the updated identity, else `null`. |
 | `on(event, cb)` / `off(...)`    | `HallPass`               | Events: `ready`, `scores`, `submitted`, `error`. Chainable.           |
 
 ### `submitScore` reasons

@@ -1,0 +1,458 @@
+/**
+ * HallPass dashboard — per-game CONTROL CENTER.
+ *
+ * Everything about one game in a single, game-centric screen, replacing the old
+ * shared-dropdown forms. The `slug` route param is awaited (this Next.js's async
+ * params convention) and resolved through the override layer; an unknown slug is
+ * a genuine 404.
+ *
+ * Four panels:
+ *   - HERO: cover thumbnail, title, category, and an "Open live" link to the
+ *     public game page.
+ *   - DETAILS: the descriptive override editor (title/tagline/description/
+ *     category/tags), prefilled from the RESOLVED game, posting to
+ *     `updateGameAction`; a sibling form resets the override via
+ *     `clearGameOverrideAction`. The Featured & New flags moved to the Curation
+ *     page, so only a small link to it lives here now.
+ *   - SOURCE CODE: upload / paste / reset of the playable HTML, reusing the
+ *     existing blob actions, each carrying this game's slug in a hidden field. A
+ *     `head()` probe reports whether a custom blob is currently published.
+ *   - LEADERBOARDS: the boards linked to this game (with live score counts +
+ *     Manage / Unlink), a "create a board for this game" form, and a "link an
+ *     existing standalone board" form.
+ *
+ * FAIL-SOFT: the board reads share one try/catch keyed on `isUnconfiguredDbError`
+ * so an unconfigured/unreachable Neon degrades the leaderboards panel to a notice
+ * instead of 500-ing the whole control center; the details + source panels need
+ * no database and always render.
+ */
+
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { head } from "@vercel/blob";
+import { requireRole } from "@/app/lib/auth";
+import { isUnconfiguredDbError } from "@/app/lib/db";
+import { blobPathForSlug } from "@/app/lib/game-html-blob";
+import { resolveCategories, resolveGame, resolveTags } from "@/app/lib/games-store";
+import { store } from "@/app/lib/scoreboard";
+import type { BoardConfig } from "@/sdk/src/contract";
+import { DashHeader } from "../../_ui/DashHeader";
+import { Section } from "../../_ui/Section";
+import { TagEditor } from "../../_ui/TagEditor";
+import { createBoardAction, linkBoardAction, unlinkBoardAction } from "../../boards/actions";
+import { clearHtmlAction, pasteHtmlAction, uploadHtmlAction } from "../actions";
+import { clearGameOverrideAction, setGameTagsAction, updateGameAction } from "./actions";
+
+export const metadata: Metadata = {
+  title: "Game",
+  robots: { index: false, follow: false },
+};
+
+type Params = Promise<{ slug: string }>;
+type SearchParams = Promise<{ ok?: string | string[]; error?: string | string[] }>;
+
+function asString(value: string | string[] | undefined): string | null {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0] : value;
+}
+
+/** True when a custom `games/<slug>/index.html` blob is published. Fails soft. */
+async function hasCustomHtml(slug: string): Promise<boolean> {
+  try {
+    await head(blobPathForSlug(slug));
+    return true;
+  } catch {
+    // Not found / no blob access → treat as "using the build default".
+    return false;
+  }
+}
+
+export default async function GameControlPage({
+  params,
+  searchParams,
+}: {
+  params: Params;
+  searchParams: SearchParams;
+}) {
+  await requireRole("admin");
+
+  const { slug } = await params;
+  const game = await resolveGame(slug);
+  if (!game) notFound();
+
+  const sp = await searchParams;
+  const ok = asString(sp.ok);
+  const error = asString(sp.error);
+
+  const [categories, tagList, customHtml] = await Promise.all([
+    resolveCategories(),
+    resolveTags(),
+    hasCustomHtml(slug),
+  ]);
+  const tagSuggestions = tagList.map((t) => t.tag);
+
+  // Board reads share one try/catch: an unconfigured DB degrades this panel to a
+  // notice instead of 500-ing the page. notFound()/redirect are never thrown in
+  // here so their control signals can't be swallowed.
+  let myBoards: BoardConfig[] = [];
+  let counts: number[] = [];
+  let standalone: BoardConfig[] = [];
+  let dbUnconfigured = false;
+  try {
+    myBoards = await store.listBoardsForGame(slug);
+    counts = await Promise.all(myBoards.map((b) => store.countScores(b.slug)));
+    const all = await store.listBoards();
+    standalone = all.filter((b) => !b.gameSlug);
+  } catch (err) {
+    if (isUnconfiguredDbError(err)) dbUnconfigured = true;
+    else throw err;
+  }
+
+  const inputClass =
+    "mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30";
+
+  return (
+    <div className="space-y-6">
+      <Link
+        href="/dashboard/games"
+        className="inline-block text-sm font-semibold text-brand hover:text-brand-600"
+      >
+        ← All games
+      </Link>
+      <DashHeader title={game.title} subtitle={game.tagline} />
+
+      {ok && (
+        <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          {ok}
+        </div>
+      )}
+      {error && (
+        <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+          {error}
+        </div>
+      )}
+
+      {/* HERO */}
+      <Section>
+        <div className="flex flex-wrap items-center gap-5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/games/${slug}/cover.png`}
+            alt=""
+            className="aspect-video w-44 shrink-0 rounded-lg bg-surface-2 object-cover"
+          />
+          <div className="min-w-0">
+            <h2 className="text-xl font-black tracking-tight">{game.title}</h2>
+            <p className="mt-1 text-sm text-muted">{game.category}</p>
+            <Link
+              href={`/game/${slug}`}
+              target="_blank"
+              className="mt-3 inline-block rounded-full border border-border bg-white px-4 py-1.5 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+            >
+              Open live ↗
+            </Link>
+          </div>
+        </div>
+      </Section>
+
+      {/* DETAILS */}
+      <Section title="Details" subtitle="Overrides the static catalogue">
+        <form action={updateGameAction} className="space-y-5">
+          <input type="hidden" name="slug" value={slug} />
+
+          <label className="block text-sm font-semibold text-zinc-900">
+            Title
+            <input
+              name="title"
+              type="text"
+              defaultValue={game.title}
+              placeholder="Leave blank to use the default"
+              className={inputClass}
+            />
+          </label>
+
+          <label className="block text-sm font-semibold text-zinc-900">
+            Tagline
+            <input
+              name="tagline"
+              type="text"
+              defaultValue={game.tagline}
+              placeholder="Leave blank to use the default"
+              className={inputClass}
+            />
+          </label>
+
+          <label className="block text-sm font-semibold text-zinc-900">
+            Description
+            <textarea
+              name="description"
+              rows={4}
+              defaultValue={game.description}
+              placeholder="Leave blank to use the default"
+              className={inputClass}
+            />
+          </label>
+
+          <label className="block text-sm font-semibold text-zinc-900 sm:max-w-xs">
+            Category
+            <input
+              name="category"
+              type="text"
+              list="game-categories"
+              defaultValue={game.category}
+              className={inputClass}
+            />
+            <datalist id="game-categories">
+              {categories.map((category) => (
+                <option key={category} value={category} />
+              ))}
+            </datalist>
+          </label>
+
+          <p className="text-xs text-muted">
+            Featured &amp; New are managed on the{" "}
+            <Link
+              href="/dashboard/curation"
+              className="font-semibold text-brand hover:text-brand-600"
+            >
+              Curation
+            </Link>{" "}
+            page.
+          </p>
+
+          <button
+            type="submit"
+            className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+          >
+            Save details
+          </button>
+        </form>
+
+        <form action={clearGameOverrideAction} className="mt-4 border-t border-border pt-4">
+          <input type="hidden" name="slug" value={slug} />
+          <button
+            type="submit"
+            className="rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+          >
+            Reset to defaults
+          </button>
+          <span className="ml-3 text-xs text-muted">
+            Drops every override and reverts to the build&apos;s values.
+          </span>
+        </form>
+      </Section>
+
+      {/* TAGS */}
+      <Section title="Tags" subtitle="Drives search & discovery">
+        <form action={setGameTagsAction} className="space-y-5">
+          <input type="hidden" name="slug" value={slug} />
+          <TagEditor defaultTags={game.tags} suggestions={tagSuggestions} />
+          <button
+            type="submit"
+            className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+          >
+            Save tags
+          </button>
+        </form>
+      </Section>
+
+      {/* SOURCE CODE */}
+      <Section
+        title="Source code"
+        subtitle={customHtml ? "Custom HTML published" : "Using the build default"}
+      >
+        <div className="space-y-6">
+          <form action={uploadHtmlAction} className="space-y-3">
+            <input type="hidden" name="slug" value={slug} />
+            <label className="block text-sm font-semibold text-zinc-900">
+              Upload an <code className="font-mono">.html</code> file
+              <input
+                name="htmlFile"
+                type="file"
+                required
+                accept=".html,text/html"
+                className="mt-2 block w-full text-sm"
+              />
+            </label>
+            <button
+              type="submit"
+              className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+            >
+              Upload HTML
+            </button>
+          </form>
+
+          <form action={pasteHtmlAction} className="space-y-3 border-t border-border pt-6">
+            <input type="hidden" name="slug" value={slug} />
+            <label className="block text-sm font-semibold text-zinc-900">
+              …or paste a full HTML document
+              <textarea
+                name="html"
+                required
+                rows={10}
+                spellCheck={false}
+                placeholder="<!doctype html>…"
+                className="mt-2 block w-full rounded-lg border border-border px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-brand/30"
+              />
+            </label>
+            <button
+              type="submit"
+              className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+            >
+              Save HTML
+            </button>
+          </form>
+
+          <div className="flex flex-wrap items-center gap-4 border-t border-border pt-6">
+            <form action={clearHtmlAction}>
+              <input type="hidden" name="slug" value={slug} />
+              <button
+                type="submit"
+                className="rounded-full bg-red-600 px-5 py-2 text-sm font-extrabold text-white hover:bg-red-700"
+              >
+                Reset to default
+              </button>
+            </form>
+            <Link
+              href={`/game/${slug}`}
+              target="_blank"
+              className="text-sm font-semibold text-brand hover:text-brand-600"
+            >
+              Open game ↗
+            </Link>
+          </div>
+        </div>
+      </Section>
+
+      {/* LEADERBOARDS */}
+      <Section title="Leaderboards" subtitle="Boards powering this game">
+        {dbUnconfigured ? (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Database not configured. Set{" "}
+            <code className="font-mono">DATABASE_URL</code> to manage leaderboards.
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {myBoards.length === 0 ? (
+              <p className="text-sm text-muted">
+                No leaderboards linked to this game yet.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border rounded-lg border border-border">
+                {myBoards.map((board, i) => (
+                  <li
+                    key={board.slug}
+                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-bold text-foreground">
+                        {board.title}
+                      </div>
+                      <div className="text-xs text-muted">
+                        <span className="font-mono">{board.slug}</span> ·{" "}
+                        {counts[i]} score{counts[i] === 1 ? "" : "s"}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <Link
+                        href={`/dashboard/boards/${board.slug}`}
+                        className="text-sm font-semibold text-brand hover:text-brand-600"
+                      >
+                        Manage →
+                      </Link>
+                      <form action={unlinkBoardAction}>
+                        <input type="hidden" name="boardId" value={board.slug} />
+                        <input type="hidden" name="gameSlug" value={slug} />
+                        <button
+                          type="submit"
+                          className="rounded-full border border-border bg-white px-3 py-1 text-xs font-bold text-zinc-700 hover:bg-surface-2"
+                        >
+                          Unlink
+                        </button>
+                      </form>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <form
+              action={createBoardAction}
+              className="space-y-4 border-t border-border pt-6"
+            >
+              <h3 className="text-sm font-black">Create a leaderboard for this game</h3>
+              <input type="hidden" name="gameSlug" value={slug} />
+              <input type="hidden" name="returnTo" value={`/dashboard/games/${slug}`} />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <label className="block text-sm font-semibold text-zinc-900">
+                  Board id
+                  <input
+                    name="slug"
+                    type="text"
+                    required
+                    pattern="[a-z0-9][a-z0-9-]*"
+                    placeholder="my-game-board"
+                    autoComplete="off"
+                    className={inputClass}
+                  />
+                </label>
+                <label className="block text-sm font-semibold text-zinc-900">
+                  Title
+                  <input
+                    name="title"
+                    type="text"
+                    required
+                    placeholder="High Scores"
+                    className={inputClass}
+                  />
+                </label>
+              </div>
+              <label className="block text-sm font-semibold text-zinc-900 sm:max-w-xs">
+                Sort
+                <select name="sort" defaultValue="desc" className={inputClass}>
+                  <option value="desc">Descending (highest first)</option>
+                  <option value="asc">Ascending (lowest first)</option>
+                </select>
+              </label>
+              <button
+                type="submit"
+                className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+              >
+                Create leaderboard
+              </button>
+            </form>
+
+            {standalone.length > 0 && (
+              <form
+                action={linkBoardAction}
+                className="flex flex-wrap items-end gap-3 border-t border-border pt-6"
+              >
+                <input type="hidden" name="gameSlug" value={slug} />
+                <label className="block text-sm font-semibold text-zinc-900">
+                  Link an existing standalone board
+                  <select name="boardId" defaultValue="" required className={inputClass}>
+                    <option value="" disabled>
+                      Select a board
+                    </option>
+                    {standalone.map((board) => (
+                      <option key={board.slug} value={board.slug}>
+                        {board.title} ({board.slug})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="submit"
+                  className="rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                >
+                  Link
+                </button>
+              </form>
+            )}
+          </div>
+        )}
+      </Section>
+    </div>
+  );
+}

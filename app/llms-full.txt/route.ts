@@ -13,17 +13,18 @@
  *    localhost, previews, and production. The embed snippet itself is reproduced
  *    VERBATIM (it hard-codes hallpass.gg/sdk/v1/hallpass.js); a note explains how
  *    to repoint the src when self-hosting from another origin.
- *  - The registered-slug list is generated from the static `games` import, so it
- *    stays in sync as games are added — no manual upkeep, no server-only code.
+ *  - The registered-slug list is generated from `resolveGames()`, so it stays in
+ *    sync as games are added AND reflects dashboard title overrides.
  *  - Route handlers are not cached by default; we set `Cache-Control` (5 minutes)
  *    explicitly. Reading `req.url` makes this request-time.
  */
 
-import { games } from "@/app/lib/games";
+import { resolveGames } from "@/app/lib/games-store";
 
 export async function GET(req: Request) {
   const base = new URL(req.url).origin;
 
+  const games = await resolveGames();
   const slugList = games
     .map((g) => `- ${g.slug} — ${g.title}`)
     .join("\n");
@@ -195,6 +196,9 @@ ${slugList}
     status: 200,
     headers: {
       "content-type": "text/plain; charset=utf-8",
+      // ~5-min staleness for the machine manifest: this request-time route reads
+      // req.url, so revalidatePath("/llms-full.txt") is a no-op here — freshness
+      // is governed solely by this max-age, not by tag/path revalidation.
       "cache-control": "public, max-age=300",
     },
   });

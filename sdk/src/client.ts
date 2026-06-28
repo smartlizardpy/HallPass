@@ -14,11 +14,14 @@
  */
 
 import type {
+  AuthRedirectOptions,
   EventName,
   GetScoresOptions,
   HallPass,
   LeaderboardResponse,
+  MeResponse,
   Mode,
+  PlayerIdentity,
   ReadyState,
   ScoreEntry,
   SubmitOptions,
@@ -70,8 +73,24 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
   // that surfaces as the "network" reason on individual calls.
   const mode: Mode = typeof fetch === "undefined" ? "inert" : "live";
 
+  /**
+   * In-memory cache of the player identity. `undefined` = not fetched yet;
+   * `null` = fetched, no session; an object = the cached identity. It lives only
+   * for this page (a full-page `signIn`/`signOut` navigation clears it anyway)
+   * and is refreshed by `setPlayerHandle`. Per-instance, so tests are isolated.
+   */
+  let cachedPlayer: PlayerIdentity | null | undefined;
+
   function leaderboardUrl(game: string): string {
     return cfg.api + "/api/v1/leaderboard/" + encodeURIComponent(game);
+  }
+
+  function meUrl(): string {
+    return cfg.api + "/api/v1/me";
+  }
+
+  function meHandleUrl(): string {
+    return cfg.api + "/api/v1/me/handle";
   }
 
   async function ready(opts?: { game?: string; api?: string }): Promise<ReadyState> {
@@ -171,6 +190,97 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
     }
   }
 
+  /**
+   * Resolve the signed-in player's PUBLIC identity, or `null`. Same-origin GET to
+   * `/api/v1/me` with credentials so the session cookie rides along. The first
+   * successful answer (identity OR a confirmed no-session `null`) is cached; a
+   * network/inert failure resolves `null` WITHOUT caching, so a later call retries.
+   */
+  async function getPlayer(): Promise<PlayerIdentity | null> {
+    try {
+      if (cachedPlayer !== undefined) return cachedPlayer;
+      if (mode === "inert") return null;
+
+      const res = await getJSON(meUrl(), { credentials: "include" });
+      if (!res.ok) return null;
+
+      cachedPlayer = extractPlayer(res.data);
+      return cachedPlayer;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Same-origin redirect into the Google sign-in flow. Busts the identity cache
+   * first (the navigation reloads the page, but be explicit). No-op when inert or
+   * outside a browser; never throws.
+   */
+  function signIn(opts?: AuthRedirectOptions): void {
+    cachedPlayer = undefined;
+    navigate("/play/signin", opts);
+  }
+
+  /**
+   * Same-origin redirect into the sign-out flow (the `/play/signout` page runs the
+   * sign-out server action). Busts the identity cache. No-op when inert or outside
+   * a browser; never throws.
+   */
+  function signOut(opts?: AuthRedirectOptions): void {
+    cachedPlayer = undefined;
+    navigate("/play/signout", opts);
+  }
+
+  /**
+   * Set the player's chosen handle. Same-origin credentialed POST to
+   * `/api/v1/me/handle`; on success refresh the identity cache and resolve the
+   * updated identity, else resolve `null`. Never throws.
+   */
+  async function setPlayerHandle(handle: string): Promise<PlayerIdentity | null> {
+    try {
+      if (mode === "inert") return null;
+
+      const res = await postJSON(meHandleUrl(), { handle }, { credentials: "include" });
+      if (!res.ok) return null;
+
+      cachedPlayer = extractPlayer(res.data);
+      return cachedPlayer;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Navigate the browser to `path?callbackUrl=<redirectTo|location.href>`. Fully
+   * guarded: a missing `window`, inert mode, or a sandbox that blocks navigation
+   * all degrade to a silent no-op.
+   */
+  function navigate(path: string, opts?: AuthRedirectOptions): void {
+    try {
+      if (mode === "inert") return;
+      if (typeof window === "undefined" || !window.location) return;
+      const raw =
+        (opts && typeof opts.redirectTo === "string" && opts.redirectTo.trim()) ||
+        window.location.href;
+      // The sign-in page only accepts a same-origin RELATIVE callbackUrl, so
+      // reduce whatever we have (an absolute href by default) to its relative
+      // part; a cross-origin value falls back to the current path.
+      let back =
+        window.location.pathname + window.location.search + window.location.hash;
+      try {
+        const u = new URL(raw, window.location.href);
+        if (u.origin === window.location.origin) {
+          back = u.pathname + u.search + u.hash;
+        }
+      } catch {
+        // keep the current-path fallback
+      }
+      window.location.assign(path + "?callbackUrl=" + encodeURIComponent(back));
+    } catch {
+      // Navigation blocked (sandboxed iframe, etc.) — never throw.
+    }
+  }
+
   const api: HallPass = {
     version: SDK_MAJOR,
     mode,
@@ -179,6 +289,10 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
     getScores,
     getHandle: () => getHandle(),
     setHandle: (handle: string) => setHandle(handle),
+    getPlayer,
+    signIn,
+    signOut,
+    setPlayerHandle,
     on(event: EventName, cb: (payload: unknown) => void): HallPass {
       try {
         if (typeof cb === "function") {
@@ -242,5 +356,32 @@ function isScoreEntry(value: unknown): value is ScoreEntry {
     typeof (value as ScoreEntry).rank === "number" &&
     typeof (value as ScoreEntry).handle === "string" &&
     typeof (value as ScoreEntry).score === "number"
+  );
+}
+
+/**
+ * Pull a validated `PlayerIdentity` out of a `MeResponse`-shaped body, else
+ * `null`. The result is re-projected to EXACTLY the four public fields so a
+ * malformed/over-sharing server response can never leak an extra field (e.g.
+ * email) through the SDK surface.
+ */
+function extractPlayer(data: unknown): PlayerIdentity | null {
+  const player = (data as Partial<MeResponse> | undefined)?.player;
+  if (!isPlayerIdentity(player)) return null;
+  return {
+    id: player.id,
+    name: player.name,
+    image: typeof player.image === "string" ? player.image : null,
+    handle: player.handle,
+  };
+}
+
+function isPlayerIdentity(value: unknown): value is PlayerIdentity {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    typeof (value as PlayerIdentity).id === "string" &&
+    typeof (value as PlayerIdentity).name === "string" &&
+    typeof (value as PlayerIdentity).handle === "string"
   );
 }

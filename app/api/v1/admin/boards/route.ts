@@ -9,24 +9,27 @@
  *   - unauthorized (missing/wrong secret) → 401;
  *   - ok → proceed.
  *
- * POST creates (or idempotently updates) a board; the slug must name a real
- * game. A brand-new board answers 201, an idempotent update answers 200, so a
- * caller can tell whether provisioning actually happened.
+ * POST creates (or idempotently updates) a board. The board's own `slug` is its
+ * free-form id and need not name a game; an optional `gameSlug` links it to one
+ * (validation lives in the shared `parseCreateBoardInput`). A brand-new board
+ * answers 201, an idempotent update answers 200, so a caller can tell whether
+ * provisioning actually happened.
  */
 
 import { games } from "@/app/lib/games";
 import { store, verifyAdminSecret } from "@/app/lib/scoreboard";
+import {
+  parseCreateBoardInput,
+  type RawBoardInput,
+} from "@/app/lib/scoreboard/board-input";
 import type {
   ApiError,
   BoardConfig,
-  CreateBoardRequest,
   CreateBoardResponse,
-  SortDir,
 } from "@/sdk/src/contract";
 
-function isKnownGame(slug: string): boolean {
-  return games.some((game) => game.slug === slug);
-}
+/** Games-list membership test injected into the shared board validator. */
+const isKnownGame = (s: string): boolean => games.some((g) => g.slug === s);
 
 /** Map the three auth outcomes to an early Response, or null to continue. */
 function authGate(headers: Headers): Response | null {
@@ -56,44 +59,25 @@ export async function POST(req: Request): Promise<Response> {
     });
   }
 
-  const body = (payload ?? {}) as Partial<CreateBoardRequest>;
-  if (
-    typeof body.slug !== "string" ||
-    body.slug.trim().length === 0 ||
-    typeof body.title !== "string" ||
-    body.title.trim().length === 0
-  ) {
-    return Response.json(
-      { error: "slug and title are required" } satisfies ApiError,
-      { status: 400 },
-    );
+  // Single, shared normalisation path — the dashboard server actions validate
+  // through the very same `parseCreateBoardInput`, so the two surfaces cannot
+  // drift on what a valid board looks like. A `gameSlug` failure is a 404
+  // (unknown game); every other field failure is a 400.
+  const parsed = parseCreateBoardInput((payload ?? {}) as RawBoardInput, {
+    isKnownGame,
+  });
+  if (!parsed.ok) {
+    return Response.json({ error: parsed.error.message } satisfies ApiError, {
+      status: parsed.error.field === "gameSlug" ? 404 : 400,
+    });
   }
-
-  if (!isKnownGame(body.slug)) {
-    return Response.json({ error: "Unknown game" } satisfies ApiError, { status: 404 });
-  }
-
-  const sort: SortDir | undefined =
-    body.sort === "asc" ? "asc" : body.sort === "desc" ? "desc" : undefined;
-  const input: CreateBoardRequest = {
-    slug: body.slug,
-    title: body.title,
-    sort,
-    scoreLabel: typeof body.scoreLabel === "string" ? body.scoreLabel : undefined,
-    maxScore:
-      body.maxScore === null
-        ? null
-        : typeof body.maxScore === "number"
-          ? body.maxScore
-          : undefined,
-  };
 
   try {
-    const { board, created } = await store.createBoard(input);
+    const { board, created } = await store.createBoard(parsed.value);
     const response: CreateBoardResponse = { ok: true, created, board };
     return Response.json(response, { status: created ? 201 : 200 });
   } catch (error) {
-    console.error(`admin createBoard failed for ${body.slug}:`, error);
+    console.error(`admin createBoard failed for ${parsed.value.slug}:`, error);
     return Response.json({ error: "Failed to create board" } satisfies ApiError, {
       status: 503,
     });

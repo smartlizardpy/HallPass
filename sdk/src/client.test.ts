@@ -174,6 +174,133 @@ describe("createClient.getScores", () => {
   });
 });
 
+describe("createClient.getPlayer", () => {
+  it("resolves the public identity on a 200 and caches it (one fetch)", async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(
+          {
+            player: {
+              id: "g-1",
+              name: "Zoe K",
+              image: "https://img/x.png",
+              handle: "ZK",
+              email: "leak@example.com",
+            },
+          },
+          200,
+        ),
+      );
+    vi.stubGlobal("fetch", fetchSpy);
+    const api = createClient(baseConfig(), () => {});
+
+    const player = await api.getPlayer!();
+
+    // Re-projected to exactly the four public fields — email never flows through.
+    expect(player).toEqual({
+      id: "g-1",
+      name: "Zoe K",
+      image: "https://img/x.png",
+      handle: "ZK",
+    });
+
+    // Same-origin credentialed GET to /api/v1/me.
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("https://api.example/api/v1/me");
+    expect(init.credentials).toBe("include");
+
+    // Cached: a second call does not hit the network again.
+    expect(await api.getPlayer!()).toEqual(player);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves null when the server reports no session", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ player: null }, 200)),
+    );
+    const api = createClient(baseConfig(), () => {});
+
+    expect(await api.getPlayer!()).toBeNull();
+  });
+
+  it("resolves null on a rejected fetch and never throws (no caching)", async () => {
+    const fetchSpy = vi.fn().mockRejectedValue(new Error("down"));
+    vi.stubGlobal("fetch", fetchSpy);
+    const api = createClient(baseConfig(), () => {});
+
+    expect(await api.getPlayer!()).toBeNull();
+    // A failure is not cached, so a retry refetches.
+    expect(await api.getPlayer!()).toBeNull();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("createClient.setPlayerHandle", () => {
+  it("posts the handle and resolves the updated identity", async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(
+          { player: { id: "g-1", name: "Zoe K", image: null, handle: "NEW" } },
+          200,
+        ),
+      );
+    vi.stubGlobal("fetch", fetchSpy);
+    const api = createClient(baseConfig(), () => {});
+
+    const player = await api.setPlayerHandle!("NEW");
+
+    expect(player).toEqual({
+      id: "g-1",
+      name: "Zoe K",
+      image: null,
+      handle: "NEW",
+    });
+
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("https://api.example/api/v1/me/handle");
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    expect(JSON.parse(init.body)).toEqual({ handle: "NEW" });
+  });
+
+  it("refreshes the getPlayer cache with the new identity", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse(
+            { player: { id: "g-1", name: "Zoe K", image: null, handle: "NEW" } },
+            200,
+          ),
+        ),
+    );
+    const api = createClient(baseConfig(), () => {});
+    await api.setPlayerHandle!("NEW");
+
+    // getPlayer now serves the refreshed identity from cache — no network call.
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const player = await api.getPlayer!();
+
+    expect(player?.handle).toBe("NEW");
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("resolves null on a non-2xx and never throws", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ error: "nope" }, 401)),
+    );
+    const api = createClient(baseConfig(), () => {});
+
+    expect(await api.setPlayerHandle!("X")).toBeNull();
+  });
+});
+
 describe("createClient handle + event chaining", () => {
   it("on/off are chainable and return the api", () => {
     const api = createClient(baseConfig(), () => {});

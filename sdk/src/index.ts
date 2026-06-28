@@ -102,5 +102,7 @@ function settle(call: StubCall, value: unknown): void {
 
 /** Safe fallback per method when replay cannot produce a real result. */
 function safeDefault(name: string): unknown {
-  return name === "getScores" ? [] : { ok: false, reason: "network" };
+  if (name === "getScores") return [];
+  if (name === "getPlayer" || name === "setPlayerHandle") return null;
+  return { ok: false, reason: "network" };
 }
