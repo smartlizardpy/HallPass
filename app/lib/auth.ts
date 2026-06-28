@@ -59,9 +59,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
      *   - always upsert the `players` row, keyed by the Google subject id
      *     (`user.id`), so every signed-in person has a verified identity.
      */
-    async signIn({ user }) {
+    async signIn({ user, account, profile }) {
       const email = user.email?.toLowerCase();
-      if (!email || !user.id) return false;
+      // STABLE identity key. `user.id` is a fresh random UUID on EVERY login in
+      // this Auth.js version, so it must never be the player PK — a returning user
+      // would mint a new id each time and collide on the UNIQUE `email` column
+      // (duplicate key → the sign-in throws → AccessDenied). The provider's subject
+      // id (`account.providerAccountId`, i.e. the Google `sub`) is immutable per
+      // account and is the correct key; `profile.sub`/`user.id` are last-ditch
+      // fallbacks so a provider that omits the account never hard-fails sign-in.
+      const subjectId = account?.providerAccountId ?? profile?.sub ?? user.id;
+      if (!email || !subjectId) return false;
       const role = await getUserRole(email);
       if (role) {
         await upsertUserOnLogin({
@@ -72,7 +80,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
       }
       await upsertPlayerOnLogin({
-        id: user.id,
+        id: subjectId,
         email,
         name: user.name,
         image: user.image,
@@ -89,17 +97,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
      * token; thereafter we fall back to `token.email`. The per-request DB read is
      * a deliberate, cheap price for correct revocation on an admin surface.
      */
-    async jwt({ token, user }) {
+    async jwt({ token, user, account, profile }) {
       const email = (user?.email ?? token.email)?.toLowerCase();
       if (email) {
         token.email = email;
         token.role = await getUserRole(email);
       }
-      // Pin the player identity (Google subject id) once, on the login pass.
-      // Unlike `role`, this is immutable, so it is stamped only when `user` is
-      // present and then rides along on the token for every later request.
-      if (user?.id) {
-        token.playerId = user.id;
+      // Pin the player identity ONCE, on the login pass, to the provider's STABLE
+      // subject id (`account.providerAccountId`, i.e. the Google `sub`) — never
+      // `user.id`, which is a fresh random UUID per login here. `account`/`profile`
+      // are present only on the sign-in pass; thereafter the pinned id rides the
+      // token. Must match the key used by `upsertPlayerOnLogin` in `signIn`.
+      const subjectId = account?.providerAccountId ?? profile?.sub;
+      if (subjectId) {
+        token.playerId = subjectId;
       }
       return token;
     },

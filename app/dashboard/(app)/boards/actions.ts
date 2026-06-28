@@ -132,7 +132,10 @@ export async function createBoardAction(formData: FormData): Promise<void> {
   }
 
   revalidatePath("/dashboard/boards");
-  redirect(safeReturn || `/dashboard/boards/${parsed.value.slug}`);
+  // `?created=1` makes the board detail page auto-open the "copy your AI
+  // integration prompt" modal once. A caller-supplied `returnTo` (e.g. the game
+  // control center) keeps its own destination and skips the modal.
+  redirect(safeReturn || `/dashboard/boards/${parsed.value.slug}?created=1`);
 }
 
 /**

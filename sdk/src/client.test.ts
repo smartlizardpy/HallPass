@@ -313,7 +313,7 @@ describe("createClient handle + event chaining", () => {
   it("setHandle sanitises and getHandle reads it back", () => {
     const api = createClient(baseConfig(), () => {});
 
-    expect(api.setHandle("Wild#Cat!!")).toBe("WildCat");
-    expect(api.getHandle()).toBe("WildCat");
+    expect(api.setHandle("Wild#Cat!!")).toBe("Wild#Cat");
+    expect(api.getHandle()).toBe("Wild#Cat");
   });
 });

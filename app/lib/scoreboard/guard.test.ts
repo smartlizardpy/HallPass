@@ -30,12 +30,18 @@ afterEach(() => {
 });
 
 describe("sanitizeHandle", () => {
-  it("strips characters outside [A-Za-z0-9 _-]", () => {
-    expect(sanitizeHandle("a!b@c#1")).toBe("abc1");
+  const GUEST_PATTERN = /^Guest#\d{4}$/;
+
+  it("strips characters outside [A-Za-z0-9 _#-] but keeps '#'", () => {
+    expect(sanitizeHandle("a!b@c#1")).toBe("abc#1");
   });
 
   it("keeps allowed spaces, underscores and hyphens", () => {
     expect(sanitizeHandle("co_op pro-1")).toBe("co_op pro-1");
+  });
+
+  it("passes an already-valid guest handle through unchanged", () => {
+    expect(sanitizeHandle("Guest#4821")).toBe("Guest#4821");
   });
 
   it("caps the result at 12 characters", () => {
@@ -43,15 +49,15 @@ describe("sanitizeHandle", () => {
     expect(sanitizeHandle("ABCDEFGHIJKLMNOP")).toHaveLength(12);
   });
 
-  it("falls back to ANON for empty, whitespace, or all-illegal input", () => {
-    expect(sanitizeHandle("")).toBe("ANON");
-    expect(sanitizeHandle("   ")).toBe("ANON");
-    expect(sanitizeHandle("™®©")).toBe("ANON");
-    expect(sanitizeHandle(undefined)).toBe("ANON");
+  it("falls back to a Guest# handle for empty, whitespace, or all-illegal input", () => {
+    expect(sanitizeHandle("")).toMatch(GUEST_PATTERN);
+    expect(sanitizeHandle("   ")).toMatch(GUEST_PATTERN);
+    expect(sanitizeHandle("™®©")).toMatch(GUEST_PATTERN);
+    expect(sanitizeHandle(undefined)).toMatch(GUEST_PATTERN);
   });
 
-  it("rejects a non-string by returning ANON", () => {
-    expect(sanitizeHandle(123 as unknown as string)).toBe("ANON");
+  it("falls back to a Guest# handle for a non-string", () => {
+    expect(sanitizeHandle(123 as unknown as string)).toMatch(GUEST_PATTERN);
   });
 });
 

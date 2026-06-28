@@ -24,11 +24,13 @@
  */
 
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { findGame, games } from "@/app/lib/games";
 import { store } from "@/app/lib/scoreboard";
+import { buildIntegrationPrompt } from "@/app/lib/integration-prompt";
 import {
   deleteBoardAction,
   deleteScoreAction,
@@ -36,6 +38,7 @@ import {
   updateBoardAction,
 } from "../actions";
 import { DashHeader } from "../../_ui/DashHeader";
+import { IntegratePanel } from "./IntegratePanel";
 
 export const metadata: Metadata = {
   title: "Edit leaderboard",
@@ -43,7 +46,11 @@ export const metadata: Metadata = {
 };
 
 type Params = Promise<{ id: string }>;
-type SearchParams = Promise<{ ok?: string | string[]; error?: string | string[] }>;
+type SearchParams = Promise<{
+  ok?: string | string[];
+  error?: string | string[];
+  created?: string | string[];
+}>;
 
 function asString(value: string | string[] | undefined): string | null {
   if (!value) return null;
@@ -75,6 +82,9 @@ export default async function BoardDetailPage({
   const sp = await searchParams;
   const ok = asString(sp.ok);
   const error = asString(sp.error);
+  // Set only on the post-create redirect, so the celebratory "copy your AI
+  // prompt" modal auto-opens once for a freshly made board.
+  const created = asString(sp.created) === "1";
 
   // All board reads share one try/catch: an unconfigured DB throws on first
   // query and must degrade to a notice, not a 500. notFound() is deliberately
@@ -122,6 +132,21 @@ export default async function BoardDetailPage({
 
   // A clean null (no error) means the id names no board → genuine 404.
   if (!board) notFound();
+
+  // Origin for the agent-integration prompt, derived from the live request so it
+  // tracks the current domain (vercel preview today, the real domain later) with
+  // no code change — mirroring how `/llms-full.txt` resolves its base URL. Falls
+  // back to the canonical host if the proxy headers are somehow absent.
+  const hdrs = await headers();
+  const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host") ?? "hallpass.gg";
+  const proto = hdrs.get("x-forwarded-proto") ?? "https";
+  const integrationPrompt = buildIntegrationPrompt({
+    slug: board.slug,
+    title: board.title,
+    sort: board.sort,
+    scoreLabel: board.scoreLabel,
+    baseUrl: `${proto}://${host}`,
+  });
 
   // A linked game whose slug no longer resolves is "missing": we keep the link
   // visible and round-trippable rather than treating the board as standalone.
@@ -263,6 +288,8 @@ export default async function BoardDetailPage({
           </button>
         </div>
       </form>
+
+      <IntegratePanel prompt={integrationPrompt} celebrate={created} />
 
       <section className="mt-6 rounded-xl border border-border bg-surface p-5">
         <div className="mb-3 flex items-baseline justify-between">

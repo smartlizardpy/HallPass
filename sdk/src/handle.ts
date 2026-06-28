@@ -5,48 +5,66 @@
  * `localStorage` under `hallpass:handle` so a returning player keeps their name
  * across sessions on the same origin.
  *
+ * Anonymous players are NEVER prompted. The first time a name is needed and
+ * nothing is stored, `ensureHandle` mints a stable `Guest#NNNN` handle (four
+ * random digits, e.g. "Guest#4821"), PERSISTS it, and reuses it on every later
+ * session — so an anonymous player keeps one consistent leaderboard name without
+ * ever seeing a dialog.
+ *
  * Load-bearing decisions:
  *  - Every storage touch is wrapped: a sandboxed/blocked `localStorage` throws
  *    `SecurityError` on access, so reads degrade to `null` and writes are
  *    best-effort (swallowed).
- *  - Handles are sanitised to `[A-Za-z0-9 _-]`, 1..12 chars, with an `"ANON"`
- *    fallback, so neither storage nor the wire ever sees arbitrary input.
- *  - `ensureHandle` may prompt the player exactly once; the prompt is wrapped so
- *    that a browser that blocks `window.prompt` (or throws) can never break a
- *    score submission.
+ *  - Handles are sanitised to `[A-Za-z0-9 _#-]`, 1..12 chars — the `#` is allowed
+ *    so a generated `Guest#NNNN` name survives — and fall back to a freshly
+ *    generated Guest handle, so neither storage nor the wire ever sees arbitrary
+ *    input.
+ *  - `window.prompt` is never called; there is no prompt path at all.
  */
 
 /** localStorage key the handle is persisted under. */
 const STORAGE_KEY = "hallpass:handle";
 
-/** Used whenever sanitisation yields nothing usable. */
-const FALLBACK = "ANON";
-
-/** Max handle length enforced on read, write, and prompt. */
+/** Max handle length enforced on read and write. ("Guest#4821" is 10 chars.) */
 const MAX_LEN = 12;
 
 export interface EnsureHandleOptions {
   /** Use this handle for the current submission only (not persisted). */
   handle?: string;
-  /** When nothing is stored, prompt once. Default `true`. */
+  /**
+   * Back-compat only. Prompts have been removed, so this field is now IGNORED:
+   * anonymous players always receive an auto-generated Guest handle and are
+   * never shown a dialog regardless of this value.
+   */
   promptHandle?: boolean;
 }
 
 /**
- * Coerce arbitrary input into a safe handle: strip disallowed characters, trim,
- * cap at 12 chars, and fall back to `"ANON"` if nothing remains.
+ * Mint a fresh anonymous handle of the form `Guest#NNNN`, where `NNNN` is a
+ * random integer from 1000 to 9999 inclusive (always four digits). This is the
+ * auto name given to a player who never chose one.
+ */
+export function generateGuestHandle(): string {
+  const n = Math.floor(Math.random() * 9000) + 1000; // 1000..9999, four digits.
+  return "Guest#" + n;
+}
+
+/**
+ * Coerce arbitrary input into a safe handle: strip disallowed characters (the
+ * `#` is kept so "Guest#NNNN" names survive), trim, cap at 12 chars, and fall
+ * back to a freshly generated Guest handle if nothing usable remains.
  */
 export function sanitizeHandle(value: unknown): string {
   try {
     const raw =
       typeof value === "string" ? value : value == null ? "" : String(value);
     const cleaned = raw
-      .replace(/[^A-Za-z0-9 _-]/g, "")
+      .replace(/[^A-Za-z0-9 _#-]/g, "")
       .slice(0, MAX_LEN)
       .trim();
-    return cleaned.length >= 1 ? cleaned : FALLBACK;
+    return cleaned.length >= 1 ? cleaned : generateGuestHandle();
   } catch {
-    return FALLBACK;
+    return generateGuestHandle();
   }
 }
 
@@ -72,12 +90,13 @@ export function setHandle(value: string): string {
 }
 
 /**
- * Resolve the handle to attach to a submission:
+ * Resolve the handle to attach to a submission. Never prompts, never throws:
  *  1. An explicit `opts.handle` override (sanitised, NOT persisted).
- *  2. The stored handle.
- *  3. A one-time prompt (unless `promptHandle === false` or unavailable).
- *  4. `"ANON"`.
- * Never throws.
+ *  2. The stored handle from a previous session.
+ *  3. Otherwise mint a fresh `Guest#NNNN` handle, PERSIST it (via `setHandle`)
+ *     so it stays stable across sessions, and return it.
+ * `opts.promptHandle` is accepted for back-compat but ignored — no dialog is
+ * ever shown, so an anonymous player always gets a stable Guest name.
  */
 export function ensureHandle(opts: EnsureHandleOptions = {}): string {
   if (typeof opts.handle === "string" && opts.handle.trim()) {
@@ -87,27 +106,7 @@ export function ensureHandle(opts: EnsureHandleOptions = {}): string {
   const stored = getHandle();
   if (stored) return stored;
 
-  if (opts.promptHandle !== false) {
-    const prompted = promptForHandle();
-    if (prompted) return setHandle(prompted);
-  }
-
-  return FALLBACK;
-}
-
-/** Prompt once for initials, fully guarded. Returns `null` if unavailable/cancelled. */
-function promptForHandle(): string | null {
-  try {
-    if (typeof window === "undefined" || typeof window.prompt !== "function") {
-      return null;
-    }
-    const answer = window.prompt(
-      "Enter a name for the leaderboard (up to 12 characters):",
-      "",
-    );
-    if (answer == null) return null; // Cancelled.
-    return sanitizeHandle(answer);
-  } catch {
-    return null;
-  }
+  // Nothing stored and no prompt: give the anonymous player a stable Guest name
+  // and persist it so the same name is reused on every later session.
+  return setHandle(generateGuestHandle());
 }

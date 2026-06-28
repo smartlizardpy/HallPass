@@ -21,9 +21,17 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { GLOBAL_MAX_SCORE } from "./config";
 
-const HANDLE_ALLOWED = /[^A-Za-z0-9 _-]/g;
+const HANDLE_ALLOWED = /[^A-Za-z0-9 _#-]/g;
 const HANDLE_MAX_LENGTH = 12;
-const FALLBACK_HANDLE = "ANON";
+
+/**
+ * Generate an anonymous display handle of the form `Guest####` (four digits,
+ * 1000–9999). Used when no usable handle was supplied; replaces the old
+ * static `"ANON"` fallback. `Math.random` is fine for a non-security label.
+ */
+function guestHandle(): string {
+  return `Guest#${Math.floor(1000 + Math.random() * 9000)}`;
+}
 
 /**
  * Last-resort salt for {@link hashIp} when neither `SCOREBOARD_IP_SALT` nor
@@ -52,17 +60,19 @@ function safeEqual(a: string, b: string): boolean {
 
 /**
  * Reduce arbitrary user input to a safe display handle: keep only
- * `[A-Za-z0-9 _-]`, trim, cap at 12 characters, and fall back to `"ANON"` when
- * nothing usable remains.
+ * `[A-Za-z0-9 _#-]`, trim, cap at 12 characters. When nothing usable remains
+ * (empty, all-illegal, or a non-string), fall back to a generated guest handle
+ * (`Guest#` + four random digits) via {@link guestHandle}. An already-valid
+ * handle such as `"Guest#4821"` passes through unchanged since `#` is allowed.
  */
 export function sanitizeHandle(input?: string): string {
-  if (typeof input !== "string") return FALLBACK_HANDLE;
+  if (typeof input !== "string") return guestHandle();
   const cleaned = input
     .replace(HANDLE_ALLOWED, "")
     .trim()
     .slice(0, HANDLE_MAX_LENGTH)
     .trim();
-  return cleaned.length > 0 ? cleaned : FALLBACK_HANDLE;
+  return cleaned.length > 0 ? cleaned : guestHandle();
 }
 
 /**
