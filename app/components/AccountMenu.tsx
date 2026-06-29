@@ -62,7 +62,7 @@ export function AccountMenu() {
       <form action={startSignIn}>
         <button
           type="submit"
-          className="hidden h-11 items-center gap-2 rounded-full bg-brand px-4 text-sm font-extrabold text-white shadow-lg shadow-brand/30 transition hover:bg-brand-600 sm:flex sm:px-5"
+          className="flex h-11 items-center gap-2 rounded-full bg-brand px-4 text-sm font-extrabold text-white shadow-lg shadow-brand/30 transition hover:bg-brand-600 sm:px-5"
         >
           Sign in
         </button>
