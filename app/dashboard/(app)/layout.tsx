@@ -22,6 +22,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/app/lib/auth";
 import { Wordmark } from "@/app/components/Wordmark";
+import { WhatsNewLink } from "@/app/components/WhatsNewLink";
 import { DashNav } from "./_ui/DashNav";
 
 export const metadata: Metadata = {
@@ -63,6 +64,10 @@ export default async function DashboardAppLayout({
           </Link>
 
           <DashNav isSuperAdmin={role === "super_admin"} />
+
+          <div className="mt-2 border-t border-border pt-2">
+            <WhatsNewLink variant="sidebar" />
+          </div>
 
           <div className="mt-auto space-y-3 border-t border-border pt-4">
             <div className="min-w-0">
