@@ -72,14 +72,7 @@ export function GameCard({
       {/* Favorite heart — sibling of the play button, top-RIGHT (badges stay
           top-left). Only rendered when a handler is supplied, so cards without
           personalization render exactly as before. Always visible (not
-          hover-only) so it stays tappable on touch.
-
-          Styling: a dark frosted-glass disc rather than a solid white circle, so
-          it reads on ANY cover art (light or dark) and recedes into the artwork
-          instead of sitting on top of it. Idle = white outline heart on the glass;
-          active = vivid pink FILLED heart on a bright white disc so a favorited
-          card is obvious at a glance. A single SVG morphs between the two states
-          (fill/stroke toggle) and the button pops on press. */}
+          hover-only) so it stays tappable on touch. */}
       {onToggleFavorite && (
         <button
           type="button"
@@ -91,26 +84,34 @@ export function GameCard({
             e.stopPropagation();
             onToggleFavorite(game.slug);
           }}
-          className={`absolute right-2 top-2 z-10 grid h-9 w-9 place-items-center rounded-full shadow-md backdrop-blur-md transition-all duration-150 hover:scale-105 active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-black/40 ${
-            isFavorite
-              ? "bg-white text-accent-pink"
-              : "bg-black/30 text-white hover:bg-black/55"
-          }`}
+          className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-zinc-700 shadow-md backdrop-blur transition hover:scale-110 hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-white"
           style={{ touchAction: "manipulation" }}
         >
-          <svg
-            width="17"
-            height="17"
-            viewBox="0 0 24 24"
-            fill={isFavorite ? "currentColor" : "none"}
-            stroke="currentColor"
-            strokeWidth={isFavorite ? 0 : 2.2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="pointer-events-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]"
-          >
-            <path d="M12 21s-6.7-4.3-9.3-8.2C.9 10.1 1.6 6.5 4.6 5.3c2-.8 4 .1 5 1.7 1-1.6 3-2.5 5-1.7 3 1.2 3.7 4.8 1.9 7.5C18.7 16.7 12 21 12 21z" />
-          </svg>
+          {isFavorite ? (
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="var(--accent-pink)"
+              className="pointer-events-none"
+            >
+              <path d="M12 21s-6.7-4.3-9.3-8.2C.9 10.1 1.6 6.5 4.6 5.3c2-.8 4 .1 5 1.7 1-1.6 3-2.5 5-1.7 3 1.2 3.7 4.8 1.9 7.5C18.7 16.7 12 21 12 21z" />
+            </svg>
+          ) : (
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="pointer-events-none"
+            >
+              <path d="M12 21s-6.7-4.3-9.3-8.2C.9 10.1 1.6 6.5 4.6 5.3c2-.8 4 .1 5 1.7 1-1.6 3-2.5 5-1.7 3 1.2 3.7 4.8 1.9 7.5C18.7 16.7 12 21 12 21z" />
+            </svg>
+          )}
         </button>
       )}
     </div>
