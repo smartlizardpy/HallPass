@@ -1,9 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import { type Game } from "../lib/games";
+import {
+  recordRecentPlay,
+  useFavorites,
+  useFavoritesServerSync,
+  useRecentlyPlayed,
+} from "../lib/personalization";
 import { GameCard } from "./GameCard";
 import { Sidebar } from "./Sidebar";
 import { PlayerOverlay } from "./PlayerOverlay";
@@ -31,6 +37,30 @@ export function Arcade({
 
   const findGame = (slug: string) => games.find((g) => g.slug === slug);
 
+  // Personalization (localStorage-backed, hydrates AFTER mount via
+  // useSyncExternalStore — server snapshot is [] so there is no hydration
+  // mismatch). Favorites also sync to Neon for a signed-in player.
+  const { favorites, isFavorite, toggleFavorite } = useFavorites();
+  const { recent } = useRecentlyPlayed();
+  useFavoritesServerSync();
+
+  // Direct nav to /game/[slug] opens a game without going through setPlaying,
+  // so record that entry path here too (covers every way a game opens).
+  useEffect(() => {
+    if (initialPlaying) recordRecentPlay(initialPlaying);
+  }, [initialPlaying]);
+
+  const handleToggleFavorite = (slug: string) => {
+    const willFavorite = !isFavorite(slug);
+    const g = findGame(slug);
+    posthog.capture(willFavorite ? "game_favorited" : "game_unfavorited", {
+      game_slug: slug,
+      game_title: g?.title,
+      game_category: g?.category,
+    });
+    toggleFavorite(slug);
+  };
+
   const setCategory = (cat: string) => {
     posthog.capture("category_selected", { category: cat });
     setCategoryState(cat);
@@ -40,6 +70,7 @@ export function Arcade({
 
   const setPlaying = (slug: string | null) => {
     if (slug) {
+      recordRecentPlay(slug);
       const game = findGame(slug);
       posthog.capture("game_started", {
         game_slug: slug,
@@ -62,12 +93,18 @@ export function Arcade({
   };
 
   const featured = games.find((g) => g.isFeatured) ?? games[0];
-  const playsFor = (g: Game) => playCounts[g.slug] ?? g.plays ?? 0;
-  const trending = useMemo(
-    () => [...games].sort((a, b) => playsFor(b) - playsFor(a)).slice(0, 6),
-    [playCounts]
-  );
-  const newGames = useMemo(() => games.filter((g) => g.isNew), []);
+  const trending = useMemo(() => {
+    const playsFor = (g: Game) => playCounts[g.slug] ?? g.plays ?? 0;
+    return [...games].sort((a, b) => playsFor(b) - playsFor(a)).slice(0, 6);
+  }, [games, playCounts]);
+  const newGames = useMemo(() => games.filter((g) => g.isNew), [games]);
+
+  // Personalized rows, resolved from slugs → games (a slug whose game has since
+  // left the catalogue is dropped). Empty until localStorage hydrates post-mount.
+  // Plain consts (not useMemo): the maps are tiny and the compiler handles reuse.
+  const isGame = (g: Game | undefined): g is Game => Boolean(g);
+  const jumpBackIn = recent.map(findGame).filter(isGame);
+  const favoriteGames = favorites.map(findGame).filter(isGame);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -89,7 +126,7 @@ export function Arcade({
         g.category.toLowerCase().includes(q)
       );
     });
-  }, [category, query, trending]);
+  }, [category, query, trending, games]);
 
   const playingGame: Game | null = playing ? findGame(playing) ?? null : null;
 
@@ -184,12 +221,52 @@ export function Arcade({
           <FeaturedBanner game={featured} onPlay={setPlaying} />
         )}
 
+        {/* Jump back in — recently played (per-device). Appears post-hydration. */}
+        {category === "All" && !query && jumpBackIn.length > 0 && (
+          <Section title="Jump back in">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+              {jumpBackIn.map((g) => (
+                <GameCard
+                  key={g.slug}
+                  game={g}
+                  onPlay={setPlaying}
+                  isFavorite={isFavorite(g.slug)}
+                  onToggleFavorite={handleToggleFavorite}
+                />
+              ))}
+            </div>
+          </Section>
+        )}
+
+        {/* Your favorites — local for everyone, server-synced when signed in. */}
+        {category === "All" && !query && favoriteGames.length > 0 && (
+          <Section title="Your favorites">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+              {favoriteGames.map((g) => (
+                <GameCard
+                  key={g.slug}
+                  game={g}
+                  onPlay={setPlaying}
+                  isFavorite={isFavorite(g.slug)}
+                  onToggleFavorite={handleToggleFavorite}
+                />
+              ))}
+            </div>
+          </Section>
+        )}
+
         {/* New row */}
         {category === "All" && !query && newGames.length > 0 && (
           <Section title="New games">
             <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
               {newGames.map((g) => (
-                <GameCard key={g.slug} game={g} onPlay={setPlaying} />
+                <GameCard
+                  key={g.slug}
+                  game={g}
+                  onPlay={setPlaying}
+                  isFavorite={isFavorite(g.slug)}
+                  onToggleFavorite={handleToggleFavorite}
+                />
               ))}
             </div>
           </Section>
@@ -203,7 +280,13 @@ export function Arcade({
           <Section title="Popular this week">
             <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
               {trending.slice(0, 6).map((g) => (
-                <GameCard key={g.slug} game={g} onPlay={setPlaying} />
+                <GameCard
+                  key={g.slug}
+                  game={g}
+                  onPlay={setPlaying}
+                  isFavorite={isFavorite(g.slug)}
+                  onToggleFavorite={handleToggleFavorite}
+                />
               ))}
             </div>
           </Section>
@@ -231,7 +314,13 @@ export function Arcade({
           ) : (
             <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
               {filtered.map((g) => (
-                <GameCard key={g.slug} game={g} onPlay={setPlaying} />
+                <GameCard
+                  key={g.slug}
+                  game={g}
+                  onPlay={setPlaying}
+                  isFavorite={isFavorite(g.slug)}
+                  onToggleFavorite={handleToggleFavorite}
+                />
               ))}
             </div>
           )}
