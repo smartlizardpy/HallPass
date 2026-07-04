@@ -22,6 +22,7 @@ import {
   hashIp,
   clampLimit,
   normalizePeriod,
+  createClaimToken,
   DEFAULT_LIMIT,
 } from "@/app/lib/scoreboard";
 import { auth } from "@/app/lib/auth";
@@ -201,6 +202,14 @@ export async function POST(
     handle: cleanHandle,
     score: intScore,
   };
+  // An ANONYMOUS row (no resolved player) gets a short-lived claim token so the
+  // guest can later attach this exact score to a signed-in account via POST
+  // /api/v1/me/claim. Never mint one for an account-attributed row, and omit it
+  // when claiming is disabled server-side (createClaimToken returns null).
+  if (playerId === null) {
+    const claimToken = createClaimToken(result.id, slug);
+    if (claimToken) body.claimToken = claimToken;
+  }
   return jsonResponse(body, 200);
 }
 

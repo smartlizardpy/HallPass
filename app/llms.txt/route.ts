@@ -57,6 +57,13 @@ on a real origin, the same SDK lights up "live" and scores start flowing.
 - POST ${base}/api/v1/admin/boards (admin-only) — provisions a board.
 - Client: HallPass.submitScore, getScores, getHandle, setHandle, ready, on/off,
   plus .mode and .version. Every method resolves; none throw.
+- Client (sign-in, same-origin only): HallPass.getPlayer() -> the signed-in
+  player's public identity ({ id, name, image, handle }) or null; signIn() /
+  signOut() open a small same-origin POPUP (the game is never reloaded — call
+  from a click handler); setPlayerHandle(handle) renames the verified player.
+  Listen with on("auth", ({ player }) => ...) to react when sign-in/out completes
+  (player is null when signed out). Guest scores from this page visit auto-attach
+  to the account on sign-in.
 
 ## Trust model
 Submitting and reading scores are public and unauthenticated. The admin password

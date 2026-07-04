@@ -30,11 +30,13 @@ function e(n){return function(){var a=[].slice.call(arguments);
 return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
 w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
 submitScore:e("submitScore"),getScores:e("getScores"),
+getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
+signIn:function(){},signOut:function(){},
 getHandle:function(){return null},setHandle:function(v){return v},
 on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
 off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
 setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
-q.splice(0).forEach(function(c){c.r(c.n==="getScores"?[]:{ok:false,reason:"inert"})})},2000)})(window);
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:{ok:false,reason:"inert"})})},2000)})(window);
 </script>`;
 
 export interface IntegrationPromptInput {
@@ -110,8 +112,23 @@ Sign in (so scores attach to a real Google account instead of an anonymous Guest
     // signed in  -> show "Signed in as " + player.name
     // signed out -> show a "Sign in" button wired to the call below
   });
-  // the "Sign in" button's click handler:
+  // the "Sign in" button's click handler (must be a real click — it opens a popup):
   HallPass.signIn();
+
+HallPass.signIn() opens a small sign-in popup; the game keeps running and is NEVER
+reloaded, so any score already in progress is safe. Wire it to a real click (a
+button's onclick) — browsers block popups opened without a user gesture. Any guest
+scores submitted during this visit are attached to the account automatically once
+sign-in completes.
+
+Because the game is not reloaded, listen for the "auth" event to live-update the
+label the moment sign-in (or sign-out) finishes in the popup:
+
+  HallPass.on("auth", function (e) {
+    // e.player is null when signed out, otherwise { name, image, handle }
+    // signed in  -> show "Signed in as " + e.player.name
+    // signed out -> show the "Sign in" button again
+  });
 
 STEP 3 — Read this so you don't think it is broken:
 - Inside this Canvas preview the network is blocked, so the leaderboard will look empty and "Sign in" will do nothing. THAT IS EXPECTED — HallPass runs in "inert" mode here and every call safely does nothing. The game must still play perfectly.

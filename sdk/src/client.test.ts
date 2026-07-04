@@ -5,12 +5,23 @@
  * to bad-score without touching the network.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createClient } from "./client";
+import { createClient, emit } from "./client";
 import type { ResolvedConfig } from "./config";
 
 const baseConfig = (): ResolvedConfig => ({
   game: "snake",
   api: "https://api.example",
+});
+
+/**
+ * A config whose API origin equals the page origin, so `sameOriginApi()` is true:
+ * credentialed submits, popup sign-in, and the auth-signal subscription all engage.
+ * The origin is read from the live jsdom `window` so it tracks whatever URL the
+ * environment runs under.
+ */
+const sameOriginConfig = (): ResolvedConfig => ({
+  game: "snake",
+  api: window.location.origin,
 });
 
 function jsonResponse(body: unknown, status: number): Response {
@@ -315,5 +326,180 @@ describe("createClient handle + event chaining", () => {
 
     expect(api.setHandle("Wild#Cat!!")).toBe("Wild#Cat");
     expect(api.getHandle()).toBe("Wild#Cat");
+  });
+});
+
+/**
+ * The same-origin auth surface. These build clients on `sameOriginConfig()`, which
+ * makes `createClient` subscribe to the cross-context auth signals; we stub away
+ * `BroadcastChannel` in each so no real channel outlives the test. This block is
+ * defined FIRST among the same-origin suites so its lone client is the only signal
+ * subscriber alive when it dispatches a storage ping.
+ */
+describe("createClient auth refresh + claim flush", () => {
+  beforeEach(() => {
+    // Never open a real BroadcastChannel (it would keep the loop alive post-test);
+    // the storage transport is what this test exercises anyway.
+    vi.stubGlobal("BroadcastChannel", undefined);
+  });
+
+  it("remembers a same-origin claim token and POSTs it to /api/v1/me/claim on refresh", async () => {
+    const origin = window.location.origin;
+    const player = { id: "p1", name: "Ada", image: null, handle: "Ada" };
+    // Record every request so we can assert on the leaderboard submit and the
+    // later claim POST without wrestling with the mock's call tuple typing.
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchSpy = vi.fn((url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      if (url.includes("/api/v1/leaderboard/")) {
+        return Promise.resolve(
+          jsonResponse(
+            { ok: true, rank: 1, handle: "ABC", score: 10, claimToken: "TESTTOKEN" },
+            200,
+          ),
+        );
+      }
+      if (url.endsWith("/api/v1/me/claim")) {
+        return Promise.resolve(jsonResponse({ ok: true, claimed: 1 }, 200));
+      }
+      if (url.endsWith("/api/v1/me")) {
+        return Promise.resolve(jsonResponse({ player }, 200));
+      }
+      return Promise.resolve(jsonResponse({}, 404));
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const events: Array<[string, unknown]> = [];
+    const api = createClient(sameOriginConfig(), (event, payload) =>
+      events.push([event, payload]),
+    );
+
+    // Anonymous same-origin submit → credentialed, and its claim token is held.
+    await api.submitScore(10);
+    const submit = calls.find((c) => c.url.includes("/api/v1/leaderboard/"));
+    expect(submit).toBeTruthy();
+    expect(submit!.init.credentials).toBe("include");
+
+    // A sign-in completing elsewhere pings the page via the storage transport.
+    window.dispatchEvent(new window.StorageEvent("storage", { key: "hallpass:auth" }));
+
+    await vi.waitFor(() => {
+      expect(calls.some((c) => c.url.endsWith("/api/v1/me/claim"))).toBe(true);
+    });
+
+    const claim = calls.find((c) => c.url.endsWith("/api/v1/me/claim"))!;
+    expect(claim.url).toBe(origin + "/api/v1/me/claim");
+    expect(claim.init.method).toBe("POST");
+    expect(claim.init.credentials).toBe("include");
+    expect(JSON.parse(claim.init.body as string)).toEqual({ tokens: ["TESTTOKEN"] });
+
+    // The refreshed identity was announced on the "auth" event.
+    const auth = events.find(([event]) => event === "auth");
+    expect(auth).toBeTruthy();
+    expect(auth![1]).toEqual({ player });
+  });
+});
+
+describe("createClient.submitScore credentials", () => {
+  beforeEach(() => {
+    vi.stubGlobal("BroadcastChannel", undefined);
+  });
+
+  it("sends credentials 'include' when the API origin equals the page origin", async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ ok: true, rank: 1, handle: "ABC", score: 10 }, 200),
+      );
+    vi.stubGlobal("fetch", fetchSpy);
+    const api = createClient(sameOriginConfig(), () => {});
+
+    await api.submitScore(10);
+
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe(window.location.origin + "/api/v1/leaderboard/snake");
+    expect(init.credentials).toBe("include");
+  });
+
+  it("sends credentials 'omit' when the API is cross-origin", async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ ok: true, rank: 1, handle: "ABC", score: 10 }, 200),
+      );
+    vi.stubGlobal("fetch", fetchSpy);
+    const api = createClient(baseConfig(), () => {});
+
+    await api.submitScore(10);
+
+    const [, init] = fetchSpy.mock.calls[0];
+    expect(init.credentials).toBe("omit");
+  });
+});
+
+describe("createClient auth popup", () => {
+  beforeEach(() => {
+    vi.stubGlobal("BroadcastChannel", undefined);
+  });
+
+  it("opens a popup at the sign-in URL when same-origin and live", () => {
+    // Fake timers keep watchPopup's poll/deadline from leaking real timers.
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("fetch", vi.fn());
+      const popup = { closed: false } as unknown as Window;
+      const openSpy = vi.spyOn(window, "open").mockReturnValue(popup);
+      const api = createClient(sameOriginConfig(), () => {});
+
+      api.signIn!();
+
+      expect(openSpy).toHaveBeenCalledTimes(1);
+      const [url, name] = openSpy.mock.calls[0];
+      expect(url).toBe("/play/signin?callbackUrl=%2Fplay%2Fauth%2Fcomplete");
+      expect(name).toBe("hallpass-auth");
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("falls back to a top-level navigation when the popup is blocked", () => {
+    vi.stubGlobal("fetch", vi.fn());
+    vi.spyOn(window, "open").mockReturnValue(null);
+
+    // Stub the whole top frame the code reads (`window.top`) so we can observe
+    // the top-frame `location.assign` and the callbackUrl derived from the top
+    // page's own relative path. vi.stubGlobal auto-restores between tests.
+    const assignSpy = vi.fn();
+    vi.stubGlobal("top", {
+      location: { pathname: "/game/snake", search: "", hash: "", assign: assignSpy },
+    });
+
+    const api = createClient(sameOriginConfig(), () => {});
+
+    api.signIn!();
+
+    expect(assignSpy).toHaveBeenCalledTimes(1);
+    expect(assignSpy).toHaveBeenCalledWith(
+      "/play/signin?callbackUrl=%2Fgame%2Fsnake",
+    );
+  });
+});
+
+describe("createClient sticky auth event", () => {
+  it("delivers the last auth payload to a late on('auth') listener", () => {
+    // Cross-origin config: no signal subscription, so this only exercises the
+    // module-level sticky replay through `emit` + `on`.
+    const api = createClient(baseConfig(), () => {});
+    const payload = {
+      player: { id: "sticky-1", name: "Ada", image: null, handle: "Ada" },
+    };
+
+    emit("auth", payload);
+
+    const seen: unknown[] = [];
+    api.on("auth", (p) => seen.push(p));
+
+    expect(seen).toEqual([payload]);
   });
 });

@@ -58,9 +58,9 @@ export interface AppendScoreInput {
   playerId?: string | null;
 }
 
-/** Result of `appendScore`: the accepted rank, or a rate-limit rejection. */
+/** Result of `appendScore`: the accepted row `id` + rank, or a rate-limit rejection. */
 export type AppendScoreResult =
-  | { ok: true; rank: number }
+  | { ok: true; id: number; rank: number }
   | { ok: false; reason: "rate-limited" };
 
 /**
@@ -323,7 +323,7 @@ export function createStore(sql: Sql) {
               WHERE (SELECT n FROM recent) < ${maxPerWindow}
               RETURNING id
             )
-            SELECT (
+            SELECT ins.id AS id, (
               SELECT count(*) FROM scores
               WHERE board_id = ${boardId} AND score < ${score}
             ) + 1 AS rank
@@ -341,7 +341,7 @@ export function createStore(sql: Sql) {
               WHERE (SELECT n FROM recent) < ${maxPerWindow}
               RETURNING id
             )
-            SELECT (
+            SELECT ins.id AS id, (
               SELECT count(*) FROM scores
               WHERE board_id = ${boardId} AND score > ${score}
             ) + 1 AS rank
@@ -350,7 +350,33 @@ export function createStore(sql: Sql) {
     if (rows.length === 0) {
       return { ok: false, reason: "rate-limited" };
     }
-    return { ok: true, rank: Number(rows[0].rank) };
+    return { ok: true, id: Number(rows[0].id), rank: Number(rows[0].rank) };
+  }
+
+  /**
+   * Attach previously-anonymous scores to a now-verified player, in ONE
+   * statement, and report how many rows were claimed. The `upd` CTE performs the
+   * UPDATE and the outer `count(*)::int` tallies its `RETURNING` rows. The
+   * `player_id IS NULL` guard makes this ONE-SHOT: an already-owned row (whether
+   * this player's or another's) is skipped, so a token can never re-claim or
+   * steal a score. `scores.handle` is left untouched. Both `playerId` and the
+   * `scoreIds` array are bound; `scoreIds` is cast to `bigint[]` so the driver's
+   * untyped array literal resolves against the BIGINT `id` column. An empty
+   * `scoreIds` early-returns 0 to avoid binding an empty array.
+   */
+  async function claimScores(playerId: string, scoreIds: number[]): Promise<number> {
+    if (scoreIds.length === 0) {
+      return 0;
+    }
+    const rows = await sql`
+      WITH upd AS (
+        UPDATE scores SET player_id = ${playerId}
+        WHERE id = ANY(${scoreIds}::bigint[]) AND player_id IS NULL
+        RETURNING id
+      )
+      SELECT count(*)::int AS n FROM upd
+    `;
+    return Number(rows[0]?.n ?? 0);
   }
 
   /**
@@ -497,6 +523,7 @@ export function createStore(sql: Sql) {
     getTopScores,
     rankForScore,
     appendScore,
+    claimScores,
     listBoards,
     countScores,
     listScoresForModeration,

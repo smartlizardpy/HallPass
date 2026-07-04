@@ -98,11 +98,13 @@ function e(n){return function(){var a=[].slice.call(arguments);
 return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
 w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
 submitScore:e("submitScore"),getScores:e("getScores"),
+getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
+signIn:function(){},signOut:function(){},
 getHandle:function(){return null},setHandle:function(v){return v},
 on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
 off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
 setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
-q.splice(0).forEach(function(c){c.r(c.n==="getScores"?[]:{ok:false,reason:"inert"})})},2000)})(window);
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:{ok:false,reason:"inert"})})},2000)})(window);
 </script>
 <script src="https://hallpass.gg/sdk/v1/hallpass.js" data-game="YOUR-SLUG" defer></script>
 
@@ -121,10 +123,11 @@ At game over, submit the final score:
 
   HallPass.submitScore(finalScore);
 
-Note: the first submitScore with no stored handle shows a ONE-TIME blocking
-window.prompt asking the player for their initials (then remembered in
-localStorage). To avoid the modal, call HallPass.setHandle("ZK") earlier, or pass
-HallPass.submitScore(finalScore, { promptHandle: false }) to submit as "ANON".
+Note: anonymous players are NEVER prompted. The first submitScore with no stored
+handle mints a stable "Guest#NNNN" name, persists it in localStorage, and reuses it
+on every later session — no dialog ever appears. Call HallPass.setHandle("ZK")
+earlier to choose a name, or pass an explicit one with
+HallPass.submitScore(finalScore, { handle: "ZK" }).
 
 Optionally render a top-10 leaderboard:
 
@@ -137,6 +140,26 @@ Optionally render a top-10 leaderboard:
 Both resolve in every environment. In inert mode submitScore resolves
 { ok:false, reason:"inert" } and getScores resolves []. You do not need a
 try/catch — nothing here rejects.
+
+Optional sign-in (same-origin only): a player can stay an anonymous Guest or sign
+in with Google for a verified identity. HallPass.getPlayer() resolves the signed-in
+player's public identity ({ id, name, image, handle }) or null. HallPass.signIn()
+opens a small same-origin POPUP — the game is NEVER reloaded, so an in-progress
+round survives — and must be called from a click handler (browsers block popups
+without a user gesture); a blocked popup falls back to a top-level redirect.
+HallPass.signOut() works the same way, and HallPass.setPlayerHandle("ZK") renames
+the verified player. Because the game is not reloaded, listen for the "auth" event
+to react when sign-in/out completes:
+
+  HallPass.on("auth", function (e) {
+    // e.player is null when signed out, otherwise { id, name, image, handle }
+  });
+
+Any guest scores submitted during the CURRENT page visit are automatically claimed
+onto the account right after sign-in (the SDK holds short-lived claim tokens in
+memory and POSTs them to /api/v1/me/claim). This is this-session only by design:
+the tokens never persist, so on a shared computer the next player can never absorb
+a previous player's scores.
 
 ## 5. Public HTTP API
 GET ${base}/api/v1/leaderboard/<game>
@@ -167,9 +190,25 @@ Error responses share a uniform body { error } with these status codes:
                          opts: { limit?, period?, game? }.
 - getHandle()          -> string | null (the stored player handle).
 - setHandle(handle)    -> string (the normalized handle that was stored).
+- getPlayer()          -> Promise<PlayerIdentity | null>. The signed-in player's
+                         PUBLIC identity ({ id, name, image, handle }) or null
+                         (anonymous / cross-origin / inert). Same-origin,
+                         credentialed. EMAIL is never exposed.
+- signIn(opts?)        -> void. Opens a small same-origin POPUP for /play/signin;
+                         the game is NEVER reloaded. Call from a click handler; a
+                         blocked popup falls back to a top-level redirect. Guest
+                         scores from this visit auto-attach to the account.
+- signOut(opts?)       -> void. Opens a same-origin popup for /play/signout; same
+                         no-reload / click-handler / fallback rules as signIn.
+- setPlayerHandle(handle)
+                       -> Promise<PlayerIdentity | null>. Rename the verified
+                         player; resolves the updated identity, else null.
 - on(event, cb)        -> HallPass (chainable).
 - off(event, cb)       -> HallPass (chainable).
-  Events: "ready" | "scores" | "submitted" | "error".
+  Events: "ready" | "scores" | "submitted" | "error" | "auth".
+  "auth" fires { player: PlayerIdentity | null } when sign-in/out completes (null
+  on sign-out). It is sticky: a listener added afterward still gets the current
+  identity.
 
 ## 7. Environment matrix
 - Hosted on hallpass.gg (this site)   -> live  (same-origin fetch).

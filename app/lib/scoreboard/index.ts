@@ -19,6 +19,7 @@ export const store = createStore(sql);
 export { isScoreboardConfigured };
 export * from "./config";
 export * from "./guard";
+export * from "./claim";
 export type {
   AppendScoreInput,
   AppendScoreResult,
