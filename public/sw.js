@@ -149,60 +149,106 @@ async function networkFirst(req) {
 
 async function networkFirstWithStaticFallback(req) {
   const url = new URL(req.url);
-  const slug = url.pathname.replace(/^\/game-html\//, "").replace(/\/$/, "");
-  const staticUrl = `/games/${slug}/index.html`;
+  const rel = url.pathname.slice("/game-html/".length).replace(/\/+$/, "");
+  const [slug, ...rest] = rel.split("/");
+  const staticUrl = rest.length
+    ? `/games/${slug}/${rest.join("/")}`
+    : `/games/${slug}/index.html`;
 
+  let res = null;
   try {
-    const res = await fetch(req, { cache: "no-store", redirect: "manual" });
-    if (isCacheable(res)) {
-      const cache = await caches.open(RUNTIME_CACHE);
-      await cache.put(req, res.clone()).catch(() => {});
-      return res;
-    }
-    // Redirect or non-ok → fall through to static fallback chain.
-    throw new Error(`upstream ${res?.status || res?.type}`);
+    res = await fetch(req, { cache: "no-store", redirect: "manual" });
   } catch {
-    // caches.match searches all caches (static + runtime + meta).
-    const cached = await caches.match(req);
-    if (cached) return cached;
+    res = null; // network unreachable — use the cache chain below.
+  }
+
+  if (res && isCacheable(res)) {
+    const cache = await caches.open(RUNTIME_CACHE);
+    await cache.put(req, res.clone()).catch(() => {});
+    return res;
+  }
+
+  // An opaqueredirect is the route's authoritative "no blob copy" answer
+  // (307 to the static twin). Any runtime-cached blob copy is now stale —
+  // evict it so "Reset source to default" propagates to returning clients,
+  // and serve the static fallback instead of preferring the dead entry.
+  if (res && res.type === "opaqueredirect") {
+    const cache = await caches.open(RUNTIME_CACHE);
+    await cache.delete(req).catch(() => {});
     const fallback = await caches.match(staticUrl);
     if (fallback) return fallback;
-    try {
-      const res = await fetch(staticUrl);
-      if (isCacheable(res)) {
-        const cache = await caches.open(RUNTIME_CACHE);
-        await cache.put(staticUrl, res.clone()).catch(() => {});
-      }
-      return res;
-    } catch {
-      return new Response(
-        '<!doctype html><meta charset="utf-8"><title>Offline</title><body style="font-family:system-ui;padding:2rem"><h1>Game unavailable offline</h1><p>Reconnect and reload to play.</p>',
-        {
-          status: 503,
-          headers: { "content-type": "text/html; charset=utf-8" },
-        },
-      );
+    return fetchStaticFallback(staticUrl);
+  }
+
+  // Offline or transient upstream error: cached copy → static twin → network.
+  // caches.match searches all caches (static + runtime + meta).
+  const cached = await caches.match(req);
+  if (cached) return cached;
+  const fallback = await caches.match(staticUrl);
+  if (fallback) return fallback;
+  return fetchStaticFallback(staticUrl);
+}
+
+async function fetchStaticFallback(staticUrl) {
+  try {
+    const res = await fetch(staticUrl);
+    if (isCacheable(res)) {
+      const cache = await caches.open(RUNTIME_CACHE);
+      await cache.put(staticUrl, res.clone()).catch(() => {});
     }
+    return res;
+  } catch {
+    return new Response(
+      '<!doctype html><meta charset="utf-8"><title>Offline</title><body style="font-family:system-ui;padding:2rem"><h1>Game unavailable offline</h1><p>Reconnect and reload to play.</p>',
+      {
+        status: 503,
+        headers: { "content-type": "text/html; charset=utf-8" },
+      },
+    );
   }
 }
 
 // ---------- games-version polling: refresh cache when admin uploads. ----------
 async function refreshAllGameHtml() {
   const cache = await caches.open(RUNTIME_CACHE);
-  const tasks = PRECACHE_URLS.filter((u) => u.startsWith("/game-html/")).map(
-    async (url) => {
-      try {
-        const res = await fetch(url, {
-          cache: "no-store",
-          credentials: "same-origin",
-          redirect: "manual",
-        });
-        if (isCacheable(res)) await cache.put(url, res.clone());
-      } catch {
-        /* ignore */
+
+  // Precached game documents PLUS every /game-html/ entry the runtime cache
+  // accumulated during play. Bundle assets exist only as runtime entries, and
+  // skipping them would pin offline players to a torn new-index/old-assets mix
+  // after a bundle update.
+  const urls = new Set(PRECACHE_URLS.filter((u) => u.startsWith("/game-html/")));
+  try {
+    for (const req of await cache.keys()) {
+      const u = new URL(req.url);
+      if (
+        u.origin === self.location.origin &&
+        u.pathname.startsWith("/game-html/")
+      ) {
+        urls.add(u.pathname + u.search);
       }
-    },
-  );
+    }
+  } catch {
+    /* enumeration is best-effort */
+  }
+
+  const tasks = [...urls].map(async (url) => {
+    try {
+      const res = await fetch(url, {
+        cache: "no-store",
+        credentials: "same-origin",
+        redirect: "manual",
+      });
+      if (isCacheable(res)) {
+        await cache.put(url, res.clone());
+      } else if (res.type === "opaqueredirect") {
+        // Blob copy deleted (307 to the static twin) — drop the stale entry
+        // instead of serving a removed override forever.
+        await cache.delete(url);
+      }
+    } catch {
+      /* offline — keep what we have */
+    }
+  });
   await Promise.allSettled(tasks);
 }
 

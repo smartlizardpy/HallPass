@@ -14,9 +14,10 @@
  *     `updateGameAction`; a sibling form resets the override via
  *     `clearGameOverrideAction`. The Featured & New flags moved to the Curation
  *     page, so only a small link to it lives here now.
- *   - SOURCE CODE: upload / paste / reset of the playable HTML, reusing the
- *     existing blob actions, each carrying this game's slug in a hidden field. A
- *     `head()` probe reports whether a custom blob is currently published.
+ *   - SOURCE CODE: upload / paste / zip-bundle upload / reset of the playable
+ *     source, reusing the existing blob actions, each carrying this game's slug
+ *     in a hidden field. A blob listing reports how many custom files are
+ *     currently published.
  *   - LEADERBOARDS: the boards linked to this game (with live score counts +
  *     Manage / Unlink), a "create a board for this game" form, and a "link an
  *     existing standalone board" form.
@@ -30,10 +31,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { head } from "@vercel/blob";
 import { requireRole } from "@/app/lib/auth";
 import { isUnconfiguredDbError } from "@/app/lib/db";
-import { blobPathForSlug } from "@/app/lib/game-html-blob";
+import { listGameFiles } from "@/app/lib/game-html-blob";
 import { resolveCategories, resolveGame, resolveTags } from "@/app/lib/games-store";
 import { store } from "@/app/lib/scoreboard";
 import type { BoardConfig } from "@/sdk/src/contract";
@@ -41,7 +41,12 @@ import { DashHeader } from "../../_ui/DashHeader";
 import { Section } from "../../_ui/Section";
 import { TagEditor } from "../../_ui/TagEditor";
 import { createBoardAction, linkBoardAction, unlinkBoardAction } from "../../boards/actions";
-import { clearHtmlAction, pasteHtmlAction, uploadHtmlAction } from "../actions";
+import {
+  clearHtmlAction,
+  pasteHtmlAction,
+  uploadBundleAction,
+  uploadHtmlAction,
+} from "../actions";
 import { clearGameOverrideAction, setGameTagsAction, updateGameAction } from "./actions";
 
 export const metadata: Metadata = {
@@ -57,14 +62,13 @@ function asString(value: string | string[] | undefined): string | null {
   return Array.isArray(value) ? value[0] : value;
 }
 
-/** True when a custom `games/<slug>/index.html` blob is published. Fails soft. */
-async function hasCustomHtml(slug: string): Promise<boolean> {
+/** Count of custom `games/<slug>/*` blobs published (0 = build default). Fails soft. */
+async function countCustomFiles(slug: string): Promise<number> {
   try {
-    await head(blobPathForSlug(slug));
-    return true;
+    return (await listGameFiles(slug)).length;
   } catch {
     // Not found / no blob access → treat as "using the build default".
-    return false;
+    return 0;
   }
 }
 
@@ -85,10 +89,10 @@ export default async function GameControlPage({
   const ok = asString(sp.ok);
   const error = asString(sp.error);
 
-  const [categories, tagList, customHtml] = await Promise.all([
+  const [categories, tagList, customFileCount] = await Promise.all([
     resolveCategories(),
     resolveTags(),
-    hasCustomHtml(slug),
+    countCustomFiles(slug),
   ]);
   const tagSuggestions = tagList.map((t) => t.tag);
 
@@ -260,9 +264,18 @@ export default async function GameControlPage({
       {/* SOURCE CODE */}
       <Section
         title="Source code"
-        subtitle={customHtml ? "Custom HTML published" : "Using the build default"}
+        subtitle={
+          customFileCount > 0
+            ? `${customFileCount} custom file${customFileCount === 1 ? "" : "s"} published`
+            : "Using the build default"
+        }
       >
         <div className="space-y-6">
+          <p className="text-xs text-zinc-500">
+            Publishing any source below replaces <strong>everything</strong>{" "}
+            previously published for this game — a single HTML file counts as a
+            one-file bundle.
+          </p>
           <form action={uploadHtmlAction} className="space-y-3">
             <input type="hidden" name="slug" value={slug} />
             <label className="block text-sm font-semibold text-zinc-900">
@@ -301,6 +314,27 @@ export default async function GameControlPage({
               className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
             >
               Save HTML
+            </button>
+          </form>
+
+          <form action={uploadBundleAction} className="space-y-3 border-t border-border pt-6">
+            <input type="hidden" name="slug" value={slug} />
+            <label className="block text-sm font-semibold text-zinc-900">
+              …or upload a multi-file bundle (<code className="font-mono">.zip</code> with{" "}
+              <code className="font-mono">index.html</code> at its root)
+              <input
+                name="bundleFile"
+                type="file"
+                required
+                accept=".zip,application/zip"
+                className="mt-2 block w-full text-sm"
+              />
+            </label>
+            <button
+              type="submit"
+              className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+            >
+              Upload bundle (.zip)
             </button>
           </form>
 

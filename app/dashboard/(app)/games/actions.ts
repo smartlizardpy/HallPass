@@ -2,9 +2,14 @@
  * HallPass dashboard — game-SOURCE editing server actions.
  *
  * These actions are the role-gated successor to the old password-protected
- * `/admin/html` surface. They write each game's playable HTML into Vercel Blob
- * at the canonical path (`games/<slug>/index.html`) and then "bump" a tiny
- * version marker so clients pull the fresh source on their next poll.
+ * `/admin/html` surface. They publish each game's playable source into Vercel
+ * Blob under the game's prefix (`games/<slug>/…` — a lone `index.html` or a
+ * whole multi-file bundle) and then "bump" a tiny version marker so clients
+ * pull the fresh source on their next poll.
+ *
+ * Convergence invariant: whatever an action publishes IS the published set.
+ * A bundle upload deletes blobs missing from the new zip; a single-file upload
+ * is a one-file bundle and deletes leftover assets; reset deletes everything.
  *
  * Authorization model: the legacy page authenticated with a bespoke password
  * cookie (`app/lib/admin-html-auth.ts`). Here we instead gate on the dashboard's
@@ -23,14 +28,29 @@
 "use server";
 
 import { del, put } from "@vercel/blob";
+import { unzipSync } from "fflate";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
-import { blobPathForSlug } from "@/app/lib/game-html-blob";
+import {
+  blobPathForAsset,
+  blobPathForSlug,
+  blobPrefixForSlug,
+  contentTypeForPath,
+  isSafeSegment,
+  listGameFiles,
+} from "@/app/lib/game-html-blob";
 import { GAMES_VERSION_BLOB_PATH } from "@/app/lib/games-version-blob";
 import { games } from "@/app/lib/games";
 
 /** Largest HTML payload we will accept, in characters (~2 MB of text). */
 const MAX_HTML_CHARS = 2_000_000;
+
+/** Bundle caps — generous for real games, tight enough to blunt zip bombs. */
+const MAX_BUNDLE_FILES = 300;
+const MAX_BUNDLE_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_BUNDLE_TOTAL_BYTES = 50 * 1024 * 1024;
+/** Deepest path we accept — mirrors the serving route's segment cap. */
+const MAX_BUNDLE_PATH_SEGMENTS = 10;
 
 /** True when `slug` names a game in the static catalogue. */
 function isKnownSlug(slug: string): boolean {
@@ -77,9 +97,14 @@ async function bumpGamesVersion(): Promise<void> {
 }
 
 /**
- * Write a game's HTML to its canonical blob path, then bump the version marker.
- * Throws only if the primary `put` fails — the bump is itself best-effort — so
- * callers can wrap a single `try` around this and treat a throw as "save failed".
+ * Publish a single-file game source: write the HTML to its canonical blob path,
+ * delete any OTHER blobs still under the game's prefix, then bump the version
+ * marker. The sibling cleanup keeps the convergence invariant — a single-file
+ * upload is a one-file bundle, so assets from a previously published bundle
+ * must not stay silently published (they would keep serving, inflate the
+ * dashboard file count, and get re-mirrored into the repo by sync-games).
+ * Throws only if the primary `put` fails — cleanup and bump are best-effort —
+ * so callers can wrap a single `try` and treat a throw as "save failed".
  */
 async function writeGameHtml(slug: string, html: string): Promise<void> {
   await put(blobPathForSlug(slug), html, {
@@ -89,7 +114,121 @@ async function writeGameHtml(slug: string, html: string): Promise<void> {
     allowOverwrite: true,
     cacheControlMaxAge: 60,
   });
+  try {
+    const stale = (await listGameFiles(slug))
+      .map((f) => f.pathname)
+      .filter((pathname) => pathname !== blobPathForSlug(slug));
+    if (stale.length > 0) await del(stale);
+  } catch {
+    // Best-effort: a leftover asset is unreferenced, not fatal; the next
+    // publish (or reset) converges it.
+  }
   await bumpGamesVersion();
+}
+
+/**
+ * Unpack an uploaded `.zip` bundle into `relPath -> bytes`, or explain why not.
+ *
+ * Tolerates the common "zipped the folder" shape: when every entry lives under
+ * one shared top-level directory AND that directory holds the `index.html`, the
+ * prefix is stripped so the bundle still lands at the game's root. Every
+ * resulting path must be servable by the game route, so each segment passes the
+ * same `isSafeSegment` allowlist and the same 10-segment depth cap.
+ *
+ * Zip-bomb guard: the count/size caps are enforced INSIDE the unzip `filter`,
+ * against the central directory's DECLARED sizes, so an oversized archive is
+ * rejected before fflate allocates or inflates anything. (fflate sizes each
+ * output buffer from that same declared value, so a lying header cannot
+ * inflate past it either.) The post-inflate re-checks below are defense in
+ * depth on the actual bytes.
+ *
+ * Returns the file map on success, or a human-readable error string — the
+ * caller turns that string straight into an `?error=` banner.
+ */
+class BundleLimitError extends Error {}
+
+function extractBundle(zipBytes: Uint8Array): Map<string, Uint8Array> | string {
+  let entries: Record<string, Uint8Array>;
+  let declaredCount = 0;
+  let declaredTotal = 0;
+  try {
+    entries = unzipSync(zipBytes, {
+      filter(info) {
+        if (info.name.endsWith("/")) return true; // directory marker, no bytes
+        declaredCount += 1;
+        if (declaredCount > MAX_BUNDLE_FILES) {
+          throw new BundleLimitError(
+            `Too many files in zip (max ${MAX_BUNDLE_FILES}).`,
+          );
+        }
+        if (info.originalSize > MAX_BUNDLE_FILE_BYTES) {
+          throw new BundleLimitError(
+            `"${info.name}" is too large (max 10MB per file).`,
+          );
+        }
+        declaredTotal += info.originalSize;
+        if (declaredTotal > MAX_BUNDLE_TOTAL_BYTES) {
+          throw new BundleLimitError("Bundle too large (max 50MB unzipped).");
+        }
+        return true;
+      },
+    });
+  } catch (err) {
+    if (err instanceof BundleLimitError) return err.message;
+    return "Not a valid .zip archive.";
+  }
+
+  // Directory entries carry no bytes — only real files matter.
+  const names = Object.keys(entries).filter((name) => !name.endsWith("/"));
+  if (names.length === 0) return "Zip contains no files.";
+  if (names.length > MAX_BUNDLE_FILES) {
+    return `Too many files in zip (max ${MAX_BUNDLE_FILES}).`;
+  }
+
+  // "Zipped the folder" tolerance: strip a single shared top-level directory,
+  // but only when the index.html actually lives inside it.
+  let strip = "";
+  const slash = names[0].indexOf("/");
+  if (slash > 0) {
+    const prefix = names[0].slice(0, slash + 1);
+    if (
+      names.every((name) => name.startsWith(prefix)) &&
+      names.includes(`${prefix}index.html`)
+    ) {
+      strip = prefix;
+    }
+  }
+
+  const files = new Map<string, Uint8Array>();
+  let totalBytes = 0;
+  for (const name of names) {
+    if (name.includes("\\") || name.startsWith("/")) {
+      return `Unsafe path in zip: "${name}".`;
+    }
+    const relPath = strip ? name.slice(strip.length) : name;
+    const segments = relPath.split("/");
+    if (segments.length > MAX_BUNDLE_PATH_SEGMENTS) {
+      return `Path too deep in zip (max ${MAX_BUNDLE_PATH_SEGMENTS} segments): "${relPath}".`;
+    }
+    if (!segments.every(isSafeSegment)) {
+      return `Unsafe path in zip: "${relPath}".`;
+    }
+
+    const data = entries[name];
+    if (data.length > MAX_BUNDLE_FILE_BYTES) {
+      return `"${relPath}" is too large (max 10MB per file).`;
+    }
+    totalBytes += data.length;
+    if (totalBytes > MAX_BUNDLE_TOTAL_BYTES) {
+      return "Bundle too large (max 50MB unzipped).";
+    }
+    files.set(relPath, data);
+  }
+
+  if (!files.has("index.html")) {
+    return "Bundle must contain an index.html at its root.";
+  }
+  return files;
 }
 
 /**
@@ -168,12 +307,77 @@ export async function pasteHtmlAction(formData: FormData): Promise<void> {
 }
 
 /**
- * Clear a game's HTML, reverting it to whatever the build ships by default.
+ * Upload a whole multi-file game as a `.zip` bundle.
  *
- * A `del()` of an already-absent blob is treated as success (the desired
- * end-state — "no override" — is reached either way), so its `try` only guards
- * the delete and is not allowed to escape to the redirect. We still bump the
- * version marker so clients drop the stale override promptly.
+ * Validation mirrors {@link uploadHtmlAction} (known slug, real File), then the
+ * archive is unpacked and vetted by {@link extractBundle} — any string it
+ * returns short-circuits into an `?error=` banner. Only a sound bundle touches
+ * blob storage: every extracted file is written under the game's prefix, then
+ * any previously published blob whose path is NOT in the new bundle is deleted,
+ * so the published set converges on exactly the bundle's contents.
+ */
+export async function uploadBundleAction(formData: FormData): Promise<void> {
+  await requireRole("admin");
+
+  const slug = String(formData.get("slug") ?? "").trim();
+  const file = formData.get("bundleFile");
+
+  if (!slug) redirect(listErrorTarget("Choose a game first."));
+  if (!isKnownSlug(slug)) redirect(listErrorTarget("Unknown game."));
+  if (!(file instanceof File)) {
+    redirect(gameTarget(slug, "error", "Pick a .zip bundle to upload."));
+  }
+
+  const zipBytes = new Uint8Array(await file.arrayBuffer());
+  if (zipBytes.length === 0) {
+    redirect(gameTarget(slug, "error", "Uploaded file is empty."));
+  }
+
+  const bundle = extractBundle(zipBytes);
+  if (typeof bundle === "string") redirect(gameTarget(slug, "error", bundle));
+
+  let saved = false;
+  try {
+    // Snapshot BEFORE writing so we know which old blobs become stale.
+    const existing = await listGameFiles(slug);
+
+    for (const [relPath, data] of bundle) {
+      await put(blobPathForAsset(slug, relPath), Buffer.from(data), {
+        access: "public",
+        contentType: contentTypeForPath(relPath),
+        addRandomSuffix: false,
+        allowOverwrite: true,
+        cacheControlMaxAge: 60,
+      });
+    }
+
+    const prefix = blobPrefixForSlug(slug);
+    const stale = existing
+      .map((f) => f.pathname)
+      .filter((pathname) => !bundle.has(pathname.slice(prefix.length)));
+    if (stale.length > 0) await del(stale);
+
+    await bumpGamesVersion();
+    saved = true;
+  } catch {
+    saved = false;
+  }
+
+  redirect(
+    saved
+      ? gameTarget(slug, "ok", `Uploaded bundle (${bundle.size} file${bundle.size === 1 ? "" : "s"})`)
+      : gameTarget(slug, "error", "Blob write failed. Try again."),
+  );
+}
+
+/**
+ * Clear a game's SOURCE, reverting it to whatever the build ships by default.
+ *
+ * Multi-file aware: deletes every blob under the game's prefix (index.html plus
+ * any bundle assets), not just the canonical HTML path. Failures inside the
+ * `try` are treated as success — the desired end-state, "no override", is
+ * reached either way — and are not allowed to escape to the redirect. We still
+ * bump the version marker so clients drop the stale override promptly.
  */
 export async function clearHtmlAction(formData: FormData): Promise<void> {
   await requireRole("admin");
@@ -183,11 +387,12 @@ export async function clearHtmlAction(formData: FormData): Promise<void> {
   if (!isKnownSlug(slug)) redirect(listErrorTarget("Unknown game."));
 
   try {
-    await del(blobPathForSlug(slug));
+    const files = await listGameFiles(slug);
+    if (files.length > 0) await del(files.map((f) => f.pathname));
   } catch {
     // already gone — the override is absent, which is exactly what we wanted.
   }
   await bumpGamesVersion();
 
-  redirect(gameTarget(slug, "ok", "Reset HTML to default"));
+  redirect(gameTarget(slug, "ok", "Reset source to default"));
 }
