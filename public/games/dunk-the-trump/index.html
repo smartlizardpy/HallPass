@@ -1,0 +1,985 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Derin's Games - Dunk The Trump</title>
+	<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚽</text></svg>" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Nunito:wght@600;800&display=swap" rel="stylesheet" />
+	<script type="text/javascript" src="js/phaser.min.js"></script>
+
+	<style type="text/css">
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		:root {
+			--tile: #10222e;
+			--grout: rgba(255, 255, 255, 0.045);
+			--porcelain: #eef5f9;
+			--water: #45aee8;
+			--gold: #f6b93b;
+			--gold-deep: #c98f1b;
+			--ink: #1d2b3a;
+		}
+
+		body {
+			min-height: 100dvh;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			gap: 12px;
+			padding: 16px;
+			background-color: var(--tile);
+			background-image:
+				linear-gradient(var(--grout) 1px, transparent 1px),
+				linear-gradient(90deg, var(--grout) 1px, transparent 1px);
+			background-size: 44px 44px;
+			font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+		}
+
+		#game-frame {
+			position: relative;
+			container-type: inline-size;
+			width: min(400px, 100%, calc((100dvh - 90px) * 0.64));
+			border-radius: 20px;
+			overflow: hidden;
+			box-shadow:
+				0 30px 60px -20px rgba(0, 0, 0, 0.65),
+				0 0 0 1px rgba(255, 255, 255, 0.08);
+		}
+
+		#game-canvas {
+			width: 100%;
+			aspect-ratio: 400 / 625;
+		}
+
+		#game-canvas canvas {
+			display: block;
+		}
+
+		/* ---------- overlays (start screen, leaderboard) ---------- */
+
+		.overlay {
+			position: absolute;
+			inset: 0;
+			z-index: 5;
+			user-select: none;
+			-webkit-user-select: none;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			gap: 3cqw;
+			text-align: center;
+			padding: 6cqw;
+			background-color: #0e2c40;
+			background-image:
+				linear-gradient(180deg, rgba(69, 174, 232, 0.16), rgba(0, 0, 0, 0.28)),
+				linear-gradient(var(--grout) 1px, transparent 1px),
+				linear-gradient(90deg, var(--grout) 1px, transparent 1px);
+			background-size: 100% 100%, 44px 44px, 44px 44px;
+			transition: opacity 0.4s ease, visibility 0.4s ease;
+		}
+
+		.overlay.hidden {
+			opacity: 0;
+			visibility: hidden;
+			pointer-events: none;
+		}
+
+		.overlay-art {
+			position: relative;
+			height: 45cqw;
+		}
+
+		.overlay-art .toilet {
+			display: block;
+			height: 100%;
+			filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.4));
+			-webkit-user-drag: none;
+		}
+
+		.overlay-art .derp {
+			position: absolute;
+			left: 50%;
+			top: 52%;
+			width: 15.8cqw;
+			height: 19.4cqw;
+			margin-left: -7.9cqw;
+			margin-top: -9.7cqw;
+			background: url('assets/images/derp_spritesheet.png') no-repeat 0 0;
+			background-size: 31.7cqw 19.4cqw;
+			transform: rotate(-12deg);
+			animation: bob 1.6s ease-in-out infinite alternate;
+		}
+
+		@keyframes bob {
+			from { translate: 0 0; }
+			to { translate: 0 -8px; }
+		}
+
+		@media (prefers-reduced-motion: reduce) {
+			.overlay-art .derp { animation: none; }
+			.overlay { transition: none; }
+		}
+
+		.eyebrow {
+			font-weight: 800;
+			font-size: max(2.75cqw, 9px);
+			letter-spacing: 0.35em;
+			text-transform: uppercase;
+			color: var(--gold);
+		}
+
+		.display-title {
+			font-family: 'Luckiest Guy', 'Arial Black', sans-serif;
+			font-weight: 400;
+			font-size: 11.5cqw;
+			line-height: 0.95;
+			color: var(--porcelain);
+			letter-spacing: 0.02em;
+			transform: rotate(-3deg);
+			text-shadow:
+				3px 3px 0 var(--water),
+				6px 6px 0 rgba(0, 0, 0, 0.35);
+		}
+
+		.display-title.sm {
+			font-size: 8.5cqw;
+			text-shadow:
+				2px 2px 0 var(--water),
+				4px 4px 0 rgba(0, 0, 0, 0.35);
+		}
+
+		.how {
+			font-weight: 600;
+			font-size: max(3.8cqw, 11px);
+			color: rgba(238, 245, 249, 0.85);
+			max-width: 26ch;
+		}
+
+		.btn-gold {
+			font-family: 'Luckiest Guy', 'Arial Black', sans-serif;
+			font-size: 5.8cqw;
+			letter-spacing: 0.12em;
+			color: var(--ink);
+			background: linear-gradient(180deg, #ffd35c, var(--gold));
+			border: none;
+			border-radius: 999px;
+			padding: 3.75cqw 13cqw 2.25cqw;
+			cursor: pointer;
+			box-shadow:
+				0 6px 0 var(--gold-deep),
+				0 16px 26px rgba(0, 0, 0, 0.35);
+			transition: transform 0.12s ease, box-shadow 0.12s ease;
+		}
+
+		.btn-gold.btn-sm {
+			font-size: 4.2cqw;
+			padding: 3cqw 9cqw 1.75cqw;
+		}
+
+		.btn-gold:hover:not(:disabled) {
+			transform: translateY(-2px);
+			box-shadow:
+				0 8px 0 var(--gold-deep),
+				0 18px 28px rgba(0, 0, 0, 0.4);
+		}
+
+		.btn-gold:active:not(:disabled) {
+			transform: translateY(4px);
+			box-shadow:
+				0 2px 0 var(--gold-deep),
+				0 8px 14px rgba(0, 0, 0, 0.3);
+		}
+
+		.btn-gold:disabled {
+			opacity: 0.65;
+			cursor: default;
+		}
+
+		.btn-gold:focus-visible {
+			outline: 3px solid var(--water);
+			outline-offset: 3px;
+		}
+
+		.best-line {
+			font-weight: 600;
+			font-size: max(3.6cqw, 10px);
+			color: rgba(238, 245, 249, 0.7);
+		}
+
+		/* ---------- leaderboard ---------- */
+
+		.board-sub {
+			font-weight: 600;
+			font-size: max(3.6cqw, 10px);
+			color: rgba(238, 245, 249, 0.85);
+		}
+
+		.board-sub b {
+			font-weight: 800;
+			color: var(--gold);
+		}
+
+		.badge {
+			display: inline-block;
+			margin-left: 4px;
+			padding: 0.5cqw 2.25cqw;
+			border-radius: 999px;
+			background: var(--gold);
+			color: var(--ink);
+			font-size: max(2.6cqw, 8px);
+			font-weight: 800;
+			letter-spacing: 0.08em;
+			text-transform: uppercase;
+			vertical-align: 1px;
+		}
+
+		#board-list {
+			list-style: none;
+			width: 100%;
+			max-width: 70cqw;
+			display: flex;
+			flex-direction: column;
+			gap: 1.5cqw;
+		}
+
+		#board-list li {
+			display: flex;
+			align-items: center;
+			gap: 2.5cqw;
+			padding: 1.75cqw 3cqw;
+			border-radius: 2.5cqw;
+			background: rgba(238, 245, 249, 0.08);
+			font-size: max(3.4cqw, 10px);
+			font-weight: 600;
+			color: var(--porcelain);
+		}
+
+		#board-list li.you {
+			background: rgba(69, 174, 232, 0.22);
+			box-shadow: inset 0 0 0 1.5px var(--water);
+		}
+
+		#board-list li.gap {
+			background: none;
+			justify-content: center;
+			padding: 0;
+			opacity: 0.5;
+		}
+
+		#board-list .rank {
+			flex: none;
+			width: 5.5cqw;
+			height: 5.5cqw;
+			border-radius: 50%;
+			display: grid;
+			place-items: center;
+			font-size: max(2.7cqw, 8px);
+			font-weight: 800;
+			background: rgba(238, 245, 249, 0.15);
+			color: var(--porcelain);
+		}
+
+		#board-list .rank.r1 { background: var(--gold); color: var(--ink); }
+		#board-list .rank.r2 { background: #c8d6e0; color: var(--ink); }
+		#board-list .rank.r3 { background: #d99a6c; color: var(--ink); }
+
+		#board-list .name {
+			flex: 1;
+			text-align: left;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		#board-list .pts {
+			font-weight: 800;
+			color: var(--gold);
+		}
+
+		#board-list .vbadge {
+			color: var(--water);
+			font-weight: 800;
+		}
+
+		.signin-line {
+			font-weight: 600;
+			font-size: max(3.2cqw, 10px);
+			color: rgba(238, 245, 249, 0.6);
+		}
+
+		.signin-line b {
+			font-weight: 800;
+			color: var(--porcelain);
+		}
+
+		.link-btn {
+			background: none;
+			border: none;
+			padding: 0;
+			font: inherit;
+			font-weight: 800;
+			color: var(--water);
+			text-decoration: underline;
+			cursor: pointer;
+		}
+
+		.link-btn:focus-visible {
+			outline: 2px solid var(--water);
+			outline-offset: 2px;
+		}
+
+		.best-line b {
+			font-weight: 800;
+			color: var(--gold);
+		}
+
+		footer {
+			font-weight: 600;
+			font-size: 0.75rem;
+			letter-spacing: 0.06em;
+			color: rgba(238, 245, 249, 0.45);
+		}
+	</style>
+</head>
+
+<body>
+
+	<div id="game-frame">
+		<div id="game-canvas"></div>
+
+		<div id="start-overlay" class="overlay">
+			<div class="overlay-art">
+				<img class="toilet" src="assets/images/toilet_full.png" alt="" />
+				<div class="derp"></div>
+			</div>
+			<p class="eyebrow">Derin's Games presents</p>
+			<h1 class="display-title">Dunk<br>The Trump</h1>
+			<p class="how">Grab the head, flick up, sink it in the bowl.</p>
+			<button id="play-btn" class="btn-gold" disabled>Loading&hellip;</button>
+			<p class="best-line" id="best-line"></p>
+		</div>
+
+		<div id="board-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="board-title">
+			<p class="eyebrow">Streak over</p>
+			<h2 id="board-title" class="display-title sm">Top Flushers</h2>
+			<p class="board-sub" id="board-sub"></p>
+			<ol id="board-list"></ol>
+			<p class="signin-line" id="signin-line"></p>
+			<button id="again-btn" class="btn-gold btn-sm">Play again</button>
+		</div>
+	</div>
+
+	<footer>Made by Ozan Kaygusuz</footer>
+
+	<script type="text/javascript">
+		// NOTE: Originally 640x1000. Other possible sizes: 512x800, 400x625
+
+		var game = new Phaser.Game(400, 625, Phaser.AUTO, 'game-canvas', {
+			preload: preload,
+			create: create,
+			update: update
+		}, false);
+
+		function preload() {
+
+
+			game.load.spritesheet('ball', 'assets/images/derp_spritesheet.png', 120, 148)
+			game.load.image('hoop', 'assets/images/toilet_full.png');
+			game.load.image('toilet_bottom', 'assets/images/toilet_bottom_morecropped.png')
+			game.load.image('side rim', 'assets/images/side_rim.png');
+			game.load.image('twitter_logo', 'assets/images/twitter_logo.png')
+
+			game.load.image('splash', 'assets/images/splash.png');
+			game.load.image('win0', 'assets/images/win0.png');
+			game.load.image('win1', 'assets/images/win1.png');
+			game.load.image('win2', 'assets/images/win2.png');
+			game.load.image('win3', 'assets/images/win3.png');
+			game.load.image('win4', 'assets/images/win4.png');
+			game.load.image('win5', 'assets/images/win5.png');
+			game.load.image('lose0', 'assets/images/lose0.png');
+			game.load.image('lose1', 'assets/images/lose1.png');
+			game.load.image('lose2', 'assets/images/lose2.png');
+			game.load.image('lose3', 'assets/images/lose3.png');
+			game.load.image('lose4', 'assets/images/lose4.png');
+			game.load.image('lose5', 'assets/images/lose5.png');
+
+			game.load.audio('sfx', ['assets/audio/sfx.m4a', 'assets/audio/sfx.ogg', 'assets/audio/sfx.wav', 'assets/audio/sfx.mp3'])
+
+		}
+
+		var qs, scoreObj;
+
+		var hoop,
+			goal,
+			left_rim,
+			right_rim,
+			ball,
+			toilet_bottom,
+			current_score = 0,
+			current_score_text,
+			high_score = 0,
+			high_score_text,
+			hint_text,
+			toilet_bottom_group;
+
+		var sfx;
+
+		var moveInTween,
+			fadeInTween,
+			moveOutTween,
+			fadeOutTween,
+			splash,
+			emoji,
+			emojiName,
+			moveInSplash,
+			fadeInSplash;
+
+		var collisionGroup;
+
+		// ---------- start screen / persistent best ----------
+
+		var startOverlay = document.getElementById('start-overlay');
+		var playBtn = document.getElementById('play-btn');
+		var bestLine = document.getElementById('best-line');
+
+		high_score = parseInt(localStorage.getItem('dunktrump_best') || '0', 10) || 0;
+		updateBestLine();
+
+		playBtn.addEventListener('click', function() {
+			startOverlay.classList.add('hidden');
+		});
+
+		function updateBestLine() {
+			if (high_score > 0) {
+				bestLine.innerHTML = 'Best streak: <b>' + high_score + '</b>';
+			} else {
+				bestLine.textContent = 'First flush? Make it count.';
+			}
+		}
+
+		function saveBest() {
+			try {
+				localStorage.setItem('dunktrump_best', high_score);
+			} catch (e) {}
+			updateBestLine();
+		}
+
+		// ---------- leaderboard (live scores via HallPass) ----------
+
+		var boardOverlay = document.getElementById('board-overlay');
+		var boardSub = document.getElementById('board-sub');
+		var boardList = document.getElementById('board-list');
+		var signinLine = document.getElementById('signin-line');
+		var againBtn = document.getElementById('again-btn');
+
+		againBtn.addEventListener('click', closeLeaderboard);
+		document.addEventListener('keydown', function(e) {
+			if (e.key === 'Escape') closeLeaderboard();
+		});
+
+		function closeLeaderboard() {
+			boardOverlay.classList.add('hidden');
+		}
+
+		function escapeHtml(s) {
+			return String(s).replace(/[&<>"']/g, function(c) {
+				return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+			});
+		}
+
+		function rowHtml(row) {
+			return '<li>' +
+				'<span class="rank' + (row.rank <= 3 ? ' r' + row.rank : '') + '">' + row.rank + '</span>' +
+				'<span class="name">' + escapeHtml(row.handle) +
+				(row.verified ? ' <span class="vbadge" title="Verified">&#10003;</span>' : '') + '</span>' +
+				'<span class="pts">' + row.score + '</span></li>';
+		}
+
+		function renderScores() {
+			boardList.innerHTML = '<li class="gap">Loading&hellip;</li>';
+			HallPass.getScores({ limit: 10 }).then(function(rows) {
+				if (!rows || !rows.length) {
+					boardList.innerHTML = '<li class="gap">Be the first to score!</li>';
+					return;
+				}
+				var html = '';
+				for (var i = 0; i < rows.length; i++) {
+					html += rowHtml(rows[i]);
+				}
+				boardList.innerHTML = html;
+			});
+		}
+
+		function renderSignIn() {
+			// getPlayer/signIn are not part of the pre-load stub, so probe before calling
+			if (!window.HallPass || typeof HallPass.getPlayer !== 'function') {
+				signinLine.textContent = '';
+				return;
+			}
+			HallPass.getPlayer().then(function(player) {
+				if (player) {
+					signinLine.innerHTML = 'Signed in as <b>' + escapeHtml(player.name) + '</b>';
+				} else {
+					signinLine.innerHTML = '<button id="signin-btn" class="link-btn">Sign in</button> to post scores under your name';
+					document.getElementById('signin-btn').addEventListener('click', function() {
+						HallPass.signIn();
+					});
+				}
+			});
+		}
+
+		function openLeaderboard(score, isNewBest) {
+			// let the lose emoji play out before covering the game
+			setTimeout(function() {
+				boardSub.innerHTML = score > 0 ?
+					'You sank <b>' + score + '</b> in a row' + (isNewBest ? ' <span class="badge">New best</span>' : '') :
+					'Airball. Sad!';
+
+				renderScores();
+				renderSignIn();
+
+				boardOverlay.classList.remove('hidden');
+				againBtn.focus();
+			}, 1100);
+		}
+
+		function create() {
+
+			qs = game.net.getQueryString()
+
+			// Scale to fit the page frame on every device; CSS centers it
+			game.scale.scaleMode = Phaser.ScaleManager.SHOW_ALL
+
+			game.physics.startSystem(Phaser.Physics.P2JS);
+
+			game.physics.p2.setImpactEvents(true);
+
+			game.physics.p2.restitution = 0.63;
+			game.physics.p2.gravity.y = 0;
+
+			collisionGroup = game.physics.p2.createCollisionGroup();
+
+			sfx = game.add.audio('sfx')
+			sfx.allowMultiple = true;
+
+
+			sfx.addMarker('score', 7, 1)
+			sfx.addMarker('backboard', 0, 1)
+			sfx.addMarker('whoosh', 11, 1)
+			sfx.addMarker('fail', 2, 1)
+			sfx.addMarker('spawn', 9, 0.75)
+			sfx.addMarker('flush', 4, 1.25)
+
+			score_sound = game.add.audio('score');
+			backboard = game.add.audio('backboard');
+			backboard.volume = 0.5;
+			whoosh = game.add.audio('whoosh');
+			fail = game.add.audio('fail');
+			// fail.volume = 0.1;
+			spawn = game.add.audio('spawn');
+			flush = game.add.audio('flush')
+
+			game.stage.backgroundColor = "#eef5f9";
+
+			// Bathroom backdrop: porcelain wall, faint tiles, floor band
+			var bg = game.add.bitmapData(400, 625);
+			var wall = bg.ctx.createLinearGradient(0, 0, 0, 625);
+			wall.addColorStop(0, '#f4fafd');
+			wall.addColorStop(1, '#d9e9f2');
+			bg.ctx.fillStyle = wall;
+			bg.ctx.fillRect(0, 0, 400, 625);
+			bg.ctx.strokeStyle = 'rgba(93, 130, 153, 0.08)';
+			bg.ctx.lineWidth = 1;
+			for (var tx = 0; tx <= 400; tx += 80) {
+				bg.ctx.beginPath();
+				bg.ctx.moveTo(tx + 0.5, 0);
+				bg.ctx.lineTo(tx + 0.5, 600);
+				bg.ctx.stroke();
+			}
+			for (var ty = 0; ty <= 600; ty += 80) {
+				bg.ctx.beginPath();
+				bg.ctx.moveTo(0, ty + 0.5);
+				bg.ctx.lineTo(400, ty + 0.5);
+				bg.ctx.stroke();
+			}
+			bg.ctx.fillStyle = '#c6dbe7';
+			bg.ctx.fillRect(0, 600, 400, 25);
+			bg.ctx.fillStyle = '#aec9d8';
+			bg.ctx.fillRect(0, 600, 400, 2);
+			game.add.sprite(0, 0, bg);
+
+			// Scoreboard HUD
+			game.add.text(24, 14, 'SCORE', {
+				font: 'bold 12px Arial',
+				fill: '#7b93a4'
+			});
+			current_score_text = game.add.text(24, 26, '0', {
+				font: 'bold 40px Arial',
+				fill: '#1d2b3a'
+			});
+			var best_label = game.add.text(376, 14, 'BEST', {
+				font: 'bold 12px Arial',
+				fill: '#7b93a4'
+			});
+			best_label.anchor.setTo(1, 0);
+			high_score_text = game.add.text(376, 26, '' + high_score, {
+				font: 'bold 40px Arial',
+				fill: '#f6b93b'
+			});
+			high_score_text.anchor.setTo(1, 0);
+			high_score_text.stroke = '#8a6210';
+			high_score_text.strokeThickness = 1;
+
+			hoop = game.add.sprite(127, 0, 'hoop'); // 141, 100
+			left_rim = game.add.sprite(144, 184, 'side rim'); // 241, 296
+			left_rim.visible = false
+			right_rim = game.add.sprite(263, 184, 'side rim'); // 398, 296
+			right_rim.visible = false
+
+			game.physics.p2.enable([left_rim, right_rim], false);
+
+			left_rim.body.setCircle(3);
+			left_rim.body.static = true;
+			left_rim.body.setCollisionGroup(collisionGroup);
+			left_rim.body.collides([collisionGroup]);
+
+			right_rim.body.setCircle(3);
+			right_rim.body.static = true;
+			right_rim.body.setCollisionGroup(collisionGroup);
+			right_rim.body.collides([collisionGroup]);
+
+			toilet_bottom_group = game.add.group()
+			createBall();
+
+			// First-throw hint, removed on launch
+			hint_text = game.add.text(200, 442, 'Flick up to dunk!', {
+				font: 'bold 20px Arial',
+				fill: '#38809e'
+			});
+			hint_text.anchor.setTo(0.5, 0.5);
+			game.add.tween(hint_text).to({
+				alpha: 0.35
+			}, 700, Phaser.Easing.Sinusoidal.InOut, true, 0, -1, true);
+
+			cursors = game.input.keyboard.createCursorKeys();
+
+			game.input.onDown.add(click, this);
+			game.input.onUp.add(release, this);
+
+			// Assets ready: open the doors
+			playBtn.disabled = false;
+			playBtn.textContent = 'Play';
+
+		}
+
+		function update() {
+
+
+			if (ball && ball.body.velocity.y > 0 && ball.body.y < 300 && ball.body.x > 150 && ball.body.y < 260) {
+				 if (toilet_bottom === undefined)  {
+					 toilet_bottom = game.add.sprite(127, 161, 'toilet_bottom');
+					 toilet_bottom_group.add(toilet_bottom)
+
+				 } else {
+					 toilet_bottom.visible = true
+				 }
+				toilet_bottom.bringToTop()
+				ball.body.collides([collisionGroup], hitRim, this);
+			}
+
+			if (ball && ball.body.velocity.y > 0 && ball.body.y > 188 && !ball.isBelowHoop) {
+				ball.isBelowHoop = true;
+				ball.body.collideWorldBounds = false;
+				var rand = Math.floor(Math.random() * 6);
+				if (ball.body.x > 151 && ball.body.x < 251) {
+					emojiName = "win" + rand;
+					current_score += 1;
+					current_score_text.text = current_score;
+					splash = true
+					splashLeft = game.add.sprite(188, 222, 'splash')
+					splashRight = game.add.sprite(205, 222, 'splash')
+					splashLeft.angle += -165
+					splashRight.angle += -100
+					splashLeft.scale.setTo(0.5, 0.5)
+					splashRight.scale.setTo(0.5, 0.5)
+					goal = true
+
+					sfx.play('score', null, 0.5);
+					sfx.play('flush', null, 0.75)
+				} else {
+					splash = false
+					emojiName = "lose" + rand;
+					sfx.play('fail', null, 0.15);
+					var endedScore = current_score;
+					var isNewBest = endedScore > high_score;
+					if (endedScore > 0) {
+						HallPass.submitScore(endedScore).then(function(result) {
+							console.log('HallPass submit:', result)
+						});
+					}
+					if (isNewBest) {
+						high_score = endedScore;
+						high_score_text.text = '' + high_score;
+						saveBest();
+						// Post highscore to Telegram??
+
+						scoreObj = {
+							score: endedScore,
+							user_id: qs.user,
+							chat_id: qs.chat,
+							message_id: +qs.message
+						}
+						if (qs.telegram) {
+							makeRequest('POST', 'setScore', scoreObj).then(function(result) {
+								console.log('result:', result)
+
+							}).catch(function(err) {
+								console.log('Uh Oh!:', err)
+							})
+						}
+					}
+					current_score = 0;
+					current_score_text.text = '0';
+					openLeaderboard(endedScore, isNewBest);
+				}
+				emoji = game.add.sprite(165, 70, emojiName);
+				// emoji.scale.setTo(0.85, 0.85);
+				moveInTween = game.add.tween(emoji).from({
+					y: 150
+				}, 300, Phaser.Easing.Elastic.Out, true);
+				fadeInTween = game.add.tween(emoji).from({
+					alpha: 0
+				}, 200, Phaser.Easing.Linear.None, true, 0, 0, false);
+
+					// remove win/lose emoji
+					moveInTween.onComplete.add(tweenOut, this);
+					// if (toilet_bottom.visible === true) {
+					// 	toilet_bottom.visible = false
+					// }
+
+				if (splash) {
+					moveInLeftSplash = game.add.tween(splashLeft).from({
+						y: 150
+					}, 500, Phaser.Easing.Elastic.Out, true);
+					fadeInLeftSplash = game.add.tween(splashLeft).from({
+						alpha: 0
+					}, 200, Phaser.Easing.Linear.None, true, 0, 0, false);
+					moveInRightSplash = game.add.tween(splashRight).from({
+						y: 150
+					}, 500, Phaser.Easing.Elastic.Out, true);
+					fadeInRightSplash = game.add.tween(splashRight).from({
+						alpha: 0
+					}, 200, Phaser.Easing.Linear.None, true, 0, 0, false);
+
+				}
+			}
+
+			if (ball && ball.body.y > 250 && goal === true) {
+				game.physics.p2.gravity.y = 0;
+				ball.destroy(); // destroy (not kill) so the P2 body leaves the world too
+				createBall();
+				goal = false
+			}
+			if (ball && ball.body.y > 1200) {
+				game.physics.p2.gravity.y = 0;
+				ball.destroy();
+				createBall();
+			}
+
+		} // end of update function
+
+		function makeRequest(method, telegramMethod, body) {
+			return new Promise(function(resolve, reject) {
+				var xhr = new XMLHttpRequest();
+				xhr.open(method, 'https://score-server-nuyixvmmzi.now.sh/' + telegramMethod);
+				// xhr.open(method, 'https://score-server-bynfolxqoq.now.sh/' + telegramMethod);
+				xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8")
+				xhr.onload = function() {
+					if (this.status >= 200 && this.status < 300) {
+						resolve(xhr.response);
+					} else {
+						reject({
+							status: this.status,
+							statusText: xhr.statusText
+						});
+					}
+				};
+				xhr.onerror = function() {
+					reject({
+						status: this.status,
+						statusText: xhr.statusText
+					});
+				};
+				xhr.send(JSON.stringify(body));
+			});
+		}
+
+		function tweenOut() {
+			moveOutTween = game.add.tween(emoji).to({
+				y: 50
+			}, 600, Phaser.Easing.Elastic.In, true);
+			if (splash) {
+				moveOutRightSplash = game.add.tween(splashRight).to({
+					y: 50
+				}, 600, Phaser.Easing.Elastic.In, true);
+				moveOutRightSplash.onComplete.add(function() {
+					splashRight.kill();
+			}, this)
+				moveOutLeftSplash = game.add.tween(splashLeft).to({
+					y: 50
+				}, 600, Phaser.Easing.Elastic.In, true);
+				moveOutLeftSplash.onComplete.add(function() {
+					splashLeft.kill();
+			}, this)
+		}
+			moveOutTween.onComplete.add(function() {
+				emoji.kill();
+
+			}, this);
+			setTimeout(function() {
+				fadeOutTween = game.add.tween(emoji).to({
+					alpha: 0
+				}, 300, Phaser.Easing.Linear.None, true, 0, 0, false);
+				if (splash) {
+					fadeOutSplashLeft = game.add.tween(splashLeft).to({
+						alpha: 0
+					}, 200, Phaser.Easing.Linear.None, true, 0, 0, false);
+					fadeOutSplashRight = game.add.tween(splashRight).to({
+						alpha: 0
+					}, 200, Phaser.Easing.Linear.None, true, 0, 0, false);
+					splash.alive = false
+				}
+			}, 300);
+
+		}
+
+		function hitRim() {
+
+			sfx.play('backboard', null, 0.5);
+
+		}
+
+		function createBall() {
+
+			var xpos;
+			if (current_score === 0) {
+				xpos = 200;
+			} else {
+				xpos = 60 + Math.random() * 280;
+			}
+			sfx.play('spawn', null, 0.5);
+			ball = game.add.sprite(xpos, 547, 'ball');
+			ball.frame = 0
+			// ball = game.add.sprite(340, 547, 'ball');
+			game.add.tween(ball.scale).from({
+				x: 0.7,
+				y: 0.7
+			}, 100, Phaser.Easing.Linear.None, true, 0, 0, false);
+			game.physics.p2.enable(ball, false);
+			ball.body.setCircle(60); // NOTE: Goes from 60 to 36
+			ball.launched = false;
+			ball.isBelowHoop = false;
+			toilet_bottom_group.add(ball)
+
+		}
+
+		var location_interval;
+		var isDown = false;
+		var start_location;
+		var end_location;
+
+		function click(pointer) {
+
+			var bodies = game.physics.p2.hitTest(pointer.position, [ball.body]);
+			if (bodies.length) {
+				ball.frame = 1
+				start_location = [pointer.x, pointer.y];
+				isDown = true;
+				location_interval = setInterval(function() {
+					start_location = [pointer.x, pointer.y];
+				}.bind(this), 100);
+			}
+
+
+		}
+
+		function release(pointer) {
+
+			if (isDown) {
+				window.clearInterval(location_interval);
+				isDown = false;
+				end_location = [pointer.x, pointer.y];
+
+				if (end_location[1] < start_location[1]) {
+					var slope = [end_location[0] - start_location[0], end_location[1] - start_location[1]];
+					var x_traj = -800 * slope[0] / slope[1];
+					launch(x_traj);
+				} else {
+					ball.frame = 0
+				}
+			}
+
+		}
+
+		function launch(x_traj) {
+
+			if (ball.launched === false) {
+				ball.body.setCircle(36);
+				ball.body.setCollisionGroup(collisionGroup);
+				ball.launched = true;
+
+				if (hint_text) {
+					hint_text.destroy();
+					hint_text = null;
+				}
+
+				game.physics.p2.gravity.y = 3000;
+        const animateCloser = game.add.tween(ball.scale).to({
+					//x: 0.6,
+					//y: 0.6
+					x: 1,
+					y: 1
+				}, 500, Phaser.Easing.Linear.None, true, 0, 0, false);
+        const animateFurther  = game.add.tween(ball.scale).to({
+					x: 0.6,
+					y: 0.6
+				}, 500, Phaser.Easing.Linear.None, false, 0, 0, false);
+        animateCloser.chain(animateFurther)
+
+				// ball.body.velocity.x = dummy //x_traj;
+				ball.body.velocity.x = x_traj;
+				ball.body.velocity.y = -1750;
+				ball.body.rotateRight(x_traj / 3);
+				sfx.play('whoosh', null, 0.5);
+			}
+
+		}
+	</script>
+
+	<script>
+	(function(w){if(w.HallPass&&w.HallPass.version!=="0")return;var q=[];
+	function e(n){return function(){var a=[].slice.call(arguments);
+	return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
+	w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
+	submitScore:e("submitScore"),getScores:e("getScores"),
+	getHandle:function(){return null},setHandle:function(v){return v},
+	on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
+	off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
+	setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
+	q.splice(0).forEach(function(c){c.r(c.n==="getScores"?[]:{ok:false,reason:"inert"})})},2000)})(window);
+	</script>
+	<script src="https://hallpass-rouge.vercel.app/sdk/v1/hallpass.js" data-game="dump-trump" defer></script>
+
+</body>
+
+</html>
