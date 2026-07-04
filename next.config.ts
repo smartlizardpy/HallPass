@@ -23,13 +23,43 @@ const nextConfig: NextConfig = {
     return [
       {
         // Versioned Scoreboard SDK artifact: loadable cross-origin by standalone
-        // games, cached but patchable in place within the same /sdk/v1/ URL.
+        // games, patchable in place within the same /sdk/v1/ URL. The URL is
+        // stable across deploys, so it must revalidate on every load — Next
+        // serves public/ files with a strong ETag, so an unchanged bundle is a
+        // cheap 304 while a redeployed bundle reaches players on their next
+        // online load. Keep Access-Control-Allow-Origin so embedded third-party
+        // games can still load it cross-origin.
         source: "/sdk/:path*",
         headers: [
           { key: "Access-Control-Allow-Origin", value: "*" },
           {
             key: "Cache-Control",
-            value: "public, max-age=600, stale-while-revalidate=86400",
+            value: "public, max-age=0, must-revalidate",
+          },
+        ],
+      },
+      {
+        // Service worker + the manifest it importScripts(). Registration uses
+        // the default updateViaCache "imports", so /sw.js bypasses the HTTP
+        // cache on update checks but /sw-manifest.js does not — pin both to
+        // revalidate so a redeployed SW (and its manifest) is picked up
+        // promptly instead of being served from a stale HTTP cache.
+        source: "/sw.js",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=0, must-revalidate",
+          },
+        ],
+      },
+      {
+        // See note on /sw.js above — the imported manifest is HTTP-cacheable
+        // under updateViaCache "imports", so it needs the same revalidation.
+        source: "/sw-manifest.js",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=0, must-revalidate",
           },
         ],
       },

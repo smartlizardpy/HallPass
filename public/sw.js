@@ -102,6 +102,15 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // SDK bundle: stable-URL script embedded by third-party games. It is NOT
+  // hashed, so cache-first would pin players to an old bundle across deploys.
+  // Network-first (revalidating past the HTTP cache) so a redeployed bundle is
+  // picked up on the next online load, with cache fallback when offline.
+  if (url.pathname.startsWith("/sdk/")) {
+    event.respondWith(networkFirstNoHttpCache(req));
+    return;
+  }
+
   // Hashed/static assets: cache-first.
   event.respondWith(cacheFirst(req));
 });
@@ -144,6 +153,27 @@ async function networkFirst(req) {
         headers: { "content-type": "text/html; charset=utf-8" },
       },
     );
+  }
+}
+
+// Like networkFirst, but bypasses the HTTP cache so a redeployed stable-URL
+// bundle (e.g. /sdk/v1/hallpass.js — a non-hashed URL, served with
+// must-revalidate) is fetched fresh instead of read from the browser's HTTP
+// cache. "no-cache" revalidates
+// with the server, so an unchanged bundle returns a cheap 304 while a new
+// deploy returns the updated 200. Falls back to the runtime cache when offline.
+async function networkFirstNoHttpCache(req) {
+  try {
+    const res = await fetch(req, { cache: "no-cache" });
+    if (isCacheable(res)) {
+      const cache = await caches.open(RUNTIME_CACHE);
+      await cache.put(req, res.clone()).catch(() => {});
+    }
+    return res;
+  } catch {
+    const cached = await caches.match(req);
+    if (cached) return cached;
+    return new Response(null, { status: 504 });
   }
 }
 
