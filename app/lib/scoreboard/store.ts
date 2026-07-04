@@ -58,9 +58,9 @@ export interface AppendScoreInput {
   playerId?: string | null;
 }
 
-/** Result of `appendScore`: the accepted rank, or a rate-limit rejection. */
+/** Result of `appendScore`: the accepted row `id` + rank, or a rate-limit rejection. */
 export type AppendScoreResult =
-  | { ok: true; rank: number }
+  | { ok: true; id: number; rank: number }
   | { ok: false; reason: "rate-limited" };
 
 /**
@@ -164,9 +164,10 @@ export function createStore(sql: Sql) {
   }
 
   /**
-   * Top `limit` rows for a board. The branch is on whitelisted enums only — six
-   * fully-written templates (sort × period) — never an interpolated fragment.
-   * Rank is positional (1..N), matching the index-ordered scan.
+   * Top `limit` players for a board — ONE row per player (their best score), so
+   * a player who played many times can't fill the board. The branch is on
+   * whitelisted enums only — six fully-written templates (sort × period) — never
+   * an interpolated fragment. Rank is positional (1..N) over those best rows.
    *
    * Each branch LEFT JOINs `players` so a verified row (`scores.player_id` set)
    * is tagged in its `ScoreEntry`: `verified = true`, `handle` becomes the
@@ -204,66 +205,94 @@ export function createStore(sql: Sql) {
 
   /**
    * The six whitelisted SELECT templates (sort × period) behind `getTopScores`.
-   * Each LEFT JOINs `players p ON p.id = s.player_id` to carry the verified
-   * player's `handle`/`name`/`image` alongside the raw `scores` row; an anonymous
-   * row simply yields NULL for the `p_*` columns. Columns that exist on BOTH
-   * tables (`handle`, `created_at`, `id`) are table-qualified to avoid ambiguity;
-   * `score` lives only on `scores`, so it stays unqualified and the index-ordered
-   * `ORDER BY score DESC|ASC` resolves to `s.score`. Only `boardId` and `limit`
-   * are ever bound — the join introduces no spliced fragment.
+   * Each collapses to ONE row per player — their BEST score — so a player who
+   * played many times never fills the board. Identity is the verified
+   * `player_id` when set, else the guest `handle`; the `'p:'`/`'g:'` prefixes
+   * keep a numeric-looking guest handle from ever colliding with a player id.
+   * `DISTINCT ON (identity)` keeps the first row per identity under the inner
+   * `ORDER BY`, i.e. each player's best (highest for desc, lowest for asc); the
+   * outer query then ranks those bests. Each LEFT JOINs `players p ON p.id =
+   * s.player_id` to carry the verified player's `handle`/`name`/`image`; an
+   * anonymous row yields NULL for the `p_*` columns. `score` lives only on
+   * `scores`, so it stays unqualified. Only `boardId` and `limit` are ever bound
+   * — the join and dedup introduce no spliced fragment.
    */
   function selectTopRows(boardId: string, limit: number, period: Period, sort: SortDir) {
     if (sort === "asc") {
       if (period === "day") {
         return sql`
-          SELECT s.handle, s.score, s.player_id, p.handle AS p_handle, p.name AS p_name, p.image AS p_image
-          FROM scores s LEFT JOIN players p ON p.id = s.player_id
-          WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 0, 1)
-          ORDER BY score ASC, s.created_at ASC, s.id ASC
+          SELECT handle, score, player_id, p_handle, p_name, p_image FROM (
+            SELECT DISTINCT ON (COALESCE('p:' || s.player_id, 'g:' || s.handle))
+              s.handle, s.score, s.player_id, p.handle AS p_handle, p.name AS p_name, p.image AS p_image, s.created_at, s.id
+            FROM scores s LEFT JOIN players p ON p.id = s.player_id
+            WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 0, 1)
+            ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score ASC, s.created_at ASC, s.id ASC
+          ) best
+          ORDER BY score ASC, created_at ASC, id ASC
           LIMIT ${limit}
         `;
       }
       if (period === "week") {
         return sql`
-          SELECT s.handle, s.score, s.player_id, p.handle AS p_handle, p.name AS p_name, p.image AS p_image
-          FROM scores s LEFT JOIN players p ON p.id = s.player_id
-          WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 1)
-          ORDER BY score ASC, s.created_at ASC, s.id ASC
+          SELECT handle, score, player_id, p_handle, p_name, p_image FROM (
+            SELECT DISTINCT ON (COALESCE('p:' || s.player_id, 'g:' || s.handle))
+              s.handle, s.score, s.player_id, p.handle AS p_handle, p.name AS p_name, p.image AS p_image, s.created_at, s.id
+            FROM scores s LEFT JOIN players p ON p.id = s.player_id
+            WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 1)
+            ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score ASC, s.created_at ASC, s.id ASC
+          ) best
+          ORDER BY score ASC, created_at ASC, id ASC
           LIMIT ${limit}
         `;
       }
       return sql`
-        SELECT s.handle, s.score, s.player_id, p.handle AS p_handle, p.name AS p_name, p.image AS p_image
-        FROM scores s LEFT JOIN players p ON p.id = s.player_id
-        WHERE s.board_id = ${boardId}
-        ORDER BY score ASC, s.created_at ASC, s.id ASC
+        SELECT handle, score, player_id, p_handle, p_name, p_image FROM (
+          SELECT DISTINCT ON (COALESCE('p:' || s.player_id, 'g:' || s.handle))
+            s.handle, s.score, s.player_id, p.handle AS p_handle, p.name AS p_name, p.image AS p_image, s.created_at, s.id
+          FROM scores s LEFT JOIN players p ON p.id = s.player_id
+          WHERE s.board_id = ${boardId}
+          ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score ASC, s.created_at ASC, s.id ASC
+        ) best
+        ORDER BY score ASC, created_at ASC, id ASC
         LIMIT ${limit}
       `;
     }
     // sort === "desc"
     if (period === "day") {
       return sql`
-        SELECT s.handle, s.score, s.player_id, p.handle AS p_handle, p.name AS p_name, p.image AS p_image
-        FROM scores s LEFT JOIN players p ON p.id = s.player_id
-        WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 0, 1)
-        ORDER BY score DESC, s.created_at ASC, s.id ASC
+        SELECT handle, score, player_id, p_handle, p_name, p_image FROM (
+          SELECT DISTINCT ON (COALESCE('p:' || s.player_id, 'g:' || s.handle))
+            s.handle, s.score, s.player_id, p.handle AS p_handle, p.name AS p_name, p.image AS p_image, s.created_at, s.id
+          FROM scores s LEFT JOIN players p ON p.id = s.player_id
+          WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 0, 1)
+          ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score DESC, s.created_at ASC, s.id ASC
+        ) best
+        ORDER BY score DESC, created_at ASC, id ASC
         LIMIT ${limit}
       `;
     }
     if (period === "week") {
       return sql`
-        SELECT s.handle, s.score, s.player_id, p.handle AS p_handle, p.name AS p_name, p.image AS p_image
-        FROM scores s LEFT JOIN players p ON p.id = s.player_id
-        WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 1)
-        ORDER BY score DESC, s.created_at ASC, s.id ASC
+        SELECT handle, score, player_id, p_handle, p_name, p_image FROM (
+          SELECT DISTINCT ON (COALESCE('p:' || s.player_id, 'g:' || s.handle))
+            s.handle, s.score, s.player_id, p.handle AS p_handle, p.name AS p_name, p.image AS p_image, s.created_at, s.id
+          FROM scores s LEFT JOIN players p ON p.id = s.player_id
+          WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 1)
+          ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score DESC, s.created_at ASC, s.id ASC
+        ) best
+        ORDER BY score DESC, created_at ASC, id ASC
         LIMIT ${limit}
       `;
     }
     return sql`
-      SELECT s.handle, s.score, s.player_id, p.handle AS p_handle, p.name AS p_name, p.image AS p_image
-      FROM scores s LEFT JOIN players p ON p.id = s.player_id
-      WHERE s.board_id = ${boardId}
-      ORDER BY score DESC, s.created_at ASC, s.id ASC
+      SELECT handle, score, player_id, p_handle, p_name, p_image FROM (
+        SELECT DISTINCT ON (COALESCE('p:' || s.player_id, 'g:' || s.handle))
+          s.handle, s.score, s.player_id, p.handle AS p_handle, p.name AS p_name, p.image AS p_image, s.created_at, s.id
+        FROM scores s LEFT JOIN players p ON p.id = s.player_id
+        WHERE s.board_id = ${boardId}
+        ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score DESC, s.created_at ASC, s.id ASC
+      ) best
+      ORDER BY score DESC, created_at ASC, id ASC
       LIMIT ${limit}
     `;
   }
@@ -323,7 +352,7 @@ export function createStore(sql: Sql) {
               WHERE (SELECT n FROM recent) < ${maxPerWindow}
               RETURNING id
             )
-            SELECT (
+            SELECT ins.id AS id, (
               SELECT count(*) FROM scores
               WHERE board_id = ${boardId} AND score < ${score}
             ) + 1 AS rank
@@ -341,7 +370,7 @@ export function createStore(sql: Sql) {
               WHERE (SELECT n FROM recent) < ${maxPerWindow}
               RETURNING id
             )
-            SELECT (
+            SELECT ins.id AS id, (
               SELECT count(*) FROM scores
               WHERE board_id = ${boardId} AND score > ${score}
             ) + 1 AS rank
@@ -350,7 +379,33 @@ export function createStore(sql: Sql) {
     if (rows.length === 0) {
       return { ok: false, reason: "rate-limited" };
     }
-    return { ok: true, rank: Number(rows[0].rank) };
+    return { ok: true, id: Number(rows[0].id), rank: Number(rows[0].rank) };
+  }
+
+  /**
+   * Attach previously-anonymous scores to a now-verified player, in ONE
+   * statement, and report how many rows were claimed. The `upd` CTE performs the
+   * UPDATE and the outer `count(*)::int` tallies its `RETURNING` rows. The
+   * `player_id IS NULL` guard makes this ONE-SHOT: an already-owned row (whether
+   * this player's or another's) is skipped, so a token can never re-claim or
+   * steal a score. `scores.handle` is left untouched. Both `playerId` and the
+   * `scoreIds` array are bound; `scoreIds` is cast to `bigint[]` so the driver's
+   * untyped array literal resolves against the BIGINT `id` column. An empty
+   * `scoreIds` early-returns 0 to avoid binding an empty array.
+   */
+  async function claimScores(playerId: string, scoreIds: number[]): Promise<number> {
+    if (scoreIds.length === 0) {
+      return 0;
+    }
+    const rows = await sql`
+      WITH upd AS (
+        UPDATE scores SET player_id = ${playerId}
+        WHERE id = ANY(${scoreIds}::bigint[]) AND player_id IS NULL
+        RETURNING id
+      )
+      SELECT count(*)::int AS n FROM upd
+    `;
+    return Number(rows[0]?.n ?? 0);
   }
 
   /**
@@ -497,6 +552,7 @@ export function createStore(sql: Sql) {
     getTopScores,
     rankForScore,
     appendScore,
+    claimScores,
     listBoards,
     countScores,
     listScoresForModeration,

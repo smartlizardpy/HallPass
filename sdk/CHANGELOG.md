@@ -9,6 +9,34 @@ to the served URL path (`v1` → `/sdk/v1/hallpass.js`).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-04
+
+### Added
+
+- Popup sign-in / sign-out: `signIn()` / `signOut()` now open a small same-origin
+  popup and signal completion back to the game, so the game document is never
+  unloaded (a blocked popup falls back to a top-level redirect). Must be called
+  from a user-gesture click handler.
+- `"auth"` event — fires `{ player: PlayerIdentity | null }` whenever the signed-in
+  identity changes (sign-in or sign-out, including from another tab). Sticky, like
+  `"ready"`: a late listener still receives the current identity.
+- In-session guest-score claiming: an anonymous same-origin submission may return a
+  short-lived `claimToken`; the SDK holds these in memory and, on sign-in this same
+  page visit, POSTs them to `/api/v1/me/claim` so those scores attach to the account.
+  In-memory only (capped, ~6h TTL) — the tokens die with the page, so a shared
+  computer can never leak one player's scores to the next.
+- Conditional credentialed submits: same-origin `submitScore` / `getPlayer` /
+  `setPlayerHandle` / claim requests now send the session cookie
+  (`credentials: "include"`); cross-origin embeds stay anonymous (`omit`) so
+  wildcard-CORS public reads keep working.
+
+### Fixed
+
+- Signed-in submissions are now attributed to the account instead of being stored
+  as an anonymous `Guest#NNNN` (the session cookie was previously never sent).
+- In-game sign-in no longer reloads the game — the in-progress round and score are
+  preserved.
+
 ## [1.0.0] - 2026-06-27
 
 ### Added
@@ -28,5 +56,6 @@ to the served URL path (`v1` → `/sdk/v1/hallpass.js`).
   sanitisation and an `"ANON"` fallback; optional one-time prompt for initials.
 - Event emitter for `ready`, `scores`, `submitted`, and `error`.
 
-[Unreleased]: https://github.com/hallpass/scoreboard-sdk/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/hallpass/scoreboard-sdk/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/hallpass/scoreboard-sdk/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/hallpass/scoreboard-sdk/releases/tag/v1.0.0

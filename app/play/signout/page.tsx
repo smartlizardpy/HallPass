@@ -4,20 +4,32 @@
  * A server component cannot auto-submit a form (there is no client JS here), so
  * sign-out is a deliberate one-click confirm rather than an automatic action —
  * which also avoids a drive-by URL silently ending someone's session. The button
- * posts an inline server action that clears the session and lands back on the
- * home page.
+ * posts an inline server action that clears the session and lands back where the
+ * caller asked via `?callbackUrl=` (default the home page) — the SDK popup uses
+ * this to return to "/play/auth/complete". As with sign-in, `callbackUrl` is
+ * attacker-influenceable, so it is validated to a same-origin relative path.
  */
 
 import type { Metadata } from "next";
 import Link from "next/link";
 import { signOut } from "@/app/lib/auth";
+import { safeRelativePath } from "@/app/lib/safe-redirect";
 
 export const metadata: Metadata = {
   title: "Sign out · HallPass",
   robots: { index: false, follow: false },
 };
 
-export default function PlaySignOutPage() {
+export default async function PlaySignOutPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ callbackUrl?: string }>;
+}) {
+  const { callbackUrl } = await searchParams;
+  // `callbackUrl` rides in the query string — harden it to a same-origin
+  // relative path before handing it to `signOut({ redirectTo })`.
+  const redirectTo = safeRelativePath(callbackUrl, "/");
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-6 py-10">
       <div className="w-full max-w-md rounded-xl border border-border bg-surface p-8 text-center">
@@ -32,7 +44,7 @@ export default function PlaySignOutPage() {
         <form
           action={async () => {
             "use server";
-            await signOut({ redirectTo: "/" });
+            await signOut({ redirectTo });
           }}
           className="mt-6"
         >

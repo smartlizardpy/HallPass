@@ -224,8 +224,8 @@ describe("appendScore", () => {
     expect(result).toEqual({ ok: false, reason: "rate-limited" });
   });
 
-  it("returns the new rank when a row was inserted", async () => {
-    const { sql, calls } = makeFakeSql(() => [{ rank: "7" }]);
+  it("returns the accepted row id and rank when a row was inserted", async () => {
+    const { sql, calls } = makeFakeSql(() => [{ id: "42", rank: "7" }]);
     const store = createStore(sql);
     const result = await store.appendScore(
       "g",
@@ -233,17 +233,35 @@ describe("appendScore", () => {
       "desc",
     );
 
-    expect(result).toEqual({ ok: true, rank: 7 });
-    // The single statement carries the rate-limit CTE, the guarded insert,
-    // and the desc rank subquery, with all dynamic data bound as values.
+    // The ok-result now surfaces the RETURNING id (a claim token is minted from
+    // it downstream), alongside the competition rank; both coerced via Number().
+    expect(result).toEqual({ ok: true, id: 42, rank: 7 });
+    // The single statement carries the rate-limit CTE, the guarded insert (which
+    // now RETURNs its id), and the desc rank subquery, with all dynamic data bound.
     expect(calls[0].text).toContain("WITH recent AS");
     expect(calls[0].text).toContain("INSERT INTO scores");
     expect(calls[0].text).toContain("INSERT INTO scores (board_id");
+    expect(calls[0].text).toContain("RETURNING id");
+    expect(calls[0].text).toContain("ins.id AS id");
     expect(calls[0].text).toContain("score >");
     expect(calls[0].values).toContain("g");
     expect(calls[0].values).toContain("ME");
     expect(calls[0].values).toContain(100);
     expect(calls[0].values).toContain("abc");
+  });
+
+  it("binds the player_id column for a verified (signed-in) submission", async () => {
+    const { sql, calls } = makeFakeSql(() => [{ id: "9", rank: "1" }]);
+    const store = createStore(sql);
+    const result = await store.appendScore(
+      "g",
+      { handle: "ME", score: 100, ipHash: "abc", playerId: "google-sub-1" },
+      "desc",
+    );
+
+    expect(result).toEqual({ ok: true, id: 9, rank: 1 });
+    expect(calls[0].text).toContain("player_id");
+    expect(calls[0].values).toContain("google-sub-1");
   });
 
   it("uses the asc rank subquery for ascending boards", async () => {
@@ -264,6 +282,35 @@ describe("appendScore", () => {
     );
     expect(calls[0].values).toContain(5);
     expect(calls[0].values).toContain(30);
+  });
+});
+
+describe("claimScores", () => {
+  it("binds the playerId + score ids and returns the atomic CTE count", async () => {
+    const { sql, calls } = makeFakeSql(() => [{ n: 2 }]);
+    const store = createStore(sql);
+
+    const claimed = await store.claimScores("google-sub-1", [10, 20]);
+
+    expect(claimed).toBe(2);
+    // One guarded UPDATE (skipping already-owned rows) wrapped in a count CTE.
+    expect(calls[0].text).toContain("UPDATE scores SET player_id");
+    expect(calls[0].text).toContain("player_id IS NULL");
+    expect(calls[0].text).toContain("= ANY(");
+    expect(calls[0].text).toContain("::bigint[]");
+    expect(calls[0].text).toContain("count(*)::int AS n");
+    // playerId then the ids array are the only bound values.
+    expect(calls[0].values[0]).toBe("google-sub-1");
+    expect(calls[0].values[1]).toEqual([10, 20]);
+  });
+
+  it("short-circuits an empty id list to 0 without querying", async () => {
+    const { sql, calls } = makeFakeSql(() => [{ n: 99 }]);
+    const store = createStore(sql);
+
+    expect(await store.claimScores("google-sub-1", [])).toBe(0);
+    // No statement is issued — the empty array never reaches the driver.
+    expect(calls).toHaveLength(0);
   });
 });
 

@@ -29,6 +29,12 @@ import type {
   SubmitResult,
 } from "./contract";
 import type { ResolvedConfig } from "./config";
+import {
+  AUTH_COMPLETE_PATH,
+  openAuthPopup,
+  subscribeAuthSignals,
+  watchPopup,
+} from "./auth-flow";
 import { ensureHandle, getHandle, setHandle } from "./handle";
 import { getJSON, postJSON } from "./transport";
 import { SDK_MAJOR } from "./version";
@@ -48,9 +54,18 @@ const registry: Partial<Record<EventName, Listener[]>> = {};
  */
 let lastReady: unknown;
 
+/**
+ * Last `"auth"` payload, cached so `"auth"` is STICKY exactly like `"ready"`: a
+ * listener attached after the identity was last resolved (via `on("auth", cb)`)
+ * is invoked immediately with the current `{ player }`. `undefined` = never
+ * emitted yet (the payload object itself is never `undefined`).
+ */
+let lastAuth: unknown;
+
 /** Dispatch `payload` to every listener of `event`. Never throws. */
 export function emit(event: EventName, payload: unknown): void {
   if (event === "ready") lastReady = payload;
+  if (event === "auth") lastAuth = payload;
   const listeners = registry[event];
   if (!listeners || !listeners.length) return;
   for (const cb of listeners.slice()) {
@@ -60,6 +75,55 @@ export function emit(event: EventName, payload: unknown): void {
       // A misbehaving listener must never break the SDK.
     }
   }
+}
+
+/** Cap on the number of pending claim tokens held in memory. */
+const MAX_CLAIM_TOKENS = 20;
+
+/** How long a remembered claim token is considered worth flushing (6h). */
+const CLAIM_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+/** One remembered anonymous-submission claim token and when it was minted. */
+interface ClaimEntry {
+  token: string;
+  ts: number;
+}
+
+/**
+ * In-memory (NEVER persisted) store of claim tokens from anonymous submissions
+ * made during THIS page visit. It is deliberately not written to storage: on a
+ * shared computer the next player signing in must never absorb a previous
+ * player's scores. It dies with the page — exactly the intended scope.
+ */
+const claimStore: ClaimEntry[] = [];
+
+/**
+ * Record a claim token from an OK anonymous `submitScore`. Prunes entries older
+ * than {@link CLAIM_MAX_AGE_MS} and caps the store at {@link MAX_CLAIM_TOKENS}
+ * (dropping the oldest). Fully guarded; never throws.
+ */
+function rememberClaimToken(token: string): void {
+  try {
+    if (typeof token !== "string" || !token) return;
+    const now = Date.now();
+    for (let i = claimStore.length - 1; i >= 0; i--) {
+      if (now - claimStore[i].ts > CLAIM_MAX_AGE_MS) claimStore.splice(i, 1);
+    }
+    claimStore.push({ token, ts: now });
+    while (claimStore.length > MAX_CLAIM_TOKENS) claimStore.shift();
+  } catch {
+    // A claim token is best-effort — never let bookkeeping throw.
+  }
+}
+
+/** Compare two identity values by id; `null`/`undefined` both mean "no player". */
+function samePlayer(
+  a: PlayerIdentity | null | undefined,
+  b: PlayerIdentity | null | undefined,
+): boolean {
+  const aId = a && typeof a === "object" ? a.id : null;
+  const bId = b && typeof b === "object" ? b.id : null;
+  return aId === bId;
 }
 
 /**
@@ -80,6 +144,23 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
    * and is refreshed by `setPlayerHandle`. Per-instance, so tests are isolated.
    */
   let cachedPlayer: PlayerIdentity | null | undefined;
+
+  /** Single-flight guard for {@link refreshAuth} so overlapping signals coalesce. */
+  let refreshing = false;
+
+  /**
+   * True iff the configured API origin equals the page origin, so credentialed
+   * (cookie-bearing) requests and popup auth signalling can actually work. Guarded:
+   * a missing `window`, an unparseable `cfg.api`, or any throw resolves `false`.
+   */
+  function sameOriginApi(): boolean {
+    try {
+      if (typeof window === "undefined" || !window.location) return false;
+      return new URL(cfg.api).origin === window.location.origin;
+    } catch {
+      return false;
+    }
+  }
 
   function leaderboardUrl(game: string): string {
     return cfg.api + "/api/v1/leaderboard/" + encodeURIComponent(game);
@@ -130,11 +211,23 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
         promptHandle: opts?.promptHandle,
       });
 
-      const res = await postJSON(leaderboardUrl(game), { score, handle });
+      // Same-origin embeds send the session cookie so a signed-in submission is
+      // attributed at insert; cross-origin embeds stay anonymous (default omit).
+      const sameOrigin = sameOriginApi();
+      const res = await postJSON(
+        leaderboardUrl(game),
+        { score, handle },
+        { credentials: sameOrigin ? "include" : "omit" },
+      );
 
       if (res.ok) {
         const body = res.data as Partial<SubmitResponse> | undefined;
         const rank = typeof body?.rank === "number" ? body.rank : undefined;
+        // An anonymous same-origin submission may hand back a claim token; hold it
+        // in memory so a later sign-in this visit can re-attribute the score.
+        if (sameOrigin && typeof body?.claimToken === "string") {
+          rememberClaimToken(body.claimToken);
+        }
         const result: SubmitResult = { ok: true, rank };
         emitEvent("submitted", result);
         return result;
@@ -212,23 +305,142 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
   }
 
   /**
-   * Same-origin redirect into the Google sign-in flow. Busts the identity cache
-   * first (the navigation reloads the page, but be explicit). No-op when inert or
-   * outside a browser; never throws.
+   * Flush any pending claim tokens to `POST <api>/api/v1/me/claim` (same-origin,
+   * credentialed) so this visit's anonymous scores attach to the signed-in
+   * player. No-op when the store is empty. On an OK response the store is cleared;
+   * on any failure the tokens are kept for a later retry. Fully guarded; never
+   * throws.
    */
-  function signIn(opts?: AuthRedirectOptions): void {
-    cachedPlayer = undefined;
-    navigate("/play/signin", opts);
+  async function flushClaims(): Promise<void> {
+    try {
+      if (!claimStore.length) return;
+      const now = Date.now();
+      const tokens = claimStore
+        .filter((e) => now - e.ts <= CLAIM_MAX_AGE_MS)
+        .map((e) => e.token);
+      if (!tokens.length) {
+        claimStore.length = 0;
+        return;
+      }
+      const res = await postJSON(
+        cfg.api + "/api/v1/me/claim",
+        { tokens },
+        { credentials: "include" },
+      );
+      if (res.ok) {
+        // Claimed (or definitively rejected server-side) — drop them either way.
+        claimStore.length = 0;
+      }
+      // Non-OK (network/transient) — keep the tokens for the next flush.
+    } catch {
+      // Never throw; keep tokens for retry.
+    }
   }
 
   /**
-   * Same-origin redirect into the sign-out flow (the `/play/signout` page runs the
-   * sign-out server action). Busts the identity cache. No-op when inert or outside
-   * a browser; never throws.
+   * Re-check the signed-in identity and, if it changed, emit the sticky `"auth"`
+   * event. Single-flight so overlapping signals (popup close + BroadcastChannel +
+   * storage) collapse into one refresh. Busts the identity cache, compares the new
+   * identity to the previous by id (null vs non-null counts as a change), and on a
+   * signed-in result fires a best-effort claim flush. Never throws.
+   */
+  async function refreshAuth(): Promise<void> {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      const prev = cachedPlayer;
+      cachedPlayer = undefined;
+      const player = await getPlayer();
+      if (!samePlayer(prev, player)) {
+        emitEvent("auth", { player });
+      }
+      if (player) {
+        void flushClaims();
+      }
+    } catch {
+      // Never throw to game code.
+    } finally {
+      refreshing = false;
+    }
+  }
+
+  /**
+   * Open the popup-based auth flow (or degrade). Busts the identity cache first.
+   * No-op when inert or outside a browser. Cross-origin embeds keep the legacy
+   * full-page `navigate()` (popup signalling and cookies can't work there). Live
+   * same-origin: open a small popup so the game document is NOT unloaded; a blocked
+   * popup falls back to a TOP-LEVEL navigation (never an iframe navigation, which
+   * dead-ends at Google's frame refusal). Never throws.
+   */
+  function startAuthFlow(path: string, opts?: AuthRedirectOptions): void {
+    try {
+      cachedPlayer = undefined;
+      if (mode === "inert") return;
+      if (typeof window === "undefined" || !window.location) return;
+
+      if (!sameOriginApi()) {
+        navigate(path, opts);
+        return;
+      }
+
+      const popup = openAuthPopup(
+        path + "?callbackUrl=" + encodeURIComponent(AUTH_COMPLETE_PATH),
+      );
+      if (!popup) {
+        topLevelNavigate(path, opts);
+        return;
+      }
+      // A close is only a hint; refreshAuth re-fetches identity to confirm.
+      watchPopup(popup, refreshAuth);
+    } catch {
+      // Never throw.
+    }
+  }
+
+  /**
+   * Popup-blocked fallback: navigate the TOP page (not this iframe) to `path`,
+   * carrying the top page's own relative path as `callbackUrl`. If `window.top`
+   * is cross-origin (inaccessible — reading its `location` throws), degrade to the
+   * in-frame `navigate(path, opts)`. Never throws.
+   */
+  function topLevelNavigate(path: string, opts?: AuthRedirectOptions): void {
+    try {
+      const top = window.top;
+      const topLoc = top ? top.location : null;
+      if (!topLoc) {
+        navigate(path, opts);
+        return;
+      }
+      const back = topLoc.pathname + topLoc.search + topLoc.hash;
+      topLoc.assign(path + "?callbackUrl=" + encodeURIComponent(back));
+    } catch {
+      // window.top is cross-origin inaccessible — fall back to in-frame navigate.
+      try {
+        navigate(path, opts);
+      } catch {
+        // Never throw.
+      }
+    }
+  }
+
+  /**
+   * Open a small same-origin popup for Google sign-in; the game document is NOT
+   * unloaded. Busts the identity cache. Falls back to a top-level redirect only if
+   * the popup is blocked; cross-origin embeds keep the legacy full-page redirect.
+   * No-op when inert or outside a browser; never throws.
+   */
+  function signIn(opts?: AuthRedirectOptions): void {
+    startAuthFlow("/play/signin", opts);
+  }
+
+  /**
+   * Open a small same-origin popup for the sign-out flow (the `/play/signout` page
+   * runs the sign-out server action); the game document is NOT unloaded. Busts the
+   * identity cache. Same fallbacks as {@link signIn}. No-op when inert or outside a
+   * browser; never throws.
    */
   function signOut(opts?: AuthRedirectOptions): void {
-    cachedPlayer = undefined;
-    navigate("/play/signout", opts);
+    startAuthFlow("/play/signout", opts);
   }
 
   /**
@@ -305,6 +517,14 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
               // A misbehaving listener must never break the SDK.
             }
           }
+          // "auth" is sticky too: a late listener gets the last known identity.
+          if (event === "auth" && lastAuth !== undefined) {
+            try {
+              cb(lastAuth);
+            } catch {
+              // A misbehaving listener must never break the SDK.
+            }
+          }
         }
       } catch {
         // ignore
@@ -324,6 +544,16 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
       return api;
     },
   };
+
+  // Live same-origin only: a sign-in/out completing in the popup — or in another
+  // tab — pings us to re-check identity. One subscription for the page lifetime.
+  try {
+    if (mode === "live" && sameOriginApi()) {
+      subscribeAuthSignals(refreshAuth);
+    }
+  } catch {
+    // Never let wiring the listener throw during construction.
+  }
 
   return api;
 }

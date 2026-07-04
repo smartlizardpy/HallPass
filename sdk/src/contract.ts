@@ -74,6 +74,13 @@ export interface SubmitResponse {
   rank: number;
   handle: string;
   score: number;
+  /**
+   * Short-lived token an anonymous submission can later present to `POST
+   * /api/v1/me/claim` to attach the score to a signed-in player. Absent when the
+   * submission was already tied to a session (or claiming is disabled
+   * server-side). Added in v1 (append-only).
+   */
+  claimToken?: string;
 }
 
 // ---- Wire types: player identity --------------------------------------------
@@ -112,6 +119,24 @@ export interface MeResponse {
 /** Request body to set the current player's chosen handle. Added in v1. */
 export interface SetHandleRequest {
   handle: string;
+}
+
+/**
+ * `POST /api/v1/me/claim` request body: the claim tokens (from earlier anonymous
+ * `SubmitResponse.claimToken`s) to attach to the current signed-in player. Added
+ * in v1 (append-only).
+ */
+export interface ClaimRequest {
+  tokens: string[];
+}
+
+/**
+ * `POST /api/v1/me/claim` success body: how many of the presented tokens were
+ * successfully claimed for the current player. Added in v1 (append-only).
+ */
+export interface ClaimResponse {
+  ok: true;
+  claimed: number;
 }
 
 // ---- Wire types: admin board provisioning -----------------------------------
@@ -207,7 +232,16 @@ export interface ReadyState {
   mode: Mode;
 }
 
-export type EventName = "ready" | "scores" | "submitted" | "error";
+export type EventName = "ready" | "scores" | "submitted" | "error" | "auth";
+
+/**
+ * Payload for the `"auth"` event: fired when the signed-in player changes. Carries
+ * the new PUBLIC identity, or `null` when the player signed out. Added in v1
+ * (append-only).
+ */
+export interface AuthChangePayload {
+  player: PlayerIdentity | null;
+}
 
 /**
  * Options for the same-origin auth redirects (`signIn` / `signOut`). Added in v1
@@ -252,16 +286,17 @@ export interface HallPass {
    */
   getPlayer?(): Promise<PlayerIdentity | null>;
   /**
-   * Begin the same-origin Google sign-in flow by navigating the browser to
-   * `/play/signin?callbackUrl=<redirectTo|location.href>`. No-op in inert mode or
-   * a non-browser environment. Never throws. Added in v1.
+   * Opens a small same-origin popup for Google sign-in; the game document is NOT
+   * unloaded. Falls back to a top-level redirect only if the popup is blocked.
+   * Cross-origin embeds keep the legacy full-page redirect. Never throws.
+   * Added in v1.
    */
   signIn?(opts?: AuthRedirectOptions): void;
   /**
-   * End the session by navigating to
-   * `/play/signout?callbackUrl=<redirectTo|location.href>` (which runs the
-   * sign-out server action). No-op in inert mode or a non-browser environment.
-   * Never throws. Added in v1.
+   * Opens a small same-origin popup for Google sign-in; the game document is NOT
+   * unloaded. Falls back to a top-level redirect only if the popup is blocked.
+   * Cross-origin embeds keep the legacy full-page redirect. Never throws.
+   * Added in v1.
    */
   signOut?(opts?: AuthRedirectOptions): void;
   /**

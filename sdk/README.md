@@ -96,6 +96,12 @@ Players can stay anonymous (the handle prompt above) or sign in with Google so
 their scores carry a verified identity (display name + avatar). Sign-in is
 same-origin only — it works on game pages served from the HallPass catalog.
 
+`signIn()` opens a small same-origin popup for Google sign-in; the game keeps
+running — it is **never reloaded**. Because it opens a popup, `signIn()` must be
+called from a real click handler (browsers block popups opened outside a user
+gesture); if the popup is blocked the SDK falls back to a top-level redirect.
+`signOut()` behaves the same way. Both are no-ops in an inert preview.
+
 ```js
 const player = await HallPass.getPlayer(); // { id, name, image, handle } | null
 if (player) {
@@ -103,20 +109,41 @@ if (player) {
   // Let the player rename themselves on the leaderboard:
   await HallPass.setPlayerHandle("ZK");
 } else {
-  // Anonymous — offer a sign-in button:
+  // Anonymous — offer a sign-in button. Must be a user-gesture click handler:
   signInButton.onclick = () => HallPass.signIn();
 }
 ```
 
 `getPlayer()` returns `null` for anonymous or cross-origin embeds (no session
-cookie) — never an error. EMAIL is never exposed. `signIn`/`signOut` navigate the
-browser within the same origin and are no-ops in an inert preview.
+cookie) — never an error. EMAIL is never exposed.
+
+The game is not reloaded, so listen for the `"auth"` event to live-update your UI
+the moment sign-in (or sign-out) completes in the popup:
+
+```js
+HallPass.on("auth", ({ player }) => {
+  if (player) {
+    signInLabel.textContent = "Signed in as " + player.handle;
+  } else {
+    signInLabel.textContent = "Sign in";
+  }
+});
+```
+
+The `"auth"` event is **sticky**: a listener added after sign-in already happened
+still fires once with the current identity, so you never miss it.
+
+Any guest scores submitted **during this same page visit** are automatically
+attached to the account right after sign-in — no extra call needed. This is
+this-session only by design: the tokens live in memory and die with the page (on
+a shared computer the next player can never absorb a previous player's scores).
 
 ### React to events
 
 ```js
 HallPass
   .on("submitted", (r) => console.log("rank", r.rank))
+  .on("auth", ({ player }) => console.log("signed in?", !!player))
   .on("error", (r) => console.warn("submit failed", r.reason));
 ```
 
@@ -132,10 +159,10 @@ HallPass
 | `getHandle()`                   | `string \| null`         | The stored player handle.                                             |
 | `setHandle(handle)`             | `string`                 | Sanitises to `[A-Za-z0-9 _-]{1,12}` and persists; returns the result. |
 | `getPlayer()`                   | `Promise<PlayerIdentity \| null>` | Signed-in player's PUBLIC identity (`{ id, name, image, handle }`), else `null`. Same-origin, credentialed. Cached in memory. EMAIL is never exposed. |
-| `signIn(opts?)`                 | `void`                   | Redirect to `/play/signin` (`opts.redirectTo` → `callbackUrl`, default current URL). No-op when inert. |
-| `signOut(opts?)`                | `void`                   | Redirect to `/play/signout`. No-op when inert.                        |
+| `signIn(opts?)`                 | `void`                   | Opens a small same-origin popup for `/play/signin`; the game is **never reloaded**. Must be called from a click handler; a blocked popup falls back to a top-level redirect. `opts.redirectTo` → `callbackUrl`. No-op when inert. |
+| `signOut(opts?)`                | `void`                   | Opens a same-origin popup for `/play/signout`; the game is **never reloaded**. Same click-handler / fallback rules as `signIn`. No-op when inert. |
 | `setPlayerHandle(handle)`       | `Promise<PlayerIdentity \| null>` | Persist the signed-in player's chosen handle; resolves the updated identity, else `null`. |
-| `on(event, cb)` / `off(...)`    | `HallPass`               | Events: `ready`, `scores`, `submitted`, `error`. Chainable.           |
+| `on(event, cb)` / `off(...)`    | `HallPass`               | Events: `ready`, `scores`, `submitted`, `error`, `auth`. `auth` fires `{ player }` when sign-in/out completes (sticky). Chainable. |
 
 ### `submitScore` reasons
 
