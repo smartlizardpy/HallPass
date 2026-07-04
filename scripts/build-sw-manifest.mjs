@@ -138,14 +138,32 @@ if (prerenderRoutes.length === 0 && existsSync(gamesTsPath)) {
   for (const m of slugMatches) tsSlugs.push(m[1]);
   for (const slug of tsSlugs) {
     pageRoutes.add(`/game/${slug}`);
-    pageRoutes.add(`/game-html/${slug}`);
+    // Trailing slash — must byte-match the PlayerOverlay iframe URL, since
+    // caches.match() is exact.
+    pageRoutes.add(`/game-html/${slug}/`);
   }
 }
 
 for (const slug of slugs) {
-  pageRoutes.add(`/game-html/${slug}`);
-  pageRoutes.add(`/games/${slug}/index.html`);
-  pageRoutes.add(`/games/${slug}/cover.png`);
+  // Trailing slash — must byte-match the PlayerOverlay iframe URL, since
+  // caches.match() is exact.
+  pageRoutes.add(`/game-html/${slug}/`);
+  // Precache every file under public/games/{slug}/ — games may be multi-file
+  // (index.html + JS + assets).
+  const slugDir = resolve(gamesDir, slug);
+  const stack = [slugDir];
+  while (stack.length > 0) {
+    const dir = stack.pop();
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(full);
+        continue;
+      }
+      const rel = full.slice(slugDir.length + 1).split(/[/\\]/).join("/");
+      pageRoutes.add(`/games/${slug}/${rel}`);
+    }
+  }
 }
 
 const precacheUrls = [...new Set([...pageRoutes, ...staticAssets])].sort();

@@ -1,20 +1,30 @@
 ---
 name: add-game
-description: Add a new game to the unblockedgames project from an HTML file. Use when the user has @-mentioned a game's HTML in chat and asks to add it, ship it, or onboard it. Triggers on phrases like "add this game", "add new game", "ship this game", or running /add-game with HTML in context.
+description: Add a new game to the unblockedgames project from a single HTML file or a multi-file game folder. Use when the user has @-mentioned a game's HTML in chat or dropped a game folder in the repo and asks to add it, ship it, or onboard it. Triggers on phrases like "add this game", "add new game", "ship this game", or running /add-game with HTML or a game folder in context.
 ---
 
 # Add a new game to unblockedgames
 
-The user has attached a single-file game HTML to the conversation (usually via `@new-game.html`). Your job is to fully onboard it: place files, generate a cover screenshot, and register metadata. Work autonomously — do not ask the user to confirm each step.
+The user has provided a game — either a single self-contained HTML file (usually via `@new-game.html`) or a folder containing `index.html` plus its own JS/CSS/asset files. Your job is to fully onboard it: place files, generate a cover screenshot, and register metadata. Work autonomously — do not ask the user to confirm each step.
 
 ## Project assumptions
 
 - Repo root: `/home/ozi/Projects/unblockedgames`
-- Games live at `public/games/<slug>/index.html` and `public/games/<slug>/cover.png`
+- Games live under `public/games/<slug>/` — always `index.html` and `cover.png`, plus (for multi-file games) the game's own JS/CSS/asset files with subdirectories preserved
 - Metadata is appended to the `games` array in `app/lib/games.ts`
-- The `[slug]/route.ts` reads from Vercel Blob first and falls back to the static file in `public/` if the blob is missing. Upload the HTML to blob as part of this flow (see Step 5) — this is the default, not optional.
+- The route at `app/game-html/[slug]/[[...path]]/route.ts` serves every game file blob-first (from `games/<slug>/<relPath>` in Vercel Blob) and falls back with a 307 to the static copy at `/games/<slug>/<relPath>` if the blob is missing. Upload to blob as part of this flow (see Step 5 / Folder Step 7) — this is the default, not optional.
+- The player iframe loads games at `/game-html/<slug>/` (trailing slash — load-bearing: the game's relative asset URLs resolve against it)
 
-## Steps
+## Step 0: Detect the intake type
+
+Before anything else, look at what the user actually provided:
+
+- **A single `.html` file** (attached in chat or dropped in the repo) → run the **Single-file flow** (Steps 1–8 below), exactly as written.
+- **A directory**, or **multiple game files** (an HTML file plus separate `.js`/`.css`/asset files that belong together) → run the **Folder flow** (see the "Folder flow (multi-file games)" section after Step 8).
+
+If it's ambiguous (e.g. one HTML file plus files that look unrelated to it), ask the user which files belong to the game before proceeding.
+
+## Single-file flow
 
 ### 1. Derive the slug
 - Read the `<title>` from the HTML in context.
@@ -103,7 +113,7 @@ Insert the new entry as the **last** element of the `games` array (just before t
 
 ### 5. Upload the HTML to Vercel Blob
 
-The runtime route at `app/game-html/[slug]/route.ts` reads from blob first. Upload the same HTML there so the game loads identically in production (and so the admin page can later overwrite it).
+The runtime route at `app/game-html/[slug]/[[...path]]/route.ts` reads from blob first. Upload the same HTML there so the game loads identically in production (and so the admin page can later overwrite it).
 
 The token lives in `.env.local` as `BLOB_READ_WRITE_TOKEN`. Run from the project root:
 
@@ -143,6 +153,7 @@ If the user attached it under a different name, use that path instead.
   - `public/games/<slug>/cover.png` (659×613)
   - new entry in `app/lib/games.ts`
   - blob upload returned a `https://*.public.blob.vercel-storage.com/games/<slug>/index.html` URL
+- If the dev server is already running, `curl -sI http://localhost:3000/game-html/<slug>/ | head -1` should return 200. Note the trailing slash — `/game-html/<slug>/` is the exact URL the player iframe loads. Don't start a dev server just for this; skip and move on if it isn't up.
 
 ### 8. Report
 
@@ -156,9 +167,109 @@ Single short summary to the user:
 
 Do NOT commit. The user reviews and commits themselves.
 
+## Folder flow (multi-file games)
+
+Run this flow when the intake is a directory (or a set of files that form one game). It mirrors the single-file flow — same slug rules, same cover, same `games.ts` entry — but validates the file tree first and uploads *every* file to blob, not just `index.html`.
+
+### Folder Step 1: Validate the folder — before touching the repo
+
+Do all of this against the drop folder, before copying anything into `public/`:
+
+1. **`index.html` must exist at the folder root** — not nested. If the drop folder wraps everything in a single inner directory (e.g. `my-game/dist/index.html`), treat that inner directory as the game root for every step below.
+2. **Every relative asset reference must resolve to a real file inside the folder.** Scan `index.html` and all `.js`/`.css` files for references:
+   - `src="..."` / `href="..."` attributes
+   - CSS `url(...)`
+   - `new Image(...)` / `new Audio(...)` / `Audio(...)` source assignments
+   - `fetch('...')` of local paths
+
+   Strip any query string or hash (`sprite.png?v=2` → `sprite.png`); ignore `data:`, `blob:`, `#`, `mailto:`, and external `http(s)://` URLs. Resolve what remains: refs in `.html` files against that file's directory, CSS `url(...)` against the CSS file's directory, and JS string paths against the folder root (the browser resolves them against `index.html`, which sits at the root). Every one must point at an existing file — a missing `assets/boom.mp3` gets caught here, not in production. Dynamically built paths (string concatenation, template literals with variables) can't be statically verified; spot-check what you can and flag the rest in the final report instead of failing.
+3. **Reject absolute local refs** like `/foo.js` or `/images/x.png` — they escape the game directory and 404 in the player. Sole exception: `/sdk/...` (the scoreboard SDK is intentionally site-absolute). Rewrite absolute refs to relative ones (and re-verify they resolve), or stop and ask the user. External `https://` CDN refs follow the same rules as the single-file flow — leave them alone.
+4. **Every path segment must be blob-route safe.** Each directory and file name must match `/^[A-Za-z0-9][A-Za-z0-9 ._-]*$/` and be ≤128 chars (mirrors `isSafeSegment` in `app/lib/game-html-blob.ts` — that file is the source of truth, re-check it if in doubt). No file may sit more than 10 path segments deep relative to the game root (the serving route rejects deeper paths). This bars `..`, dotfiles, and names starting with `.` or space. For offending files: rename them AND patch every reference — prefer renaming spaces out of filenames (`my sprite.png` → `my-sprite.png`) — or stop and ask the user.
+5. **Sanity caps**: ≤300 files total. If the folder exceeds ~25 MB total, warn the user in the final summary (the dashboard upload path caps at 25 MB).
+
+### Folder Step 2: Derive the slug
+
+Exactly as single-file Step 1: read the `<title>` from `index.html`, kebab-case it, and dedupe against `app/lib/games.ts`.
+
+### Folder Step 3: Clean HTML files only
+
+Apply the unicode-corruption Python pass from single-file Step 2 to every `.html` file in the folder — and to `.html` files ONLY. All other files (`.js`, `.css`, images, audio, fonts, …) must reach `public/` byte-identical: no re-encoding, no newline normalization, nothing. Running the pass in the drop folder is fine — it gets deleted in Folder Step 8 anyway.
+
+### Folder Step 4: Copy the whole tree
+
+Copy the entire game tree — subdirectories preserved — to `public/games/<slug>/`:
+
+```bash
+mkdir -p public/games/<slug>
+cp -r <game-root>/. public/games/<slug>/
+```
+
+### Folder Step 5: Generate the cover
+
+Unchanged from single-file Step 3. The `python3 -m http.server` flow already serves folders with their assets, so the game's relative JS/images/audio load fine at `http://localhost:9876/games/<slug>/index.html`.
+
+### Folder Step 6: Append metadata to `app/lib/games.ts`
+
+Unchanged from single-file Step 4. Multi-file games need no new fields.
+
+### Folder Step 7: Upload EVERY file to Vercel Blob
+
+Instead of one `put`, loop over every file under `public/games/<slug>/` (the cleaned copies; skip the generated `cover.png` — it's site metadata, not a game asset) and upload each to `games/<slug>/<relPath>`. Content type is picked by extension — the mapping must mirror `contentTypeForPath` in `app/lib/game-html-blob.ts` (source of truth; the map below is a copy, re-check that file if it may have changed). Token from `.env.local` (`BLOB_READ_WRITE_TOKEN`) exactly as single-file Step 5 documents; if it's missing, skip this step and tell the user.
+
+```bash
+set -a && . .env.local && set +a && node -e "
+const { put } = require('@vercel/blob');
+const fs = require('fs');
+const path = require('path');
+const slug = '<slug>';
+const root = path.join('public/games', slug);
+// Mirror of CONTENT_TYPES in app/lib/game-html-blob.ts
+const types = {
+  html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8',
+  mjs: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8',
+  json: 'application/json; charset=utf-8', txt: 'text/plain; charset=utf-8',
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
+  gif: 'image/gif', svg: 'image/svg+xml', ico: 'image/x-icon',
+  mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav',
+  wasm: 'application/wasm', woff: 'font/woff', woff2: 'font/woff2',
+};
+const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+  e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]);
+(async () => {
+  for (const file of walk(root)) {
+    const rel = path.relative(root, file).split(path.sep).join('/');
+    if (rel === 'cover.png') continue;
+    const ext = path.extname(file).slice(1).toLowerCase();
+    const r = await put('games/' + slug + '/' + rel, fs.readFileSync(file), {
+      access: 'public',
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      cacheControlMaxAge: 60,
+      contentType: types[ext] || 'application/octet-stream',
+    });
+    console.log('OK', r.pathname);
+  }
+})().catch((e) => { console.error(e); process.exit(1); });
+"
+```
+
+Confirm the loop printed one `OK` line per file, including `games/<slug>/index.html`.
+
+### Folder Step 8: Cleanup, verify, report
+
+- Remove the drop folder: `rm -rf /home/ozi/Projects/unblockedgames/<drop-folder>` (use the actual path the user dropped it at).
+- Verify:
+  - `public/games/<slug>/index.html` exists locally AND `games/<slug>/index.html` appeared as an `OK` line in Folder Step 7's output (present in blob).
+  - Pick at least one sub-asset (a `.js` file or an image) and confirm it returns 200 at BOTH `http://localhost:3000/game-html/<slug>/<file>` (blob-first route the player uses) and `http://localhost:3000/games/<slug>/<file>` (static fallback target) via `curl -sI ... | head -1`. Remember the player iframe itself loads `/game-html/<slug>/` — WITH the trailing slash; that slash is what makes the game's relative asset URLs resolve. If the dev server isn't running, skip these curls and say so in the report — do not start one.
+  - `public/games/<slug>/cover.png` is 659×613.
+  - The new entry is appended to `app/lib/games.ts`.
+- Report as in single-file Step 8, plus: number of files uploaded to blob, any renames made in validation, and any size or unverifiable-reference warnings.
+
 ## Notes
 
 - Don't run the dev server. The user already has it running or will start it.
 - Don't open a PR or push.
-- Don't touch `app/admin/` or `app/api/` — those are separate. The blob upload in Step 5 is the *only* blob action that belongs in this flow.
-- If the @-mentioned HTML isn't actually a complete standalone game (no `<canvas>`, no `<script>`, just a snippet), stop and ask the user.
+- Don't touch `app/admin/` or `app/api/` — those are separate. The blob upload (Step 5, or Folder Step 7) is the *only* blob action that belongs in this flow.
+- Games are no longer required to be single-file — multi-file games (index.html + JS + assets) are fully supported via the Folder flow.
+- Single-file intake: if the @-mentioned HTML isn't actually a complete game (no `<canvas>`, no `<script>`, just a snippet), stop and ask the user. But an HTML that references sibling `.js`/asset files is not a reason to bail — it means you should be running the Folder flow instead.
+- Folder intake: if there's no `index.html` at the game root, or it's clearly not a playable game, stop and ask the user.

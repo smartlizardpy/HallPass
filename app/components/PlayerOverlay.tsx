@@ -96,7 +96,9 @@ export function PlayerOverlay({
       >
         <iframe
           key={game.slug}
-          src={`/game-html/${game.slug}`}
+          // Trailing slash is load-bearing: it makes the game's relative asset
+          // URLs (./main.js) resolve under /game-html/<slug>/, not /game-html/.
+          src={`/game-html/${game.slug}/`}
           title={game.title}
           className="absolute inset-0 h-full w-full border-0"
           allow="autoplay; fullscreen; gamepad; pointer-lock"
