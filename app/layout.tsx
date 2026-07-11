@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Nunito } from "next/font/google";
+import { InstallPrompt } from "./components/InstallPrompt";
 import { PWA } from "./components/PWA";
 import { WelcomeToast } from "./components/WelcomeToast";
+import { SITE_URL } from "./lib/site";
 import "./globals.css";
 
 export const viewport: Viewport = {
@@ -22,7 +24,7 @@ const siteDescription =
   "A modern arcade of unblocked browser games. Neon, fast, free, and ready to play.";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://hallpass.gg"),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "HALLPASS — Unblocked Games",
     template: "%s · HALLPASS",
@@ -79,6 +81,7 @@ export default function RootLayout({
         {children}
         <WelcomeToast />
         <PWA />
+        <InstallPrompt />
       </body>
     </html>
   );
