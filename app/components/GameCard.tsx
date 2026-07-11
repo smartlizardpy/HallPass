@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Game } from "../lib/games";
 
 export function GameCard({
@@ -16,13 +17,20 @@ export function GameCard({
   const aspect =
     size === "lg" ? "aspect-[16/10]" : "aspect-square";
   return (
-    // Root is a DIV (not a button): the full-card play control and the favorite
-    // heart are SIBLING buttons, so we never nest a button inside a button
-    // (invalid HTML + breaks keyboard/AT activation).
+    // Root is a DIV: the full-card play control and the favorite heart are
+    // SIBLINGS, so we never nest one interactive element inside another.
+    // The play control is a real <a href="/game/slug"> so search engines (and
+    // middle-click / open-in-new-tab) can reach every game page; a normal left
+    // click opens the in-app player overlay instead of a full navigation.
     <div className="card group relative flex flex-col text-left">
-      <button
-        type="button"
-        onClick={() => onPlay(game.slug)}
+      <Link
+        href={`/game/${game.slug}`}
+        prefetch={false}
+        onClick={(e) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+          e.preventDefault();
+          onPlay(game.slug);
+        }}
         className="flex flex-col text-left"
       >
         <div className={`relative overflow-hidden rounded-3xl bg-zinc-900 ${aspect}`}>
@@ -67,7 +75,7 @@ export function GameCard({
             {game.category}
           </p>
         </div>
-      </button>
+      </Link>
 
       {/* Favorite heart — sibling of the play button, top-RIGHT (badges stay
           top-left). Only rendered when a handler is supplied, so cards without
