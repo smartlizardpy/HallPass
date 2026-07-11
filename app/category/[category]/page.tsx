@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Arcade } from "../../components/Arcade";
 import { resolveCategories, resolveGames } from "../../lib/games-store";
+import { SITE_URL as BASE } from "../../lib/site";
 import { getGamePlayCounts } from "../../lib/stats";
 
 const VIRTUAL = ["New", "Trending"];
@@ -29,20 +30,22 @@ export async function generateMetadata({
   const { category } = await params;
   const resolved = resolveCategory(category, await resolveCategories());
   if (!resolved) return { title: "Category not found" };
-  const title = `${resolved} games`;
+  const title = `${resolved} Games — Play Unblocked Free`;
   const description = `Play free unblocked ${resolved} games on HALLPASS.`;
+  // Encode to match the sitemap/nav category URLs (app/sitemap.ts).
+  const path = `/category/${encodeURIComponent(resolved.toLowerCase())}`;
   return {
     title,
     description,
-    alternates: { canonical: `/category/${resolved.toLowerCase()}` },
+    alternates: { canonical: path },
     openGraph: {
       type: "website",
       title,
       description,
-      url: `/category/${resolved.toLowerCase()}`,
+      url: path,
     },
     twitter: {
-      card: "summary",
+      card: "summary_large_image",
       title,
       description,
     },
@@ -62,12 +65,36 @@ export default async function CategoryPage({
   ]);
   const resolved = resolveCategory(category, categories);
   if (!resolved) notFound();
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "HALLPASS", item: BASE },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: `${resolved} Games`,
+        item: `${BASE}/category/${encodeURIComponent(resolved.toLowerCase())}`,
+      },
+    ],
+  };
+
   return (
-    <Arcade
-      games={games}
-      categories={categories}
-      initialCategory={resolved}
-      playCounts={playCounts}
-    />
+    <>
+      <h1 className="sr-only">{resolved} Games — Unblocked</h1>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
+        }}
+      />
+      <Arcade
+        games={games}
+        categories={categories}
+        initialCategory={resolved}
+        playCounts={playCounts}
+      />
+    </>
   );
 }
