@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import { type Game } from "../lib/games";
@@ -367,9 +368,12 @@ function FeaturedBanner({
 }) {
   return (
     <section className="px-3 pt-2 sm:px-8">
-      <button
-        type="button"
-        onClick={() => {
+      <Link
+        href={`/game/${game.slug}`}
+        prefetch={false}
+        onClick={(e) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+          e.preventDefault();
           posthog.capture("featured_game_played", {
             game_slug: game.slug,
             game_title: game.title,
@@ -420,7 +424,7 @@ function FeaturedBanner({
             />
           </div>
         </div>
-      </button>
+      </Link>
     </section>
   );
 }

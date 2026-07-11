@@ -8,5 +8,10 @@ export default async function Home() {
     resolveCategories(),
     getGamePlayCounts(),
   ]);
-  return <Arcade games={games} categories={categories} playCounts={playCounts} />;
+  return (
+    <>
+      <h1 className="sr-only">Unblocked Games — Play Free Online at HALLPASS</h1>
+      <Arcade games={games} categories={categories} playCounts={playCounts} />
+    </>
+  );
 }
