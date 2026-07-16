@@ -172,15 +172,15 @@ export default async function UsersPage({
         </div>
       ) : (
         users && (
-          <div className="overflow-hidden rounded-xl border border-border bg-surface">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-xl border border-border bg-surface">
+            <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-muted">
                   <th className="px-4 py-3">Email</th>
                   <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Invited by</th>
+                  <th className="whitespace-nowrap px-4 py-3">Invited by</th>
                   <th className="px-4 py-3">Added</th>
-                  <th className="px-4 py-3">Last sign-in</th>
+                  <th className="whitespace-nowrap px-4 py-3">Last sign-in</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>

@@ -34,13 +34,29 @@ export function GameCard({
         className="flex flex-col text-left"
       >
         <div className={`relative overflow-hidden rounded-3xl bg-zinc-900 ${aspect}`}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`/games/${game.slug}/cover.png`}
-            alt={game.title}
-            className="card-art absolute inset-0 h-full w-full object-cover"
-            loading="lazy"
-          />
+          {game.externalUrl && !game.coverUrl ? (
+            // External game with no cover art: render a CSS gradient placeholder
+            // (using the game's gradient stops) instead of a broken <img>. The
+            // title initial is centred so the card still reads at a glance.
+            <div
+              className="card-art absolute inset-0 flex items-center justify-center"
+              style={{
+                backgroundImage: `linear-gradient(135deg, ${game.gradient[0]}, ${game.gradient[1]})`,
+              }}
+            >
+              <span className="text-4xl font-black text-white/90 drop-shadow-[0_2px_6px_rgba(0,0,0,0.4)]">
+                {game.title.charAt(0)}
+              </span>
+            </div>
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={game.coverUrl ?? `/games/${game.slug}/cover.png`}
+              alt={game.title}
+              className="card-art absolute inset-0 h-full w-full object-cover"
+              loading="lazy"
+            />
+          )}
 
           {/* badges overlay */}
           <div className="pointer-events-none absolute left-2 top-2 flex gap-1">

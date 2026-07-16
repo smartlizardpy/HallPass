@@ -22,6 +22,7 @@ const ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Overview", exact: true },
   { href: "/dashboard/boards", label: "Leaderboards" },
   { href: "/dashboard/games", label: "Games" },
+  { href: "/dashboard/external-games", label: "External Games" },
   { href: "/dashboard/curation", label: "Curation" },
   { href: "/dashboard/tags", label: "Tags & genres" },
 ];
@@ -33,7 +34,7 @@ export function DashNav({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const items = isSuperAdmin ? [...ITEMS, USERS_ITEM] : ITEMS;
 
   return (
-    <nav className="flex flex-row gap-1 md:flex-col">
+    <nav className="flex flex-col gap-1">
       {items.map((item) => {
         const active = item.exact
           ? pathname === item.href

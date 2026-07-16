@@ -27,6 +27,8 @@ export type Game = {
   isNew?: boolean;
   isFeatured?: boolean;
   plays?: number;
+  externalUrl?: string; // present => game hosted off-site; iframe points here
+  coverUrl?: string; // absolute cover URL; overrides /games/<slug>/cover.png convention
 };
 
 export const games: Game[] = [

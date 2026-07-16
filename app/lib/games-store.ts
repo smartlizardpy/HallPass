@@ -36,6 +36,7 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { sql } from "@/app/lib/db";
 import { games, type Game } from "@/app/lib/games";
+import { readExternalGames } from "@/app/lib/external-games-store";
 
 /**
  * The cache tag under which {@link readOverrides} is stored. Re-exported so the
@@ -136,13 +137,19 @@ async function readOverrides(): Promise<GameOverride[]> {
  * The public catalogue with overrides applied: the static `games` array, each
  * game's DESCRIPTIVE fields replaced by its override's non-null values. The
  * immutable presentation (`slug`, `gradient`, `accent`, `art`, `plays`) is kept
- * from the static entry via spread. Never throws — {@link readOverrides} already
- * fails soft, so an outage yields the unmodified static catalogue.
+ * from the static entry via spread. EXTERNAL games (off-site, iframe-embedded;
+ * see `@/app/lib/external-games-store`) are APPENDED after the static catalogue so
+ * they surface in the same listings/filters as native games. Never throws — both
+ * {@link readOverrides} and {@link readExternalGames} fail soft (returning `[]`),
+ * so an outage yields the unmodified static catalogue with nothing appended.
  */
 export async function resolveGames(): Promise<Game[]> {
-  const overrides = await readOverrides();
+  const [overrides, external] = await Promise.all([
+    readOverrides(),
+    readExternalGames(),
+  ]);
   const bySlug = new Map(overrides.map((o) => [o.slug, o]));
-  return games.map((game) => {
+  const mapped = games.map((game) => {
     const o = bySlug.get(game.slug);
     if (!o) return game;
     return {
@@ -156,6 +163,9 @@ export async function resolveGames(): Promise<Game[]> {
       isFeatured: o.isFeatured ?? game.isFeatured,
     };
   });
+  // External games are appended after the static catalogue (which may itself be
+  // override-edited); the resolve* helpers below derive from this combined list.
+  return [...mapped, ...external];
 }
 
 /** The resolved (override-applied) game for `slug`, or `undefined` if unknown. */
@@ -406,6 +416,13 @@ export async function renameTag(from: string, to: string): Promise<number> {
   const all = await resolveGames();
   let changed = 0;
   for (const game of all) {
+    // EXTERNAL games carry their tags in the `external_games` table, NOT the
+    // `game_overrides` table that {@link setGameTags} writes to — resolveGames()
+    // appends them straight from readExternalGames() and never merges overrides
+    // for them. Writing an override row keyed by an external slug would be an
+    // orphan the resolver ignores, so the rename would silently no-op yet still
+    // be counted. Skip them: global tag curation only touches the static catalogue.
+    if (game.externalUrl) continue;
     if (!game.tags.includes(from)) continue;
     const seen = new Set<string>();
     const newTags: string[] = [];
@@ -434,6 +451,10 @@ export async function renameCategory(from: string, to: string): Promise<number> 
   const all = await resolveGames();
   let changed = 0;
   for (const game of all) {
+    // Skip EXTERNAL games for the same reason as {@link renameTag}: their
+    // category lives in `external_games`, so a `game_overrides` write keyed by an
+    // external slug is an orphan the resolver never applies (silent no-op).
+    if (game.externalUrl) continue;
     if (game.category !== from) continue;
     await setGameCategory(game.slug, target);
     changed += 1;

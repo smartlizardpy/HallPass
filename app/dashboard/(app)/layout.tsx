@@ -18,12 +18,11 @@
  */
 
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/app/lib/auth";
-import { Wordmark } from "@/app/components/Wordmark";
 import { WhatsNewLink } from "@/app/components/WhatsNewLink";
 import { DashNav } from "./_ui/DashNav";
+import { DashShell } from "./_ui/DashShell";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -52,52 +51,43 @@ export default async function DashboardAppLayout({
   const email = session.user?.email ?? "";
   const roleLabel = ROLE_LABEL[role] ?? role;
 
+  // The sign-out server action must stay in this server component. We render its
+  // <form> here and hand the element to DashShell as a slot — RSC lets a
+  // server-rendered element (server action and all) be passed as a prop into a
+  // client component without the action ever crossing the client boundary.
+  const signOutForm = (
+    <form
+      action={async () => {
+        "use server";
+        await signOut({ redirectTo: "/dashboard/signin" });
+      }}
+    >
+      <button
+        type="submit"
+        className="w-full rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+      >
+        Sign out
+      </button>
+    </form>
+  );
+
   return (
-    <div className="min-h-screen bg-background md:flex">
-      <aside className="border-b border-border bg-surface md:sticky md:top-0 md:h-dvh md:w-64 md:shrink-0 md:overflow-y-auto md:border-b-0 md:border-r">
-        <div className="flex h-full flex-col gap-6 px-5 py-6">
-          <Link href="/dashboard" className="block">
-            <Wordmark />
-            <span className="mt-0.5 block text-[11px] font-bold uppercase tracking-wider text-muted">
-              Dashboard
-            </span>
-          </Link>
-
-          <DashNav isSuperAdmin={role === "super_admin"} />
-
-          <div className="mt-2 border-t border-border pt-2">
-            <WhatsNewLink variant="sidebar" />
+    <DashShell
+      nav={<DashNav isSuperAdmin={role === "super_admin"} />}
+      whatsNew={<WhatsNewLink variant="sidebar" />}
+      user={
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold text-foreground">
+            {email}
           </div>
-
-          <div className="mt-auto space-y-3 border-t border-border pt-4">
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-foreground">
-                {email}
-              </div>
-              <span className="mt-1 inline-block rounded-full bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand">
-                {roleLabel}
-              </span>
-            </div>
-            <form
-              action={async () => {
-                "use server";
-                await signOut({ redirectTo: "/dashboard/signin" });
-              }}
-            >
-              <button
-                type="submit"
-                className="w-full rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2"
-              >
-                Sign out
-              </button>
-            </form>
-          </div>
+          <span className="mt-1 inline-block rounded-full bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand">
+            {roleLabel}
+          </span>
         </div>
-      </aside>
-
-      <div className="min-w-0 flex-1">
-        <main className="mx-auto w-full max-w-7xl px-6 py-8">{children}</main>
-      </div>
-    </div>
+      }
+      signOut={signOutForm}
+    >
+      {children}
+    </DashShell>
   );
 }
