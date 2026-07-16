@@ -26,7 +26,9 @@ async function hogql<T = unknown>(
         Authorization: `Bearer ${API_KEY}`,
       },
       body: JSON.stringify({ query: { kind: "HogQLQuery", query: sql } }),
-      next: { revalidate: 3600, tags: [tag] },
+      // Dashboard stays near-live: PostHog caches query results ~60s anyway, so
+      // a 60s window is about as fresh as it gets without hammering the API.
+      next: { revalidate: 60, tags: [tag] },
       signal: AbortSignal.timeout(8000),
     });
 
@@ -57,8 +59,11 @@ function safe<T>(p: Promise<T[]>): Promise<T[]> {
   return p.catch(() => [] as T[]);
 }
 
-// Events that count as "a play".
-const PLAY_EVENTS = "('game_started', 'featured_game_played')";
+// Events that count as "a play". Only `game_started` — it fires once for every
+// game open (Arcade `setPlaying`), including featured ones. The featured banner
+// ALSO fires `featured_game_played`, so counting both double-counted every
+// featured play; that event is kept purely as a supplementary engagement signal.
+const PLAY_EVENTS = "('game_started')";
 
 export type Delta = {
   /** Current-period value. */
@@ -131,7 +136,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       countIf(event = 'ad_clicked' AND timestamp >= now() - INTERVAL 30 DAY) AS ad_clicks
     FROM events
     WHERE timestamp >= now() - INTERVAL 60 DAY
-      AND event IN ('game_started', 'featured_game_played', 'game_searched', 'ad_clicked')
+      AND event IN ('game_started', 'game_searched', 'ad_clicked')
   `;
 
   const dailySql = `
@@ -140,7 +145,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       count(DISTINCT if(event IN ${PLAY_EVENTS}, distinct_id, NULL)) AS visitors,
       countIf(event = 'game_searched') AS searches
     FROM events
-    WHERE event IN ('game_started', 'featured_game_played', 'game_searched')
+    WHERE event IN ('game_started', 'game_searched')
       AND timestamp >= now() - INTERVAL 30 DAY
     GROUP BY date ORDER BY date ASC
   `;
@@ -266,7 +271,9 @@ export async function getGamePlayCounts(): Promise<PlayCounts> {
           Authorization: `Bearer ${API_KEY}`,
         },
         body: JSON.stringify(query),
-        next: { revalidate: 3600, tags: ["game-play-counts"] },
+        // Homepage card counts are vanity numbers on a high-traffic page, so a
+        // 5-minute window keeps them fresh-ish without a PostHog hit per render.
+        next: { revalidate: 300, tags: ["game-play-counts"] },
         signal: AbortSignal.timeout(8000),
       });
 
