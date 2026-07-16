@@ -22,6 +22,7 @@ const ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Overview", exact: true },
   { href: "/dashboard/boards", label: "Leaderboards" },
   { href: "/dashboard/games", label: "Games" },
+  { href: "/dashboard/external-games", label: "External Games" },
   { href: "/dashboard/curation", label: "Curation" },
   { href: "/dashboard/tags", label: "Tags & genres" },
 ];

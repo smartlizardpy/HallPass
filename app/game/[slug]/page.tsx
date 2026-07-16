@@ -18,7 +18,7 @@ export async function generateMetadata({
   const { slug } = await params;
   const game = await resolveGame(slug);
   if (!game) return { title: "Game not found" };
-  const cover = `/games/${game.slug}/cover.png`;
+  const cover = game.coverUrl ?? `/games/${game.slug}/cover.png`;
   const title = `Play ${game.title} Unblocked — Free Online`;
   return {
     title,
@@ -56,7 +56,13 @@ export default async function GamePage({
   ]);
 
   const url = `${BASE}/game/${game.slug}`;
-  const image = `${BASE}/games/${game.slug}/cover.png`;
+  // Prefer an explicit coverUrl. It may already be absolute (external cover) —
+  // use it as-is then; otherwise prefix BASE so JSON-LD stays fully qualified.
+  const image = game.coverUrl
+    ? game.coverUrl.startsWith("http")
+      ? game.coverUrl
+      : `${BASE}${game.coverUrl}`
+    : `${BASE}/games/${game.slug}/cover.png`;
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
