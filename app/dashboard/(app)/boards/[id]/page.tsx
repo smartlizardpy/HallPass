@@ -302,12 +302,13 @@ export default async function BoardDetailPage({
             No scores submitted yet.
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[420px] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-muted">
                 <th className="py-2 pr-3">#</th>
                 <th className="py-2 pr-3">Handle</th>
-                <th className="py-2 text-right">{board.scoreLabel}</th>
+                <th className="whitespace-nowrap py-2 text-right">{board.scoreLabel}</th>
               </tr>
             </thead>
             <tbody>
@@ -347,6 +348,7 @@ export default async function BoardDetailPage({
               ))}
             </tbody>
           </table>
+          </div>
         )}
 
         <p className="mt-4 text-xs text-muted">
@@ -368,13 +370,14 @@ export default async function BoardDetailPage({
             No scores to moderate.
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[520px] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-muted">
                 <th className="py-2 pr-3">Id</th>
                 <th className="py-2 pr-3">Handle</th>
-                <th className="py-2 pr-3 text-right">{board.scoreLabel}</th>
-                <th className="py-2 pr-3">Submitted</th>
+                <th className="whitespace-nowrap py-2 pr-3 text-right">{board.scoreLabel}</th>
+                <th className="whitespace-nowrap py-2 pr-3">Submitted</th>
                 <th className="py-2 text-right" />
               </tr>
             </thead>
@@ -401,6 +404,7 @@ export default async function BoardDetailPage({
               ))}
             </tbody>
           </table>
+          </div>
         )}
 
         <div className="mt-5 border-t border-border pt-4">

@@ -231,7 +231,7 @@ export default async function DashboardPage() {
             <Empty hint="Database not configured." />
           ) : (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[auto_1fr]">
-              <div className="grid grid-cols-3 gap-4 lg:gap-8">
+              <div className="grid grid-cols-1 min-[380px]:grid-cols-3 gap-4 lg:gap-8">
                 <MiniStat label="Players" value={compact(community.players)} />
                 <MiniStat label="Leaderboards" value={compact(community.boards)} />
                 <MiniStat label="Scores" value={compact(community.scores)} />
