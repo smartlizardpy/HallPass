@@ -386,6 +386,19 @@ export const games: Game[] = [
     art: "splatter",
     isNew: true,
   },
+  {
+    slug: "duskfall",
+    title: "Duskfall",
+    tagline: "Survive the dusk. Outgun the horde.",
+    description:
+      "A first-person zombie wave shooter. Pick a two-weapon loadout, lock the pointer, and hold the arena through endless waves as runners, brutes, and spitters close in at dusk.",
+    category: "Shooter",
+    tags: ["Shooter", "Zombies", "Survival", "3D"],
+    gradient: ["#312c3d", "#ffb347"],
+    accent: "#ffb347",
+    art: "swarm",
+    isNew: true,
+  },
 ];
 
 export const categories = Array.from(
