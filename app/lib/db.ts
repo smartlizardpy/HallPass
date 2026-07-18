@@ -13,12 +13,18 @@
  * `fetch` to Neon's SQL-over-HTTP endpoint. So a module-level singleton is the
  * correct reuse pattern on Vercel Fluid Compute; there is no pool to manage.
  *
- * Graceful-when-unconfigured: `neon()` THROWS synchronously if handed an empty
- * connection string, which would crash module evaluation (and every route that
- * imports it) on a deployment that simply hasn't wired `DATABASE_URL` yet. To
- * honour "throw only when actually used", we substitute a stand-in query
- * function that throws a clear error the moment a query is attempted, and expose
- * {@link isDbConfigured} so callers can answer 503 deliberately.
+ * Graceful-when-unconfigured: `neon()` THROWS synchronously both when handed an
+ * empty connection string AND when handed a present-but-malformed one (e.g. a
+ * placeholder value pulled by `vercel build` running OFF Vercel, where Sensitive
+ * system env vars are not materialized — see the "System environment variables
+ * will not be available" warning). Either would crash module evaluation (and
+ * every route that imports it), which fails the whole build during Next's
+ * page-data collection. To honour "throw only when actually used", we catch that
+ * synchronous failure and substitute a stand-in query function that throws a
+ * clear error the moment a query is attempted, and expose {@link isDbConfigured}
+ * so callers can answer 503 deliberately. At runtime on real Vercel infra the
+ * correct `DATABASE_URL` is injected per cold start, so this only affects builds
+ * and genuinely-unconfigured deployments — never a properly wired production one.
  */
 
 import "server-only";
@@ -26,9 +32,17 @@ import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 
 const connectionString = process.env.DATABASE_URL;
 
-/** True when `DATABASE_URL` is present, i.e. the database is reachable. */
+/**
+ * Whether the shared {@link sql} is a live Neon client (as opposed to the
+ * throw-on-use stand-in). True only when `DATABASE_URL` was present AND a valid
+ * connection string that `neon()` accepted — a present-but-malformed value reads
+ * as unconfigured, not configured-but-broken.
+ */
+let dbConfigured = false;
+
+/** True when `DATABASE_URL` is present and valid, i.e. the database is reachable. */
 export function isDbConfigured(): boolean {
-  return Boolean(connectionString);
+  return dbConfigured;
 }
 
 /**
@@ -44,13 +58,32 @@ const unconfiguredSql = ((): never => {
 }) as unknown as NeonQueryFunction<false, false>;
 
 /**
+ * Build the shared query function, failing soft to {@link unconfiguredSql} when
+ * `DATABASE_URL` is absent OR present-but-invalid. `neon()` validates the URL
+ * synchronously and throws on a malformed one; catching it here defers that
+ * failure from import time (which would crash the build) to first query.
+ */
+function createSql(): NeonQueryFunction<false, false> {
+  if (!connectionString) return unconfiguredSql;
+  try {
+    const client = neon(connectionString);
+    dbConfigured = true;
+    return client;
+  } catch (error) {
+    console.error(
+      "Invalid DATABASE_URL; deferring database failure to query time:",
+      error,
+    );
+    return unconfiguredSql;
+  }
+}
+
+/**
  * The shared Neon query function. Use it as a tagged template only:
  * `await sql\`SELECT ... WHERE id = ${id}\`` — interpolated values are sent as
  * bound parameters, never spliced into the SQL text.
  */
-export const sql: NeonQueryFunction<false, false> = connectionString
-  ? neon(connectionString)
-  : unconfiguredSql;
+export const sql: NeonQueryFunction<false, false> = createSql();
 
 /**
  * True when `error` is the "DATABASE_URL not set" failure thrown by the
