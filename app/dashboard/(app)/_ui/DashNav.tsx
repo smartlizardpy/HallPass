@@ -27,11 +27,15 @@ const ITEMS: NavItem[] = [
   { href: "/dashboard/tags", label: "Tags & genres" },
 ];
 
-const USERS_ITEM: NavItem = { href: "/dashboard/users", label: "Users" };
+// Super-admin-only links, appended when the caller holds that role.
+const SUPER_ADMIN_ITEMS: NavItem[] = [
+  { href: "/dashboard/users", label: "Users" },
+  { href: "/dashboard/logs", label: "Logs" },
+];
 
 export function DashNav({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const pathname = usePathname();
-  const items = isSuperAdmin ? [...ITEMS, USERS_ITEM] : ITEMS;
+  const items = isSuperAdmin ? [...ITEMS, ...SUPER_ADMIN_ITEMS] : ITEMS;
 
   return (
     <nav className="flex flex-col gap-1">
