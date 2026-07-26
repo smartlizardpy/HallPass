@@ -1,4 +1,11 @@
 import posthog from "posthog-js";
+import { initConsoleCapture } from "@/app/lib/console-capture";
+
+// Start buffering console output + uncaught errors as early as possible (this
+// file runs before hydration on every page load) so warnings like the
+// missing-token notice below are visible to super admins on the dashboard
+// "Logs" page — no devtools required. See app/dashboard/(app)/logs.
+initConsoleCapture();
 
 // NEXT_PUBLIC_ vars are inlined at BUILD time, so this token must already be
 // present in the Vercel project settings (and in .env.local for local dev)
