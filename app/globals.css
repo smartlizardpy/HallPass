@@ -147,6 +147,15 @@ body {
     0 6px 16px -8px rgba(28, 28, 40, 0.08);
 }
 
+/* Store-page title bar: a thick left rule in the game's own accent.
+   A >=4px rule is one of the few places raw --g-accent is allowed — it carries
+   no text, so the contrast floor that rules out accent-coloured type does not
+   apply. Falls back to the brand colour if the var is somehow unset, so the bar
+   never renders with an invisible edge. */
+.game-title-tab {
+  border-left: 5px solid var(--g-accent, var(--brand));
+}
+
 /* Chips and small tinted surfaces inside a tinted section. */
 .game-tinted {
   background: color-mix(in oklab, var(--g-accent) 14%, #fff);

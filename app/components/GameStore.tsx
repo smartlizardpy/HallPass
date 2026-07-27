@@ -8,27 +8,29 @@ import { useFavorites } from "../lib/personalization";
 import { useOpenGame } from "./ArcadeShell";
 import { CoverImage } from "./CoverImage";
 import { GameCard } from "./GameCard";
+import { GameReviews } from "./reviews/GameReviews";
 import { FriendsWhoPlay } from "./friends/FriendsWhoPlay";
 import { ScreenshotGallery } from "./ScreenshotGallery";
 
 /**
- * A game's store page body — the Steam × Roblox listing that replaced the old
- * `/game/[slug]`, which rendered the whole catalog with the player already open
- * and showed the game's description nowhere.
+ * A game's store page body.
  *
- * DESIGN NOTE — why this does not look like Steam. Steam is dark and dense; this
- * site is light, and the game `gradient` values were authored for DARK card art
- * (20 of 28 second stops are near-black). Painting a hero with the raw gradient
- * produces a dark-mode island on a `#f4f4f7` page that has no dark variant
- * anywhere. So the "store" feel comes from LAYOUT — a two-column desktop split
- * with a sticky buy-box beside scrolling media — and the game's colour enters
- * only as a ≤18% wash plus a coloured shadow, via `color-mix` in globals.css.
+ * LAYOUT is lifted from a Steam-style listing: a title tab above a hero card
+ * that splits media (left) from a metadata rail and the Play button (right),
+ * then About, then reviews. The SKIN is entirely ours.
  *
- * Likewise `game.accent` is never used for text. It is card-art accent data: 8 of
- * the 28 values are under 3:1 contrast on white, and an admin can enter any hex
- * for an external game. Raw accent is allowed for washes, shadows and thick
- * rules; anything textual uses the derived `--g-ink`, which mixes in enough
- * foreground to clear 4.5:1 regardless of hue.
+ * That distinction is the design brief and worth stating, because the temptation
+ * is to copy the chrome too. The reference is dark, boxy and dense; this site is
+ * light, rounded and chunky, with no dark variant anywhere in the stylesheet. So
+ * what is borrowed is the information architecture — what sits where, and what
+ * the eye reaches in what order — while every surface stays white on `#f4f4f7`,
+ * corners stay `rounded-3xl`, and the primary action stays brand purple rather
+ * than the reference's green.
+ *
+ * The game's own colour enters only as a ≤18% wash behind the hero and as the
+ * title tab's rule (`.game-hero` / `.game-title-tab` in globals.css).
+ * `game.accent` is never used for text: 8 of the 28 catalogue values fall below
+ * 3:1 contrast on white, and an admin can type any hex for an external game.
  */
 export function GameStore({
   game,
@@ -45,10 +47,9 @@ export function GameStore({
   const { isFavorite, toggleFavorite } = useFavorites();
 
   const favorited = isFavorite(game.slug);
+  const categoryHref = `/category/${encodeURIComponent(game.category.toLowerCase())}`;
+  const hasShots = media.length > 0;
 
-  // Same event the catalog cards emit. Without this, favourites recorded from the
-  // store page would be invisible in analytics — and the store page is now the
-  // destination of every card click, so that is where most of them will happen.
   const handleToggleFavorite = (slug: string) => {
     const target = slug === game.slug ? game : related.find((g) => g.slug === slug);
     posthog.capture(isFavorite(slug) ? "game_unfavorited" : "game_favorited", {
@@ -58,13 +59,18 @@ export function GameStore({
     });
     toggleFavorite(slug);
   };
-  const categoryHref = `/category/${encodeURIComponent(game.category.toLowerCase())}`;
+
+  const accentVars = {
+    "--g-from": game.gradient[0],
+    "--g-to": game.gradient[1],
+    "--g-accent": game.accent,
+  } as React.CSSProperties;
 
   return (
-    <div className="px-3 pb-8 pt-2 sm:px-8">
-      {/* Breadcrumb — mirrors the JSON-LD BreadcrumbList exactly, including the
-          category encoding, so the two never disagree. */}
-      <nav aria-label="Breadcrumb" className="mb-4 text-[13px] font-bold text-muted">
+    <div className="px-3 pb-10 pt-2 sm:px-8" style={accentVars}>
+      {/* Breadcrumb — mirrors the JSON-LD BreadcrumbList exactly, encoding
+          included, so the two can never disagree. */}
+      <nav aria-label="Breadcrumb" className="mb-3 text-[13px] font-bold text-muted">
         <ol className="flex flex-wrap items-center gap-1.5">
           <li>
             <Link href="/" className="hover:text-brand">
@@ -77,25 +83,26 @@ export function GameStore({
               {game.category}
             </Link>
           </li>
-          <li aria-hidden>/</li>
-          <li className="text-zinc-900">{game.title}</li>
         </ol>
       </nav>
 
-      <section
-        className="game-hero relative isolate grid gap-5 overflow-hidden rounded-3xl p-4 sm:gap-6 sm:p-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:p-8"
-        style={
-          {
-            "--g-from": game.gradient[0],
-            "--g-to": game.gradient[1],
-            "--g-accent": game.accent,
-          } as React.CSSProperties
-        }
-      >
-        {/* MEDIA COLUMN. The dark frame here is fine — it is a framed image, not
-            the page — which is why the gradient fallback can stay vivid. */}
+      {/* TITLE BAR — the reference's folder-tab header.
+          It originally overlapped the hero by 8px as a deliberate "tuck", but
+          that read as the title COLLIDING with the card rather than sitting on
+          it, so it now stands clear with its own margin. The per-game accent
+          appears as a thick left rule (see `.game-title-tab`), which is a use
+          `--g-accent` is safe for — unlike text, where 8 of 28 catalogue values
+          fall below 3:1 on white. */}
+      <div className="game-title-tab mb-3 inline-block max-w-full rounded-2xl bg-white py-3 pl-4 pr-5 shadow-sm">
+        <h1 className="truncate text-xl font-black leading-tight tracking-tight text-zinc-900 sm:text-2xl">
+          {game.title}
+        </h1>
+      </div>
+
+      {/* HERO — media left, metadata rail + Play right. */}
+      <section className="game-hero grid gap-5 rounded-3xl p-4 sm:gap-6 sm:p-6 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
         <div className="min-w-0">
-          {media.length > 0 ? (
+          {hasShots ? (
             <ScreenshotGallery media={media} title={game.title} />
           ) : (
             <div className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl bg-zinc-900">
@@ -109,36 +116,39 @@ export function GameStore({
           )}
         </div>
 
-        {/* BUY BOX. Sticky on desktop beside the scrolling media — the store
-            idiom that carries the "listing" feel without a dark palette. */}
-        <div className="min-w-0 lg:sticky lg:top-24 lg:self-start">
-          <h1 className="text-2xl font-black leading-tight tracking-tight text-zinc-900 sm:text-3xl">
-            {game.title}
-          </h1>
-          <p className="mt-2 text-[15px] font-bold text-muted">{game.tagline}</p>
+        {/* RAIL */}
+        <aside className="flex min-w-0 flex-col gap-4">
+          {/* Capsule art, only when the gallery already occupies the left side —
+              otherwise this would be the same image twice. */}
+          {hasShots && (
+            <div className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl bg-zinc-900">
+              <CoverImage game={game} initialClass="text-4xl" />
+            </div>
+          )}
 
-          <div className="mt-4 flex flex-wrap gap-1.5">
-            <Link
-              href={categoryHref}
-              className="game-tinted rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wider"
-            >
-              {game.category}
-            </Link>
-            {game.tags
-              .filter((tag) => tag !== game.category)
-              .map((tag) => (
-                // Not links: there is no /tag/[tag] route, and /category/<tag>
-                // would 404 for any tag that is not also a category.
-                <span
-                  key={tag}
-                  className="rounded-full bg-surface-2 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-muted"
-                >
-                  {tag}
-                </span>
-              ))}
-          </div>
+          <p className="text-[15px] font-bold leading-snug text-zinc-700">
+            {game.tagline}
+          </p>
 
-          <div className="mt-6 flex items-center gap-2">
+          <dl className="divide-y divide-border rounded-2xl bg-white/70 px-4 text-[13px]">
+            <MetaRow label="Plays">{plays.toLocaleString()}</MetaRow>
+            <MetaRow label="Genre">
+              <Link href={categoryHref} className="font-bold text-brand hover:text-brand-600">
+                {game.category}
+              </Link>
+            </MetaRow>
+            {game.tags.length > 0 && (
+              <MetaRow label="Tags">
+                {/* Plain text, not links: there is no /tag/[tag] route, and
+                    /category/<tag> would 404 for any tag that is not also a
+                    category. */}
+                {game.tags.join(", ")}
+              </MetaRow>
+            )}
+            <MetaRow label="Plays in">Your browser</MetaRow>
+          </dl>
+
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => openGame(game.slug)}
@@ -176,43 +186,26 @@ export function GameStore({
             </button>
           </div>
 
-          {/* Per-viewer, so it fetches client-side — see FriendsWhoPlay for why
-              this page must never read the session on the server. */}
           <FriendsWhoPlay slug={game.slug} />
-
-          <dl className="mt-6 grid grid-cols-2 gap-3">
-            <div className="rounded-2xl bg-white p-4">
-              <dt className="text-[11px] font-black uppercase tracking-wider text-muted">
-                Plays
-              </dt>
-              <dd className="mt-1 text-xl font-black text-zinc-900">
-                {plays.toLocaleString()}
-              </dd>
-            </div>
-            <div className="rounded-2xl bg-white p-4">
-              <dt className="text-[11px] font-black uppercase tracking-wider text-muted">
-                Runs in
-              </dt>
-              <dd className="mt-1 text-xl font-black text-zinc-900">Browser</dd>
-            </div>
-          </dl>
-        </div>
+        </aside>
       </section>
 
-      {/* ABOUT — the description finally renders somewhere a human can read it.
+      {/* ABOUT — its own card, narrower than the hero, as in the reference.
           `whitespace-pre-line` because the copy is plain text with real line
           breaks; there is no markdown dependency in this repo. */}
-      <section className="mt-10">
-        <h2 className="text-lg font-black tracking-tight text-zinc-900">
+      <section className="mt-5 max-w-3xl rounded-3xl bg-white p-5 sm:p-6">
+        <h2 className="text-[11px] font-black uppercase tracking-wider text-muted">
           About this game
         </h2>
-        <p className="mt-3 max-w-2xl whitespace-pre-line text-[15px] font-semibold leading-relaxed text-zinc-700">
+        <p className="mt-3 whitespace-pre-line text-[15px] font-semibold leading-relaxed text-zinc-700">
           {game.description}
         </p>
       </section>
 
+      <GameReviews slug={game.slug} title={game.title} />
+
       {related.length > 0 && (
-        <section className="mt-12">
+        <section className="mt-10">
           <h2 className="mb-5 text-lg font-black tracking-tight text-zinc-900">
             More like this
           </h2>
@@ -229,6 +222,26 @@ export function GameStore({
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+/** One label/value row in the hero rail's metadata table. */
+function MetaRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 py-2.5">
+      <dt className="shrink-0 text-[11px] font-black uppercase tracking-wider text-muted">
+        {label}
+      </dt>
+      <dd className="min-w-0 truncate text-right font-bold text-zinc-900">
+        {children}
+      </dd>
     </div>
   );
 }
