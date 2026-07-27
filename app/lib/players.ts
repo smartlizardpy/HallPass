@@ -102,6 +102,36 @@ export function effectiveHandle(p: { handle: string | null; name: string | null 
   return p.handle?.trim() || p.name?.trim() || "Player";
 }
 
+/**
+ * The display name for a PUBLIC surface: the chosen handle, else "@username",
+ * else a generic "Player".
+ *
+ * The difference from {@link effectiveHandle} is the whole point, and it is a
+ * privacy difference, not a cosmetic one: `effectiveHandle` falls back to
+ * `players.name`, which is the GOOGLE ACCOUNT NAME — for most people, their real
+ * name. That fallback is fine on owner-facing surfaces (the account page, "signed
+ * in as …"), where the viewer is the person themselves. It is not fine on a
+ * profile page at a guessable URL, in a friends list, or beside a comment, where
+ * it would publish a child's real name to anyone who can read the page.
+ *
+ * Use THIS on anything another player can see. Use `effectiveHandle` only where
+ * the viewer is the owner.
+ *
+ * Known related gap, out of scope here: `getTopScores` in
+ * `app/lib/scoreboard/store.ts` still falls back to the Google name on public
+ * leaderboards, so real names are already published there today. Same bug, its
+ * own fix.
+ */
+export function publicDisplayName(p: {
+  handle: string | null;
+  username: string | null;
+}): string {
+  const handle = p.handle?.trim();
+  if (handle) return handle;
+  const username = p.username?.trim();
+  return username ? `@${username}` : "Player";
+}
+
 function mapPlayer(row: Row): Player {
   return {
     id: String(row.id),
