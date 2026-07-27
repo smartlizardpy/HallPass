@@ -11,6 +11,7 @@ import {
   useFavoritesServerSync,
   useRecentlyPlayed,
 } from "../lib/personalization";
+import { CoverImage } from "./CoverImage";
 import { GameCard } from "./GameCard";
 import { Sidebar } from "./Sidebar";
 import { PlayerOverlay } from "./PlayerOverlay";
@@ -416,27 +417,14 @@ function FeaturedBanner({
         </div>
         <div className="relative hidden h-full min-h-[280px] sm:block">
           <div className="absolute inset-4 overflow-hidden rounded-2xl bg-zinc-900">
-            {game.externalUrl && !game.coverUrl ? (
-              // External game with no cover art: CSS gradient placeholder
-              // (game's gradient stops) instead of a broken <img>.
-              <div
-                className="absolute inset-0 flex items-center justify-center"
-                style={{
-                  backgroundImage: `linear-gradient(135deg, ${game.gradient[0]}, ${game.gradient[1]})`,
-                }}
-              >
-                <span className="text-6xl font-black text-white/90 drop-shadow-[0_2px_6px_rgba(0,0,0,0.4)]">
-                  {game.title.charAt(0)}
-                </span>
-              </div>
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={game.coverUrl ?? `/games/${game.slug}/cover.png`}
-                alt={game.title}
-                className="absolute inset-0 h-full w-full object-cover"
-              />
-            )}
+            {/* The featured banner is above the fold: load its cover eagerly and
+                at high priority, since it is the page's LCP candidate. */}
+            <CoverImage
+              game={game}
+              initialClass="text-6xl"
+              loading="eager"
+              fetchPriority="high"
+            />
           </div>
         </div>
       </Link>

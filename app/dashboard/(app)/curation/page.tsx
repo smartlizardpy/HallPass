@@ -21,6 +21,7 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/app/lib/auth";
 import { resolveGames } from "@/app/lib/games-store";
+import { CoverImage } from "@/app/components/CoverImage";
 import { DashHeader } from "../_ui/DashHeader";
 import { Section } from "../_ui/Section";
 import { setFeaturedAction, toggleNewAction } from "./actions";
@@ -93,13 +94,11 @@ export default async function CurationPage({
                     defaultChecked={Boolean(game.isFeatured)}
                     className="h-4 w-4 shrink-0 border-border text-brand focus:ring-brand/30"
                   />
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={`/games/${game.slug}/cover.png`}
-                    alt=""
-                    loading="lazy"
-                    className="aspect-video w-20 shrink-0 rounded bg-surface-2 object-cover"
-                  />
+                  {/* CoverImage handles external games, which have no
+                      `/games/<slug>/cover.png` to point at. */}
+                  <div className="relative aspect-video w-20 shrink-0 overflow-hidden rounded bg-surface-2">
+                    <CoverImage game={game} initialClass="text-base" />
+                  </div>
                   <div className="min-w-0">
                     <div className="truncate text-sm font-bold text-foreground">
                       {game.title}
