@@ -124,6 +124,12 @@ export function SiteHeader({
       ) : (
         <form
           role="search"
+          // `action`/`method` so the form works BEFORE hydration and with JS off:
+          // a native GET to `/` with the `q` field is exactly the URL the onSubmit
+          // handler builds. Without them a pre-hydration submit would reload the
+          // CURRENT page instead of searching.
+          action="/"
+          method="get"
           className="contents"
           onSubmit={(e) => {
             e.preventDefault();

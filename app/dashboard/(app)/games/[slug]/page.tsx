@@ -56,7 +56,7 @@ import {
 import { clearGameOverrideAction, setGameTagsAction, updateGameAction } from "./actions";
 import {
   deleteMediaAction,
-  reorderMediaAction,
+  moveMediaAction,
   setMediaAltAction,
   uploadMediaAction,
 } from "./media-actions";
@@ -289,44 +289,60 @@ export default async function GameControlPage({
               until you add some.
             </p>
           ) : (
-            // One form for the whole grid: the hidden `ids` fields are emitted in
-            // their current display order, so "Save order" posts the sequence the
-            // admin can see. Reordering is done with the ↑/↓ buttons below, which
-            // are plain submit buttons on the per-image forms.
-            <form action={reorderMediaAction} className="space-y-4">
-              <input type="hidden" name="slug" value={slug} />
-              <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {media.map((item, index) => (
-                  <li
-                    key={item.id}
-                    className="rounded-lg border border-border p-3"
-                  >
-                    <input type="hidden" name="ids" value={item.id} />
-                    <div className="relative aspect-video w-full overflow-hidden rounded bg-surface-2">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={mediaPublicPath(item)}
-                        alt={item.alt || `Screenshot ${index + 1}`}
-                        width={item.width}
-                        height={item.height}
-                        loading="lazy"
-                        className="absolute inset-0 h-full w-full object-cover"
-                      />
-                    </div>
-                    <p className="mt-2 text-xs text-muted">
+            <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {media.map((item, index) => (
+                <li key={item.id} className="rounded-lg border border-border p-3">
+                  <div className="relative aspect-video w-full overflow-hidden rounded bg-surface-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={mediaPublicPath(item)}
+                      alt={item.alt || `Screenshot ${index + 1}`}
+                      width={item.width}
+                      height={item.height}
+                      loading="lazy"
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <p className="min-w-0 truncate text-xs text-muted">
                       #{index + 1} · {item.width}×{item.height} ·{" "}
                       {Math.round(item.bytes / 1024)} KB
                     </p>
-                  </li>
-                ))}
-              </ul>
-              <button
-                type="submit"
-                className="rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2"
-              >
-                Save order
-              </button>
-            </form>
+                    {/* Two one-field forms rather than a drag handle: this works
+                        with no JavaScript, and the server derives the new order
+                        from the direction. */}
+                    <div className="flex shrink-0 gap-1">
+                      <form action={moveMediaAction}>
+                        <input type="hidden" name="slug" value={slug} />
+                        <input type="hidden" name="id" value={item.id} />
+                        <input type="hidden" name="direction" value="up" />
+                        <button
+                          type="submit"
+                          disabled={index === 0}
+                          aria-label={`Move screenshot ${index + 1} earlier`}
+                          className="grid h-7 w-7 place-items-center rounded border border-border text-xs font-bold text-zinc-700 hover:bg-surface-2 disabled:opacity-30"
+                        >
+                          ↑
+                        </button>
+                      </form>
+                      <form action={moveMediaAction}>
+                        <input type="hidden" name="slug" value={slug} />
+                        <input type="hidden" name="id" value={item.id} />
+                        <input type="hidden" name="direction" value="down" />
+                        <button
+                          type="submit"
+                          disabled={index === media.length - 1}
+                          aria-label={`Move screenshot ${index + 1} later`}
+                          className="grid h-7 w-7 place-items-center rounded border border-border text-xs font-bold text-zinc-700 hover:bg-surface-2 disabled:opacity-30"
+                        >
+                          ↓
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
 
           {/* Per-image controls live in their own forms so they never nest

@@ -39,6 +39,7 @@ import {
   countMediaForSlug,
   deleteMedia,
   insertMedia,
+  listMediaIdsForSlug,
   mediaBlobPath,
   reorderMedia,
   setMediaAlt,
@@ -172,9 +173,21 @@ export async function uploadMediaAction(formData: FormData): Promise<void> {
     failure = "Could not upload images";
   }
 
-  if (failure) redirect(err(slug, failure));
-
-  revalidateMedia(slug);
+  // Revalidate BEFORE the failure bounce, not after. A batch can fail partway —
+  // three files stored, the fourth throws — and jumping straight to the error
+  // redirect would leave those three rows written but invisible until the 1h
+  // cache TTL rolled over, which reads as "the upload did nothing".
+  if (stored > 0) revalidateMedia(slug);
+  if (failure) {
+    redirect(
+      err(
+        slug,
+        stored > 0
+          ? `${failure} — ${stored} uploaded before the error`
+          : failure,
+      ),
+    );
+  }
   if (stored === 0) {
     redirect(err(slug, `Nothing uploaded: ${skipped.join("; ")}`));
   }
@@ -206,7 +219,7 @@ export async function deleteMediaAction(formData: FormData): Promise<void> {
 
   let failed = false;
   try {
-    const blobPath = await deleteMedia(id);
+    const blobPath = await deleteMedia(slug, id);
     if (blobPath) {
       await del(blobPath).catch(() => {
         /* orphaned object; the row is gone, which is what users see */
@@ -222,36 +235,49 @@ export async function deleteMediaAction(formData: FormData): Promise<void> {
 }
 
 /**
- * Rewrite the gallery order from the submitted id sequence.
+ * Move one screenshot one slot earlier or later.
  *
- * The form emits one hidden `ids` field per image in its new order and we read
- * them with `getAll` — the same one-field-per-item convention `_ui/TagEditor`
- * uses for tags. The whole reorder is a single bound-array statement in
- * `reorderMedia`, scoped to this slug so foreign ids are ignored rather than
- * letting one game reorder another's rows.
+ * Per-image ↑/↓ submit buttons, not a "save the whole order" form. The form-only
+ * approach cannot work without JavaScript: the hidden id fields render in the
+ * order the rows are ALREADY in, so submitting them posts the existing sequence
+ * and the reorder is always a no-op. A move carries the one thing a plain form
+ * can express — which item, which direction — and the server derives the new
+ * sequence from it.
+ *
+ * The current order is re-read UNCACHED inside the action, so two admins moving
+ * images at once cannot write positions derived from a stale view.
  */
-export async function reorderMediaAction(formData: FormData): Promise<void> {
+export async function moveMediaAction(formData: FormData): Promise<void> {
   await requireRole("admin");
 
   const slug = String(formData.get("slug") ?? "").trim();
-  if (!slug) redirect("/dashboard/games?error=Unknown+game");
-
-  const ids = formData
-    .getAll("ids")
-    .map((v) => String(v).trim())
-    .filter(Boolean);
-  if (ids.length === 0) redirect(err(slug, "Nothing to reorder"));
+  const id = String(formData.get("id") ?? "").trim();
+  const direction = String(formData.get("direction") ?? "");
+  if (!slug || !id) redirect("/dashboard/games?error=Unknown+game");
+  if (direction !== "up" && direction !== "down") {
+    redirect(err(slug, "Unknown move"));
+  }
 
   let failed = false;
+  let moved = false;
   try {
-    await reorderMedia(slug, ids);
+    const ids = await listMediaIdsForSlug(slug);
+    const from = ids.indexOf(id);
+    const to = direction === "up" ? from - 1 : from + 1;
+    // A no-op at the ends. The buttons are disabled there, so reaching this only
+    // happens on a stale view — which should not produce an error banner.
+    if (from !== -1 && to >= 0 && to < ids.length) {
+      [ids[from], ids[to]] = [ids[to], ids[from]];
+      await reorderMedia(slug, ids);
+      moved = true;
+    }
   } catch {
     failed = true;
   }
-  if (failed) redirect(err(slug, "Could not save the new order"));
+  if (failed) redirect(err(slug, "Could not reorder"));
 
-  revalidateMedia(slug);
-  redirect(ok(slug, "Order saved"));
+  if (moved) revalidateMedia(slug);
+  redirect(ok(slug, moved ? "Order updated" : "Already in place"));
 }
 
 /**
@@ -272,12 +298,14 @@ export async function setMediaAltAction(formData: FormData): Promise<void> {
     .slice(0, MAX_ALT_LENGTH);
 
   let failed = false;
+  let matched = true;
   try {
-    await setMediaAlt(id, alt);
+    matched = await setMediaAlt(slug, id, alt);
   } catch {
     failed = true;
   }
   if (failed) redirect(err(slug, "Could not save that description"));
+  if (!matched) redirect(err(slug, "That image is no longer here"));
 
   revalidateMedia(slug);
   redirect(ok(slug, "Description saved"));

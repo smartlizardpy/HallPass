@@ -88,9 +88,23 @@ function readU24LE(bytes: Uint8Array, offset: number): number {
 /**
  * PNG: the IHDR chunk is mandated to be first, so width/height sit at fixed
  * offsets 16 and 20 (8 signature + 4 length + 4 type).
+ *
+ * The chunk type is verified rather than assumed. Without it, any 24 bytes
+ * starting with the PNG signature — a signature followed by junk — reads as a
+ * valid image with whatever the next 8 bytes happen to say, so a hand-crafted
+ * 24-byte "PNG" would pass validation and be stored.
  */
 function pngSize(bytes: Uint8Array): { width: number; height: number } | null {
   if (bytes.length < 24) return null;
+  // "IHDR" at offset 12.
+  if (
+    bytes[12] !== 0x49 ||
+    bytes[13] !== 0x48 ||
+    bytes[14] !== 0x44 ||
+    bytes[15] !== 0x52
+  ) {
+    return null;
+  }
   return { width: readU32BE(bytes, 16), height: readU32BE(bytes, 20) };
 }
 
@@ -214,8 +228,19 @@ export function readImageMeta(bytes: Uint8Array): ImageMeta | null {
   if (!size) return null;
   if (!Number.isFinite(size.width) || !Number.isFinite(size.height)) return null;
   if (size.width <= 0 || size.height <= 0) return null;
+  // Upper bound matters as much as the lower one. PNG stores dimensions as
+  // unsigned 32-bit, so a corrupt or crafted header can report ~4 billion — which
+  // sails through the aspect check (4e9 / 4e9 = 1) and then overflows the INTEGER
+  // columns on insert, turning a bad upload into a database error. 65535 is
+  // comfortably above any real screenshot and inside INTEGER range.
+  if (size.width > MAX_IMAGE_DIMENSION || size.height > MAX_IMAGE_DIMENSION) {
+    return null;
+  }
   return { type, width: size.width, height: size.height };
 }
+
+/** Sanity ceiling for a decoded dimension; see {@link readImageMeta}. */
+export const MAX_IMAGE_DIMENSION = 65_535;
 
 /** File extension to use for a stored blob of this type. */
 export function extensionForType(type: ImageType): string {

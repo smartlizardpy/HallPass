@@ -78,11 +78,18 @@ export function GameCard({
           `group-focus-within` alongside `group-hover` is what makes it reachable
           by keyboard at all — previously the ▶ was `pointer-events-none` and
           purely decorative, so there was no keyboard path to instant play.
-          Hidden on touch (`@media (hover:none)` never triggers the group-hover),
-          where tapping the card goes to the store page — which is the behaviour
-          Poki and Roblox both use on mobile. */}
+
+          `hidden [@media(hover:hover)]:flex` — NOT `opacity-0` — is what keeps it
+          off touch devices, and the distinction is load-bearing. `opacity: 0`
+          does not remove an element from hit testing, so an opacity-hidden button
+          with `pointer-events-auto` would sit invisible but tappable dead centre
+          over the artwork: on a phone, tapping the middle of any card would
+          instant-play instead of opening the store page, silently defeating this
+          whole change on the majority of traffic. `display: none` genuinely
+          removes it. On touch, tapping the card goes to the store page — the
+          behaviour Poki and Roblox both use. */}
       <div
-        className={`pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-center rounded-3xl bg-black/0 opacity-0 transition-all duration-200 group-hover:bg-black/20 group-hover:opacity-100 group-focus-within:opacity-100 ${aspect}`}
+        className={`pointer-events-none absolute inset-x-0 top-0 z-10 hidden items-center justify-center rounded-3xl bg-black/0 opacity-0 transition-all duration-200 group-hover:bg-black/20 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:hover)]:flex ${aspect}`}
       >
         <button
           type="button"

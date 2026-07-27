@@ -5,11 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import { type Game } from "../lib/games";
-import {
-  useFavorites,
-  useFavoritesServerSync,
-  useRecentlyPlayed,
-} from "../lib/personalization";
+import { useFavorites, useRecentlyPlayed } from "../lib/personalization";
 import { CoverImage } from "./CoverImage";
 import { ArcadeShell, useOpenGame } from "./ArcadeShell";
 import { GameCard } from "./GameCard";
@@ -105,7 +101,6 @@ function ArcadeRows({
   // mismatch). Favorites also sync to Neon for a signed-in player.
   const { favorites, isFavorite, toggleFavorite } = useFavorites();
   const { recent } = useRecentlyPlayed();
-  useFavoritesServerSync();
 
   const handleToggleFavorite = (slug: string) => {
     const willFavorite = !isFavorite(slug);

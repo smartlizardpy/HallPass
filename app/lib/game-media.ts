@@ -166,18 +166,54 @@ export async function insertMedia(media: {
  * delete leaks one object; losing the row delete after the blob delete would
  * leave a row pointing at a 404, which is worse.
  */
-export async function deleteMedia(id: string): Promise<string | null> {
+export async function deleteMedia(
+  slug: string,
+  id: string,
+): Promise<string | null> {
   const rows = await sql`
-    DELETE FROM game_media WHERE id = ${id} RETURNING blob_path
+    DELETE FROM game_media WHERE id = ${id} AND slug = ${slug} RETURNING blob_path
   `;
   return rows.length > 0 ? String(rows[0].blob_path) : null;
 }
 
-/** Set one image's alt text. */
-export async function setMediaAlt(id: string, alt: string): Promise<void> {
-  await sql`
-    UPDATE game_media SET alt = ${alt}, updated_at = now() WHERE id = ${id}
+/**
+ * Delete EVERY media row for a slug, returning the blob keys so the caller can
+ * clean up the objects. Used when the game itself is deleted.
+ *
+ * Without this, deleting an external game leaves its `game_media` rows behind —
+ * and since `slug` is the join key and is deliberately NOT a foreign key (games
+ * live in a static array plus `external_games`, not one table), nothing cascades.
+ * Re-creating a game with the same slug would then inherit the deleted game's
+ * screenshots.
+ */
+export async function deleteAllMediaForSlug(slug: string): Promise<string[]> {
+  const rows = await sql`
+    DELETE FROM game_media WHERE slug = ${slug} RETURNING blob_path
   `;
+  return rows.map((row) => String(row.blob_path));
+}
+
+/**
+ * Set one image's alt text, scoped to its slug.
+ *
+ * Both this and {@link deleteMedia} take the slug as well as the id and return
+ * whether a row actually matched. The id alone would be sufficient to find the
+ * row — it is the primary key — but then a forged `id` in the form would let one
+ * game's panel mutate another game's media, and a no-op would be indistinguishable
+ * from a success. Scoping by slug matches what the panel claims to be editing, and
+ * `RETURNING` lets the action report "not found" honestly.
+ */
+export async function setMediaAlt(
+  slug: string,
+  id: string,
+  alt: string,
+): Promise<boolean> {
+  const rows = await sql`
+    UPDATE game_media SET alt = ${alt}, updated_at = now()
+    WHERE id = ${id} AND slug = ${slug}
+    RETURNING id
+  `;
+  return rows.length > 0;
 }
 
 /**
@@ -202,6 +238,23 @@ export async function reorderMedia(slug: string, ids: string[]): Promise<void> {
     FROM unnest(${ids}::text[]) WITH ORDINALITY AS x(id, pos)
     WHERE m.id = x.id AND m.slug = ${slug}
   `;
+}
+
+/**
+ * The ordered media ids for a slug, read UNCACHED.
+ *
+ * Deliberately not `getGameMedia`: that read is `unstable_cache`d, and a reorder
+ * must compute the new sequence from what is actually in the table right now. A
+ * stale list would silently write positions derived from an order the admin is no
+ * longer looking at.
+ */
+export async function listMediaIdsForSlug(slug: string): Promise<string[]> {
+  const rows = await sql`
+    SELECT id FROM game_media
+    WHERE slug = ${slug}
+    ORDER BY position ASC, created_at ASC
+  `;
+  return rows.map((row) => String(row.id));
 }
 
 /** How many images a slug already has — used to enforce the per-game cap. */

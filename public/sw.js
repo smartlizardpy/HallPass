@@ -156,7 +156,17 @@ async function networkFirst(req) {
     }
     return res;
   } catch {
-    const cached = await caches.match(req);
+    // `ignoreSearch` because `caches.match` is exact on the query string by
+    // default, and precached entries never carry one. Without it, any navigation
+    // to a page WITH a query misses its own precached document offline — e.g.
+    // `/?q=racing` from the store page's search box, or a shared
+    // `/game/<slug>?play=1`, would both fall through to the offline page even
+    // though the exact document is sitting in the cache.
+    //
+    // Scoped to navigations ONLY. It must never reach
+    // `networkFirstWithStaticFallback`, where exact matching of
+    // `/game-html/<slug>/` is load-bearing.
+    const cached = await caches.match(req, { ignoreSearch: true });
     if (cached) return cached;
 
     // Fallback chain: the precached /offline document, THEN "/" but only for a

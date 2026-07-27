@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import posthog from "posthog-js";
 import type { Game } from "../lib/games";
 import type { GameMedia } from "../lib/game-media-blob";
-import { useFavorites, useFavoritesServerSync } from "../lib/personalization";
+import { useFavorites } from "../lib/personalization";
 import { useOpenGame } from "./ArcadeShell";
 import { CoverImage } from "./CoverImage";
 import { GameCard } from "./GameCard";
@@ -41,9 +42,21 @@ export function GameStore({
 }) {
   const openGame = useOpenGame();
   const { isFavorite, toggleFavorite } = useFavorites();
-  useFavoritesServerSync();
 
   const favorited = isFavorite(game.slug);
+
+  // Same event the catalog cards emit. Without this, favourites recorded from the
+  // store page would be invisible in analytics — and the store page is now the
+  // destination of every card click, so that is where most of them will happen.
+  const handleToggleFavorite = (slug: string) => {
+    const target = slug === game.slug ? game : related.find((g) => g.slug === slug);
+    posthog.capture(isFavorite(slug) ? "game_unfavorited" : "game_favorited", {
+      game_slug: slug,
+      game_title: target?.title,
+      game_category: target?.category,
+    });
+    toggleFavorite(slug);
+  };
   const categoryHref = `/category/${encodeURIComponent(game.category.toLowerCase())}`;
 
   return (
@@ -140,7 +153,7 @@ export function GameStore({
               type="button"
               aria-pressed={favorited}
               aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
-              onClick={() => toggleFavorite(game.slug)}
+              onClick={() => handleToggleFavorite(game.slug)}
               style={{ touchAction: "manipulation" }}
               className={`grid h-14 w-14 shrink-0 place-items-center rounded-full border border-border bg-white transition hover:bg-surface-2 active:scale-90 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30 ${
                 favorited ? "text-accent-pink" : "text-zinc-400"
@@ -205,7 +218,7 @@ export function GameStore({
                 game={g}
                 onPlay={openGame}
                 isFavorite={isFavorite(g.slug)}
-                onToggleFavorite={toggleFavorite}
+                onToggleFavorite={handleToggleFavorite}
               />
             ))}
           </div>

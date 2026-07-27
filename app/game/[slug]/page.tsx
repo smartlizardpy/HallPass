@@ -84,8 +84,8 @@ export async function generateMetadata({
     description,
     keywords: [game.title, game.category, ...game.tags, "unblocked", "free"],
     // Load-bearing, not boilerplate: `skipTrailingSlashRedirect: true` means
-    // `/game/<slug>/` serves this same page with no 308, and shared `?play=1`
-    // links get crawled. The canonical collapses all of them.
+    // `/game/<slug>/` serves this same page with NO 308 redirect, so the
+    // trailing-slash form is a genuine duplicate URL. The canonical collapses it.
     alternates: { canonical: `/game/${game.slug}` },
     openGraph: {
       type: "website",

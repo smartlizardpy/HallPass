@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import type { Game } from "../lib/games";
+import { useFavoritesServerSync } from "../lib/personalization";
 import { PlayerOverlay } from "./PlayerOverlay";
 import { Sidebar } from "./Sidebar";
 import { SiteFooter } from "./SiteFooter";
@@ -71,6 +72,14 @@ export function ArcadeShell({
 }) {
   const [navOpen, setNavOpen] = useState(false);
   const [playingSlug, setPlayingSlug] = useState<string | null>(null);
+
+  // Favourites sync lives HERE because the shell is the one component guaranteed
+  // to mount exactly once per page. It has no internal guard against being called
+  // twice — two calls would mean two GETs and two PUTs to /api/v1/me/favorites —
+  // and both the catalog rows and the store body want synced favourites, so
+  // calling it in each of them would only be safe for as long as they stay
+  // mutually exclusive. Hoisting it removes that coupling entirely.
+  useFavoritesServerSync();
 
   const openGame = useCallback((slug: string) => setPlayingSlug(slug), []);
   const closeGame = useCallback(() => setPlayingSlug(null), []);

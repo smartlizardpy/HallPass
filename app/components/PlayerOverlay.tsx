@@ -22,16 +22,9 @@ import { recordRecentPlay } from "../lib/personalization";
 export function PlayerOverlay({
   game,
   onClose,
-  historyUrl,
 }: {
   game: Game | null;
   onClose: () => void;
-  /**
-   * URL to push while the game is open, so Back closes it and the address bar is
-   * shareable. Pass `null`/omit to push a history entry without changing the URL
-   * — Back still closes the overlay, which is what the catalog pages want.
-   */
-  historyUrl?: string | null;
 }) {
   const frameWrapRef = useRef<HTMLDivElement>(null);
 
@@ -76,7 +69,15 @@ export function PlayerOverlay({
    * doing nothing visible. The `popstate` listener below is what actually clears
    * the state, so both the button and the Back gesture take one identical path.
    */
+  const closingRef = useRef(false);
   const requestClose = useCallback(() => {
+    // Guarded: `history.back()` is async, so React has not unmounted this overlay
+    // by the time a second Esc or ✕ press lands. Without the latch, two quick
+    // presses pop TWO entries and the user is thrown back past the page they
+    // opened the game from. The latch is released when the overlay actually
+    // closes (the effect below reruns with a null slug).
+    if (closingRef.current) return;
+    closingRef.current = true;
     window.history.back();
   }, []);
 
@@ -106,7 +107,11 @@ export function PlayerOverlay({
   const title = game?.title;
   const categoryName = game?.category;
   useEffect(() => {
-    if (!slug) return;
+    if (!slug) {
+      // Overlay is closed: re-arm the close latch for the next open.
+      closingRef.current = false;
+      return;
+    }
 
     recordRecentPlay(slug);
     posthog.capture("game_started", {
@@ -115,12 +120,17 @@ export function PlayerOverlay({
       game_category: categoryName,
     });
 
-    // A history entry so Back closes the game, uniformly from every page. The URL
-    // itself only changes when the caller supplies one; `pushState` is used
-    // rather than `router.push` because the target route's SERVER output cannot
-    // differ (no page here reads the query), so an RSC round trip would buy
-    // nothing.
-    window.history.pushState({ hpOverlay: slug }, "", historyUrl ?? undefined);
+    // A history entry so Back closes the game, uniformly from every page.
+    //
+    // The URL is deliberately left UNCHANGED. A `?play=1`-style URL would be
+    // shareable, but it would also have to auto-open on load, and `caches.match`
+    // is exact on the query string — so a shared link opened offline would miss
+    // the precached document for the page it names. Not worth it for a link
+    // nobody asked for; `/game/<slug>` already shares fine.
+    //
+    // `pushState` rather than `router.push`: the route's SERVER output cannot
+    // differ (nothing here reads the query), so an RSC round trip buys nothing.
+    window.history.pushState({ hpOverlay: slug }, "");
 
     const onPop = () => onClose();
     window.addEventListener("popstate", onPop);
@@ -137,7 +147,7 @@ export function PlayerOverlay({
     // including it would re-run the whole effect (re-firing game_started and
     // pushing a second history entry) on any parent re-render that broke that.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug, title, categoryName, historyUrl]);
+  }, [slug, title, categoryName]);
 
   const handleFullscreen = () => {
     const el = frameWrapRef.current;
