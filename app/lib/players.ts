@@ -178,6 +178,13 @@ export async function setPlayerHandle(id: string, handle: string): Promise<void>
 }
 
 /**
+ * The handle a deleted player's historical scores are rewritten to. Fits the
+ * anonymous-submission charset in `scoreboard/guard.ts` (`[A-Za-z0-9 _#-]`, ≤12)
+ * so it renders like any other leaderboard row.
+ */
+export const DELETED_PLAYER_HANDLE = "Deleted";
+
+/**
  * Delete a player's identity row by Google subject id. Returns `true` if a row
  * was removed, `false` for an unknown id (the `RETURNING id` lets us distinguish
  * the two without a follow-up read). `id` is interpolated as a bound VALUE, never
@@ -189,8 +196,28 @@ export async function setPlayerHandle(id: string, handle: string): Promise<void>
  * each of their scores — their historical entries simply revert to ANONYMOUS
  * (the same state as a never-tagged score) rather than disappearing from the
  * leaderboard.
+ *
+ * ERASURE, and why the first statement is load-bearing:
+ *   De-tagging alone does NOT erase the person. `scores.handle` is `TEXT NOT
+ *   NULL` — a SNAPSHOT of the display name taken at submit time — and
+ *   `getTopScores` falls back to it once `player_id` is null. For a player who
+ *   never set a handle, that snapshot is their Google `name`, i.e. very often
+ *   their REAL NAME. So "delete my account" used to leave the person's real name
+ *   on every leaderboard they ever entered, permanently and unreachably (once
+ *   `player_id` is null there is no key left to find those rows by). This rewrite
+ *   is the only chance to do it.
+ *
+ * Order is deliberate and NOT interchangeable. The `neon()` HTTP driver has no
+ * cross-statement transaction, so these two statements can interleave with a
+ * failure. Anonymising FIRST means the worst case is "scores anonymised but the
+ * account still exists" — recoverable, and the user can simply retry. Deleting
+ * first would null every `player_id` and leave the real names permanently
+ * orphaned with no key to reach them: an unrecoverable privacy failure.
  */
 export async function deletePlayer(id: string): Promise<boolean> {
+  await sql`
+    UPDATE scores SET handle = ${DELETED_PLAYER_HANDLE} WHERE player_id = ${id}
+  `;
   const rows = await sql`
     DELETE FROM players WHERE id = ${id} RETURNING id
   `;

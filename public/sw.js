@@ -81,10 +81,26 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return; // PostHog/ads/etc.
 
   // Never intercept admin/dashboard/api — those need the network.
+  //
+  // PER-VIEWER PAGES ARE ALSO EXCLUDED, and that is a privacy requirement, not a
+  // freshness one. `networkFirst` below writes every HTML navigation into
+  // RUNTIME_CACHE, which is deliberately NOT keyed by BUILD_ID and therefore
+  // survives deploys — and the cache is shared by everyone using the browser
+  // profile. `/play/account` renders the signed-in player's EMAIL, and `/u/...`
+  // renders a specific person's profile. Caching either means the next user of a
+  // shared school machine can be served the previous user's page from the cache
+  // the moment the network hiccups. Any future route that renders one specific
+  // player's data belongs in this list.
+  //
+  // `/play/friends` is intentionally NOT here: its server shell is PII-free and
+  // all viewer data arrives from `/api/` (never intercepted), so it can be
+  // precached and still work offline without leaking anything.
   if (
     url.pathname.startsWith("/admin") ||
     url.pathname.startsWith("/dashboard") ||
     url.pathname.startsWith("/api/") ||
+    url.pathname.startsWith("/play/account") ||
+    url.pathname.startsWith("/u/") ||
     url.pathname === "/games-version"
   ) {
     return;
@@ -142,8 +158,24 @@ async function networkFirst(req) {
   } catch {
     const cached = await caches.match(req);
     if (cached) return cached;
-    const home = await caches.match("/");
-    if (home) return home;
+
+    // Fallback chain: the precached /offline document, THEN "/" but only for a
+    // request that actually IS "/".
+    //
+    // Why "/" is no longer a universal fallback: it used to answer ANY
+    // unsatisfiable navigation, so opening an uncached URL offline rendered the
+    // arcade homepage UNDER THAT URL — e.g. /u/someone or /game/silence/ (which
+    // `skipTrailingSlashRedirect: true` keeps as a distinct, never-precached
+    // URL) would silently show the catalog instead of an offline message, and
+    // the served HTML's RSC payload disagrees with the router's expected route.
+    // A wrong page is worse than an honest one.
+    const offline = await caches.match("/offline");
+    if (offline) return offline;
+    const url = new URL(req.url);
+    if (url.pathname === "/") {
+      const home = await caches.match("/");
+      if (home) return home;
+    }
     // Synthesized offline page — Response.error() shows the browser's hard
     // network error and breaks back-button navigation.
     return new Response(

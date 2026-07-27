@@ -269,7 +269,8 @@ export default async function PlayAccountPage({
           <p className="mt-2 text-sm text-red-900/80">
             Delete your account permanently. Your scores stay on the leaderboards
             but are <span className="font-bold">no longer tagged</span> to your
-            account.
+            account, and the name shown on them is replaced with
+            &ldquo;Deleted&rdquo;.
           </p>
           <form action={deleteAccountAction} className="mt-4">
             <label className="block text-sm font-semibold text-red-900">

@@ -14,7 +14,8 @@
     "dev:sdk": "tsup --config sdk/tsup.config.ts --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "sync-games": "node scripts/sync-games.mjs"
+    "sync-games": "node scripts/sync-games.mjs",
+    "migrate": "node scripts/migrate.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
