@@ -9,17 +9,31 @@
  * for instant feedback; this does not, so word-block errors only appear on
  * submit. That asymmetry is intentional.
  *
- * TWO TIERS, which is the structurally important part:
+ * ── TWO MATCH MODES, and this is the part that was wrong the first time ──────
  *
- *   BLOCKED — refused outright. Matched aggressively against the folded skeleton,
- *             accepting Scunthorpe-class false positives. On a school site a
- *             false block costs one retry; a false ALLOW costs a class seeing a
- *             slur.
- *   FLAGGED — mild or ambiguous. The review POSTS but is stored `hidden` and
- *             lands in the moderation queue. Two tiers are what let the blocked
- *             list stay aggressive without making the product unusable, and mean
- *             a borderline review reaches a human instead of being invisible by
- *             default or published unseen.
+ * WORD terms are compared against WHOLE WORDS. Short terms embed inside ordinary
+ * English — `rape` in "grape", `spic` in "suspicious", `pedo` in "pedometer",
+ * `hate` in "whatever" — so matching them as substrings rejects innocent
+ * reviews. Whole-word comparison catches the slur and leaves the word alone.
+ *
+ * LOOSE terms are compared as SUBSTRINGS of the whole separator-stripped text.
+ * That is what catches evasion — `f.u.c.k`, `f u c k`, `xxfuckxx`, `fuuuck` —
+ * and it is only safe for terms that do not occur inside real words. Every entry
+ * in that list has been checked against ordinary English; the one knowing
+ * exception is `cunt`, which costs us the town of Scunthorpe.
+ *
+ * The input is tested in BOTH plain and repeat-collapsed form, so `fuuuck`
+ * matches `fuck` without the term itself ever being collapsed. Collapsing terms
+ * is what previously turned `kkk` into `k` and rejected every review containing
+ * the letter K.
+ *
+ * ── TWO SEVERITY TIERS ──────────────────────────────────────────────────────
+ *
+ *   BLOCKED — refused outright.
+ *   FLAGGED — the review POSTS but is stored `hidden` and queued for review. This
+ *             is what lets the blocked list stay firm without making the product
+ *             unusable: a borderline review reaches a human rather than being
+ *             invisible by default or published unseen.
  *
  * HONEST LIMITS, worth writing down so nobody develops false confidence: a list
  * cannot catch vowel-dropping (`fck`), phonetic respelling (`phuck`), novel or
@@ -31,55 +45,71 @@
  */
 
 import "server-only";
-import { reviewSkeleton } from "./validate";
+import { collapseRepeats, reviewSkeleton, reviewWordSkeletons } from "./validate";
 
-/** Refused outright. */
-const RAW_BLOCKED = [
-  // Slurs and hate terms.
-  "nigger", "nigga", "faggot", "tranny", "chink", "spic", "kike", "gook",
-  "wetback", "paki", "coon", "beaner", "raghead", "retard",
-  "hitler", "nazi", "kkk",
-  // Sexual.
-  "rape", "rapist", "molest", "pedo", "paedo", "porn", "hentai", "dildo",
-  // Self-harm — this matters more on this site than any swear word.
-  "killyourself", "kys", "killurself", "neckyourself",
-  // Strong profanity.
-  "cunt", "whore", "slut", "fuck", "motherfucker",
-];
-
-/** Posts, but hidden pending review. */
-const RAW_FLAGGED = [
-  "shit", "bitch", "bastard", "wanker", "dickhead", "asshole", "arsehole",
-  "bollocks", "twat", "prick", "damn", "crap", "piss", "idiot", "stupid",
-  "loser", "trash", "garbage", "sucks", "hate",
+/**
+ * Refused outright, matched as SUBSTRINGS.
+ *
+ * Every entry here must not occur inside an ordinary English word — that is the
+ * entry criterion for this list, not severity.
+ */
+const BLOCKED_LOOSE = [
+  "nigger", "nigga", "faggot", "tranny", "wetback", "beaner", "raghead",
+  "retard", "hitler", "nazi", "kkk",
+  "rapist", "molest", "hentai", "dildo",
+  "killyourself", "killurself", "neckyourself",
+  "fuck", "motherfucker", "cunt", "whore", "slut", "porn",
 ];
 
 /**
- * Both lists folded at module load.
+ * Refused outright, matched as WHOLE WORDS.
  *
- * Folding both sides is what makes the comparison sound — `f.u.c.k` only matches
- * `fuck` once `fuck` has been through the same function. Terms can therefore be
- * written here in plain form.
+ * These are here because each one embeds in innocent English: `rape` in "grape",
+ * `spic` in "suspicious", `coon` in "raccoon", `pedo` in "pedometer", `chink` in
+ * "a chink in the armour".
  */
-const BLOCKED = new Set(RAW_BLOCKED.map(reviewSkeleton));
-const FLAGGED = new Set(RAW_FLAGGED.map(reviewSkeleton));
+const BLOCKED_WORD = [
+  "rape", "spic", "coon", "gook", "kike", "chink", "paki", "pedo", "paedo",
+  "kys", "kms",
+];
+
+/** Posts but hidden pending review, matched as WHOLE WORDS. */
+const FLAGGED_WORD = [
+  "shit", "bitch", "bastard", "wanker", "dickhead", "asshole", "arsehole",
+  "bollocks", "twat", "prick", "damn", "crap", "piss", "arse", "dick",
+  "idiot", "stupid", "loser", "trash", "garbage", "sucks", "hate", "dumb",
+];
+
+/**
+ * Terms folded at module load — with {@link reviewSkeleton}, which does NOT
+ * collapse repeats. Folding both sides through the same function is what makes
+ * `f.u.c.k` match `fuck`; NOT collapsing the term is what stops `kkk` becoming
+ * `k`.
+ */
+const LOOSE = new Set(BLOCKED_LOOSE.map(reviewSkeleton));
+const WORD_BLOCKED = new Set(BLOCKED_WORD.map(reviewSkeleton));
+const WORD_FLAGGED = new Set(FLAGGED_WORD.map(reviewSkeleton));
 
 export type WordVerdict = "clean" | "flagged" | "blocked";
 
-/**
- * Classify a normalised review body.
- *
- * Substring matching against the skeleton, not word-boundary: separators are
- * stripped during folding, so there are no boundaries left to anchor to, and
- * `xxslurxx` has to be caught.
- */
+/** Classify a normalised review body. */
 export function containsBlockedReviewTerm(body: string): WordVerdict {
-  const skeleton = reviewSkeleton(body);
-  for (const term of BLOCKED) {
-    if (skeleton.includes(term)) return "blocked";
+  // Whole text, separators stripped — checked in both plain and collapsed form so
+  // `fuuuck` matches without the term ever being collapsed.
+  const dense = reviewSkeleton(body);
+  const denseCollapsed = collapseRepeats(dense);
+  for (const term of LOOSE) {
+    if (dense.includes(term) || denseCollapsed.includes(term)) return "blocked";
   }
-  for (const term of FLAGGED) {
-    if (skeleton.includes(term)) return "flagged";
+
+  // Per-word, for the short terms that would otherwise hit innocent English.
+  const words = reviewWordSkeletons(body);
+  for (const term of WORD_BLOCKED) {
+    if (words.has(term)) return "blocked";
   }
+  for (const term of WORD_FLAGGED) {
+    if (words.has(term)) return "flagged";
+  }
+
   return "clean";
 }

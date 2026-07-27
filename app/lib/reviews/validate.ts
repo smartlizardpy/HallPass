@@ -82,12 +82,22 @@ export function normalizeReviewBody(raw: string): string {
 }
 
 /**
- * Fold text to a comparison skeleton: lowercase, strip diacritics, undo leetspeak
- * and remove every separator.
+ * Fold text to a comparison skeleton: lowercase, strip diacritics, undo
+ * leetspeak, remove every separator.
  *
  * Applied identically to the input and to each blocklist term. That SYMMETRY is
  * what makes the comparison work — folding only one side means `f.u.c.k` never
  * matches `fuck`.
+ *
+ * IT DELIBERATELY DOES NOT COLLAPSE REPEATED LETTERS. It used to, and that was a
+ * serious bug: collapsing is fine for the INPUT (it maps `fuuuck` onto `fuck`)
+ * but catastrophic for a TERM, because a term made of one repeated character
+ * degenerates. `kkk` collapsed to `k`, so every review containing the letter K —
+ * including "Keep up the good work" — was rejected as a slur. It also turned
+ * `coon` into `con`, which matches inside "second".
+ *
+ * Collapsing now lives in {@link collapseRepeats} and is applied ONLY to input,
+ * which is checked in both forms. See `wordlist.ts`.
  */
 export function reviewSkeleton(text: string): string {
   return text
@@ -102,11 +112,41 @@ export function reviewSkeleton(text: string): string {
     .replace(/7/g, "t")
     .replace(/@/g, "a")
     .replace(/\$/g, "s")
-    .replace(/[^a-z0-9]/g, "")
-    // Collapse repeated letters so `fuuuck` folds onto `fuck`. Note this also maps
-    // `pass` -> `pas`, which is exactly why the blocklist terms must be folded
-    // through this same function rather than written in their final form.
-    .replace(/(.)\1+/g, "$1");
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Collapse runs of the same character to one, so `fuuuck` folds onto `fuck`.
+ *
+ * INPUT ONLY — never apply this to a blocklist term. See the note in
+ * {@link reviewSkeleton} for what happens when you do.
+ */
+export function collapseRepeats(text: string): string {
+  return text.replace(/(.)\1+/g, "$1");
+}
+
+/**
+ * The review split into per-word skeletons, in both plain and repeat-collapsed
+ * form.
+ *
+ * Word-level matching is what makes short blocklist terms safe. Matching them as
+ * substrings of the whole text blocks ordinary English — `rape` inside "grape",
+ * `spic` inside "suspicious" — whereas a whole-word comparison catches the slur
+ * and leaves the innocent word alone.
+ *
+ * Splitting happens BEFORE separators are stripped, which is exactly why the
+ * blocklist also keeps a substring pass over the un-split text: `f.u.c.k` splits
+ * into four one-letter words and could never word-match.
+ */
+export function reviewWordSkeletons(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const raw of text.split(/[^\p{L}\p{N}@$]+/u)) {
+    const folded = reviewSkeleton(raw);
+    if (!folded) continue;
+    out.add(folded);
+    out.add(collapseRepeats(folded));
+  }
+  return out;
 }
 
 /**
