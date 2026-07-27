@@ -22,6 +22,37 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // PUBLIC PROFILES ARE NEVER INDEXED — the header half of a two-part
+        // signal whose other half is the `robots` metadata in
+        // `app/u/[username]/page.tsx`. Read that file's docblock for the full
+        // argument; the short version:
+        //
+        //   * A `robots.txt` Disallow would be WRONG here, not merely weaker. It
+        //     prevents CRAWLING, so the crawler never fetches the page and never
+        //     sees the noindex — a disallowed-but-linked URL can still be
+        //     indexed as a bare URL, and the directive that would remove it can
+        //     never be read. `app/robots.ts` therefore stays `Allow: /`.
+        //   * The meta tag alone is not enough. Next answers a STREAMED
+        //     `not-found.js` with HTTP 200, and a header applies to responses no
+        //     HTML parser ever reaches the <head> of.
+        //
+        // A search-indexed directory of school-age players — photographs,
+        // display names, what they play — is the thing this site must not build,
+        // and indexing would also defeat a username rename by leaving the old
+        // name in results (with a cached snapshot) for weeks.
+        //
+        // `:path*` rather than `:username` so it also covers `/u/name/` (this
+        // config sets `skipTrailingSlashRedirect`, so that URL is served, not
+        // redirected) and anything nested added later.
+        source: "/u/:path*",
+        headers: [
+          {
+            key: "X-Robots-Tag",
+            value: "noindex, nofollow, noimageindex, noarchive",
+          },
+        ],
+      },
+      {
         // Versioned Scoreboard SDK artifact: loadable cross-origin by standalone
         // games, patchable in place within the same /sdk/v1/ URL. The URL is
         // stable across deploys, so it must revalidate on every load — Next
