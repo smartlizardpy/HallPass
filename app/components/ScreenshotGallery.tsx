@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { type GameMedia, mediaPublicPath } from "../lib/game-media-blob";
 
 /**
@@ -31,6 +31,7 @@ export function ScreenshotGallery({
   const [index, setIndex] = useState(0);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const pointerStart = useRef<number | null>(null);
+  const swipedRef = useRef(false);
 
   const count = media.length;
   const current = media[index] ?? media[0];
@@ -39,8 +40,19 @@ export function ScreenshotGallery({
     setIndex((i) => (i + delta + count) % count);
   };
 
-  // Arrow/Home/End on the gallery itself. Scoped to the container rather than the
-  // document so it cannot fight the page or the player overlay for arrow keys.
+  /**
+   * Arrow/Home/End for the gallery, handled ONCE on the container.
+   *
+   * There used to be a second, document-level listener for the open lightbox.
+   * That was a bug: a `<dialog>` opened with `showModal()` moves to the top layer
+   * VISUALLY but stays where it is in the DOM tree, so a keydown inside it still
+   * bubbles to this container. Both handlers therefore fired and every arrow press
+   * advanced TWO slides — which, with exactly two screenshots, is a full cycle and
+   * looked like the arrows were dead. One handler covers both states.
+   *
+   * Scoped to the container rather than the document so it never fights the page
+   * or the player overlay for arrow keys.
+   */
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (count < 2) return;
     if (e.key === "ArrowRight") {
@@ -57,20 +69,6 @@ export function ScreenshotGallery({
       setIndex(count - 1);
     }
   };
-
-  // Arrow keys inside the open lightbox, where the dialog owns focus.
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (!dialog.open || count < 2) return;
-      if (e.key === "ArrowRight") step(1);
-      else if (e.key === "ArrowLeft") step(-1);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [count]);
 
   return (
     <div
@@ -104,23 +102,44 @@ export function ScreenshotGallery({
           />
         ))}
 
-        {/* Swipe. Threshold is ~40px so a vertical page scroll that drifts a few
-            pixels horizontally does not change the slide. */}
-        <div
-          className="absolute inset-0"
+        {/* The artwork itself is the control that opens the lightbox, and it is a
+            real <button>, not a div with pointer handlers. As a div there was no
+            keyboard or assistive-tech path to the lightbox at all — it could only
+            be opened with a mouse or a finger.
+
+            Swipe and activation are separated by WHICH event they listen to:
+            pointer events carry the drag distance, and `click` fires for a mouse
+            click, a tap AND a keyboard Enter/Space on a button. The `swipedRef`
+            latch stops a drag that ends over the image from also counting as a
+            click and popping the lightbox open.
+
+            Threshold is ~40px so a vertical page scroll that drifts a few pixels
+            horizontally does not change the slide. */}
+        <button
+          type="button"
+          aria-label={`View ${title} screenshot ${index + 1} full size`}
+          className="absolute inset-0 cursor-zoom-in focus:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-brand"
           onPointerDown={(e) => {
             pointerStart.current = e.clientX;
+            swipedRef.current = false;
           }}
           onPointerUp={(e) => {
             const start = pointerStart.current;
             pointerStart.current = null;
             if (start === null) return;
             const dx = e.clientX - start;
-            if (Math.abs(dx) < 40) {
-              dialogRef.current?.showModal();
+            if (Math.abs(dx) >= 40 && count > 1) {
+              swipedRef.current = true;
+              step(dx < 0 ? 1 : -1);
+            }
+          }}
+          onClick={() => {
+            if (swipedRef.current) {
+              swipedRef.current = false;
               return;
             }
-            if (count > 1) step(dx < 0 ? 1 : -1);
+            // `showModal()` throws if the dialog is already open.
+            if (!dialogRef.current?.open) dialogRef.current?.showModal();
           }}
         />
 

@@ -202,36 +202,35 @@ async function networkFirst(req) {
     }
     return res;
   } catch {
-    // `ignoreSearch` because `caches.match` is exact on the query string by
-    // default, and precached entries never carry one. Without it, any navigation
-    // to a page WITH a query misses its own precached document offline — e.g.
-    // `/?q=racing` from the store page's search box, or a shared
-    // `/game/<slug>?play=1`, would both fall through to the offline page even
-    // though the exact document is sitting in the cache.
+    // Exact first, then loose. `caches.match` is exact on the query string by
+    // default and precached documents never carry one, so a navigation to
+    // `/?q=racing` (the store page's header search) would otherwise miss its own
+    // cached document and fall through to the offline page.
     //
-    // Scoped to navigations ONLY. It must never reach
-    // `networkFirstWithStaticFallback`, where exact matching of
-    // `/game-html/<slug>/` is load-bearing.
-    const cached = await caches.match(req, { ignoreSearch: true });
+    // Exact-BEFORE-loose, not loose-only: `caches.match` walks caches in creation
+    // order, `hp-static-<id>` before `hp-runtime`, so a loose match would let the
+    // precached bare `/` shadow an exact `/?q=racing` that an earlier online visit
+    // wrote into the runtime cache. Widening only on miss keeps "serve the
+    // document you actually cached" true.
+    //
+    // Navigations ONLY. This must never reach `networkFirstWithStaticFallback`,
+    // where exact matching of `/game-html/<slug>/` is load-bearing. Nor can it
+    // cross-match private pages: `/play/account`, `/u/`, `/admin`, `/dashboard`,
+    // `/api/` and `/games-version` all return before this strategy is reached.
+    const cached = await caches.match(req);
     if (cached) return cached;
+    const loose = await caches.match(req, { ignoreSearch: true });
+    if (loose) return loose;
 
-    // Fallback chain: the precached /offline document, THEN "/" but only for a
-    // request that actually IS "/".
-    //
-    // Why "/" is no longer a universal fallback: it used to answer ANY
-    // unsatisfiable navigation, so opening an uncached URL offline rendered the
-    // arcade homepage UNDER THAT URL — e.g. /u/someone or /game/silence/ (which
-    // `skipTrailingSlashRedirect: true` keeps as a distinct, never-precached
-    // URL) would silently show the catalog instead of an offline message, and
-    // the served HTML's RSC payload disagrees with the router's expected route.
-    // A wrong page is worse than an honest one.
+    // The precached offline document. Note the pathname still has to match
+    // exactly above, so `/u/someone` and `/game/<slug>/` (the trailing-slash form
+    // `skipTrailingSlashRedirect: true` keeps alive) correctly land here rather
+    // than being answered with the catalog — which is what this chain was
+    // rewritten for. There is deliberately no `/` fallback any more: `/` is
+    // precached, so a request for it is already satisfied by the exact match.
     const offline = await caches.match("/offline");
     if (offline) return offline;
-    const url = new URL(req.url);
-    if (url.pathname === "/") {
-      const home = await caches.match("/");
-      if (home) return home;
-    }
+
     // Synthesized offline page — Response.error() shows the browser's hard
     // network error and breaks back-button navigation.
     return new Response(
