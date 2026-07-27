@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Nunito } from "next/font/google";
+import { FeaturePromo } from "./components/FeaturePromo";
 import { InstallPrompt } from "./components/InstallPrompt";
 import { PWA } from "./components/PWA";
 import { WelcomeToast } from "./components/WelcomeToast";
@@ -82,6 +83,7 @@ export default function RootLayout({
         <WelcomeToast />
         <PWA />
         <InstallPrompt />
+        <FeaturePromo />
       </body>
     </html>
   );

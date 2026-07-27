@@ -24,7 +24,7 @@ export async function GET(): Promise<Response> {
   const playerId = await currentPlayerId();
   if (!playerId) {
     return Response.json(
-      { signedIn: false, friends: 0, incoming: 0 },
+      { signedIn: false, friends: 0, incoming: 0, hasUsername: false },
       { headers: NO_STORE },
     );
   }
@@ -39,7 +39,7 @@ export async function GET(): Promise<Response> {
       console.error("me/friends/count failed:", error);
     }
     return Response.json(
-      { signedIn: true, friends: 0, incoming: 0 },
+      { signedIn: true, friends: 0, incoming: 0, hasUsername: false },
       { headers: NO_STORE },
     );
   }

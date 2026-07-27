@@ -162,6 +162,45 @@ body {
   color: color-mix(in oklab, var(--g-accent) 45%, var(--foreground));
 }
 
+/* Feature-promo modal entrance.
+   Sits at z-[95], deliberately BELOW PlayerOverlay's z-[100] — a promo must
+   never be able to cover a running game, which is also why it is a plain fixed
+   element rather than a native <dialog> (showModal() promotes to the browser's
+   top layer, above every z-index on the page). */
+@keyframes promo-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes promo-rise {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.promo-backdrop { animation: promo-fade 0.2s ease-out; }
+.promo-panel    { animation: promo-rise 0.28s cubic-bezier(0.2, 0.9, 0.2, 1); }
+
+/* The repo had no reduced-motion guard anywhere; rather than extend that debt,
+   this covers the promo AND retrofits the card hover-lift and drawer slide.
+   Motion is removed, never the element — hiding content would be worse than
+   moving it. */
+@media (prefers-reduced-motion: reduce) {
+  .promo-backdrop,
+  .promo-panel {
+    animation: none;
+  }
+  .card,
+  .card:hover,
+  .card-art,
+  .card:hover .card-art,
+  .card:active {
+    transition: none;
+    transform: none;
+  }
+  .pip,
+  .marquee-track {
+    animation: none;
+  }
+}
+
 /* Pulse for the LIVE / NEW pip */
 @keyframes pulse-pip {
   0%, 100% { opacity: 1; transform: scale(1); }

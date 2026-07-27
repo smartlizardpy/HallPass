@@ -232,18 +232,33 @@ export function createSocialStore(sql: Sql) {
       }));
     },
 
-    /** Counts for the nav badge — one round trip, no row payload. */
-    async counts(me: string): Promise<{ friends: number; incoming: number }> {
+    /**
+     * The caller's social state at a glance — one round trip, no row payload.
+     *
+     * `hasUsername` rides along with the counts rather than living on its own
+     * endpoint because both consumers want the whole picture at once: the header
+     * badge polls this on EVERY page, and the feature promo needs to know what
+     * the player is still missing. Splitting it would double the requests on the
+     * hottest client path to carry one boolean.
+     */
+    async counts(
+      me: string,
+    ): Promise<{ friends: number; incoming: number; hasUsername: boolean }> {
       const rows = await sql`
         SELECT
           (SELECT count(*)::int FROM friendships
             WHERE status = 'accepted' AND (player_a = ${me} OR player_b = ${me})) AS friends,
           (SELECT count(*)::int FROM friendships
             WHERE status = 'pending' AND requested_by <> ${me}
-              AND (player_a = ${me} OR player_b = ${me}))                        AS incoming
+              AND (player_a = ${me} OR player_b = ${me}))                        AS incoming,
+          (SELECT username IS NOT NULL FROM players WHERE id = ${me})            AS has_username
       `;
       const row = rows[0] ?? {};
-      return { friends: toInt(row.friends), incoming: toInt(row.incoming) };
+      return {
+        friends: toInt(row.friends),
+        incoming: toInt(row.incoming),
+        hasUsername: Boolean(row.has_username),
+      };
     },
 
     /**
