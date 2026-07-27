@@ -187,13 +187,20 @@ export default async function GamePage({
           __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
         }}
       />
-      {/* Warm the game bundle so tapping Play is instant. Local games get the
-          document prefetched; external games only get a preconnect, since
-          prefetching a cross-origin document is wasteful and often blocked. */}
-      {game.externalUrl ? (
+      {/* External games get a preconnect so the DNS/TLS handshake to the
+          third-party origin is already done when the iframe opens.
+
+          Local games get NOTHING, deliberately. The obvious move —
+          `<link rel="prefetch" href={`/game-html/${slug}/`} as="document">` — is
+          worse than useless here: the service worker serves that path through
+          `networkFirstWithStaticFallback`, which fetches with
+          `cache: "no-store"`, bypassing the HTTP cache entirely. So the
+          prefetched copy can never be reused, and the game document would be
+          downloaded once on every store-page view (including for the majority of
+          visitors who never press Play) and then downloaded AGAIN when they do.
+          Local games are already precached by the service worker anyway. */}
+      {game.externalUrl && (
         <link rel="preconnect" href={new URL(game.externalUrl).origin} />
-      ) : (
-        <link rel="prefetch" href={`/game-html/${game.slug}/`} as="document" />
       )}
       <ArcadeShell
         games={allGames}

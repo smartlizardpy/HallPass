@@ -13,6 +13,19 @@ const META_CACHE = "hp-meta";
 // could collide with a real route.
 const GAMES_VERSION_KEY = "https://hallpass.local/__sw__/games-version";
 
+// Paths whose responses are PER-VIEWER and must never sit in a shared cache.
+// `hp-runtime` is deliberately not keyed by BUILD_ID and is shared by everyone
+// using the browser profile, so a cached `/play/account` is one user's email
+// waiting to be served to the next. Used in two places: the fetch handler skips
+// these entirely, and `activate` purges anything an EARLIER version of this
+// service worker already stored.
+function isPrivatePath(pathname) {
+  return (
+    pathname.startsWith("/play/account") ||
+    pathname.startsWith("/u/")
+  );
+}
+
 // A response is safe to cache.put only if it's a non-redirected,
 // same-origin (basic/default) success. Avoids redirect-poisoning the cache —
 // some browsers refuse to serve redirected responses for iframe src.
@@ -63,6 +76,7 @@ self.addEventListener("activate", (event) => {
           .filter((k) => k.startsWith("hp-static-") && k !== STATIC_CACHE)
           .map((k) => caches.delete(k)),
       );
+      await purgePrivateEntries();
       await self.clients.claim();
     })(),
   );
@@ -71,6 +85,39 @@ self.addEventListener("activate", (event) => {
     refreshAllGameHtml().catch(() => {}),
   );
 });
+
+/**
+ * Evict per-viewer responses an earlier service worker already cached.
+ *
+ * Adding `/play/account` and `/u/` to the never-intercept list stops NEW leaks,
+ * but it cannot undo old ones: `hp-runtime` survives deploys by design, so a
+ * device that visited the account page before this shipped still holds that
+ * user's email and would still be served it on the next offline navigation.
+ * Retroactive, runs once per activation, and is cheap — a cache-key enumeration
+ * plus a delete for the rare match.
+ */
+async function purgePrivateEntries() {
+  try {
+    const cache = await caches.open(RUNTIME_CACHE);
+    const requests = await cache.keys();
+    await Promise.all(
+      requests
+        .filter((req) => {
+          try {
+            const url = new URL(req.url);
+            return (
+              url.origin === self.location.origin && isPrivatePath(url.pathname)
+            );
+          } catch {
+            return false;
+          }
+        })
+        .map((req) => cache.delete(req)),
+    );
+  } catch {
+    /* best-effort: never block activation on cache housekeeping */
+  }
+}
 
 // ---------- fetch: same-origin only. ----------
 self.addEventListener("fetch", (event) => {
@@ -99,8 +146,7 @@ self.addEventListener("fetch", (event) => {
     url.pathname.startsWith("/admin") ||
     url.pathname.startsWith("/dashboard") ||
     url.pathname.startsWith("/api/") ||
-    url.pathname.startsWith("/play/account") ||
-    url.pathname.startsWith("/u/") ||
+    isPrivatePath(url.pathname) ||
     url.pathname === "/games-version"
   ) {
     return;
