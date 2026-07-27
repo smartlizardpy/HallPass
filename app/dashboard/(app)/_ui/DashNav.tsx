@@ -15,11 +15,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { OpenReportBadge } from "../moderation/_ui/OpenReportBadge";
 
 type NavItem = { href: string; label: string; exact?: boolean };
 
+/**
+ * Moderation sits SECOND, directly under Overview, because it is the only link
+ * here that can have a child waiting on the other end of it — the shortest reach
+ * goes to the highest-urgency surface. Its open-report count rides on the link
+ * itself (`OpenReportBadge`), so the backlog is visible from every screen rather
+ * than only after someone thinks to look.
+ */
 const ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Overview", exact: true },
+  { href: "/dashboard/moderation", label: "Moderation" },
   { href: "/dashboard/boards", label: "Leaderboards" },
   { href: "/dashboard/games", label: "Games" },
   { href: "/dashboard/external-games", label: "External Games" },
@@ -55,6 +64,7 @@ export function DashNav({ isSuperAdmin }: { isSuperAdmin: boolean }) {
             }
           >
             {item.label}
+            {item.href === "/dashboard/moderation" && <OpenReportBadge />}
           </Link>
         );
       })}
