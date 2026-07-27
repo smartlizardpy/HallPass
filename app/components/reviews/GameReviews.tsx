@@ -50,6 +50,10 @@ export function GameReviews({ slug, title }: { slug: string; title: string }) {
   );
 
   useEffect(() => {
+    // `load` only ever calls setState after `await fetch(...)`, so it cannot
+    // cascade a render synchronously — but the rule traces the call statically
+    // and cannot see that the awaits are in the way.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load(sort);
   }, [load, sort]);
 
