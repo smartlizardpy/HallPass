@@ -113,3 +113,29 @@ export function containsBlockedReviewTerm(body: string): WordVerdict {
 
   return "clean";
 }
+
+/**
+ * Blocked-terms check for a PUBLIC DISPLAY STRING — a leaderboard handle, a
+ * friends-list name.
+ *
+ * Reuses the review lists rather than starting a third one: the concern is
+ * identical (text a class of children will read) and a second list would drift.
+ * Only the BLOCKED tier applies — a display name has no "post it but hide it
+ * pending review" state, so `flagged` terms are permitted. Someone calling
+ * themselves "stupid boss" is not a moderation event.
+ *
+ * Handles allow spaces, so folding through `reviewSkeleton` (which strips every
+ * separator) is what catches `f u c k` as a name.
+ */
+export function hasBlockedDisplayTerm(value: string): boolean {
+  const dense = reviewSkeleton(value);
+  const denseCollapsed = collapseRepeats(dense);
+  for (const term of LOOSE) {
+    if (dense.includes(term) || denseCollapsed.includes(term)) return true;
+  }
+  const words = reviewWordSkeletons(value);
+  for (const term of WORD_BLOCKED) {
+    if (words.has(term)) return true;
+  }
+  return false;
+}

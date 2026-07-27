@@ -657,6 +657,64 @@ export function createSocialStore(sql: Sql) {
       `;
     },
 
+    /**
+     * Every count the badge rules need, in ONE round trip.
+     *
+     * Written as independent scalar subqueries rather than a pile of joins: each
+     * one is answered by its own index (`player_plays` PK, `idx_scores_player`,
+     * `game_reviews_player_idx`, the friendship partial indexes), and joining
+     * them would multiply rows before aggregating. On the HTTP driver — one
+     * request per statement, no pooling — collapsing this to a single query is
+     * the difference between a profile view costing one round trip and seven.
+     *
+     * The rank-1 count is the only non-trivial part: `scores` has no stored rank,
+     * so first place is "no score on this board beats mine". `DISTINCT ON` picks
+     * each board's best row and the outer filter keeps the ones that are this
+     * player's.
+     */
+    async badgeStats(playerId: string): Promise<{
+      gamesPlayed: number;
+      totalPlays: number;
+      firstPlaces: number;
+      boardsEntered: number;
+      reviewsWritten: number;
+      bestReviewHelpful: number;
+      friends: number;
+      accountAgeDays: number;
+    }> {
+      const rows = await sql`
+        SELECT
+          (SELECT count(*)::int FROM player_plays WHERE player_id = ${playerId})            AS games_played,
+          (SELECT COALESCE(sum(play_count), 0)::int FROM player_plays
+            WHERE player_id = ${playerId})                                                  AS total_plays,
+          (SELECT count(DISTINCT board_id)::int FROM scores WHERE player_id = ${playerId})   AS boards_entered,
+          (SELECT count(*)::int FROM (
+             SELECT DISTINCT ON (board_id) board_id, player_id
+             FROM scores
+             ORDER BY board_id, score DESC, created_at ASC, id ASC
+           ) best WHERE best.player_id = ${playerId})                                       AS first_places,
+          (SELECT count(*)::int FROM game_reviews
+            WHERE player_id = ${playerId} AND status = 'visible')                           AS reviews_written,
+          (SELECT COALESCE(max(helpful_count), 0)::int FROM game_reviews
+            WHERE player_id = ${playerId} AND status = 'visible')                           AS best_review_helpful,
+          (SELECT count(*)::int FROM friendships
+            WHERE status = 'accepted' AND (player_a = ${playerId} OR player_b = ${playerId})) AS friends,
+          (SELECT GREATEST(0, EXTRACT(DAY FROM now() - created_at))::int FROM players
+            WHERE id = ${playerId})                                                          AS account_age_days
+      `;
+      const row = rows[0] ?? {};
+      return {
+        gamesPlayed: toInt(row.games_played),
+        totalPlays: toInt(row.total_plays),
+        firstPlaces: toInt(row.first_places),
+        boardsEntered: toInt(row.boards_entered),
+        reviewsWritten: toInt(row.reviews_written),
+        bestReviewHelpful: toInt(row.best_review_helpful),
+        friends: toInt(row.friends),
+        accountAgeDays: toInt(row.account_age_days),
+      };
+    },
+
     /** A player's recently-played slugs, newest first. */
     async recentPlays(playerId: string, limit: number): Promise<string[]> {
       const rows = await sql`
