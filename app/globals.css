@@ -99,6 +99,60 @@ body {
   transition: transform 0.6s cubic-bezier(0.2, 0.9, 0.2, 1);
 }
 
+/* ============================================================
+   Per-game tinting (store page hero)
+
+   The three custom properties below are set INLINE from a game's own
+   `gradient`/`accent` data — they are per-row values, not theme tokens, which is
+   why they deliberately do NOT live in `:root`/`@theme inline` alongside --brand
+   and friends. Adding 28 games' worth of colours to the theme would be the wrong
+   shape entirely.
+
+   WHY THE GRADIENT IS MIXED TOWARD WHITE RATHER THAN PAINTED DIRECTLY.
+   The gradient stops were authored for dark card ART: 20 of the 28 second stops
+   are near-black (#0f172a, #020617, #0a0a0a, #050505, #0c0a09, #1c1917 …). A
+   plain `linear-gradient(135deg, from, to)` hero would therefore be a dark island
+   on a #f4f4f7 page that has no `dark:` variant anywhere in the codebase. Mixing
+   each stop to ~12-18% of white keeps the hero unmistakably tinted to ITS game
+   while staying light enough that normal `text-zinc-900` / `text-muted` keep
+   their contrast, with no per-game auditing.
+
+   WHY TEXT NEVER USES --g-accent DIRECTLY.
+   `accent` is card-art accent data. Eight of the 28 catalogue values (#fde047,
+   #facc15, #fde68a, #33ff33, #4ade80, #84cc16, #ffb347, #22d3ee) fall below 3:1
+   against white, and an admin can type any hex for an external game — so it can
+   never be made safe by editing the static list. Raw --g-accent is allowed ONLY
+   for washes, shadows and thick rules. Anything textual uses --g-ink, which mixes
+   in 55% of the foreground colour and therefore clears 4.5:1 on white whatever
+   the source hue.
+
+   `color-mix` needs no browser-support note: Tailwind v4 compiles its own opacity
+   modifiers to it, so it is already a hard requirement of this stylesheet.
+   ============================================================ */
+.game-hero {
+  background:
+    radial-gradient(
+      120% 100% at 100% 0%,
+      color-mix(in oklab, var(--g-from) 18%, #fff) 0%,
+      transparent 62%
+    ),
+    radial-gradient(
+      100% 100% at 0% 100%,
+      color-mix(in oklab, var(--g-to) 12%, #fff) 0%,
+      transparent 58%
+    ),
+    var(--surface);
+  box-shadow:
+    0 24px 60px -30px color-mix(in oklab, var(--g-accent) 55%, transparent),
+    0 6px 16px -8px rgba(28, 28, 40, 0.08);
+}
+
+/* Chips and small tinted surfaces inside a tinted section. */
+.game-tinted {
+  background: color-mix(in oklab, var(--g-accent) 14%, #fff);
+  color: color-mix(in oklab, var(--g-accent) 45%, var(--foreground));
+}
+
 /* Pulse for the LIVE / NEW pip */
 @keyframes pulse-pip {
   0%, 100% { opacity: 1; transform: scale(1); }

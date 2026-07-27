@@ -34,52 +34,25 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
 import { sql } from "@/app/lib/db";
-import { extensionForType, type ImageType } from "@/app/lib/image-meta";
+import type { ImageType } from "@/app/lib/image-meta";
+import type { GameMedia, GameMediaKind } from "@/app/lib/game-media-blob";
+
+// Re-exported so server callers have one import site for "everything media".
+// The definitions live in `game-media-blob.ts` because that module is NOT
+// server-only and can therefore be imported by the client gallery.
+export {
+  type GameMedia,
+  type GameMediaKind,
+  mediaBlobPath,
+  mediaBlobPrefix,
+  mediaPublicPath,
+} from "@/app/lib/game-media-blob";
 
 /**
  * Cache tag for {@link readAllMediaCached}. Re-exported so server actions can
  * invalidate without re-declaring the literal.
  */
 export const MEDIA_CACHE_TAG = "game-media";
-
-/** The Vercel Blob prefix for a game's media. NEVER `games/<slug>/` — see above. */
-export function mediaBlobPrefix(slug: string): string {
-  return `game-media/${slug}/`;
-}
-
-/** The blob key for one image. `id` is random, so the key is content-stable. */
-export function mediaBlobPath(slug: string, id: string, type: ImageType): string {
-  return `${mediaBlobPrefix(slug)}${id}.${extensionForType(type)}`;
-}
-
-/**
- * The public, same-origin URL for a media row.
- *
- * Same-origin is not cosmetic. `public/sw.js` returns early for cross-origin
- * requests, and `isCacheable()` requires `res.type === "basic" || "default"`, so
- * a raw Vercel Blob URL can NEVER be cached by the service worker. Serving
- * through our own `/game-media/` route puts screenshots in the `cacheFirst`
- * branch, which is what makes them available offline after one online visit.
- */
-export function mediaPublicPath(media: GameMedia): string {
-  return `/${media.blobPath}`;
-}
-
-export type GameMediaKind = "screenshot" | "hero";
-
-export type GameMedia = {
-  id: string;
-  slug: string;
-  kind: GameMediaKind;
-  /** Blob key, which doubles as the same-origin URL path. */
-  blobPath: string;
-  contentType: ImageType;
-  width: number;
-  height: number;
-  bytes: number;
-  alt: string;
-  position: number;
-};
 
 type Row = Record<string, unknown>;
 

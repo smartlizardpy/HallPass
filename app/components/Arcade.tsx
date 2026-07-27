@@ -6,36 +6,97 @@ import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import { type Game } from "../lib/games";
 import {
-  recordRecentPlay,
   useFavorites,
   useFavoritesServerSync,
   useRecentlyPlayed,
 } from "../lib/personalization";
 import { CoverImage } from "./CoverImage";
+import { ArcadeShell, useOpenGame } from "./ArcadeShell";
 import { GameCard } from "./GameCard";
-import { Sidebar } from "./Sidebar";
-import { PlayerOverlay } from "./PlayerOverlay";
-import { AccountMenu } from "./AccountMenu";
-import { WhatsNewLink } from "./WhatsNewLink";
 
+/**
+ * The catalog: featured banner, personalized rows, filter grid.
+ *
+ * The site chrome (sidebar, header, footer) and the fullscreen player used to
+ * live in here too. They now live in `ArcadeShell`, so a page that is not the
+ * catalog — a game's store page — can wear the same chrome. `Arcade` owns only
+ * what is genuinely catalog state: the active category and the search query.
+ */
 export function Arcade({
   games,
   categories,
   initialCategory = "All",
-  initialPlaying = null,
   playCounts = {},
 }: {
   games: Game[];
   categories: string[];
   initialCategory?: string;
-  initialPlaying?: string | null;
   playCounts?: Record<string, number>;
 }) {
   const router = useRouter();
   const [category, setCategoryState] = useState(initialCategory);
   const [query, setQuery] = useState("");
-  const [playing, setPlayingState] = useState<string | null>(initialPlaying);
-  const [navOpen, setNavOpen] = useState(false);
+
+  // Seed the search box from `?q=` — set by the header on pages that have no
+  // local grid to filter (see `SiteHeader`). Read from `window.location` in an
+  // effect rather than with `useSearchParams`, which would force a Suspense
+  // boundary and de-opt this page out of static prerendering — and therefore out
+  // of the service-worker precache. Same reasoning as `WelcomeToast`. Running
+  // post-mount means the server render is always the empty-query one, so there is
+  // no hydration mismatch.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q");
+    // The extra render this causes is the POINT, not an oversight: the server
+    // render must be the empty-query one (it is prerendered and shared by every
+    // visitor), so the seeded value can only appear after hydration. A lazy
+    // `useState` initialiser would read the URL during the first client render
+    // and mismatch the prerendered HTML.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (q) setQuery(q);
+  }, []);
+
+  const setCategory = (cat: string) => {
+    posthog.capture("category_selected", { category: cat });
+    setCategoryState(cat);
+    if (cat === "All") router.push("/");
+    else router.push(`/category/${encodeURIComponent(cat.toLowerCase())}`);
+  };
+
+  return (
+    <ArcadeShell
+      games={games}
+      categories={categories}
+      activeCategory={category}
+      onSelectCategory={setCategory}
+      query={query}
+      onQueryChange={setQuery}
+    >
+      <ArcadeRows
+        games={games}
+        category={category}
+        query={query}
+        playCounts={playCounts}
+      />
+    </ArcadeShell>
+  );
+}
+
+/**
+ * Everything below the header. Split out from `Arcade` because `useOpenGame` must
+ * be called INSIDE the `ArcadeShell` provider that supplies it.
+ */
+function ArcadeRows({
+  games,
+  category,
+  query,
+  playCounts,
+}: {
+  games: Game[];
+  category: string;
+  query: string;
+  playCounts: Record<string, number>;
+}) {
+  const openGame = useOpenGame();
 
   const findGame = (slug: string) => games.find((g) => g.slug === slug);
 
@@ -46,12 +107,6 @@ export function Arcade({
   const { recent } = useRecentlyPlayed();
   useFavoritesServerSync();
 
-  // Direct nav to /game/[slug] opens a game without going through setPlaying,
-  // so record that entry path here too (covers every way a game opens).
-  useEffect(() => {
-    if (initialPlaying) recordRecentPlay(initialPlaying);
-  }, [initialPlaying]);
-
   const handleToggleFavorite = (slug: string) => {
     const willFavorite = !isFavorite(slug);
     const g = findGame(slug);
@@ -61,37 +116,6 @@ export function Arcade({
       game_category: g?.category,
     });
     toggleFavorite(slug);
-  };
-
-  const setCategory = (cat: string) => {
-    posthog.capture("category_selected", { category: cat });
-    setCategoryState(cat);
-    if (cat === "All") router.push("/");
-    else router.push(`/category/${encodeURIComponent(cat.toLowerCase())}`);
-  };
-
-  const setPlaying = (slug: string | null) => {
-    if (slug) {
-      recordRecentPlay(slug);
-      const game = findGame(slug);
-      posthog.capture("game_started", {
-        game_slug: slug,
-        game_title: game?.title,
-        game_category: game?.category,
-      });
-    } else if (playing) {
-      const game = findGame(playing);
-      posthog.capture("game_closed", {
-        game_slug: playing,
-        game_title: game?.title,
-        game_category: game?.category,
-      });
-    }
-    setPlayingState(slug);
-    if (slug) router.push(`/game/${slug}`);
-    else if (category !== "All")
-      router.push(`/category/${encodeURIComponent(category.toLowerCase())}`);
-    else router.push("/");
   };
 
   const featured = games.find((g) => g.isFeatured) ?? games[0];
@@ -130,97 +154,12 @@ export function Arcade({
     });
   }, [category, query, trending, games]);
 
-  const playingGame: Game | null = playing ? findGame(playing) ?? null : null;
-
   return (
-    <div className="flex min-h-screen flex-1">
-      <Sidebar
-        categories={categories}
-        active={category}
-        onSelect={setCategory}
-        mobileOpen={navOpen}
-        onMobileClose={() => setNavOpen(false)}
-      />
-
-      <main className="flex-1 overflow-x-hidden">
-        {/* Top bar */}
-        <header
-          className="sticky top-0 z-40 flex h-16 items-center gap-2 bg-background/85 px-3 backdrop-blur-xl sm:h-20 sm:gap-4 sm:px-8"
-          style={{ paddingTop: "env(safe-area-inset-top)" }}
-        >
-          {/* Mobile hamburger */}
-          <button
-            type="button"
-            onClick={() => setNavOpen(true)}
-            aria-label="Open menu"
-            aria-expanded={navOpen}
-            aria-controls="mobile-nav"
-            style={{ touchAction: "manipulation" }}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-zinc-800 transition hover:text-brand lg:hidden"
-          >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-              className="pointer-events-none"
-            >
-              <path d="M4 7h16M4 12h16M4 17h16" />
-            </svg>
-          </button>
-
-          {/* Mobile logo */}
-          <a href="#" className="flex items-baseline gap-0.5 lg:hidden">
-            <span className="text-xl font-black tracking-tight text-brand sm:text-2xl">
-              hallpass
-            </span>
-            <span className="h-1.5 w-1.5 rounded-full bg-accent-yellow" />
-          </a>
-
-          {/* Search */}
-          <div className="relative ml-1 min-w-0 flex-1 max-w-2xl sm:ml-0">
-            <svg
-              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted sm:left-5"
-              width="18"
-              height="18"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-            >
-              <circle cx="7" cy="7" r="5" />
-              <path d="m14 14-3-3" strokeLinecap="round" />
-            </svg>
-            <input
-              type="search"
-              inputMode="search"
-              autoComplete="off"
-              value={query}
-              onChange={(e) => {
-                const newQuery = e.target.value;
-                setQuery(newQuery);
-                if (newQuery.length >= 3) {
-                  posthog.capture("game_searched", { query: newQuery });
-                }
-              }}
-              placeholder="Search games"
-              aria-label="Search games"
-              className="h-11 w-full rounded-full bg-white pl-11 pr-4 text-base font-semibold text-zinc-900 placeholder:text-muted outline-none transition focus:ring-4 focus:ring-brand/20 sm:h-auto sm:py-3.5 sm:pl-12 sm:pr-5 sm:text-[15px]"
-            />
-          </div>
-
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            <WhatsNewLink />
-            <AccountMenu />
-          </div>
-        </header>
+    <>
 
         {/* Hero / Featured banner */}
         {category === "All" && !query && (
-          <FeaturedBanner game={featured} onPlay={setPlaying} />
+          <FeaturedBanner game={featured} />
         )}
 
         {/* Jump back in — recently played (per-device). Appears post-hydration. */}
@@ -231,7 +170,7 @@ export function Arcade({
                 <GameCard
                   key={g.slug}
                   game={g}
-                  onPlay={setPlaying}
+                  onPlay={openGame}
                   isFavorite={isFavorite(g.slug)}
                   onToggleFavorite={handleToggleFavorite}
                 />
@@ -248,7 +187,7 @@ export function Arcade({
                 <GameCard
                   key={g.slug}
                   game={g}
-                  onPlay={setPlaying}
+                  onPlay={openGame}
                   isFavorite={isFavorite(g.slug)}
                   onToggleFavorite={handleToggleFavorite}
                 />
@@ -265,7 +204,7 @@ export function Arcade({
                 <GameCard
                   key={g.slug}
                   game={g}
-                  onPlay={setPlaying}
+                  onPlay={openGame}
                   isFavorite={isFavorite(g.slug)}
                   onToggleFavorite={handleToggleFavorite}
                 />
@@ -285,7 +224,7 @@ export function Arcade({
                 <GameCard
                   key={g.slug}
                   game={g}
-                  onPlay={setPlaying}
+                  onPlay={openGame}
                   isFavorite={isFavorite(g.slug)}
                   onToggleFavorite={handleToggleFavorite}
                 />
@@ -319,7 +258,7 @@ export function Arcade({
                 <GameCard
                   key={g.slug}
                   game={g}
-                  onPlay={setPlaying}
+                  onPlay={openGame}
                   isFavorite={isFavorite(g.slug)}
                   onToggleFavorite={handleToggleFavorite}
                 />
@@ -331,56 +270,27 @@ export function Arcade({
         {/* Footer ad — "your ad here" slot */}
         {category === "All" && !query && <AdRow index={3} />}
 
-        {/* Footer */}
-        <footer className="mt-16 px-3 py-10 sm:px-8" style={{ paddingBottom: "calc(2.5rem + env(safe-area-inset-bottom))" }}>
-          <div className="flex flex-col items-start justify-between gap-4 rounded-3xl bg-white p-6 sm:flex-row sm:items-center sm:p-8">
-            <div className="flex items-baseline gap-0.5">
-              <span className="text-2xl font-black tracking-tight text-brand">
-                hallpass
-              </span>
-              <span className="h-1.5 w-1.5 rounded-full bg-accent-yellow" />
-            </div>
-            <div className="text-[13px] font-bold text-muted sm:text-right">
-              <p>
-                Games by{" "}
-                <span className="text-zinc-900">Ateş Demir</span> · Site by{" "}
-                <span className="text-zinc-900">Ozan Kaygusuz</span>
-              </p>
-              <p className="mt-1 text-muted/80">
-                © {new Date().getFullYear()} · all games unblocked, forever.
-              </p>
-            </div>
-          </div>
-        </footer>
-      </main>
-
-      <PlayerOverlay game={playingGame} onClose={() => setPlaying(null)} />
-    </div>
+    </>
   );
 }
 
 /* ===================== Featured banner ===================== */
-function FeaturedBanner({
-  game,
-  onPlay,
-}: {
-  game: Game;
-  onPlay: (slug: string) => void;
-}) {
+function FeaturedBanner({ game }: { game: Game }) {
   return (
     <section className="px-3 pt-2 sm:px-8">
       <Link
         href={`/game/${game.slug}`}
         prefetch={false}
-        onClick={(e) => {
-          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-          e.preventDefault();
-          posthog.capture("featured_game_played", {
+        onClick={() => {
+          // Renamed from `featured_game_played`: this now means "clicked through
+          // to the store page", not "started playing". `game_started` is fired
+          // by PlayerOverlay and is the only event `app/lib/stats.ts` counts, so
+          // the rename cannot double-count or lose plays.
+          posthog.capture("featured_game_opened", {
             game_slug: game.slug,
             game_title: game.title,
             game_category: game.category,
           });
-          onPlay(game.slug);
         }}
         className="group relative grid w-full overflow-hidden rounded-3xl bg-brand text-left shadow-xl shadow-brand/20 sm:grid-cols-[1.1fr_1fr]"
         style={{

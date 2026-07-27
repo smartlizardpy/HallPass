@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect } from "react";
+import { Wordmark } from "./Wordmark";
 
 const ICONS: Record<string, React.ReactNode> = {
   All: <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />,
@@ -42,6 +44,18 @@ function CategoryIcon({ name }: { name: string }) {
   );
 }
 
+/**
+ * The public URL for a sidebar item. "All" is the catalog root; "New" and
+ * "Trending" are virtual categories the category route already understands.
+ * Encoding matches `app/sitemap.ts` and the JSON-LD breadcrumbs byte for byte —
+ * categories are free-form and dashboard-editable, so they can contain spaces.
+ */
+function hrefForItem(item: string): string {
+  return item === "All"
+    ? "/"
+    : `/category/${encodeURIComponent(item.toLowerCase())}`;
+}
+
 export function Sidebar({
   categories,
   active,
@@ -51,7 +65,15 @@ export function Sidebar({
 }: {
   categories: string[];
   active: string;
-  onSelect: (cat: string) => void;
+  /**
+   * Callback mode (the catalog pages): clicking a category filters in place.
+   *
+   * OMIT IT for link mode, used by pages with no local grid to filter. Each item
+   * then renders a real `<Link>`, which is also why link mode is worth having at
+   * all: the category nav was previously `<button>`s only, so the only crawlable
+   * paths to `/category/...` were the sitemap and the JSON-LD breadcrumb.
+   */
+  onSelect?: (cat: string) => void;
   mobileOpen?: boolean;
   onMobileClose?: () => void;
 }) {
@@ -72,7 +94,7 @@ export function Sidebar({
   }, [mobileOpen, onMobileClose]);
 
   const handleSelect = (item: string) => {
-    onSelect(item);
+    onSelect?.(item);
     onMobileClose?.();
   };
 
@@ -81,23 +103,39 @@ export function Sidebar({
       <ul className="flex flex-col gap-1">
         {items.map((item) => {
           const isActive = item === active;
+          const itemClass = `group flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] font-bold transition lg:py-2.5 ${
+            isActive
+              ? "bg-brand-50 text-brand"
+              : "text-zinc-700 hover:bg-surface-2 hover:text-zinc-900"
+          }`;
+          const inner = (
+            <>
+              <CategoryIcon name={item} />
+              <span className="flex-1 text-left">{item}</span>
+              {item === "New" && !isActive && (
+                <span className="h-2 w-2 rounded-full bg-accent-pink" />
+              )}
+            </>
+          );
           return (
             <li key={item}>
-              <button
-                type="button"
-                onClick={() => handleSelect(item)}
-                className={`group flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] font-bold transition lg:py-2.5 ${
-                  isActive
-                    ? "bg-brand-50 text-brand"
-                    : "text-zinc-700 hover:bg-surface-2 hover:text-zinc-900"
-                }`}
-              >
-                <CategoryIcon name={item} />
-                <span className="flex-1 text-left">{item}</span>
-                {item === "New" && !isActive && (
-                  <span className="h-2 w-2 rounded-full bg-accent-pink" />
-                )}
-              </button>
+              {onSelect ? (
+                <button
+                  type="button"
+                  onClick={() => handleSelect(item)}
+                  className={itemClass}
+                >
+                  {inner}
+                </button>
+              ) : (
+                <Link
+                  href={hrefForItem(item)}
+                  onClick={onMobileClose}
+                  className={itemClass}
+                >
+                  {inner}
+                </Link>
+              )}
             </li>
           );
         })}
@@ -139,12 +177,9 @@ export function Sidebar({
       {/* Desktop sidebar — unchanged */}
       <aside className="hidden w-60 shrink-0 border-r border-border bg-white lg:flex lg:flex-col">
         <div className="flex h-20 items-center px-6">
-          <a href="#" className="flex items-baseline gap-0.5">
-            <span className="text-3xl font-black tracking-tight text-brand">
-              hallpass
-            </span>
-            <span className="h-2 w-2 translate-y-[-2px] rounded-full bg-accent-yellow" />
-          </a>
+          <Link href="/">
+            <Wordmark size="text-3xl" dotClass="h-2 w-2" />
+          </Link>
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 pb-4">{navList}</nav>
@@ -186,12 +221,9 @@ export function Sidebar({
           }}
         >
           <div className="flex h-16 items-center justify-between px-5">
-            <a href="#" className="flex items-baseline gap-0.5" onClick={onMobileClose}>
-              <span className="text-2xl font-black tracking-tight text-brand">
-                hallpass
-              </span>
-              <span className="h-1.5 w-1.5 rounded-full bg-accent-yellow" />
-            </a>
+            <Link href="/" onClick={onMobileClose}>
+              <Wordmark />
+            </Link>
             <button
               type="button"
               onClick={onMobileClose}
