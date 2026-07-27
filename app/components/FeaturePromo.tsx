@@ -249,15 +249,23 @@ export function FeaturePromo() {
           </svg>
         </button>
 
-        <Wordmark />
-
-        <span className="mt-4 inline-block rounded-full bg-accent-pink px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-white">
-          {copy.badge}
-        </span>
+        {/*
+          Flex ROW, not two inline elements. `Wordmark` is an inline-flex span, so
+          a bare `inline-block` pill beside it shares the same line box and its
+          `margin-top` drags it down over the logo. A block-level flex container
+          takes both out of the inline formatting context entirely. `pr-10` keeps
+          the row clear of the absolutely positioned close button.
+        */}
+        <div className="flex items-center gap-2.5 pr-10">
+          <Wordmark />
+          <span className="rounded-full bg-accent-pink px-2.5 py-1 text-[10px] font-black uppercase leading-none tracking-wider text-white">
+            {copy.badge}
+          </span>
+        </div>
 
         <h2
           id="promo-title"
-          className="mt-3 text-2xl font-black leading-tight tracking-tight text-zinc-900"
+          className="mt-4 text-2xl font-black leading-tight tracking-tight text-zinc-900"
         >
           {copy.title}
         </h2>
