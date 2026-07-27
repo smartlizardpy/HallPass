@@ -374,19 +374,6 @@ export const games: Game[] = [
     isNew: true,
   },
   {
-    slug: "dunk-the-trump",
-    title: "Dunk the Trump",
-    tagline: "Flick it up, flush it down",
-    description:
-      "Grab the bobbling head, flick it skyward, and sink it in the porcelain bowl. Chain flushes into a streak and climb the Top Flushers leaderboard.",
-    category: "Arcade",
-    tags: ["Arcade", "Physics", "High Score", "Meme"],
-    gradient: ["#10222e", "#45aee8"],
-    accent: "#f6b93b",
-    art: "splatter",
-    isNew: true,
-  },
-  {
     slug: "duskfall",
     title: "Duskfall",
     tagline: "Survive the dusk. Outgun the horde.",
