@@ -8,6 +8,7 @@ import { useFavorites } from "../lib/personalization";
 import { useOpenGame } from "./ArcadeShell";
 import { CoverImage } from "./CoverImage";
 import { GameCard } from "./GameCard";
+import { FriendsWhoPlay } from "./friends/FriendsWhoPlay";
 import { ScreenshotGallery } from "./ScreenshotGallery";
 
 /**
@@ -174,6 +175,10 @@ export function GameStore({
               </svg>
             </button>
           </div>
+
+          {/* Per-viewer, so it fetches client-side — see FriendsWhoPlay for why
+              this page must never read the session on the server. */}
+          <FriendsWhoPlay slug={game.slug} />
 
           <dl className="mt-6 grid grid-cols-2 gap-3">
             <div className="rounded-2xl bg-white p-4">

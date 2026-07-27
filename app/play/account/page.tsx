@@ -26,6 +26,8 @@ import { auth, signOut } from "@/app/lib/auth";
 import { Wordmark } from "@/app/components/Wordmark";
 import { getPlayerById, effectiveHandle } from "@/app/lib/players";
 import { store } from "@/app/lib/scoreboard";
+import { social } from "@/app/lib/social";
+import { UsernameCard } from "@/app/components/friends/UsernameCard";
 import { setHandleAction, deleteAccountAction } from "./actions";
 
 export const metadata: Metadata = {
@@ -104,12 +106,16 @@ export default async function PlayAccountPage({
   // standings read is guarded — a transient Neon hiccup must NOT 500 this
   // owner-only page, so on failure it degrades to [] and the empty state renders
   // (mirroring the resilient public leaderboard route).
-  const [player, standings] = await Promise.all([
+  const [player, standings, own] = await Promise.all([
     getPlayerById(playerId),
     store.getPlayerStandings(playerId).catch((error) => {
       console.error(`account standings read failed for ${playerId}:`, error);
       return [];
     }),
+    // Guarded separately: if migration 007 has not been applied yet, the social
+    // columns do not exist. That must degrade the username card, not 500 the
+    // whole account page.
+    social.getOwnSocial(playerId).catch(() => null),
   ]);
   if (!player) return <NotSignedInCard />;
 
@@ -259,6 +265,24 @@ export default async function PlayAccountPage({
               Sign out
             </button>
           </form>
+        </section>
+
+        {/* USERNAME + FRIEND CODE ------------------------------------------- */}
+        {own && <UsernameCard initialUsername={own.username} />}
+
+        <section className="rounded-xl border border-border bg-surface p-6">
+          <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900">
+            Friends
+          </h2>
+          <p className="mt-2 text-sm text-muted">
+            See what your friends are playing, and manage your requests.
+          </p>
+          <Link
+            href="/play/friends"
+            className="mt-4 inline-block rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 transition hover:bg-surface-2"
+          >
+            Manage friends
+          </Link>
         </section>
 
         {/* DANGER ZONE ------------------------------------------------------ */}

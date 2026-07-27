@@ -18,6 +18,7 @@ export function AccountMenu() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
+  const [incoming, setIncoming] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -81,7 +82,17 @@ export function AccountMenu() {
         aria-expanded={open}
         className="flex h-11 items-center gap-2 rounded-full bg-white pl-1.5 pr-2 text-sm font-bold text-zinc-800 shadow-sm transition hover:text-brand sm:pr-3"
       >
-        <Avatar src={player.image} initial={initial} size={32} />
+        <span className="relative">
+          <Avatar src={player.image} initial={initial} size={32} />
+          {incoming > 0 && (
+            <span
+              aria-label={`${incoming} pending friend request${incoming === 1 ? "" : "s"}`}
+              className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-accent-pink px-1 text-[10px] font-black text-white ring-2 ring-white"
+            >
+              {incoming > 9 ? "9+" : incoming}
+            </span>
+          )}
+        </span>
         <span className="hidden max-w-[7.5rem] truncate sm:block">
           {player.handle}
         </span>
@@ -121,6 +132,14 @@ export function AccountMenu() {
 
           <div className="my-1 h-px bg-border" />
 
+          <MenuLink href="/play/friends">
+            Friends
+            {incoming > 0 && (
+              <span className="ml-2 rounded-full bg-accent-pink px-1.5 py-0.5 text-[10px] font-black text-white">
+                {incoming}
+              </span>
+            )}
+          </MenuLink>
           <MenuLink href="/play/account">Account settings</MenuLink>
           {isAdmin && <MenuLink href="/dashboard">Dashboard</MenuLink>}
 
