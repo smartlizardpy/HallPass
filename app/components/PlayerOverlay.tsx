@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import posthog from "posthog-js";
 import type { Game } from "../lib/games";
-import { recordRecentPlay } from "../lib/personalization";
+import { recordPlayServerSide, recordRecentPlay } from "../lib/personalization";
 
 /**
  * The fullscreen game player.
@@ -114,6 +114,10 @@ export function PlayerOverlay({
     }
 
     recordRecentPlay(slug);
+    // Server-side play history, which is what makes "friends who play this"
+    // answerable — `hp:recent` above is device-local and never synced. Debounced
+    // per slug and a no-op for guests.
+    recordPlayServerSide(slug);
     posthog.capture("game_started", {
       game_slug: slug,
       game_title: title,

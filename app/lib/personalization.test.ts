@@ -14,6 +14,7 @@ import {
   readSlugs,
   toggleSlug,
   writeSlugs,
+  shouldSyncPlay,
 } from "./personalization";
 
 describe("readSlugs", () => {
@@ -122,5 +123,45 @@ describe("mergeSlugs (login union)", () => {
 
   it("returns server list when local is empty", () => {
     expect(mergeSlugs([], ["x", "y"])).toEqual(["x", "y"]);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * Play-beacon debounce.
+ * ------------------------------------------------------------------ */
+
+describe("shouldSyncPlay", () => {
+  const TTL = 30 * 60_000;
+
+  it("reports a slug that has never been reported", () => {
+    expect(shouldSyncPlay({}, "duskfall", 1_000_000, TTL)).toBe(true);
+  });
+
+  it("suppresses a repeat inside the window", () => {
+    expect(shouldSyncPlay({ duskfall: 1_000_000 }, "duskfall", 1_000_001, TTL)).toBe(
+      false,
+    );
+  });
+
+  it("reports again once the window has passed", () => {
+    expect(
+      shouldSyncPlay({ duskfall: 1_000_000 }, "duskfall", 1_000_000 + TTL, TTL),
+    ).toBe(true);
+  });
+
+  it("tracks each slug independently", () => {
+    const map = { duskfall: 1_000_000 };
+    expect(shouldSyncPlay(map, "silence", 1_000_001, TTL)).toBe(true);
+  });
+
+  it("recovers from a clock that moved backwards", () => {
+    // A timezone change or a manually-set clock must not lock the beacon out
+    // until some future timestamp expires.
+    expect(shouldSyncPlay({ duskfall: 9_000_000 }, "duskfall", 1_000, TTL)).toBe(true);
+  });
+
+  it("ignores corrupt ledger entries", () => {
+    const corrupt = { duskfall: Number.NaN } as unknown as Record<string, number>;
+    expect(shouldSyncPlay(corrupt, "duskfall", 1_000, TTL)).toBe(true);
   });
 });

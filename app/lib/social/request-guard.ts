@@ -39,6 +39,7 @@
  */
 
 import { auth } from "@/app/lib/auth";
+import { isTrustedOrigin } from "./origin";
 import type { Session } from "next-auth";
 
 /** Per-user, never shared-cacheable. */
@@ -60,46 +61,6 @@ export async function currentPlayerId(): Promise<string | null> {
   // `playerId` is the Google subject pinned at login. NEVER `session.user.id`,
   // which `app/lib/auth.ts` documents as a fresh random UUID on every login.
   return session?.user?.playerId ?? null;
-}
-
-/**
- * App paths a credentialed social mutation may legitimately originate from.
- *
- * Everything a user can actually press one of these buttons on. `/game-html/` is
- * conspicuously absent, which is the entire point.
- */
-const ALLOWED_REFERER_PREFIXES = [
-  "/play/", // account, friends, sign-in flows
-  "/u/", // profile pages
-  "/game/", // store pages (friend chip, comment box)
-  "/category/",
-];
-
-/**
- * Whether a mutating request came from one of our own pages.
- *
- * Same-origin is required as well as path: a referrer from another site tells us
- * nothing useful, and cross-origin credentialed calls are already impossible here
- * (no wildcard CORS header is ever sent).
- */
-export function isTrustedOrigin(req: Request): boolean {
-  const referer = req.headers.get("referer");
-  if (!referer) return false;
-
-  let url: URL;
-  try {
-    url = new URL(referer);
-  } catch {
-    return false;
-  }
-
-  const self = new URL(req.url);
-  if (url.origin !== self.origin) return false;
-
-  // `/` alone is allowed explicitly — the catalog root has no trailing segment to
-  // match a prefix against.
-  if (url.pathname === "/") return true;
-  return ALLOWED_REFERER_PREFIXES.some((prefix) => url.pathname.startsWith(prefix));
 }
 
 /**
@@ -132,3 +93,5 @@ export function credentialedOptions(methods: string): Response {
     },
   });
 }
+
+export { isTrustedOrigin };
