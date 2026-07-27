@@ -10,6 +10,7 @@ const NOTHING: BadgeStats = {
   bestReviewHelpful: 0,
   friends: 0,
   accountAgeDays: 0,
+  achievementPoints: 0,
 };
 
 describe("earnedBadges", () => {
@@ -48,6 +49,7 @@ describe("earnedBadges", () => {
       bestReviewHelpful: 20,
       friends: 20,
       accountAgeDays: 400,
+      achievementPoints: 1000,
     };
     expect(earnedBadges(everything)).toHaveLength(ALL_BADGES.length);
     expect(earnedBadges(everything)[0].id).toBe("champion");
@@ -68,5 +70,33 @@ describe("lockedBadges", () => {
     const locked = lockedBadges(stats).map((b) => b.id);
     expect(earned.length + locked.length).toBe(ALL_BADGES.length);
     expect(earned.filter((id) => locked.includes(id))).toEqual([]);
+  });
+});
+
+describe("achievement badges", () => {
+  // The bridge between the two systems: everything else in BadgeStats is derived
+  // from rows the platform can see for itself, whereas achievement points come
+  // from games reporting unlocks through the SDK. Worth its own block because it
+  // is the one input that arrives from outside.
+  it("awards on points, not on how many achievements were collected", () => {
+    // One hard achievement worth 100 beats ten trivial ones worth 5.
+    expect(earnedBadges({ ...NOTHING, achievementPoints: 99 }).map((b) => b.id)).toEqual([]);
+    expect(earnedBadges({ ...NOTHING, achievementPoints: 100 }).map((b) => b.id)).toEqual([
+      "achiever",
+    ]);
+  });
+
+  it("stacks the tiers like the other badge families", () => {
+    const ids = earnedBadges({ ...NOTHING, achievementPoints: 500 }).map((b) => b.id);
+    expect(ids).toContain("achiever");
+    expect(ids).toContain("trophy-hunter");
+  });
+
+  it("leaves them locked for a player whose games ship no achievements", () => {
+    // Most games will never define any, so this must read as "not yet", not as a
+    // permanently empty shelf.
+    const locked = lockedBadges(NOTHING).map((b) => b.id);
+    expect(locked).toContain("achiever");
+    expect(locked).toContain("trophy-hunter");
   });
 });

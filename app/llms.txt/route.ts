@@ -24,7 +24,7 @@ export async function GET(req: Request) {
 
   const body = `# HallPass
 
-> Drop-in leaderboard for HTML games. One script tag. The client never throws and never blocks your game.
+> Drop-in leaderboard and achievements for HTML games. One script tag. The client never throws and never blocks your game.
 
 HallPass is a hosted scoreboard SDK for browser games. You add one <script> tag
 and call HallPass.submitScore(score) when a run ends. The client is defensive:
@@ -55,8 +55,19 @@ on a real origin, the same SDK lights up "live" and scores start flowing.
 - POST ${base}/api/v1/leaderboard/<game> { score, handle? }
        -> { ok, rank, handle, score }
 - POST ${base}/api/v1/admin/boards (admin-only) — provisions a board.
+- GET  ${base}/api/v1/games/<game>/achievements
+       -> { game, achievements: [{ key, name, icon, points, target, secret,
+            progress, unlocked, unlockedAt }], earnedPoints, totalPoints }
+- POST ${base}/api/v1/games/<game>/achievements { entries: [{ key, progress? }] }
+       -> { ok, reason?, results: [{ key, unlocked, alreadyUnlocked, progress,
+            target }] }  (same-origin + signed in; progress is ABSOLUTE)
 - Client: HallPass.submitScore, getScores, getHandle, setHandle, ready, on/off,
   plus .mode and .version. Every method resolves; none throw.
+- Client (achievements, same-origin + signed in): HallPass.unlock(key),
+  unlockMany(keys), progress(key, absoluteValue) — safe to call every frame, the
+  SDK coalesces and never drops the final value — and getAchievements(). Listen
+  with on("achievement", a => showToast(a.name, a.icon)); it fires ONLY when
+  something is newly earned, never for one the player already holds.
 - Client (sign-in, same-origin only): HallPass.getPlayer() -> the signed-in
   player's public identity ({ id, name, image, handle }) or null; signIn() /
   signOut() open a small same-origin POPUP (the game is never reloaded — call

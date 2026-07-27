@@ -60,6 +60,7 @@ import {
   setMediaAltAction,
   uploadMediaAction,
 } from "./media-actions";
+import { AchievementPanel } from "./_ui/AchievementPanel";
 
 export const metadata: Metadata = {
   title: "Game",
@@ -427,6 +428,16 @@ export default async function GameControlPage({
             </form>
           )}
         </div>
+      </Section>
+
+      {/* ACHIEVEMENTS — beside Media, and for the same reason: both are page
+          data the store page renders, neither touches the playable bundle. The
+          panel does its own (fail-soft, uncached) catalogue read. */}
+      <Section
+        title="Achievements"
+        subtitle="Admin-provisioned · a game can only unlock keys defined here"
+      >
+        <AchievementPanel slug={slug} />
       </Section>
 
       {/* SOURCE CODE */}

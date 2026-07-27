@@ -8,6 +8,7 @@ import { useFavorites } from "../lib/personalization";
 import { useOpenGame } from "./ArcadeShell";
 import { CoverImage } from "./CoverImage";
 import { GameCard } from "./GameCard";
+import { GameAchievements } from "./GameAchievements";
 import { GameReviews } from "./reviews/GameReviews";
 import { FriendsWhoPlay } from "./friends/FriendsWhoPlay";
 import { ScreenshotGallery } from "./ScreenshotGallery";
@@ -201,6 +202,11 @@ export function GameStore({
           {game.description}
         </p>
       </section>
+
+      {/* Renders nothing at all unless this game has achievements provisioned —
+          the island decides that itself after fetching, because only the fetch
+          knows and 26 of 27 games have none. */}
+      <GameAchievements slug={game.slug} />
 
       <GameReviews slug={game.slug} title={game.title} />
 

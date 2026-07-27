@@ -36,6 +36,17 @@ export type BadgeStats = {
   friends: number;
   /** Days since the account was created. */
   accountAgeDays: number;
+  /**
+   * Total points from GAME achievements the player has earned.
+   *
+   * The one input here that is not derivable from platform rows. Everything else
+   * above is something the site can see for itself; "beat level 10 of Duskfall"
+   * is knowable only to the game, so it is reported by the SDK and stored. That
+   * makes it the single bridge between the two systems — the badges themselves
+   * stay derived, and a player who collects a lot of game achievements earns a
+   * platform badge for it without anything new being written down.
+   */
+  achievementPoints: number;
 };
 
 export type Badge = {
@@ -139,6 +150,27 @@ const RULES: BadgeRule[] = [
     icon: "🎖️",
     tone: "time",
     earned: (s) => s.accountAgeDays >= 90,
+  },
+  // Thresholds are in POINTS, not achievement count, so a game that hands out
+  // twenty trivial unlocks cannot out-rank one that gates a hard achievement
+  // behind a real accomplishment. An admin sets the points when authoring the
+  // achievement, which makes this the one badge rule whose difficulty is tuned
+  // outside this file.
+  {
+    id: "achiever",
+    label: "Achiever",
+    description: "Earned 100 achievement points across the arcade",
+    icon: "🏅",
+    tone: "score",
+    earned: (s) => s.achievementPoints >= 100,
+  },
+  {
+    id: "trophy-hunter",
+    label: "Trophy Hunter",
+    description: "Earned 500 achievement points across the arcade",
+    icon: "🏆",
+    tone: "score",
+    earned: (s) => s.achievementPoints >= 500,
   },
 ];
 

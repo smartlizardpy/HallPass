@@ -32,6 +32,21 @@ export interface RequestOptions {
    * same-origin identity endpoints pass `"include"` to send the session cookie.
    */
   credentials?: RequestCredentials;
+  /**
+   * Ask the browser to let this request outlive the page.
+   *
+   * LOAD-BEARING for anything sent at game over. Without it the browser is free
+   * to cancel an in-flight request the moment the document starts unloading, so
+   * a final `unlock()` or a flushed `progress()` followed by
+   * `location.href = ...` — the exact pattern the integration docs recommend —
+   * silently never reaches the server. `app/lib/personalization.ts` documents
+   * the same reasoning for the play beacon.
+   *
+   * Only meaningful on POSTs, and the browser caps all in-flight keepalive
+   * bodies at 64 KiB. A batch here is at most `MAX_BATCH_SIZE` short entries,
+   * which is orders of magnitude under that.
+   */
+  keepalive?: boolean;
 }
 
 /** Hard ceiling for any single request. */
@@ -43,6 +58,7 @@ export function getJSON(url: string, opts?: RequestOptions): Promise<TransportRe
     url,
     { method: "GET", headers: { Accept: "application/json" } },
     opts?.credentials,
+    opts?.keepalive,
   );
 }
 
@@ -69,6 +85,7 @@ export function postJSON(
       body: payload,
     },
     opts?.credentials,
+    opts?.keepalive,
   );
 }
 
@@ -76,6 +93,7 @@ async function request(
   url: string,
   init: RequestInit,
   credentials: RequestCredentials = "omit",
+  keepalive = false,
 ): Promise<TransportResult> {
   if (typeof fetch === "undefined") {
     return { ok: false, status: 0, error: "fetch unavailable" };
@@ -107,6 +125,11 @@ async function request(
         ...init,
         mode: "cors",
         credentials,
+        // Only set when asked. Passing `keepalive: false` explicitly is
+        // harmless, but some older engines treat the presence of the key as
+        // opting into the keepalive body-size accounting, and this SDK runs on
+        // whatever browser a school hands a pupil.
+        ...(keepalive ? { keepalive: true } : {}),
         signal: controller ? controller.signal : undefined,
       });
 

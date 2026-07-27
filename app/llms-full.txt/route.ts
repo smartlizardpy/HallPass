@@ -4,9 +4,10 @@
  * existing HTML game.
  *
  * Purpose: a single self-contained, plain-text spec covering the golden rules,
- * one-time board provisioning, the verbatim embed snippet, game-over usage, the
- * public HTTP API, the client (window.HallPass) API, the environment matrix,
- * failure detection, and the live list of registered game slugs.
+ * one-time board provisioning, the verbatim embed snippet, game-over usage,
+ * achievements, the public HTTP API, the client (window.HallPass) API, the
+ * environment matrix, failure detection, and the live list of registered game
+ * slugs.
  *
  * Load-bearing decisions:
  *  - The base URL is derived from the request so every example/curl resolves on
@@ -99,12 +100,13 @@ return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
 w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
 submitScore:e("submitScore"),getScores:e("getScores"),
 getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
-signIn:function(){},signOut:function(){},
+unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
+getAchievements:e("getAchievements"),signIn:function(){},signOut:function(){},
 getHandle:function(){return null},setHandle:function(v){return v},
 on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
 off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
 setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
-q.splice(0).forEach(function(c){c.r(c.n==="getScores"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:{ok:false,reason:"inert"})})},2000)})(window);
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:{ok:false,reason:"inert"})})},2000)})(window);
 </script>
 <script src="https://hallpass.gg/sdk/v1/hallpass.js" data-game="YOUR-SLUG" defer></script>
 
@@ -161,6 +163,45 @@ memory and POSTs them to /api/v1/me/claim). This is this-session only by design:
 the tokens never persist, so on a shared computer the next player can never absorb
 a previous player's scores.
 
+## 4b. Achievements (optional, same-origin, signed-in players)
+A game may also have ACHIEVEMENTS: a fixed catalogue provisioned by an admin, one
+per game, each addressed by a short "key" (lowercase letters, digits, - and _).
+A game cannot mint them; an unknown key is a harmless no-op with the reason
+"unknown-achievement".
+
+The whole integration is three lines — one listener and one call:
+
+  HallPass.on("achievement", function (a) { showToast(a.name, a.icon); });
+  HallPass.unlock("first-blood");
+
+The "achievement" event fires ONLY when something is NEWLY earned, never for an
+achievement the player already holds, so unlock() is safe to call repeatedly. Its
+payload always has { key, name, description, icon, points, progress, target,
+unlockedAt, game } with name and icon filled in, so a toast can render straight
+from it.
+
+  await HallPass.unlock("first-blood");                 // one; idempotent
+  await HallPass.unlockMany(["level-1", "no-damage"]);  // several, ONE request
+  HallPass.progress("zombies-slain", killCount);        // a counter
+  const list = await HallPass.getAchievements();        // the player's shelf
+
+progress() takes an ABSOLUTE value ("the player is now at 57"), never a delta
+("add 3"). That is what makes it safe to retry: the server keeps the greater of
+what it has and what you send, so a duplicated or out-of-order call can neither
+double-count nor move a counter backwards. It is safe to call EVERY FRAME: the
+SDK coalesces calls per key on a ~1s trailing edge and flushes whatever is pending
+with a beacon when the page is hidden or closed, so the final value is never lost.
+Pass { flush: true } to send one immediately (e.g. at game over).
+
+Achievements attach to an account, so they need a signed-in player AND a
+same-origin embed (the endpoint is cookie-credentialed). Cross-origin or inert,
+every call resolves { ok:false, reason:"signed-out" } or { ok:false,
+reason:"inert" } without firing a request — the game is unaffected either way.
+
+Games embedded before SDK 1.2.0 carry an older inline stub that does not know
+these methods; there, call them only AFTER ready() resolves (await
+HallPass.ready()), or re-paste the snippet in section 3.
+
 ## 5. Public HTTP API
 GET ${base}/api/v1/leaderboard/<game>
   Query: limit (1-100, default 10), period (all | day | week, default all)
@@ -170,6 +211,24 @@ GET ${base}/api/v1/leaderboard/<game>
 POST ${base}/api/v1/leaderboard/<game>
   Body: { score, handle? }
   200 -> { ok: true, rank, handle, score }
+
+GET ${base}/api/v1/games/<game>/achievements
+  Same-origin + credentialed for the signed-in player's own progress.
+  200 -> { game, achievements: [ { key, name, description, icon, points, target,
+           secret, progress, unlocked, unlockedAt } ], earnedPoints, totalPoints }
+  An unearned SECRET achievement arrives with its name and description redacted —
+  the player is meant to see that something is left to find, not what it is.
+
+POST ${base}/api/v1/games/<game>/achievements
+  Same-origin + credentialed; requires a signed-in player.
+  Body: { entries: [ { key, progress? } ] }   (max 20 entries per request)
+        progress is ABSOLUTE; omit it (or send null) to mean "reach the target",
+        i.e. earn the achievement outright.
+  200 -> { ok, reason?, results: [ { key, unlocked, alreadyUnlocked, progress,
+           target } ] }
+        unlocked = NEWLY earned by THIS call (false for one already held) — it is
+        the toast signal. An unknown key produces no result element and is NOT an
+        error; ok:true with reason:"unknown-achievement" means nothing resolved.
 
 Error responses share a uniform body { error } with these status codes:
   404  unknown game (no such slug)
@@ -203,12 +262,32 @@ Error responses share a uniform body { error } with these status codes:
 - setPlayerHandle(handle)
                        -> Promise<PlayerIdentity | null>. Rename the verified
                          player; resolves the updated identity, else null.
+- unlock(key, opts?)   -> Promise<UnlockResult { ok, key, unlocked,
+                         alreadyUnlocked, progress, target, achievement?,
+                         reason? }>. Earns one achievement outright. IDEMPOTENT:
+                         one already held resolves ok:true with unlocked:false.
+                         opts: { game? }.
+- unlockMany(keys, opts?)
+                       -> Promise<UnlockResult[]>, in the order the keys were
+                         given; sent as ONE request.
+- progress(key, value, opts?)
+                       -> Promise<UnlockResult>. ABSOLUTE value, never a delta.
+                         Safe to call every frame (coalesced ~1s per key, flushed
+                         on page hide). opts: { game?, flush? }.
+- getAchievements(opts?)
+                       -> Promise<PlayerAchievement[]> ({ key, name, description,
+                         icon, points, target, secret, progress, unlocked,
+                         unlockedAt }). [] on any failure. opts: { game? }.
 - on(event, cb)        -> HallPass (chainable).
 - off(event, cb)       -> HallPass (chainable).
-  Events: "ready" | "scores" | "submitted" | "error" | "auth".
+  Events: "ready" | "scores" | "submitted" | "error" | "auth" | "achievement".
   "auth" fires { player: PlayerIdentity | null } when sign-in/out completes (null
   on sign-out). It is sticky: a listener added afterward still gets the current
   identity.
+  "achievement" fires the earned achievement itself ({ key, name, description,
+  icon, points, progress, target, unlockedAt, game }) and ONLY when it is newly
+  earned — never for one the player already holds. It is NOT sticky: an unlock is
+  a moment, not a state, so a listener added later is not re-toasted.
 
 ## 7. Environment matrix
 - Hosted on hallpass.gg (this site)   -> live  (same-origin fetch).
@@ -222,6 +301,11 @@ Error responses share a uniform body { error } with these status codes:
 - Check window.HallPass.mode === "inert" to know networking is unavailable.
 - Inspect SubmitResult.reason to see why a submit did not land:
   "no-game" | "bad-score" | "inert" | "network" | "rate-limited" | "http".
+- Inspect UnlockResult.reason to see why an unlock/progress did not land:
+  "no-game" | "bad-request" | "signed-out" | "unknown-achievement" | "inert" |
+  "network" | "rate-limited" | "http". "signed-out" is what every CROSS-ORIGIN
+  embed gets (there is no session cookie to attach an achievement to);
+  "unknown-achievement" means that key is not provisioned for this game.
 - Everything resolves; nothing rejects. There is no error to catch — read the
   result object instead.
 

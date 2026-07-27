@@ -79,16 +79,16 @@ function replay(api: HallPass, call: StubCall): void {
   try {
     const method = (api as unknown as Record<string, unknown>)[call.n];
     if (typeof method !== "function") {
-      call.r(safeDefault(call.n));
+      call.r(safeDefault(call.n, call.a));
       return;
     }
     Promise.resolve(
       (method as (...args: unknown[]) => unknown).apply(api, call.a || []),
     )
       .then(call.r)
-      .catch(() => settle(call, safeDefault(call.n)));
+      .catch(() => settle(call, safeDefault(call.n, call.a)));
   } catch {
-    settle(call, safeDefault(call.n));
+    settle(call, safeDefault(call.n, call.a));
   }
 }
 
@@ -100,9 +100,24 @@ function settle(call: StubCall, value: unknown): void {
   }
 }
 
-/** Safe fallback per method when replay cannot produce a real result. */
-function safeDefault(name: string): unknown {
-  if (name === "getScores") return [];
+/**
+ * Safe fallback per method when replay cannot produce a real result.
+ *
+ * The shapes MUST match the inline stub's own 2s inert fallback (see
+ * sdk/README.md), because a game cannot tell which of the two settled its call:
+ * array-returning methods resolve `[]`, identity-returning ones `null`, and
+ * everything else the uniform `{ ok: false, reason }` result object.
+ *
+ * `args` is threaded in purely so a failed `unlock`/`progress` replay can still
+ * echo the key it was about — a batch result a game cannot attribute to a key is
+ * of no use to it.
+ */
+function safeDefault(name: string, args?: unknown[]): unknown {
+  if (name === "getScores" || name === "getAchievements" || name === "unlockMany") return [];
   if (name === "getPlayer" || name === "setPlayerHandle") return null;
+  if (name === "unlock" || name === "progress") {
+    const key = args && typeof args[0] === "string" ? args[0] : undefined;
+    return { ok: false, key, unlocked: false, reason: "network" };
+  }
   return { ok: false, reason: "network" };
 }

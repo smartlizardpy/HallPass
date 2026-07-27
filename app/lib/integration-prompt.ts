@@ -18,11 +18,19 @@
  */
 
 /**
- * The verbatim synchronous loader stub (mirrors `/llms-full.txt` and the embed in
- * `public/sdk/v1/hallpass.js`). Installs `window.HallPass` immediately so the game
- * can call it before the real SDK loads, and flips to a safe inert no-op if the
- * SDK never arrives (e.g. a sandboxed preview). Kept as a plain string so the
- * agent pastes it unchanged. Contains no `${...}` — safe inside a template below.
+ * The verbatim synchronous loader stub. Installs `window.HallPass` immediately so
+ * the game can call it before the real SDK loads, and flips to a safe inert no-op
+ * if the SDK never arrives (e.g. a sandboxed preview). Kept as a plain string so
+ * the agent pastes it unchanged. Contains no `${...}` — safe inside a template
+ * below.
+ *
+ * KEEP BYTE-IDENTICAL with the other two copies — `sdk/README.md` and
+ * `app/llms-full.txt/route.ts`. Every method the SDK exposes needs an entry here
+ * AND a matching entry in the 2s inert fallback at the bottom: a method the stub
+ * queues but the fallback forgets leaves a promise unresolved forever, which is a
+ * hung game with no error message anywhere. (Games already shipped carry whatever
+ * stub they were pasted with — hence the "call it after ready()" note in the
+ * docs, rather than any attempt to update them in place.)
  */
 const EMBED_STUB = `<script>
 (function(w){if(w.HallPass&&w.HallPass.version!=="0")return;var q=[];
@@ -31,12 +39,13 @@ return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
 w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
 submitScore:e("submitScore"),getScores:e("getScores"),
 getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
-signIn:function(){},signOut:function(){},
+unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
+getAchievements:e("getAchievements"),signIn:function(){},signOut:function(){},
 getHandle:function(){return null},setHandle:function(v){return v},
 on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
 off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
 setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
-q.splice(0).forEach(function(c){c.r(c.n==="getScores"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:{ok:false,reason:"inert"})})},2000)})(window);
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:{ok:false,reason:"inert"})})},2000)})(window);
 </script>`;
 
 export interface IntegrationPromptInput {
@@ -129,6 +138,25 @@ label the moment sign-in (or sign-out) finishes in the popup:
     // signed in  -> show "Signed in as " + e.player.name
     // signed out -> show the "Sign in" button again
   });
+
+(d) OPTIONAL — achievements. If (and only if) I tell you this game has
+achievements, I will give you their exact keys. Do NOT invent keys: they are
+provisioned by an admin, and an unknown key does nothing. With real keys, the
+whole integration is a toast listener plus one call where the thing is earned:
+
+  HallPass.on("achievement", function (a) {
+    // fires ONLY when something is newly earned — never for one already held
+    // a = { key, name, description, icon, points, progress, target, game }
+    showToast(a.name, a.icon);   // or whatever your game uses for a banner
+  });
+
+  HallPass.unlock("THE_KEY_I_GAVE_YOU");          // earn one outright
+  HallPass.progress("THE_KEY_I_GAVE_YOU", n);     // a counter: n is the ABSOLUTE
+                                                  // total so far, never "+1"
+
+progress() is safe to call every frame — the SDK batches it — and achievements
+only apply to signed-in players on this site, so calls quietly resolve
+{ ok:false, reason:"signed-out" } elsewhere. Nothing throws.
 
 STEP 3 — Read this so you don't think it is broken:
 - Inside this Canvas preview the network is blocked, so the leaderboard will look empty and "Sign in" will do nothing. THAT IS EXPECTED — HallPass runs in "inert" mode here and every call safely does nothing. The game must still play perfectly.

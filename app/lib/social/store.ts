@@ -696,6 +696,7 @@ export function createSocialStore(sql: Sql) {
       bestReviewHelpful: number;
       friends: number;
       accountAgeDays: number;
+      achievementPoints: number;
     }> {
       const rows = await sql`
         SELECT
@@ -715,7 +716,15 @@ export function createSocialStore(sql: Sql) {
           (SELECT count(*)::int FROM friendships
             WHERE status = 'accepted' AND (player_a = ${playerId} OR player_b = ${playerId})) AS friends,
           (SELECT GREATEST(0, EXTRACT(DAY FROM now() - created_at))::int FROM players
-            WHERE id = ${playerId})                                                          AS account_age_days
+            WHERE id = ${playerId})                                                          AS account_age_days,
+          -- Game achievements are the ONE badge input that cannot be derived from
+          -- rows the platform already has: only the game knows the player beat
+          -- level 10. Summed here rather than counted so a hard achievement can
+          -- be worth more than an easy one.
+          (SELECT COALESCE(sum(a.points), 0)::int
+             FROM player_achievements pa
+             JOIN achievements a ON a.id = pa.achievement_id
+            WHERE pa.player_id = ${playerId} AND pa.unlocked_at IS NOT NULL)                 AS achievement_points
       `;
       const row = rows[0] ?? {};
       return {
@@ -727,6 +736,7 @@ export function createSocialStore(sql: Sql) {
         bestReviewHelpful: toInt(row.best_review_helpful),
         friends: toInt(row.friends),
         accountAgeDays: toInt(row.account_age_days),
+        achievementPoints: toInt(row.achievement_points),
       };
     },
 

@@ -190,6 +190,118 @@ export interface ApiError {
   error: string;
 }
 
+// ---- Wire types: achievements -----------------------------------------------
+//
+// NAME COLLISION, ON PURPOSE: `PlayerAchievement` and `UnlockReason` below are
+// structurally identical to the ones in `app/lib/achievements/store.ts` and
+// `app/lib/achievements/config.ts`. They are re-declared here rather than
+// imported because THIS file is the browser's type surface and must stay
+// import-free (see the header) — the SDK build erases it entirely, and pulling a
+// server module in for a type would drag `server-only` into the bundle. A module
+// that imports both must alias one of them.
+
+/**
+ * One entry in an unlock/progress batch.
+ *
+ * `progress` is ABSOLUTE, never a delta — "the player is now at 57", never
+ * "add 3". That is what makes a retried or out-of-order beacon harmless: the
+ * server takes `GREATEST(stored, incoming)`, so a duplicate can neither
+ * double-count nor walk a counter backwards. OMITTING it (or `null`) means
+ * "reach the target", i.e. earn the thing outright. Added in v1 (append-only).
+ */
+export interface AchievementEntryRequest {
+  key: string;
+  progress?: number | null;
+}
+
+/**
+ * `POST /api/v1/games/<slug>/achievements` request body. Always a batch, even
+ * for one key: a game that finishes a level crosses several thresholds at once,
+ * and the alternative is N round trips out of a game loop. Capped server-side at
+ * 20 entries. Added in v1 (append-only).
+ */
+export interface UnlockRequest {
+  entries: AchievementEntryRequest[];
+}
+
+/**
+ * Per-entry outcome echoed by the server, one per RESOLVED entry (an unknown key
+ * simply produces no element — it is not an error). Added in v1 (append-only).
+ */
+export interface UnlockEntryResult {
+  key: string;
+  /**
+   * NEWLY earned by THIS call. The toast signal: true only when the achievement
+   * was unearned before the statement ran and earned after it. An already-held
+   * achievement reports `false` here and `true` in `alreadyUnlocked`.
+   */
+  unlocked: boolean;
+  alreadyUnlocked: boolean;
+  /** Absolute progress after the write. */
+  progress: number;
+  target: number;
+  /**
+   * Presentation fields, OPTIONAL by design. When the server enriches a result
+   * from the catalogue the SDK can fire the `"achievement"` event immediately;
+   * when it does not, the SDK fills them from its own catalogue read, so a game
+   * never has to care which happened. A server MUST NOT send `name` for an
+   * achievement the player has not earned (an unearned secret's name is the
+   * secret). Added in v1 (append-only).
+   */
+  name?: string;
+  description?: string;
+  icon?: string;
+  points?: number;
+}
+
+/** `POST /api/v1/games/<slug>/achievements` success body. Added in v1 (append-only). */
+export interface UnlockResponse {
+  /**
+   * Batch-level outcome. Note `ok: true` WITH `reason: "unknown-achievement"` is
+   * a real and deliberate combination: a game that ships a key before an admin
+   * provisions it is a developer diagnostic, not a player-facing failure.
+   */
+  ok: boolean;
+  reason?: UnlockReason;
+  results: UnlockEntryResult[];
+}
+
+/**
+ * One achievement as seen BY a player — the browser-facing projection.
+ *
+ * Deliberately has no numeric id: `key` is the only identifier a game or client
+ * ever needs, and keeping the primary key out means no client surface can grow a
+ * dependency on it. An unearned SECRET arrives redacted (`name` becomes a
+ * placeholder, `description` empty) — the redaction happens server-side, so this
+ * type is what it is safe to render. Added in v1 (append-only).
+ */
+export interface PlayerAchievement {
+  key: string;
+  name: string;
+  description: string;
+  icon: string;
+  points: number;
+  /** `> 1` makes this a progress achievement; `1` is a plain unlock. */
+  target: number;
+  secret: boolean;
+  /** Absolute, clamped to `target` so a progress bar cannot overfill. */
+  progress: number;
+  unlocked: boolean;
+  unlockedAt: string | null;
+}
+
+/** `GET /api/v1/games/<slug>/achievements` success body. Added in v1 (append-only). */
+export interface AchievementsResponse {
+  game: string;
+  achievements: PlayerAchievement[];
+  /** Points the viewing player has earned in this game. */
+  earnedPoints: number;
+  /** Points available in this game. */
+  totalPoints: number;
+  /** `false` when the feature is not provisioned/reachable; the SDK reads `[]`. */
+  enabled?: boolean;
+}
+
 // ---- Client SDK surface (window.HallPass) -----------------------------------
 
 /** Why a `submitScore` call did not land. */
@@ -232,7 +344,19 @@ export interface ReadyState {
   mode: Mode;
 }
 
-export type EventName = "ready" | "scores" | "submitted" | "error" | "auth";
+/**
+ * `"achievement"` is a NEW EVENT NAME, which the append-only rule explicitly
+ * allows (a game that never listens for it is unaffected). It fires ONCE per
+ * achievement, at the moment it is newly earned, and NEVER for one the player
+ * already held — see {@link AchievementUnlock}. Added in v1 (append-only).
+ */
+export type EventName =
+  | "ready"
+  | "scores"
+  | "submitted"
+  | "error"
+  | "auth"
+  | "achievement";
 
 /**
  * Payload for the `"auth"` event: fired when the signed-in player changes. Carries
@@ -253,6 +377,100 @@ export interface AuthRedirectOptions {
    * the current `location.href`; forwarded to the `/play/*` page as `callbackUrl`.
    */
   redirectTo?: string;
+}
+
+/**
+ * Why an `unlock` / `unlockMany` / `progress` call did not land.
+ *
+ * Mirrors `UnlockReason` in `app/lib/achievements/config.ts` member for member —
+ * the two are kept in lockstep BY HAND for the same reason the wire types above
+ * are re-declared: this file must not import server code. Shaped like
+ * {@link SubmitReason} so a game handles both surfaces the same way. Added in v1
+ * (append-only).
+ */
+export type UnlockReason =
+  | "no-game" // no game slug configured / passed
+  | "bad-request" // key missing/malformed, or the batch was empty/oversized
+  | "signed-out" // no signed-in player (includes every cross-origin embed)
+  | "unknown-achievement" // no achievement with that key is provisioned here
+  | "inert" // client is inert (sandboxed / no network)
+  | "network" // request failed to reach the server
+  | "rate-limited" // server rejected with 429
+  | "http"; // server returned another non-2xx status
+
+/**
+ * Payload of the `"achievement"` event, and of `UnlockResult.achievement`: an
+ * achievement the player JUST earned.
+ *
+ * Every field is REQUIRED and non-null so a toast can render straight from it —
+ * `showToast(a.name, a.icon)` must never print `undefined`. When the server does
+ * not enrich the unlock, the SDK fills these in from the catalogue; if even that
+ * fails it falls back to the key as the name and a generic medal as the icon.
+ * Added in v1 (append-only).
+ */
+export interface AchievementUnlock {
+  key: string;
+  name: string;
+  description: string;
+  icon: string;
+  points: number;
+  /** Absolute progress after the unlock (equals `target` for a plain unlock). */
+  progress: number;
+  target: number;
+  /** ISO timestamp, when the server reported one. */
+  unlockedAt: string | null;
+  /** The game slug the achievement belongs to. */
+  game: string | null;
+}
+
+/**
+ * Result of `unlock` / `progress` (and one element of `unlockMany`'s array).
+ * Always resolved — never rejected.
+ *
+ * Shaped exactly like {@link SubmitResult}: `ok` is the only guaranteed field,
+ * because the pre-load inline stub's 2s inert fallback can only produce
+ * `{ ok: false, reason: "inert" }` and lying about the rest would be worse than
+ * omitting it. The live client always populates `key`, `unlocked`, `progress`
+ * and `target`. Added in v1 (append-only).
+ */
+export interface UnlockResult {
+  ok: boolean;
+  /** Echoed back so a batch result can be attributed without positional matching. */
+  key?: string;
+  /** NEWLY earned by THIS call — the toast signal. Never true for a re-unlock. */
+  unlocked?: boolean;
+  /** Held before this call. `unlocked` and `alreadyUnlocked` are never both true. */
+  alreadyUnlocked?: boolean;
+  progress?: number;
+  target?: number;
+  /** Present IFF `unlocked` — the same payload the `"achievement"` event carries. */
+  achievement?: AchievementUnlock;
+  error?: string;
+  reason?: UnlockReason;
+}
+
+/** Options for `unlock` / `unlockMany`. Added in v1 (append-only). */
+export interface UnlockOptions {
+  /** Override the configured game slug. */
+  game?: string;
+}
+
+/** Options for `progress`. Added in v1 (append-only). */
+export interface ProgressOptions {
+  /** Override the configured game slug. */
+  game?: string;
+  /**
+   * Send immediately instead of waiting out the ~1s coalescing window. Use it
+   * for the LAST value of a run (game over), where a player who finishes at
+   * 100/100 must never be left looking at 97/100.
+   */
+  flush?: boolean;
+}
+
+/** Options for `getAchievements`. Added in v1 (append-only). */
+export interface GetAchievementsOptions {
+  /** Override the configured game slug. */
+  game?: string;
 }
 
 /**
@@ -306,4 +524,40 @@ export interface HallPass {
    * success. Never throws. Added in v1.
    */
   setPlayerHandle?(handle: string): Promise<PlayerIdentity | null>;
+  /**
+   * Earn one achievement outright: `POST <api>/api/v1/games/<slug>/achievements`
+   * with no progress number, which the server reads as "reach the target".
+   *
+   * IDEMPOTENT. Calling it for something the player already holds resolves
+   * `{ ok: true, unlocked: false, alreadyUnlocked: true }` — never an error, and
+   * never a second `"achievement"` event. Requires a signed-in player and a
+   * SAME-ORIGIN embed (the endpoint is cookie-credentialed); a cross-origin embed
+   * resolves `{ ok: false, reason: "signed-out" }` without firing a doomed
+   * request. Never throws. Added in v1.
+   */
+  unlock?(key: string, opts?: UnlockOptions): Promise<UnlockResult>;
+  /**
+   * Earn several achievements in ONE request — the case a game hits when
+   * finishing a level crosses three thresholds at once. Resolves one
+   * {@link UnlockResult} per key, in the order given. Over-long batches are split
+   * automatically. Same auth rules as `unlock`. Never throws. Added in v1.
+   */
+  unlockMany?(keys: string[], opts?: UnlockOptions): Promise<UnlockResult[]>;
+  /**
+   * Report ABSOLUTE progress toward an achievement ("the player is now at 57"),
+   * never a delta.
+   *
+   * SAFE TO CALL EVERY FRAME: calls are coalesced per key on a ~1s trailing edge,
+   * so a 60fps loop produces about one request per second per key, and the
+   * pending value is flushed on `pagehide` with a beacon so the FINAL value is
+   * never lost. Same auth rules as `unlock`. Never throws. Added in v1.
+   */
+  progress?(key: string, value: number, opts?: ProgressOptions): Promise<UnlockResult>;
+  /**
+   * The game's full achievement list as seen by the current player: every
+   * achievement with the player's progress and unlocked state, unearned secrets
+   * already redacted. Resolves `[]` on any failure or in inert mode — never
+   * throws. Added in v1.
+   */
+  getAchievements?(opts?: GetAchievementsOptions): Promise<PlayerAchievement[]>;
 }
