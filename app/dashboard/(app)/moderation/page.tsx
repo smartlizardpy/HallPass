@@ -456,14 +456,24 @@ function QueueCard({
           </span>
         </div>
 
-        <div className="mt-2 flex flex-wrap gap-2">
-          {tally.map(({ reason, n }) => (
-            <Chip key={reason} tone={REASON_TONE[reason] ?? "zinc"}>
-              {reasonLabel(reason)}
-              {n > 1 && <span className="tabular-nums"> ×{n}</span>}
-            </Chip>
-          ))}
-        </div>
+        {/*
+          The tally is a SUMMARY, so it only earns its space when there is
+          something to summarise. With a single report it printed the reason as
+          a chip and then again in the row directly beneath it — the same string
+          twice, which reads as a rendering bug rather than as a heading. With
+          several it does real work ("Bullying ×4, Spam ×1" is the shape of the
+          complaint at a glance, before you read anyone's individual reason).
+        */}
+        {reports.length > 1 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {tally.map(({ reason, n }) => (
+              <Chip key={reason} tone={REASON_TONE[reason] ?? "zinc"}>
+                {reasonLabel(reason)}
+                {n > 1 && <span className="tabular-nums"> ×{n}</span>}
+              </Chip>
+            ))}
+          </div>
+        )}
 
         <ul className="mt-3 divide-y divide-border rounded-lg border border-border">
           {reports.map((report) => (

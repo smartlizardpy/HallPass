@@ -357,7 +357,21 @@ export function createReviewStore(sql: Sql) {
       await sql`
         WITH ins AS (
           INSERT INTO review_reports (review_id, reporter_id, reason, ip_hash)
-          VALUES (${reviewId}, ${reporterId}, ${reason}, ${ipHash})
+          SELECT ${reviewId}, ${reporterId}, ${reason}, ${ipHash}
+          -- NOBODY REPORTS THEMSELVES. Not a security control — auto-hide needs
+          -- three DISTINCT reporters and the dedup index caps one person at one
+          -- report, so a self-report can never hide anything. It is a noise
+          -- control, and the moderation queue's entire value is being short
+          -- enough that a human actually reads it. An author who wants their own
+          -- review gone already has the delete button.
+          --
+          -- Selected rather than VALUES so the guard lives in the same statement
+          -- as the insert; a check-then-write split would need a second round
+          -- trip the HTTP driver cannot make transactional.
+          WHERE NOT EXISTS (
+            SELECT 1 FROM game_reviews
+            WHERE id = ${reviewId} AND player_id = ${reporterId}
+          )
           ON CONFLICT (review_id, reporter_id) DO NOTHING
           RETURNING 1
         ),
