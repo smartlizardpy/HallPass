@@ -44,7 +44,7 @@ export function GameStore({
   media,
   related,
   plays,
-  credit,
+  credit = null,
 }: {
   game: Game;
   media: GameMedia[];
@@ -55,11 +55,21 @@ export function GameStore({
    * games that predate the credits table — a missing name is simply omitted
    * rather than filled with a guess, because inventing attribution is worse than
    * having none.
+   *
+   * OPTIONAL AND NULLABLE ON PURPOSE. Most games have no credit at all, and this
+   * is decoration: a caller that forgets to resolve it, or a stale bundle still
+   * passing the raw database row (`null` for any uncredited game), must not take
+   * the whole store page down over a byline. Normalised immediately below.
    */
-  credit: ResolvedCredit;
+  credit?: ResolvedCredit | null;
 }) {
   const openGame = useOpenGame();
   const { isFavorite, toggleFavorite } = useFavorites();
+
+  // Normalise once so every read below is total. Reading `.author` off a null
+  // prop crashed the page for every game that had never been credited — which is
+  // most of them.
+  const credits: ResolvedCredit = credit ?? { author: null, addedBy: null };
 
   const favorited = isFavorite(game.slug);
   const categoryHref = `/category/${encodeURIComponent(game.category.toLowerCase())}`;
@@ -168,20 +178,20 @@ export function GameStore({
               different jobs, and folding them together would take authorship off
               whoever actually wrote it.
             */}
-            {credit.author && credit.author === credit.addedBy ? (
+            {credits.author && credits.author === credits.addedBy ? (
               <MetaRow label="By">
-                <span className="font-bold text-zinc-900">{credit.author}</span>
+                <span className="font-bold text-zinc-900">{credits.author}</span>
               </MetaRow>
             ) : (
               <>
-                {credit.author && (
+                {credits.author && (
                   <MetaRow label="Created by">
-                    <span className="font-bold text-zinc-900">{credit.author}</span>
+                    <span className="font-bold text-zinc-900">{credits.author}</span>
                   </MetaRow>
                 )}
-                {credit.addedBy && (
+                {credits.addedBy && (
                   <MetaRow label="Added by">
-                    <span className="font-bold text-zinc-900">{credit.addedBy}</span>
+                    <span className="font-bold text-zinc-900">{credits.addedBy}</span>
                   </MetaRow>
                 )}
               </>
