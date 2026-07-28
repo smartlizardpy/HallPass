@@ -115,13 +115,14 @@ export default async function GameControlPage({
     resolveCategories(),
     resolveTags(),
     countCustomFiles(slug),
-    // The current published source, for the copy-out half of the panel.
-    readPublishedIndexHtml(slug),
     getGameMedia(slug),
     getGameCredit(slug),
     // Admins, offered as suggestions for the credit. Fail-soft: a Neon blip should
     // cost the dropdown, not the page.
     listUsers().catch(() => []),
+    // The current published source, for the copy-out half of the panel. LAST, so
+    // it lines up with `currentHtml` in the destructuring above.
+    readPublishedIndexHtml(slug),
   ]);
   const tagSuggestions = tagList.map((t) => t.tag);
 
