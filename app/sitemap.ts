@@ -32,11 +32,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.8,
   }));
 
+  // Game pages are the money pages — the ones built to rank for
+  // "play <game> unblocked" — so they get the strongest signal after the home
+  // grid, and `weekly` rather than `monthly` because reviews, achievements and
+  // media now change them.
   const gamePages: MetadataRoute.Sitemap = games.map((g) => ({
     url: `${BASE}/game/${g.slug}`,
     lastModified: now,
-    changeFrequency: "monthly" as const,
-    priority: 0.6,
+    changeFrequency: "weekly" as const,
+    priority: 0.7,
   }));
 
   return [...staticPages, ...categoryPages, ...gamePages];
