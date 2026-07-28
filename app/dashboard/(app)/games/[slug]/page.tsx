@@ -33,7 +33,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { isUnconfiguredDbError } from "@/app/lib/db";
-import { listGameFiles } from "@/app/lib/game-html-blob";
+import { listGameFiles, readPublishedIndexHtml } from "@/app/lib/game-html-blob";
+import { buildEmbedSnippet, buildExampleCalls } from "@/app/lib/integration-prompt";
+import { SITE_URL } from "@/app/lib/site";
+import { CopyBox } from "./_ui/CopyBox";
 import { resolveCategories, resolveGame, resolveTags } from "@/app/lib/games-store";
 import { store } from "@/app/lib/scoreboard";
 import { getGameMedia, mediaPublicPath } from "@/app/lib/game-media";
@@ -108,10 +111,12 @@ export default async function GameControlPage({
   // `getGameMedia` is already fail-soft (returns [] on any DB failure), so it
   // needs no try/catch and does NOT join the `dbUnconfigured` branch below —
   // an unreachable database simply shows an empty Media panel.
-  const [categories, tagList, customFileCount, media, credit, admins] = await Promise.all([
+  const [categories, tagList, customFileCount, media, credit, admins, currentHtml] = await Promise.all([
     resolveCategories(),
     resolveTags(),
     countCustomFiles(slug),
+    // The current published source, for the copy-out half of the panel.
+    readPublishedIndexHtml(slug),
     getGameMedia(slug),
     getGameCredit(slug),
     // Admins, offered as suggestions for the credit. Fail-soft: a Neon blip should
