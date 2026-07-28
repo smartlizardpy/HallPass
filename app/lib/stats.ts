@@ -95,6 +95,8 @@ export type DashboardStats = {
   daily: DailyPlays[];
   categories: LabeledCount[];
   searchTerms: LabeledCount[];
+  /** Searches that matched no game — the next games to add. */
+  zeroResultTerms: LabeledCount[];
   countries: LabeledCount[];
   devices: LabeledCount[];
   configured: boolean;
@@ -114,6 +116,7 @@ const EMPTY_STATS: DashboardStats = {
   daily: [],
   categories: [],
   searchTerms: [],
+  zeroResultTerms: [],
   countries: [],
   devices: [],
   configured: false,
@@ -166,12 +169,76 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     GROUP BY category ORDER BY plays DESC LIMIT 8
   `;
 
+  /**
+   * Top searches, with PREFIX CHAINS COLLAPSED and counted by PEOPLE.
+   *
+   * Search used to be captured on every keystroke, so typing "duskfall" emitted
+   * six events and the old `GROUP BY query, count()` ranked PREFIXES rather than
+   * intentions — a real result read `ter 2 / terr 1 / dus 1 / dusk 1`, which is
+   * two people typing two words. `SiteHeader` now debounces, so new data arrives
+   * clean, but thirty days of the old shape is still in range and the same
+   * collapse is wanted anyway whenever a player backspaces.
+   *
+   * The inner query buckets each person's searches into five-minute bursts and
+   * keeps a term only when NOTHING ELSE in that burst extends it. That is
+   * deliberately not `argMax(query, timestamp)`, which looks equivalent and is
+   * not: taking only the last query per burst would silently discard a genuine
+   * second search, so somebody who looked for "terraria" and then "duskfall"
+   * would be recorded as having only wanted the latter.
+   *
+   * Ranked by DISTINCT PEOPLE, so one indecisive player cannot outrank five who
+   * all wanted the same thing.
+   */
   const searchSql = `
-    SELECT properties.query AS term, count() AS n
-    FROM events
-    WHERE event = 'game_searched' AND properties.query IS NOT NULL
-      AND timestamp >= now() - INTERVAL 30 DAY
-    GROUP BY term ORDER BY n DESC LIMIT 8
+    SELECT term, count(DISTINCT distinct_id) AS people
+    FROM (
+      SELECT distinct_id, arrayJoin(
+        arrayFilter(x -> NOT arrayExists(y -> y != x AND startsWith(y, x), qs), qs)
+      ) AS term
+      FROM (
+        SELECT distinct_id,
+               toStartOfInterval(timestamp, INTERVAL 5 MINUTE) AS bucket,
+               groupArray(properties.query) AS qs
+        FROM events
+        WHERE event = 'game_searched' AND properties.query IS NOT NULL
+          AND timestamp >= now() - INTERVAL 30 DAY
+        GROUP BY distinct_id, bucket
+      )
+    )
+    GROUP BY term ORDER BY people DESC, term ASC LIMIT 8
+  `;
+
+  /**
+   * Searches that found NOTHING — the only search metric that is directly
+   * actionable.
+   *
+   * "Eleven people looked for a game you do not have" names the next game to
+   * add. Same prefix collapse as above, then filtered to bursts whose terminal
+   * query matched zero games.
+   *
+   * `properties.results` only exists on events captured after the debounce
+   * shipped, so this panel fills in from that date rather than backfilling. An
+   * event without the property is excluded rather than assumed to be zero —
+   * assuming zero would invent a content gap for every search ever made.
+   */
+  const zeroResultSql = `
+    SELECT term, count(DISTINCT distinct_id) AS people
+    FROM (
+      SELECT distinct_id, arrayJoin(
+        arrayFilter(x -> NOT arrayExists(y -> y != x AND startsWith(y, x), qs), qs)
+      ) AS term
+      FROM (
+        SELECT distinct_id,
+               toStartOfInterval(timestamp, INTERVAL 5 MINUTE) AS bucket,
+               groupArray(properties.query) AS qs
+        FROM events
+        WHERE event = 'game_searched' AND properties.query IS NOT NULL
+          AND toInt(properties.results) = 0
+          AND timestamp >= now() - INTERVAL 30 DAY
+        GROUP BY distinct_id, bucket
+      )
+    )
+    GROUP BY term ORDER BY people DESC, term ASC LIMIT 8
   `;
 
   const countrySql = `
@@ -194,12 +261,13 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     // The KPI query is critical (its failure marks the dashboard unavailable);
     // every secondary panel degrades to empty on its own without taking the
     // others down.
-    const [kpi, daily, top, cats, searches, countries, devices] = await Promise.all([
+    const [kpi, daily, top, cats, searches, zeroResults, countries, devices] = await Promise.all([
       hogql<[number, number, number, number, number, number, number]>(kpiSql),
       safe(hogql<[string, number, number, number]>(dailySql)),
       safe(hogql<[string, number]>(topSql)),
       safe(hogql<[string, number]>(catSql)),
       safe(hogql<[string, number]>(searchSql)),
+      safe(hogql<[string, number]>(zeroResultSql)),
       safe(hogql<[string, number]>(countrySql)),
       safe(hogql<[string, number]>(deviceSql)),
     ]);
@@ -233,6 +301,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       })),
       categories: cats.map(([label, value]) => ({ label, value: num(value) })),
       searchTerms: searches.map(([label, value]) => ({ label, value: num(value) })),
+      zeroResultTerms: zeroResults.map(([label, value]) => ({ label, value: num(value) })),
       countries: countries.map(([label, value]) => ({ label, value: num(value) })),
       devices: devices.map(([label, value]) => ({ label, value: num(value) })),
       configured: true,

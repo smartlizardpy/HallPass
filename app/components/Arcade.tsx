@@ -9,6 +9,7 @@ import { useFavorites, useRecentlyPlayed } from "../lib/personalization";
 import { CoverImage } from "./CoverImage";
 import { ArcadeShell, useOpenGame } from "./ArcadeShell";
 import { GameCard } from "./GameCard";
+import { useSearchCapture } from "../lib/use-search-capture";
 
 /**
  * The catalog: featured banner, personalized rows, filter grid.
@@ -148,6 +149,13 @@ function ArcadeRows({
       );
     });
   }, [category, query, trending, games]);
+
+  // Report the search from HERE rather than from the header: this is the only
+  // component that knows BOTH what was typed and how many games it matched, and
+  // the match count is what powers the dashboard's zero-result panel — the one
+  // search metric that names the next game to add. Debounced inside the hook, so
+  // a player typing "duskfall" produces one event rather than six prefixes.
+  useSearchCapture(query, filtered.length);
 
   return (
     <>

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import posthog from "posthog-js";
+import { captureSearchNow } from "../lib/use-search-capture";
 import { AccountMenu } from "./AccountMenu";
 import { WhatsNewLink } from "./WhatsNewLink";
 import { Wordmark } from "./Wordmark";
@@ -70,11 +70,10 @@ export function SiteHeader({
           ? {
               value: query,
               onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
-                const next = e.target.value;
-                onQueryChange!(next);
-                if (next.length >= 3) {
-                  posthog.capture("game_searched", { query: next });
-                }
+                // No analytics here. `ArcadeRows` reports the search, because it
+                // is the only component that also knows how many games matched —
+                // and the match count is what makes the zero-result panel work.
+                onQueryChange!(e.target.value);
               },
             }
           : {})}
@@ -136,9 +135,7 @@ export function SiteHeader({
             const value = String(
               new FormData(e.currentTarget).get("q") ?? "",
             ).trim();
-            if (value.length >= 3) {
-              posthog.capture("game_searched", { query: value });
-            }
+            captureSearchNow(value);
             router.push(value ? `/?q=${encodeURIComponent(value)}` : "/");
           }}
         >
