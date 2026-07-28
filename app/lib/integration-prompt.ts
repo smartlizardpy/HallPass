@@ -48,6 +48,52 @@ setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert"
 q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:{ok:false,reason:"inert"})})},2000)})(window);
 </script>`;
 
+/**
+ * The two `<script>` tags a game needs, ready to paste at the end of its
+ * `<body>`: the inline stub (so calls made before the bundle loads are queued,
+ * never lost) and the SDK itself, tagged with this game's slug.
+ *
+ * Exported so the dashboard's source-code panel shows the SAME snippet
+ * `buildIntegrationPrompt` embeds — the stub lives in exactly one place and
+ * cannot drift between the two surfaces.
+ */
+export function buildEmbedSnippet(slug: string, baseUrl: string): string {
+  const base = baseUrl.replace(/\/+$/, "");
+  return `${EMBED_STUB}
+<script src="${base}/sdk/v1/hallpass.js" data-game="${slug}" defer></script>`;
+}
+
+/**
+ * A worked example of the calls a game makes AFTER the snippet is in place:
+ * submit a score, unlock an achievement, report progress, and show a toast. The
+ * achievement keys must already be provisioned for this game in the dashboard —
+ * an unprovisioned key is a no-op, exactly like an unprovisioned board.
+ */
+export function buildExampleCalls(slug: string): string {
+  return `<script>
+  // Do all of this AFTER ready() resolves, so the real SDK has loaded.
+  HallPass.ready().then(function () {
+
+    // --- Scoreboard -------------------------------------------------------
+    // Call when a run ends. The signed-in player's name is attached for them.
+    // HallPass.submitScore(finalScore);
+
+    // --- Achievements (provision the keys in the dashboard first) ----------
+    // A one-off unlock:
+    // HallPass.unlock("first-blood");
+
+    // A progress achievement — report the ABSOLUTE value, not a delta:
+    // HallPass.progress("zombies-killed", killCount);
+
+    // Toast when something is newly earned:
+    HallPass.on("achievement", function (a) {
+      console.log("Earned:", a.name, a.icon);
+    });
+  });
+</script>
+<!-- game: ${slug} -->`;
+}
+
 export interface IntegrationPromptInput {
   /** The board id — used verbatim as `data-game` and in `/api/v1/leaderboard/<id>`. */
   slug: string;

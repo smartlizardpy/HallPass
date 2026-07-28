@@ -1,4 +1,4 @@
-import { list } from "@vercel/blob";
+import { list, head } from "@vercel/blob";
 
 export function blobPathForSlug(slug: string): string {
   return `games/${slug}/index.html`;
@@ -66,4 +66,31 @@ export async function listGameFiles(slug: string): Promise<GameBlobFile[]> {
     cursor = page.hasMore ? page.cursor : undefined;
   } while (cursor);
   return files;
+}
+
+
+/**
+ * The current published `index.html` for a game, as a string — or `null` when
+ * the game is still on the build default (no custom blob for it).
+ *
+ * This is the READ side of the source-code panel, whose only affordance until now
+ * was upload. The integration loop is: copy the live code out, add the scoreboard
+ * and achievement calls, publish it back. Without this, step one meant hunting
+ * for a blob URL by hand.
+ *
+ * Blob is the source of truth for a published game, so it is read directly rather
+ * than through the serving route. `cache: "no-store"` because an admin who just
+ * uploaded expects to copy exactly what they uploaded, not a cached prior version.
+ * Fails soft to `null`: a missing file or a blob hiccup means "nothing to copy",
+ * never a broken dashboard.
+ */
+export async function readPublishedIndexHtml(slug: string): Promise<string | null> {
+  try {
+    const meta = await head(blobPathForAsset(slug, "index.html"));
+    const res = await fetch(meta.url, { cache: "no-store" });
+    if (!res.ok) return null;
+    return await res.text();
+  } catch {
+    return null;
+  }
 }

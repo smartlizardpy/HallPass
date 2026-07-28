@@ -33,7 +33,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { isUnconfiguredDbError } from "@/app/lib/db";
-import { listGameFiles } from "@/app/lib/game-html-blob";
+import { listGameFiles, readPublishedIndexHtml } from "@/app/lib/game-html-blob";
+import { buildEmbedSnippet, buildExampleCalls } from "@/app/lib/integration-prompt";
+import { SITE_URL } from "@/app/lib/site";
+import { CopyBox } from "./_ui/CopyBox";
 import { resolveCategories, resolveGame, resolveTags } from "@/app/lib/games-store";
 import { store } from "@/app/lib/scoreboard";
 import { getGameMedia, mediaPublicPath } from "@/app/lib/game-media";
@@ -108,7 +111,7 @@ export default async function GameControlPage({
   // `getGameMedia` is already fail-soft (returns [] on any DB failure), so it
   // needs no try/catch and does NOT join the `dbUnconfigured` branch below —
   // an unreachable database simply shows an empty Media panel.
-  const [categories, tagList, customFileCount, media, credit, admins] = await Promise.all([
+  const [categories, tagList, customFileCount, media, credit, admins, currentHtml] = await Promise.all([
     resolveCategories(),
     resolveTags(),
     countCustomFiles(slug),
@@ -117,6 +120,9 @@ export default async function GameControlPage({
     // Admins, offered as suggestions for the credit. Fail-soft: a Neon blip should
     // cost the dropdown, not the page.
     listUsers().catch(() => []),
+    // The current published source, for the copy-out half of the panel. LAST, so
+    // it lines up with `currentHtml` in the destructuring above.
+    readPublishedIndexHtml(slug),
   ]);
   const tagSuggestions = tagList.map((t) => t.tag);
 
@@ -519,7 +525,38 @@ export default async function GameControlPage({
         }
       >
         <div className="space-y-6">
-          <p className="text-xs text-zinc-500">
+          {/* COPY OUT — the read half of this panel. An admin copies the current
+              code, adds the scoreboard and achievement calls, and publishes it
+              back with the forms below. It doubles as the sync point: both admins
+              read the same live blob, so whoever opens this page has the latest. */}
+          <div className="space-y-3">
+            {currentHtml ? (
+              <CopyBox
+                label="Current published index.html"
+                code={currentHtml}
+                note="Copy this out, add the snippet below, then publish it back with the forms further down."
+              />
+            ) : (
+              <p className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-xs text-muted">
+                This game is on the build default — its source lives in the repo at{" "}
+                <code className="font-mono">public/games/{slug}/</code>. Publish an
+                HTML file below to start editing it here.
+              </p>
+            )}
+
+            <CopyBox
+              label="Scoreboard + achievements — paste at the end of <body>"
+              code={buildEmbedSnippet(slug, SITE_URL)}
+              note="The two script tags. Achievement keys must be provisioned in the Achievements panel above first."
+            />
+            <CopyBox
+              label="Example calls — submit a score, unlock, progress, toast"
+              code={buildExampleCalls(slug)}
+              language="html"
+            />
+          </div>
+
+          <p className="border-t border-border pt-6 text-xs text-zinc-500">
             Publishing any source below replaces <strong>everything</strong>{" "}
             previously published for this game — a single HTML file counts as a
             one-file bundle.
