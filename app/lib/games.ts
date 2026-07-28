@@ -29,6 +29,28 @@ export type Game = {
   plays?: number;
   externalUrl?: string; // present => game hosted off-site; iframe points here
   coverUrl?: string; // absolute cover URL; overrides /games/<slug>/cover.png convention
+  /**
+   * Who MADE the game. Free text, and deliberately not restricted to the admin
+   * list — plenty of games come from somebody who has no account here.
+   */
+  author?: string;
+  /**
+   * Who brought it ONTO HallPass: generated the cover, wrote the metadata, wired
+   * up the scoreboard and achievements. Usually an admin, and usually NOT the
+   * same person as `author`.
+   *
+   * These two are separate because collapsing them takes authorship off the
+   * person who actually wrote the game. The site footer already draws the same
+   * line — "Games by Ateş Demir · Site by Ozan Kaygusuz".
+   *
+   * Both live here rather than only in `game_credits` because the `add-game`
+   * skill onboards games by appending to THIS array from a local machine and
+   * committing the result. It has no production database access, so a credit it
+   * could only write to a database would never reach the live site. The database
+   * row still exists for dashboard-uploaded and external games, and overrides
+   * these when present.
+   */
+  addedBy?: string;
 };
 
 export const games: Game[] = [

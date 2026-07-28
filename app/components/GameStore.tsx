@@ -8,7 +8,7 @@ import type { Game } from "../lib/games";
 // `import type` is erased before bundling so nothing is emitted, but promoting
 // this to a value import would break the build — the same trap `game-media.ts`
 // already fell into, which is why its types live in `game-media-blob.ts`.
-import type { GameCredit } from "../lib/game-credits";
+import type { ResolvedCredit } from "../lib/game-credits";
 import type { GameMedia } from "../lib/game-media-blob";
 import { useFavorites } from "../lib/personalization";
 import { useOpenGame } from "./ArcadeShell";
@@ -51,11 +51,12 @@ export function GameStore({
   related: Game[];
   plays: number;
   /**
-   * Who first put this game on the site. `null` for the games that predate the
-   * credits table — the row is simply omitted rather than filled with a guess,
-   * because inventing attribution is worse than having none.
+   * Who made the game and who put it on the site. Either side may be `null` for
+   * games that predate the credits table — a missing name is simply omitted
+   * rather than filled with a guess, because inventing attribution is worse than
+   * having none.
    */
-  credit: GameCredit | null;
+  credit: ResolvedCredit;
 }) {
   const openGame = useOpenGame();
   const { isFavorite, toggleFavorite } = useFavorites();
@@ -159,10 +160,31 @@ export function GameStore({
                 {game.tags.join(", ")}
               </MetaRow>
             )}
-            {credit && (
-              <MetaRow label="Added by">
-                <span className="font-bold text-zinc-900">{credit.uploaderName}</span>
+            {/*
+              Two contributions, two rows — EXCEPT when one person did both, in
+              which case repeating the name reads like bureaucracy rather than
+              credit. Making the game and bringing it onto HallPass (cover,
+              metadata, scoreboard and achievement wiring) are genuinely
+              different jobs, and folding them together would take authorship off
+              whoever actually wrote it.
+            */}
+            {credit.author && credit.author === credit.addedBy ? (
+              <MetaRow label="By">
+                <span className="font-bold text-zinc-900">{credit.author}</span>
               </MetaRow>
+            ) : (
+              <>
+                {credit.author && (
+                  <MetaRow label="Created by">
+                    <span className="font-bold text-zinc-900">{credit.author}</span>
+                  </MetaRow>
+                )}
+                {credit.addedBy && (
+                  <MetaRow label="Added by">
+                    <span className="font-bold text-zinc-900">{credit.addedBy}</span>
+                  </MetaRow>
+                )}
+              </>
             )}
             <MetaRow label="Plays in">Your browser</MetaRow>
           </dl>

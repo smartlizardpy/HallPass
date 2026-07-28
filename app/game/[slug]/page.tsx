@@ -23,7 +23,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ArcadeShell } from "../../components/ArcadeShell";
 import { GameStore } from "../../components/GameStore";
-import { getGameCredit } from "../../lib/game-credits";
+import { getGameCredit, resolveCredit } from "../../lib/game-credits";
 import { getGameMedia, mediaPublicPath } from "../../lib/game-media";
 import { resolveCategories, resolveGame, resolveGames } from "../../lib/games-store";
 import { SITE_URL as BASE } from "../../lib/site";
@@ -217,7 +217,7 @@ export default async function GamePage({
           media={media}
           related={related}
           plays={plays}
-          credit={credit}
+          credit={resolveCredit(game, credit)}
         />
       </ArcadeShell>
     </>

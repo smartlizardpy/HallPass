@@ -41,6 +41,7 @@ export async function setGameCreditAction(formData: FormData): Promise<void> {
 
   const slug = String(formData.get("slug") ?? "").trim();
   const name = String(formData.get("uploaderName") ?? "").trim();
+  const author = String(formData.get("authorName") ?? "").trim();
 
   // `isResolvedSlug`, never the static `games` array — the static array silently
   // excludes every external game, and an external game is exactly the kind that
@@ -49,9 +50,9 @@ export async function setGameCreditAction(formData: FormData): Promise<void> {
     redirect("/dashboard/games?error=Unknown+game.");
   }
 
-  // An empty field means "remove the credit", which is the honest way to undo a
-  // wrong one. Filling it with a placeholder would publish a guess.
-  if (!name) {
+  // Both fields empty means "remove the credit", which is the honest way to undo
+  // a wrong one. Filling either with a placeholder would publish a guess.
+  if (!name && !author) {
     let failed = false;
     try {
       await clearCredit(slug);
@@ -69,13 +70,22 @@ export async function setGameCreditAction(formData: FormData): Promise<void> {
     );
   }
 
-  if (name.length > MAX_NAME) {
-    redirect(target(slug, "error", `Name must be ${MAX_NAME} characters or fewer.`));
+  if (name.length > MAX_NAME || author.length > MAX_NAME) {
+    redirect(target(slug, "error", `Names must be ${MAX_NAME} characters or fewer.`));
   }
+  // The author can stand alone (a game whose uploader nobody recorded), but the
+  // row needs SOMETHING in `uploader_name` because the column is NOT NULL. Fall
+  // back to the author rather than inventing a name — a game credited only to its
+  // creator then reads "By <creator>", which is exactly right.
+  const uploaderName = name || author;
 
   let failed = false;
   try {
-    await setCredit(slug, name, actorEmail);
+    await setCredit(
+      slug,
+      { authorName: author || null, uploaderName },
+      actorEmail,
+    );
   } catch {
     failed = true;
   }
