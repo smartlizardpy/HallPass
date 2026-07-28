@@ -520,12 +520,28 @@ export function createSocialStore(sql: Sql) {
      *
      * Gates, all evaluated against one snapshot:
      *   tomb   the name is tombstoned by SOMEONE ELSE and still quarantined
-     *   plays  anti-squatting: the account must have played at least one game.
-     *          A real user has this by construction — they arrived from a game —
-     *          while a farm of throwaway Google accounts has to simulate gameplay
-     *          per account. Cheap, invisible to humans, meaningfully expensive to
-     *          automate.
+     *   plays  anti-squatting, ON RENAMES ONLY — see below.
      *   cooldown  rename frequency
+     *
+     * THE PLAYS GATE NO LONGER APPLIES TO A FIRST CLAIM, and that is a deliberate
+     * reversal. It was written as "the account must have played at least one
+     * game", on the reasoning that a real user has a play row by construction
+     * while a farm of throwaway Google accounts would have to simulate gameplay
+     * per account.
+     *
+     * The premise was wrong. `player_plays` is only written for SIGNED-IN players
+     * (`/api/v1/me/plays` returns `recorded:false` for guests), so at the moment
+     * anybody first signs in their play count is exactly zero — including someone
+     * who has been playing as a guest for months. Asking for a username during
+     * sign-up therefore hit this gate for EVERY user, and it failed silently:
+     * `upd` matches no row, the statement still succeeds, and the caller sees
+     * "not claimed" with no reason that maps to anything a person could act on.
+     *
+     * The gate survives on RENAMES, where it still does useful work: an account
+     * that has never played has no legitimate reason to cycle names, which is
+     * exactly the shape of name-parking. And the real defence against account
+     * farming was never this — it is that Google itself charges a phone
+     * verification per account.
      *
      * The `hist` CTE tombstones the OLD name before `upd` takes the new one, so a
      * rename cannot free the previous name instantly.
@@ -565,7 +581,10 @@ export function createSocialStore(sql: Sql) {
           UPDATE players SET username = ${next}, username_changed_at = now()
           WHERE id = ${playerId}
             AND (SELECT n FROM tomb) = 0
-            AND (SELECT plays FROM me) > 0
+            -- Plays are required to RENAME, never to claim a first name. See the
+            -- docblock: at first sign-in everybody has zero, so requiring them
+            -- here rejected every new player with no actionable reason.
+            AND (username IS NULL OR (SELECT plays FROM me) > 0)
             AND (username IS NULL
                  OR username_changed_at IS NULL
                  OR username_changed_at < now() - make_interval(0, 0, 0, ${USERNAME_RENAME_COOLDOWN_DAYS}))
