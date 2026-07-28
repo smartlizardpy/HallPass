@@ -84,6 +84,36 @@ Port `8765` is taken by motionEye on this machine — use `9876` (or anything el
 
 If Playwright MCP isn't available, fall back to a solid-color placeholder using the chosen accent color: `magick -size 659x613 xc:'<accent-hex>' public/games/<slug>/cover.png`, and warn the user in the final summary.
 
+### 3b. Ask who made the game
+
+**This is the ONE question to ask the user.** Everything else in this skill is
+inferred; attribution cannot be, and guessing publishes a false claim about a
+named person.
+
+One name — the person who MADE the game. It renders on the store page as
+"By <name>".
+
+Get the admin list to offer as suggestions:
+
+```bash
+cd /home/ozi/Projects/unblockedgames
+node --input-type=module -e '
+import { neon } from "@neondatabase/serverless";
+import { readFileSync } from "node:fs";
+const url = readFileSync(".env.local","utf8").match(/^DATABASE_URL=(.*)$/m)[1].replace(/^["\x27]|["\x27]$/g,"");
+const sql = neon(url);
+const rows = await sql`SELECT name, email, role FROM dashboard_users ORDER BY name`;
+for (const r of rows) console.log(`${r.name ?? "(no name)"}  <${r.email}>  ${r.role}`);
+'
+```
+
+Then ask with `AskUserQuestion`, offering each admin name as an option. The user
+must also be able to type someone who is not an admin — plenty of games come from
+people with no account here.
+
+**Do not skip this and do not guess.** A wrong credit is worse than no credit, and
+this is the only moment the information is available.
+
 ### 4. Append metadata to `app/lib/games.ts`
 
 The `Game` type requires:
@@ -91,7 +121,8 @@ The `Game` type requires:
 {
   slug, title, tagline, description, category,
   tags: string[], gradient: [string, string], accent, art,
-  isNew?, isFeatured?, plays?
+  isNew?, isFeatured?, plays?,
+  author?
 }
 ```
 
@@ -108,6 +139,14 @@ Fill every field by inferring from the HTML and screenshot:
 - **isNew**: `true` (always, for newly added games).
 - **plays**: omit.
 - **isFeatured**: omit unless the user said to feature it.
+- **author**: the name from Step 3b, exactly as the user gave it. Never invent it.
+  Omit only if the user genuinely does not know — the game page then renders no
+  byline rather than a guess.
+
+  It lives in `games.ts` rather than in the `game_credits` table on purpose: this
+  skill runs on a local machine with no production database access, so a credit
+  written only to a database would never reach the live site. The table exists for
+  dashboard-uploaded and external games, and overrides this when set.
 
 Insert the new entry as the **last** element of the `games` array (just before the closing `];`). Match the formatting style of nearby entries exactly (2-space indent, trailing commas, multi-line description if it would exceed line length).
 
@@ -210,7 +249,9 @@ Unchanged from single-file Step 3. The `python3 -m http.server` flow already ser
 
 ### Folder Step 6: Append metadata to `app/lib/games.ts`
 
-Unchanged from single-file Step 4. Multi-file games need no new fields.
+Unchanged from single-file Step 4, including **Step 3b** — a folder game needs its
+`author` credit exactly as much as a single-file one, and the question must still
+be asked rather than guessed.
 
 ### Folder Step 7: Upload EVERY file to Vercel Blob
 

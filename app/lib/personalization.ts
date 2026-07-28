@@ -47,6 +47,11 @@ import { useCallback, useEffect, useSyncExternalStore } from "react";
 const FAVORITES_KEY = "hp:favorites";
 /** localStorage key holding the JSON `string[]` of recently-played slugs. */
 const RECENT_KEY = "hp:recent";
+/**
+ * Per-slug timestamps of the last time a play was reported to the server. Purely
+ * a debounce ledger — it holds no history and is never read for display.
+ */
+const PLAY_SYNC_KEY = "hp:playsync";
 /** Hard cap on the recently-played list (most-recent-first, older ones drop off). */
 const RECENT_CAP = 12;
 
@@ -281,6 +286,89 @@ export function recordRecentPlay(slug: string): void {
   ensureLoaded();
   if (recentSnapshot[0] === slug) return;
   commitRecent(prependCapped(recentSnapshot, slug, RECENT_CAP));
+}
+
+/* -------------------------------------------------------------------------- *
+ * Server-side play history (the "friends who play this" input).
+ * -------------------------------------------------------------------------- */
+
+/**
+ * How long before the same game is reported to the server again.
+ *
+ * The write itself is an idempotent UPSERT, so a duplicate would be harmless —
+ * this exists to cut the REQUEST volume. A player bouncing between three games
+ * for an hour produces three requests instead of thirty, which is what keeps the
+ * beacon at roughly 0.03 writes/second on a driver with no connection pooling.
+ */
+const PLAY_SYNC_TTL_MS = 30 * 60_000;
+
+/**
+ * Whether `slug` is due to be reported again. Pure, so the debounce contract is
+ * unit-testable without touching storage or the clock.
+ */
+export function shouldSyncPlay(
+  map: Record<string, number>,
+  slug: string,
+  now: number,
+  ttlMs: number = PLAY_SYNC_TTL_MS,
+): boolean {
+  const last = map[slug];
+  if (typeof last !== "number" || !Number.isFinite(last)) return true;
+  // A clock that moved backwards (timezone change, manual set) must not lock the
+  // beacon out until the future timestamp expires.
+  if (last > now) return true;
+  return now - last >= ttlMs;
+}
+
+/** Read the debounce ledger, tolerating anything corrupt in storage. */
+function readPlaySync(): Record<string, number> {
+  const raw = safeGet(PLAY_SYNC_KEY);
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, number> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === "number" && Number.isFinite(value)) out[key] = value;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Report a play to the server, debounced per slug.
+ *
+ * Fire-and-forget with a swallowed catch, exactly like `toggleFavorite`'s sync:
+ * a failed beacon must never surface to the player, and a guest gets a
+ * deliberate `200 { recorded: false }` rather than a 401 so no console error
+ * appears for signed-out visitors.
+ *
+ * `keepalive: true` is load-bearing. The caller fires this at the moment a game
+ * opens, which is immediately followed by the overlay mounting and, historically,
+ * a navigation — without the flag the browser is free to cancel the request
+ * in-flight and the play is simply lost.
+ */
+export function recordPlayServerSide(slug: string): void {
+  if (!slug) return;
+  const map = readPlaySync();
+  const now = Date.now();
+  if (!shouldSyncPlay(map, slug, now)) return;
+
+  // Written BEFORE the request, deliberately: the ledger is a rate limiter, not a
+  // record of success. Waiting for the response would let a burst of opens all
+  // pass the check and fire together.
+  map[slug] = now;
+  safeSet(PLAY_SYNC_KEY, JSON.stringify(map));
+
+  void fetch("/api/v1/me/plays", {
+    method: "POST",
+    keepalive: true,
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ slug }),
+  }).catch(() => {});
 }
 
 /* -------------------------------------------------------------------------- *

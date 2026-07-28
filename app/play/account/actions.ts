@@ -59,11 +59,17 @@ export async function setHandleAction(formData: FormData): Promise<void> {
  * type the literal word `DELETE`; anything else bounces back with `?error=confirm`
  * (mapped to a fixed banner message on the page) and no write happens.
  *
- * `deletePlayer` removes the `players` row; the `scores.player_id` FK is
+ * `deletePlayer` rewrites the player's `scores.handle` to a neutral placeholder
+ * and THEN removes the `players` row; the `scores.player_id` FK is
  * `ON DELETE SET NULL`, so the player's historical scores DE-TAG (revert to
- * anonymous) rather than being destroyed. `signOut({ redirectTo })` both clears
- * the now-orphaned session cookie and redirects home; like `redirect()` it
- * throws a control-flow signal, so it is the last statement and is never caught.
+ * anonymous) rather than being destroyed. The handle rewrite is what makes this
+ * a real erasure — de-tagging alone would leave the name snapshot (often the
+ * player's real Google name) on the leaderboard forever. See `deletePlayer` in
+ * `app/lib/players.ts` for why the statement order cannot be swapped.
+ *
+ * `signOut({ redirectTo })` both clears the now-orphaned session cookie and
+ * redirects home; like `redirect()` it throws a control-flow signal, so it is the
+ * last statement and is never caught.
  */
 export async function deleteAccountAction(formData: FormData): Promise<void> {
   const session = await auth();

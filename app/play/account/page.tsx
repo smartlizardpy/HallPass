@@ -26,6 +26,10 @@ import { auth, signOut } from "@/app/lib/auth";
 import { Wordmark } from "@/app/components/Wordmark";
 import { getPlayerById, effectiveHandle } from "@/app/lib/players";
 import { store } from "@/app/lib/scoreboard";
+import { social } from "@/app/lib/social";
+import { UsernameCard } from "@/app/components/friends/UsernameCard";
+import { BadgeShelf } from "@/app/components/BadgeShelf";
+import { earnedBadges, lockedBadges, type BadgeStats } from "@/app/lib/badges";
 import { setHandleAction, deleteAccountAction } from "./actions";
 
 export const metadata: Metadata = {
@@ -104,12 +108,20 @@ export default async function PlayAccountPage({
   // standings read is guarded — a transient Neon hiccup must NOT 500 this
   // owner-only page, so on failure it degrades to [] and the empty state renders
   // (mirroring the resilient public leaderboard route).
-  const [player, standings] = await Promise.all([
+  const [player, standings, own, stats] = await Promise.all([
     getPlayerById(playerId),
     store.getPlayerStandings(playerId).catch((error) => {
       console.error(`account standings read failed for ${playerId}:`, error);
       return [];
     }),
+    // Guarded separately: if migration 007 has not been applied yet, the social
+    // columns do not exist. That must degrade the username card, not 500 the
+    // whole account page.
+    social.getOwnSocial(playerId).catch(() => null),
+    // Guarded on its own: badges are derived from tables that may not exist yet
+    // if 007/008 have not been applied. A missing badge shelf must not 500 the
+    // account page.
+    social.badgeStats(playerId).catch(() => null),
   ]);
   if (!player) return <NotSignedInCard />;
 
@@ -261,6 +273,44 @@ export default async function PlayAccountPage({
           </form>
         </section>
 
+        {/* BADGES ----------------------------------------------------------- */}
+        {stats && (
+          <section className="rounded-xl border border-border bg-surface p-6">
+            <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900">
+              Badges
+            </h2>
+            <p className="mt-2 text-sm text-muted">
+              Earned automatically from what you play, score and write.
+            </p>
+            <div className="mt-4">
+              <BadgeShelf
+                earned={earnedBadges(stats as BadgeStats)}
+                // Owner-only view, so the locked list is fine to show here.
+                locked={lockedBadges(stats as BadgeStats)}
+                emptyLabel="No badges yet — play a few games and they'll show up here."
+              />
+            </div>
+          </section>
+        )}
+
+        {/* USERNAME + FRIEND CODE ------------------------------------------- */}
+        {own && <UsernameCard initialUsername={own.username} />}
+
+        <section className="rounded-xl border border-border bg-surface p-6">
+          <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900">
+            Friends
+          </h2>
+          <p className="mt-2 text-sm text-muted">
+            See what your friends are playing, and manage your requests.
+          </p>
+          <Link
+            href="/play/friends"
+            className="mt-4 inline-block rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 transition hover:bg-surface-2"
+          >
+            Manage friends
+          </Link>
+        </section>
+
         {/* DANGER ZONE ------------------------------------------------------ */}
         <section className="rounded-xl border border-red-300 bg-red-50 p-6">
           <h2 className="text-sm font-black uppercase tracking-wide text-red-900">
@@ -269,7 +319,8 @@ export default async function PlayAccountPage({
           <p className="mt-2 text-sm text-red-900/80">
             Delete your account permanently. Your scores stay on the leaderboards
             but are <span className="font-bold">no longer tagged</span> to your
-            account.
+            account, and the name shown on them is replaced with
+            &ldquo;Deleted&rdquo;.
           </p>
           <form action={deleteAccountAction} className="mt-4">
             <label className="block text-sm font-semibold text-red-900">

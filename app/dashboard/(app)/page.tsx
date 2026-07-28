@@ -198,7 +198,7 @@ export default async function DashboardPage() {
 
       {/* Searches + community */}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Section title="Top searches" subtitle="last 30 days">
+        <Section title="Top searches" subtitle="people, last 30 days">
           {stats.searchTerms.length === 0 ? (
             <Empty hint="No searches in range." />
           ) : (
@@ -214,6 +214,36 @@ export default async function DashboardPage() {
                     <span className="text-muted">”</span>
                   </span>
                   <span className="font-mono tabular-nums text-muted">
+                    {fmt(t.value)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+
+        {/*
+          The one search panel that is directly actionable: every row is a game
+          somebody wanted and could not find, which is a shortlist of what to add
+          next. Counted in PEOPLE, and prefix chains are collapsed upstream, so a
+          row of 11 is eleven players rather than one player's eleven keystrokes.
+        */}
+        <Section title="Found nothing" subtitle="searches with no match">
+          {stats.zeroResultTerms.length === 0 ? (
+            <Empty hint="Every search matched a game." />
+          ) : (
+            <ul className="space-y-2.5">
+              {stats.zeroResultTerms.map((t) => (
+                <li
+                  key={t.label}
+                  className="flex items-center justify-between gap-3 text-sm"
+                >
+                  <span className="truncate">
+                    <span className="text-muted">“</span>
+                    <span className="font-semibold">{t.label}</span>
+                    <span className="text-muted">”</span>
+                  </span>
+                  <span className="font-mono tabular-nums text-amber-700">
                     {fmt(t.value)}
                   </span>
                 </li>

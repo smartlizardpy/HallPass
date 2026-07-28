@@ -29,10 +29,11 @@
  * closed (redirects an under-privileged caller before any work happens).
  */
 
-import { put } from "@vercel/blob";
+import { del, put } from "@vercel/blob";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
+import { CREDITS_CACHE_TAG, recordFirstUpload } from "@/app/lib/game-credits";
 import { games } from "@/app/lib/games";
 import {
   EXTERNAL_CACHE_TAG,
@@ -40,6 +41,10 @@ import {
   deleteExternalGame,
   getExternalGame,
 } from "@/app/lib/external-games-store";
+import {
+  MEDIA_CACHE_TAG,
+  deleteAllMediaForSlug,
+} from "@/app/lib/game-media";
 
 /** Matches a valid slug: starts alphanumeric, then alphanumerics/hyphens. */
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -145,7 +150,7 @@ async function generateCover(slug: string, externalUrl: string): Promise<string 
  * fallible step inside a `try`; the `redirect()` is issued OUTSIDE it.
  */
 export async function createExternalGameAction(formData: FormData): Promise<void> {
-  await requireRole("admin");
+  const { email: actorEmail } = await requireRole("admin");
 
   const title = String(formData.get("title") ?? "").trim();
   const externalUrl = String(formData.get("externalUrl") ?? "").trim();
@@ -220,6 +225,11 @@ export async function createExternalGameAction(formData: FormData): Promise<void
   }
   if (saveFailed) redirect(newErrorTarget("Could not save the external game. Try again."));
 
+  // Registering an external game IS its first upload — it is the moment the game
+  // appears on the site — so it earns a credit exactly like a bundle does.
+  await recordFirstUpload(slug, actorEmail);
+  revalidateTag(CREDITS_CACHE_TAG, { expire: 0 });
+
   revalidateExternal(slug);
   redirect("/dashboard/external-games?ok=created");
 }
@@ -243,6 +253,18 @@ export async function deleteExternalGameAction(formData: FormData): Promise<void
     await deleteExternalGame(slug);
   } catch {
     // Best-effort: the row is gone or never existed, which is the goal anyway.
+  }
+
+  // The game's screenshots go with it. `game_media.slug` is deliberately NOT a
+  // foreign key (games live in a static array plus this table, not one table), so
+  // nothing cascades — and because the slug is the only join key, re-creating a
+  // game with the same slug would otherwise inherit the deleted game's gallery.
+  try {
+    const blobPaths = await deleteAllMediaForSlug(slug);
+    await Promise.allSettled(blobPaths.map((path: string) => del(path)));
+    if (blobPaths.length > 0) revalidateTag(MEDIA_CACHE_TAG, { expire: 0 });
+  } catch {
+    // Best-effort cleanup; the game row is already gone, which is what users see.
   }
 
   revalidateExternal(slug);

@@ -27,6 +27,7 @@ import { list } from "@vercel/blob";
 import { requireRole } from "@/app/lib/auth";
 import { resolveGames } from "@/app/lib/games-store";
 import { store } from "@/app/lib/scoreboard";
+import { CoverImage } from "@/app/components/CoverImage";
 import type { BoardConfig } from "@/sdk/src/contract";
 import { DashHeader } from "../_ui/DashHeader";
 
@@ -111,13 +112,11 @@ export default async function GamesPage() {
               href={`/dashboard/games/${game.slug}`}
               className="group flex flex-col rounded-xl border border-border bg-surface p-3 transition hover:border-brand/40 hover:shadow-sm"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`/games/${game.slug}/cover.png`}
-                alt=""
-                loading="lazy"
-                className="aspect-video w-full rounded-lg bg-surface-2 object-cover"
-              />
+              {/* CoverImage, not a hardcoded path: external games have no
+                  `/games/<slug>/cover.png` and rendered broken here. */}
+              <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-surface-2">
+                <CoverImage game={game} initialClass="text-2xl" />
+              </div>
 
               <div className="mt-3 min-w-0">
                 <h2 className="truncate text-sm font-black tracking-tight text-foreground group-hover:text-brand">

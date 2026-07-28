@@ -29,6 +29,7 @@ import type {
   SubmitResult,
 } from "./contract";
 import type { ResolvedConfig } from "./config";
+import { createAchievements } from "./achievements";
 import {
   AUTH_COMPLETE_PATH,
   openAuthPopup,
@@ -493,6 +494,24 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
     }
   }
 
+  /**
+   * The achievement half of the surface, built here so it shares this instance's
+   * config object (so a later `ready({ game })` retargets it too), its mode, its
+   * same-origin test, and — crucially — its event sink, so `"achievement"` is
+   * delivered through the one registry `on`/`off` already talk to.
+   *
+   * Note `"achievement"` is deliberately NOT sticky, unlike `"ready"` and
+   * `"auth"`. Those describe a STATE a late listener still needs; an unlock is a
+   * MOMENT, and replaying it to every listener attached afterwards would re-toast
+   * a trophy the player already celebrated.
+   */
+  const achievements = createAchievements({
+    cfg,
+    mode,
+    sameOrigin: sameOriginApi,
+    emit: emitEvent,
+  });
+
   const api: HallPass = {
     version: SDK_MAJOR,
     mode,
@@ -505,6 +524,10 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
     signIn,
     signOut,
     setPlayerHandle,
+    unlock: achievements.unlock,
+    unlockMany: achievements.unlockMany,
+    progress: achievements.progress,
+    getAchievements: achievements.getAchievements,
     on(event: EventName, cb: (payload: unknown) => void): HallPass {
       try {
         if (typeof cb === "function") {

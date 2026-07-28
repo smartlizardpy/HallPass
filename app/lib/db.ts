@@ -96,3 +96,32 @@ export function isUnconfiguredDbError(error: unknown): boolean {
     error instanceof Error && /unconfigured|DATABASE_URL/i.test(error.message)
   );
 }
+
+/**
+ * True when `error` is Postgres complaining that a column or table does not
+ * exist (SQLSTATE `42703` undefined_column / `42P01` undefined_table).
+ *
+ * Why this exists: schema changes here are applied BY HAND (see
+ * `app/lib/scoreboard/migrations/` — `scripts/migrate.mjs` now tracks them, but
+ * nothing forces it to run before a deploy). So there is always a window where
+ * code that reads a new column is live against a database that does not have it
+ * yet. Without this check that window is a 500 on a public page; with it, a
+ * feature can catch its OWN missing-schema error and degrade to "unavailable"
+ * while every pre-existing surface keeps working.
+ *
+ * Use it ONLY to disable the feature whose schema is missing. It must never be
+ * used to swallow errors generally — a genuine outage has to stay loud, which is
+ * why this matches the two specific SQLSTATEs rather than any query failure.
+ *
+ * The `neon()` HTTP driver surfaces the SQLSTATE on `error.code`; the message
+ * test is a fallback for wrapped/re-thrown errors that lose the property.
+ */
+export function isMissingColumnError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: unknown }).code;
+  if (code === "42703" || code === "42P01") return true;
+  return (
+    error instanceof Error &&
+    /(column|relation) .* does not exist/i.test(error.message)
+  );
+}

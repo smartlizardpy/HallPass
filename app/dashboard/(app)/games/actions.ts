@@ -30,7 +30,9 @@
 import { del, put } from "@vercel/blob";
 import { unzipSync } from "fflate";
 import { redirect } from "next/navigation";
+import { revalidateTag } from "next/cache";
 import { requireRole } from "@/app/lib/auth";
+import { CREDITS_CACHE_TAG, recordFirstUpload } from "@/app/lib/game-credits";
 import {
   blobPathForAsset,
   blobPathForSlug,
@@ -241,7 +243,7 @@ function extractBundle(zipBytes: Uint8Array): Map<string, Uint8Array> | string {
  * banner.
  */
 export async function uploadHtmlAction(formData: FormData): Promise<void> {
-  await requireRole("admin");
+  const { email: actorEmail } = await requireRole("admin");
 
   const slug = String(formData.get("slug") ?? "").trim();
   const file = formData.get("htmlFile");
@@ -266,6 +268,15 @@ export async function uploadHtmlAction(formData: FormData): Promise<void> {
     saved = false;
   }
 
+  // Only on a SUCCESSFUL publish, and only the first one — `recordFirstUpload`
+  // is ON CONFLICT DO NOTHING, so re-uploading to fix a bug never re-attributes
+  // the game. Best-effort by contract: it swallows its own errors, because a
+  // missing credit line is cosmetic and a failed upload is not.
+  if (saved) {
+    await recordFirstUpload(slug, actorEmail);
+    revalidateTag(CREDITS_CACHE_TAG, { expire: 0 });
+  }
+
   redirect(
     saved
       ? gameTarget(slug, "ok", "Uploaded HTML")
@@ -279,7 +290,7 @@ export async function uploadHtmlAction(formData: FormData): Promise<void> {
  * File, so there is no File presence check.
  */
 export async function pasteHtmlAction(formData: FormData): Promise<void> {
-  await requireRole("admin");
+  const { email: actorEmail } = await requireRole("admin");
 
   const slug = String(formData.get("slug") ?? "").trim();
   const html = String(formData.get("html") ?? "");
@@ -297,6 +308,15 @@ export async function pasteHtmlAction(formData: FormData): Promise<void> {
     saved = true;
   } catch {
     saved = false;
+  }
+
+  // Only on a SUCCESSFUL publish, and only the first one — `recordFirstUpload`
+  // is ON CONFLICT DO NOTHING, so re-uploading to fix a bug never re-attributes
+  // the game. Best-effort by contract: it swallows its own errors, because a
+  // missing credit line is cosmetic and a failed upload is not.
+  if (saved) {
+    await recordFirstUpload(slug, actorEmail);
+    revalidateTag(CREDITS_CACHE_TAG, { expire: 0 });
   }
 
   redirect(
@@ -317,7 +337,7 @@ export async function pasteHtmlAction(formData: FormData): Promise<void> {
  * so the published set converges on exactly the bundle's contents.
  */
 export async function uploadBundleAction(formData: FormData): Promise<void> {
-  await requireRole("admin");
+  const { email: actorEmail } = await requireRole("admin");
 
   const slug = String(formData.get("slug") ?? "").trim();
   const file = formData.get("bundleFile");
@@ -361,6 +381,11 @@ export async function uploadBundleAction(formData: FormData): Promise<void> {
     saved = true;
   } catch {
     saved = false;
+  }
+
+  if (saved) {
+    await recordFirstUpload(slug, actorEmail);
+    revalidateTag(CREDITS_CACHE_TAG, { expire: 0 });
   }
 
   redirect(

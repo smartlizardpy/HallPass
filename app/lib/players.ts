@@ -102,6 +102,36 @@ export function effectiveHandle(p: { handle: string | null; name: string | null 
   return p.handle?.trim() || p.name?.trim() || "Player";
 }
 
+/**
+ * The display name for a PUBLIC surface: the chosen handle, else "@username",
+ * else a generic "Player".
+ *
+ * The difference from {@link effectiveHandle} is the whole point, and it is a
+ * privacy difference, not a cosmetic one: `effectiveHandle` falls back to
+ * `players.name`, which is the GOOGLE ACCOUNT NAME — for most people, their real
+ * name. That fallback is fine on owner-facing surfaces (the account page, "signed
+ * in as …"), where the viewer is the person themselves. It is not fine on a
+ * profile page at a guessable URL, in a friends list, or beside a comment, where
+ * it would publish a child's real name to anyone who can read the page.
+ *
+ * Use THIS on anything another player can see. Use `effectiveHandle` only where
+ * the viewer is the owner.
+ *
+ * Known related gap, out of scope here: `getTopScores` in
+ * `app/lib/scoreboard/store.ts` still falls back to the Google name on public
+ * leaderboards, so real names are already published there today. Same bug, its
+ * own fix.
+ */
+export function publicDisplayName(p: {
+  handle: string | null;
+  username: string | null;
+}): string {
+  const handle = p.handle?.trim();
+  if (handle) return handle;
+  const username = p.username?.trim();
+  return username ? `@${username}` : "Player";
+}
+
 function mapPlayer(row: Row): Player {
   return {
     id: String(row.id),
@@ -178,6 +208,13 @@ export async function setPlayerHandle(id: string, handle: string): Promise<void>
 }
 
 /**
+ * The handle a deleted player's historical scores are rewritten to. Fits the
+ * anonymous-submission charset in `scoreboard/guard.ts` (`[A-Za-z0-9 _#-]`, ≤12)
+ * so it renders like any other leaderboard row.
+ */
+export const DELETED_PLAYER_HANDLE = "Deleted";
+
+/**
  * Delete a player's identity row by Google subject id. Returns `true` if a row
  * was removed, `false` for an unknown id (the `RETURNING id` lets us distinguish
  * the two without a follow-up read). `id` is interpolated as a bound VALUE, never
@@ -189,8 +226,28 @@ export async function setPlayerHandle(id: string, handle: string): Promise<void>
  * each of their scores — their historical entries simply revert to ANONYMOUS
  * (the same state as a never-tagged score) rather than disappearing from the
  * leaderboard.
+ *
+ * ERASURE, and why the first statement is load-bearing:
+ *   De-tagging alone does NOT erase the person. `scores.handle` is `TEXT NOT
+ *   NULL` — a SNAPSHOT of the display name taken at submit time — and
+ *   `getTopScores` falls back to it once `player_id` is null. For a player who
+ *   never set a handle, that snapshot is their Google `name`, i.e. very often
+ *   their REAL NAME. So "delete my account" used to leave the person's real name
+ *   on every leaderboard they ever entered, permanently and unreachably (once
+ *   `player_id` is null there is no key left to find those rows by). This rewrite
+ *   is the only chance to do it.
+ *
+ * Order is deliberate and NOT interchangeable. The `neon()` HTTP driver has no
+ * cross-statement transaction, so these two statements can interleave with a
+ * failure. Anonymising FIRST means the worst case is "scores anonymised but the
+ * account still exists" — recoverable, and the user can simply retry. Deleting
+ * first would null every `player_id` and leave the real names permanently
+ * orphaned with no key to reach them: an unrecoverable privacy failure.
  */
 export async function deletePlayer(id: string): Promise<boolean> {
+  await sql`
+    UPDATE scores SET handle = ${DELETED_PLAYER_HANDLE} WHERE player_id = ${id}
+  `;
   const rows = await sql`
     DELETE FROM players WHERE id = ${id} RETURNING id
   `;

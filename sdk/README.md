@@ -2,6 +2,8 @@
 
 A tiny, dependency-free leaderboard client for browser games. Drop in two
 `<script>` tags and call `HallPass.submitScore(finalScore)` when the game ends.
+Achievements ride along on the same bundle: `HallPass.unlock("first-blood")`, and
+one `"achievement"` event to hang a toast on.
 
 **Golden rule:** every method always resolves and never throws. In a sandboxed
 preview with no network or storage the SDK goes _inert_ and quietly no-ops
@@ -26,12 +28,13 @@ return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
 w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
 submitScore:e("submitScore"),getScores:e("getScores"),
 getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
-signIn:function(){},signOut:function(){},
+unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
+getAchievements:e("getAchievements"),signIn:function(){},signOut:function(){},
 getHandle:function(){return null},setHandle:function(v){return v},
 on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
 off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
 setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
-q.splice(0).forEach(function(c){c.r(c.n==="getScores"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:{ok:false,reason:"inert"})})},2000)})(window);
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:{ok:false,reason:"inert"})})},2000)})(window);
 </script>
 <script src="https://hallpass.gg/sdk/v1/hallpass.js" data-game="YOUR-SLUG" defer></script>
 ```
@@ -138,12 +141,64 @@ attached to the account right after sign-in — no extra call needed. This is
 this-session only by design: the tokens live in memory and die with the page (on
 a shared computer the next player can never absorb a previous player's scores).
 
+### Achievements (optional, same-origin)
+
+Achievements are provisioned by an admin, one catalogue per game, and addressed
+by `key`. Show a toast with three lines:
+
+```js
+HallPass.on("achievement", (a) => showToast(a.name, a.icon));
+
+// somewhere in the game:
+HallPass.unlock("first-blood");
+```
+
+The `"achievement"` event fires **only when something is newly earned**, never
+for an achievement the player already holds — so you can call `unlock()` as often
+as you like and the player is congratulated exactly once. `name` and `icon` are
+always filled in, so a toast can render straight from the payload.
+
+```js
+// One achievement. Idempotent: calling it twice is not an error.
+const r = await HallPass.unlock("first-blood");
+// { ok: true, key: "first-blood", unlocked: true, alreadyUnlocked: false,
+//   progress: 1, target: 1, achievement: { name, icon, points, ... } }
+
+// Several at once — ONE request.
+await HallPass.unlockMany(["level-1", "no-damage", "speedrun"]);
+
+// A counter. The value is ABSOLUTE ("now at 57"), never a delta ("+3").
+HallPass.progress("zombies-slain", killCount);
+
+// The player's shelf, for a UI:
+const list = await HallPass.getAchievements();
+// [{ key, name, description, icon, points, target, secret,
+//    progress, unlocked, unlockedAt }, ...]
+```
+
+`progress()` is **safe to call every frame.** Calls are coalesced per key on a ~1s
+trailing edge, so a 60fps loop sends about one request per second, and whatever is
+pending is flushed with a beacon when the page is hidden or closed — the final
+value is never lost. If you want a value sent right now (at game over, say), pass
+`{ flush: true }`.
+
+Achievements need a signed-in player and a same-origin embed, because they attach
+to an account. In a cross-origin embed or a sandboxed preview every call resolves
+`{ ok: false, reason: "signed-out" | "inert" }` and no request is made — nothing
+throws, and the game plays on regardless.
+
+> **Games embedded before v1.2.0** carry an older inline stub that does not know
+> these methods. They still work — just call them **after `ready()` resolves**
+> (`await HallPass.ready()`), by which point the real SDK has replaced the stub.
+> Re-paste the snippet above to get early-call queueing for them too.
+
 ### React to events
 
 ```js
 HallPass
   .on("submitted", (r) => console.log("rank", r.rank))
   .on("auth", ({ player }) => console.log("signed in?", !!player))
+  .on("achievement", (a) => showToast(a.name, a.icon))
   .on("error", (r) => console.warn("submit failed", r.reason));
 ```
 
@@ -162,11 +217,23 @@ HallPass
 | `signIn(opts?)`                 | `void`                   | Opens a small same-origin popup for `/play/signin`; the game is **never reloaded**. Must be called from a click handler; a blocked popup falls back to a top-level redirect. `opts.redirectTo` → `callbackUrl`. No-op when inert. |
 | `signOut(opts?)`                | `void`                   | Opens a same-origin popup for `/play/signout`; the game is **never reloaded**. Same click-handler / fallback rules as `signIn`. No-op when inert. |
 | `setPlayerHandle(handle)`       | `Promise<PlayerIdentity \| null>` | Persist the signed-in player's chosen handle; resolves the updated identity, else `null`. |
-| `on(event, cb)` / `off(...)`    | `HallPass`               | Events: `ready`, `scores`, `submitted`, `error`, `auth`. `auth` fires `{ player }` when sign-in/out completes (sticky). Chainable. |
+| `unlock(key, opts?)`            | `Promise<UnlockResult>`  | Earn one achievement outright. Idempotent — an already-held one resolves `{ ok: true, unlocked: false, alreadyUnlocked: true }`. `opts`: `{ game? }`. |
+| `unlockMany(keys, opts?)`       | `Promise<UnlockResult[]>` | Earn several in ONE request; results come back in the order the keys were given. |
+| `progress(key, value, opts?)`   | `Promise<UnlockResult>`  | Report ABSOLUTE progress. Coalesced per key (~1s) and flushed on page hide. `opts`: `{ game?, flush? }`. |
+| `getAchievements(opts?)`        | `Promise<PlayerAchievement[]>` | This player's view of the game's achievements. `[]` on any failure. `opts`: `{ game? }`. |
+| `on(event, cb)` / `off(...)`    | `HallPass`               | Events: `ready`, `scores`, `submitted`, `error`, `auth`, `achievement`. `auth` fires `{ player }` when sign-in/out completes (sticky). `achievement` fires the earned achievement — only on a NEW unlock, never sticky. Chainable. |
 
 ### `submitScore` reasons
 
 `no-game` · `bad-score` · `inert` · `network` · `rate-limited` · `http`.
+
+### `unlock` / `unlockMany` / `progress` reasons
+
+`no-game` · `bad-request` · `signed-out` · `unknown-achievement` · `inert` ·
+`network` · `rate-limited` · `http`.
+
+`signed-out` covers every cross-origin embed (there is no session cookie to write
+against); `unknown-achievement` means that key is not provisioned for this game.
 
 The window global is installed as both `window.HallPass` and the alias
 `window.HP`.

@@ -174,6 +174,27 @@ export async function resolveGame(slug: string): Promise<Game | undefined> {
 }
 
 /**
+ * Whether `slug` names a game in the RESOLVED catalogue — static entries AND
+ * dashboard-created external games.
+ *
+ * Use this, not a check against the static `games` array, whenever a write is
+ * being gated on "is this a real game". `app/lib/favorites.ts` builds its
+ * `KNOWN_SLUGS` set from the static array at module load, which is why a
+ * signed-in player favouriting an EXTERNAL game has it silently dropped
+ * server-side while localStorage happily keeps it. Do not reproduce that.
+ *
+ * Cheap: `resolveGames()` is `unstable_cache`d, so this is a cache hit rather
+ * than a query. It inherits that read's fail-soft behaviour, which has a
+ * consequence worth knowing — during a Neon outage the external half resolves to
+ * `[]`, so a legitimate external slug reads as unknown. Callers should prefer a
+ * retryable "try again" over writing an unverified slug; the column's own
+ * `CHECK (slug ~ '^[a-z0-9][a-z0-9-]*$')` is the structural backstop.
+ */
+export async function isResolvedSlug(slug: string): Promise<boolean> {
+  return (await resolveGames()).some((g) => g.slug === slug);
+}
+
+/**
  * Sorted, unique category list derived from the RESOLVED catalogue — NOT the
  * static `categories`, because `category` is itself override-editable (a renamed
  * or re-bucketed game must show up under its new category in filters/nav).

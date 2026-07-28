@@ -13,6 +13,19 @@ const META_CACHE = "hp-meta";
 // could collide with a real route.
 const GAMES_VERSION_KEY = "https://hallpass.local/__sw__/games-version";
 
+// Paths whose responses are PER-VIEWER and must never sit in a shared cache.
+// `hp-runtime` is deliberately not keyed by BUILD_ID and is shared by everyone
+// using the browser profile, so a cached `/play/account` is one user's email
+// waiting to be served to the next. Used in two places: the fetch handler skips
+// these entirely, and `activate` purges anything an EARLIER version of this
+// service worker already stored.
+function isPrivatePath(pathname) {
+  return (
+    pathname.startsWith("/play/account") ||
+    pathname.startsWith("/u/")
+  );
+}
+
 // A response is safe to cache.put only if it's a non-redirected,
 // same-origin (basic/default) success. Avoids redirect-poisoning the cache —
 // some browsers refuse to serve redirected responses for iframe src.
@@ -63,6 +76,7 @@ self.addEventListener("activate", (event) => {
           .filter((k) => k.startsWith("hp-static-") && k !== STATIC_CACHE)
           .map((k) => caches.delete(k)),
       );
+      await purgePrivateEntries();
       await self.clients.claim();
     })(),
   );
@@ -71,6 +85,39 @@ self.addEventListener("activate", (event) => {
     refreshAllGameHtml().catch(() => {}),
   );
 });
+
+/**
+ * Evict per-viewer responses an earlier service worker already cached.
+ *
+ * Adding `/play/account` and `/u/` to the never-intercept list stops NEW leaks,
+ * but it cannot undo old ones: `hp-runtime` survives deploys by design, so a
+ * device that visited the account page before this shipped still holds that
+ * user's email and would still be served it on the next offline navigation.
+ * Retroactive, runs once per activation, and is cheap — a cache-key enumeration
+ * plus a delete for the rare match.
+ */
+async function purgePrivateEntries() {
+  try {
+    const cache = await caches.open(RUNTIME_CACHE);
+    const requests = await cache.keys();
+    await Promise.all(
+      requests
+        .filter((req) => {
+          try {
+            const url = new URL(req.url);
+            return (
+              url.origin === self.location.origin && isPrivatePath(url.pathname)
+            );
+          } catch {
+            return false;
+          }
+        })
+        .map((req) => cache.delete(req)),
+    );
+  } catch {
+    /* best-effort: never block activation on cache housekeeping */
+  }
+}
 
 // ---------- fetch: same-origin only. ----------
 self.addEventListener("fetch", (event) => {
@@ -81,10 +128,25 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return; // PostHog/ads/etc.
 
   // Never intercept admin/dashboard/api — those need the network.
+  //
+  // PER-VIEWER PAGES ARE ALSO EXCLUDED, and that is a privacy requirement, not a
+  // freshness one. `networkFirst` below writes every HTML navigation into
+  // RUNTIME_CACHE, which is deliberately NOT keyed by BUILD_ID and therefore
+  // survives deploys — and the cache is shared by everyone using the browser
+  // profile. `/play/account` renders the signed-in player's EMAIL, and `/u/...`
+  // renders a specific person's profile. Caching either means the next user of a
+  // shared school machine can be served the previous user's page from the cache
+  // the moment the network hiccups. Any future route that renders one specific
+  // player's data belongs in this list.
+  //
+  // `/play/friends` is intentionally NOT here: its server shell is PII-free and
+  // all viewer data arrives from `/api/` (never intercepted), so it can be
+  // precached and still work offline without leaking anything.
   if (
     url.pathname.startsWith("/admin") ||
     url.pathname.startsWith("/dashboard") ||
     url.pathname.startsWith("/api/") ||
+    isPrivatePath(url.pathname) ||
     url.pathname === "/games-version"
   ) {
     return;
@@ -140,10 +202,35 @@ async function networkFirst(req) {
     }
     return res;
   } catch {
+    // Exact first, then loose. `caches.match` is exact on the query string by
+    // default and precached documents never carry one, so a navigation to
+    // `/?q=racing` (the store page's header search) would otherwise miss its own
+    // cached document and fall through to the offline page.
+    //
+    // Exact-BEFORE-loose, not loose-only: `caches.match` walks caches in creation
+    // order, `hp-static-<id>` before `hp-runtime`, so a loose match would let the
+    // precached bare `/` shadow an exact `/?q=racing` that an earlier online visit
+    // wrote into the runtime cache. Widening only on miss keeps "serve the
+    // document you actually cached" true.
+    //
+    // Navigations ONLY. This must never reach `networkFirstWithStaticFallback`,
+    // where exact matching of `/game-html/<slug>/` is load-bearing. Nor can it
+    // cross-match private pages: `/play/account`, `/u/`, `/admin`, `/dashboard`,
+    // `/api/` and `/games-version` all return before this strategy is reached.
     const cached = await caches.match(req);
     if (cached) return cached;
-    const home = await caches.match("/");
-    if (home) return home;
+    const loose = await caches.match(req, { ignoreSearch: true });
+    if (loose) return loose;
+
+    // The precached offline document. Note the pathname still has to match
+    // exactly above, so `/u/someone` and `/game/<slug>/` (the trailing-slash form
+    // `skipTrailingSlashRedirect: true` keeps alive) correctly land here rather
+    // than being answered with the catalog — which is what this chain was
+    // rewritten for. There is deliberately no `/` fallback any more: `/` is
+    // precached, so a request for it is already satisfied by the exact match.
+    const offline = await caches.match("/offline");
+    if (offline) return offline;
+
     // Synthesized offline page — Response.error() shows the browser's hard
     // network error and breaks back-button navigation.
     return new Response(

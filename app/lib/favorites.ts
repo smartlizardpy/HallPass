@@ -29,27 +29,44 @@
 
 import "server-only";
 import { sql } from "@/app/lib/db";
-import { games } from "@/app/lib/games";
+import { resolveGames } from "@/app/lib/games-store";
 
-/** The set of real game slugs, built once at module load from the static catalogue. */
-const KNOWN_SLUGS: ReadonlySet<string> = new Set(games.map((g) => g.slug));
-
-/** True when `slug` names a real game in the static catalogue. */
-export function isKnownSlug(slug: string): boolean {
-  return KNOWN_SLUGS.has(slug);
+/**
+ * The set of slugs a favorite may name, from the RESOLVED catalogue.
+ *
+ * This used to be built at module load from the STATIC `games` array, which
+ * silently dropped every external (dashboard-created) game: a signed-in player
+ * could favorite one, see the heart fill from localStorage, and have the write
+ * discarded server-side with no error anywhere — so the favorite vanished on
+ * their next device. `resolveGames()` merges static + overrides + external and is
+ * `unstable_cache`d, so this is a cache hit rather than a query.
+ *
+ * Fail-soft consequence worth knowing: during a Neon outage the external half
+ * resolves to `[]`, so an external slug reads as unknown and its write is
+ * skipped. The alternative — writing unverified slugs — would let this table be
+ * used as arbitrary key/value storage, which is the invariant this guard exists
+ * to protect.
+ */
+async function knownSlugs(): Promise<ReadonlySet<string>> {
+  return new Set((await resolveGames()).map((g) => g.slug));
 }
 
 /**
  * Validate + de-duplicate a batch of slugs for a bulk write: drop non-strings,
- * unknown slugs, and duplicates while PRESERVING order. Pure (no DB) so the merge
- * contract is unit-testable. Used by {@link mergeFavorites}.
+ * unknown slugs, and duplicates while PRESERVING order.
+ *
+ * Takes the known-slug set as an ARGUMENT rather than reaching for it, so this
+ * stays pure and unit-testable while the set itself became async.
  */
-export function normalizeFavoriteSlugs(slugs: string[]): string[] {
+export function normalizeFavoriteSlugs(
+  slugs: string[],
+  known: ReadonlySet<string>,
+): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const slug of slugs) {
     if (typeof slug !== "string") continue;
-    if (!isKnownSlug(slug)) continue;
+    if (!known.has(slug)) continue;
     if (seen.has(slug)) continue;
     seen.add(slug);
     out.push(slug);
@@ -69,7 +86,8 @@ export async function listFavorites(playerId: string): Promise<string[]> {
       WHERE player_id = ${playerId}
       ORDER BY created_at DESC
     `;
-    return rows.map((row) => String(row.slug)).filter(isKnownSlug);
+    const known = await knownSlugs();
+    return rows.map((row) => String(row.slug)).filter((slug) => known.has(slug));
   } catch (error) {
     console.error("listFavorites failed:", error);
     return [];
@@ -83,7 +101,7 @@ export async function listFavorites(playerId: string): Promise<string[]> {
  * not thrown.
  */
 export async function addFavorite(playerId: string, slug: string): Promise<void> {
-  if (!isKnownSlug(slug)) return;
+  if (!(await knownSlugs()).has(slug)) return;
   try {
     await sql`
       INSERT INTO player_favorites (player_id, slug)
@@ -119,7 +137,7 @@ export async function removeFavorite(playerId: string, slug: string): Promise<vo
  * favorites keep their original `created_at`. Fail-soft → `[]`.
  */
 export async function mergeFavorites(playerId: string, slugs: string[]): Promise<string[]> {
-  const valid = normalizeFavoriteSlugs(slugs);
+  const valid = normalizeFavoriteSlugs(slugs, await knownSlugs());
   try {
     if (valid.length > 0) {
       await sql`

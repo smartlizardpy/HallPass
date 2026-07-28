@@ -104,6 +104,13 @@ const slugs = readdirSync(gamesDir).filter((name) => {
 
 const pageRoutes = new Set([
   "/",
+  // The SW's offline fallback document. It must be precached UNCONDITIONALLY —
+  // it is what `networkFirst` serves when a navigation misses everything else,
+  // so if it were ever absent from the manifest the fallback silently reverts to
+  // the synthesized bare-HTML response. `/offline` is also picked up from the
+  // prerender manifest below; listing it here means a prerender-manifest hiccup
+  // can never drop it.
+  "/offline",
   "/manifest.webmanifest",
   "/icon-192.png",
   "/icon-512.png",

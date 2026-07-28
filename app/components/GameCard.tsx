@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Game } from "../lib/games";
+import { CoverImage } from "./CoverImage";
 
 export function GameCard({
   game,
@@ -9,6 +10,11 @@ export function GameCard({
   onToggleFavorite,
 }: {
   game: Game;
+  /**
+   * INSTANT PLAY, bypassing the store page. Wired to the hover ▶ only — a plain
+   * card click now navigates to `/game/<slug>`, which is a real page with the
+   * description, screenshots, leaderboard and comments on it.
+   */
   onPlay: (slug: string) => void;
   size?: "sm" | "md" | "lg";
   isFavorite?: boolean;
@@ -17,46 +23,22 @@ export function GameCard({
   const aspect =
     size === "lg" ? "aspect-[16/10]" : "aspect-square";
   return (
-    // Root is a DIV: the full-card play control and the favorite heart are
-    // SIBLINGS, so we never nest one interactive element inside another.
-    // The play control is a real <a href="/game/slug"> so search engines (and
-    // middle-click / open-in-new-tab) can reach every game page; a normal left
-    // click opens the in-app player overlay instead of a full navigation.
+    // Root is a DIV so the card link, the hover ▶ and the favorite heart are all
+    // SIBLINGS — an interactive element is never nested inside another.
     <div className="card group relative flex flex-col text-left">
+      {/* The whole card is one plain link to the store page. It used to
+          preventDefault and open the player instead, which made the href
+          decorative; now the navigation is the actual behaviour, so
+          middle-click, open-in-new-tab and crawlers all agree with the click. */}
       <Link
         href={`/game/${game.slug}`}
         prefetch={false}
-        onClick={(e) => {
-          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-          e.preventDefault();
-          onPlay(game.slug);
-        }}
         className="flex flex-col text-left"
       >
         <div className={`relative overflow-hidden rounded-3xl bg-zinc-900 ${aspect}`}>
-          {game.externalUrl && !game.coverUrl ? (
-            // External game with no cover art: render a CSS gradient placeholder
-            // (using the game's gradient stops) instead of a broken <img>. The
-            // title initial is centred so the card still reads at a glance.
-            <div
-              className="card-art absolute inset-0 flex items-center justify-center"
-              style={{
-                backgroundImage: `linear-gradient(135deg, ${game.gradient[0]}, ${game.gradient[1]})`,
-              }}
-            >
-              <span className="text-4xl font-black text-white/90 drop-shadow-[0_2px_6px_rgba(0,0,0,0.4)]">
-                {game.title.charAt(0)}
-              </span>
-            </div>
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={game.coverUrl ?? `/games/${game.slug}/cover.png`}
-              alt={game.title}
-              className="card-art absolute inset-0 h-full w-full object-cover"
-              loading="lazy"
-            />
-          )}
+          {/* Cover art + its fallback chain live in CoverImage — `card-art` is
+              what the globals.css hover-zoom hooks onto. */}
+          <CoverImage game={game} className="card-art" />
 
           {/* badges overlay */}
           <div className="pointer-events-none absolute left-2 top-2 flex gap-1">
@@ -71,15 +53,6 @@ export function GameCard({
               </span>
             )}
           </div>
-
-          {/* hover play button */}
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all duration-200 group-hover:bg-black/20 group-hover:opacity-100">
-            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-brand shadow-2xl ring-4 ring-white/30">
-              <svg width="18" height="18" viewBox="0 0 14 14" fill="currentColor">
-                <path d="M3 1.5v11l10-5.5z" />
-              </svg>
-            </span>
-          </div>
         </div>
 
         {/* meta */}
@@ -92,6 +65,55 @@ export function GameCard({
           </p>
         </div>
       </Link>
+
+      {/* Hover ▶ — instant play, skipping the store page.
+
+          It is a real <button> and a SIBLING of the card link, not a span inside
+          it: a nested button would be invalid HTML and unreachable by keyboard.
+          The wrapper is anchored `inset-x-0 top-0` with the SAME aspect ratio as
+          the cover, so it overlays the artwork exactly without having to know the
+          meta strip's height. Only the button itself takes pointer events, so the
+          rest of the artwork still belongs to the card link.
+
+          `group-focus-within` alongside `group-hover` is what makes it reachable
+          by keyboard at all — previously the ▶ was `pointer-events-none` and
+          purely decorative, so there was no keyboard path to instant play.
+
+          `hidden [@media(hover:hover)]:flex` — NOT `opacity-0` — is what keeps it
+          off touch devices, and the distinction is load-bearing. `opacity: 0`
+          does not remove an element from hit testing, so an opacity-hidden button
+          with `pointer-events-auto` would sit invisible but tappable dead centre
+          over the artwork: on a phone, tapping the middle of any card would
+          instant-play instead of opening the store page, silently defeating this
+          whole change on the majority of traffic. `display: none` genuinely
+          removes it. On touch, tapping the card goes to the store page — the
+          behaviour Poki and Roblox both use. */}
+      <div
+        className={`pointer-events-none absolute inset-x-0 top-0 z-10 hidden items-center justify-center rounded-3xl bg-black/0 opacity-0 transition-all duration-200 group-hover:bg-black/20 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:hover)]:flex ${aspect}`}
+      >
+        <button
+          type="button"
+          aria-label={`Play ${game.title} now`}
+          title={`Play ${game.title} now`}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onPlay(game.slug);
+          }}
+          style={{ touchAction: "manipulation" }}
+          className="pointer-events-auto flex h-14 w-14 items-center justify-center rounded-full bg-white text-brand shadow-2xl ring-4 ring-white/30 transition hover:scale-105 active:scale-95 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 14 14"
+            fill="currentColor"
+            className="pointer-events-none"
+          >
+            <path d="M3 1.5v11l10-5.5z" />
+          </svg>
+        </button>
+      </div>
 
       {/* Favorite heart — sibling of the play button, top-RIGHT (badges stay
           top-left). Only rendered when a handler is supplied, so cards without

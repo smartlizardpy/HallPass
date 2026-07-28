@@ -6,5 +6,5 @@
  * release; bump `SDK_MAJOR` (and move to a new `/sdk/vN/` path) only on a
  * breaking change.
  */
-export const SDK_VERSION = "1.1.0";
+export const SDK_VERSION = "1.2.0";
 export const SDK_MAJOR = "1";

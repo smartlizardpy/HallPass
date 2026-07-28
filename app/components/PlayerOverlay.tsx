@@ -1,9 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import posthog from "posthog-js";
 import type { Game } from "../lib/games";
+import { recordPlayServerSide, recordRecentPlay } from "../lib/personalization";
 
+/**
+ * The fullscreen game player.
+ *
+ * THIS COMPONENT OWNS PLAY TELEMETRY. It used to be fired by `Arcade.setPlaying`,
+ * which meant it only fired for plays that started from a catalog card — a direct
+ * link, a shared URL, or a PWA launch went through `initialPlaying` instead and
+ * fired `recordRecentPlay` but NOT `game_started`. So `getGamePlayCounts()` in
+ * `app/lib/stats.ts`, which counts `game_started`, has been under-reporting every
+ * one of those. Firing from the overlay makes it exactly once, from one place,
+ * for every entry path.
+ *
+ * Expect a step change in the plays chart when this ships — it is the previously
+ * uncounted plays appearing, not a traffic spike. Worth annotating in PostHog.
+ */
 export function PlayerOverlay({
   game,
   onClose,
@@ -47,10 +62,29 @@ export function PlayerOverlay({
     setMaybeBlocked(false);
   };
 
+  /**
+   * User-initiated close (Esc, ✕, backdrop). Goes through history rather than
+   * calling `onClose` directly: opening pushed an entry, so closing must POP it,
+   * or the entry would linger and the next Back would leave the page instead of
+   * doing nothing visible. The `popstate` listener below is what actually clears
+   * the state, so both the button and the Back gesture take one identical path.
+   */
+  const closingRef = useRef(false);
+  const requestClose = useCallback(() => {
+    // Guarded: `history.back()` is async, so React has not unmounted this overlay
+    // by the time a second Esc or ✕ press lands. Without the latch, two quick
+    // presses pop TWO entries and the user is thrown back past the page they
+    // opened the game from. The latch is released when the overlay actually
+    // closes (the effect below reruns with a null slug).
+    if (closingRef.current) return;
+    closingRef.current = true;
+    window.history.back();
+  }, []);
+
   useEffect(() => {
     if (!game) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") requestClose();
     };
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
@@ -58,7 +92,66 @@ export function PlayerOverlay({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
     };
-  }, [game, onClose]);
+  }, [game, requestClose]);
+
+  /**
+   * Play telemetry + a history entry, keyed on the SLUG rather than the `game`
+   * object so a re-render that produces a new object identity does not re-fire.
+   *
+   * The close event is emitted from the cleanup, using values captured in the
+   * effect body — reading `game` there would see the NEXT value (or null) by the
+   * time cleanup runs, so a close would be attributed to the wrong game or
+   * dropped entirely.
+   */
+  const slug = game?.slug ?? null;
+  const title = game?.title;
+  const categoryName = game?.category;
+  useEffect(() => {
+    if (!slug) {
+      // Overlay is closed: re-arm the close latch for the next open.
+      closingRef.current = false;
+      return;
+    }
+
+    recordRecentPlay(slug);
+    // Server-side play history, which is what makes "friends who play this"
+    // answerable — `hp:recent` above is device-local and never synced. Debounced
+    // per slug and a no-op for guests.
+    recordPlayServerSide(slug);
+    posthog.capture("game_started", {
+      game_slug: slug,
+      game_title: title,
+      game_category: categoryName,
+    });
+
+    // A history entry so Back closes the game, uniformly from every page.
+    //
+    // The URL is deliberately left UNCHANGED. A `?play=1`-style URL would be
+    // shareable, but it would also have to auto-open on load, and `caches.match`
+    // is exact on the query string — so a shared link opened offline would miss
+    // the precached document for the page it names. Not worth it for a link
+    // nobody asked for; `/game/<slug>` already shares fine.
+    //
+    // `pushState` rather than `router.push`: the route's SERVER output cannot
+    // differ (nothing here reads the query), so an RSC round trip buys nothing.
+    window.history.pushState({ hpOverlay: slug }, "");
+
+    const onPop = () => onClose();
+    window.addEventListener("popstate", onPop);
+
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      posthog.capture("game_closed", {
+        game_slug: slug,
+        game_title: title,
+        game_category: categoryName,
+      });
+    };
+    // `onClose` is intentionally excluded: callers pass a stable useCallback, and
+    // including it would re-run the whole effect (re-firing game_started and
+    // pushing a second history entry) on any parent re-render that broke that.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, title, categoryName]);
 
   const handleFullscreen = () => {
     const el = frameWrapRef.current;
@@ -79,7 +172,7 @@ export function PlayerOverlay({
     <div
       className="fixed inset-0 z-[100] flex flex-col bg-zinc-900/80 backdrop-blur-md"
       style={{ height: "100dvh" }}
-      onClick={onClose}
+      onClick={requestClose}
     >
       {/* Top bar */}
       <div
@@ -142,7 +235,7 @@ export function PlayerOverlay({
           </button>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             aria-label="Close game"
             className="inline-flex h-11 min-w-11 items-center justify-center rounded-full bg-brand px-4 text-xs font-extrabold text-white transition hover:bg-brand-600 sm:h-auto sm:min-w-0 sm:py-2"
           >

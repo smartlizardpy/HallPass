@@ -36,6 +36,12 @@ import { isUnconfiguredDbError } from "@/app/lib/db";
 import { listGameFiles } from "@/app/lib/game-html-blob";
 import { resolveCategories, resolveGame, resolveTags } from "@/app/lib/games-store";
 import { store } from "@/app/lib/scoreboard";
+import { getGameMedia, mediaPublicPath } from "@/app/lib/game-media";
+import {
+  MAX_MEDIA_PER_SLUG,
+  MAX_MEDIA_PER_UPLOAD,
+} from "@/app/lib/image-meta";
+import { CoverImage } from "@/app/components/CoverImage";
 import type { BoardConfig } from "@/sdk/src/contract";
 import { DashHeader } from "../../_ui/DashHeader";
 import { Section } from "../../_ui/Section";
@@ -48,6 +54,16 @@ import {
   uploadHtmlAction,
 } from "../actions";
 import { clearGameOverrideAction, setGameTagsAction, updateGameAction } from "./actions";
+import {
+  deleteMediaAction,
+  moveMediaAction,
+  setMediaAltAction,
+  uploadMediaAction,
+} from "./media-actions";
+import { AchievementPanel } from "./_ui/AchievementPanel";
+import { setGameCreditAction } from "./credit-actions";
+import { getGameCredit } from "@/app/lib/game-credits";
+import { listUsers } from "@/app/lib/dashboard-users";
 
 export const metadata: Metadata = {
   title: "Game",
@@ -89,10 +105,18 @@ export default async function GameControlPage({
   const ok = asString(sp.ok);
   const error = asString(sp.error);
 
-  const [categories, tagList, customFileCount] = await Promise.all([
+  // `getGameMedia` is already fail-soft (returns [] on any DB failure), so it
+  // needs no try/catch and does NOT join the `dbUnconfigured` branch below —
+  // an unreachable database simply shows an empty Media panel.
+  const [categories, tagList, customFileCount, media, credit, admins] = await Promise.all([
     resolveCategories(),
     resolveTags(),
     countCustomFiles(slug),
+    getGameMedia(slug),
+    getGameCredit(slug),
+    // Admins, offered as suggestions for the credit. Fail-soft: a Neon blip should
+    // cost the dropdown, not the page.
+    listUsers().catch(() => []),
   ]);
   const tagSuggestions = tagList.map((t) => t.tag);
 
@@ -140,12 +164,11 @@ export default async function GameControlPage({
       {/* HERO */}
       <Section>
         <div className="flex flex-wrap items-center gap-5">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`/games/${slug}/cover.png`}
-            alt=""
-            className="aspect-video w-44 shrink-0 rounded-lg bg-surface-2 object-cover"
-          />
+          {/* Was a hardcoded `/games/<slug>/cover.png`, which 404s for external
+              games — the ones whose thumbnail is most worth seeing here. */}
+          <div className="relative aspect-video w-44 shrink-0 overflow-hidden rounded-lg bg-surface-2">
+            <CoverImage game={game} initialClass="text-3xl" />
+          </div>
           <div className="min-w-0">
             <h2 className="text-xl font-black tracking-tight">{game.title}</h2>
             <p className="mt-1 text-sm text-muted">{game.category}</p>
@@ -248,6 +271,68 @@ export default async function GameControlPage({
       </Section>
 
       {/* TAGS */}
+      <Section title="Credit" subtitle="Who made this game">
+        {/*
+          ONE name. This started as two — "created by" and "added by" — on the
+          theory that one person writes a game and another does the HallPass
+          integration. Everybody here writes their own games, so the two fields
+          always wanted the same answer, and a form with two boxes that always
+          want the same answer is a form people fill in wrong.
+
+          Free text with the admins offered as suggestions rather than a hard
+          select: a game can come from somebody who has no account here, and a
+          select would make those games unattributable.
+        */}
+        <form action={setGameCreditAction} className="space-y-3">
+          <input type="hidden" name="slug" value={slug} />
+          <input
+            type="text"
+            name="creditName"
+            list="hp-admin-names"
+            defaultValue={credit?.uploaderName ?? game.author ?? ""}
+            maxLength={60}
+            placeholder="Nobody credited yet"
+            className="w-full max-w-sm rounded-lg border border-border px-3 py-2 text-sm"
+          />
+          <datalist id="hp-admin-names">
+            {admins
+              .map((u) => u.name?.trim())
+              .filter((n): n is string => Boolean(n))
+              .map((n) => (
+                <option key={n} value={n} />
+              ))}
+          </datalist>
+
+          <p className="text-xs text-muted">
+            {credit ? (
+              <>
+                Recorded{" "}
+                {new Date(credit.firstUploadedAt).toLocaleDateString("en-GB", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}
+                .{" "}
+              </>
+            ) : (
+              <>
+                New dashboard uploads fill this in automatically, and re-uploading
+                never changes an existing credit.{" "}
+              </>
+            )}
+            Shown on the game page as &ldquo;By &lt;name&gt;&rdquo;. Leave blank to
+            remove it.
+          </p>
+
+          <button
+            type="submit"
+            className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+          >
+            Save credit
+          </button>
+        </form>
+      </Section>
+
       <Section title="Tags" subtitle="Drives search & discovery">
         <form action={setGameTagsAction} className="space-y-5">
           <input type="hidden" name="slug" value={slug} />
@@ -259,6 +344,169 @@ export default async function GameControlPage({
             Save tags
           </button>
         </form>
+      </Section>
+
+      {/* MEDIA — sits between Tags and Source code: media is descriptive (like
+          details/tags), source is operational. */}
+      <Section
+        title="Media"
+        subtitle={`${media.length} / ${MAX_MEDIA_PER_SLUG} screenshots · shown on the game's store page`}
+      >
+        <div className="space-y-6">
+          {media.length === 0 ? (
+            <p className="text-sm text-muted">
+              No screenshots yet. The store page falls back to the cover art
+              until you add some.
+            </p>
+          ) : (
+            <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {media.map((item, index) => (
+                <li key={item.id} className="rounded-lg border border-border p-3">
+                  <div className="relative aspect-video w-full overflow-hidden rounded bg-surface-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={mediaPublicPath(item)}
+                      alt={item.alt || `Screenshot ${index + 1}`}
+                      width={item.width}
+                      height={item.height}
+                      loading="lazy"
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <p className="min-w-0 truncate text-xs text-muted">
+                      #{index + 1} · {item.width}×{item.height} ·{" "}
+                      {Math.round(item.bytes / 1024)} KB
+                    </p>
+                    {/* Two one-field forms rather than a drag handle: this works
+                        with no JavaScript, and the server derives the new order
+                        from the direction. */}
+                    <div className="flex shrink-0 gap-1">
+                      <form action={moveMediaAction}>
+                        <input type="hidden" name="slug" value={slug} />
+                        <input type="hidden" name="id" value={item.id} />
+                        <input type="hidden" name="direction" value="up" />
+                        <button
+                          type="submit"
+                          disabled={index === 0}
+                          aria-label={`Move screenshot ${index + 1} earlier`}
+                          className="grid h-7 w-7 place-items-center rounded border border-border text-xs font-bold text-zinc-700 hover:bg-surface-2 disabled:opacity-30"
+                        >
+                          ↑
+                        </button>
+                      </form>
+                      <form action={moveMediaAction}>
+                        <input type="hidden" name="slug" value={slug} />
+                        <input type="hidden" name="id" value={item.id} />
+                        <input type="hidden" name="direction" value="down" />
+                        <button
+                          type="submit"
+                          disabled={index === media.length - 1}
+                          aria-label={`Move screenshot ${index + 1} later`}
+                          className="grid h-7 w-7 place-items-center rounded border border-border text-xs font-bold text-zinc-700 hover:bg-surface-2 disabled:opacity-30"
+                        >
+                          ↓
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Per-image controls live in their own forms so they never nest
+              inside the reorder form above — nested <form> is invalid HTML and
+              silently breaks submission. */}
+          {media.length > 0 && (
+            <ul className="space-y-2 border-t border-border pt-6">
+              {media.map((item, index) => (
+                <li
+                  key={item.id}
+                  className="flex flex-wrap items-end gap-2 rounded-lg border border-border p-3"
+                >
+                  <form
+                    action={setMediaAltAction}
+                    className="flex min-w-0 flex-1 items-end gap-2"
+                  >
+                    <input type="hidden" name="slug" value={slug} />
+                    <input type="hidden" name="id" value={item.id} />
+                    <label className="block min-w-0 flex-1 text-xs font-semibold text-zinc-900">
+                      Description for #{index + 1}{" "}
+                      <span className="font-normal text-muted">
+                        (screen readers)
+                      </span>
+                      <input
+                        name="alt"
+                        type="text"
+                        defaultValue={item.alt}
+                        placeholder="e.g. Player dodging lasers in the neon tunnel"
+                        className={inputClass}
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      className="shrink-0 rounded-full border border-border bg-white px-4 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                    >
+                      Save
+                    </button>
+                  </form>
+                  <form action={deleteMediaAction} className="shrink-0">
+                    <input type="hidden" name="slug" value={slug} />
+                    <input type="hidden" name="id" value={item.id} />
+                    <button
+                      type="submit"
+                      className="rounded-full border border-red-300 bg-red-50 px-4 py-2 text-sm font-bold text-red-900 hover:bg-red-100"
+                    >
+                      Delete
+                    </button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {media.length < MAX_MEDIA_PER_SLUG && (
+            <form
+              action={uploadMediaAction}
+              className="space-y-3 border-t border-border pt-6"
+            >
+              <input type="hidden" name="slug" value={slug} />
+              <label className="block text-sm font-semibold text-zinc-900">
+                Add screenshots
+                <input
+                  name="files"
+                  type="file"
+                  multiple
+                  accept="image/png,image/jpeg,image/webp"
+                  className={inputClass}
+                />
+              </label>
+              <p className="text-xs text-zinc-500">
+                PNG, JPEG or WebP · up to {MAX_MEDIA_PER_UPLOAD} at a time · max
+                4 MB and at least 640px wide each · landscape only. The first
+                screenshot becomes the store-page hero and the social preview
+                image.
+              </p>
+              <button
+                type="submit"
+                className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+              >
+                Upload
+              </button>
+            </form>
+          )}
+        </div>
+      </Section>
+
+      {/* ACHIEVEMENTS — beside Media, and for the same reason: both are page
+          data the store page renders, neither touches the playable bundle. The
+          panel does its own (fail-soft, uncached) catalogue read. */}
+      <Section
+        title="Achievements"
+        subtitle="Admin-provisioned · a game can only unlock keys defined here"
+      >
+        <AchievementPanel slug={slug} />
       </Section>
 
       {/* SOURCE CODE */}
