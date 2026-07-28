@@ -23,6 +23,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { auth, signOut } from "@/app/lib/auth";
+import { BackButton } from "@/app/components/BackButton";
 import { Wordmark } from "@/app/components/Wordmark";
 import { getPlayerById, effectiveHandle } from "@/app/lib/players";
 import { store } from "@/app/lib/scoreboard";
@@ -40,7 +41,11 @@ export const metadata: Metadata = {
 /** The shared "you are not signed in" card (states 1 and 2 above). */
 function NotSignedInCard() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-6 py-10">
+    <main className="relative flex min-h-screen items-center justify-center bg-background px-6 py-10">
+      {/* The signed-out state is just as much a dead end as the signed-in one. */}
+      <div className="absolute left-6 top-6">
+        <BackButton />
+      </div>
       <div className="w-full max-w-md rounded-xl border border-border bg-surface p-8 text-center">
         <Wordmark size="text-3xl" dotClass="h-2 w-2" />
         <h1 className="mt-3 text-2xl font-black tracking-tight">Not signed in</h1>
@@ -133,6 +138,11 @@ export default async function PlayAccountPage({
   return (
     <main className="min-h-screen bg-background px-6 py-10">
       <div className="mx-auto max-w-2xl space-y-5">
+        {/* This page has no header and no sidebar, so without this there is no
+            way out of it except the browser's own back button — which on an
+            installed PWA is not always on screen. */}
+        <BackButton />
+
         <div className="text-center">
           <Wordmark size="text-3xl" dotClass="h-2 w-2" />
           <h1 className="mt-3 text-2xl font-black tracking-tight">Your profile</h1>

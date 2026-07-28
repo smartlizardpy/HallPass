@@ -113,11 +113,13 @@ export async function POST(req: Request): Promise<Response> {
       );
     }
     if (result.plays === 0) {
-      // Anti-squatting: a real player has a play row by construction, having
-      // arrived from a game. A farm of throwaway accounts has to simulate
-      // gameplay per account, which is the point.
+      // Only reachable on a RENAME now. A first claim no longer requires plays,
+      // because `player_plays` is written for signed-in players only — so at
+      // first sign-in everybody has zero and the gate rejected every new user.
+      // It still guards renaming: an account that has never played has no
+      // legitimate reason to cycle names, which is the shape of name-parking.
       return Response.json(
-        { ok: false, reason: "Play a game first, then pick your username" },
+        { ok: false, reason: "Play a game before changing your username" },
         { status: 409, headers: NO_STORE },
       );
     }

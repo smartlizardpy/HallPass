@@ -154,6 +154,54 @@ export function validateUsernameFormat(raw: string): UsernameValidation {
 }
 
 /** Fixed, user-facing copy per rejection. Never reflects the input back. */
+/**
+ * Propose a username from whatever name the player already has.
+ *
+ * Used to PREFILL the sign-up step so the common case is one tap rather than an
+ * empty box. It is a suggestion only — the claim still validates it, and the
+ * player can type anything.
+ *
+ * Lowercases, replaces every illegal character with an underscore, then collapses
+ * and trims them, because the format rules reject both doubled and edge
+ * underscores. Digits are padded onto an all-digit or too-short result rather
+ * than returning something that will simply be rejected: an empty suggestion is
+ * useless, and a rejected one is worse than useless because it teaches the player
+ * the step is broken.
+ *
+ * Returns "" when there is nothing usable to build from, which the caller renders
+ * as an empty field.
+ */
+export function suggestUsernameFrom(raw: string | null | undefined): string {
+  if (typeof raw !== "string") return "";
+  let out = raw
+    .normalize("NFKD")
+    // Strip combining marks so "Ateş" becomes "ates" rather than "ate_".
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  if (out.length > USERNAME_MAX_LENGTH) out = out.slice(0, USERNAME_MAX_LENGTH);
+  out = out.replace(/_+$/, "");
+  if (out.length === 0) return "";
+
+  // An all-digit name is rejected by the format rules, so it would be dead on
+  // arrival.
+  if (!/[a-z]/.test(out)) return "";
+  while (out.length < USERNAME_MIN_LENGTH) out += "1";
+
+  // RUN THE REAL VALIDATOR ON OUR OWN OUTPUT, and give up rather than propose
+  // something that will be refused. This is not belt-and-braces: the padding
+  // above can produce a name whose CONFUSABLE SKELETON is reserved — "a" pads to
+  // "a11", whose skeleton is "all" — and there is no way to enumerate those
+  // collisions here without duplicating the reserved set. Returning "" leaves an
+  // empty box, which is a mildly worse start than a good suggestion but far
+  // better than showing a new player their own name being rejected on their very
+  // first action.
+  return validateUsernameFormat(out).ok ? out : "";
+}
+
 export const USERNAME_REJECTION_MESSAGES: Record<UsernameRejection, string> = {
   "too-short": `Usernames need at least ${USERNAME_MIN_LENGTH} characters`,
   "too-long": `Usernames can be at most ${USERNAME_MAX_LENGTH} characters`,

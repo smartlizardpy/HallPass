@@ -175,7 +175,7 @@ describe("removeRelationship", () => {
   });
 });
 
-describe("searchByUsernamePrefix", () => {
+describe("searchPlayers", () => {
   it("escapes LIKE wildcards — `_` is a legal username character", async () => {
     const seen: unknown[][] = [];
     const { sql, calls } = makeFakeSql((call) => {
@@ -183,7 +183,7 @@ describe("searchByUsernamePrefix", () => {
       return [];
     });
     const store = createSocialStore(sql);
-    await store.searchByUsernamePrefix("me", "a_b");
+    await store.searchPlayers("me", "a_b");
 
     // Without escaping, `_` is LIKE's single-character wildcard and `%` its
     // multi-character one, so a search for "_" would match every username.
@@ -198,14 +198,14 @@ describe("searchByUsernamePrefix", () => {
       return [];
     });
     const store = createSocialStore(sql);
-    await store.searchByUsernamePrefix("me", "100%\\");
+    await store.searchPlayers("me", "100%\\");
     expect(seen[0]).toContain("100\\%\\\\%");
   });
 
   it("excludes the caller, private profiles and blocks in both directions", async () => {
     const { sql, calls } = makeFakeSql(() => []);
     const store = createSocialStore(sql);
-    await store.searchByUsernamePrefix("me", "abc");
+    await store.searchPlayers("me", "abc");
     expect(calls[0].text).toContain("profile_visibility <> 'private'");
     expect(calls[0].text).toContain("player_blocks");
     expect(calls[0].text).toContain("NOT EXISTS");
@@ -214,8 +214,62 @@ describe("searchByUsernamePrefix", () => {
   it("has no OFFSET — the cap must not be walkable into a namespace dump", async () => {
     const { sql, calls } = makeFakeSql(() => []);
     const store = createSocialStore(sql);
-    await store.searchByUsernamePrefix("me", "abc");
+    await store.searchPlayers("me", "abc");
     expect(calls[0].text).not.toContain("OFFSET");
+  });
+
+  it("matches the DISPLAY NAME, not just the username", async () => {
+    // The bug this exists to prevent: search matched usernames only, and not one
+    // player had claimed one, so every search returned nothing for everyone —
+    // and typing the name you actually know somebody by could never work.
+    const { sql, calls } = makeFakeSql(() => []);
+    const store = createSocialStore(sql);
+    await store.searchPlayers("me", "ata");
+    expect(calls[0].text).toContain("p.handle ILIKE");
+    expect(calls[0].text).toContain("p.username LIKE");
+  });
+
+  it("matches a display name at a word boundary, so \"Can\" finds \"Ata Can\"", async () => {
+    const seen: unknown[][] = [];
+    const { sql } = makeFakeSql((call) => {
+      seen.push(call.values);
+      return [];
+    });
+    const store = createSocialStore(sql);
+    await store.searchPlayers("me", "can");
+    // Prefix AND word-start patterns are both bound. A bare substring match would
+    // also find "can" inside "Duncan", which turns search into a fishing trip.
+    expect(seen[0]).toContain("can%");
+    expect(seen[0]).toContain("% can%");
+  });
+
+  it("escapes wildcards in the word-boundary pattern too", async () => {
+    // Easy to escape one pattern and forget the other, at which point `_` matches
+    // everybody again through the second branch.
+    const seen: unknown[][] = [];
+    const { sql } = makeFakeSql((call) => {
+      seen.push(call.values);
+      return [];
+    });
+    const store = createSocialStore(sql);
+    await store.searchPlayers("me", "a_b");
+    expect(seen[0]).toContain("% a\\_b%".replace("\\\\", "\\"));
+  });
+
+  it("still never selects the internal id or email", async () => {
+    const { sql, calls } = makeFakeSql(() => []);
+    const store = createSocialStore(sql);
+    await store.searchPlayers("me", "abc");
+    expect(calls[0].text).toContain("p.public_id");
+    expect(calls[0].text).not.toContain("p.email");
+    // Check the SELECT LIST only. `p.id <> me` in the WHERE clause is a filter,
+    // not an exposure — excluding the caller from their own results is exactly
+    // what it is there for.
+    const selectList = calls[0].text.slice(
+      calls[0].text.indexOf("SELECT"),
+      calls[0].text.indexOf("FROM"),
+    );
+    expect(selectList).not.toMatch(/\bp\.id\b/);
   });
 });
 

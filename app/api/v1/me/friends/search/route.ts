@@ -51,7 +51,7 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   try {
-    const results = await social.searchByUsernamePrefix(playerId, q);
+    const results = await social.searchPlayers(playerId, q);
     return Response.json({ results }, { headers: NO_STORE });
   } catch (error) {
     if (!isMissingColumnError(error)) {

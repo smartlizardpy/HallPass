@@ -234,6 +234,8 @@ export function FriendsIsland() {
 function AddFriend({ onChanged }: { onChanged: () => Promise<void> }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PublicProfile[]>([]);
+  /** Whether the current query has come back from the server. */
+  const [searched, setSearched] = useState(false);
   const [code, setCode] = useState("");
   const [myCode, setMyCode] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -259,16 +261,23 @@ function AddFriend({ onChanged }: { onChanged: () => Promise<void> }) {
     const q = query.trim();
     if (q.length < 3) {
       setResults([]);
+      setSearched(false);
       return;
     }
     let active = true;
+    setSearched(false);
     const timer = setTimeout(() => {
       fetch(`/api/v1/me/friends/search?q=${encodeURIComponent(q)}`, {
         credentials: "include",
       })
         .then((r) => (r.ok ? r.json() : { results: [] }))
         .then((d: { results?: PublicProfile[] }) => {
-          if (active) setResults(d.results ?? []);
+          if (!active) return;
+          setResults(d.results ?? []);
+          // Only NOW is an empty list meaningful. Before this the same empty
+          // array meant "we have not asked yet", and rendering nothing for both
+          // is what made a search that found nobody look like a broken feature.
+          setSearched(true);
         })
         .catch(() => {});
     }, 250);
@@ -308,18 +317,34 @@ function AddFriend({ onChanged }: { onChanged: () => Promise<void> }) {
 
   return (
     <div className="space-y-4">
-      <Panel title="Search by username">
+      <Panel title="Search by name or username">
         <input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="username"
-          aria-label="Search for a username"
+          placeholder="name or @username"
+          aria-label="Search for a player by name or username"
           className={INPUT}
         />
         {query.trim().length > 0 && query.trim().length < 3 && (
           <p className="mt-2 text-xs font-bold text-muted">
             Keep typing — at least 3 characters.
+          </p>
+        )}
+        {/*
+          A search that finds nobody MUST say so. Rendering nothing for "no
+          matches" and nothing for "haven't searched yet" made a working search
+          indistinguishable from a broken one — which is exactly how it was
+          reported. The friend-code hint is here because it is the answer in the
+          most common case: the person you are looking for has not picked a
+          username yet, and a code works regardless.
+        */}
+        {searched && results.length === 0 && (
+          <p className="mt-3 text-sm font-semibold text-muted">
+            Nobody found matching{" "}
+            <span className="font-bold text-zinc-900">{query.trim()}</span>. Check
+            the spelling, or ask them for their friend code below — that works even
+            if they haven&rsquo;t picked a username.
           </p>
         )}
         {results.length > 0 && (
