@@ -1,4 +1,5 @@
 import { Arcade } from "./components/Arcade";
+import { SiteJsonLd } from "./components/SiteJsonLd";
 import { resolveCategories, resolveGames } from "./lib/games-store";
 import { getGamePlayCounts } from "./lib/stats";
 
@@ -10,6 +11,7 @@ export default async function Home() {
   ]);
   return (
     <>
+      <SiteJsonLd />
       <h1 className="sr-only">Unblocked Games — Play Free Online at HALLPASS</h1>
       <Arcade games={games} categories={categories} playCounts={playCounts} />
     </>
