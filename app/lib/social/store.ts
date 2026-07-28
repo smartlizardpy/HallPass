@@ -40,6 +40,7 @@ import {
   USERNAME_TOMBSTONE_DAYS,
 } from "./config";
 import { orderPair } from "./pair";
+import { foldToAscii } from "@/app/lib/username";
 
 type Sql = NeonQueryFunction<false, false>;
 type Row = Record<string, unknown>;
@@ -81,6 +82,24 @@ export type SendResult =
   | "rate-limited"
   | "at-capacity"
   | "unavailable";
+
+
+/**
+ * Character map for folding a display name to ASCII inside Postgres.
+ *
+ * `translate()` rather than the `unaccent` extension: unaccent would be a new
+ * database dependency, and a migration, for exactly one query. These two strings
+ * MUST stay the same length in characters — Postgres pairs them positionally and
+ * silently DELETES any source character with no partner, which would turn "Ateş"
+ * into "Ate" rather than "Ates" and quietly break the very search this exists for.
+ *
+ * Lowercase only, because every use site wraps the column in `lower()` first.
+ * Turkish comes first because it is the alphabet this site's players actually
+ * type; the rest is common Latin coverage. It only has to agree with
+ * `foldToAscii` on the characters people really use, not on all of Unicode.
+ */
+const HANDLE_FOLD_FROM = "şığüöçàáâãäåèéêëìíîïòóôõùúûñýÿ";
+const HANDLE_FOLD_TO = "siguocaaaaaaeeeeiiiioooouuunyy";
 
 export function createSocialStore(sql: Sql) {
   /**
@@ -190,7 +209,12 @@ export function createSocialStore(sql: Sql) {
      * scale this site is nowhere near.
      */
     async searchPlayers(me: string, query: string): Promise<PublicProfile[]> {
-      const escaped = query.replace(/([\\%_])/g, "\\$1");
+      // Fold BOTH sides to plain ASCII so "Ateş" and "Ates" are the same search.
+      // A Turkish keyboard produces "ş" without being asked, so a player typing a
+      // friend's name the natural way was searching for a spelling the username
+      // could not contain — usernames are ASCII by rule — and got nothing back.
+      const folded = foldToAscii(query);
+      const escaped = folded.replace(/([\\%_])/g, "\\$1");
       const startsWith = `${escaped}%`;
       const wordStart = `% ${escaped}%`;
       const rows = await sql`
@@ -198,8 +222,10 @@ export function createSocialStore(sql: Sql) {
         FROM players p
         WHERE (
                 p.username LIKE ${startsWith} ESCAPE '\\'
-             OR p.handle ILIKE ${startsWith} ESCAPE '\\'
-             OR p.handle ILIKE ${wordStart} ESCAPE '\\'
+             OR translate(lower(p.handle), ${HANDLE_FOLD_FROM}, ${HANDLE_FOLD_TO})
+                  LIKE ${startsWith} ESCAPE '\\'
+             OR translate(lower(p.handle), ${HANDLE_FOLD_FROM}, ${HANDLE_FOLD_TO})
+                  LIKE ${wordStart} ESCAPE '\\'
               )
           AND p.id <> ${me}
           AND p.profile_visibility <> 'private'
@@ -213,7 +239,8 @@ export function createSocialStore(sql: Sql) {
           -- somebody can type, then a name that starts with the query, then one
           -- that merely contains it as a word.
           (p.username LIKE ${startsWith} ESCAPE '\\') DESC,
-          (p.handle ILIKE ${startsWith} ESCAPE '\\') DESC,
+          (translate(lower(p.handle), ${HANDLE_FOLD_FROM}, ${HANDLE_FOLD_TO})
+             LIKE ${startsWith} ESCAPE '\\') DESC,
           p.username ASC NULLS LAST,
           p.handle ASC
         LIMIT ${SEARCH_MAX_RESULTS}

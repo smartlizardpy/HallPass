@@ -28,7 +28,7 @@ import {
   currentPlayerId,
 } from "@/app/lib/social/request-guard";
 import { SEARCH_MIN_CHARS } from "@/app/lib/social/config";
-import { normalizeUsername } from "@/app/lib/username";
+import { foldToAscii, normalizeUsername } from "@/app/lib/username";
 
 export async function GET(req: Request): Promise<Response> {
   const playerId = await currentPlayerId();
@@ -37,16 +37,26 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   const raw = new URL(req.url).searchParams.get("q") ?? "";
-  const q = normalizeUsername(raw);
+  // FOLD, DO NOT REJECT. This used to normalise to the username charset and
+  // return nothing for anything outside it, on the reasoning that a character no
+  // username can contain cannot match one. That was true while search matched
+  // usernames only. It stopped being true when search started matching DISPLAY
+  // names, which are free-form: "Ateş Demir" is a real player on this site, and a
+  // Turkish keyboard types "ş" without being asked — so the query was discarded
+  // here and never reached the database, and the search that mattered most to the
+  // people using it always came back empty.
+  const q = foldToAscii(normalizeUsername(raw));
 
   // Below the floor is an empty result, not an error: the client types into this
-  // continuously and a 400 per keystroke would be noise.
+  // continuously and a 400 per keystroke would be noise. Measured AFTER folding,
+  // since that is the string that will actually be matched.
   if (q.length < SEARCH_MIN_CHARS) {
     return Response.json({ results: [] }, { headers: NO_STORE });
   }
-  // Anything outside the username charset cannot match a stored username, so
-  // there is no point querying for it.
-  if (!/^[a-z0-9_]+$/.test(q)) {
+  // What survives folding still has to be something a name can contain. A query
+  // of pure emoji folds to nothing matchable, and querying for it is wasted work
+  // rather than a useful result.
+  if (!/^[a-z0-9_ ]+$/.test(q)) {
     return Response.json({ results: [] }, { headers: NO_STORE });
   }
 

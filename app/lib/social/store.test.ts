@@ -225,7 +225,9 @@ describe("searchPlayers", () => {
     const { sql, calls } = makeFakeSql(() => []);
     const store = createSocialStore(sql);
     await store.searchPlayers("me", "ata");
-    expect(calls[0].text).toContain("p.handle ILIKE");
+    // The handle is compared through the fold, so this asserts on that form
+    // rather than a bare ILIKE.
+    expect(calls[0].text).toContain("translate(lower(p.handle)");
     expect(calls[0].text).toContain("p.username LIKE");
   });
 
@@ -254,6 +256,24 @@ describe("searchPlayers", () => {
     const store = createSocialStore(sql);
     await store.searchPlayers("me", "a_b");
     expect(seen[0]).toContain("% a\\_b%".replace("\\\\", "\\"));
+  });
+
+  it("folds diacritics so \"Ateş\" and \"Ates\" are the same search", async () => {
+    // The reported bug: a Turkish keyboard produces "ş" without being asked, so
+    // somebody typing their friend's name naturally searched for a spelling the
+    // username could not contain — usernames are ASCII by rule — and got nothing.
+    const seen: unknown[][] = [];
+    const { sql, calls } = makeFakeSql((call) => {
+      seen.push(call.values);
+      return [];
+    });
+    const store = createSocialStore(sql);
+    await store.searchPlayers("me", "Ateş");
+
+    // The query is folded before it is bound...
+    expect(seen[0]).toContain("ates%");
+    // ...and the HANDLE column is folded too, so it works in both directions.
+    expect(calls[0].text).toContain("translate(lower(p.handle)");
   });
 
   it("still never selects the internal id or email", async () => {
