@@ -171,6 +171,55 @@ export function validateUsernameFormat(raw: string): UsernameValidation {
  * Returns "" when there is nothing usable to build from, which the caller renders
  * as an empty field.
  */
+/**
+ * Fold a string to plain ASCII letters for comparison.
+ *
+ * WHY SEARCH NEEDS THIS. Usernames are ASCII by rule, but display names are not:
+ * this site's own author is "Ateş Demir". A Turkish keyboard produces "ş" without
+ * being asked, so somebody typing their friend's name the natural way was
+ * searching for "Ateş" while the username said "ates" — and got nothing. The
+ * mirror image is just as bad: an English keyboard types "Ates" and cannot match
+ * a handle spelled "Ateş".
+ *
+ * Folding BOTH SIDES of the comparison makes the two spellings the same search.
+ * The database half is a `translate()` over a fixed character map — see
+ * `HANDLE_FOLD_*` in `social/store.ts` — rather than the `unaccent` extension,
+ * which would be a new database dependency for one query.
+ *
+ * NFKD then dropping combining marks is deliberately broader than the SQL map:
+ * it costs nothing here and handles scripts the map does not enumerate. The two
+ * only have to agree on the characters people actually type.
+ */
+/**
+ * Letters NFKD cannot help with, because they are not accented forms of anything
+ * — they are their own characters with no decomposition.
+ *
+ * `ı` (U+0131, Turkish dotless i) is the one that matters here and the one that
+ * caught this out: it is the most Turkish character in the set, and NFKD returns
+ * it unchanged, so a fold built only on decomposition silently left it alone
+ * while the SQL side mapped it to "i". The two sides then disagreed and the
+ * search matched nothing — the exact bug this whole helper exists to fix.
+ */
+const NON_DECOMPOSING: Record<string, string> = {
+  ı: "i",
+  ø: "o",
+  đ: "d",
+  ł: "l",
+  ħ: "h",
+  ŋ: "n",
+  ŧ: "t",
+  æ: "ae",
+  œ: "oe",
+  ß: "ss",
+};
+
+export function foldToAscii(raw: string): string {
+  const lowered = raw.toLowerCase();
+  let mapped = "";
+  for (const ch of lowered) mapped += NON_DECOMPOSING[ch] ?? ch;
+  return mapped.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+}
+
 export function suggestUsernameFrom(raw: string | null | undefined): string {
   if (typeof raw !== "string") return "";
   let out = raw
