@@ -23,6 +23,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ArcadeShell } from "../../components/ArcadeShell";
 import { GameStore } from "../../components/GameStore";
+import { getGameCredit } from "../../lib/game-credits";
 import { getGameMedia, mediaPublicPath } from "../../lib/game-media";
 import { resolveCategories, resolveGame, resolveGames } from "../../lib/games-store";
 import { SITE_URL as BASE } from "../../lib/site";
@@ -112,11 +113,15 @@ export default async function GamePage({
   const game = await resolveGame(slug);
   if (!game) notFound();
 
-  const [allGames, categories, playCounts, media] = await Promise.all([
+  const [allGames, categories, playCounts, media, credit] = await Promise.all([
     resolveGames(),
     resolveCategories(),
     getGamePlayCounts(),
     getGameMedia(slug),
+    // Fail-soft to null, like every other read here — a missing credit line must
+    // never cost the page. Cached under its own tag, so it does not widen the
+    // blast radius of a games-catalogue invalidation.
+    getGameCredit(slug),
   ]);
 
   const plays = playCounts[game.slug] ?? game.plays ?? 0;
@@ -212,6 +217,7 @@ export default async function GamePage({
           media={media}
           related={related}
           plays={plays}
+          credit={credit}
         />
       </ArcadeShell>
     </>

@@ -33,6 +33,7 @@ import { del, put } from "@vercel/blob";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
+import { CREDITS_CACHE_TAG, recordFirstUpload } from "@/app/lib/game-credits";
 import { games } from "@/app/lib/games";
 import {
   EXTERNAL_CACHE_TAG,
@@ -149,7 +150,7 @@ async function generateCover(slug: string, externalUrl: string): Promise<string 
  * fallible step inside a `try`; the `redirect()` is issued OUTSIDE it.
  */
 export async function createExternalGameAction(formData: FormData): Promise<void> {
-  await requireRole("admin");
+  const { email: actorEmail } = await requireRole("admin");
 
   const title = String(formData.get("title") ?? "").trim();
   const externalUrl = String(formData.get("externalUrl") ?? "").trim();
@@ -223,6 +224,11 @@ export async function createExternalGameAction(formData: FormData): Promise<void
     saveFailed = true;
   }
   if (saveFailed) redirect(newErrorTarget("Could not save the external game. Try again."));
+
+  // Registering an external game IS its first upload — it is the moment the game
+  // appears on the site — so it earns a credit exactly like a bundle does.
+  await recordFirstUpload(slug, actorEmail);
+  revalidateTag(CREDITS_CACHE_TAG, { expire: 0 });
 
   revalidateExternal(slug);
   redirect("/dashboard/external-games?ok=created");

@@ -3,6 +3,12 @@
 import Link from "next/link";
 import posthog from "posthog-js";
 import type { Game } from "../lib/games";
+// TYPE-ONLY, and it has to stay that way: `game-credits.ts` imports
+// `server-only`, which throws if it is ever pulled into a client bundle. A
+// `import type` is erased before bundling so nothing is emitted, but promoting
+// this to a value import would break the build — the same trap `game-media.ts`
+// already fell into, which is why its types live in `game-media-blob.ts`.
+import type { GameCredit } from "../lib/game-credits";
 import type { GameMedia } from "../lib/game-media-blob";
 import { useFavorites } from "../lib/personalization";
 import { useOpenGame } from "./ArcadeShell";
@@ -38,11 +44,18 @@ export function GameStore({
   media,
   related,
   plays,
+  credit,
 }: {
   game: Game;
   media: GameMedia[];
   related: Game[];
   plays: number;
+  /**
+   * Who first put this game on the site. `null` for the games that predate the
+   * credits table — the row is simply omitted rather than filled with a guess,
+   * because inventing attribution is worse than having none.
+   */
+  credit: GameCredit | null;
 }) {
   const openGame = useOpenGame();
   const { isFavorite, toggleFavorite } = useFavorites();
@@ -144,6 +157,11 @@ export function GameStore({
                     /category/<tag> would 404 for any tag that is not also a
                     category. */}
                 {game.tags.join(", ")}
+              </MetaRow>
+            )}
+            {credit && (
+              <MetaRow label="Added by">
+                <span className="font-bold text-zinc-900">{credit.uploaderName}</span>
               </MetaRow>
             )}
             <MetaRow label="Plays in">Your browser</MetaRow>

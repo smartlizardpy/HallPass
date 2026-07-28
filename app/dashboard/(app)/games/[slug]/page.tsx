@@ -61,6 +61,8 @@ import {
   uploadMediaAction,
 } from "./media-actions";
 import { AchievementPanel } from "./_ui/AchievementPanel";
+import { setGameCreditAction } from "./credit-actions";
+import { getGameCredit } from "@/app/lib/game-credits";
 
 export const metadata: Metadata = {
   title: "Game",
@@ -105,11 +107,12 @@ export default async function GameControlPage({
   // `getGameMedia` is already fail-soft (returns [] on any DB failure), so it
   // needs no try/catch and does NOT join the `dbUnconfigured` branch below —
   // an unreachable database simply shows an empty Media panel.
-  const [categories, tagList, customFileCount, media] = await Promise.all([
+  const [categories, tagList, customFileCount, media, credit] = await Promise.all([
     resolveCategories(),
     resolveTags(),
     countCustomFiles(slug),
     getGameMedia(slug),
+    getGameCredit(slug),
   ]);
   const tagSuggestions = tagList.map((t) => t.tag);
 
@@ -264,6 +267,49 @@ export default async function GameControlPage({
       </Section>
 
       {/* TAGS */}
+      <Section
+        title="Added by"
+        subtitle="Who first put this game on the site"
+      >
+        <form action={setGameCreditAction} className="space-y-3">
+          <input type="hidden" name="slug" value={slug} />
+          <input
+            type="text"
+            name="uploaderName"
+            defaultValue={credit?.uploaderName ?? ""}
+            maxLength={60}
+            placeholder="Nobody recorded yet"
+            className="w-full max-w-sm rounded-lg border border-border px-3 py-2 text-sm"
+          />
+          <p className="text-xs text-muted">
+            {credit ? (
+              <>
+                Recorded{" "}
+                {new Date(credit.firstUploadedAt).toLocaleDateString("en-GB", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}
+                . Shown publicly on the game page.
+              </>
+            ) : (
+              <>
+                Games added before this was tracked have no record — set one here.
+                New uploads are credited automatically, and re-uploading never
+                changes an existing credit.
+              </>
+            )}{" "}
+            Leave blank to remove it.
+          </p>
+          <button
+            type="submit"
+            className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+          >
+            Save credit
+          </button>
+        </form>
+      </Section>
+
       <Section title="Tags" subtitle="Drives search & discovery">
         <form action={setGameTagsAction} className="space-y-5">
           <input type="hidden" name="slug" value={slug} />
