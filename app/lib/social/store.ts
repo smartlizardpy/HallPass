@@ -155,16 +155,52 @@ export function createSocialStore(sql: Sql) {
      * There is deliberately NO pagination or offset — that is what stops the
      * result cap being turned into a namespace walk.
      */
-    async searchByUsernamePrefix(
-      me: string,
-      prefix: string,
-    ): Promise<PublicProfile[]> {
-      const escaped = prefix.replace(/([\\%_])/g, "\\$1");
-      const pattern = `${escaped}%`;
+    /**
+     * Find people to befriend, by username OR display name.
+     *
+     * IT USED TO MATCH USERNAMES ONLY, and that made the feature unusable: not one
+     * player on the site had claimed a username, because claiming was opt-in and
+     * buried on the account page. So every search returned nothing, for everyone,
+     * forever — and since a display name was never matched either, typing the name
+     * you actually know somebody by could not work in principle.
+     *
+     * Matching the handle exposes nothing new. A handle is already printed next to
+     * every score on every public leaderboard; it is the least private field on the
+     * player record. What stays protected is everything this query still refuses to
+     * return: private profiles, anyone either party has blocked, and the internal
+     * id — callers get `public_id` only.
+     *
+     * ENUMERATION IS BOUNDED THE SAME WAY AS BEFORE: a session is required, the
+     * caller must supply at least `SEARCH_MIN_CHARS`, at most `SEARCH_MAX_RESULTS`
+     * come back, and there is no pagination — which is the part that actually stops
+     * somebody walking the namespace.
+     *
+     * Handles match at a WORD BOUNDARY as well as at the start, because "Ata Can"
+     * is one person and somebody looking for them will type either half. A full
+     * substring match would also find "can" inside "Duncan", which turns a search
+     * into a fishing expedition. Usernames stay prefix-only: they are a namespace,
+     * not a name.
+     *
+     * `%` and `_` in the input are escaped before they reach the pattern. `_` is a
+     * legal username character AND the LIKE single-character wildcard, so an
+     * unescaped `_` would quietly match everybody.
+     *
+     * The handle comparison is case-insensitive and therefore cannot use the
+     * prefix index. That is fine at this size and would need reconsidering at a
+     * scale this site is nowhere near.
+     */
+    async searchPlayers(me: string, query: string): Promise<PublicProfile[]> {
+      const escaped = query.replace(/([\\%_])/g, "\\$1");
+      const startsWith = `${escaped}%`;
+      const wordStart = `% ${escaped}%`;
       const rows = await sql`
         SELECT p.public_id, p.username, p.handle, p.image
         FROM players p
-        WHERE p.username LIKE ${pattern} ESCAPE '\\'
+        WHERE (
+                p.username LIKE ${startsWith} ESCAPE '\\'
+             OR p.handle ILIKE ${startsWith} ESCAPE '\\'
+             OR p.handle ILIKE ${wordStart} ESCAPE '\\'
+              )
           AND p.id <> ${me}
           AND p.profile_visibility <> 'private'
           AND NOT EXISTS (
@@ -172,7 +208,14 @@ export function createSocialStore(sql: Sql) {
             WHERE (b.blocker_id = ${me} AND b.blocked_id = p.id)
                OR (b.blocker_id = p.id AND b.blocked_id = ${me})
           )
-        ORDER BY p.username ASC
+        ORDER BY
+          -- Exact-ish matches first: a username hit is the most deliberate thing
+          -- somebody can type, then a name that starts with the query, then one
+          -- that merely contains it as a word.
+          (p.username LIKE ${startsWith} ESCAPE '\\') DESC,
+          (p.handle ILIKE ${startsWith} ESCAPE '\\') DESC,
+          p.username ASC NULLS LAST,
+          p.handle ASC
         LIMIT ${SEARCH_MAX_RESULTS}
       `;
       return rows.map(mapPublic);

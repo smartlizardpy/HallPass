@@ -18,6 +18,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/app/lib/auth";
 import { getPlayerById } from "@/app/lib/players";
+import { social } from "@/app/lib/social";
 
 // Reads the session cookie, so this route is inherently per-request.
 export const dynamic = "force-dynamic";
@@ -33,6 +34,7 @@ export default async function AuthLandingPage() {
 
   let returning = false;
   let needsHandle = false;
+  let needsUsername = false;
   try {
     const player = await getPlayerById(playerId);
     if (player) {
@@ -41,6 +43,10 @@ export default async function AuthLandingPage() {
       // existing players who never picked one, which is precisely the population
       // whose real Google name is on the leaderboards today.
       needsHandle = !player.handle;
+      // Fail-soft: if the social read hiccups, treat the username as present so a
+      // database blip cannot insert an extra step into everybody's sign-in.
+      const own = await social.getOwnSocial(playerId).catch(() => null);
+      needsUsername = own ? !own.username : false;
       const created = Date.parse(player.createdAt);
       const last = player.lastLogin ? Date.parse(player.lastLogin) : created;
       returning =
@@ -55,7 +61,20 @@ export default async function AuthLandingPage() {
   const destination = `${session?.user?.role ? "/dashboard" : "/"}?welcome=${
     returning ? "back" : "new"
   }`;
-  if (needsHandle) {
+
+  // Route to the sign-up steps when EITHER name is missing, not just the handle.
+  //
+  // Gating on the handle alone left every existing player without a username, and
+  // a username is the only thing friend SEARCH can match — so the friends feature
+  // was unusable for everybody: nobody was findable, and nobody could find anyone.
+  // `/play/welcome` decides which step to show from the player's actual state, so
+  // somebody who already has a handle goes straight to the username step and
+  // somebody who has both is redirected onward without seeing anything.
+  //
+  // Safe to ask on every sign-in because the username step is SKIPPABLE and the
+  // page self-guards: once a username exists this branch stops firing. It is not a
+  // gate, and sign-in can never dead-end on it.
+  if (needsHandle || needsUsername) {
     redirect(`/play/welcome?next=${encodeURIComponent(destination)}`);
   }
   redirect(destination);
