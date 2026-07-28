@@ -525,7 +525,38 @@ export default async function GameControlPage({
         }
       >
         <div className="space-y-6">
-          <p className="text-xs text-zinc-500">
+          {/* COPY OUT — the read half of this panel. An admin copies the current
+              code, adds the scoreboard and achievement calls, and publishes it
+              back with the forms below. It doubles as the sync point: both admins
+              read the same live blob, so whoever opens this page has the latest. */}
+          <div className="space-y-3">
+            {currentHtml ? (
+              <CopyBox
+                label="Current published index.html"
+                code={currentHtml}
+                note="Copy this out, add the snippet below, then publish it back with the forms further down."
+              />
+            ) : (
+              <p className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-xs text-muted">
+                This game is on the build default — its source lives in the repo at{" "}
+                <code className="font-mono">public/games/{slug}/</code>. Publish an
+                HTML file below to start editing it here.
+              </p>
+            )}
+
+            <CopyBox
+              label="Scoreboard + achievements — paste at the end of <body>"
+              code={buildEmbedSnippet(slug, SITE_URL)}
+              note="The two script tags. Achievement keys must be provisioned in the Achievements panel above first."
+            />
+            <CopyBox
+              label="Example calls — submit a score, unlock, progress, toast"
+              code={buildExampleCalls(slug)}
+              language="html"
+            />
+          </div>
+
+          <p className="border-t border-border pt-6 text-xs text-zinc-500">
             Publishing any source below replaces <strong>everything</strong>{" "}
             previously published for this game — a single HTML file counts as a
             one-file bundle.
