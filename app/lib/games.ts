@@ -56,6 +56,7 @@ export type Game = {
 export const games: Game[] = [
   {
     slug: "neon-velocity-hyperdrive",
+    author: "Ateş Demir",
     title: "Neon Velocity: Hyperdrive",
     tagline: "Flip gravity. Outrun the grid.",
     description:
@@ -70,6 +71,7 @@ export const games: Game[] = [
   },
   {
     slug: "crimson-survivor",
+    author: "Ateş Demir",
     title: "Crimson Survivor",
     tagline: "Outlast the red tide",
     description:
@@ -84,6 +86,7 @@ export const games: Game[] = [
   },
   {
     slug: "sea-mercenary",
+    author: "Ateş Demir",
     title: "Sea Mercenary",
     tagline: "Contracts, cannons, and open water",
     description:
@@ -97,6 +100,7 @@ export const games: Game[] = [
   },
   {
     slug: "vanta-void",
+    author: "Ateş Demir",
     title: "Vanta Void",
     tagline: "Neon Overdrive",
     description:
@@ -110,6 +114,7 @@ export const games: Game[] = [
   },
   {
     slug: "depths-of-aethelgard",
+    author: "Ateş Demir",
     title: "Depths of Aethelgard",
     tagline: "Forgotten kingdoms below",
     description:
@@ -123,6 +128,7 @@ export const games: Game[] = [
   },
   {
     slug: "symbiosis",
+    author: "Ateş Demir",
     title: "Symbiosis",
     tagline: "The Mycelium Network",
     description:
@@ -136,6 +142,7 @@ export const games: Game[] = [
   },
   {
     slug: "silence",
+    author: "Ateş Demir",
     title: "Silence",
     tagline: "Don't make a sound",
     description:
@@ -149,6 +156,7 @@ export const games: Game[] = [
   },
   {
     slug: "neon-snake",
+    author: "Ateş Demir",
     title: "Neon Snake",
     tagline: "The classic, electrified",
     description:
@@ -162,6 +170,7 @@ export const games: Game[] = [
   },
   {
     slug: "system-restore",
+    author: "Ateş Demir",
     title: "System Restore",
     tagline: "Web Evolution",
     description:
@@ -175,6 +184,7 @@ export const games: Game[] = [
   },
   {
     slug: "neon-fracture",
+    author: "Ateş Demir",
     title: "Neon Fracture",
     tagline: "Reality, broken in RGB",
     description:
@@ -188,6 +198,7 @@ export const games: Game[] = [
   },
   {
     slug: "color-clash-3d",
+    author: "Ateş Demir",
     title: "Color Clash 3D",
     tagline: "Neon Prime — Tactical Arcade Shooter",
     description:
@@ -201,6 +212,7 @@ export const games: Game[] = [
   },
   {
     slug: "cube-clash-3d",
+    author: "Ateş Demir",
     title: "Cube Clash 3D",
     tagline: "Ultimate Arsenal — 2-player brawler",
     description:
@@ -214,6 +226,7 @@ export const games: Game[] = [
   },
   {
     slug: "teraria",
+    author: "Ateş Demir",
     title: "Teraria",
     tagline: "Dig. Build. Survive.",
     description:
@@ -227,6 +240,7 @@ export const games: Game[] = [
   },
   {
     slug: "snag",
+    author: "Ateş Demir",
     title: "S N A G",
     tagline: "Neon ascension — 1v1 dash duel",
     description:
@@ -240,6 +254,7 @@ export const games: Game[] = [
   },
   {
     slug: "neon-hockey",
+    author: "Ateş Demir",
     title: "Neon Hockey",
     tagline: "Air-hockey, weaponized",
     description:
@@ -253,6 +268,7 @@ export const games: Game[] = [
   },
   {
     slug: "core-vs-swarm",
+    author: "Ateş Demir",
     title: "Core vs. Swarm",
     tagline: "Two players, one core",
     description:
@@ -266,6 +282,7 @@ export const games: Game[] = [
   },
   {
     slug: "jjk-domain-survival-v3",
+    author: "Ateş Demir",
     title: "JJK: Domain Survival V3",
     tagline: "Take the quiz. Claim your domain.",
     description:
@@ -279,6 +296,7 @@ export const games: Game[] = [
   },
   {
     slug: "jjk-domain-survival-top-down",
+    author: "Ateş Demir",
     title: "JJK: Domain Survival — Top Down",
     tagline: "Cursed energy, new angle",
     description:
@@ -292,6 +310,7 @@ export const games: Game[] = [
   },
   {
     slug: "neon-tether",
+    author: "Ateş Demir",
     title: "Neon Tether",
     tagline: "Swing the flail. Protect the core.",
     description:
@@ -305,6 +324,7 @@ export const games: Game[] = [
   },
   {
     slug: "chroma-orbit",
+    author: "Ateş Demir",
     title: "Chroma Orbit",
     tagline: "Ultimate Edition — color-swap shooter",
     description:
@@ -318,6 +338,7 @@ export const games: Game[] = [
   },
   {
     slug: "pixel-slicer",
+    author: "Ateş Demir",
     title: "Pixel Slicer",
     tagline: "Swipe to slice",
     description:
@@ -331,6 +352,7 @@ export const games: Game[] = [
   },
   {
     slug: "pixel-bullet-quest",
+    author: "Ateş Demir",
     title: "Pixel Bullet Quest",
     tagline: "Every weapon is unique",
     description:
@@ -345,6 +367,7 @@ export const games: Game[] = [
   },
   {
     slug: "system-error",
+    author: "Ateş Demir",
     title: "System.ERROR",
     tagline: "Overdrive Protocol",
     description:
@@ -358,6 +381,7 @@ export const games: Game[] = [
   },
   {
     slug: "nuclear-reactor-manager",
+    author: "Ateş Demir",
     title: "Nuclear Reactor Manager",
     tagline: "Don't let it melt down",
     description:
@@ -371,6 +395,7 @@ export const games: Game[] = [
   },
   {
     slug: "paddle-crawler",
+    author: "Ateş Demir",
     title: "Paddle Crawler",
     tagline: "Ultra Edition — break the grid",
     description:
@@ -384,6 +409,7 @@ export const games: Game[] = [
   },
   {
     slug: "rhythm-hell-harmonic-flash",
+    author: "Ateş Demir",
     title: "Rhythm Hell: Harmonic Flash",
     tagline: "Parry the beat. Expand your domain.",
     description:
@@ -397,6 +423,7 @@ export const games: Game[] = [
   },
   {
     slug: "duskfall",
+    author: "Ozan Kaygusuz",
     title: "Duskfall",
     tagline: "Survive the dusk. Outgun the horde.",
     description:
