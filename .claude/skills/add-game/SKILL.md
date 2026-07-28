@@ -84,22 +84,16 @@ Port `8765` is taken by motionEye on this machine — use `9876` (or anything el
 
 If Playwright MCP isn't available, fall back to a solid-color placeholder using the chosen accent color: `magick -size 659x613 xc:'<accent-hex>' public/games/<slug>/cover.png`, and warn the user in the final summary.
 
-### 3b. Ask who made it and who is adding it
+### 3b. Ask who made the game
 
 **This is the ONE question to ask the user.** Everything else in this skill is
-inferred; attribution cannot be, and guessing it publishes a false claim about a
-person.
+inferred; attribution cannot be, and guessing publishes a false claim about a
+named person.
 
-Two names, because they are two different contributions and the site renders them
-as two different things:
+One name — the person who MADE the game. It renders on the store page as
+"By <name>".
 
-- **Created by** — who MADE the game. Often not an admin at all; it may be a
-  third party, a jam entry, or the user's collaborator.
-- **Added by** — who is putting it on HallPass: generating the cover, writing the
-  metadata, wiring up the scoreboard and achievements. This is normally whoever
-  is running the skill.
-
-Get the list of admins to offer as choices for **Added by**:
+Get the admin list to offer as suggestions:
 
 ```bash
 cd /home/ozi/Projects/unblockedgames
@@ -113,16 +107,12 @@ for (const r of rows) console.log(`${r.name ?? "(no name)"}  <${r.email}>  ${r.r
 '
 ```
 
-Then ask with `AskUserQuestion`: one question offering each admin name as an
-option for **Added by**, and one free-text question for **Created by** (offer the
-admin names as options there too, since often the same people write the games,
-but the user must be able to type anyone).
+Then ask with `AskUserQuestion`, offering each admin name as an option. The user
+must also be able to type someone who is not an admin — plenty of games come from
+people with no account here.
 
-If the two names are the same person, that is fine and expected — the game page
-collapses to a single "By <name>" line rather than repeating it.
-
-**Do not skip this and do not guess.** A wrong credit is worse than no credit,
-and this is the only moment the information is available.
+**Do not skip this and do not guess.** A wrong credit is worse than no credit, and
+this is the only moment the information is available.
 
 ### 4. Append metadata to `app/lib/games.ts`
 
@@ -132,7 +122,7 @@ The `Game` type requires:
   slug, title, tagline, description, category,
   tags: string[], gradient: [string, string], accent, art,
   isNew?, isFeatured?, plays?,
-  author?, addedBy?
+  author?
 }
 ```
 
@@ -149,14 +139,14 @@ Fill every field by inferring from the HTML and screenshot:
 - **isNew**: `true` (always, for newly added games).
 - **plays**: omit.
 - **isFeatured**: omit unless the user said to feature it.
-- **author** / **addedBy**: the two names from Step 3b, exactly as the user gave
-  them. Never invent either. Omit a field only if the user genuinely does not
-  know — the game page renders nothing rather than a guess.
+- **author**: the name from Step 3b, exactly as the user gave it. Never invent it.
+  Omit only if the user genuinely does not know — the game page then renders no
+  byline rather than a guess.
 
-  These live in `games.ts` rather than in the `game_credits` table on purpose:
-  this skill runs on a local machine with no production database access, so a
-  credit written only to a database would never reach the live site. The table
-  exists for dashboard-uploaded and external games, and overrides these when set.
+  It lives in `games.ts` rather than in the `game_credits` table on purpose: this
+  skill runs on a local machine with no production database access, so a credit
+  written only to a database would never reach the live site. The table exists for
+  dashboard-uploaded and external games, and overrides this when set.
 
 Insert the new entry as the **last** element of the `games` array (just before the closing `];`). Match the formatting style of nearby entries exactly (2-space indent, trailing commas, multi-line description if it would exceed line length).
 
@@ -259,9 +249,9 @@ Unchanged from single-file Step 3. The `python3 -m http.server` flow already ser
 
 ### Folder Step 6: Append metadata to `app/lib/games.ts`
 
-Unchanged from single-file Step 4, including **Step 3b** — a folder game needs
-its `author` / `addedBy` credit exactly as much as a single-file one, and the
-question must still be asked rather than guessed.
+Unchanged from single-file Step 4, including **Step 3b** — a folder game needs its
+`author` credit exactly as much as a single-file one, and the question must still
+be asked rather than guessed.
 
 ### Folder Step 7: Upload EVERY file to Vercel Blob
 

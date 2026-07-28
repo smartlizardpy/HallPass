@@ -114,7 +114,7 @@ export default async function GameControlPage({
     countCustomFiles(slug),
     getGameMedia(slug),
     getGameCredit(slug),
-    // Admins, to offer as choices for "Added by". Fail-soft: a Neon blip should
+    // Admins, offered as suggestions for the credit. Fail-soft: a Neon blip should
     // cost the dropdown, not the page.
     listUsers().catch(() => []),
   ]);
@@ -271,66 +271,37 @@ export default async function GameControlPage({
       </Section>
 
       {/* TAGS */}
-      <Section
-        title="Credits"
-        subtitle="Who made it, and who put it on the site"
-      >
+      <Section title="Credit" subtitle="Who made this game">
         {/*
-          TWO NAMES, because these are two different contributions and collapsing
-          them takes authorship off the person who actually wrote the game. The
-          footer already draws the same line: "Games by Ateş Demir · Site by Ozan
-          Kaygusuz".
+          ONE name. This started as two — "created by" and "added by" — on the
+          theory that one person writes a game and another does the HallPass
+          integration. Everybody here writes their own games, so the two fields
+          always wanted the same answer, and a form with two boxes that always
+          want the same answer is a form people fill in wrong.
 
-          "Created by" is FREE TEXT on purpose — plenty of games come from
-          somebody with no account here. "Added by" is a picker, because bringing
-          a game onto HallPass is something only an admin can do.
+          Free text with the admins offered as suggestions rather than a hard
+          select: a game can come from somebody who has no account here, and a
+          select would make those games unattributable.
         */}
-        <form action={setGameCreditAction} className="space-y-4">
+        <form action={setGameCreditAction} className="space-y-3">
           <input type="hidden" name="slug" value={slug} />
-
-          <label className="block space-y-1">
-            <span className="text-xs font-bold uppercase tracking-wide text-muted">
-              Created by
-            </span>
-            <input
-              type="text"
-              name="authorName"
-              defaultValue={credit?.authorName ?? game.author ?? ""}
-              maxLength={60}
-              placeholder="Who made the game"
-              className="w-full max-w-sm rounded-lg border border-border px-3 py-2 text-sm"
-            />
-          </label>
-
-          <label className="block space-y-1">
-            <span className="text-xs font-bold uppercase tracking-wide text-muted">
-              Added by
-            </span>
-            <input
-              type="text"
-              name="uploaderName"
-              list="hp-admin-names"
-              defaultValue={credit?.uploaderName ?? game.addedBy ?? ""}
-              maxLength={60}
-              placeholder="Who put it on HallPass"
-              className="w-full max-w-sm rounded-lg border border-border px-3 py-2 text-sm"
-            />
-            {/*
-              A `datalist` rather than a `select`: it offers the admins as
-              one-click choices while still accepting a name that is not in the
-              list — someone who has since been removed from the allow-list, or a
-              contributor who never had an account. A hard `select` would make
-              those games unattributable.
-            */}
-            <datalist id="hp-admin-names">
-              {admins
-                .map((u) => u.name?.trim())
-                .filter((n): n is string => Boolean(n))
-                .map((n) => (
-                  <option key={n} value={n} />
-                ))}
-            </datalist>
-          </label>
+          <input
+            type="text"
+            name="creditName"
+            list="hp-admin-names"
+            defaultValue={credit?.uploaderName ?? game.author ?? ""}
+            maxLength={60}
+            placeholder="Nobody credited yet"
+            className="w-full max-w-sm rounded-lg border border-border px-3 py-2 text-sm"
+          />
+          <datalist id="hp-admin-names">
+            {admins
+              .map((u) => u.name?.trim())
+              .filter((n): n is string => Boolean(n))
+              .map((n) => (
+                <option key={n} value={n} />
+              ))}
+          </datalist>
 
           <p className="text-xs text-muted">
             {credit ? (
@@ -345,20 +316,19 @@ export default async function GameControlPage({
               </>
             ) : (
               <>
-                Games added before this was tracked have no record — set one here.
-                New dashboard uploads fill in &ldquo;Added by&rdquo; automatically,
-                and re-uploading never changes an existing credit.{" "}
+                New dashboard uploads fill this in automatically, and re-uploading
+                never changes an existing credit.{" "}
               </>
             )}
-            Shown on the game page. Leave both blank to remove the credit; when
-            they match, the page shows one line instead of two.
+            Shown on the game page as &ldquo;By &lt;name&gt;&rdquo;. Leave blank to
+            remove it.
           </p>
 
           <button
             type="submit"
             className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
           >
-            Save credits
+            Save credit
           </button>
         </form>
       </Section>

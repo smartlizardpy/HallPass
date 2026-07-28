@@ -2,7 +2,7 @@
  * HallPass — who added each game.
  *
  * One row per game recording the person who first put it on the site, so a store
- * page can say "Added by Ateş" instead of leaving the footer's site-wide "Games
+ * page can say "By Ateş" instead of leaving the footer's site-wide "Games
  * by Ateş Demir · Site by Ozan Kaygusuz" to stand in for per-game attribution.
  *
  * Shaped after `game-media.ts`, including the two rules that matter:
@@ -44,14 +44,10 @@ export const CREDITS_CACHE_TAG = "game-credits";
 export type GameCredit = {
   slug: string;
   /**
-   * Who MADE the game. `null` when unknown — rendered as nothing rather than as
-   * a guess. Not drawn from `dashboard_users`: plenty of games come from
-   * somebody with no account here.
-   */
-  authorName: string | null;
-  /**
-   * Who brought it onto HallPass. Display name as it read on the day of the
-   * upload.
+   * Who made this game. Display name as it read on the day it was recorded.
+   *
+   * ONE name. An earlier version split this into author and uploader; everybody
+   * here writes their own games, so the two were always the same person.
    */
   uploaderName: string;
   /** ISO timestamp of the first upload. */
@@ -59,19 +55,7 @@ export type GameCredit = {
 };
 
 /**
- * What the store page actually renders. Either side may be absent.
- *
- * Separate from {@link GameCredit} because the two names can come from two
- * different places — the static catalogue or the database — and because a game
- * can have an author and no recorded uploader, or the reverse.
- */
-export type ResolvedCredit = {
-  author: string | null;
-  addedBy: string | null;
-};
-
-/**
- * Merge the static catalogue's credit with the database row.
+ * Resolve a game's credit from its two possible sources.
  *
  * TWO SOURCES, because there are two ways a game arrives. The `add-game` skill
  * onboards from a local machine by appending to `app/lib/games.ts` and
@@ -79,25 +63,25 @@ export type ResolvedCredit = {
  * write to a database would never reach the live site. Dashboard uploads and
  * external games go the other way and have no static entry to write to.
  *
- * The DATABASE WINS on each field independently, because it is the editable one:
- * an admin correcting a credit in the dashboard must not be silently overridden
- * by a stale value someone committed months ago. Per-field rather than
- * whole-record, so correcting only the author does not blank the uploader.
+ * The DATABASE WINS, because it is the editable one: an admin correcting a credit
+ * in the dashboard must not be silently overridden by a value someone committed
+ * months ago.
+ *
+ * Returns `null` when nobody has been credited, which the store page renders as
+ * no row at all rather than as a placeholder — inventing attribution is worse
+ * than having none.
  *
  * Pure, so the precedence is unit-testable without a database.
  */
 export function resolveCredit(
-  staticCredit: { author?: string; addedBy?: string } | undefined,
+  staticCredit: { author?: string } | undefined,
   row: GameCredit | null,
-): ResolvedCredit {
+): string | null {
   const clean = (v: string | null | undefined): string | null => {
     const t = typeof v === "string" ? v.trim() : "";
     return t.length > 0 ? t : null;
   };
-  return {
-    author: clean(row?.authorName) ?? clean(staticCredit?.author),
-    addedBy: clean(row?.uploaderName) ?? clean(staticCredit?.addedBy),
-  };
+  return clean(row?.uploaderName) ?? clean(staticCredit?.author);
 }
 
 type Row = Record<string, unknown>;
@@ -106,7 +90,6 @@ function mapCredit(row: Row): GameCredit {
   const at = new Date(String(row.first_uploaded_at));
   return {
     slug: String(row.slug),
-    authorName: row.author_name == null ? null : String(row.author_name),
     uploaderName: String(row.uploader_name),
     firstUploadedAt: Number.isNaN(at.getTime())
       ? String(row.first_uploaded_at)
@@ -130,7 +113,7 @@ function mapCredit(row: Row): GameCredit {
 const readAllCreditsCached = unstable_cache(
   async (): Promise<GameCredit[]> => {
     const rows = await sql`
-      SELECT slug, author_name, uploader_name, first_uploaded_at
+      SELECT slug, uploader_name, first_uploaded_at
       FROM game_credits
       ORDER BY slug ASC
     `;
@@ -222,16 +205,15 @@ export async function recordFirstUpload(
  */
 export async function setCredit(
   slug: string,
-  names: { authorName: string | null; uploaderName: string },
+  name: string,
   actorEmail: string,
 ): Promise<void> {
   await sql`
-    INSERT INTO game_credits (slug, uploader_email, uploader_name, author_name)
-    VALUES (${slug}, ${actorEmail}, ${names.uploaderName}, ${names.authorName})
+    INSERT INTO game_credits (slug, uploader_email, uploader_name)
+    VALUES (${slug}, ${actorEmail}, ${name})
     ON CONFLICT (slug) DO UPDATE
       SET uploader_name = EXCLUDED.uploader_name,
           uploader_email = EXCLUDED.uploader_email,
-          author_name = EXCLUDED.author_name,
           updated_at = now()
   `;
 }
