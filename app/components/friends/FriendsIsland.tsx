@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import type { PublicProfile } from "../../lib/social/store";
 import { formatFriendCode, normalizeFriendCode } from "../../lib/username";
 import { Avatar } from "./Avatar";
@@ -470,8 +471,13 @@ function PersonRow({
   person: PublicProfile;
   children: React.ReactNode;
 }) {
-  return (
-    <li className="flex flex-wrap items-center gap-3 py-3">
+  // No username, no profile page — `/u/[username]` is the only route there is, so
+  // somebody who has not claimed one simply is not linkable. Rendering a dead
+  // link would be worse than rendering none.
+  const href = person.username ? `/u/${encodeURIComponent(person.username)}` : null;
+
+  const identity = (
+    <>
       <Avatar person={person} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-[15px] font-extrabold text-zinc-900">
@@ -484,6 +490,29 @@ function PersonRow({
           <p className="truncate text-[13px] font-bold text-muted">@{person.username}</p>
         )}
       </div>
+    </>
+  );
+
+  return (
+    <li className="flex flex-wrap items-center gap-3 py-3">
+      {/*
+        ONLY THE AVATAR AND NAME ARE THE LINK — never the whole row. Every row
+        carries its own action button (Add, Accept, Remove), and a button nested
+        inside an anchor is invalid HTML that browsers resolve inconsistently:
+        the click either navigates instead of acting, or does both. `GameCard`
+        already had to be fixed for exactly this, and its docblock states the
+        invariant; this keeps to it by making the link and the buttons siblings.
+      */}
+      {href ? (
+        <Link
+          href={href}
+          className="-mx-2 flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-2 py-1 transition hover:bg-surface-2 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30"
+        >
+          {identity}
+        </Link>
+      ) : (
+        identity
+      )}
       <div className="flex shrink-0 gap-2">{children}</div>
     </li>
   );
