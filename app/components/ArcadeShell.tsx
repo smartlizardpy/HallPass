@@ -94,6 +94,7 @@ export function ArcadeShell({
       <div className="flex min-h-screen flex-1">
         <Sidebar
           categories={categories}
+          games={games}
           active={activeCategory}
           onSelect={onSelectCategory}
           mobileOpen={navOpen}
