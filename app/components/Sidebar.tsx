@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
+import type { Game } from "../lib/games";
+import { SurpriseButton } from "./SurpriseButton";
 import { Wordmark } from "./Wordmark";
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -58,12 +60,15 @@ function hrefForItem(item: string): string {
 
 export function Sidebar({
   categories,
+  games,
   active,
   onSelect,
   mobileOpen = false,
   onMobileClose,
 }: {
   categories: string[];
+  /** The catalogue, used only to pick a random game for "Surprise me". */
+  games: Game[];
   active: string;
   /**
    * Callback mode (the catalog pages): clicking a category filters in place.
@@ -100,6 +105,12 @@ export function Sidebar({
 
   const navList = (
     <>
+      {/* Above the categories, not among them: it is an action, not a filter,
+          and grouping it with the nav items would make it look like a
+          destination that could be "active". Rendered here rather than in each
+          <aside> so the desktop rail and the mobile drawer share one copy. */}
+      <SurpriseButton games={games} onNavigate={onMobileClose} />
+
       <ul className="flex flex-col gap-1">
         {items.map((item) => {
           const isActive = item === active;
