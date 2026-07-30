@@ -181,8 +181,10 @@ export default async function NewExternalGamePage({
             />
             <span className="mt-1 block text-xs font-normal text-muted">
               Leave blank to auto-screenshot the site. The screenshot sends the
-              URL to a third-party service (image.thum.io). On any failure the
-              game is still created with a gradient placeholder.
+              URL to a third-party service (image.thum.io). A cover you supply
+              here is downloaded and re-hosted on our storage, so devices load it
+              from us rather than the original host. On any failure the game is
+              still created with a gradient placeholder.
             </span>
           </label>
 

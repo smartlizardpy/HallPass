@@ -209,6 +209,23 @@ export async function createExternalGame(
   `;
 }
 
+/**
+ * Overwrite ONLY the `cover_url` of an existing external game (a `null` clears
+ * it, falling the app back to its gradient placeholder). Used by the "re-cache
+ * cover" action to point a row at a freshly blob-hosted copy of its cover. Only
+ * bound values are interpolated. Caller must revalidate after.
+ */
+export async function updateExternalGameCover(
+  slug: string,
+  coverUrl: string | null,
+): Promise<void> {
+  await sql`
+    UPDATE external_games
+    SET cover_url = ${coverUrl}, updated_at = now()
+    WHERE slug = ${slug}
+  `;
+}
+
 /** Delete the external game for `slug` entirely. Caller must revalidate after. */
 export async function deleteExternalGame(slug: string): Promise<void> {
   await sql`DELETE FROM external_games WHERE slug = ${slug}`;

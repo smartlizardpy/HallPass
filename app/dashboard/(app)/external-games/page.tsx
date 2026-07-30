@@ -19,7 +19,7 @@ import { listExternalGames } from "@/app/lib/external-games-store";
 import type { Game } from "@/app/lib/games";
 import { DashHeader } from "../_ui/DashHeader";
 import { Section } from "../_ui/Section";
-import { deleteExternalGameAction } from "./actions";
+import { deleteExternalGameAction, recacheExternalCoverAction } from "./actions";
 
 export const metadata: Metadata = {
   title: "External games",
@@ -37,6 +37,7 @@ function asString(value: string | string[] | undefined): string | null {
 const OK_LABEL: Record<string, string> = {
   created: "External game added.",
   deleted: "External game deleted.",
+  recached: "Cover re-cached to blob storage.",
 };
 
 export default async function ExternalGamesPage({
@@ -133,15 +134,31 @@ export default async function ExternalGamesPage({
                   )}
                 </div>
 
-                <form action={deleteExternalGameAction} className="shrink-0">
-                  <input type="hidden" name="slug" value={game.slug} />
-                  <button
-                    type="submit"
-                    className="rounded-full border border-red-300 bg-white px-4 py-1.5 text-sm font-bold text-red-700 hover:bg-red-50"
-                  >
-                    Delete
-                  </button>
-                </form>
+                <div className="flex shrink-0 items-center gap-2">
+                  {/* Re-host this game's cover on our blob so devices stop
+                      re-fetching it from the third-party host. External-only:
+                      every row on this page is an off-site game. */}
+                  <form action={recacheExternalCoverAction}>
+                    <input type="hidden" name="slug" value={game.slug} />
+                    <button
+                      type="submit"
+                      className="rounded-full border border-border bg-white px-4 py-1.5 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                      title="Download the current cover and re-host it on our storage"
+                    >
+                      Re-cache cover
+                    </button>
+                  </form>
+
+                  <form action={deleteExternalGameAction}>
+                    <input type="hidden" name="slug" value={game.slug} />
+                    <button
+                      type="submit"
+                      className="rounded-full border border-red-300 bg-white px-4 py-1.5 text-sm font-bold text-red-700 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </form>
+                </div>
               </li>
             ))}
           </ul>
