@@ -15,11 +15,15 @@
  * (the table's primary key would reject it anyway, but we reject early with a
  * friendly banner). Both checks run before any write.
  *
- * Cover generation is FAIL-SOFT and NEVER blocks creation: if the admin supplies
- * a manual `coverUrl` we use it verbatim; otherwise we best-effort screenshot the
- * site via a third-party service and upload the PNG to Vercel Blob. ANY failure
- * (bad response, non-image, timeout, blob error) leaves the cover null and the
- * game is still created — `GameCard` renders a gradient placeholder.
+ * Cover generation is FAIL-SOFT and NEVER blocks creation. In BOTH paths the
+ * image is downloaded once and re-hosted on Vercel Blob so a visitor's device
+ * never re-fetches it from a third-party host on every page load:
+ *   - a manual `coverUrl` (e.g. from an off-site HTML/thumbnail page) is fetched
+ *     and cached to Blob, falling back to the verbatim URL only if that fails;
+ *   - otherwise we best-effort screenshot the site via a third-party service and
+ *     upload the result to Blob.
+ * ANY failure (bad response, non-image, timeout, blob error) leaves the cover
+ * null and the game is still created — `GameCard` renders a gradient placeholder.
  *
  * Control-flow note (shared with every dashboard action): `redirect()` works by
  * THROWING a Next.js control signal, so it must never sit inside a `try`/`catch`
@@ -95,40 +99,58 @@ function revalidateExternal(slug: string): void {
 }
 
 /**
- * Best-effort screenshot cover for a freshly registered external game.
- *
- * FAIL-SOFT and total: the entire screenshot fetch + blob upload is wrapped so it
- * can NEVER throw out of the create action. On ANY problem — non-OK response, a
- * response that is not an image, a network timeout, or a blob write failure — we
- * return `null` and the game is created with no cover (the app renders a gradient
- * placeholder). On success we return the uploaded blob URL.
- *
- * Privacy note: this sends the target URL to a third-party screenshot service
- * (thum.io); the create form warns the admin of that.
+ * Map an image `content-type` to a filename extension for the blob path. The
+ * extension is cosmetic — Blob serves the bytes with the `contentType` we pass to
+ * `put`, not with a type inferred from the path — but a matching extension keeps
+ * the stored object honest. Anything not listed (still a valid `image/*`) is
+ * stored as `.img`; the correct `contentType` header is preserved regardless.
  */
-async function generateCover(slug: string, externalUrl: string): Promise<string | null> {
+const IMAGE_EXT: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/avif": "avif",
+  "image/svg+xml": "svg",
+};
+
+/**
+ * Download an image from `imageUrl` and re-host it on Vercel Blob under the game's
+ * cover path, returning the stable public blob URL.
+ *
+ * This is the whole point of the caching: whether the bytes come from the
+ * screenshot service or an admin-pasted off-site cover, we pull them ONCE here so
+ * every later render points at OUR blob (CDN-served, service-worker-precacheable)
+ * instead of at the third-party host — the device stops re-fetching the image on
+ * every visit.
+ *
+ * FAIL-SOFT and total: the entire fetch + blob upload is wrapped so it can NEVER
+ * throw out of the create action. On ANY problem — non-OK response, a response
+ * that is not an image, a network timeout, or a blob write failure — we return
+ * `null` and let the caller decide the fallback.
+ *
+ * `fetch` (undici) has NO default timeout, so without an `AbortSignal` a hang
+ * (a stalled screenshot render, a slow third-party host) would block the create
+ * action until the serverless function is killed — no row inserted, a platform
+ * 5xx to the admin — the OPPOSITE of the fail-soft guarantee this module
+ * documents. The 8s bound makes a stall REJECT into the catch (=> null) instead.
+ */
+async function cacheCoverToBlob(slug: string, imageUrl: string): Promise<string | null> {
   try {
-    // thum.io renders the screenshot synchronously and can stall on a heavy or
-    // unresponsive target. `fetch` (undici) has NO default timeout, so without an
-    // AbortSignal a hang would block the create action until the serverless
-    // function is killed — no row inserted, a platform 5xx to the admin — which
-    // is the OPPOSITE of the fail-soft "timeout => null, game still created"
-    // guarantee this module documents. Bound the request so a stall REJECTS into
-    // the catch below (=> null cover, creation proceeds) instead of hanging.
-    const res = await fetch(
-      `https://image.thum.io/get/width/1318/crop/1226/${externalUrl}`,
-      { signal: AbortSignal.timeout(8000) },
-    );
+    const res = await fetch(imageUrl, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
-    const contentType = res.headers.get("content-type") ?? "";
+
+    // Split off any `; charset=…` parameter before matching/validating.
+    const contentType = (res.headers.get("content-type") ?? "").split(";")[0].trim();
     if (!contentType.startsWith("image/")) return null;
 
     const bytes = new Uint8Array(await res.arrayBuffer());
     if (bytes.length === 0) return null;
 
-    const blob = await put(`games/${slug}/cover.png`, Buffer.from(bytes), {
+    const ext = IMAGE_EXT[contentType] ?? "img";
+    const blob = await put(`games/${slug}/cover.${ext}`, Buffer.from(bytes), {
       access: "public",
-      contentType: "image/png",
+      contentType,
       addRandomSuffix: false,
       allowOverwrite: true,
     });
@@ -137,6 +159,22 @@ async function generateCover(slug: string, externalUrl: string): Promise<string 
     // Best-effort: a missing cover is cosmetic, never a reason to fail creation.
     return null;
   }
+}
+
+/**
+ * Best-effort screenshot cover for a freshly registered external game: build the
+ * third-party screenshot URL and hand it to {@link cacheCoverToBlob}, which pulls
+ * the PNG once and re-hosts it on our blob. Returns the blob URL, or `null` on any
+ * failure (the game is still created with a gradient placeholder).
+ *
+ * Privacy note: this sends the target URL to a third-party screenshot service
+ * (thum.io); the create form warns the admin of that.
+ */
+async function generateCover(slug: string, externalUrl: string): Promise<string | null> {
+  return cacheCoverToBlob(
+    slug,
+    `https://image.thum.io/get/width/1318/crop/1226/${externalUrl}`,
+  );
 }
 
 /**
@@ -194,11 +232,13 @@ export async function createExternalGameAction(formData: FormData): Promise<void
     redirect(newErrorTarget(`An external game with slug "${slug}" already exists.`));
   }
 
-  // Cover: a valid manual override wins verbatim (no screenshot); otherwise
-  // best-effort screenshot → blob, which fails soft to null.
+  // Cover: a valid manual override is downloaded and re-hosted on our blob so the
+  // device never re-fetches it from the third-party host on every visit; if that
+  // caching fails we fall back to the verbatim URL (a working cover beats none).
+  // With no override we best-effort screenshot → blob, which fails soft to null.
   let finalCoverUrl: string | null = null;
   if (coverOverride && isHttpUrl(coverOverride)) {
-    finalCoverUrl = coverOverride;
+    finalCoverUrl = (await cacheCoverToBlob(slug, coverOverride)) ?? coverOverride;
   } else {
     finalCoverUrl = await generateCover(slug, externalUrl);
   }
