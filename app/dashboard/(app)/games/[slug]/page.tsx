@@ -65,7 +65,10 @@ import {
 } from "./media-actions";
 import { AchievementPanel } from "./_ui/AchievementPanel";
 import { setGameCreditAction } from "./credit-actions";
+import { setGameVideoAction } from "./video-actions";
 import { getGameCredit } from "@/app/lib/game-credits";
+import { MAX_VIDEO_LABEL, getGameVideo } from "@/app/lib/game-videos";
+import { youtubeWatchUrl } from "@/app/lib/youtube";
 import { listUsers } from "@/app/lib/dashboard-users";
 
 export const metadata: Metadata = {
@@ -111,12 +114,13 @@ export default async function GameControlPage({
   // `getGameMedia` is already fail-soft (returns [] on any DB failure), so it
   // needs no try/catch and does NOT join the `dbUnconfigured` branch below —
   // an unreachable database simply shows an empty Media panel.
-  const [categories, tagList, customFileCount, media, credit, admins, currentHtml] = await Promise.all([
+  const [categories, tagList, customFileCount, media, credit, video, admins, currentHtml] = await Promise.all([
     resolveCategories(),
     resolveTags(),
     countCustomFiles(slug),
     getGameMedia(slug),
     getGameCredit(slug),
+    getGameVideo(slug),
     // Admins, offered as suggestions for the credit. Fail-soft: a Neon blip should
     // cost the dropdown, not the page.
     listUsers().catch(() => []),
@@ -335,6 +339,66 @@ export default async function GameControlPage({
             className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
           >
             Save credit
+          </button>
+        </form>
+      </Section>
+
+      <Section title="Video" subtitle="Gameplay or intro, shown above the screenshots">
+        {/*
+          ONE field for the link, because the admin should not have to know what a
+          video id is. `parseYouTubeId` accepts every form YouTube's own share UI
+          produces — watch, youtu.be, shorts, embed, with or without the scheme —
+          and only the extracted id is stored.
+
+          The link is prefilled as a watch URL rather than as whatever was pasted:
+          the pasted string is deliberately not kept (see `video-actions.ts`), and
+          rebuilding it from the id is what makes "what is currently attached"
+          verifiable in one click.
+        */}
+        <form action={setGameVideoAction} className="space-y-3">
+          <input type="hidden" name="slug" value={slug} />
+          <input
+            type="url"
+            name="videoUrl"
+            defaultValue={video ? youtubeWatchUrl(video.youtubeId) : ""}
+            placeholder="https://www.youtube.com/watch?v=…"
+            className="w-full max-w-lg rounded-lg border border-border px-3 py-2 text-sm"
+          />
+          <input
+            type="text"
+            name="videoLabel"
+            defaultValue={video?.label ?? ""}
+            maxLength={MAX_VIDEO_LABEL}
+            placeholder="Gameplay"
+            className="w-full max-w-[12rem] rounded-lg border border-border px-3 py-2 text-sm"
+          />
+
+          <p className="text-xs text-muted">
+            {video ? (
+              <>
+                Attached as{" "}
+                <a
+                  href={youtubeWatchUrl(video.youtubeId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-bold text-brand hover:text-brand-600"
+                >
+                  {video.youtubeId}
+                </a>
+                .{" "}
+              </>
+            ) : null}
+            The label names the button on the game page. Nothing loads from YouTube
+            until a player presses play — the poster is this game&apos;s first
+            screenshot, so the video costs the page nothing. Leave the link blank to
+            remove it.
+          </p>
+
+          <button
+            type="submit"
+            className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+          >
+            Save video
           </button>
         </form>
       </Section>
