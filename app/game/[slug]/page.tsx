@@ -25,9 +25,11 @@ import { ArcadeShell } from "../../components/ArcadeShell";
 import { GameStore } from "../../components/GameStore";
 import { getGameCredit, resolveCredit } from "../../lib/game-credits";
 import { getGameMedia, mediaPublicPath } from "../../lib/game-media";
+import { getGameVideo } from "../../lib/game-videos";
 import { resolveCategories, resolveGame, resolveGames } from "../../lib/games-store";
 import { SITE_URL as BASE } from "../../lib/site";
 import { getGamePlayCounts } from "../../lib/stats";
+import { youtubeEmbedUrl, youtubeThumbnailUrl, youtubeWatchUrl } from "../../lib/youtube";
 
 /**
  * Prerender EVERY resolved game, not just the static array.
@@ -113,7 +115,7 @@ export default async function GamePage({
   const game = await resolveGame(slug);
   if (!game) notFound();
 
-  const [allGames, categories, playCounts, media, credit] = await Promise.all([
+  const [allGames, categories, playCounts, media, credit, video] = await Promise.all([
     resolveGames(),
     resolveCategories(),
     getGamePlayCounts(),
@@ -122,6 +124,11 @@ export default async function GamePage({
     // never cost the page. Cached under its own tag, so it does not widen the
     // blast radius of a games-catalogue invalidation.
     getGameCredit(slug),
+    // Same contract, and it keeps this route statically prerenderable: a cached
+    // read with no cookies/headers/auth anywhere in it. See the docblock — going
+    // dynamic here would silently drop every /game/<slug> from the service-worker
+    // precache and break offline play with no error.
+    getGameVideo(slug),
   ]);
 
   const plays = playCounts[game.slug] ?? game.plays ?? 0;
@@ -164,6 +171,32 @@ export default async function GamePage({
           interactionType: "https://schema.org/PlayAction",
           userInteractionCount: plays,
         },
+        // The gameplay/intro video, when one is attached.
+        //
+        // `uploadDate` IS DELIBERATELY ABSENT even though Google lists it as
+        // required for VideoObject. We know when an admin pasted the link, which is
+        // not when the video was published, and the two are frequently years apart.
+        // Emitting the former as the latter would be asserting something we did not
+        // observe — the same reason there is no `aggregateRating` above. The cost is
+        // that this may not earn a video rich result; the alternative is inventing a
+        // date, which risks a structured-data manual action against the whole domain.
+        //
+        // Every other property here is real: the name and description are the ones
+        // rendered on the page, and both URLs are built from the stored id.
+        ...(video
+          ? {
+              trailer: {
+                "@type": "VideoObject",
+                name: `${game.title} — ${video.label}`,
+                description: game.tagline,
+                // Metadata only, and `autoplay: false` accordingly — advertising an
+                // autoplaying URL to crawlers and embedders would be wrong.
+                embedUrl: youtubeEmbedUrl(video.youtubeId, { autoplay: false }),
+                url: youtubeWatchUrl(video.youtubeId),
+                thumbnailUrl: youtubeThumbnailUrl(video.youtubeId),
+              },
+            }
+          : {}),
       },
       {
         "@type": "BreadcrumbList",
@@ -213,11 +246,21 @@ export default async function GamePage({
         activeCategory={game.category}
       >
         <GameStore
+          // KEYED ON THE SLUG so client-side state cannot outlive a navigation.
+          // Moving between two store pages renders the same component type at the
+          // same position, which React reconciles by KEEPING its state — so without
+          // this, the media switch (and the gallery's slide index) would carry over
+          // from the previous game, and you could arrive at a game showing the
+          // "Screenshots" side because that is where you left the last one.
+          key={game.slug}
           game={game}
           media={media}
           related={related}
           plays={plays}
           credit={resolveCredit(game, credit)}
+          // Mapped into a structural prop rather than passed as the row: GameStore
+          // is a client component and `game-videos.ts` is server-only.
+          video={video ? { id: video.youtubeId, label: video.label } : null}
         />
       </ArcadeShell>
     </>

@@ -175,6 +175,28 @@ export function youtubeEmbedUrl(
 }
 
 /**
+ * YouTube's own thumbnail for a video — FOR STRUCTURED DATA ONLY.
+ *
+ * DO NOT USE THIS AS AN `<img>` OR `poster` SRC. `GameTrailer` deliberately posters
+ * itself with the game's own screenshot, and this URL is everything that choice
+ * rejects: a request to Google on page load, cross-origin so `public/sw.js` can
+ * never cache it for offline, and served by the same infrastructure a school
+ * content filter blocks — which would make the poster itself a broken image on
+ * exactly the networks this site is built for.
+ *
+ * It exists because `VideoObject` in the store page's JSON-LD requires a
+ * `thumbnailUrl`, and a string in a `<script type="application/ld+json">` causes no
+ * browser request at all. Metadata for crawlers, never markup for readers.
+ *
+ * `hqdefault.jpg` rather than `maxresdefault.jpg`: the latter 404s for videos that
+ * were never uploaded at 1080p, and a structured-data thumbnail that 404s is worse
+ * than a smaller one that resolves.
+ */
+export function youtubeThumbnailUrl(id: string): string {
+  return `https://i.ytimg.com/vi/${encodeURIComponent(id)}/hqdefault.jpg`;
+}
+
+/**
  * The canonical watch URL, for the "Watch on YouTube" escape hatch.
  *
  * Uses `youtube.com` rather than the no-cookie host deliberately: this is a link
