@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Avatar } from "@/app/components/friends/Avatar";
 import type { PublicProfile } from "@/app/lib/profile";
+import { FlairRow } from "./FlairRow";
 import { RecencyChip } from "./Recency";
 
 /**
@@ -64,6 +65,12 @@ export function ProfileHeader({
           <p className="mt-0.5 truncate text-[15px] font-bold text-muted">
             @{profile.username}
           </p>
+
+          {/* Admin-granted flair, right under the identity — conferred status
+              reads as part of who this player is, above the derived counts. Only
+              on a full profile (the type has no `flair` field otherwise), and the
+              row renders nothing when there is none. */}
+          {profile.visibility === "full" && <FlairRow flair={profile.flair} />}
 
           {profile.visibility === "full" && (
             <div className="mt-3 flex flex-wrap items-center gap-2">

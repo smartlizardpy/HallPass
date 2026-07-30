@@ -34,6 +34,7 @@ const ITEMS: NavItem[] = [
   { href: "/dashboard/external-games", label: "External Games" },
   { href: "/dashboard/curation", label: "Curation" },
   { href: "/dashboard/tags", label: "Tags & genres" },
+  { href: "/dashboard/flair", label: "Flair" },
 ];
 
 // Super-admin-only links, appended when the caller holds that role.

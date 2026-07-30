@@ -79,6 +79,7 @@ import {
   type Badge,
   type BadgeStats,
 } from "@/app/lib/badges";
+import { mapFlairRow, type Flair } from "@/app/lib/flair";
 import { USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH } from "@/app/lib/username";
 
 type Sql = NeonQueryFunction<false, false>;
@@ -288,6 +289,14 @@ export type FullProfile = ProfileBase & {
    * child.
    */
   lockedBadges: Badge[];
+  /**
+   * Admin-granted flair ("custom perks"). Unlike `badges` (derived) these are
+   * conferred by an admin from the dashboard and STORED in `player_flair`. They
+   * live only on the full shape, so a blocked or unentitled viewer never receives
+   * them — the same structural guarantee that keeps counts and plays out of the
+   * minimal profile.
+   */
+  flair: Flair[];
   recentPlays: RecentPlay[];
 };
 
@@ -477,6 +486,43 @@ export function createProfileReader(sqlClient: Sql) {
     `;
   }
 
+  /**
+   * Admin-granted flair for this player, newest first.
+   *
+   * Inlined here rather than reached through the live `flair-store.ts` for the
+   * same reason `badgeStats` is composed in: the reader is bound to a swappable
+   * `sqlClient` so its whole result — flair included — is testable through the
+   * fake-tagged-template seam, and importing the live store would tie it back to
+   * the shared connection. The row shape is decoded by the shared `mapFlairRow`,
+   * so the profile and the dashboard cannot drift on what a flair row means.
+   *
+   * Served by `player_flair_player_idx (player_id, created_at DESC)`.
+   */
+  function selectFlair(playerId: string) {
+    return sqlClient`
+      SELECT id, label, icon, tone
+      FROM player_flair
+      WHERE player_id = ${playerId}
+      ORDER BY created_at DESC
+    `;
+  }
+
+  /**
+   * {@link selectFlair}, degraded to `[]` if and only if the `player_flair` table
+   * is missing. `try/catch` rather than `.catch()` so it is robust to a driver
+   * that throws SYNCHRONOUSLY as well as one that rejects — the same shape as the
+   * outer guard in {@link getPublicProfileByUsername}. Every other error rethrows,
+   * so a real outage stays loud (see the note where this is awaited).
+   */
+  async function safeFlair(playerId: string): Promise<Row[]> {
+    try {
+      return await selectFlair(playerId);
+    } catch (error) {
+      if (isMissingColumnError(error)) return [];
+      throw error;
+    }
+  }
+
   return {
     /**
      * Resolve `/u/<username>` for `viewerId` (null when signed out).
@@ -558,13 +604,22 @@ export function createProfileReader(sqlClient: Sql) {
         };
       }
 
-      // Two independent statements, issued together. `neon()` is stateless
+      // Independent statements, issued together. `neon()` is stateless
       // SQL-over-HTTP with no pooling and no cross-statement transaction, so
       // there is nothing to serialise them for: awaiting in sequence would just
       // add a network round trip to every full profile view.
-      const [stats, playRows] = await Promise.all([
+      //
+      // FLAIR FAILS SOFT ON A MISSING TABLE, and only that. `player_flair` is the
+      // newest table here, so there is a deploy window where this code is live
+      // against a database that has not run `014_player_flair.sql`. That must
+      // degrade to "no flair" — an empty pill row — not a 500 on a public profile.
+      // Every other error rethrows, exactly as `getPublicProfileByUsername`'s own
+      // guard does: an outage has to stay loud, or a profile silently sheds its
+      // flair during one and nobody can reproduce it.
+      const [stats, playRows, flairRows] = await Promise.all([
         social.badgeStats(playerId),
         selectRecentPlays(playerId),
+        safeFlair(playerId),
       ]);
 
       // One `now` for the whole render, so two games played minutes apart cannot
@@ -582,6 +637,7 @@ export function createProfileReader(sqlClient: Sql) {
           stats,
           badges: earnedBadges(stats),
           lockedBadges: isOwner ? lockedBadges(stats) : [],
+          flair: flairRows.map(mapFlairRow),
           recentPlays: playRows.map((play) => ({
             slug: String(play.slug),
             recency: coarsenActivity(play.last_played as string | null, now),

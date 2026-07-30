@@ -99,7 +99,11 @@ const badgeStatsRow = {
  * Route each query by a marker unique to it, so a test never depends on call
  * ORDER — the two follow-up queries are issued with `Promise.all`.
  */
-function routed(row: Record<string, unknown> | null, plays: unknown[] = []) {
+function routed(
+  row: Record<string, unknown> | null,
+  plays: unknown[] = [],
+  flair: Record<string, unknown>[] = [],
+) {
   return (call: RecordedCall) => {
     if (call.text.includes("FROM players p")) return row ? [row] : [];
     if (call.text.includes("games_played")) return [badgeStatsRow];
@@ -108,6 +112,7 @@ function routed(row: Record<string, unknown> | null, plays: unknown[] = []) {
     if (call.text.includes("ORDER BY pp.last_played DESC")) {
       return plays as Record<string, unknown>[];
     }
+    if (call.text.includes("FROM player_flair")) return flair;
     return [];
   };
 }
@@ -347,7 +352,8 @@ describe("getPublicProfileByUsername — lookup", () => {
       "a__b",
       null,
     );
-    expect(calls).toHaveLength(3);
+    // Row lookup, then badge stats + recent plays + flair in parallel.
+    expect(calls).toHaveLength(4);
     expect(result.found).toBe(true);
   });
 
@@ -644,6 +650,56 @@ describe("getPublicProfileByUsername — failure modes", () => {
     await expect(
       createProfileReader(sql).getPublicProfileByUsername("cool_kid", null),
     ).rejects.toThrow(/connection terminated/);
+  });
+});
+
+describe("getPublicProfileByUsername — admin-granted flair", () => {
+  it("carries granted flair on a full profile, decoded to pills", async () => {
+    const { sql } = makeFakeSql(
+      routed(profileRow({ profile_visibility: "public" }), [], [
+        { id: "3", label: "Beta Tester", icon: "🧪", tone: "gold" },
+        { id: "4", label: "Founder", icon: null, tone: "brand" },
+      ]),
+    );
+    const result = await createProfileReader(sql).getPublicProfileByUsername(
+      "cool_kid",
+      "viewer-1",
+    );
+    if (!result.found || result.visibility !== "full") throw new Error("expected full");
+    expect(result.profile.flair).toEqual([
+      { id: 3, label: "Beta Tester", icon: "🧪", tone: "gold" },
+      { id: 4, label: "Founder", icon: null, tone: "brand" },
+    ]);
+  });
+
+  it("never fetches flair for a viewer who only gets the minimal profile", async () => {
+    const { sql, calls } = makeFakeSql(
+      routed(profileRow({ profile_visibility: "friends" })),
+    );
+    await createProfileReader(sql).getPublicProfileByUsername("cool_kid", "viewer-1");
+    // Only the one row lookup runs — no flair query for an unentitled viewer.
+    expect(calls).toHaveLength(1);
+    expect(calls.some((c) => c.text.includes("FROM player_flair"))).toBe(false);
+  });
+
+  it("degrades to no flair when the player_flair table is missing", async () => {
+    // The newest table here — a deploy can land before `014_player_flair.sql`
+    // runs. That must be an empty pill row, not a 500 on a public profile.
+    const responder = routed(profileRow({ profile_visibility: "public" }));
+    const { sql } = makeFakeSql((call) => {
+      if (call.text.includes("FROM player_flair")) {
+        throw Object.assign(new Error("relation player_flair does not exist"), {
+          code: "42P01",
+        });
+      }
+      return responder(call);
+    });
+    const result = await createProfileReader(sql).getPublicProfileByUsername(
+      "cool_kid",
+      "viewer-1",
+    );
+    if (!result.found || result.visibility !== "full") throw new Error("expected full");
+    expect(result.profile.flair).toEqual([]);
   });
 });
 
