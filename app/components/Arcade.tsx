@@ -125,7 +125,7 @@ function ArcadeRows({
   // left the catalogue is dropped). Empty until localStorage hydrates post-mount.
   // Plain consts (not useMemo): the maps are tiny and the compiler handles reuse.
   const isGame = (g: Game | undefined): g is Game => Boolean(g);
-  const jumpBackIn = recent.map(findGame).filter(isGame);
+  const jumpBackIn = recent.map(findGame).filter(isGame).slice(0, 4);
   const favoriteGames = favorites.map(findGame).filter(isGame);
 
   const filtered = useMemo(() => {
