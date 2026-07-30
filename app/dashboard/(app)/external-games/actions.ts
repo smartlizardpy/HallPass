@@ -44,6 +44,7 @@ import {
   createExternalGame,
   deleteExternalGame,
   getExternalGame,
+  updateExternalGameCover,
 } from "@/app/lib/external-games-store";
 import {
   MEDIA_CACHE_TAG,
@@ -272,6 +273,69 @@ export async function createExternalGameAction(formData: FormData): Promise<void
 
   revalidateExternal(slug);
   redirect("/dashboard/external-games?ok=created");
+}
+
+/**
+ * Re-cache an existing external game's cover into Vercel Blob (the one-click
+ * "backfill" for rows created before covers were re-hosted, or a plain refresh).
+ *
+ * Source preference mirrors create: if the row already carries a bespoke
+ * `coverUrl` (typically the verbatim off-site URL of a legacy row) we pull THAT
+ * and re-host it; otherwise — or if that pull fails — we fall back to a fresh
+ * screenshot of the external URL. On success the row is repointed at the blob
+ * copy so the device stops re-fetching from the third-party host.
+ *
+ * FAIL-SOFT: if nothing could be cached we leave the existing cover untouched and
+ * report it via `?error=` rather than clearing a working (if hotlinked) cover.
+ * The DB write is the sole fallible step inside a `try`; `redirect()` is OUTSIDE.
+ */
+export async function recacheExternalCoverAction(formData: FormData): Promise<void> {
+  await requireRole("admin");
+
+  const slug = String(formData.get("slug") ?? "").trim();
+  if (!slug) {
+    redirect(`/dashboard/external-games?error=${encodeURIComponent("Unknown game.")}`);
+  }
+
+  const game = await getExternalGame(slug);
+  if (!game) {
+    redirect(
+      `/dashboard/external-games?error=${encodeURIComponent(`No external game "${slug}".`)}`,
+    );
+  }
+
+  // Prefer re-hosting the existing cover source; fall back to a fresh screenshot.
+  let cached: string | null = null;
+  if (game.coverUrl && isHttpUrl(game.coverUrl)) {
+    cached = await cacheCoverToBlob(slug, game.coverUrl);
+  }
+  if (!cached && game.externalUrl) {
+    cached = await generateCover(slug, game.externalUrl);
+  }
+  if (!cached) {
+    redirect(
+      `/dashboard/external-games?error=${encodeURIComponent(
+        "Could not fetch a cover to cache. The existing cover was left unchanged.",
+      )}`,
+    );
+  }
+
+  let saveFailed = false;
+  try {
+    await updateExternalGameCover(slug, cached);
+  } catch {
+    saveFailed = true;
+  }
+  if (saveFailed) {
+    redirect(
+      `/dashboard/external-games?error=${encodeURIComponent(
+        "Cached the cover but could not save it. Try again.",
+      )}`,
+    );
+  }
+
+  revalidateExternal(slug);
+  redirect("/dashboard/external-games?ok=recached");
 }
 
 /**
