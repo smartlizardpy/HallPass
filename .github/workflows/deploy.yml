@@ -23,6 +23,10 @@ jobs:
     name: Build and deploy
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Job-level env so the step guard below can read whether the Blob secret is
+    # set — the `secrets` context is available to job env but not to a step `if`.
+    env:
+      HAS_BLOB_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,6 +39,24 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Refresh the baked-in game mirror from Vercel Blob so this deploy ships the
+      # latest uploads as FREE static files under public/games/, then regenerate
+      # the manifest + stamp the serving route reads to pick static-vs-Blob. Runs
+      # BEFORE the build so vercel bundles the fresh files.
+      #
+      # OPT-IN: only runs once BLOB_READ_WRITE_TOKEN is added as a repo secret;
+      # without it the deploy just ships the committed mirror (and the route keeps
+      # proxying live games from Blob as before). NON-FATAL: a sync hiccup must not
+      # block a deploy — the route still proxies any un-mirrored game from Blob, so
+      # nothing is lost, it just isn't free that round.
+      - name: Sync games from Blob into the static mirror
+        if: env.HAS_BLOB_TOKEN == 'true'
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+        run: |
+          npm run sync-games || echo "sync-games failed; deploying with the committed mirror"
+          node scripts/build-games-manifest.mjs
 
       - name: Install Vercel CLI
         run: npm i -g vercel@latest
