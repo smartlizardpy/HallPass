@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "npm run build:sdk",
+    "predev": "npm run build:sdk && node scripts/build-games-manifest.mjs",
     "dev": "next dev",
-    "prebuild": "npm run build:sdk",
+    "prebuild": "npm run build:sdk && node scripts/build-games-manifest.mjs",
     "build": "next build",
     "postbuild": "node scripts/build-sw-manifest.mjs",
     "start": "next start",
