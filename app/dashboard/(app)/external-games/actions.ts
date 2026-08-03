@@ -3,12 +3,19 @@
 /**
  * HallPass dashboard — EXTERNAL (off-site) games server actions.
  *
- * These register and remove whole games that live OFF-SITE: their play surface
- * is a third-party URL embedded in an iframe, and each is a self-describing row
- * in the `external_games` Neon table (see `@/app/lib/external-games-store`),
- * APPENDED to the resolved catalogue after the static entries. Unlike the
- * per-game override actions in `../games/[slug]/actions.ts`, there is no static
- * catalogue entry to inherit from — the create form supplies every field.
+ * These register, EDIT, and remove whole games that live OFF-SITE: their play
+ * surface is a third-party URL embedded in an iframe, and each is a
+ * self-describing row in the `external_games` Neon table (see
+ * `@/app/lib/external-games-store`), APPENDED to the resolved catalogue after
+ * the static entries. Unlike the per-game override actions in
+ * `../games/[slug]/actions.ts`, there is no static catalogue entry to inherit
+ * from — every column is authoritative, so the edit actions here overwrite
+ * fields outright rather than storing sparse overrides.
+ *
+ * External games have no separate list page: they are created from the Games tab
+ * ("Add external game") and edited from the SAME per-game control center as
+ * native games (`/dashboard/games/<slug>`), so the create/edit/re-cache/delete
+ * actions all report back to `/dashboard/games` surfaces.
  *
  * Slug ownership: the derived slug must NOT collide with a static game (that
  * would shadow a real, playable catalogue entry) NOR an existing external row
@@ -45,6 +52,7 @@ import {
   deleteExternalGame,
   getExternalGame,
   updateExternalGameCover,
+  updateExternalGameDetails,
 } from "@/app/lib/external-games-store";
 import {
   MEDIA_CACHE_TAG,
@@ -81,6 +89,16 @@ function isHttpUrl(value: string): boolean {
 /** Build a `?error=` redirect target for the create form. */
 function newErrorTarget(message: string): string {
   return `/dashboard/external-games/new?error=${encodeURIComponent(message)}`;
+}
+
+/**
+ * Build an `?ok`/`?error` redirect target back to a game's per-game control
+ * center under the unified Games tab. External games no longer have their own
+ * list page — every external game is edited from `/dashboard/games/<slug>`
+ * alongside native games — so post-mutation banners land there.
+ */
+function controlTarget(slug: string, key: "ok" | "error", message: string): string {
+  return `/dashboard/games/${encodeURIComponent(slug)}?${key}=${encodeURIComponent(message)}`;
 }
 
 /**
@@ -272,7 +290,134 @@ export async function createExternalGameAction(formData: FormData): Promise<void
   revalidateTag(CREDITS_CACHE_TAG, { expire: 0 });
 
   revalidateExternal(slug);
-  redirect("/dashboard/external-games?ok=created");
+  // Land on the new game's control center under the unified Games tab, where all
+  // further editing (details, tags, cover, delete) now happens.
+  redirect(controlTarget(slug, "ok", "External game added."));
+}
+
+/**
+ * Save the descriptive fields of an existing external game from its per-game
+ * control center: title, tagline, description, category, external URL, and the
+ * accent/gradient colours. Tags have their own action
+ * ({@link setExternalGameTagsAction}) and the cover has its own controls, so
+ * this preserves both by reading the current row and re-writing only what this
+ * form owns. An optional cover-URL override, when supplied, is downloaded and
+ * re-hosted on our blob exactly as the create form does.
+ *
+ * Same control-flow contract as every dashboard action: `requireRole("admin")`
+ * first, validate, wrap the fallible DB write in a `try`, issue `redirect()`
+ * OUTSIDE it.
+ */
+export async function updateExternalGameAction(formData: FormData): Promise<void> {
+  await requireRole("admin");
+
+  const slug = String(formData.get("slug") ?? "").trim();
+  if (!slug) redirect("/dashboard/games?error=" + encodeURIComponent("Unknown game."));
+
+  const existing = await getExternalGame(slug);
+  if (!existing) {
+    redirect("/dashboard/games?error=" + encodeURIComponent(`No external game "${slug}".`));
+  }
+
+  const title = String(formData.get("title") ?? "").trim();
+  const externalUrl = String(formData.get("externalUrl") ?? "").trim();
+  const tagline = String(formData.get("tagline") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const category = String(formData.get("category") ?? "").trim();
+  const accent = String(formData.get("accent") ?? "").trim() || "#7c5cff";
+  const gradientFrom = String(formData.get("gradientFrom") ?? "").trim() || "#7c5cff";
+  const gradientTo = String(formData.get("gradientTo") ?? "").trim() || "#00e5ff";
+  const coverOverride = String(formData.get("coverUrl") ?? "").trim();
+
+  if (!title) redirect(controlTarget(slug, "error", "Title is required."));
+  if (!externalUrl) redirect(controlTarget(slug, "error", "External URL is required."));
+  if (!isHttpUrl(externalUrl)) {
+    redirect(controlTarget(slug, "error", "External URL must be a valid http(s) URL."));
+  }
+
+  // Cover is optional on edit: a supplied override is re-hosted on our blob (with
+  // a verbatim-URL fallback if caching fails); a blank field leaves the existing
+  // cover untouched, so a details save never clears a good cover.
+  let newCover: string | null | undefined;
+  if (coverOverride) {
+    if (!isHttpUrl(coverOverride)) {
+      redirect(controlTarget(slug, "error", "Cover URL must be a valid http(s) URL."));
+    }
+    newCover = (await cacheCoverToBlob(slug, coverOverride)) ?? coverOverride;
+  }
+
+  let saveFailed = false;
+  try {
+    await updateExternalGameDetails(slug, {
+      title,
+      tagline,
+      description,
+      category,
+      tags: existing.tags, // owned by setExternalGameTagsAction — preserved here
+      externalUrl,
+      accent,
+      gradientFrom,
+      gradientTo,
+    });
+    if (newCover !== undefined) await updateExternalGameCover(slug, newCover);
+  } catch {
+    saveFailed = true;
+  }
+  if (saveFailed) redirect(controlTarget(slug, "error", "Could not save details."));
+
+  revalidateExternal(slug);
+  redirect(controlTarget(slug, "ok", "Saved."));
+}
+
+/**
+ * Save the tag list of an existing external game. External games carry their
+ * tags in the `external_games` row (NOT `game_overrides`), so this reads the
+ * current row and re-writes it with the new tags, leaving every other field
+ * intact. Tags arrive one field per chip from the shared `TagEditor`, trimmed +
+ * deduped case-insensitively to mirror the editor's hygiene.
+ */
+export async function setExternalGameTagsAction(formData: FormData): Promise<void> {
+  await requireRole("admin");
+
+  const slug = String(formData.get("slug") ?? "").trim();
+  if (!slug) redirect("/dashboard/games?error=" + encodeURIComponent("Unknown game."));
+
+  const existing = await getExternalGame(slug);
+  if (!existing) {
+    redirect("/dashboard/games?error=" + encodeURIComponent(`No external game "${slug}".`));
+  }
+
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const raw of formData.getAll("tags")) {
+    const trimmed = String(raw).trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    tags.push(trimmed);
+  }
+
+  let saveFailed = false;
+  try {
+    await updateExternalGameDetails(slug, {
+      title: existing.title,
+      tagline: existing.tagline,
+      description: existing.description,
+      category: existing.category,
+      tags,
+      externalUrl: existing.externalUrl!,
+      accent: existing.accent,
+      gradientFrom: existing.gradient[0],
+      gradientTo: existing.gradient[1],
+    });
+  } catch {
+    saveFailed = true;
+  }
+  if (saveFailed) redirect(controlTarget(slug, "error", "Could not save tags."));
+
+  revalidateExternal(slug);
+  redirect(controlTarget(slug, "ok", "Tags saved."));
 }
 
 /**
@@ -294,14 +439,12 @@ export async function recacheExternalCoverAction(formData: FormData): Promise<vo
 
   const slug = String(formData.get("slug") ?? "").trim();
   if (!slug) {
-    redirect(`/dashboard/external-games?error=${encodeURIComponent("Unknown game.")}`);
+    redirect(`/dashboard/games?error=${encodeURIComponent("Unknown game.")}`);
   }
 
   const game = await getExternalGame(slug);
   if (!game) {
-    redirect(
-      `/dashboard/external-games?error=${encodeURIComponent(`No external game "${slug}".`)}`,
-    );
+    redirect(`/dashboard/games?error=${encodeURIComponent(`No external game "${slug}".`)}`);
   }
 
   // Prefer re-hosting the existing cover source; fall back to a fresh screenshot.
@@ -314,9 +457,11 @@ export async function recacheExternalCoverAction(formData: FormData): Promise<vo
   }
   if (!cached) {
     redirect(
-      `/dashboard/external-games?error=${encodeURIComponent(
+      controlTarget(
+        slug,
+        "error",
         "Could not fetch a cover to cache. The existing cover was left unchanged.",
-      )}`,
+      ),
     );
   }
 
@@ -327,15 +472,11 @@ export async function recacheExternalCoverAction(formData: FormData): Promise<vo
     saveFailed = true;
   }
   if (saveFailed) {
-    redirect(
-      `/dashboard/external-games?error=${encodeURIComponent(
-        "Cached the cover but could not save it. Try again.",
-      )}`,
-    );
+    redirect(controlTarget(slug, "error", "Cached the cover but could not save it. Try again."));
   }
 
   revalidateExternal(slug);
-  redirect("/dashboard/external-games?ok=recached");
+  redirect(controlTarget(slug, "ok", "Cover re-cached to blob storage."));
 }
 
 /**
@@ -350,7 +491,7 @@ export async function deleteExternalGameAction(formData: FormData): Promise<void
 
   const slug = String(formData.get("slug") ?? "").trim();
   if (!slug) {
-    redirect(`/dashboard/external-games?error=${encodeURIComponent("Unknown game.")}`);
+    redirect(`/dashboard/games?error=${encodeURIComponent("Unknown game.")}`);
   }
 
   try {
@@ -372,5 +513,6 @@ export async function deleteExternalGameAction(formData: FormData): Promise<void
   }
 
   revalidateExternal(slug);
-  redirect("/dashboard/external-games?ok=deleted");
+  // The game is gone — land on the Games grid rather than its now-404 page.
+  redirect(`/dashboard/games?ok=${encodeURIComponent("External game deleted.")}`);
 }

@@ -24,9 +24,13 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { CACHE_TAG, renameCategory, renameTag } from "@/app/lib/games-store";
 
-/** Build a `?ok`/`?error` redirect target back to the tags manager. */
+/**
+ * Build a `?ok`/`?error` redirect target back to the tags & genres tools, which
+ * now live on the Curation page (the standalone "Tags & genres" tab was folded
+ * into it).
+ */
 function target(key: "ok" | "error", message: string): string {
-  return `/dashboard/tags?${key}=${encodeURIComponent(message)}`;
+  return `/dashboard/curation?${key}=${encodeURIComponent(message)}`;
 }
 
 /**
@@ -55,7 +59,7 @@ export async function renameTagAction(formData: FormData): Promise<void> {
   const from = String(formData.get("from") ?? "");
   const to = String(formData.get("to") ?? "").trim();
   if (!from) redirect(target("error", "Missing tag."));
-  if (to === from) redirect("/dashboard/tags");
+  if (to === from) redirect("/dashboard/curation");
 
   let changed: number | null = null;
   try {
@@ -105,7 +109,7 @@ export async function renameGenreAction(formData: FormData): Promise<void> {
   const to = String(formData.get("to") ?? "").trim();
   if (!from) redirect(target("error", "Missing genre."));
   if (!to) redirect(target("error", "Genre name can’t be empty."));
-  if (to === from) redirect("/dashboard/tags");
+  if (to === from) redirect("/dashboard/curation");
 
   let changed: number | null = null;
   try {

@@ -58,6 +58,12 @@ import {
 } from "../actions";
 import { clearGameOverrideAction, setGameTagsAction, updateGameAction } from "./actions";
 import {
+  deleteExternalGameAction,
+  recacheExternalCoverAction,
+  setExternalGameTagsAction,
+  updateExternalGameAction,
+} from "../../external-games/actions";
+import {
   deleteMediaAction,
   moveMediaAction,
   setMediaAltAction,
@@ -111,6 +117,242 @@ export default async function GameControlPage({
   const ok = asString(sp.ok);
   const error = asString(sp.error);
 
+  const inputClass =
+    "mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30";
+
+  // EXTERNAL games are whole off-site rows in `external_games`, not native
+  // catalogue entries with an override layer — so they get a FOCUSED editor that
+  // writes to that table (details/tags/cover/delete) and skips the native-only
+  // panels (source code, media, achievements, leaderboards) that an iframed game
+  // cannot use. Branch early so none of that native data is fetched for them.
+  if (game.externalUrl) {
+    const [categories, tagList] = await Promise.all([
+      resolveCategories(),
+      resolveTags(),
+    ]);
+    const tagSuggestions = tagList.map((t) => t.tag);
+
+    return (
+      <div className="space-y-6">
+        <Link
+          href="/dashboard/games"
+          className="inline-block text-sm font-semibold text-brand hover:text-brand-600"
+        >
+          ← All games
+        </Link>
+        <DashHeader title={game.title} subtitle={game.tagline} />
+
+        {ok && (
+          <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+            {ok}
+          </div>
+        )}
+        {error && (
+          <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+            {error}
+          </div>
+        )}
+
+        {/* HERO */}
+        <Section>
+          <div className="flex flex-wrap items-center gap-5">
+            <div className="relative aspect-video w-44 shrink-0 overflow-hidden rounded-lg bg-surface-2">
+              <CoverImage game={game} initialClass="text-3xl" />
+            </div>
+            <div className="min-w-0">
+              <span className="inline-block rounded-full bg-sky-50 px-2 py-0.5 text-xs font-bold text-sky-700">
+                External ↗
+              </span>
+              <h2 className="mt-1 text-xl font-black tracking-tight">{game.title}</h2>
+              <p className="mt-1 text-sm text-muted">{game.category}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Link
+                  href={`/game/${slug}`}
+                  target="_blank"
+                  className="inline-block rounded-full border border-border bg-white px-4 py-1.5 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                >
+                  Open in arcade ↗
+                </Link>
+                {game.externalUrl && (
+                  <a
+                    href={game.externalUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-block rounded-full border border-border bg-white px-4 py-1.5 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                  >
+                    Open source site ↗
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        </Section>
+
+        {/* DETAILS — one write covering every descriptive field + colours + an
+            optional cover-URL override. */}
+        <Section title="Details" subtitle="Off-site game hosted by URL">
+          <form action={updateExternalGameAction} className="space-y-5">
+            <input type="hidden" name="slug" value={slug} />
+
+            <label className="block text-sm font-semibold text-zinc-900">
+              Title
+              <input
+                name="title"
+                type="text"
+                required
+                defaultValue={game.title}
+                className={inputClass}
+              />
+            </label>
+
+            <label className="block text-sm font-semibold text-zinc-900">
+              External URL
+              <input
+                name="externalUrl"
+                type="url"
+                required
+                defaultValue={game.externalUrl}
+                placeholder="https://…"
+                className={inputClass}
+              />
+            </label>
+
+            <label className="block text-sm font-semibold text-zinc-900">
+              Tagline
+              <input
+                name="tagline"
+                type="text"
+                defaultValue={game.tagline}
+                className={inputClass}
+              />
+            </label>
+
+            <label className="block text-sm font-semibold text-zinc-900">
+              Description
+              <textarea
+                name="description"
+                rows={4}
+                defaultValue={game.description}
+                className={inputClass}
+              />
+            </label>
+
+            <label className="block text-sm font-semibold text-zinc-900 sm:max-w-xs">
+              Category
+              <input
+                name="category"
+                type="text"
+                list="ext-game-categories"
+                defaultValue={game.category}
+                className={inputClass}
+              />
+              <datalist id="ext-game-categories">
+                {categories.map((category) => (
+                  <option key={category} value={category} />
+                ))}
+              </datalist>
+            </label>
+
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+              <label className="block text-sm font-semibold text-zinc-900">
+                Accent color
+                <input
+                  name="accent"
+                  type="color"
+                  defaultValue={game.accent}
+                  className="mt-2 h-10 w-full rounded-lg border border-border px-1 py-1 outline-none focus:ring-2 focus:ring-brand/30"
+                />
+              </label>
+              <label className="block text-sm font-semibold text-zinc-900">
+                Gradient from
+                <input
+                  name="gradientFrom"
+                  type="color"
+                  defaultValue={game.gradient[0]}
+                  className="mt-2 h-10 w-full rounded-lg border border-border px-1 py-1 outline-none focus:ring-2 focus:ring-brand/30"
+                />
+              </label>
+              <label className="block text-sm font-semibold text-zinc-900">
+                Gradient to
+                <input
+                  name="gradientTo"
+                  type="color"
+                  defaultValue={game.gradient[1]}
+                  className="mt-2 h-10 w-full rounded-lg border border-border px-1 py-1 outline-none focus:ring-2 focus:ring-brand/30"
+                />
+              </label>
+            </div>
+
+            <label className="block text-sm font-semibold text-zinc-900">
+              Cover URL override
+              <input
+                name="coverUrl"
+                type="url"
+                placeholder="https://… — leave blank to keep the current cover"
+                className={inputClass}
+              />
+              <span className="mt-1 block text-xs font-normal text-muted">
+                A cover you supply here is downloaded and re-hosted on our storage.
+                Leave blank to keep the current cover; use{" "}
+                <span className="font-semibold text-foreground">Re-cache cover</span>{" "}
+                below to refresh it from the source.
+              </span>
+            </label>
+
+            <button
+              type="submit"
+              className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+            >
+              Save details
+            </button>
+          </form>
+        </Section>
+
+        {/* TAGS */}
+        <Section title="Tags" subtitle="Drives search & discovery">
+          <form action={setExternalGameTagsAction} className="space-y-5">
+            <input type="hidden" name="slug" value={slug} />
+            <TagEditor defaultTags={game.tags} suggestions={tagSuggestions} />
+            <button
+              type="submit"
+              className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+            >
+              Save tags
+            </button>
+          </form>
+        </Section>
+
+        {/* COVER + DANGER */}
+        <Section title="Cover & removal" subtitle="Re-host the cover, or delete the game">
+          <div className="flex flex-wrap items-center gap-4">
+            <form action={recacheExternalCoverAction}>
+              <input type="hidden" name="slug" value={slug} />
+              <button
+                type="submit"
+                className="rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                title="Download the current cover (or screenshot the site) and re-host it on our storage"
+              >
+                Re-cache cover
+              </button>
+            </form>
+            <form action={deleteExternalGameAction}>
+              <input type="hidden" name="slug" value={slug} />
+              <button
+                type="submit"
+                className="rounded-full bg-red-600 px-5 py-2 text-sm font-extrabold text-white hover:bg-red-700"
+              >
+                Delete game
+              </button>
+            </form>
+            <span className="text-xs text-muted">
+              Deleting removes the external game and its screenshots for good.
+            </span>
+          </div>
+        </Section>
+      </div>
+    );
+  }
+
   // `getGameMedia` is already fail-soft (returns [] on any DB failure), so it
   // needs no try/catch and does NOT join the `dbUnconfigured` branch below —
   // an unreachable database simply shows an empty Media panel.
@@ -146,9 +388,6 @@ export default async function GameControlPage({
     if (isUnconfiguredDbError(err)) dbUnconfigured = true;
     else throw err;
   }
-
-  const inputClass =
-    "mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30";
 
   return (
     <div className="space-y-6">

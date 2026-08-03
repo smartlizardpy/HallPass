@@ -210,6 +210,53 @@ export async function createExternalGame(
 }
 
 /**
+ * The typed input for {@link updateExternalGameDetails}. Mirrors the DESCRIPTIVE
+ * columns an admin edits from the per-game control center — every field the
+ * create form collects EXCEPT the cover, which has its own write
+ * ({@link updateExternalGameCover}) so a details save never disturbs a
+ * separately re-cached cover.
+ */
+export type UpdateExternalGameInput = {
+  title: string;
+  tagline: string;
+  description: string;
+  category: string;
+  tags: string[];
+  externalUrl: string;
+  accent: string;
+  gradientFrom: string;
+  gradientTo: string;
+};
+
+/**
+ * Overwrite the descriptive columns of an existing external game in one write.
+ * Unlike `game_overrides` (which is sparse — an external game has no static
+ * entry to inherit from, so every column is authoritative), this sets each
+ * editable column outright from `input`; `cover_url`, `plays`, and the curation
+ * flags are left untouched. Only bound values are interpolated. Caller must
+ * `revalidateTag(EXTERNAL_CACHE_TAG)` + `revalidatePath(...)` after.
+ */
+export async function updateExternalGameDetails(
+  slug: string,
+  input: UpdateExternalGameInput,
+): Promise<void> {
+  await sql`
+    UPDATE external_games
+    SET title = ${input.title},
+        tagline = ${input.tagline},
+        description = ${input.description},
+        category = ${input.category},
+        tags = ${input.tags},
+        external_url = ${input.externalUrl},
+        accent = ${input.accent},
+        gradient_from = ${input.gradientFrom},
+        gradient_to = ${input.gradientTo},
+        updated_at = now()
+    WHERE slug = ${slug}
+  `;
+}
+
+/**
  * Overwrite ONLY the `cover_url` of an existing external game (a `null` clears
  * it, falling the app back to its gradient placeholder). Used by the "re-cache
  * cover" action to point a row at a freshly blob-hosted copy of its cover. Only
