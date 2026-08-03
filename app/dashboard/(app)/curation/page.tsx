@@ -23,12 +23,12 @@
 
 import type { Metadata } from "next";
 import { requireRole } from "@/app/lib/auth";
-import { resolveGames, resolveTags } from "@/app/lib/games-store";
+import { resolveGames, resolveGenres, resolveTags } from "@/app/lib/games-store";
 import { CoverImage } from "@/app/components/CoverImage";
 import { DashHeader } from "../_ui/DashHeader";
 import { Section } from "../_ui/Section";
 import { toggleNewAction } from "./actions";
-import { deleteTagAction, renameTagAction } from "../tags/actions";
+import { deleteTagAction, renameGenreAction, renameTagAction } from "../tags/actions";
 import { FeaturedPicker } from "./_ui/FeaturedPicker";
 
 export const metadata: Metadata = {
@@ -61,7 +61,11 @@ export default async function CurationPage({
 }) {
   await requireRole("admin");
 
-  const [games, tags] = await Promise.all([resolveGames(), resolveTags()]);
+  const [games, tags, genres] = await Promise.all([
+    resolveGames(),
+    resolveTags(),
+    resolveGenres(),
+  ]);
   const sp = await searchParams;
   const ok = asString(sp.ok);
   const error = asString(sp.error);
@@ -226,6 +230,62 @@ export default async function CurationPage({
                     </button>
                   </form>
                 </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      {/* GENRES — the homepage category rows. A genre can't be blank, so there is
+          deliberately no delete: every game belongs to exactly one. */}
+      <Section
+        title="Genres"
+        subtitle={`${genres.length} ${genres.length === 1 ? "genre" : "genres"} · catalogue-wide`}
+      >
+        <p className="mb-4 text-sm text-muted">
+          Genres are the homepage category rows. Renaming onto an{" "}
+          <span className="font-semibold text-foreground">existing</span> genre{" "}
+          <span className="font-semibold text-foreground">merges</span> its games
+          in. A genre can&rsquo;t be empty, so there&rsquo;s no delete — every game
+          belongs to exactly one.
+        </p>
+
+        {genres.length === 0 ? (
+          <p className="rounded-lg border border-border px-4 py-6 text-center text-sm text-muted">
+            No genres in the catalogue yet.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {genres.map(({ name, count }) => (
+              <li
+                key={name}
+                className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3"
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <span className="truncate text-sm font-bold text-foreground">
+                    {name}
+                  </span>
+                  <CountPill count={count} />
+                </div>
+                <form action={renameGenreAction} className="flex items-center gap-2">
+                  <input type="hidden" name="from" value={name} />
+                  <label className="sr-only" htmlFor={`genre-${name}`}>
+                    New name for {name}
+                  </label>
+                  <input
+                    id={`genre-${name}`}
+                    name="to"
+                    defaultValue={name}
+                    autoComplete="off"
+                    className="w-40 rounded-lg border border-border px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="submit"
+                    className="rounded-full bg-brand px-4 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+                  >
+                    Rename / merge
+                  </button>
+                </form>
               </li>
             ))}
           </ul>
