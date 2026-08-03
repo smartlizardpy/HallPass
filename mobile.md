@@ -3,13 +3,21 @@
 Every game in the catalogue is tagged `desktop` / `mobile` / `both`, and the site
 uses that tag to stop serving people games they physically cannot play.
 
-> **Status.** Phases 1–5 are built and committed on `feat/mobile-platform-tag`;
-> migration `014` is applied to the branch `.env.local` points at
-> (`ep-raspy-waterfall-a6sp6ijx`). **Phase 6 — the backfill — is not done**, so
-> every one of the 27 games is still untagged and the site therefore looks and
-> behaves exactly as it did before. Tag them at
-> `/dashboard/games/<slug>` ("Plays on"); the games list marks the untagged ones
-> in amber. Prod still needs `npm run migrate` (Phase 7, step 5).
+> **Status — all phases done except the prod migration.**
+>
+> Built and committed on `feat/mobile-platform-tag`, rebased onto current `main`
+> (which by then included the Blob work through PR #36).
+>
+> - **Phase 6 backfill is DONE**: Pixel Slicer and Depths of Aethelgard are
+>   `both`; the other 25 are `desktop`. Written into `app/lib/games.ts` so the
+>   tags ship with a deploy rather than living in one Neon branch.
+> - Migration `014` is applied to the branch `.env.local` points at
+>   (`ep-raspy-waterfall-a6sp6ijx`). **Production still needs `npm run migrate`**
+>   — that is the one remaining step (Phase 7, step 5).
+> - Corrections go through the dashboard: `/dashboard/games/<slug>` → "Plays on".
+>   Native games write a sparse `game_overrides` column, external games write
+>   their own row; both use the same control, and "Unknown" is selectable so any
+>   tag here can be taken back off.
 
 Right now a phone visitor sees the same grid a desktop visitor sees, taps a
 WASD-controlled runner, gets a game that does not respond to touch, and leaves.
