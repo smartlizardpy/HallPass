@@ -52,10 +52,10 @@ export default async function NewExternalGamePage({
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6">
       <Link
-        href="/dashboard/external-games"
+        href="/dashboard/games"
         className="inline-block text-sm font-semibold text-brand hover:text-brand-600"
       >
-        ← All external games
+        ← All games
       </Link>
 
       <DashHeader
@@ -196,7 +196,7 @@ export default async function NewExternalGamePage({
               Add external game
             </button>
             <Link
-              href="/dashboard/external-games"
+              href="/dashboard/games"
               className="rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2"
             >
               Cancel
