@@ -6,9 +6,11 @@ import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import { type Game } from "../lib/games";
 import { useFavorites, useRecentlyPlayed } from "../lib/personalization";
+import { playsOn, useDevicePlatform } from "../lib/use-device-platform";
 import { CoverImage } from "./CoverImage";
 import { ArcadeShell, useOpenGame } from "./ArcadeShell";
 import { GameCard } from "./GameCard";
+import { PlatformConfirmSheet, usePlayGuard } from "./PlatformGate";
 import { useSearchCapture } from "../lib/use-search-capture";
 
 /**
@@ -95,6 +97,14 @@ function ArcadeRows({
 }) {
   const openGame = useOpenGame();
 
+  // Every ▶ on this page goes through the guard rather than straight to
+  // `openGame`, so a device-mismatched game asks before it takes over the screen.
+  // Games with no tag, and the pre-mount render, pass through untouched.
+  const { requestPlay, pending, confirmPlay, cancelPlay } = usePlayGuard(
+    games,
+    openGame,
+  );
+
   const findGame = (slug: string) => games.find((g) => g.slug === slug);
 
   // Personalization (localStorage-backed, hydrates AFTER mount via
@@ -150,6 +160,31 @@ function ArcadeRows({
     });
   }, [category, query, trending, games]);
 
+  // Device-aware ORDER, never device-aware membership. Every game the filter
+  // matched is still in this list on every device — search crawlers are mobile
+  // clients, so dropping desktop games on a phone would drop them from the index.
+  //
+  // Three buckets, STABLE within each so the existing ranking survives: plays
+  // here → not checked yet → known not to work here. While `device` is null (the
+  // server render and the first client paint) the list is returned untouched,
+  // which is what keeps this hydration-safe and keeps the prerendered HTML — the
+  // copy sitting in the service-worker precache — device-neutral.
+  const device = useDevicePlatform();
+  const ordered = useMemo(() => {
+    if (!device) return filtered;
+    const rank = (g: Game) => {
+      const ok = playsOn(g, device);
+      return ok === true ? 0 : ok === null ? 1 : 2;
+    };
+    // `map`+`sort` on index keeps ties in their original order. Array.prototype
+    // .sort is specified as stable, but the explicit tiebreak documents that the
+    // ordering inside a bucket is load-bearing rather than incidental.
+    return filtered
+      .map((g, i) => ({ g, i }))
+      .sort((a, b) => rank(a.g) - rank(b.g) || a.i - b.i)
+      .map(({ g }) => g);
+  }, [filtered, device]);
+
   // Report the search from HERE rather than from the header: this is the only
   // component that knows BOTH what was typed and how many games it matched, and
   // the match count is what powers the dashboard's zero-result panel — the one
@@ -159,6 +194,12 @@ function ArcadeRows({
 
   return (
     <>
+        {/* Renders nothing until a mismatched ▶ is pressed. */}
+        <PlatformConfirmSheet
+          game={pending}
+          onConfirm={confirmPlay}
+          onCancel={cancelPlay}
+        />
 
         {/* Hero / Featured banner */}
         {category === "All" && !query && (
@@ -173,7 +214,7 @@ function ArcadeRows({
                 <GameCard
                   key={g.slug}
                   game={g}
-                  onPlay={openGame}
+                  onPlay={requestPlay}
                   isFavorite={isFavorite(g.slug)}
                   onToggleFavorite={handleToggleFavorite}
                 />
@@ -190,7 +231,7 @@ function ArcadeRows({
                 <GameCard
                   key={g.slug}
                   game={g}
-                  onPlay={openGame}
+                  onPlay={requestPlay}
                   isFavorite={isFavorite(g.slug)}
                   onToggleFavorite={handleToggleFavorite}
                 />
@@ -207,7 +248,7 @@ function ArcadeRows({
                 <GameCard
                   key={g.slug}
                   game={g}
-                  onPlay={openGame}
+                  onPlay={requestPlay}
                   isFavorite={isFavorite(g.slug)}
                   onToggleFavorite={handleToggleFavorite}
                 />
@@ -227,7 +268,7 @@ function ArcadeRows({
                 <GameCard
                   key={g.slug}
                   game={g}
-                  onPlay={openGame}
+                  onPlay={requestPlay}
                   isFavorite={isFavorite(g.slug)}
                   onToggleFavorite={handleToggleFavorite}
                 />
@@ -257,11 +298,11 @@ function ArcadeRows({
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-              {filtered.map((g) => (
+              {ordered.map((g) => (
                 <GameCard
                   key={g.slug}
                   game={g}
-                  onPlay={openGame}
+                  onPlay={requestPlay}
                   isFavorite={isFavorite(g.slug)}
                   onToggleFavorite={handleToggleFavorite}
                 />

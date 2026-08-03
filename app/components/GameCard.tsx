@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import type { Game } from "../lib/games";
+import { playsOn, useDevicePlatform } from "../lib/use-device-platform";
 import { CoverImage } from "./CoverImage";
 
 export function GameCard({
@@ -22,6 +25,14 @@ export function GameCard({
 }) {
   const aspect =
     size === "lg" ? "aspect-[16/10]" : "aspect-square";
+
+  // `null` before mount and for any untagged game, which is why this is a strict
+  // `=== false` rather than a falsy check: unknown must render NO badge, and both
+  // states are falsy. The badge names the platform the game DOES want, so it reads
+  // as information ("this one is a desktop game") rather than as a refusal.
+  const device = useDevicePlatform();
+  const mismatch = device ? playsOn(game, device) === false : false;
+
   return (
     // Root is a DIV so the card link, the hover ▶ and the favorite heart are all
     // SIBLINGS — an interactive element is never nested inside another.
@@ -50,6 +61,15 @@ export function GameCard({
             {game.isFeatured && (
               <span className="rounded-full bg-accent-yellow px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-zinc-900 shadow-lg">
                 ★ Hot
+              </span>
+            )}
+            {/* Deliberately muted, and deliberately still here: a game that does
+                not suit this device is sorted down and labelled, never removed.
+                The card keeps its link, so the catalogue a crawler sees is the
+                same catalogue on every device. */}
+            {mismatch && (
+              <span className="rounded-full bg-zinc-900/80 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white shadow-lg">
+                {game.platform === "mobile" ? "Mobile" : "Desktop"}
               </span>
             )}
           </div>
