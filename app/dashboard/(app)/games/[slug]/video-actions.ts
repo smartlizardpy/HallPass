@@ -63,7 +63,12 @@ export async function setGameVideoAction(formData: FormData): Promise<void> {
     let failed = false;
     try {
       await clearGameVideo(slug);
-    } catch {
+    } catch (error) {
+      // Log the real cause — the redirect below only tells the admin "try
+      // again". The single most common cause is the `game_videos` table not
+      // existing yet (migration 013 not applied to this database), which shows
+      // here as a `relation "game_videos" does not exist` error.
+      console.error(`[video] clearGameVideo(${slug}) failed`, error);
       failed = true;
     }
     if (!failed) {
@@ -98,7 +103,12 @@ export async function setGameVideoAction(formData: FormData): Promise<void> {
   let failed = false;
   try {
     await setGameVideo(slug, videoId, label, actorEmail);
-  } catch {
+  } catch (error) {
+    // See the note in the clear branch above: the usual cause of "Could not
+    // save the video" is the `game_videos` table missing (migration 013 not
+    // applied). Logging the real error makes that visible in the server logs
+    // instead of only as the generic redirect message.
+    console.error(`[video] setGameVideo(${slug}) failed`, error);
     failed = true;
   }
   if (!failed) {
