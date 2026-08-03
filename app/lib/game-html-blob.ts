@@ -51,6 +51,54 @@ export function contentTypeForPath(relPath: string): string {
   return CONTENT_TYPES[ext] ?? "application/octet-stream";
 }
 
+/**
+ * One blob under a game's prefix, as the serving route needs it: enough to serve
+ * the bytes (`url`) and to judge freshness against the deployed static mirror
+ * (`uploadedAt`, epoch ms — a number, not a `Date`, so the cached list is
+ * serialisable).
+ */
+export type ServingBlob = { url: string; uploadedAt: number };
+
+/** What the game-serving route should do with one requested asset. */
+export type GameSource =
+  | { kind: "static" }
+  | { kind: "proxy"; url: string };
+
+/**
+ * Decide whether a requested game asset should be served from the free
+ * `public/games/` CDN twin or proxied byte-for-byte from Vercel Blob.
+ *
+ * This is the whole point of the blob-limits work, so the reasoning is here, in
+ * one pure function, rather than smeared through the route:
+ *
+ * Vercel Blob is the LIVE copy — an admin upload lands there and must serve
+ * immediately. `public/games/<slug>/` is the SAME bytes baked into the deploy by
+ * `scripts/sync-games.mjs`, served for free off Vercel's CDN. `mirrorSyncedAt` is
+ * when that mirror was captured. So a blob whose `uploadedAt` is at or before the
+ * mirror stamp is already in the deploy and costs nothing to serve statically;
+ * only a blob uploaded SINCE the last sync is genuinely newer than the mirror and
+ * has to be proxied so the edit is live. Once the next sync+deploy bakes it in,
+ * it falls back to the free path automatically.
+ *
+ * `staticExists` guards the one case that would otherwise 404: a game that lives
+ * ONLY in Blob (uploaded but never mirrored into the repo — `sync-games` skips
+ * slugs with no `public/games/<slug>/` dir). Such an asset is not newer than the
+ * mirror yet has no static twin, so it must still be proxied. When neither a blob
+ * nor a static twin exists we redirect to the static path anyway and let the CDN
+ * answer 404 — exactly what the old `head()`-fails branch did.
+ */
+export function chooseGameSource(args: {
+  staticExists: boolean;
+  blob: ServingBlob | null;
+  mirrorSyncedAt: number;
+}): GameSource {
+  const { staticExists, blob, mirrorSyncedAt } = args;
+  if (blob && blob.uploadedAt > mirrorSyncedAt) return { kind: "proxy", url: blob.url };
+  if (staticExists) return { kind: "static" };
+  if (blob) return { kind: "proxy", url: blob.url };
+  return { kind: "static" };
+}
+
 export type GameBlobFile = { pathname: string; size: number };
 
 // `list()` results carry no contentType (only `head()` does) — callers must

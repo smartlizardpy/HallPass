@@ -11,6 +11,7 @@ import {
   blobPathForAsset,
   blobPathForSlug,
   blobPrefixForSlug,
+  chooseGameSource,
   contentTypeForPath,
   isSafeSegment,
 } from "./game-html-blob";
@@ -86,5 +87,78 @@ describe("contentTypeForPath", () => {
     expect(contentTypeForPath("noextension")).toBe(
       "application/octet-stream",
     );
+  });
+});
+
+describe("chooseGameSource", () => {
+  const url = "https://blob.example/games/x/index.html";
+  const STAMP = 1000;
+
+  it("proxies a blob uploaded since the last sync, even when a static twin exists", () => {
+    // The whole freshness contract: an admin edit is newer than the deployed
+    // mirror, so it must be served live rather than from the stale CDN twin.
+    expect(
+      chooseGameSource({
+        staticExists: true,
+        blob: { url, uploadedAt: STAMP + 1 },
+        mirrorSyncedAt: STAMP,
+      }),
+    ).toEqual({ kind: "proxy", url });
+  });
+
+  it("serves the static twin when the blob is not newer than the mirror", () => {
+    // Already baked into public/games/ — the free CDN path, no Blob transfer.
+    expect(
+      chooseGameSource({
+        staticExists: true,
+        blob: { url, uploadedAt: STAMP },
+        mirrorSyncedAt: STAMP,
+      }),
+    ).toEqual({ kind: "static" });
+  });
+
+  it("serves the static twin when there is no blob at all (reset to default)", () => {
+    expect(
+      chooseGameSource({
+        staticExists: true,
+        blob: null,
+        mirrorSyncedAt: STAMP,
+      }),
+    ).toEqual({ kind: "static" });
+  });
+
+  it("proxies a blob-only game that has no static twin, regardless of age", () => {
+    // Uploaded but never mirrored into the repo (sync skips slugs with no
+    // public/games/<slug>/ dir). Not newer than the mirror, yet redirecting to a
+    // non-existent static path would 404 — so it must proxy.
+    expect(
+      chooseGameSource({
+        staticExists: false,
+        blob: { url, uploadedAt: STAMP - 1 },
+        mirrorSyncedAt: STAMP,
+      }),
+    ).toEqual({ kind: "proxy", url });
+  });
+
+  it("redirects to static when neither a blob nor a twin exists (CDN answers 404)", () => {
+    expect(
+      chooseGameSource({
+        staticExists: false,
+        blob: null,
+        mirrorSyncedAt: STAMP,
+      }),
+    ).toEqual({ kind: "static" });
+  });
+
+  it("prefers Blob for everything at the default stamp of 0", () => {
+    // MIRROR_SYNCED_AT = 0 (nothing synced yet) must reproduce the old blob-first
+    // behaviour: any real upload has uploadedAt > 0.
+    expect(
+      chooseGameSource({
+        staticExists: true,
+        blob: { url, uploadedAt: 1 },
+        mirrorSyncedAt: 0,
+      }),
+    ).toEqual({ kind: "proxy", url });
   });
 });
