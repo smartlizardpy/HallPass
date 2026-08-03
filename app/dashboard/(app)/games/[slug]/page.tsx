@@ -126,9 +126,12 @@ export default async function GameControlPage({
   // panels (source code, media, achievements, leaderboards) that an iframed game
   // cannot use. Branch early so none of that native data is fetched for them.
   if (game.externalUrl) {
-    const [categories, tagList] = await Promise.all([
+    const [categories, tagList, video] = await Promise.all([
       resolveCategories(),
       resolveTags(),
+      // Fail-soft to null like the native branch, so a Neon blip costs the
+      // prefill, not the page.
+      getGameVideo(slug),
     ]);
     const tagSuggestions = tagList.map((t) => t.tag);
 
@@ -322,27 +325,43 @@ export default async function GameControlPage({
           </form>
         </Section>
 
-        {/* VIDEO — same form and action as the native branch. Prefilling it with
-            the currently-attached video is a follow-up commit; this one just adds
-            the control so an external game can be given a video at all. */}
+        {/* VIDEO — same form and action as the native branch; external games
+            back it identically (id stored in `game_videos`, keyed on slug), and
+            their store page renders `GameTrailer` like any other. */}
         <Section title="Video" subtitle="Gameplay or intro, shown above the screenshots">
           <form action={setGameVideoAction} className="space-y-3">
             <input type="hidden" name="slug" value={slug} />
             <input
               type="url"
               name="videoUrl"
+              defaultValue={video ? youtubeWatchUrl(video.youtubeId) : ""}
               placeholder="https://www.youtube.com/watch?v=…"
               className="w-full max-w-lg rounded-lg border border-border px-3 py-2 text-sm"
             />
             <input
               type="text"
               name="videoLabel"
+              defaultValue={video?.label ?? ""}
               maxLength={MAX_VIDEO_LABEL}
               placeholder="Gameplay"
               className="w-full max-w-[12rem] rounded-lg border border-border px-3 py-2 text-sm"
             />
 
             <p className="text-xs text-muted">
+              {video ? (
+                <>
+                  Attached as{" "}
+                  <a
+                    href={youtubeWatchUrl(video.youtubeId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-bold text-brand hover:text-brand-600"
+                  >
+                    {video.youtubeId}
+                  </a>
+                  .{" "}
+                </>
+              ) : null}
               The label names the button on the game page. Nothing loads from
               YouTube until a player presses play — the poster is this game&apos;s
               cover art, so the video costs the page nothing. Leave the link blank
