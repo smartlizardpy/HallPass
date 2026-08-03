@@ -56,7 +56,12 @@ import {
   uploadBundleAction,
   uploadHtmlAction,
 } from "../actions";
-import { clearGameOverrideAction, setGameTagsAction, updateGameAction } from "./actions";
+import {
+  clearGameOverrideAction,
+  setGamePlatformAction,
+  setGameTagsAction,
+  updateGameAction,
+} from "./actions";
 import {
   deleteExternalGameAction,
   recacheExternalCoverAction,
@@ -81,6 +86,19 @@ export const metadata: Metadata = {
   title: "Game",
   robots: { index: false, follow: false },
 };
+
+/**
+ * The "Plays on" radios. Unknown posts the EMPTY STRING rather than being absent
+ * from the form — an unchecked radio group submits no field at all, which the
+ * action could not tell apart from a malformed post. An explicit empty value
+ * narrows to `null` through `toGamePlatform` and stores as SQL NULL.
+ */
+const PLATFORM_CHOICES: readonly { value: string; label: string }[] = [
+  { value: "", label: "Unknown" },
+  { value: "desktop", label: "Desktop only" },
+  { value: "mobile", label: "Mobile only" },
+  { value: "both", label: "Both" },
+];
 
 type Params = Promise<{ slug: string }>;
 type SearchParams = Promise<{ ok?: string | string[]; error?: string | string[] }>;
@@ -706,6 +724,50 @@ export default async function GameControlPage({
             className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
           >
             Save tags
+          </button>
+        </form>
+      </Section>
+
+      {/* PLAYS ON — a capability, not curation. It rides with the descriptive
+          editors rather than the Curation page because it describes the game
+          itself; and it is its own form because it gets set ONCE, after somebody
+          opens the game on a phone, not edited alongside the tagline. */}
+      <Section
+        title="Plays on"
+        subtitle="Sorts and labels the game per device — never hides it"
+      >
+        <form action={setGamePlatformAction} className="space-y-4">
+          <input type="hidden" name="slug" value={slug} />
+          <div className="flex flex-wrap gap-2">
+            {PLATFORM_CHOICES.map((choice) => (
+              <label
+                key={choice.label}
+                className="flex cursor-pointer items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold text-zinc-900 hover:border-brand has-checked:border-brand has-checked:bg-brand/10"
+              >
+                <input
+                  type="radio"
+                  name="platform"
+                  value={choice.value}
+                  defaultChecked={(game.platform ?? "") === choice.value}
+                  className="accent-brand"
+                />
+                {choice.label}
+              </label>
+            ))}
+          </div>
+          {/* Unknown is a real, selectable option, not just the initial state. A
+              wrong tag is worse than no tag — it badges and re-sorts the game on
+              the public site — so an admin has to be able to take it back off. */}
+          <p className="text-sm text-muted">
+            Leave on <strong>Unknown</strong> until someone has actually opened
+            the game on a phone. Unknown renders exactly like an untagged game:
+            no badge, no reordering, no warning.
+          </p>
+          <button
+            type="submit"
+            className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+          >
+            Save platform
           </button>
         </form>
       </Section>

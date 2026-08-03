@@ -177,6 +177,18 @@ export default async function GamesPage({
                     Custom HTML
                   </Chip>
                 )}
+                {/* An UNTAGGED game is the state worth surfacing, so this chip
+                    marks the absence rather than the value: tagging is a manual
+                    pass over the whole catalogue and "which ones are left" should
+                    be visible here, not something you hold in your head. Games
+                    that ARE tagged say so plainly. */}
+                {game.platform ? (
+                  <Chip className="border border-border bg-surface-2 text-muted">
+                    {game.platform === "both" ? "Desktop + mobile" : `${game.platform} only`}
+                  </Chip>
+                ) : (
+                  <Chip className="bg-amber-50 text-amber-700">No platform</Chip>
+                )}
                 <Chip
                   className={
                     boardCount > 0
