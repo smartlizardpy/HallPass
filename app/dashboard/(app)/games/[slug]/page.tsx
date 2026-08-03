@@ -322,6 +322,42 @@ export default async function GameControlPage({
           </form>
         </Section>
 
+        {/* VIDEO — same form and action as the native branch. Prefilling it with
+            the currently-attached video is a follow-up commit; this one just adds
+            the control so an external game can be given a video at all. */}
+        <Section title="Video" subtitle="Gameplay or intro, shown above the screenshots">
+          <form action={setGameVideoAction} className="space-y-3">
+            <input type="hidden" name="slug" value={slug} />
+            <input
+              type="url"
+              name="videoUrl"
+              placeholder="https://www.youtube.com/watch?v=…"
+              className="w-full max-w-lg rounded-lg border border-border px-3 py-2 text-sm"
+            />
+            <input
+              type="text"
+              name="videoLabel"
+              maxLength={MAX_VIDEO_LABEL}
+              placeholder="Gameplay"
+              className="w-full max-w-[12rem] rounded-lg border border-border px-3 py-2 text-sm"
+            />
+
+            <p className="text-xs text-muted">
+              The label names the button on the game page. Nothing loads from
+              YouTube until a player presses play — the poster is this game&apos;s
+              cover art, so the video costs the page nothing. Leave the link blank
+              to remove it.
+            </p>
+
+            <button
+              type="submit"
+              className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+            >
+              Save video
+            </button>
+          </form>
+        </Section>
+
         {/* COVER + DANGER */}
         <Section title="Cover & removal" subtitle="Re-host the cover, or delete the game">
           <div className="flex flex-wrap items-center gap-4">
