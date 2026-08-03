@@ -124,6 +124,7 @@ export const games: Game[] = [
     art: "speed",
     isFeatured: true,
     plays: 184213,
+    platform: "desktop",
   },
   {
     slug: "crimson-survivor",
@@ -139,6 +140,7 @@ export const games: Game[] = [
     art: "swarm",
     isNew: true,
     plays: 4220,
+    platform: "desktop",
   },
   {
     slug: "sea-mercenary",
@@ -153,6 +155,7 @@ export const games: Game[] = [
     accent: "#22d3ee",
     art: "wave",
     plays: 28110,
+    platform: "desktop",
   },
   {
     slug: "vanta-void",
@@ -167,6 +170,7 @@ export const games: Game[] = [
     accent: "#a78bfa",
     art: "void",
     plays: 13400,
+    platform: "desktop",
   },
   {
     slug: "depths-of-aethelgard",
@@ -181,6 +185,7 @@ export const games: Game[] = [
     accent: "#fbbf24",
     art: "rune",
     plays: 9012,
+    platform: "both",
   },
   {
     slug: "symbiosis",
@@ -195,6 +200,7 @@ export const games: Game[] = [
     accent: "#34d399",
     art: "orbit",
     plays: 5680,
+    platform: "desktop",
   },
   {
     slug: "silence",
@@ -209,6 +215,7 @@ export const games: Game[] = [
     accent: "#818cf8",
     art: "eye",
     plays: 22001,
+    platform: "desktop",
   },
   {
     slug: "neon-snake",
@@ -223,6 +230,7 @@ export const games: Game[] = [
     accent: "#4ade80",
     art: "serpent",
     plays: 96214,
+    platform: "desktop",
   },
   {
     slug: "system-restore",
@@ -237,6 +245,7 @@ export const games: Game[] = [
     accent: "#38bdf8",
     art: "glitch",
     plays: 7423,
+    platform: "desktop",
   },
   {
     slug: "neon-fracture",
@@ -251,6 +260,7 @@ export const games: Game[] = [
     accent: "#f43f5e",
     art: "glitch",
     plays: 11244,
+    platform: "desktop",
   },
   {
     slug: "color-clash-3d",
@@ -265,6 +275,7 @@ export const games: Game[] = [
     accent: "#fb923c",
     art: "splatter",
     plays: 88330,
+    platform: "desktop",
   },
   {
     slug: "cube-clash-3d",
@@ -279,6 +290,7 @@ export const games: Game[] = [
     accent: "#22d3ee",
     art: "splatter",
     plays: 41200,
+    platform: "desktop",
   },
   {
     slug: "teraria",
@@ -293,6 +305,7 @@ export const games: Game[] = [
     accent: "#84cc16",
     art: "terrain",
     plays: 142001,
+    platform: "desktop",
   },
   {
     slug: "snag",
@@ -307,6 +320,7 @@ export const games: Game[] = [
     accent: "#fde047",
     art: "tether",
     plays: 6710,
+    platform: "desktop",
   },
   {
     slug: "neon-hockey",
@@ -321,6 +335,7 @@ export const games: Game[] = [
     accent: "#22d3ee",
     art: "rink",
     plays: 33421,
+    platform: "desktop",
   },
   {
     slug: "core-vs-swarm",
@@ -335,6 +350,7 @@ export const games: Game[] = [
     accent: "#fde68a",
     art: "swarm",
     plays: 19120,
+    platform: "desktop",
   },
   {
     slug: "jjk-domain-survival-v3",
@@ -349,6 +365,7 @@ export const games: Game[] = [
     accent: "#c084fc",
     art: "rune",
     plays: 211405,
+    platform: "desktop",
   },
   {
     slug: "jjk-domain-survival-top-down",
@@ -363,6 +380,7 @@ export const games: Game[] = [
     accent: "#e879f9",
     art: "orbit",
     plays: 89532,
+    platform: "desktop",
   },
   {
     slug: "neon-tether",
@@ -377,6 +395,7 @@ export const games: Game[] = [
     accent: "#a5b4fc",
     art: "tether",
     plays: 4221,
+    platform: "desktop",
   },
   {
     slug: "chroma-orbit",
@@ -391,6 +410,7 @@ export const games: Game[] = [
     accent: "#f472b6",
     art: "orbit",
     plays: 16800,
+    platform: "desktop",
   },
   {
     slug: "pixel-slicer",
@@ -405,6 +425,7 @@ export const games: Game[] = [
     accent: "#fbbf24",
     art: "slash",
     plays: 54021,
+    platform: "both",
   },
   {
     slug: "pixel-bullet-quest",
@@ -420,6 +441,7 @@ export const games: Game[] = [
     art: "swarm",
     isNew: true,
     plays: 0,
+    platform: "desktop",
   },
   {
     slug: "system-error",
@@ -434,6 +456,7 @@ export const games: Game[] = [
     accent: "#f87171",
     art: "glitch",
     plays: 28722,
+    platform: "desktop",
   },
   {
     slug: "nuclear-reactor-manager",
@@ -448,6 +471,7 @@ export const games: Game[] = [
     accent: "#33ff33",
     art: "glitch",
     isNew: true,
+    platform: "desktop",
   },
   {
     slug: "paddle-crawler",
@@ -462,6 +486,7 @@ export const games: Game[] = [
     accent: "#ff0055",
     art: "glitch",
     isNew: true,
+    platform: "desktop",
   },
   {
     slug: "rhythm-hell-harmonic-flash",
@@ -476,6 +501,7 @@ export const games: Game[] = [
     accent: "#00f3ff",
     art: "slash",
     isNew: true,
+    platform: "desktop",
   },
   {
     slug: "duskfall",
@@ -490,6 +516,7 @@ export const games: Game[] = [
     accent: "#ffb347",
     art: "swarm",
     isNew: true,
+    platform: "desktop",
   },
 ];
 
