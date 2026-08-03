@@ -132,6 +132,21 @@ export default async function NewExternalGamePage({
             </datalist>
           </label>
 
+          <label className="block text-sm font-semibold text-zinc-900 sm:max-w-xs">
+            Plays on
+            {/* Defaults to Unknown, NOT to "Both". Whoever adds an external game
+                has usually only seen it on the machine they added it from, and a
+                guess here becomes a badge and a sort position on the public site.
+                Unknown is silent — leave it until someone opens the game on a
+                phone. */}
+            <select name="platform" defaultValue="" className={inputClass}>
+              <option value="">Unknown — not checked yet</option>
+              <option value="desktop">Desktop only</option>
+              <option value="mobile">Mobile only</option>
+              <option value="both">Both</option>
+            </select>
+          </label>
+
           <div className="block text-sm font-semibold text-zinc-900">
             Tags
             <div className="mt-2">

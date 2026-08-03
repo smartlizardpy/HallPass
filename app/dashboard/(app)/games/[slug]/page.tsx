@@ -36,6 +36,7 @@ import { isUnconfiguredDbError } from "@/app/lib/db";
 import { listGameFiles, readPublishedIndexHtml } from "@/app/lib/game-html-blob";
 import { buildEmbedSnippet, buildExampleCalls } from "@/app/lib/integration-prompt";
 import { SITE_URL } from "@/app/lib/site";
+import type { Game } from "@/app/lib/games";
 import { CopyBox } from "./_ui/CopyBox";
 import { resolveCategories, resolveGame, resolveTags } from "@/app/lib/games-store";
 import { store } from "@/app/lib/scoreboard";
@@ -56,10 +57,16 @@ import {
   uploadBundleAction,
   uploadHtmlAction,
 } from "../actions";
-import { clearGameOverrideAction, setGameTagsAction, updateGameAction } from "./actions";
+import {
+  clearGameOverrideAction,
+  setGamePlatformAction,
+  setGameTagsAction,
+  updateGameAction,
+} from "./actions";
 import {
   deleteExternalGameAction,
   recacheExternalCoverAction,
+  setExternalGamePlatformAction,
   setExternalGameTagsAction,
   updateExternalGameAction,
 } from "../../external-games/actions";
@@ -81,6 +88,81 @@ export const metadata: Metadata = {
   title: "Game",
   robots: { index: false, follow: false },
 };
+
+/**
+ * The "Plays on" radios. Unknown posts the EMPTY STRING rather than being absent
+ * from the form — an unchecked radio group submits no field at all, which the
+ * action could not tell apart from a malformed post. An explicit empty value
+ * narrows to `null` through `toGamePlatform` and stores as SQL NULL.
+ */
+const PLATFORM_CHOICES: readonly { value: string; label: string }[] = [
+  { value: "", label: "Unknown" },
+  { value: "desktop", label: "Desktop only" },
+  { value: "mobile", label: "Mobile only" },
+  { value: "both", label: "Both" },
+];
+
+/**
+ * The "Plays on" editor, shared by BOTH branches of this page.
+ *
+ * One component rather than two copies because native and external games differ
+ * only in which action receives the post — native writes a sparse
+ * `game_overrides` column, external updates its own row — while the control, the
+ * wording and the meaning of "Unknown" are identical. Two copies would drift, and
+ * the half that drifted would be the external one, which is the half nobody looks
+ * at.
+ */
+function PlatformSection({
+  slug,
+  platform,
+  action,
+}: {
+  slug: string;
+  platform: Game["platform"];
+  action: (formData: FormData) => Promise<void>;
+}) {
+  return (
+    <Section
+      title="Plays on"
+      subtitle="Sorts and labels the game per device — never hides it"
+    >
+      <form action={action} className="space-y-4">
+        <input type="hidden" name="slug" value={slug} />
+        <div className="flex flex-wrap gap-2">
+          {PLATFORM_CHOICES.map((choice) => (
+            <label
+              key={choice.label}
+              className="flex cursor-pointer items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold text-zinc-900 hover:border-brand has-checked:border-brand has-checked:bg-brand/10"
+            >
+              <input
+                type="radio"
+                name="platform"
+                value={choice.value}
+                defaultChecked={(platform ?? "") === choice.value}
+                className="accent-brand"
+              />
+              {choice.label}
+            </label>
+          ))}
+        </div>
+        {/* Unknown is a real, selectable option, not just the initial state. A
+            wrong tag is worse than no tag — it badges and re-sorts the game on
+            the public site — so an admin has to be able to take it back off. */}
+        <p className="text-sm text-muted">
+          Leave on <strong>Unknown</strong> until someone has actually opened the
+          game on a phone. Unknown renders exactly like an untagged game: no
+          badge, no reordering, no warning.
+        </p>
+        <button
+          type="submit"
+          className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+        >
+          Save platform
+        </button>
+      </form>
+    </Section>
+  );
+}
 
 type Params = Promise<{ slug: string }>;
 type SearchParams = Promise<{ ok?: string | string[]; error?: string | string[] }>;
@@ -324,6 +406,16 @@ export default async function GameControlPage({
             </button>
           </form>
         </Section>
+
+        {/* PLAYS ON — same control as the native branch, different action: an
+            external game owns its whole row in `external_games`, so its tag is a
+            column on that row rather than a sparse `game_overrides` entry. The
+            public site cannot tell the two apart, and neither should this. */}
+        <PlatformSection
+          slug={slug}
+          platform={game.platform}
+          action={setExternalGamePlatformAction}
+        />
 
         {/* VIDEO — same form and action as the native branch; external games
             back it identically (id stored in `game_videos`, keyed on slug), and
@@ -709,6 +801,16 @@ export default async function GameControlPage({
           </button>
         </form>
       </Section>
+
+      {/* PLAYS ON — a capability, not curation. It rides with the descriptive
+          editors rather than the Curation page because it describes the game
+          itself; and it is its own form because it gets set ONCE, after somebody
+          opens the game on a phone, not edited alongside the tagline. */}
+      <PlatformSection
+        slug={slug}
+        platform={game.platform}
+        action={setGamePlatformAction}
+      />
 
       {/* MEDIA — sits between Tags and Source code: media is descriptive (like
           details/tags), source is operational. */}

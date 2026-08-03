@@ -35,7 +35,12 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
 import { sql } from "@/app/lib/db";
-import { games, type Game } from "@/app/lib/games";
+import {
+  games,
+  toGamePlatform,
+  type Game,
+  type GamePlatform,
+} from "@/app/lib/games";
 import { readExternalGames } from "@/app/lib/external-games-store";
 
 /**
@@ -60,6 +65,7 @@ export type GameOverride = {
   tags: string[] | null;
   isNew: boolean | null;
   isFeatured: boolean | null;
+  platform: GamePlatform | null;
 };
 
 /** A row as returned by the driver (column names as keys). */
@@ -95,6 +101,12 @@ function mapOverride(row: Row): GameOverride {
     tags: toTagsOrNull(row.tags),
     isNew: toBoolOrNull(row.is_new),
     isFeatured: toBoolOrNull(row.is_featured),
+    // NOT `toStringOrNull`: this one is VALIDATED, not stringified. The column is
+    // TEXT with a CHECK, but it still arrives here as `unknown`, and a row written
+    // before that constraint existed (or by hand in a psql session) must not be
+    // able to enter the `GamePlatform` union. Anything unrecognised reads as
+    // `null` — unknown — which the whole app already handles.
+    platform: toGamePlatform(row.platform),
   };
 }
 
@@ -109,7 +121,7 @@ function mapOverride(row: Row): GameOverride {
 const readOverridesCached = unstable_cache(
   async (): Promise<GameOverride[]> => {
     const rows = await sql`
-      SELECT slug, title, tagline, description, category, tags, is_new, is_featured
+      SELECT slug, title, tagline, description, category, tags, is_new, is_featured, platform
       FROM game_overrides
     `;
     return rows.map(mapOverride);
@@ -161,6 +173,10 @@ export async function resolveGames(): Promise<Game[]> {
       tags: o.tags ?? game.tags,
       isNew: o.isNew ?? game.isNew,
       isFeatured: o.isFeatured ?? game.isFeatured,
+      // Both sides may be absent, and the result is then absent too — an untagged
+      // game with an override row that does not set `platform` stays UNKNOWN
+      // rather than acquiring a value from either layer.
+      platform: o.platform ?? game.platform,
     };
   });
   // External games are appended after the static catalogue (which may itself be
@@ -249,7 +265,7 @@ export async function resolveGenres(): Promise<{ name: string; count: number }[]
 /** The single override row for `slug`, or `null` when none exists. */
 export async function getOverride(slug: string): Promise<GameOverride | null> {
   const rows = await sql`
-    SELECT slug, title, tagline, description, category, tags, is_new, is_featured
+    SELECT slug, title, tagline, description, category, tags, is_new, is_featured, platform
     FROM game_overrides
     WHERE slug = ${slug}
   `;
@@ -274,9 +290,15 @@ export async function upsertOverride(
   const tags = patch.tags ?? null;
   const isNew = patch.isNew ?? null;
   const isFeatured = patch.isFeatured ?? null;
+  // `platform` is listed here for the same reason as every other column: this
+  // helper's contract is that the patch FULLY defines the row. Omitting it would
+  // quietly make that false — a platform tag would survive an upsert that wiped
+  // the title — and a half-replacing "replace" is worse than either behaviour on
+  // its own. Callers that want to touch the tag alone use {@link setGamePlatform}.
+  const platform = patch.platform ?? null;
   await sql`
-    INSERT INTO game_overrides (slug, title, tagline, description, category, tags, is_new, is_featured)
-    VALUES (${slug}, ${title}, ${tagline}, ${description}, ${category}, ${tags}, ${isNew}, ${isFeatured})
+    INSERT INTO game_overrides (slug, title, tagline, description, category, tags, is_new, is_featured, platform)
+    VALUES (${slug}, ${title}, ${tagline}, ${description}, ${category}, ${tags}, ${isNew}, ${isFeatured}, ${platform})
     ON CONFLICT (slug) DO UPDATE SET
       title = EXCLUDED.title,
       tagline = EXCLUDED.tagline,
@@ -285,6 +307,7 @@ export async function upsertOverride(
       tags = EXCLUDED.tags,
       is_new = EXCLUDED.is_new,
       is_featured = EXCLUDED.is_featured,
+      platform = EXCLUDED.platform,
       updated_at = now()
   `;
 }
@@ -329,6 +352,34 @@ export async function setGameNew(slug: string, value: boolean): Promise<void> {
     VALUES (${slug}, ${value})
     ON CONFLICT (slug) DO UPDATE SET
       is_new = EXCLUDED.is_new,
+      updated_at = now()
+  `;
+}
+
+/**
+ * Set ONLY the `platform` tag for `slug` (sparse-insert + single-column upsert),
+ * leaving every other overridable field intact. Caller must revalidate after.
+ *
+ * `null` is a first-class argument, not an absence: it stores SQL NULL, which
+ * resolves the game back to UNKNOWN. An admin who tagged a game wrong needs to be
+ * able to say "actually I do not know" and have the badge and the sort stop
+ * asserting anything — clearing the tag is not the same as clearing the whole
+ * override row ({@link clearOverride}), which would also discard their copy edits.
+ *
+ * Unlike `is_new`/`is_featured` this is a CAPABILITY rather than a curation flag —
+ * it describes the game, not our editorial opinion of it — which is why the
+ * dashboard puts it on the game's own page instead of the Curation screen. The
+ * write mechanics are identical, hence its home here.
+ */
+export async function setGamePlatform(
+  slug: string,
+  value: GamePlatform | null,
+): Promise<void> {
+  await sql`
+    INSERT INTO game_overrides (slug, platform)
+    VALUES (${slug}, ${value})
+    ON CONFLICT (slug) DO UPDATE SET
+      platform = EXCLUDED.platform,
       updated_at = now()
   `;
 }

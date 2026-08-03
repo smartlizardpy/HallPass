@@ -7,6 +7,7 @@ import type { Game } from "../lib/games";
 import { type GameMedia, mediaPublicPath } from "../lib/game-media-blob";
 import { useFavorites } from "../lib/personalization";
 import { useOpenGame } from "./ArcadeShell";
+import { PlatformConfirmSheet, usePlayGuard } from "./PlatformGate";
 import { CoverImage } from "./CoverImage";
 import { GameCard } from "./GameCard";
 import { GameAchievements } from "./GameAchievements";
@@ -69,6 +70,13 @@ export function GameStore({
   video?: { id: string; label: string } | null;
 }) {
   const openGame = useOpenGame();
+  // This page's ▶ buttons are the game itself plus the related rail, so the guard
+  // needs both — a related card is as likely to be device-mismatched as the
+  // headline game, and it opens the same fullscreen player.
+  const { requestPlay, pending, confirmPlay, cancelPlay } = usePlayGuard(
+    [game, ...related],
+    openGame,
+  );
   const { isFavorite, toggleFavorite } = useFavorites();
 
   /**
@@ -104,6 +112,13 @@ export function GameStore({
 
   return (
     <div className="px-3 pb-10 pt-2 sm:px-8" style={accentVars}>
+      {/* Renders nothing until a device-mismatched ▶ is pressed. */}
+      <PlatformConfirmSheet
+        game={pending}
+        onConfirm={confirmPlay}
+        onCancel={cancelPlay}
+      />
+
       {/* Breadcrumb — mirrors the JSON-LD BreadcrumbList exactly, encoding
           included, so the two can never disagree. */}
       <nav aria-label="Breadcrumb" className="mb-3 text-[13px] font-bold text-muted">
@@ -251,13 +266,27 @@ export function GameStore({
                 <span className="font-bold text-zinc-900">{credit}</span>
               </MetaRow>
             )}
+            {/* Rendered from the tag ALONE, with no reference to the visitor's
+                device — a fact about the game, the same for everyone and for the
+                crawler. The device-aware treatment is the badge and the sort;
+                this row is just the spec sheet. Untagged games omit it rather
+                than claiming anything. */}
+            {game.platform && (
+              <MetaRow label="Best on">
+                {game.platform === "both"
+                  ? "Desktop or mobile"
+                  : game.platform === "mobile"
+                    ? "Mobile — touch controls"
+                    : "Desktop — keyboard controls"}
+              </MetaRow>
+            )}
             <MetaRow label="Plays in">Your browser</MetaRow>
           </dl>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => openGame(game.slug)}
+              onClick={() => requestPlay(game.slug)}
               style={{ touchAction: "manipulation" }}
               className="flex flex-1 items-center justify-center gap-2 rounded-full bg-brand px-6 py-4 text-base font-extrabold text-white shadow-lg shadow-brand/25 transition hover:bg-brand-600 active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30"
             >
@@ -325,7 +354,7 @@ export function GameStore({
               <GameCard
                 key={g.slug}
                 game={g}
-                onPlay={openGame}
+                onPlay={requestPlay}
                 isFavorite={isFavorite(g.slug)}
                 onToggleFavorite={handleToggleFavorite}
               />

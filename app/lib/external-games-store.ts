@@ -34,7 +34,7 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
 import { sql } from "@/app/lib/db";
-import { type Game } from "@/app/lib/games";
+import { toGamePlatform, type Game, type GamePlatform } from "@/app/lib/games";
 
 /**
  * The cache tag under which {@link readExternalGames} is stored. Re-exported so
@@ -45,7 +45,9 @@ export const EXTERNAL_CACHE_TAG = "external-games";
 
 /**
  * A single row of `external_games` (column names as keys). Every descriptive
- * column is NOT NULL in the schema; `cover_url` is the lone nullable column.
+ * column is NOT NULL in the schema; `cover_url` and `platform` are the two
+ * nullable ones — a NULL `platform` means UNKNOWN (nobody has checked which
+ * devices the game works on), not "works on everything".
  */
 export type ExternalGameRow = {
   slug: string;
@@ -61,6 +63,7 @@ export type ExternalGameRow = {
   gradient_to: string;
   is_new: boolean;
   is_featured: boolean;
+  platform: GamePlatform | null;
   plays: number;
 };
 
@@ -96,6 +99,11 @@ function mapRow(row: Row): Game {
     plays: Number(row.plays) || 0,
     externalUrl: String(row.external_url),
     coverUrl,
+    // Unlike `art` above, this is NOT a placeholder to satisfy the type — it is a
+    // real fact about the game and comes from the column. `undefined` (not
+    // `null`) so an untagged external game is indistinguishable from an untagged
+    // static one to everything downstream.
+    platform: toGamePlatform(row.platform) ?? undefined,
   };
 }
 
@@ -111,7 +119,7 @@ const readExternalGamesCached = unstable_cache(
   async (): Promise<Game[]> => {
     const rows = await sql`
       SELECT slug, title, tagline, description, category, tags, external_url,
-             cover_url, accent, gradient_from, gradient_to, is_new, is_featured, plays
+             cover_url, accent, gradient_from, gradient_to, is_new, is_featured, platform, plays
       FROM external_games
       ORDER BY created_at DESC
     `;
@@ -147,7 +155,7 @@ export async function readExternalGames(): Promise<Game[]> {
 export async function listExternalGames(): Promise<Game[]> {
   const rows = await sql`
     SELECT slug, title, tagline, description, category, tags, external_url,
-           cover_url, accent, gradient_from, gradient_to, is_new, is_featured, plays
+           cover_url, accent, gradient_from, gradient_to, is_new, is_featured, platform, plays
     FROM external_games
     ORDER BY created_at DESC
   `;
@@ -158,7 +166,7 @@ export async function listExternalGames(): Promise<Game[]> {
 export async function getExternalGame(slug: string): Promise<Game | null> {
   const rows = await sql`
     SELECT slug, title, tagline, description, category, tags, external_url,
-           cover_url, accent, gradient_from, gradient_to, is_new, is_featured, plays
+           cover_url, accent, gradient_from, gradient_to, is_new, is_featured, platform, plays
     FROM external_games
     WHERE slug = ${slug}
   `;
@@ -167,7 +175,8 @@ export async function getExternalGame(slug: string): Promise<Game | null> {
 
 /**
  * The typed input for {@link createExternalGame}. Mirrors the writable columns of
- * `external_games`; `coverUrl` may be `null` ("no bespoke cover"). `plays`,
+ * `external_games`; `coverUrl` may be `null` ("no bespoke cover") and `platform`
+ * may be `null` ("nobody has checked which devices this works on"). `plays`,
  * `created_at`, `updated_at` are left to their column defaults.
  */
 export type CreateExternalGameInput = {
@@ -184,6 +193,7 @@ export type CreateExternalGameInput = {
   gradientTo: string;
   isNew: boolean;
   isFeatured: boolean;
+  platform: GamePlatform | null;
 };
 
 /**
@@ -198,13 +208,13 @@ export async function createExternalGame(
   await sql`
     INSERT INTO external_games (
       slug, title, tagline, description, category, tags, external_url,
-      cover_url, accent, gradient_from, gradient_to, is_new, is_featured
+      cover_url, accent, gradient_from, gradient_to, is_new, is_featured, platform
     )
     VALUES (
       ${input.slug}, ${input.title}, ${input.tagline}, ${input.description},
       ${input.category}, ${input.tags}, ${input.externalUrl}, ${input.coverUrl},
       ${input.accent}, ${input.gradientFrom}, ${input.gradientTo},
-      ${input.isNew}, ${input.isFeatured}
+      ${input.isNew}, ${input.isFeatured}, ${input.platform}
     )
   `;
 }
@@ -269,6 +279,29 @@ export async function updateExternalGameCover(
   await sql`
     UPDATE external_games
     SET cover_url = ${coverUrl}, updated_at = now()
+    WHERE slug = ${slug}
+  `;
+}
+
+/**
+ * Overwrite ONLY the `platform` tag of an existing external game. `null` is a
+ * real argument — it stores SQL NULL and returns the game to UNKNOWN, so an admin
+ * who tagged it wrong can stop the public site asserting anything about it.
+ *
+ * A single-column write for the same reason {@link updateExternalGameCover} is
+ * one: `updateExternalGameDetails` full-replaces every descriptive column, so
+ * routing the tag through it would mean a platform save had to carry the title,
+ * tagline, URL and gradients along for the ride. It is also the external mirror
+ * of `setGamePlatform` in `games-store.ts` — the two halves of the catalogue
+ * should not disagree about how a tag gets written. Caller must revalidate after.
+ */
+export async function setExternalGamePlatform(
+  slug: string,
+  platform: GamePlatform | null,
+): Promise<void> {
+  await sql`
+    UPDATE external_games
+    SET platform = ${platform}, updated_at = now()
     WHERE slug = ${slug}
   `;
 }

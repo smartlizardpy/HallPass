@@ -45,12 +45,13 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { CREDITS_CACHE_TAG, recordFirstUpload } from "@/app/lib/game-credits";
-import { games } from "@/app/lib/games";
+import { games, toGamePlatform } from "@/app/lib/games";
 import {
   EXTERNAL_CACHE_TAG,
   createExternalGame,
   deleteExternalGame,
   getExternalGame,
+  setExternalGamePlatform,
   updateExternalGameCover,
   updateExternalGameDetails,
 } from "@/app/lib/external-games-store";
@@ -218,6 +219,11 @@ export async function createExternalGameAction(formData: FormData): Promise<void
   const gradientFrom = String(formData.get("gradientFrom") ?? "").trim() || "#7c5cff";
   const gradientTo = String(formData.get("gradientTo") ?? "").trim() || "#00e5ff";
   const coverOverride = String(formData.get("coverUrl") ?? "").trim();
+  // Unrecognised (including the empty string the "Unknown" option submits) → null,
+  // which stores as SQL NULL and means nobody has checked what this game runs on.
+  // Not defaulted to "both": an untested claim of mobile support is the one thing
+  // this tag exists to stop the site from making.
+  const platform = toGamePlatform(formData.get("platform"));
 
   // Tags arrive one field per chip from the TagEditor (getAll), trimmed + deduped
   // case-insensitively (first spelling wins) to mirror the editor's own hygiene.
@@ -278,6 +284,7 @@ export async function createExternalGameAction(formData: FormData): Promise<void
       gradientTo,
       isNew: true,
       isFeatured: false,
+      platform,
     });
   } catch {
     saveFailed = true;
@@ -418,6 +425,51 @@ export async function setExternalGameTagsAction(formData: FormData): Promise<voi
 
   revalidateExternal(slug);
   redirect(controlTarget(slug, "ok", "Tags saved."));
+}
+
+/**
+ * Save which devices an external game is playable on.
+ *
+ * The external twin of `setGamePlatformAction` (native games, `game_overrides`).
+ * The submitted value narrows through `toGamePlatform`, so anything unrecognised
+ * — including the empty string the "Unknown" radio posts — becomes `null` and
+ * stores as SQL NULL. Unknown is a reachable state on purpose: a wrong tag badges
+ * and re-sorts the game on every visitor's device, so it has to be undoable.
+ *
+ * Writes through the single-column `setExternalGamePlatform` rather than
+ * `updateExternalGameDetails`, which full-replaces every descriptive column.
+ */
+export async function setExternalGamePlatformAction(
+  formData: FormData,
+): Promise<void> {
+  await requireRole("admin");
+
+  const slug = String(formData.get("slug") ?? "").trim();
+  if (!slug) redirect("/dashboard/games?error=" + encodeURIComponent("Unknown game."));
+
+  const existing = await getExternalGame(slug);
+  if (!existing) {
+    redirect("/dashboard/games?error=" + encodeURIComponent(`No external game "${slug}".`));
+  }
+
+  const platform = toGamePlatform(formData.get("platform"));
+
+  let saveFailed = false;
+  try {
+    await setExternalGamePlatform(slug, platform);
+  } catch {
+    saveFailed = true;
+  }
+  if (saveFailed) redirect(controlTarget(slug, "error", "Could not save platform."));
+
+  revalidateExternal(slug);
+  redirect(
+    controlTarget(
+      slug,
+      "ok",
+      platform ? `Plays on: ${platform}` : "Platform cleared.",
+    ),
+  );
 }
 
 /**

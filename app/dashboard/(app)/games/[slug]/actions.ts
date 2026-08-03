@@ -10,7 +10,10 @@
  * `is_featured` curation flags are owned by the Curation page — these forms never
  * touch them. {@link updateGameAction} owns the text fields (title/tagline/
  * description/category); {@link setGameTagsAction} owns the `tags` list, posted by
- * the chip editor in `_ui/TagEditor`.
+ * the chip editor in `_ui/TagEditor`; {@link setGamePlatformAction} owns the
+ * `platform` tag, which is a CAPABILITY (what the game runs on) rather than copy —
+ * hence its own form, and hence not living on the Curation page with the editorial
+ * flags.
  *
  * Override semantics (the load-bearing part) — every write is SPARSE, touching
  * ONLY its own columns so the rest of the row stays as-is:
@@ -36,11 +39,12 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
-import { games } from "@/app/lib/games";
+import { games, toGamePlatform } from "@/app/lib/games";
 import {
   CACHE_TAG,
   clearOverride,
   setDetailsOverride,
+  setGamePlatform,
   setGameTags,
 } from "@/app/lib/games-store";
 
@@ -166,6 +170,49 @@ export async function setGameTagsAction(formData: FormData): Promise<void> {
   revalidateGame(slug);
   redirect(
     `/dashboard/games/${encodeURIComponent(slug)}?ok=${encodeURIComponent("Tags saved")}`,
+  );
+}
+
+/**
+ * Save which devices a game is playable on.
+ *
+ * The submitted value is narrowed by `toGamePlatform`, so anything unrecognised —
+ * including the empty string the "Unknown" radio posts — becomes `null` and
+ * stores as SQL NULL. That is a deliberate, reachable state, not a validation
+ * failure: an admin who tagged a game wrong must be able to put it back to "not
+ * checked" so the public site stops asserting anything about it. Clearing the tag
+ * is NOT `clearGameOverrideAction`, which would also discard their copy edits.
+ *
+ * Writes through the sparse `setGamePlatform`, so it touches only the one column
+ * and leaves title/tagline/tags and the Curation flags intact. Same auth +
+ * control-flow shape as {@link updateGameAction}; redirect issued OUTSIDE the try.
+ */
+export async function setGamePlatformAction(formData: FormData): Promise<void> {
+  await requireRole("admin");
+
+  const slug = String(formData.get("slug") ?? "").trim();
+  if (!slug) redirect("/dashboard/games?error=" + encodeURIComponent("Unknown game."));
+  if (!games.some((g) => g.slug === slug)) redirect("/dashboard/games?error=Unknown+game");
+
+  const platform = toGamePlatform(formData.get("platform"));
+
+  let saveFailed = false;
+  try {
+    await setGamePlatform(slug, platform);
+  } catch {
+    saveFailed = true;
+  }
+  if (saveFailed) {
+    redirect(
+      `/dashboard/games/${encodeURIComponent(slug)}?error=${encodeURIComponent("Could not save platform")}`,
+    );
+  }
+
+  revalidateGame(slug);
+  redirect(
+    `/dashboard/games/${encodeURIComponent(slug)}?ok=${encodeURIComponent(
+      platform ? `Plays on: ${platform}` : "Platform cleared",
+    )}`,
   );
 }
 

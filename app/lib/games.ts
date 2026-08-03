@@ -14,6 +14,43 @@ export type ArtStyle =
   | "rink"
   | "slash";
 
+/**
+ * Which devices a game is actually PLAYABLE on — a capability, not a preference.
+ *
+ * Three values and no fourth: `"both"` is the common case and has to be sayable,
+ * which is exactly why this is not a `mobileOnly` boolean. A boolean stores
+ * "works on both" and "desktop only" as the same `false`, and once written the
+ * two are indistinguishable forever.
+ *
+ * The ABSENT case is the load-bearing one — see the `platform` field on
+ * {@link Game}.
+ */
+export type GamePlatform = "desktop" | "mobile" | "both";
+
+/** The three valid {@link GamePlatform} values, for runtime validation. */
+export const GAME_PLATFORMS: readonly GamePlatform[] = [
+  "desktop",
+  "mobile",
+  "both",
+];
+
+/**
+ * Narrow an untrusted value (a form field, a database column) to a
+ * {@link GamePlatform}, or `null` for anything else — including the empty string
+ * the dashboard's "Unknown" radio submits.
+ *
+ * Every ingress point uses this rather than a cast. A `TEXT` column with a CHECK
+ * constraint is still `unknown` to TypeScript when it comes back off the wire,
+ * and a cast would let a row written before the constraint existed (or by hand
+ * in a psql session) enter a union that swears it cannot happen.
+ */
+export function toGamePlatform(value: unknown): GamePlatform | null {
+  return typeof value === "string" &&
+    (GAME_PLATFORMS as readonly string[]).includes(value)
+    ? (value as GamePlatform)
+    : null;
+}
+
 export type Game = {
   slug: string;
   title: string;
@@ -49,6 +86,27 @@ export type Game = {
    * exists for dashboard-uploaded and external games, and overrides this when set.
    */
   author?: string;
+  /**
+   * Which devices this game can actually be played on.
+   *
+   * OPTIONAL ON PURPOSE, and do not "tidy this up" by giving it a default. An
+   * absent value means UNKNOWN — nobody has picked the game up on a phone and
+   * checked — and that is a genuinely different thing from any of the three
+   * {@link GamePlatform} values. Defaulting to `"desktop"` would assert something
+   * unverified about every game in this array and wrongly demote any that does
+   * work on touch; defaulting to `"both"` asserts the opposite. Unknown is the
+   * honest answer until a human has looked.
+   *
+   * It is also what makes this field safe to ship ahead of the data: every
+   * surface that reads it treats unknown as "render exactly as before" — no
+   * badge, no reordering, no warning — so an untagged catalogue looks precisely
+   * like the site did before the field existed.
+   *
+   * NEVER used to remove a game from a listing, only to sort and label it. The
+   * catalogue is identical on every device because search crawlers are mobile
+   * clients: hiding desktop games on small screens hides them from the index.
+   */
+  platform?: GamePlatform;
 };
 
 export const games: Game[] = [
@@ -66,6 +124,7 @@ export const games: Game[] = [
     art: "speed",
     isFeatured: true,
     plays: 184213,
+    platform: "desktop",
   },
   {
     slug: "crimson-survivor",
@@ -81,6 +140,7 @@ export const games: Game[] = [
     art: "swarm",
     isNew: true,
     plays: 4220,
+    platform: "desktop",
   },
   {
     slug: "sea-mercenary",
@@ -95,6 +155,7 @@ export const games: Game[] = [
     accent: "#22d3ee",
     art: "wave",
     plays: 28110,
+    platform: "desktop",
   },
   {
     slug: "vanta-void",
@@ -109,6 +170,7 @@ export const games: Game[] = [
     accent: "#a78bfa",
     art: "void",
     plays: 13400,
+    platform: "desktop",
   },
   {
     slug: "depths-of-aethelgard",
@@ -123,6 +185,7 @@ export const games: Game[] = [
     accent: "#fbbf24",
     art: "rune",
     plays: 9012,
+    platform: "both",
   },
   {
     slug: "symbiosis",
@@ -137,6 +200,7 @@ export const games: Game[] = [
     accent: "#34d399",
     art: "orbit",
     plays: 5680,
+    platform: "desktop",
   },
   {
     slug: "silence",
@@ -151,6 +215,7 @@ export const games: Game[] = [
     accent: "#818cf8",
     art: "eye",
     plays: 22001,
+    platform: "desktop",
   },
   {
     slug: "neon-snake",
@@ -165,6 +230,7 @@ export const games: Game[] = [
     accent: "#4ade80",
     art: "serpent",
     plays: 96214,
+    platform: "desktop",
   },
   {
     slug: "system-restore",
@@ -179,6 +245,7 @@ export const games: Game[] = [
     accent: "#38bdf8",
     art: "glitch",
     plays: 7423,
+    platform: "desktop",
   },
   {
     slug: "neon-fracture",
@@ -193,6 +260,7 @@ export const games: Game[] = [
     accent: "#f43f5e",
     art: "glitch",
     plays: 11244,
+    platform: "desktop",
   },
   {
     slug: "color-clash-3d",
@@ -207,6 +275,7 @@ export const games: Game[] = [
     accent: "#fb923c",
     art: "splatter",
     plays: 88330,
+    platform: "desktop",
   },
   {
     slug: "cube-clash-3d",
@@ -221,6 +290,7 @@ export const games: Game[] = [
     accent: "#22d3ee",
     art: "splatter",
     plays: 41200,
+    platform: "desktop",
   },
   {
     slug: "teraria",
@@ -235,6 +305,7 @@ export const games: Game[] = [
     accent: "#84cc16",
     art: "terrain",
     plays: 142001,
+    platform: "desktop",
   },
   {
     slug: "snag",
@@ -249,6 +320,7 @@ export const games: Game[] = [
     accent: "#fde047",
     art: "tether",
     plays: 6710,
+    platform: "desktop",
   },
   {
     slug: "neon-hockey",
@@ -263,6 +335,7 @@ export const games: Game[] = [
     accent: "#22d3ee",
     art: "rink",
     plays: 33421,
+    platform: "desktop",
   },
   {
     slug: "core-vs-swarm",
@@ -277,6 +350,7 @@ export const games: Game[] = [
     accent: "#fde68a",
     art: "swarm",
     plays: 19120,
+    platform: "desktop",
   },
   {
     slug: "jjk-domain-survival-v3",
@@ -291,6 +365,7 @@ export const games: Game[] = [
     accent: "#c084fc",
     art: "rune",
     plays: 211405,
+    platform: "desktop",
   },
   {
     slug: "jjk-domain-survival-top-down",
@@ -305,6 +380,7 @@ export const games: Game[] = [
     accent: "#e879f9",
     art: "orbit",
     plays: 89532,
+    platform: "desktop",
   },
   {
     slug: "neon-tether",
@@ -319,6 +395,7 @@ export const games: Game[] = [
     accent: "#a5b4fc",
     art: "tether",
     plays: 4221,
+    platform: "desktop",
   },
   {
     slug: "chroma-orbit",
@@ -333,6 +410,7 @@ export const games: Game[] = [
     accent: "#f472b6",
     art: "orbit",
     plays: 16800,
+    platform: "desktop",
   },
   {
     slug: "pixel-slicer",
@@ -347,6 +425,7 @@ export const games: Game[] = [
     accent: "#fbbf24",
     art: "slash",
     plays: 54021,
+    platform: "both",
   },
   {
     slug: "pixel-bullet-quest",
@@ -362,6 +441,7 @@ export const games: Game[] = [
     art: "swarm",
     isNew: true,
     plays: 0,
+    platform: "desktop",
   },
   {
     slug: "system-error",
@@ -376,6 +456,7 @@ export const games: Game[] = [
     accent: "#f87171",
     art: "glitch",
     plays: 28722,
+    platform: "desktop",
   },
   {
     slug: "nuclear-reactor-manager",
@@ -390,6 +471,7 @@ export const games: Game[] = [
     accent: "#33ff33",
     art: "glitch",
     isNew: true,
+    platform: "desktop",
   },
   {
     slug: "paddle-crawler",
@@ -404,6 +486,7 @@ export const games: Game[] = [
     accent: "#ff0055",
     art: "glitch",
     isNew: true,
+    platform: "desktop",
   },
   {
     slug: "rhythm-hell-harmonic-flash",
@@ -418,6 +501,7 @@ export const games: Game[] = [
     accent: "#00f3ff",
     art: "slash",
     isNew: true,
+    platform: "desktop",
   },
   {
     slug: "duskfall",
@@ -432,6 +516,7 @@ export const games: Game[] = [
     accent: "#ffb347",
     art: "swarm",
     isNew: true,
+    platform: "desktop",
   },
 ];
 
