@@ -283,6 +283,29 @@ export async function updateExternalGameCover(
   `;
 }
 
+/**
+ * Overwrite ONLY the `platform` tag of an existing external game. `null` is a
+ * real argument — it stores SQL NULL and returns the game to UNKNOWN, so an admin
+ * who tagged it wrong can stop the public site asserting anything about it.
+ *
+ * A single-column write for the same reason {@link updateExternalGameCover} is
+ * one: `updateExternalGameDetails` full-replaces every descriptive column, so
+ * routing the tag through it would mean a platform save had to carry the title,
+ * tagline, URL and gradients along for the ride. It is also the external mirror
+ * of `setGamePlatform` in `games-store.ts` — the two halves of the catalogue
+ * should not disagree about how a tag gets written. Caller must revalidate after.
+ */
+export async function setExternalGamePlatform(
+  slug: string,
+  platform: GamePlatform | null,
+): Promise<void> {
+  await sql`
+    UPDATE external_games
+    SET platform = ${platform}, updated_at = now()
+    WHERE slug = ${slug}
+  `;
+}
+
 /** Delete the external game for `slug` entirely. Caller must revalidate after. */
 export async function deleteExternalGame(slug: string): Promise<void> {
   await sql`DELETE FROM external_games WHERE slug = ${slug}`;

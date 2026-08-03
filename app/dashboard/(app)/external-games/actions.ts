@@ -51,6 +51,7 @@ import {
   createExternalGame,
   deleteExternalGame,
   getExternalGame,
+  setExternalGamePlatform,
   updateExternalGameCover,
   updateExternalGameDetails,
 } from "@/app/lib/external-games-store";
@@ -424,6 +425,51 @@ export async function setExternalGameTagsAction(formData: FormData): Promise<voi
 
   revalidateExternal(slug);
   redirect(controlTarget(slug, "ok", "Tags saved."));
+}
+
+/**
+ * Save which devices an external game is playable on.
+ *
+ * The external twin of `setGamePlatformAction` (native games, `game_overrides`).
+ * The submitted value narrows through `toGamePlatform`, so anything unrecognised
+ * — including the empty string the "Unknown" radio posts — becomes `null` and
+ * stores as SQL NULL. Unknown is a reachable state on purpose: a wrong tag badges
+ * and re-sorts the game on every visitor's device, so it has to be undoable.
+ *
+ * Writes through the single-column `setExternalGamePlatform` rather than
+ * `updateExternalGameDetails`, which full-replaces every descriptive column.
+ */
+export async function setExternalGamePlatformAction(
+  formData: FormData,
+): Promise<void> {
+  await requireRole("admin");
+
+  const slug = String(formData.get("slug") ?? "").trim();
+  if (!slug) redirect("/dashboard/games?error=" + encodeURIComponent("Unknown game."));
+
+  const existing = await getExternalGame(slug);
+  if (!existing) {
+    redirect("/dashboard/games?error=" + encodeURIComponent(`No external game "${slug}".`));
+  }
+
+  const platform = toGamePlatform(formData.get("platform"));
+
+  let saveFailed = false;
+  try {
+    await setExternalGamePlatform(slug, platform);
+  } catch {
+    saveFailed = true;
+  }
+  if (saveFailed) redirect(controlTarget(slug, "error", "Could not save platform."));
+
+  revalidateExternal(slug);
+  redirect(
+    controlTarget(
+      slug,
+      "ok",
+      platform ? `Plays on: ${platform}` : "Platform cleared.",
+    ),
+  );
 }
 
 /**
