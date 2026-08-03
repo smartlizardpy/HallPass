@@ -14,6 +14,43 @@ export type ArtStyle =
   | "rink"
   | "slash";
 
+/**
+ * Which devices a game is actually PLAYABLE on — a capability, not a preference.
+ *
+ * Three values and no fourth: `"both"` is the common case and has to be sayable,
+ * which is exactly why this is not a `mobileOnly` boolean. A boolean stores
+ * "works on both" and "desktop only" as the same `false`, and once written the
+ * two are indistinguishable forever.
+ *
+ * The ABSENT case is the load-bearing one — see the `platform` field on
+ * {@link Game}.
+ */
+export type GamePlatform = "desktop" | "mobile" | "both";
+
+/** The three valid {@link GamePlatform} values, for runtime validation. */
+export const GAME_PLATFORMS: readonly GamePlatform[] = [
+  "desktop",
+  "mobile",
+  "both",
+];
+
+/**
+ * Narrow an untrusted value (a form field, a database column) to a
+ * {@link GamePlatform}, or `null` for anything else — including the empty string
+ * the dashboard's "Unknown" radio submits.
+ *
+ * Every ingress point uses this rather than a cast. A `TEXT` column with a CHECK
+ * constraint is still `unknown` to TypeScript when it comes back off the wire,
+ * and a cast would let a row written before the constraint existed (or by hand
+ * in a psql session) enter a union that swears it cannot happen.
+ */
+export function toGamePlatform(value: unknown): GamePlatform | null {
+  return typeof value === "string" &&
+    (GAME_PLATFORMS as readonly string[]).includes(value)
+    ? (value as GamePlatform)
+    : null;
+}
+
 export type Game = {
   slug: string;
   title: string;
@@ -49,6 +86,27 @@ export type Game = {
    * exists for dashboard-uploaded and external games, and overrides this when set.
    */
   author?: string;
+  /**
+   * Which devices this game can actually be played on.
+   *
+   * OPTIONAL ON PURPOSE, and do not "tidy this up" by giving it a default. An
+   * absent value means UNKNOWN — nobody has picked the game up on a phone and
+   * checked — and that is a genuinely different thing from any of the three
+   * {@link GamePlatform} values. Defaulting to `"desktop"` would assert something
+   * unverified about every game in this array and wrongly demote any that does
+   * work on touch; defaulting to `"both"` asserts the opposite. Unknown is the
+   * honest answer until a human has looked.
+   *
+   * It is also what makes this field safe to ship ahead of the data: every
+   * surface that reads it treats unknown as "render exactly as before" — no
+   * badge, no reordering, no warning — so an untagged catalogue looks precisely
+   * like the site did before the field existed.
+   *
+   * NEVER used to remove a game from a listing, only to sort and label it. The
+   * catalogue is identical on every device because search crawlers are mobile
+   * clients: hiding desktop games on small screens hides them from the index.
+   */
+  platform?: GamePlatform;
 };
 
 export const games: Game[] = [
