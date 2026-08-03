@@ -31,6 +31,14 @@ import { CoverImage } from "@/app/components/CoverImage";
 import type { BoardConfig } from "@/sdk/src/contract";
 import { DashHeader } from "../_ui/DashHeader";
 
+type SearchParams = Promise<{ ok?: string | string[]; error?: string | string[] }>;
+
+/** First value of a possibly-repeated query param, or `null`. */
+function asString(value: string | string[] | undefined): string | null {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0] : value;
+}
+
 export const metadata: Metadata = {
   title: "Games",
   description: "Browse every HALLPASS game and open its control center.",
@@ -76,8 +84,16 @@ function Chip({
   );
 }
 
-export default async function GamesPage() {
+export default async function GamesPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
   await requireRole("admin");
+
+  const sp = await searchParams;
+  const ok = asString(sp.ok);
+  const error = asString(sp.error);
 
   // resolveGames already fails soft; the board list is guarded so an
   // unconfigured/unreachable Neon shows "0 boards" instead of throwing.
@@ -99,8 +115,27 @@ export default async function GamesPage() {
     <>
       <DashHeader
         title="Games"
-        subtitle="Pick a game to edit its details, source code, and leaderboards."
+        subtitle="Every game — native and external. Pick one to edit its details, source, and leaderboards."
+        action={
+          <Link
+            href="/dashboard/external-games/new"
+            className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+          >
+            Add external game
+          </Link>
+        }
       />
+
+      {ok && (
+        <div className="mb-6 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          {ok}
+        </div>
+      )}
+      {error && (
+        <div className="mb-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+          {error}
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {games.map((game) => {
@@ -128,6 +163,9 @@ export default async function GamesPage() {
               </div>
 
               <div className="mt-3 flex flex-wrap gap-1.5">
+                {game.externalUrl && (
+                  <Chip className="bg-sky-50 text-sky-700">External ↗</Chip>
+                )}
                 {game.isNew && (
                   <Chip className="bg-emerald-50 text-emerald-700">New</Chip>
                 )}
