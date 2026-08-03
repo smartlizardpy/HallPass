@@ -79,8 +79,39 @@ Port `8765` is taken by motionEye on this machine — use `9876` (or anything el
 - Goal is to capture the **start/title screen** — that's what looks good as a card. Don't try to click into gameplay; if the snapshot is empty (canvas-only game), that's fine, screenshot anyway.
 - `mcp__playwright__browser_take_screenshot` — Playwright MCP only writes inside the project, so use `filename: ".playwright-mcp/<slug>-cover.png"` (NOT `/tmp/...`, which is rejected as outside allowed roots). `fullPage: false`.
 - Resize to exact dimensions: `magick .playwright-mcp/<slug>-cover.png -resize 659x613! public/games/<slug>/cover.png`. The `!` forces exact size.
+- **Now do the platform check below, while the server and the browser are still up.**
 - `mcp__playwright__browser_close`.
 - Kill the temp server: `kill $(cat /tmp/addgame-httpsrv.pid) 2>/dev/null`.
+
+#### 3a-ii. Platform check — does it work on a phone?
+
+This decides the `platform` field in step 4. **Actually test it. Do not infer it
+from the source.** Grepping for `touchstart` versus `keydown` gives the wrong
+answer often enough to be worse than no answer: plenty of games register both
+listeners and are still unplayable on a phone — hit targets built for a mouse, a
+pause menu bound to `Esc`, a canvas that assumes landscape.
+
+Still with the temp server running:
+
+- `mcp__playwright__browser_resize` to **390×844** (iPhone-ish portrait).
+- `mcp__playwright__browser_navigate` to the same URL again (a resize alone will
+  not re-run layout code that read the viewport at startup).
+- `mcp__playwright__browser_wait_for` with `time: 2`, then
+  `mcp__playwright__browser_take_screenshot`.
+- Tap the middle of the play area with `mcp__playwright__browser_click`, wait ~1s,
+  and screenshot again.
+
+Then judge from the two screenshots plus a read of the controls code:
+
+| What you see | `platform` |
+|---|---|
+| Responds to the tap; UI fits the portrait viewport | `"both"` (or `"mobile"` if it *only* makes sense on touch — gyro, swipe, portrait-locked) |
+| Nothing responds, or the playfield is cut off / needs keys | `"desktop"` |
+| Cannot tell, the check did not run, or Playwright is unavailable | **omit the field** |
+
+Omitting is a real, correct outcome — it means "unknown", which renders exactly
+like the site did before the field existed. A wrong guess is worse than no guess:
+it badges the game and re-sorts it on every visitor's phone.
 
 If Playwright MCP isn't available, fall back to a solid-color placeholder using the chosen accent color: `magick -size 659x613 xc:'<accent-hex>' public/games/<slug>/cover.png`, and warn the user in the final summary.
 
@@ -122,7 +153,7 @@ The `Game` type requires:
   slug, title, tagline, description, category,
   tags: string[], gradient: [string, string], accent, art,
   isNew?, isFeatured?, plays?,
-  author?
+  author?, platform?
 }
 ```
 
@@ -147,6 +178,17 @@ Fill every field by inferring from the HTML and screenshot:
   skill runs on a local machine with no production database access, so a credit
   written only to a database would never reach the live site. The table exists for
   dashboard-uploaded and external games, and overrides this when set.
+
+- **platform**: `"desktop" | "mobile" | "both"`, from the check in step 3a-ii —
+  or **omit it entirely** if that check did not give a clear answer. Omitted means
+  UNKNOWN, and unknown is silent: no badge, no re-sorting, no warning, exactly as
+  the site behaves for a game with no tag at all.
+
+  Whatever you write here is a PROPOSAL. Say so in the final summary, naming what
+  you saw — "tagged `desktop`: tapping the canvas at 390×844 did nothing and the
+  controls are `keydown`-only; fix it in the dashboard if that's wrong." The
+  dashboard has a "Plays on" control on every game's page, so a correction costs
+  one click, but only if the user knows a guess was made.
 
 Insert the new entry as the **last** element of the `games` array (just before the closing `];`). Match the formatting style of nearby entries exactly (2-space indent, trailing commas, multi-line description if it would exceed line length).
 
@@ -202,6 +244,8 @@ Single short summary to the user:
 - gradient/accent picked
 - whether the cover is a real screenshot or a placeholder
 - whether the blob upload succeeded (and the URL)
+- the `platform` tag, WHAT YOU SAW that justified it, and that it can be changed
+  on the game's dashboard page — or that you left it unknown, and why
 - the dev URL: `http://localhost:3000/game/<slug>`
 
 Do NOT commit. The user reviews and commits themselves.
@@ -245,7 +289,8 @@ cp -r <game-root>/. public/games/<slug>/
 
 ### Folder Step 5: Generate the cover
 
-Unchanged from single-file Step 3. The `python3 -m http.server` flow already serves folders with their assets, so the game's relative JS/images/audio load fine at `http://localhost:9876/games/<slug>/index.html`.
+Unchanged from single-file Step 3 — including the **platform check in 3a-ii**,
+which reuses the same server and browser session. The `python3 -m http.server` flow already serves folders with their assets, so the game's relative JS/images/audio load fine at `http://localhost:9876/games/<slug>/index.html`.
 
 ### Folder Step 6: Append metadata to `app/lib/games.ts`
 
