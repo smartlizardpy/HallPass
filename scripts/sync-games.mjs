@@ -14,11 +14,18 @@
 
 import { list } from "@vercel/blob";
 import { existsSync, statSync } from "node:fs";
-import { mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const rootDir = path.resolve(import.meta.dirname, "..");
 const gamesDir = path.join(rootDir, "public", "games");
+const mirrorStampPath = path.join(rootDir, "app", "lib", "mirror-synced-at.ts");
+
+// Captured BEFORE listing the store, so any blob uploaded while this sync runs
+// has an `uploadedAt` after the stamp and the serving route treats it as newer
+// than the mirror (proxied) rather than as already-baked-in (served static, and
+// possibly 404 if this run didn't capture it).
+const syncStartedAt = Date.now();
 
 if (!process.env.BLOB_READ_WRITE_TOKEN) {
   try {
@@ -115,6 +122,32 @@ for (const blob of blobs) {
 
 console.log();
 console.log(`synced: ${synced}   skipped: ${skipped}   failed: ${failed}`);
+
+// Stamp the mirror ONLY on a clean run. A partial sync leaves some blobs
+// un-mirrored; advancing the stamp then would make the route treat those missing
+// files as already-baked-in and 307 them to a 404. Leaving the old stamp keeps
+// them newer-than-mirror, so they stay proxied from Blob until a clean sync.
 if (failed > 0) {
   process.exitCode = 1;
+} else {
+  try {
+    const src = await readFile(mirrorStampPath, "utf8");
+    const next = src.replace(
+      /export const MIRROR_SYNCED_AT = \d+;/,
+      `export const MIRROR_SYNCED_AT = ${syncStartedAt};`,
+    );
+    if (next === src) {
+      console.log(
+        "warn: could not find MIRROR_SYNCED_AT to update — commit the mirror stamp by hand",
+      );
+    } else {
+      await writeFile(mirrorStampPath, next);
+      console.log(`stamped mirror-synced-at.ts: ${syncStartedAt}`);
+      console.log("commit app/lib/mirror-synced-at.ts alongside public/games/");
+    }
+  } catch (err) {
+    console.log(
+      `warn: failed to stamp mirror-synced-at.ts (${err instanceof Error ? err.message : err})`,
+    );
+  }
 }

@@ -1,4 +1,5 @@
 import { list, head } from "@vercel/blob";
+import { SITE_URL } from "@/app/lib/site";
 
 export function blobPathForSlug(slug: string): string {
   return `games/${slug}/index.html`;
@@ -51,6 +52,54 @@ export function contentTypeForPath(relPath: string): string {
   return CONTENT_TYPES[ext] ?? "application/octet-stream";
 }
 
+/**
+ * One blob under a game's prefix, as the serving route needs it: enough to serve
+ * the bytes (`url`) and to judge freshness against the deployed static mirror
+ * (`uploadedAt`, epoch ms — a number, not a `Date`, so the cached list is
+ * serialisable).
+ */
+export type ServingBlob = { url: string; uploadedAt: number };
+
+/** What the game-serving route should do with one requested asset. */
+export type GameSource =
+  | { kind: "static" }
+  | { kind: "proxy"; url: string };
+
+/**
+ * Decide whether a requested game asset should be served from the free
+ * `public/games/` CDN twin or proxied byte-for-byte from Vercel Blob.
+ *
+ * This is the whole point of the blob-limits work, so the reasoning is here, in
+ * one pure function, rather than smeared through the route:
+ *
+ * Vercel Blob is the LIVE copy — an admin upload lands there and must serve
+ * immediately. `public/games/<slug>/` is the SAME bytes baked into the deploy by
+ * `scripts/sync-games.mjs`, served for free off Vercel's CDN. `mirrorSyncedAt` is
+ * when that mirror was captured. So a blob whose `uploadedAt` is at or before the
+ * mirror stamp is already in the deploy and costs nothing to serve statically;
+ * only a blob uploaded SINCE the last sync is genuinely newer than the mirror and
+ * has to be proxied so the edit is live. Once the next sync+deploy bakes it in,
+ * it falls back to the free path automatically.
+ *
+ * `staticExists` guards the one case that would otherwise 404: a game that lives
+ * ONLY in Blob (uploaded but never mirrored into the repo — `sync-games` skips
+ * slugs with no `public/games/<slug>/` dir). Such an asset is not newer than the
+ * mirror yet has no static twin, so it must still be proxied. When neither a blob
+ * nor a static twin exists we redirect to the static path anyway and let the CDN
+ * answer 404 — exactly what the old `head()`-fails branch did.
+ */
+export function chooseGameSource(args: {
+  staticExists: boolean;
+  blob: ServingBlob | null;
+  mirrorSyncedAt: number;
+}): GameSource {
+  const { staticExists, blob, mirrorSyncedAt } = args;
+  if (blob && blob.uploadedAt > mirrorSyncedAt) return { kind: "proxy", url: blob.url };
+  if (staticExists) return { kind: "static" };
+  if (blob) return { kind: "proxy", url: blob.url };
+  return { kind: "static" };
+}
+
 export type GameBlobFile = { pathname: string; size: number };
 
 // `list()` results carry no contentType (only `head()` does) — callers must
@@ -70,27 +119,45 @@ export async function listGameFiles(slug: string): Promise<GameBlobFile[]> {
 
 
 /**
- * The current published `index.html` for a game, as a string — or `null` when
- * the game is still on the build default (no custom blob for it).
+ * The current `index.html` for a game, as a string — or `null` only when neither
+ * a published blob nor a baked-in static copy can be read.
  *
- * This is the READ side of the source-code panel, whose only affordance until now
- * was upload. The integration loop is: copy the live code out, add the scoreboard
- * and achievement calls, publish it back. Without this, step one meant hunting
- * for a blob URL by hand.
+ * This is the READ side of the source-code panel. The integration loop is: copy
+ * the live code out, add the scoreboard and achievement calls, publish it back.
  *
- * Blob is the source of truth for a published game, so it is read directly rather
- * than through the serving route. `cache: "no-store"` because an admin who just
- * uploaded expects to copy exactly what they uploaded, not a cached prior version.
- * Fails soft to `null`: a missing file or a blob hiccup means "nothing to copy",
- * never a broken dashboard.
+ * TWO SOURCES, latest-first:
+ *  1. The published blob (`games/<slug>/index.html`). When present it is the
+ *     freshest copy — an upload lands here before anything else — so it is read
+ *     directly and `no-store`, so an admin who just published copies exactly what
+ *     they uploaded rather than a cached prior version.
+ *  2. FALLBACK: the source baked into the deploy at `public/games/<slug>/`. This
+ *     is what a build-default game (never published, or reset to default) is
+ *     actually running, so it must be copyable too — otherwise that game's panel
+ *     has nothing to copy and the integration loop can't start. Read over HTTP,
+ *     not the filesystem: `public/` is served by the CDN and is not reliably
+ *     present in the serverless function's working directory on Vercel. Since the
+ *     static twin is a mirror of the blob at sync time, the blob (when present)
+ *     is always at least as new, so blob-first is also latest-first.
+ *
+ * Fails soft to `null` at every step: a missing file or a hiccup means "nothing
+ * to copy", never a broken dashboard.
  */
 export async function readPublishedIndexHtml(slug: string): Promise<string | null> {
   try {
     const meta = await head(blobPathForAsset(slug, "index.html"));
     const res = await fetch(meta.url, { cache: "no-store" });
-    if (!res.ok) return null;
-    return await res.text();
+    if (res.ok) return await res.text();
   } catch {
-    return null;
+    // No blob (build default / reset), or a transient blob error — fall back to
+    // the static twin below rather than reporting "nothing to copy".
   }
+  try {
+    const res = await fetch(`${SITE_URL}/games/${slug}/index.html`, {
+      cache: "no-store",
+    });
+    if (res.ok) return await res.text();
+  } catch {
+    // Network hiccup reaching the static twin.
+  }
+  return null;
 }

@@ -890,15 +890,24 @@ export default async function GameControlPage({
           <div className="space-y-3">
             {currentHtml ? (
               <CopyBox
-                label="Current published index.html"
+                label={
+                  customFileCount > 0
+                    ? "Current published index.html"
+                    : "Current source — build default (public/games/)"
+                }
                 code={currentHtml}
-                note="Copy this out, add the snippet below, then publish it back with the forms further down."
+                note={
+                  customFileCount > 0
+                    ? "Copy this out, add the snippet below, then publish it back with the forms further down."
+                    : `Copied from the repo at public/games/${slug}/. Add the snippet below, then publish it back to start editing this game from the dashboard.`
+                }
               />
             ) : (
               <p className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-xs text-muted">
-                This game is on the build default — its source lives in the repo at{" "}
-                <code className="font-mono">public/games/{slug}/</code>. Publish an
-                HTML file below to start editing it here.
+                Couldn&apos;t load the current source right now. This game&apos;s
+                code lives in the repo at{" "}
+                <code className="font-mono">public/games/{slug}/</code> — reload to
+                try again, or publish an HTML file below.
               </p>
             )}
 

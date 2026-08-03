@@ -33,6 +33,7 @@ import { redirect } from "next/navigation";
 import { revalidateTag } from "next/cache";
 import { requireRole } from "@/app/lib/auth";
 import { CREDITS_CACHE_TAG, recordFirstUpload } from "@/app/lib/game-credits";
+import { GAMES_BLOB_CACHE_TAG } from "@/app/lib/game-serving-blobs";
 import {
   blobPathForAsset,
   blobPathForSlug,
@@ -96,6 +97,13 @@ async function bumpGamesVersion(): Promise<void> {
   } catch {
     // best-effort; offline-refresh polling will lag until the next bump.
   }
+  // The three source mutators (single/paste, bundle, reset) ALL funnel through
+  // here and are the only writers of `games/**` blobs, so this is the one place
+  // that must drop the serving route's cached `list()` — otherwise a just-
+  // uploaded game would keep serving the pre-edit copy (or the static twin) until
+  // the 60s soft TTL rolled over. `{ expire: 0 }` for read-your-writes; not in the
+  // try above because a failed sentinel write must not skip the invalidation.
+  revalidateTag(GAMES_BLOB_CACHE_TAG, { expire: 0 });
 }
 
 /**
