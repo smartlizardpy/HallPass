@@ -518,6 +518,21 @@ export const games: Game[] = [
     isNew: true,
     platform: "desktop",
   },
+  {
+    slug: "neon-well",
+    author: "Ozan Kaygusuz",
+    title: "Neon Well",
+    tagline: "Modern Tetris, wrapped in neon glass.",
+    description:
+      "A guideline-accurate Tetris with SRS wall kicks, hold, ghost piece, and T-spins. Drop tetrominoes into the well, chain line clears for combos and back-to-back bonuses, and ride the rising gravity curve as the levels climb.",
+    category: "Puzzle",
+    tags: ["Puzzle", "Tetris", "Neon", "Retro"],
+    gradient: ["#1b1f4d", "#3fe6fb"],
+    accent: "#3fe6fb",
+    art: "glitch",
+    isNew: true,
+    platform: "both",
+  },
 ];
 
 export const categories = Array.from(
