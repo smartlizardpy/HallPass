@@ -178,6 +178,22 @@ export function createReviewStore(sql: Sql) {
       return { recommended: toInt(row.recommended), total: toInt(row.total) };
     },
 
+    /**
+     * The plain-text body of a single VISIBLE review, for on-demand translation.
+     *
+     * Scoped to `status = 'visible'` on purpose: a hidden or deleted review is not
+     * shown, so there is nothing on screen to translate, and this closes the only
+     * way the translate route could otherwise surface the text of a review a
+     * moderator (or its author) had taken down.
+     */
+    async visibleReviewBody(id: number): Promise<string | null> {
+      const rows = await sql`
+        SELECT body FROM game_reviews
+        WHERE id = ${id} AND status = 'visible'
+      `;
+      return rows.length > 0 ? String(rows[0].body) : null;
+    },
+
     /** The caller's own review for a game, if any — so the form can prefill. */
     async ownReview(slug: string, playerId: string): Promise<Review | null> {
       const rows = await sql`
