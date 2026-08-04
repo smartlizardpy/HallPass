@@ -22,7 +22,7 @@
  * `(pointer: coarse)` asks the browser directly.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Game } from "./games";
 
 /**
@@ -71,7 +71,7 @@ const MOBILE_QUERY = "(pointer: coarse) and (hover: none)";
  * Re-evaluates on change, so rotating a tablet or dragging a desktop window
  * narrow updates the UI rather than stranding it on the first answer.
  */
-export function useDevicePlatform(): DevicePlatform | null {
+export function useRawDevice(): DevicePlatform | null {
   const [device, setDevice] = useState<DevicePlatform | null>(null);
 
   useEffect(() => {
@@ -87,6 +87,70 @@ export function useDevicePlatform(): DevicePlatform | null {
   }, []);
 
   return device;
+}
+
+/**
+ * The "force desktop" preference — a phone visitor's explicit "show me the full
+ * desktop site anyway" choice, the escape hatch behind the mobile shell.
+ *
+ * Persisted in localStorage so it STICKS across reloads (a per-session store would
+ * bounce them back to the mobile shell on the next visit), and exposed through
+ * `useSyncExternalStore` so flipping it re-renders every consumer of
+ * {@link useDevicePlatform} at once — the whole shell (catalogue, header, tab bar,
+ * splash) turns over from one setter.
+ *
+ * The SERVER snapshot is always `false`: the first client render must match the
+ * override-free prerendered HTML, and the real value is read on the render AFTER
+ * hydration — the same second-paint rule the raw device hook follows, so there is
+ * no hydration mismatch.
+ */
+const FORCE_DESKTOP_KEY = "hp-force-desktop";
+const forceListeners = new Set<() => void>();
+
+function forceSubscribe(onChange: () => void): () => void {
+  forceListeners.add(onChange);
+  window.addEventListener("storage", onChange); // keep tabs in sync
+  return () => {
+    forceListeners.delete(onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+function getForceSnapshot(): boolean {
+  try {
+    return localStorage.getItem(FORCE_DESKTOP_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Set or clear the force-desktop preference, then notify every subscriber. */
+export function setForceDesktop(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(FORCE_DESKTOP_KEY, "1");
+    else localStorage.removeItem(FORCE_DESKTOP_KEY);
+  } catch {
+    // Private mode / storage disabled: the toggle simply won't persist.
+  }
+  forceListeners.forEach((l) => l());
+}
+
+/** Whether the visitor has asked to see the desktop site on their phone. */
+export function useForceDesktop(): boolean {
+  return useSyncExternalStore(forceSubscribe, getForceSnapshot, () => false);
+}
+
+/**
+ * The EFFECTIVE device — the raw detection, unless the visitor has explicitly
+ * forced the desktop site. Every consumer reads THIS (not {@link useRawDevice}),
+ * so the one preference flips the entire shell. The switch control itself reads
+ * `useRawDevice` + `useForceDesktop` directly, because it must stay visible to a
+ * phone that is currently being shown desktop.
+ */
+export function useDevicePlatform(): DevicePlatform | null {
+  const raw = useRawDevice();
+  const forceDesktop = useForceDesktop();
+  return forceDesktop ? "desktop" : raw;
 }
 
 /**
