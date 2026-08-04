@@ -87,6 +87,10 @@ export function MobileSplash() {
         phase === "leaving" ? "pointer-events-none opacity-0" : "opacity-100"
       }`}
     >
+      {/* Wordmark on top, spinner beneath it — the wheel reads as "loading this"
+          rather than sitting above an unlabelled mark. */}
+      <Wordmark size="text-3xl" dotClass="h-2 w-2" tag="mobile" />
+
       {/* The wheel: a brand arc on a faint track, spinning under motion-safe. */}
       <svg
         width="56"
@@ -113,8 +117,6 @@ export function MobileSplash() {
           className="text-brand"
         />
       </svg>
-
-      <Wordmark size="text-3xl" dotClass="h-2 w-2" tag="mobile" />
     </div>
   );
 }
