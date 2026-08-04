@@ -13,12 +13,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { Game } from "./games";
-import { playsOn } from "./use-device-platform";
+import { mobileCatalog, playsOn } from "./use-device-platform";
 
 /** A minimal `Game`; only `platform` matters to `playsOn`. */
 function game(platform?: Game["platform"]): Game {
   return {
-    slug: "test-game",
+    slug: `test-game-${platform ?? "untagged"}`,
     title: "Test Game",
     tagline: "",
     description: "",
@@ -55,5 +55,31 @@ describe("playsOn", () => {
     // as unplayable. They must be compared explicitly.
     expect(playsOn(game(), "mobile")).not.toBe(false);
     expect(playsOn(game("desktop"), "mobile")).toBe(false);
+  });
+});
+
+describe("mobileCatalog", () => {
+  it("keeps only mobile and both, in input order", () => {
+    const games = [
+      game("desktop"),
+      game("mobile"),
+      game("both"),
+      game(), // untagged
+      game("desktop"),
+    ];
+    expect(mobileCatalog(games).map((g) => g.platform)).toEqual([
+      "mobile",
+      "both",
+    ]);
+  });
+
+  it("EXCLUDES untagged games — the shell only promises confirmed touch games", () => {
+    // The whole point of the strict filter: an unchecked game must not appear in
+    // the curated phone list even though `playsOn` returns null (not false) for it.
+    expect(mobileCatalog([game()])).toEqual([]);
+  });
+
+  it("returns an empty list rather than throwing when nothing qualifies", () => {
+    expect(mobileCatalog([game("desktop"), game("desktop")])).toEqual([]);
   });
 });
