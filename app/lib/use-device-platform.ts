@@ -32,19 +32,30 @@ import type { Game } from "./games";
 export type DevicePlatform = "desktop" | "mobile";
 
 /**
- * Coarse pointer AND a small viewport. Both halves are load-bearing:
+ * Coarse PRIMARY pointer AND no hover. Both halves are load-bearing:
  *
  *   - `(pointer: coarse)` alone matches a touchscreen laptop, which is a keyboard
  *     machine and should get the desktop treatment.
- *   - a width bound alone matches a narrow window on a desktop, which is also a
- *     keyboard machine.
+ *   - `(hover: none)` is what separates a real touch device from that laptop: a
+ *     laptop's primary input can hover (trackpad/mouse), a phone's cannot.
+ *
+ * WHY NOT A `max-width` BOUND, which is the obvious way to do this. A pixel width
+ * is not a device fact, it is a viewport fact, and it gets the answer wrong on the
+ * exact devices this feature is for. A large iPhone in LANDSCAPE is 926–932 CSS px
+ * wide (14/15/16 Pro Max and Plus) — past any "phone-sized" cutoff around 900 —
+ * so the moment someone rotates their phone to actually play, a width test flips
+ * them to "desktop" and every badge, sort and warning silently switches off. That
+ * regression is invisible in portrait and in the simulator's default size, which
+ * is exactly how it survives review. `(hover: none)` asks the real question —
+ * "can this input hover" — and answers it the same in both orientations and on
+ * every screen size.
  *
  * Together they are a decent proxy for "phone". Not a perfect one — which is
  * exactly why nothing downstream ever HIDES a game based on this, it only sorts
  * and labels, and the play warning is a confirm the visitor can walk straight
  * through.
  */
-const MOBILE_QUERY = "(pointer: coarse) and (max-width: 900px)";
+const MOBILE_QUERY = "(pointer: coarse) and (hover: none)";
 
 /**
  * The visitor's device, or `null` before the first effect runs.
