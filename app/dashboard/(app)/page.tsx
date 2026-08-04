@@ -71,6 +71,13 @@ export default async function DashboardPage() {
     value: g.plays,
   }));
 
+  // Most-commented games — first-party (reviews live in our Neon DB, not PostHog).
+  // Resolve slugs → curated titles here so the chart stays presentational.
+  const topCommented = community.topCommented.map((g) => ({
+    label: titleBySlug.get(g.slug) ?? g.slug,
+    value: g.count,
+  }));
+
   return (
     <>
       <DashHeader
@@ -171,6 +178,37 @@ export default async function DashboardPage() {
         </Section>
       </div>
 
+      {/* Most commented games — first-party review counts, mirrors "Top games". */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Section
+          title="Most commented games"
+          subtitle="by player comments"
+          className="lg:col-span-2"
+        >
+          {!community.available ? (
+            <Empty hint="Database not configured." />
+          ) : topCommented.length === 0 ? (
+            <Empty hint="No comments yet." />
+          ) : (
+            <TopGamesBar
+              data={topCommented}
+              barName="Comments"
+              color={C.visitors}
+            />
+          )}
+        </Section>
+        <Section title="Comments" subtitle="total, all games">
+          <div className="flex h-64 flex-col items-center justify-center">
+            <div className="text-6xl font-black tabular-nums">
+              {community.available ? fmt(community.comments) : "—"}
+            </div>
+            <div className="mt-2 text-sm font-medium text-muted">
+              player comments posted
+            </div>
+          </div>
+        </Section>
+      </div>
+
       {/* Breakdown row */}
       <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Section title="Category mix" subtitle="plays by category">
@@ -261,10 +299,11 @@ export default async function DashboardPage() {
             <Empty hint="Database not configured." />
           ) : (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[auto_1fr]">
-              <div className="grid grid-cols-1 min-[380px]:grid-cols-3 gap-4 lg:gap-8">
+              <div className="grid grid-cols-2 min-[380px]:grid-cols-4 gap-4 lg:gap-8">
                 <MiniStat label="Players" value={compact(community.players)} />
                 <MiniStat label="Leaderboards" value={compact(community.boards)} />
                 <MiniStat label="Scores" value={compact(community.scores)} />
+                <MiniStat label="Comments" value={compact(community.comments)} />
               </div>
               <div className="lg:border-l lg:border-border lg:pl-6">
                 <div className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">
