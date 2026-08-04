@@ -93,8 +93,12 @@ export function MobileTabBar() {
         <path d="m21 21-4.3-4.3" strokeLinecap="round" />
       </TabButton>
 
+      {/* Two equal heads over one shared base — a symmetric "friends" mark,
+          instead of the lopsided big-person/little-person users glyph. */}
       <TabLink href="/play/friends" label="Friends" active={friendsActive}>
-        <path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM17 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M15 21v-2a4 4 0 0 0-3-3.87" />
+        <circle cx="8" cy="8" r="3" />
+        <circle cx="16" cy="8" r="3" />
+        <path d="M3 20v-1a5 5 0 0 1 5-5h8a5 5 0 0 1 5 5v1" />
       </TabLink>
 
       <TabLink href="/play/account" label="Account" active={accountActive}>
