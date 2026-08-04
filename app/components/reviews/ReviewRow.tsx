@@ -3,8 +3,40 @@
 import { useState } from "react";
 import type { Review } from "../../lib/reviews/store";
 import { REPORT_REASONS } from "../../lib/reviews/config";
+import { normalizeTargetLang } from "../../lib/reviews/translate";
 import { Avatar } from "../friends/Avatar";
 import { ThumbIcon } from "./ReviewComposer";
+
+/**
+ * The reader's preferred language as a code the translate route accepts, or null
+ * when we cannot offer a translation (no `navigator`, or an unsupported locale).
+ * `navigator.languages` is tried in order so a reader whose top choice we cannot
+ * serve still gets their second. Normalised through the SAME function the server
+ * uses, so both agree on the cache key and region variants (`en-GB`, `en-US`) fold
+ * to one upstream call.
+ */
+function readerLang(): string | null {
+  if (typeof navigator === "undefined") return null;
+  const langs = navigator.languages?.length ? navigator.languages : [navigator.language];
+  for (const lang of langs) {
+    const normalized = normalizeTargetLang(lang);
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
+/** A human language name for a code (`es` → "Spanish"), in the reader's own locale. */
+function languageName(code: string): string {
+  try {
+    const names = new Intl.DisplayNames(
+      typeof navigator === "undefined" ? undefined : [navigator.language],
+      { type: "language" },
+    );
+    return names.of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
 
 /**
  * One review: author, verdict badge, body, helpful vote, report control.
@@ -39,6 +71,57 @@ export function ReviewRow({
   const [reporting, setReporting] = useState(false);
   const [reported, setReported] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // Translation is fetched once, lazily, and then toggled locally. `target` is
+  // computed a single time on the client; when it is null we never render the
+  // control. `native` means the review is already in the reader's language, so the
+  // offer is replaced by a quiet note rather than a toggle to an identical string.
+  const [target] = useState<string | null>(() => readerLang());
+  const [translation, setTranslation] = useState<string | null>(null);
+  const [source, setSource] = useState("");
+  const [showTranslated, setShowTranslated] = useState(false);
+  const [translating, setTranslating] = useState(false);
+  const [transError, setTransError] = useState(false);
+  const [native, setNative] = useState(false);
+
+  const translate = async () => {
+    // Already have it — this is a pure show/hide toggle, no network.
+    if (translation) {
+      setShowTranslated((v) => !v);
+      return;
+    }
+    if (!target) return;
+    setTranslating(true);
+    setTransError(false);
+    try {
+      const res = await fetch(
+        `/api/v1/reviews/${review.id}/translate?to=${encodeURIComponent(target)}`,
+      );
+      const data = (await res.json()) as {
+        ok?: boolean;
+        text?: string;
+        source?: string;
+      };
+      if (data.ok && typeof data.text === "string") {
+        const src = String(data.source ?? "");
+        // Source detected as the reader's own language: nothing to translate.
+        if (src.split("-")[0] === target.split("-")[0]) {
+          setNative(true);
+        } else {
+          setTranslation(data.text);
+          setSource(src);
+          setShowTranslated(true);
+        }
+      } else {
+        setTransError(true);
+      }
+    } catch {
+      // Offline or a soft upstream miss — keep the original, say so quietly.
+      setTransError(true);
+    } finally {
+      setTranslating(false);
+    }
+  };
 
   const vote = async () => {
     setBusy(true);
@@ -124,9 +207,18 @@ export function ReviewRow({
             {review.recommended ? "Recommended" : "Not for me"}
           </span>
 
+          {/* PLAIN TEXT still — a machine translation is as untrusted as the
+              original body, so it is rendered as a text child (React escapes it),
+              never via dangerouslySetInnerHTML. */}
           <p className="mt-2 whitespace-pre-wrap break-words text-[15px] font-semibold leading-relaxed text-zinc-700">
-            {review.body}
+            {showTranslated && translation ? translation : review.body}
           </p>
+
+          {showTranslated && translation && (
+            <p className="mt-1 text-[11px] font-bold text-muted">
+              Translated from {languageName(source)} · machine translation
+            </p>
+          )}
 
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <button
@@ -140,6 +232,37 @@ export function ReviewRow({
             >
               Helpful{helpful > 0 && ` (${helpful})`}
             </button>
+
+            {/* Translation offer. Hidden entirely when we cannot serve the reader's
+                language; replaced by a quiet note when the review already is in it. */}
+            {target &&
+              (native ? (
+                <span className="text-[12px] font-bold text-muted">
+                  Already in your language
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={translate}
+                  disabled={translating}
+                  aria-pressed={showTranslated}
+                  className="text-[12px] font-bold text-muted transition hover:text-zinc-900 disabled:opacity-50"
+                >
+                  {translating
+                    ? "Translating…"
+                    : translation
+                      ? showTranslated
+                        ? "Show original"
+                        : "Show translation"
+                      : "Translate"}
+                </button>
+              ))}
+
+            {transError && (
+              <span className="text-[12px] font-bold text-muted">
+                Translation unavailable
+              </span>
+            )}
           </div>
         </div>
       </div>

@@ -92,3 +92,29 @@ describe("reportReview", () => {
     expect(calls[0].values).toContain("'; DROP TABLE players; --");
   });
 });
+
+describe("visibleReviewBody", () => {
+  it("selects the body of a VISIBLE review by id, as a bound value", async () => {
+    // Scoped to status='visible' so a hidden or deleted review's text can never
+    // be surfaced through the translate route.
+    const { sql, calls } = makeFakeSql([{ body: "great game" }]);
+    const store = createReviewStore(sql);
+
+    const body = await store.visibleReviewBody(42);
+
+    expect(body).toBe("great game");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].text).toContain("FROM game_reviews");
+    expect(calls[0].text).toContain("status = 'visible'");
+    // The id is bound, never spliced.
+    expect(calls[0].text).not.toContain("42");
+    expect(calls[0].values).toContain(42);
+  });
+
+  it("returns null when no visible review matches", async () => {
+    const { sql } = makeFakeSql([]);
+    const store = createReviewStore(sql);
+
+    expect(await store.visibleReviewBody(999)).toBeNull();
+  });
+});
