@@ -21,7 +21,7 @@
  */
 
 import { useCallback, useEffect } from "react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useDevicePlatform } from "../lib/use-device-platform";
 
@@ -93,8 +93,12 @@ export function MobileTabBar() {
         <path d="m21 21-4.3-4.3" strokeLinecap="round" />
       </TabButton>
 
+      {/* Two equal heads over one shared base — a symmetric "friends" mark,
+          instead of the lopsided big-person/little-person users glyph. */}
       <TabLink href="/play/friends" label="Friends" active={friendsActive}>
-        <path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM17 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M15 21v-2a4 4 0 0 0-3-3.87" />
+        <circle cx="8" cy="8" r="3" />
+        <circle cx="16" cy="8" r="3" />
+        <path d="M3 20v-1a5 5 0 0 1 5-5h8a5 5 0 0 1 5 5v1" />
       </TabLink>
 
       <TabLink href="/play/account" label="Account" active={accountActive}>
@@ -138,6 +142,30 @@ function TabInner({
   );
 }
 
+/**
+ * The tab body, rendered INSIDE the `Link` so it can read `useLinkStatus`. A tap
+ * lights the tab up the instant navigation starts — `pending` counts as active —
+ * so the bar feels responsive even when the destination (e.g. the dynamic account
+ * page) takes a moment to arrive. The Next docs recommend exactly this pairing:
+ * prefetch for speed, `useLinkStatus` for immediate feedback while it completes.
+ */
+function TabLinkContent({
+  label,
+  active,
+  children,
+}: {
+  label: string;
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  const { pending } = useLinkStatus();
+  return (
+    <TabInner label={label} active={active || pending}>
+      {children}
+    </TabInner>
+  );
+}
+
 function TabLink({
   href,
   label,
@@ -150,16 +178,19 @@ function TabLink({
   children: React.ReactNode;
 }) {
   return (
+    // Prefetch left at the default (auto): the bar is always on screen, so all
+    // four routes warm up ahead of the tap, which is what makes the switch feel
+    // instant in production. `prefetch={false}` here was the mistake — it forced a
+    // cold round-trip on every tap.
     <Link
       href={href}
-      prefetch={false}
       aria-current={active ? "page" : undefined}
       style={{ touchAction: "manipulation" }}
-      className="flex-1"
+      className="flex-1 transition active:opacity-50"
     >
-      <TabInner label={label} active={active}>
+      <TabLinkContent label={label} active={active}>
         {children}
-      </TabInner>
+      </TabLinkContent>
     </Link>
   );
 }
@@ -180,7 +211,7 @@ function TabButton({
       type="button"
       onClick={onClick}
       style={{ touchAction: "manipulation" }}
-      className="flex-1"
+      className="flex-1 transition active:opacity-50"
     >
       <TabInner label={label} active={active}>
         {children}

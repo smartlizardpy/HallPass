@@ -177,10 +177,15 @@ export function SiteHeader({
         </form>
       )}
 
-      <div className="ml-auto flex shrink-0 items-center gap-2">
-        <WhatsNewLink />
-        <AccountMenu />
-      </div>
+      {/* On a phone the account lives in the bottom tab bar and What's New is
+          noise, so both come off the header — which is what gives the search
+          field the whole row instead of a cramped sliver. Desktop keeps them. */}
+      {!isMobile && (
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <WhatsNewLink />
+          <AccountMenu />
+        </div>
+      )}
     </header>
   );
 }
