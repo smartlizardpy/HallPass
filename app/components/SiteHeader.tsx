@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { captureSearchNow } from "../lib/use-search-capture";
@@ -54,6 +55,25 @@ export function SiteHeader({
   // shell has no genres — and brand the mark "hallpass · mobile".
   const isMobile = useDevicePlatform() === "mobile";
 
+  // The bottom tab bar's Search tab navigates to `/#search`; this focuses the
+  // input when that hash arrives (on mount after navigation, or via hashchange
+  // when already on the page), then clears the hash so a repeat tap re-triggers.
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const focusFromHash = () => {
+      if (window.location.hash !== "#search") return;
+      searchRef.current?.focus();
+      history.replaceState(
+        null,
+        "",
+        window.location.pathname + window.location.search,
+      );
+    };
+    focusFromHash();
+    window.addEventListener("hashchange", focusFromHash);
+    return () => window.removeEventListener("hashchange", focusFromHash);
+  }, []);
+
   const searchInput = (
     <div className="relative ml-1 min-w-0 flex-1 max-w-2xl sm:ml-0">
       <svg
@@ -69,6 +89,7 @@ export function SiteHeader({
         <path d="m14 14-3-3" strokeLinecap="round" />
       </svg>
       <input
+        ref={searchRef}
         type="search"
         name="q"
         inputMode="search"
