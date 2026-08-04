@@ -22,7 +22,7 @@
  * it is absent from the prerendered HTML the crawler and the SW precache see.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useDevicePlatform } from "../lib/use-device-platform";
 import { Wordmark } from "./Wordmark";
@@ -37,8 +37,19 @@ export function MobileSplash() {
   const pathname = usePathname() ?? "/";
   const [phase, setPhase] = useState<"idle" | "showing" | "leaving">("idle");
 
+  // The show-once latch is a REF, not the `phase` state, and that distinction is
+  // load-bearing. `phase` cannot be a dependency of the effect that schedules the
+  // dismiss timers: that effect calls `setPhase("showing")`, so listing `phase`
+  // makes React tear the effect down and run its cleanup — clearing `toLeave` and
+  // `toGone` — the instant it re-runs for the `idle → showing` change, before
+  // either timer can fire. The splash then stays on "showing" forever (a spinner
+  // that never fades). A ref carries "already triggered" across renders without
+  // being a dependency, so entering "showing" can no longer cancel its own exit.
+  const triggered = useRef(false);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+
   useEffect(() => {
-    if (!isMobile || phase !== "idle") return;
+    if (triggered.current || !isMobile) return;
     if (SKIP_PREFIXES.some((p) => pathname.startsWith(p))) return;
     try {
       if (sessionStorage.getItem(SEEN_KEY)) return;
@@ -48,6 +59,7 @@ export function MobileSplash() {
       // remember we showed it, better to skip than to replay it every navigation.
       return;
     }
+    triggered.current = true;
     // Showing on the render AFTER mount is the point, not an oversight: the
     // server/first-paint render must be splash-free (it is shared, prerendered and
     // in the SW precache), so the overlay can only appear once the effect has
@@ -55,13 +67,16 @@ export function MobileSplash() {
     // in `Arcade.tsx`.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPhase("showing");
-    const toLeave = setTimeout(() => setPhase("leaving"), 700);
-    const toGone = setTimeout(() => setPhase("idle"), 1050);
-    return () => {
-      clearTimeout(toLeave);
-      clearTimeout(toGone);
-    };
-  }, [isMobile, pathname, phase]);
+    // Deliberately no dep-change cleanup here: these timers are the exit path, and
+    // clearing them on any re-run (a pathname change, a device flip) is exactly
+    // what stranded the splash before. They're cleared only on real unmount, by
+    // the effect below.
+    timers.current.push(setTimeout(() => setPhase("leaving"), 700));
+    timers.current.push(setTimeout(() => setPhase("idle"), 1050));
+  }, [isMobile, pathname]);
+
+  // Clear any pending timers on unmount only — never on a dependency change.
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   if (phase === "idle") return null;
 
@@ -72,6 +87,10 @@ export function MobileSplash() {
         phase === "leaving" ? "pointer-events-none opacity-0" : "opacity-100"
       }`}
     >
+      {/* Wordmark on top, spinner beneath it — the wheel reads as "loading this"
+          rather than sitting above an unlabelled mark. */}
+      <Wordmark size="text-3xl" dotClass="h-2 w-2" tag="mobile" />
+
       {/* The wheel: a brand arc on a faint track, spinning under motion-safe. */}
       <svg
         width="56"
@@ -98,8 +117,6 @@ export function MobileSplash() {
           className="text-brand"
         />
       </svg>
-
-      <Wordmark size="text-3xl" dotClass="h-2 w-2" tag="mobile" />
     </div>
   );
 }
