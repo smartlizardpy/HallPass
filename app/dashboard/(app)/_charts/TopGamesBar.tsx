@@ -20,8 +20,14 @@ import { COLORS, GRID, TICK, ChartTooltip, Placeholder, useMounted } from "./_sh
 
 export function TopGamesBar({
   data,
+  barName = "Plays",
+  color = COLORS.plays,
 }: {
   data: { label: string; value: number }[];
+  /** Tooltip series label. Defaults to "Plays" — the original use. */
+  barName?: string;
+  /** Bar fill. Defaults to the plays brand colour. */
+  color?: string;
 }) {
   const mounted = useMounted();
   if (!mounted) return <Placeholder className="h-64" />;
@@ -50,8 +56,8 @@ export function TopGamesBar({
           />
           <Bar
             dataKey="value"
-            name="Plays"
-            fill={COLORS.plays}
+            name={barName}
+            fill={color}
             radius={[0, 6, 6, 0]}
             maxBarSize={22}
           />
