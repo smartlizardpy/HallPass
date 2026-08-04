@@ -26,6 +26,7 @@ import { auth, signOut } from "@/app/lib/auth";
 import { BackButton } from "@/app/components/BackButton";
 import { Wordmark } from "@/app/components/Wordmark";
 import { getPlayerById, effectiveHandle } from "@/app/lib/players";
+import { getUserRole } from "@/app/lib/dashboard-users";
 import { store } from "@/app/lib/scoreboard";
 import { social } from "@/app/lib/social";
 import { UsernameCard } from "@/app/components/friends/UsernameCard";
@@ -130,6 +131,13 @@ export default async function PlayAccountPage({
   ]);
   if (!player) return <NotSignedInCard />;
 
+  // Effective role from the owner's own email (env allow-list + dashboard_users).
+  // This is the mobile entry to the dashboard: with no header/sidebar on this page
+  // and the account tab being where an admin lands, a role-gated link here is how
+  // "check the overview on the go" works. `/dashboard` re-checks the role itself,
+  // so the link is a convenience, not the gate.
+  const adminRole = await getUserRole(player.email);
+
   const { ok, error } = await searchParams;
   const errorBanner = errorMessage(error);
   const display = effectiveHandle(player);
@@ -215,6 +223,26 @@ export default async function PlayAccountPage({
             </button>
           </form>
         </section>
+
+        {/* ADMIN — only for a signed-in admin, the mobile way into the dashboard. */}
+        {adminRole && (
+          <Link
+            href="/dashboard"
+            className="flex items-center justify-between gap-3 rounded-xl border border-brand/30 bg-brand-50 p-6 transition hover:border-brand"
+          >
+            <div className="min-w-0">
+              <div className="text-sm font-black uppercase tracking-wide text-brand">
+                {adminRole === "super_admin" ? "Super admin" : "Admin"} · Dashboard
+              </div>
+              <p className="mt-1 text-xs font-semibold text-muted">
+                Overview, games, moderation and analytics.
+              </p>
+            </div>
+            <span aria-hidden className="shrink-0 text-xl font-black text-brand">
+              →
+            </span>
+          </Link>
+        )}
 
         {/* YOUR LEADERBOARDS ------------------------------------------------ */}
         <section className="rounded-xl border border-border bg-surface p-6">
