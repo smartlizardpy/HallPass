@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Nunito } from "next/font/google";
 import { FeaturePromo } from "./components/FeaturePromo";
 import { InstallPrompt } from "./components/InstallPrompt";
+import { MobileTabBar } from "./components/MobileTabBar";
 import { PWA } from "./components/PWA";
 import { WelcomeToast } from "./components/WelcomeToast";
 import { SITE_URL } from "./lib/site";
@@ -84,6 +85,7 @@ export default function RootLayout({
         <PWA />
         <InstallPrompt />
         <FeaturePromo />
+        <MobileTabBar />
       </body>
     </html>
   );
