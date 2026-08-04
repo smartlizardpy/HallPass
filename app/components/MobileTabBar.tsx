@@ -21,7 +21,7 @@
  */
 
 import { useCallback, useEffect } from "react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useDevicePlatform } from "../lib/use-device-platform";
 
@@ -138,6 +138,30 @@ function TabInner({
   );
 }
 
+/**
+ * The tab body, rendered INSIDE the `Link` so it can read `useLinkStatus`. A tap
+ * lights the tab up the instant navigation starts — `pending` counts as active —
+ * so the bar feels responsive even when the destination (e.g. the dynamic account
+ * page) takes a moment to arrive. The Next docs recommend exactly this pairing:
+ * prefetch for speed, `useLinkStatus` for immediate feedback while it completes.
+ */
+function TabLinkContent({
+  label,
+  active,
+  children,
+}: {
+  label: string;
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  const { pending } = useLinkStatus();
+  return (
+    <TabInner label={label} active={active || pending}>
+      {children}
+    </TabInner>
+  );
+}
+
 function TabLink({
   href,
   label,
@@ -150,16 +174,19 @@ function TabLink({
   children: React.ReactNode;
 }) {
   return (
+    // Prefetch left at the default (auto): the bar is always on screen, so all
+    // four routes warm up ahead of the tap, which is what makes the switch feel
+    // instant in production. `prefetch={false}` here was the mistake — it forced a
+    // cold round-trip on every tap.
     <Link
       href={href}
-      prefetch={false}
       aria-current={active ? "page" : undefined}
       style={{ touchAction: "manipulation" }}
-      className="flex-1"
+      className="flex-1 transition active:opacity-50"
     >
-      <TabInner label={label} active={active}>
+      <TabLinkContent label={label} active={active}>
         {children}
-      </TabInner>
+      </TabLinkContent>
     </Link>
   );
 }
@@ -180,7 +207,7 @@ function TabButton({
       type="button"
       onClick={onClick}
       style={{ touchAction: "manipulation" }}
-      className="flex-1"
+      className="flex-1 transition active:opacity-50"
     >
       <TabInner label={label} active={active}>
         {children}
