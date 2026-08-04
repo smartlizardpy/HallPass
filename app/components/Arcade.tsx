@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import { type Game } from "../lib/games";
 import { useFavorites, useRecentlyPlayed } from "../lib/personalization";
-import { playsOn, useDevicePlatform } from "../lib/use-device-platform";
+import { mobileCatalog, playsOn, useDevicePlatform } from "../lib/use-device-platform";
 import { CoverImage } from "./CoverImage";
 import { ArcadeShell, useOpenGame } from "./ArcadeShell";
 import { GameCard } from "./GameCard";
@@ -192,6 +192,28 @@ function ArcadeRows({
   // a player typing "duskfall" produces one event rather than six prefixes.
   useSearchCapture(query, filtered.length);
 
+  // The MOBILE shell: a curated touch arcade, not a re-sorted desktop grid. Only
+  // reached on the SECOND paint (device is `null` on the server and first client
+  // render, so the shared prerendered HTML stays the full desktop catalogue — the
+  // crawler and the service-worker precache both see it). The MobileSplash island
+  // covers the swap. Everything shown is confirmed phone-playable, favourites
+  // included, so nothing here ever trips the platform interstitial.
+  const mobileGames = useMemo(() => mobileCatalog(filtered), [filtered]);
+  if (device === "mobile") {
+    return (
+      <MobileCatalog
+        games={mobileGames}
+        favorites={mobileCatalog(favoriteGames)}
+        onPlay={requestPlay}
+        pending={pending}
+        confirmPlay={confirmPlay}
+        cancelPlay={cancelPlay}
+        isFavorite={isFavorite}
+        onToggleFavorite={handleToggleFavorite}
+      />
+    );
+  }
+
   return (
     <>
         {/* Renders nothing until a mismatched ▶ is pressed. */}
@@ -315,6 +337,97 @@ function ArcadeRows({
         {category === "All" && !query && <AdRow index={3} />}
 
     </>
+  );
+}
+
+/* ===================== Mobile shell ===================== */
+/**
+ * The phone catalogue: Favourites on top (only when there are any), then the
+ * curated list. No hero, no editorial rows, no genres — "all we need is the games
+ * list", per the design. Deliberately sparse.
+ *
+ * `favorites` and `games` are BOTH already filtered to phone-playable by the
+ * caller, so the whole shell keeps one promise: everything on it works under a
+ * thumb. A short list is the honest state until more games are tagged.
+ */
+function MobileCatalog({
+  games,
+  favorites,
+  onPlay,
+  pending,
+  confirmPlay,
+  cancelPlay,
+  isFavorite,
+  onToggleFavorite,
+}: {
+  games: Game[];
+  favorites: Game[];
+  onPlay: (slug: string) => void;
+  pending: Game | null;
+  confirmPlay: () => void;
+  cancelPlay: () => void;
+  isFavorite: (slug: string) => boolean;
+  onToggleFavorite: (slug: string) => void;
+}) {
+  const grid = (list: Game[]) => (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-6">
+      {list.map((g) => (
+        <GameCard
+          key={g.slug}
+          game={g}
+          onPlay={onPlay}
+          isFavorite={isFavorite(g.slug)}
+          onToggleFavorite={onToggleFavorite}
+        />
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="pb-8">
+      {/* Consistent with the desktop path: harmless here since everything shown
+          is phone-playable, but kept so the play flow is identical on both. */}
+      <PlatformConfirmSheet
+        game={pending}
+        onConfirm={confirmPlay}
+        onCancel={cancelPlay}
+      />
+
+      {favorites.length > 0 && (
+        <MobileSection title="Favourites">{grid(favorites)}</MobileSection>
+      )}
+
+      <MobileSection title="Games">
+        {games.length === 0 ? (
+          <div className="rounded-3xl bg-white p-10 text-center">
+            <p className="text-[15px] font-bold text-muted">
+              No phone games yet — more are on the way.
+            </p>
+          </div>
+        ) : (
+          grid(games)
+        )}
+      </MobileSection>
+    </div>
+  );
+}
+
+/** A slimmer {@link Section} for the phone shell — tighter top padding, no
+ *  desktop-only "See all" affordance. */
+function MobileSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="px-3 pt-6">
+      <h2 className="mb-4 text-xl font-black tracking-tight text-zinc-900">
+        {title}
+      </h2>
+      {children}
+    </section>
   );
 }
 
