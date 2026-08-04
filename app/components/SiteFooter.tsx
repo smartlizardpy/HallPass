@@ -1,3 +1,4 @@
+import { DeviceSwitch } from "./DeviceSwitch";
 import { Wordmark } from "./Wordmark";
 
 /**
@@ -34,6 +35,10 @@ export function SiteFooter() {
           </p>
         </div>
       </div>
+
+      {/* Phone-only escape hatch to the full desktop site (renders nothing on
+          desktop). Client island inside this server component. */}
+      <DeviceSwitch />
     </footer>
   );
 }
