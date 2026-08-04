@@ -107,3 +107,21 @@ export function playsOn(game: Game, device: DevicePlatform): boolean | null {
   if (!game.platform) return null;
   return game.platform === "both" || game.platform === device;
 }
+
+/**
+ * The games the MOBILE shell lists — the curated touch arcade.
+ *
+ * STRICT on purpose: only games a human has confirmed play on a phone (`mobile`
+ * or `both`). Untagged games are EXCLUDED here even though `playsOn` treats them
+ * as unknown-not-unplayable — the mobile shell is a promise ("everything here
+ * works under your thumb"), and padding it with unchecked games is exactly the
+ * "tapped a WASD runner, it didn't respond, left" failure the platform tag exists
+ * to prevent. The list is short until more games are tagged; that is the honest
+ * state, not a bug. Order is preserved from the input so the existing ranking
+ * survives.
+ *
+ * Pure and DOM-free, like {@link playsOn}, so it is unit-tested directly.
+ */
+export function mobileCatalog(games: Game[]): Game[] {
+  return games.filter((g) => playsOn(g, "mobile") === true);
+}
