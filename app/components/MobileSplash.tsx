@@ -1,0 +1,105 @@
+"use client";
+
+/**
+ * HallPass mobile — the launch splash.
+ *
+ * More than polish: the mobile shell is decided on the SECOND paint (device is
+ * `null` on the server and first client render — see `use-device-platform.ts`),
+ * so for a beat the desktop layout is on screen before it swaps to the phone
+ * shell. This overlay covers exactly that seam: a phone visitor sees the wordmark
+ * and a spinning wheel, and by the time it fades the mobile shell has mounted
+ * underneath.
+ *
+ * ONCE PER SESSION. Keyed in `sessionStorage`, so it plays on the first load /
+ * PWA launch and never again while browsing around — a splash on every tap-through
+ * gets old fast.
+ *
+ * REDUCED MOTION. The wheel spins only under `motion-safe`; a visitor who asked
+ * for less motion gets the static mark and a plain fade. No JS branch needed —
+ * the Tailwind `motion-safe:` variant gates it at the CSS level.
+ *
+ * SERVER / DESKTOP. `null` until mounted and only ever shown on a real phone, so
+ * it is absent from the prerendered HTML the crawler and the SW precache see.
+ */
+
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+import { useDevicePlatform } from "../lib/use-device-platform";
+import { Wordmark } from "./Wordmark";
+
+const SEEN_KEY = "hp-mobile-splash-shown";
+
+/** Full-screen worlds where a launch splash would be noise, not a welcome. */
+const SKIP_PREFIXES = ["/dashboard", "/play/signin", "/play/signout", "/play/auth"];
+
+export function MobileSplash() {
+  const isMobile = useDevicePlatform() === "mobile";
+  const pathname = usePathname() ?? "/";
+  const [phase, setPhase] = useState<"idle" | "showing" | "leaving">("idle");
+
+  useEffect(() => {
+    if (!isMobile || phase !== "idle") return;
+    if (SKIP_PREFIXES.some((p) => pathname.startsWith(p))) return;
+    try {
+      if (sessionStorage.getItem(SEEN_KEY)) return;
+      sessionStorage.setItem(SEEN_KEY, "1");
+    } catch {
+      // sessionStorage can throw in locked-down/private modes — if we can't
+      // remember we showed it, better to skip than to replay it every navigation.
+      return;
+    }
+    // Showing on the render AFTER mount is the point, not an oversight: the
+    // server/first-paint render must be splash-free (it is shared, prerendered and
+    // in the SW precache), so the overlay can only appear once the effect has
+    // confirmed a phone. Same deliberate second-paint pattern as the `?q=` seeding
+    // in `Arcade.tsx`.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPhase("showing");
+    const toLeave = setTimeout(() => setPhase("leaving"), 700);
+    const toGone = setTimeout(() => setPhase("idle"), 1050);
+    return () => {
+      clearTimeout(toLeave);
+      clearTimeout(toGone);
+    };
+  }, [isMobile, pathname, phase]);
+
+  if (phase === "idle") return null;
+
+  return (
+    <div
+      aria-hidden
+      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center gap-6 bg-background transition-opacity duration-300 lg:hidden ${
+        phase === "leaving" ? "pointer-events-none opacity-0" : "opacity-100"
+      }`}
+    >
+      {/* The wheel: a brand arc on a faint track, spinning under motion-safe. */}
+      <svg
+        width="56"
+        height="56"
+        viewBox="0 0 50 50"
+        className="motion-safe:animate-spin"
+        style={{ animationDuration: "0.8s" }}
+      >
+        <circle
+          cx="25"
+          cy="25"
+          r="20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="5"
+          className="text-brand/15"
+        />
+        <path
+          d="M25 5a20 20 0 0 1 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="5"
+          strokeLinecap="round"
+          className="text-brand"
+        />
+      </svg>
+
+      <Wordmark size="text-3xl" dotClass="h-2 w-2" tag="mobile" />
+    </div>
+  );
+}
