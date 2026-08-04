@@ -38,6 +38,8 @@ export const STATIC_GAME_FILES: ReadonlySet<string> = new Set([
   "neon-tether/index.html",
   "neon-velocity-hyperdrive/cover.png",
   "neon-velocity-hyperdrive/index.html",
+  "neon-well/cover.png",
+  "neon-well/index.html",
   "nuclear-reactor-manager/cover.png",
   "nuclear-reactor-manager/index.html",
   "paddle-crawler/cover.png",
