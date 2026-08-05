@@ -19,9 +19,14 @@
  * as the most common footgun in this codebase.
  */
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { put } from "@vercel/blob";
-import { beta, requireBetaTester } from "@/app/lib/beta";
+import {
+  beta,
+  requireBetaTester,
+  BETA_CREDITS_CACHE_TAG,
+} from "@/app/lib/beta";
+import { reviews } from "@/app/lib/reviews";
 import {
   REPORT_BODY_MAX,
   REPORT_BODY_MIN,
@@ -32,9 +37,34 @@ import {
   toReportKind,
 } from "@/app/lib/beta/config";
 import { isResolvedSlug } from "@/app/lib/games-store";
-import { validateMediaUpload } from "@/app/lib/image-meta";
+import {
+  validateMediaUpload,
+  type ImageType,
+  type MediaRejection,
+} from "@/app/lib/image-meta";
 
 export type ActionResult = { ok: true; message: string } | { ok: false; error: string };
+
+/** Human copy for each rejection, so no reason code reaches a tester. */
+const SHOT_REJECTION_COPY: Record<MediaRejection, string> = {
+  empty: "That image was empty.",
+  "too-large": "That image is too big — 4 MB is the limit.",
+  "not-an-image": "That file isn't a PNG, JPEG or WebP.",
+  "too-narrow": "Something went wrong capturing that one — try another.",
+  "bad-aspect": "Something went wrong capturing that one — try another.",
+};
+
+/**
+ * Ceilings on everything the browser reports about a clip or an error log.
+ *
+ * All of these arrive from client code that the tester's own devtools can edit,
+ * so every one is re-clamped server-side even though the capture modules already
+ * bound them. The numbers are generous versions of what the client produces.
+ */
+const MAX_CLIP_BYTES = 25 * 1024 * 1024;
+const MAX_CLIP_MS = 120_000;
+const MAX_ERROR_ENTRIES = 100;
+const MAX_ERROR_LOG_CHARS = 60_000;
 
 /** Random, URL-safe, and matching the `^[a-z0-9][a-z0-9-]*$` CHECK on ids. */
 function newId(): string {
@@ -49,14 +79,41 @@ function newId(): string {
  * severity at all — the database CHECK enforces that, so it is normalised here
  * rather than passed through and allowed to 500.
  */
-export async function submitReportAction(input: {
-  slug: string;
-  kind: string;
-  severity: string | null;
-  title: string;
-  body: string;
-  device?: string;
-}): Promise<ActionResult> {
+export async function submitReportAction(
+  input: {
+    slug: string;
+    kind: string;
+    severity: string | null;
+    title: string;
+    body: string;
+    device?: string;
+    /**
+     * A replay clip already uploaded by the browser, straight to Blob storage.
+     *
+     * The client uploads it (see `api/v1/beta/clip-token`) and reports the
+     * result here, because a 30-second clip exceeds the 4.5 MB request-body cap
+     * a Server Action is subject to. The player is still re-derived from the
+     * SESSION below, so a forged path can only ever attach a clip to the
+     * forger's own report.
+     */
+    clipBlobPath?: string | null;
+    clipUrl?: string | null;
+    clipBytes?: number;
+    clipMs?: number;
+    /** The game's own errors, already capped and serialised by the client. */
+    errorLog?: string | null;
+    errorCount?: number;
+  },
+  /**
+   * An optional screenshot pinned to the report, picked from the session's
+   * automatic grabs.
+   *
+   * Passed as a separate `FormData` rather than folded into `input`: a Server
+   * Action can carry a `File` in FormData but not inside a plain serialised
+   * object, and keeping the text fields typed is worth the second argument.
+   */
+  shot?: FormData,
+): Promise<ActionResult> {
   const { playerId } = await requireBetaTester();
 
   if (!(await isResolvedSlug(input.slug))) {
@@ -95,6 +152,41 @@ export async function submitReportAction(input: {
       (a) => a.slug === input.slug,
     );
 
+    // Evidence is stored BEFORE the row, so a failed upload never leaves a
+    // report claiming a screenshot that does not exist. A failed upload is not
+    // fatal to the report either — the words are the point, the picture is
+    // supporting material — so it degrades to a report with no image rather
+    // than losing what the tester typed.
+    let shotBlobPath: string | null = null;
+    let shotUrl: string | null = null;
+    const file = shot?.get("file");
+    if (file instanceof File && file.size > 0) {
+      const stored = await uploadShot(input.slug, file);
+      if (stored.ok) {
+        shotBlobPath = stored.blobPath;
+        shotUrl = stored.blobUrl;
+      } else {
+        console.error("beta report screenshot rejected:", stored.error);
+      }
+    }
+
+    // A clip path must live under this report's own game. The token route
+    // enforced it when minting, and this enforces it again at write time — the
+    // two together mean neither a stolen token nor a hand-rolled call can point
+    // a report at somebody else's object.
+    const clipPath =
+      typeof input.clipBlobPath === "string" &&
+      input.clipBlobPath.startsWith(`beta-clips/${input.slug}/`)
+        ? input.clipBlobPath
+        : null;
+
+    // The client already caps this, but it is client input: re-cap so a crafted
+    // call cannot write an unbounded blob of text into the row.
+    const errors =
+      typeof input.errorLog === "string" && input.errorLog.length > 0
+        ? input.errorLog.slice(0, MAX_ERROR_LOG_CHARS)
+        : null;
+
     await beta.createReport({
       playerId,
       assignmentId: assignment?.id ?? null,
@@ -104,6 +196,19 @@ export async function submitReportAction(input: {
       title,
       body,
       device: String(input.device ?? "").slice(0, 200),
+      shotBlobPath,
+      shotUrl,
+      // Belt and braces on a client-supplied path: the token route already
+      // pinned the prefix, but nothing here should trust a string from a
+      // browser to name a blob.
+      clipBlobPath: clipPath,
+      // Only kept when the path validated — a URL without a matching path
+      // would let a crafted call point playback at an arbitrary host.
+      clipUrl: clipPath ? (input.clipUrl ?? null) : null,
+      clipBytes: Math.max(0, Math.min(MAX_CLIP_BYTES, Math.floor(input.clipBytes ?? 0))),
+      clipMs: Math.max(0, Math.min(MAX_CLIP_MS, Math.floor(input.clipMs ?? 0))),
+      errorLog: errors,
+      errorCount: Math.max(0, Math.min(MAX_ERROR_ENTRIES, Math.floor(input.errorCount ?? 0))),
     });
 
     // Opening a report means they are actively testing; reflect that in the
@@ -134,6 +239,54 @@ export async function submitReportAction(input: {
  * sweep that prefix — blob deletes, `sync-games.mjs` mirroring into the repo,
  * the SW precache — and are enumerated in `app/lib/game-media.sql`.
  */
+/**
+ * Validate and store one captured still, returning its blob key and URL.
+ *
+ * Shared by the gallery submission and the bug-report attachment so both apply
+ * the same magic-byte sniffing and the same size/dimension policy. Returns a
+ * reason rather than throwing, because both callers turn it into UI copy.
+ */
+async function uploadShot(
+  slug: string,
+  file: File,
+): Promise<
+  | { ok: true; blobPath: string; blobUrl: string; meta: { type: ImageType; width: number; height: number }; bytes: number }
+  | { ok: false; error: string }
+> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const check = validateMediaUpload(bytes);
+  if (!check.ok) return { ok: false, error: SHOT_REJECTION_COPY[check.reason] };
+
+  const id = newId();
+  const ext =
+    check.meta.type === "image/png"
+      ? "png"
+      : check.meta.type === "image/jpeg"
+        ? "jpg"
+        : "webp";
+  const blobPath = `beta-shots/${slug}/${id}.${ext}`;
+
+  // The `File` is uploaded, not the `Uint8Array` we validated — `put` takes a
+  // stream-like body and the two are the same bytes. The content type is the
+  // SNIFFED one, never `file.type`, so a mislabelled upload is stored under what
+  // it actually is. Same reasoning as `media-actions.ts`.
+  const uploaded = await put(blobPath, file, {
+    access: "public",
+    contentType: check.meta.type,
+    addRandomSuffix: false,
+    allowOverwrite: false,
+    cacheControlMaxAge: 31_536_000,
+  });
+
+  return {
+    ok: true,
+    blobPath,
+    blobUrl: uploaded.url,
+    meta: check.meta,
+    bytes: check.bytes,
+  };
+}
+
 export async function submitShotAction(formData: FormData): Promise<ActionResult> {
   const { playerId } = await requireBetaTester();
 
@@ -143,44 +296,25 @@ export async function submitShotAction(formData: FormData): Promise<ActionResult
   const file = formData.get("file");
   if (!(file instanceof File)) return { ok: false, error: "No image" };
 
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const check = validateMediaUpload(bytes);
-  if (!check.ok) {
-    return { ok: false, error: `Image rejected (${check.reason})` };
-  }
-
   try {
     const recent = await beta.recentShotCount(playerId, SHOT_RATE_LIMIT.windowSeconds);
     if (recent >= SHOT_RATE_LIMIT.maxPerWindow) {
       return { ok: false, error: "That's plenty of screenshots for now" };
     }
 
-    const id = newId();
-    const ext = check.meta.type === "image/png" ? "png" : check.meta.type === "image/jpeg" ? "jpg" : "webp";
-    const blobPath = `beta-shots/${slug}/${id}.${ext}`;
-
-    // The `File` is uploaded, not the `Uint8Array` we validated — `put` takes a
-    // stream-like body and the two are the same bytes. The content type is the
-    // SNIFFED one, never `file.type`, so a mislabelled upload is stored under
-    // what it actually is. Same reasoning as `media-actions.ts`.
-    const uploaded = await put(blobPath, file, {
-      access: "public",
-      contentType: check.meta.type,
-      addRandomSuffix: false,
-      allowOverwrite: false,
-      cacheControlMaxAge: 31_536_000,
-    });
+    const stored = await uploadShot(slug, file);
+    if (!stored.ok) return stored;
 
     await beta.createShot({
-      id,
+      id: stored.blobPath.split("/").pop()!.replace(/\.[^.]+$/, ""),
       playerId,
       slug,
-      blobPath,
-      blobUrl: uploaded.url,
-      contentType: check.meta.type,
-      width: check.meta.width,
-      height: check.meta.height,
-      bytes: check.bytes,
+      blobPath: stored.blobPath,
+      blobUrl: stored.blobUrl,
+      contentType: stored.meta.type,
+      width: stored.meta.width,
+      height: stored.meta.height,
+      bytes: stored.bytes,
       kind: "screenshot",
     });
   } catch (error) {
@@ -192,7 +326,23 @@ export async function submitShotAction(formData: FormData): Promise<ActionResult
   return { ok: true, message: "Sent for review" };
 }
 
-/** Mark an assignment finished from the session screen. */
+/**
+ * Mark an assignment finished.
+ *
+ * A REVIEW IS REQUIRED, not encouraged. The whole point of assigning a game is
+ * to get a verdict on it, and a playtest that produced no bugs currently
+ * produces no output at all — the tester plays for twenty minutes, finds nothing
+ * wrong, and the programme learns nothing. Requiring the review means "it works
+ * fine" is a recorded result rather than silence.
+ *
+ * It is also what the credit on the game page rests on: `completedTesters()`
+ * publishes the names of everyone who finished, so finishing has to mean
+ * something more than pressing a button.
+ *
+ * The check is against the reviews store rather than a flag of our own, so a
+ * review written earlier from the game page counts — a tester who already
+ * reviewed a game they are later assigned should not have to write a second one.
+ */
 export async function finishAssignmentAction(slug: string): Promise<ActionResult> {
   const { playerId } = await requireBetaTester();
 
@@ -201,6 +351,15 @@ export async function finishAssignmentAction(slug: string): Promise<ActionResult
       (a) => a.slug === slug,
     );
     if (!assignment) return { ok: false, error: "No assignment for this game" };
+
+    const review = await reviews.ownReview(slug, playerId);
+    if (!review) {
+      return {
+        ok: false,
+        error: "Write your review of this game first — that's the point of the playtest",
+      };
+    }
+
     await beta.setAssignmentStatus(assignment.id, "submitted");
   } catch (error) {
     console.error("beta finishAssignment failed:", error);
@@ -209,5 +368,26 @@ export async function finishAssignmentAction(slug: string): Promise<ActionResult
 
   revalidatePath("/beta");
   revalidatePath("/dashboard/beta");
-  return { ok: true, message: "Marked as done" };
+  // The game page credits everyone who has finished; this is the moment that
+  // list changes.
+  revalidateTag(BETA_CREDITS_CACHE_TAG, { expire: 0 });
+  revalidatePath(`/game/${slug}`);
+  return { ok: true, message: "Marked as done — thanks!" };
+}
+
+/**
+ * Whether the tester has already reviewed this game.
+ *
+ * Read by the session screen so the "Done" button can explain itself BEFORE it
+ * is pressed, rather than refusing after. Fail-soft to `false`: the worst case
+ * is showing the review prompt to someone who has already written one, and
+ * `finishAssignmentAction` re-checks authoritatively anyway.
+ */
+export async function hasReviewedAction(slug: string): Promise<boolean> {
+  const { playerId } = await requireBetaTester();
+  try {
+    return (await reviews.ownReview(slug, playerId)) != null;
+  } catch {
+    return false;
+  }
 }

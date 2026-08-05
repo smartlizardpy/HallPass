@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import { Wordmark } from "./Wordmark";
+import type { MeResponse } from "@/sdk/src/contract";
 
 /**
  * A one-time announcement modal for the new social features.
@@ -29,7 +30,17 @@ import { Wordmark } from "./Wordmark";
  * latter would force a Suspense boundary and de-opt every page in the layout.
  */
 
-type Variant = "signin" | "username" | "friends";
+/**
+ * `beta` is different in kind from the other three and is treated accordingly.
+ *
+ * The originals are NAGS — "you are missing a username", "you have no friends
+ * yet" — and only the first missing thing is shown. `beta` is NEWS: something
+ * the player has just been GIVEN, by an admin, at a moment the site cannot
+ * predict. It therefore takes priority over the nags (being told you are in the
+ * programme matters more than being reminded to add friends) and it is keyed
+ * per player rather than per browser — see {@link dismissKey}.
+ */
+type Variant = "beta" | "signin" | "username" | "friends";
 
 type SocialCounts = {
   signedIn: boolean;
@@ -61,16 +72,49 @@ const SUPPRESSED_PREFIXES = [
 /** Let the page paint and settle before interrupting it. */
 const DELAY_MS = 1500;
 
+/** Shared by the three social variants, which all pitch the same features. */
+const SOCIAL_POINTS = [
+  { icon: "🏷️", text: "A unique @username other players can find" },
+  { icon: "👑", text: "Badges earned from what you play and score" },
+  { icon: "🤝", text: "See what your friends are playing" },
+];
+
 const COPY: Record<
   Variant,
-  { badge: string; title: string; body: string; cta: string; href: string }
+  {
+    badge: string;
+    title: string;
+    body: string;
+    cta: string;
+    href: string;
+    /**
+     * Per-variant selling points. These used to be a single hardcoded list in
+     * the markup, which was fine while every variant was pitching the same
+     * social features — the beta variant pitches something else entirely, so
+     * they moved in here rather than growing a conditional in the JSX.
+     */
+    points: { icon: string; text: string }[];
+  }
 > = {
+  beta: {
+    badge: "Beta",
+    title: "You're a beta tester",
+    body: "You've been picked to try games before everyone else, and to break them on purpose.",
+    cta: "See my games",
+    href: "/beta",
+    points: [
+      { icon: "🎮", text: "Games assigned to you before they go live" },
+      { icon: "🐛", text: "Earn XP for every bug we accept" },
+      { icon: "📸", text: "Your screenshots on the game's page" },
+    ],
+  },
   signin: {
     badge: "New",
     title: "Usernames, badges and friends are here",
     body: "Sign in to claim your @username, earn badges as you play, and see what your friends are playing.",
     cta: "Sign in",
     href: "/play/signin?callbackUrl=/play/account",
+    points: SOCIAL_POINTS,
   },
   username: {
     badge: "New",
@@ -78,6 +122,7 @@ const COPY: Record<
     body: "Your username is how friends find you — and it is first come, first served. Grab yours before someone else does.",
     cta: "Claim it now",
     href: "/play/account",
+    points: SOCIAL_POINTS,
   },
   friends: {
     badge: "New",
@@ -85,8 +130,23 @@ const COPY: Record<
     body: "See what your friends are playing, right on the game page. Add them by username or share your friend code.",
     cta: "Find friends",
     href: "/play/friends",
+    points: SOCIAL_POINTS,
   },
 };
+
+/**
+ * The dismissal key for a variant.
+ *
+ * `beta` is keyed PER PLAYER. A single shared key would mean the first tester to
+ * use a school computer suppresses the announcement for every other account on
+ * that machine — and unlike the social nags, this one is never shown again by
+ * any other route, so a missed one is missed permanently. The nags keep their
+ * plain per-browser key: seeing "claim your username" once per device is the
+ * behaviour that already shipped, and re-keying them would re-nag everyone.
+ */
+function dismissKey(variant: Variant, playerId: string | null): string {
+  return variant === "beta" && playerId ? `beta:${playerId}` : variant;
+}
 
 function readDismissed(): Set<string> {
   try {
@@ -102,10 +162,10 @@ function readDismissed(): Set<string> {
   }
 }
 
-function rememberDismissed(variant: Variant): void {
+function rememberDismissed(key: string): void {
   try {
     const next = readDismissed();
-    next.add(variant);
+    next.add(key);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([...next]));
   } catch {
     /* best effort */
@@ -116,6 +176,8 @@ export function FeaturePromo() {
   const pathname = usePathname();
   const router = useRouter();
   const [variant, setVariant] = useState<Variant | null>(null);
+  /** Whose beta announcement this is — see {@link dismissKey}. */
+  const [playerId, setPlayerId] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -123,13 +185,13 @@ export function FeaturePromo() {
     (reason: "dismissed" | "accepted") => {
       setVariant((current) => {
         if (current) {
-          rememberDismissed(current);
+          rememberDismissed(dismissKey(current, playerId));
           posthog.capture("feature_promo_closed", { variant: current, reason });
         }
         return null;
       });
     },
-    [],
+    [playerId],
   );
 
   useEffect(() => {
@@ -141,22 +203,42 @@ export function FeaturePromo() {
       // drawer). Do not stack a promo on top of it.
       if (document.body.style.overflow === "hidden") return;
 
-      fetch("/api/v1/me/friends/count", { credentials: "include" })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data: SocialCounts | null) => {
+      // Both in parallel: two round trips in sequence would delay the modal by
+      // the slower one for no reason, and each is a cheap no-store read.
+      Promise.all([
+        fetch("/api/v1/me/friends/count", { credentials: "include" })
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
+        fetch("/api/v1/me", { credentials: "include" })
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
+      ])
+        .then(([data, me]: [SocialCounts | null, MeResponse | null]) => {
           if (!active || !data) return;
 
-          // Only the FIRST thing they are missing, so the modal never appears
-          // twice in a row for two different reasons.
-          const next: Variant | null = !data.signedIn
-            ? "signin"
-            : !data.hasUsername
-              ? "username"
-              : data.friends === 0
-                ? "friends"
-                : null;
+          const dismissed = readDismissed();
+          const playerId = me?.player?.id ?? null;
 
-          if (!next || readDismissed().has(next)) return;
+          // NEWS BEFORE NAGS. Being told you are now a beta tester outranks a
+          // reminder to add friends, and it is the only variant the site cannot
+          // re-offer by another route.
+          const next: Variant | null = me?.isBetaTester
+            ? "beta"
+            : !data.signedIn
+              ? "signin"
+              : !data.hasUsername
+                ? "username"
+                : data.friends === 0
+                  ? "friends"
+                  : null;
+
+          if (!next) return;
+          // A dismissed `beta` must not fall through to a social nag on the same
+          // page load — the player has already been interrupted once by this
+          // component's decision, and stacking a second ask reads as badgering.
+          if (dismissed.has(dismissKey(next, playerId))) return;
+
+          setPlayerId(playerId);
           setVariant(next);
           posthog.capture("feature_promo_shown", { variant: next });
         })
@@ -258,7 +340,14 @@ export function FeaturePromo() {
         */}
         <div className="flex items-center gap-2.5 pr-10">
           <Wordmark />
-          <span className="rounded-full bg-accent-pink px-2.5 py-1 text-[10px] font-black uppercase leading-none tracking-wider text-white">
+          {/* Brand purple for the beta badge, pink for the social "New" ones —
+              the badge names a programme here rather than flagging novelty, and
+              it should read as the same purple the /beta surfaces use. */}
+          <span
+            className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase leading-none tracking-wider text-white ${
+              variant === "beta" ? "bg-brand" : "bg-accent-pink"
+            }`}
+          >
             {copy.badge}
           </span>
         </div>
@@ -277,9 +366,11 @@ export function FeaturePromo() {
         </p>
 
         <ul className="mt-5 space-y-2">
-          <PromoPoint icon="🏷️">A unique @username other players can find</PromoPoint>
-          <PromoPoint icon="👑">Badges earned from what you play and score</PromoPoint>
-          <PromoPoint icon="🤝">See what your friends are playing</PromoPoint>
+          {copy.points.map((point) => (
+            <PromoPoint key={point.text} icon={point.icon}>
+              {point.text}
+            </PromoPoint>
+          ))}
         </ul>
 
         <div className="mt-6 flex flex-wrap items-center gap-3">

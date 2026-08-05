@@ -67,6 +67,23 @@ CREATE TABLE IF NOT EXISTS beta_reports (
   status         TEXT NOT NULL DEFAULT 'open'
                    CHECK (status IN ('open','accepted','rejected','duplicate')),
   clip_blob_path TEXT,
+  -- What upload() returned, so streaming a replay costs no billed head().
+  clip_url       TEXT,
+  -- Evidence pinned to the report by the tester, picked from the session's
+  -- automatic gameplay grabs. Deliberately NOT a `beta_shots` row: that table
+  -- stages images for a game's public gallery and feeds the admin's image
+  -- review queue, which is no place for screenshots of things that are broken.
+  -- `shot_url` is what `put()` returned, so triage renders it with no head().
+  shot_blob_path TEXT,
+  shot_url       TEXT,
+  -- The game's own JavaScript errors, collected silently during the session.
+  -- TEXT rather than JSONB deliberately: nothing queries inside it, and a
+  -- malformed payload should degrade to "no errors shown" rather than fail the
+  -- insert and lose what the tester typed. The app caps the payload before it
+  -- gets here. `error_count` is denormalised so the triage list can badge a row
+  -- without parsing every row's JSON.
+  error_log      TEXT,
+  error_count    INTEGER NOT NULL DEFAULT 0,
   clip_bytes     INTEGER NOT NULL DEFAULT 0,
   clip_ms        INTEGER NOT NULL DEFAULT 0,
   device         TEXT NOT NULL DEFAULT '',

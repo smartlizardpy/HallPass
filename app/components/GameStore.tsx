@@ -42,6 +42,7 @@ export function GameStore({
   related,
   plays,
   credit = null,
+  testers = [],
   video = null,
 }: {
   game: Game;
@@ -58,6 +59,15 @@ export function GameStore({
    * page down over it.
    */
   credit?: string | null;
+  /**
+   * Display names of the beta testers who finished a playtest of this game.
+   *
+   * Already reduced to strings by `getGameTesters()` on the server — this
+   * component is a client component, so handing it player rows would ship
+   * identifiers to the browser for a decorative credit line. Defaults to `[]`
+   * so every existing call site is unchanged.
+   */
+  testers?: string[];
   /**
    * A gameplay/intro video, or `null` when the game has none — which renders no
    * switch at all, leaving the media column exactly as it was before the feature.
@@ -264,6 +274,19 @@ export function GameStore({
             {credit && (
               <MetaRow label="By">
                 <span className="font-bold text-zinc-900">{credit}</span>
+              </MetaRow>
+            )}
+            {/* Who playtested this before it shipped. A fact about the game, the
+                same for every visitor and for the crawler, so it belongs in the
+                spec sheet beside the byline rather than in a client island.
+                Display names only — `getGameTesters` reduces rows to
+                `publicDisplayName()` on the server, so no identifier reaches the
+                browser. */}
+            {testers.length > 0 && (
+              <MetaRow label="Tested by">
+                <span className="font-bold text-zinc-900">
+                  {testers.join(", ")}
+                </span>
               </MetaRow>
             )}
             {/* Rendered from the tag ALONE, with no reference to the visitor's

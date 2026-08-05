@@ -25,6 +25,7 @@ import { ArcadeShell } from "../../components/ArcadeShell";
 import { GameStore } from "../../components/GameStore";
 import { getGameCredit, resolveCredit } from "../../lib/game-credits";
 import { getGameMedia, mediaPublicPath } from "../../lib/game-media";
+import { getGameTesters } from "../../lib/beta";
 import { getGameVideo } from "../../lib/game-videos";
 import { resolveCategories, resolveGame, resolveGames } from "../../lib/games-store";
 import { SITE_URL as BASE } from "../../lib/site";
@@ -115,21 +116,26 @@ export default async function GamePage({
   const game = await resolveGame(slug);
   if (!game) notFound();
 
-  const [allGames, categories, playCounts, media, credit, video] = await Promise.all([
-    resolveGames(),
-    resolveCategories(),
-    getGamePlayCounts(),
-    getGameMedia(slug),
-    // Fail-soft to null, like every other read here — a missing credit line must
-    // never cost the page. Cached under its own tag, so it does not widen the
-    // blast radius of a games-catalogue invalidation.
-    getGameCredit(slug),
-    // Same contract, and it keeps this route statically prerenderable: a cached
-    // read with no cookies/headers/auth anywhere in it. See the docblock — going
-    // dynamic here would silently drop every /game/<slug> from the service-worker
-    // precache and break offline play with no error.
-    getGameVideo(slug),
-  ]);
+  const [allGames, categories, playCounts, media, credit, video, testers] =
+    await Promise.all([
+      resolveGames(),
+      resolveCategories(),
+      getGamePlayCounts(),
+      getGameMedia(slug),
+      // Fail-soft to null, like every other read here — a missing credit line
+      // must never cost the page. Cached under its own tag, so it does not widen
+      // the blast radius of a games-catalogue invalidation.
+      getGameCredit(slug),
+      // Same contract, and it keeps this route statically prerenderable: a
+      // cached read with no cookies/headers/auth anywhere in it. See the
+      // docblock — going dynamic here would silently drop every /game/<slug>
+      // from the service-worker precache and break offline play with no error.
+      getGameVideo(slug),
+      // Who playtested this before it shipped. Same contract again: a cached,
+      // session-free read, fail-soft to `[]`, so it neither makes this route
+      // dynamic nor costs the page if Neon is unreachable.
+      getGameTesters(slug),
+    ]);
 
   const plays = playCounts[game.slug] ?? game.plays ?? 0;
 
@@ -258,6 +264,9 @@ export default async function GamePage({
           related={related}
           plays={plays}
           credit={resolveCredit(game, credit)}
+          // Already reduced to display names server-side, so the client bundle
+          // never sees a player row.
+          testers={testers}
           // Mapped into a structural prop rather than passed as the row: GameStore
           // is a client component and `game-videos.ts` is server-only.
           video={video ? { id: video.youtubeId, label: video.label } : null}

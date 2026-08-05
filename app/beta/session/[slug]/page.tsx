@@ -17,6 +17,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { resolveGame } from "@/app/lib/games-store";
 import { getAssignments, requireBetaTester } from "@/app/lib/beta";
+import { reviews } from "@/app/lib/reviews";
 import { TestSessionClient } from "./TestSessionClient";
 
 export const metadata: Metadata = {
@@ -37,7 +38,16 @@ export default async function BetaSessionPage({
   // an off-site game is exactly the kind that most needs testing.
   if (!game) notFound();
 
-  const assignment = (await getAssignments(playerId)).find((a) => a.slug === slug);
+  const [assignments, ownReview] = await Promise.all([
+    getAssignments(playerId),
+    // Finishing an assignment REQUIRES a review, so the session screen needs to
+    // know up front whether one exists — a "Done" button that only explains
+    // itself after being pressed is a worse experience than one that says so.
+    // Fail-soft: showing the prompt to someone who already reviewed is harmless,
+    // and `finishAssignmentAction` re-checks authoritatively.
+    reviews.ownReview(slug, playerId).catch(() => null),
+  ]);
+  const assignment = assignments.find((a) => a.slug === slug);
 
   return (
     <TestSessionClient
@@ -48,6 +58,8 @@ export default async function BetaSessionPage({
       }}
       brief={assignment?.brief ?? ""}
       hasAssignment={Boolean(assignment)}
+      initiallyReviewed={ownReview != null}
+      playerId={playerId}
     />
   );
 }

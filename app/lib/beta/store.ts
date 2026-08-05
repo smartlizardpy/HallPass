@@ -126,8 +126,18 @@ export type BetaReport = {
   body: string;
   status: ReportStatus;
   clipBlobPath: string | null;
+  /** What `upload()` returned; the clip route streams from it. */
+  clipUrl: string | null;
   clipBytes: number;
   clipMs: number;
+  /** Blob key of the screenshot pinned to this report, for deletion on resolve. */
+  shotBlobPath: string | null;
+  /** The screenshot's URL, so triage renders evidence without a head(). */
+  shotUrl: string | null;
+  /** The game's own JavaScript errors, as a JSON string. Parsed by the reader. */
+  errorLog: string | null;
+  /** Denormalised so a queue row can be badged without parsing the JSON. */
+  errorCount: number;
   device: string;
   createdAt: string;
   resolvedBy: string | null;
@@ -224,8 +234,13 @@ function mapReport(row: Row): BetaReport {
     body: toStr(row.body),
     status: toReportStatus(row.status) ?? "open",
     clipBlobPath: toStrOrNull(row.clip_blob_path),
+    clipUrl: toStrOrNull(row.clip_url),
     clipBytes: toInt(row.clip_bytes),
     clipMs: toInt(row.clip_ms),
+    shotBlobPath: toStrOrNull(row.shot_blob_path),
+    shotUrl: toStrOrNull(row.shot_url),
+    errorLog: toStrOrNull(row.error_log),
+    errorCount: toInt(row.error_count),
     device: toStr(row.device),
     createdAt: toIso(row.created_at),
     resolvedBy: toStrOrNull(row.resolved_by),
@@ -374,6 +389,41 @@ export function createBetaStore(sql: Sql) {
       return rows.map(mapAssignment);
     },
 
+    /**
+     * Everyone who has FINISHED a playtest, for the public credit on a game
+     * page. Keyed by slug by the caller.
+     *
+     * Only `submitted` and `closed` count. Crediting someone the moment a game
+     * is assigned would publish "this person is testing an unreleased game"
+     * before they have done anything, and would keep crediting them if they
+     * never got round to it.
+     *
+     * PUBLIC DISPLAY FIELDS ONLY — the same rule the roster follows, and it
+     * matters more here: this feeds `/game/[slug]`, which IS indexed. A query
+     * that cannot select `players.email` cannot leak one onto the open web.
+     *
+     * Reads the whole table in one go rather than per slug. It is bounded by the
+     * number of assignments ever completed and the caller caches it under a
+     * single tag, exactly as `readAllMediaCached` does — a per-slug cache would
+     * key on a runtime argument and grow without bound.
+     */
+    async completedTesters(): Promise<
+      { slug: string; handle: string | null; username: string | null }[]
+    > {
+      const rows = await sql`
+        SELECT a.slug, p.handle, p.username
+        FROM beta_assignments a
+        JOIN players p ON p.id = a.player_id
+        WHERE a.status IN ('submitted', 'closed')
+        ORDER BY a.slug ASC, a.completed_at ASC NULLS LAST
+      `;
+      return rows.map((row) => ({
+        slug: String(row.slug),
+        handle: toStrOrNull(row.handle),
+        username: toStrOrNull(row.username),
+      }));
+    },
+
     /** Every assignment, newest first — the admin overview. */
     async allAssignments(): Promise<BetaAssignment[]> {
       const rows = await sql`
@@ -464,13 +514,37 @@ export function createBetaStore(sql: Sql) {
       title: string;
       body: string;
       device?: string;
+      /** Evidence picked from the session's automatic grabs, if any. */
+      shotBlobPath?: string | null;
+      shotUrl?: string | null;
+      /** The game's own errors as JSON, and how many there were. */
+      errorLog?: string | null;
+      errorCount?: number;
+      /**
+       * A replay clip the BROWSER already uploaded straight to Blob storage.
+       *
+       * Written in the same INSERT rather than through {@link attachClip}
+       * afterwards: `neon()` cannot span a transaction, so a second statement
+       * could fail and leave a report that silently lost its evidence.
+       */
+      clipBlobPath?: string | null;
+      clipUrl?: string | null;
+      clipBytes?: number;
+      clipMs?: number;
     }): Promise<number> {
       const rows = await sql`
         INSERT INTO beta_reports
-          (player_id, assignment_id, slug, kind, severity, title, body, device)
+          (player_id, assignment_id, slug, kind, severity, title, body, device,
+           shot_blob_path, shot_url, error_log, error_count,
+           clip_blob_path, clip_url, clip_bytes, clip_ms)
         VALUES (${input.playerId}, ${input.assignmentId}, ${input.slug},
                 ${input.kind}, ${input.severity}, ${input.title}, ${input.body},
-                ${input.device ?? ""})
+                ${input.device ?? ""},
+                ${input.shotBlobPath ?? null}, ${input.shotUrl ?? null},
+                ${input.errorLog ?? null}, ${input.errorCount ?? 0},
+                ${input.clipBlobPath ?? null}, ${input.clipUrl ?? null},
+                ${input.clipBytes ?? 0},
+                ${input.clipMs ?? 0})
         RETURNING id
       `;
       return toInt(rows[0]?.id);
@@ -480,7 +554,9 @@ export function createBetaStore(sql: Sql) {
     async reportById(id: number): Promise<BetaReport | null> {
       const rows = await sql`
         SELECT id, player_id, assignment_id, slug, kind, severity, title, body,
-               status, clip_blob_path, clip_bytes, clip_ms, device, created_at,
+               status, clip_blob_path, clip_url, clip_bytes, clip_ms,
+               shot_blob_path, shot_url,
+               error_log, error_count, device, created_at,
                resolved_by, resolved_at
         FROM beta_reports
         WHERE id = ${id}
@@ -492,7 +568,9 @@ export function createBetaStore(sql: Sql) {
     async reportsFor(playerId: string, limit = 50): Promise<BetaReport[]> {
       const rows = await sql`
         SELECT id, player_id, assignment_id, slug, kind, severity, title, body,
-               status, clip_blob_path, clip_bytes, clip_ms, device, created_at,
+               status, clip_blob_path, clip_url, clip_bytes, clip_ms,
+               shot_blob_path, shot_url,
+               error_log, error_count, device, created_at,
                resolved_by, resolved_at
         FROM beta_reports
         WHERE player_id = ${playerId}
@@ -513,8 +591,10 @@ export function createBetaStore(sql: Sql) {
     async reportQueue(limit = 100): Promise<BetaReportWithAuthor[]> {
       const rows = await sql`
         SELECT r.id, r.player_id, r.assignment_id, r.slug, r.kind, r.severity,
-               r.title, r.body, r.status, r.clip_blob_path, r.clip_bytes,
-               r.clip_ms, r.device, r.created_at, r.resolved_by, r.resolved_at,
+               r.title, r.body, r.status, r.clip_blob_path, r.clip_url, r.clip_bytes,
+               r.clip_ms, r.shot_blob_path, r.shot_url,
+               r.error_log, r.error_count,
+               r.device, r.created_at, r.resolved_by, r.resolved_at,
                p.username AS author_username,
                p.handle   AS author_handle,
                p.name     AS author_name

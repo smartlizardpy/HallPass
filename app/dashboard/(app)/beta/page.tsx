@@ -56,6 +56,76 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+/**
+ * The game's own errors, rendered from the JSON the session collected.
+ *
+ * PARSES DEFENSIVELY. The payload is written by client code that a tester's
+ * devtools can edit, and the column is TEXT precisely so a malformed one cannot
+ * fail the insert. A bad payload must therefore degrade to "couldn't read them"
+ * here rather than throwing and taking down the whole triage queue — one
+ * corrupt report would otherwise hide every other report waiting behind it.
+ *
+ * `<details>` keeps a long stack collapsed by default: the queue is for scanning
+ * and a 40-line trace between two reports makes that impossible.
+ */
+function ErrorList({ raw, count }: { raw: string | null; count: number }) {
+  let entries: {
+    at?: number;
+    source?: string;
+    kind?: string;
+    message?: string;
+    stack?: string;
+    file?: string;
+    line?: number;
+    count?: number;
+  }[] = [];
+  try {
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed)) entries = parsed;
+  } catch {
+    entries = [];
+  }
+
+  return (
+    <details className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
+      <summary className="cursor-pointer text-xs font-black uppercase tracking-wide text-amber-900">
+        ⚠️ {count} error{count === 1 ? "" : "s"} from the game
+      </summary>
+      {entries.length === 0 ? (
+        <p className="mt-2 text-xs font-semibold text-amber-900/80">
+          Couldn&rsquo;t read the error details.
+        </p>
+      ) : (
+        <ul className="mt-2 space-y-2">
+          {entries.map((entry, i) => (
+            <li key={i} className="border-t border-amber-200 pt-2 first:border-0 first:pt-0">
+              <p className="text-xs font-bold text-amber-950">
+                {entry.message ?? "(no message)"}
+                {typeof entry.count === "number" && entry.count > 1 && (
+                  <span className="ml-1.5 rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-black">
+                    ×{entry.count}
+                  </span>
+                )}
+              </p>
+              {(entry.file || typeof entry.line === "number") && (
+                <p className="mt-0.5 font-mono text-[11px] text-amber-900/80">
+                  {entry.file}
+                  {typeof entry.line === "number" ? `:${entry.line}` : ""}
+                </p>
+              )}
+              {entry.stack && (
+                <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-white/60 p-2 font-mono text-[10px] leading-snug text-amber-950">
+                  {entry.stack}
+                </pre>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
+  );
+}
+
 /** Fixed locale — a dashboard rendered on the server must not drift on hydrate. */
 function formatDay(iso: string): string {
   const date = new Date(iso);
@@ -175,9 +245,44 @@ export default async function DashboardBetaPage({
                     {report.body}
                   </p>
 
+                  {report.shotUrl && (
+                    // The URL is stored on the row, so rendering evidence costs
+                    // no Blob head() — see migration 017.
+                    <a
+                      href={report.shotUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 block w-fit overflow-hidden rounded-lg border border-border transition hover:border-brand"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={report.shotUrl}
+                        alt={`Screenshot attached to "${report.title}"`}
+                        className="h-32 w-auto"
+                      />
+                    </a>
+                  )}
+
                   {report.clipBlobPath && (
-                    <p className="mt-2 text-xs font-bold text-brand">
-                      📹 {Math.round(report.clipMs / 1000)}s replay attached
+                    <video
+                      // Served through our own authenticated route, never the
+                      // raw Blob URL: a replay is a recording of a child's
+                      // screen and must not be readable by anyone holding a
+                      // guessable link.
+                      src={`/api/v1/beta/clips/${report.id}`}
+                      controls
+                      preload="metadata"
+                      className="mt-2 h-48 w-auto rounded-lg border border-border bg-black"
+                    />
+                  )}
+
+                  {report.errorCount > 0 && (
+                    <ErrorList raw={report.errorLog} count={report.errorCount} />
+                  )}
+
+                  {report.device && (
+                    <p className="mt-2 truncate text-[11px] font-semibold text-muted">
+                      {report.device}
                     </p>
                   )}
 
