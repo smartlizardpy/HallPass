@@ -32,6 +32,7 @@ const ITEMS: NavItem[] = [
   { href: "/dashboard/boards", label: "Leaderboards" },
   { href: "/dashboard/games", label: "Games" },
   { href: "/dashboard/curation", label: "Curation" },
+  { href: "/dashboard/beta", label: "Beta" },
 ];
 
 // Super-admin-only links, appended when the caller holds that role.
