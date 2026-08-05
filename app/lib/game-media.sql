@@ -42,6 +42,13 @@
 -- explicit dimensions (no layout shift) and so `generateMetadata` can emit correct
 -- OpenGraph image dimensions without reading the file.
 --
+-- `blob_url` exists for the same reason: it is what `put()` returned at upload
+-- time, so the serving route never has to spend a billed `head()` just to learn
+-- where the bytes live. It is NULLABLE because rows created before the column
+-- existed cannot have it (only a Blob `list()` knows those URLs) — the route
+-- treats NULL as "fall back to `head()` once and write the answer back", so the
+-- table self-heals. See `scoreboard/migrations/015_game_media_url.sql`.
+--
 -- There is deliberately NO `UNIQUE (slug, position)`. Reordering under such a
 -- constraint requires either deferrable constraints or a two-pass shuffle through
 -- temporary values; instead the app rewrites every position for a slug in ONE
@@ -57,6 +64,7 @@ CREATE TABLE IF NOT EXISTS game_media (
   slug         TEXT NOT NULL CHECK (slug ~ '^[a-z0-9][a-z0-9-]*$'),
   kind         TEXT NOT NULL DEFAULT 'screenshot' CHECK (kind IN ('screenshot','hero')),
   blob_path    TEXT NOT NULL UNIQUE,
+  blob_url     TEXT,
   content_type TEXT NOT NULL CHECK (content_type IN ('image/png','image/jpeg','image/webp')),
   width        INTEGER NOT NULL DEFAULT 0,
   height       INTEGER NOT NULL DEFAULT 0,

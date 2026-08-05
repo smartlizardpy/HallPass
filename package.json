@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "sync-games": "node scripts/sync-games.mjs",
-    "migrate": "node scripts/migrate.mjs"
+    "migrate": "node scripts/migrate.mjs",
+    "backfill-media-urls": "node scripts/backfill-media-urls.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

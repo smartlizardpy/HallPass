@@ -21,6 +21,14 @@
  *    `allowOverwrite: false`, so a given URL's bytes never change; editing a
  *    gallery mints new URLs rather than rewriting old ones.
  *
+ * COSTS NO BLOB OPERATION ON THE HOT PATH. This route used to `head()` the object
+ * just to learn its URL and then fetch that URL with `cache: "no-store"` — two
+ * billed "simple operations" per image, so 16 per view of a full 8-image gallery,
+ * against a Hobby allowance of 10,000/month. The URL now comes from the database
+ * row (`blob_url`, written at upload time from what `put()` returned) and the
+ * fetch is allowed to reuse a cached copy. `head()` survives only as a
+ * self-healing fallback for rows created before that column existed.
+ *
  * Why serve through our origin at all instead of linking the Blob URL directly:
  * `public/sw.js` returns early for cross-origin requests, and its `isCacheable`
  * requires a `basic`/`default` response type, so a raw Blob URL can never enter
@@ -31,7 +39,11 @@
 import { head } from "@vercel/blob";
 import { isSafeSegment } from "@/app/lib/game-html-blob";
 import { isResolvedSlug } from "@/app/lib/games-store";
-import { getMediaByBlobPath, mediaBlobPrefix } from "@/app/lib/game-media";
+import {
+  getMediaByBlobPath,
+  mediaBlobPrefix,
+  setMediaBlobUrl,
+} from "@/app/lib/game-media";
 
 /** Media is always `<slug>/<id>.<ext>` — one segment. Anything else is a probe. */
 const MAX_PATH_SEGMENTS = 1;
@@ -74,15 +86,30 @@ export async function GET(
   }
   if (!media) return NOT_FOUND();
 
-  let meta: { url: string } | null = null;
-  try {
-    meta = await head(blobPath);
-  } catch {
-    meta = null;
+  // The row normally carries the URL `put()` returned at upload time, so the
+  // common path spends NO Blob operation at all. `head()` is only for rows that
+  // predate the `blob_url` column; we write the answer back so each old image
+  // costs one operation exactly once, ever.
+  let blobUrl = media.blobUrl;
+  if (!blobUrl) {
+    try {
+      blobUrl = (await head(blobPath)).url;
+    } catch {
+      return NOT_FOUND();
+    }
+    // Best-effort self-heal; the response does not depend on it.
+    void setMediaBlobUrl(blobPath, blobUrl).catch(() => {
+      /* next request pays for another head(); nothing user-visible */
+    });
   }
-  if (!meta) return NOT_FOUND();
 
-  const upstream = await fetch(meta.url, { cache: "no-store" });
+  // NOT `cache: "no-store"`. That forced a cache MISS on every request, and a
+  // MISS is itself a billed Blob simple operation — so the old code paid twice
+  // per image, once for the head() and once for refusing to reuse the fetch.
+  // These objects are immutable by construction (random id + allowOverwrite:
+  // false), which is what already justifies the `immutable` response header
+  // below, so reusing a cached copy is always correct.
+  const upstream = await fetch(blobUrl);
   if (!upstream.ok || !upstream.body) return NOT_FOUND();
 
   return new Response(upstream.body, {

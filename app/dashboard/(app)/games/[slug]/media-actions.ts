@@ -144,18 +144,23 @@ export async function uploadMediaAction(formData: FormData): Promise<void> {
         // `allowOverwrite: false` + a random id is what makes the served URL
         // content-stable, which is what justifies the `immutable` cache header on
         // the serving route.
-        await put(blobPath, file, {
+        const uploaded = await put(blobPath, file, {
           access: "public",
           contentType: check.meta.type,
           addRandomSuffix: false,
           allowOverwrite: false,
           cacheControlMaxAge: 31_536_000,
         });
+        // Persist the URL `put` just handed us. Without it the serving route has
+        // to call `head()` on every single request purely to rediscover this
+        // string — a billed Blob operation per image per page view. See
+        // `scoreboard/migrations/015_game_media_url.sql`.
         await insertMedia({
           id,
           slug,
           kind: "screenshot",
           blobPath,
+          blobUrl: uploaded.url,
           contentType: check.meta.type,
           width: check.meta.width,
           height: check.meta.height,
