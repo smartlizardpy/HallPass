@@ -46,3 +46,6 @@ next-env.d.ts
 #Stuff
 .playwright-mcp
 excalidraw.log
+
+# Playwright MCP evaluate() output, written into the repo root by the tool.
+capture-sample.json
