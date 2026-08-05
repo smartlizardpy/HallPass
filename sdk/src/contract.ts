@@ -114,6 +114,13 @@ export interface MeResponse {
    * player — lets a header show the precise role label. Added in v1.
    */
   role?: "super_admin" | "admin" | null;
+  /**
+   * Whether the signed-in player is a current member of the beta programme, so
+   * the account menu can show a "Beta testing" entry and the welcome banner
+   * knows when to fire. Membership only — never the roster, never anyone else's
+   * status, never an email. Added in v1.
+   */
+  isBetaTester?: boolean;
 }
 
 /** Request body to set the current player's chosen handle. Added in v1. */

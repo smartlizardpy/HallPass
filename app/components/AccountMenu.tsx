@@ -49,6 +49,7 @@ export function AccountMenu() {
 
   const player = me?.player ?? null;
   const isAdmin = Boolean(me?.isAdmin);
+  const isBetaTester = Boolean(me?.isBetaTester);
   const roleLabel =
     me?.role === "super_admin" ? "Super admin" : isAdmin ? "Admin" : null;
 
@@ -141,6 +142,17 @@ export function AccountMenu() {
             )}
           </MenuLink>
           <MenuLink href="/play/account">Account settings</MenuLink>
+          {/* Sits in the same slot as Dashboard: the one entry that is only
+              there because of who you are. A tester who is also an admin sees
+              both — they are different jobs, not two names for one. */}
+          {isBetaTester && (
+            <MenuLink href="/beta">
+              Beta testing
+              <span className="ml-2 rounded-full bg-brand-50 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-brand">
+                beta
+              </span>
+            </MenuLink>
+          )}
           {isAdmin && <MenuLink href="/dashboard">Dashboard</MenuLink>}
 
           <form action={startSignOut}>
