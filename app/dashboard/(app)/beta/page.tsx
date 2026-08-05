@@ -30,6 +30,7 @@ import {
   getRoster,
   getShotQueue,
 } from "@/app/lib/beta";
+import type { BetaShot } from "@/app/lib/beta/store";
 import { BUG_SEVERITIES, DUPLICATE_XP, FIX_BONUS_XP } from "@/app/lib/beta/config";
 import { rankFor } from "@/app/lib/beta/xp";
 import {
@@ -147,6 +148,62 @@ function testerLabel(entry: {
     : (entry.handle ?? entry.name ?? "Player");
 }
 
+/**
+ * One submitted image in the review grid.
+ *
+ * Extracted only so the settled images can reuse it inside the collapsed
+ * section — the alternative was the same 30 lines of markup twice, drifting.
+ */
+function ShotTile({
+  shot,
+  gameTitle,
+}: {
+  shot: BetaShot;
+  gameTitle: string;
+}) {
+  return (
+    <li className="overflow-hidden rounded-lg border border-border bg-surface-2">
+      <div className="relative aspect-video bg-zinc-900">
+        {shot.blobUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={shot.blobUrl}
+            alt={`Submitted for ${gameTitle}`}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        )}
+      </div>
+      <div className="p-2">
+        <div className="flex items-center justify-between gap-1">
+          <span className="truncate text-xs font-bold text-zinc-900">{gameTitle}</span>
+          <ShotStatusChip status={shot.status} />
+        </div>
+        {shot.status === "pending" && (
+          <form action={reviewShotAction} className="mt-2 flex gap-1.5">
+            <input type="hidden" name="id" value={shot.id} />
+            <button
+              type="submit"
+              name="status"
+              value="accepted"
+              className="flex-1 rounded-full bg-emerald-600 px-2 py-1 text-[11px] font-extrabold text-white transition hover:bg-emerald-700"
+            >
+              Accept
+            </button>
+            <button
+              type="submit"
+              name="status"
+              value="rejected"
+              className="flex-1 rounded-full border border-border bg-white px-2 py-1 text-[11px] font-bold text-zinc-700 transition hover:bg-surface-2"
+            >
+              Reject
+            </button>
+          </form>
+        )}
+      </div>
+    </li>
+  );
+}
+
 const INPUT =
   "w-full rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30";
 const BTN_PRIMARY =
@@ -179,6 +236,14 @@ export default async function DashboardBetaPage({
   const unpublishedShots = shots.filter(
     (s) => s.status === "accepted" && s.promotedMediaId == null,
   );
+  // A published image has nothing left to decide, so it stops competing for
+  // attention with the ones that do. HIDDEN, NOT DROPPED: the row is the record
+  // that a tester earned XP for it, and the tile is still one click away — an
+  // admin checking "did that one go live?" must not have to query the database.
+  const settledShots = shots.filter(
+    (s) => s.status === "rejected" || (s.status === "accepted" && s.promotedMediaId != null),
+  );
+  const openShots = shots.filter((s) => !settledShots.includes(s));
 
   return (
     <>
@@ -389,7 +454,7 @@ export default async function DashboardBetaPage({
         {/* IMAGE REVIEW ---------------------------------------------------- */}
         <Section
           title="Image review"
-          subtitle={`${pendingShots.length} pending of ${shots.length}`}
+          subtitle={`${pendingShots.length} pending · ${settledShots.length} done`}
         >
           {/* Accepted but never published. Only ever non-empty because
               acceptance used to award XP without copying the image into the
@@ -416,55 +481,38 @@ export default async function DashboardBetaPage({
             <p className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-8 text-center text-sm text-muted">
               No submissions yet.
             </p>
+          ) : openShots.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-8 text-center text-sm text-muted">
+              Nothing waiting — every image has been dealt with.
+            </p>
           ) : (
             <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {shots.map((shot) => (
-                <li
+              {openShots.map((shot) => (
+                <ShotTile
                   key={shot.id}
-                  className="overflow-hidden rounded-lg border border-border bg-surface-2"
-                >
-                  <div className="relative aspect-video bg-zinc-900">
-                    {shot.blobUrl && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={shot.blobUrl}
-                        alt={`Submitted for ${titleFor.get(shot.slug) ?? shot.slug}`}
-                        className="absolute inset-0 h-full w-full object-cover"
-                      />
-                    )}
-                  </div>
-                  <div className="p-2">
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="truncate text-xs font-bold text-zinc-900">
-                        {titleFor.get(shot.slug) ?? shot.slug}
-                      </span>
-                      <ShotStatusChip status={shot.status} />
-                    </div>
-                    {shot.status === "pending" && (
-                      <form action={reviewShotAction} className="mt-2 flex gap-1.5">
-                        <input type="hidden" name="id" value={shot.id} />
-                        <button
-                          type="submit"
-                          name="status"
-                          value="accepted"
-                          className="flex-1 rounded-full bg-emerald-600 px-2 py-1 text-[11px] font-extrabold text-white transition hover:bg-emerald-700"
-                        >
-                          Accept
-                        </button>
-                        <button
-                          type="submit"
-                          name="status"
-                          value="rejected"
-                          className="flex-1 rounded-full border border-border bg-white px-2 py-1 text-[11px] font-bold text-zinc-700 transition hover:bg-surface-2"
-                        >
-                          Reject
-                        </button>
-                      </form>
-                    )}
-                  </div>
-                </li>
+                  shot={shot}
+                  gameTitle={titleFor.get(shot.slug) ?? shot.slug}
+                />
               ))}
             </ul>
+          )}
+
+          {/* Collapsed by default. Closed business, kept reachable. */}
+          {settledShots.length > 0 && (
+            <details className="mt-3 rounded-lg border border-border bg-white px-3 py-2">
+              <summary className="cursor-pointer text-xs font-black uppercase tracking-wide text-muted">
+                {settledShots.length} already dealt with
+              </summary>
+              <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {settledShots.map((shot) => (
+                  <ShotTile
+                    key={shot.id}
+                    shot={shot}
+                    gameTitle={titleFor.get(shot.slug) ?? shot.slug}
+                  />
+                ))}
+              </ul>
+            </details>
           )}
         </Section>
 
