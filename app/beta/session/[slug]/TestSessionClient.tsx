@@ -113,6 +113,9 @@ export function TestSessionClient({
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
 
+  /** Which captured still is pinned to the report being written, if any. */
+  const [attachedId, setAttachedId] = useState<string | null>(null);
+
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewed, setReviewed] = useState(initiallyReviewed);
   const [recommended, setRecommended] = useState<boolean | null>(null);
@@ -183,19 +186,36 @@ export function TestSessionClient({
 
   const submitReport = async () => {
     setBusy(true);
-    const result = await submitReportAction({
-      slug: game.slug,
-      kind,
-      severity: kind === "bug" ? severity : null,
-      title,
-      body,
-      device: typeof navigator !== "undefined" ? navigator.userAgent : "",
-    });
+
+    // The picked still travels as FormData — a Server Action can carry a File
+    // there but not inside a plain serialised object.
+    let shot: FormData | undefined;
+    const attached = shots.find((s) => s.id === attachedId);
+    if (attached) {
+      shot = new FormData();
+      shot.set(
+        "file",
+        new File([attached.blob], `${attached.id}.webp`, { type: "image/webp" }),
+      );
+    }
+
+    const result = await submitReportAction(
+      {
+        slug: game.slug,
+        kind,
+        severity: kind === "bug" ? severity : null,
+        title,
+        body,
+        device: typeof navigator !== "undefined" ? navigator.userAgent : "",
+      },
+      shot,
+    );
     setBusy(false);
     setToast({ ok: result.ok, text: result.ok ? result.message : result.error });
     if (result.ok) {
       setTitle("");
       setBody("");
+      setAttachedId(null);
       setComposerOpen(false);
     }
   };
@@ -489,6 +509,48 @@ export function TestSessionClient({
                 ? `${REPORT_BODY_MIN - body.trim().length} more characters`
                 : `${REPORT_BODY_MAX - body.length} left`}
             </p>
+
+            {/* Pin one of the automatic grabs to the report. A bug reading
+                "the score resets when you pause" is a claim; the same bug with
+                the moment on screen is evidence — and the tester already has
+                one to hand, so this costs them a click rather than a workflow. */}
+            {shots.length > 0 && (
+              <div className="mt-4">
+                <p className="text-[11px] font-black uppercase tracking-wide text-muted">
+                  Attach a screenshot
+                </p>
+                <ul className="mt-1.5 flex gap-1.5 overflow-x-auto pb-1">
+                  {shots.map((shot) => {
+                    const picked = attachedId === shot.id;
+                    return (
+                      <li key={shot.id} className="shrink-0">
+                        <button
+                          type="button"
+                          // Clicking the picked one clears it, so an attachment
+                          // can be undone without closing the composer.
+                          onClick={() =>
+                            setAttachedId(picked ? null : shot.id)
+                          }
+                          aria-pressed={picked}
+                          className={`block overflow-hidden rounded-lg border-2 transition ${
+                            picked
+                              ? "border-brand ring-2 ring-brand/30"
+                              : "border-border hover:border-brand/50"
+                          }`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={shot.previewUrl}
+                            alt=""
+                            className="h-14 w-auto"
+                          />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
 
             <button
               type="button"

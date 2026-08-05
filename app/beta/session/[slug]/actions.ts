@@ -39,6 +39,7 @@ import {
 import { isResolvedSlug } from "@/app/lib/games-store";
 import {
   validateMediaUpload,
+  type ImageType,
   type MediaRejection,
 } from "@/app/lib/image-meta";
 
@@ -66,14 +67,25 @@ function newId(): string {
  * severity at all — the database CHECK enforces that, so it is normalised here
  * rather than passed through and allowed to 500.
  */
-export async function submitReportAction(input: {
-  slug: string;
-  kind: string;
-  severity: string | null;
-  title: string;
-  body: string;
-  device?: string;
-}): Promise<ActionResult> {
+export async function submitReportAction(
+  input: {
+    slug: string;
+    kind: string;
+    severity: string | null;
+    title: string;
+    body: string;
+    device?: string;
+  },
+  /**
+   * An optional screenshot pinned to the report, picked from the session's
+   * automatic grabs.
+   *
+   * Passed as a separate `FormData` rather than folded into `input`: a Server
+   * Action can carry a `File` in FormData but not inside a plain serialised
+   * object, and keeping the text fields typed is worth the second argument.
+   */
+  shot?: FormData,
+): Promise<ActionResult> {
   const { playerId } = await requireBetaTester();
 
   if (!(await isResolvedSlug(input.slug))) {
@@ -112,6 +124,24 @@ export async function submitReportAction(input: {
       (a) => a.slug === input.slug,
     );
 
+    // Evidence is stored BEFORE the row, so a failed upload never leaves a
+    // report claiming a screenshot that does not exist. A failed upload is not
+    // fatal to the report either — the words are the point, the picture is
+    // supporting material — so it degrades to a report with no image rather
+    // than losing what the tester typed.
+    let shotBlobPath: string | null = null;
+    let shotUrl: string | null = null;
+    const file = shot?.get("file");
+    if (file instanceof File && file.size > 0) {
+      const stored = await uploadShot(input.slug, file);
+      if (stored.ok) {
+        shotBlobPath = stored.blobPath;
+        shotUrl = stored.blobUrl;
+      } else {
+        console.error("beta report screenshot rejected:", stored.error);
+      }
+    }
+
     await beta.createReport({
       playerId,
       assignmentId: assignment?.id ?? null,
@@ -121,6 +151,8 @@ export async function submitReportAction(input: {
       title,
       body,
       device: String(input.device ?? "").slice(0, 200),
+      shotBlobPath,
+      shotUrl,
     });
 
     // Opening a report means they are actively testing; reflect that in the
@@ -151,6 +183,54 @@ export async function submitReportAction(input: {
  * sweep that prefix — blob deletes, `sync-games.mjs` mirroring into the repo,
  * the SW precache — and are enumerated in `app/lib/game-media.sql`.
  */
+/**
+ * Validate and store one captured still, returning its blob key and URL.
+ *
+ * Shared by the gallery submission and the bug-report attachment so both apply
+ * the same magic-byte sniffing and the same size/dimension policy. Returns a
+ * reason rather than throwing, because both callers turn it into UI copy.
+ */
+async function uploadShot(
+  slug: string,
+  file: File,
+): Promise<
+  | { ok: true; blobPath: string; blobUrl: string; meta: { type: ImageType; width: number; height: number }; bytes: number }
+  | { ok: false; error: string }
+> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const check = validateMediaUpload(bytes);
+  if (!check.ok) return { ok: false, error: SHOT_REJECTION_COPY[check.reason] };
+
+  const id = newId();
+  const ext =
+    check.meta.type === "image/png"
+      ? "png"
+      : check.meta.type === "image/jpeg"
+        ? "jpg"
+        : "webp";
+  const blobPath = `beta-shots/${slug}/${id}.${ext}`;
+
+  // The `File` is uploaded, not the `Uint8Array` we validated — `put` takes a
+  // stream-like body and the two are the same bytes. The content type is the
+  // SNIFFED one, never `file.type`, so a mislabelled upload is stored under what
+  // it actually is. Same reasoning as `media-actions.ts`.
+  const uploaded = await put(blobPath, file, {
+    access: "public",
+    contentType: check.meta.type,
+    addRandomSuffix: false,
+    allowOverwrite: false,
+    cacheControlMaxAge: 31_536_000,
+  });
+
+  return {
+    ok: true,
+    blobPath,
+    blobUrl: uploaded.url,
+    meta: check.meta,
+    bytes: check.bytes,
+  };
+}
+
 export async function submitShotAction(formData: FormData): Promise<ActionResult> {
   const { playerId } = await requireBetaTester();
 
@@ -160,49 +240,25 @@ export async function submitShotAction(formData: FormData): Promise<ActionResult
   const file = formData.get("file");
   if (!(file instanceof File)) return { ok: false, error: "No image" };
 
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const check = validateMediaUpload(bytes);
-  if (!check.ok) {
-    // Never surface the raw reason code. Auto-captured stills are pinned to
-    // 16:9 at a fixed width precisely so `bad-aspect` and `too-narrow` cannot
-    // happen — if one of those appears here it is a bug in the grabber, not
-    // something the tester did or can fix, and the copy should not imply
-    // otherwise.
-    return { ok: false, error: SHOT_REJECTION_COPY[check.reason] };
-  }
-
   try {
     const recent = await beta.recentShotCount(playerId, SHOT_RATE_LIMIT.windowSeconds);
     if (recent >= SHOT_RATE_LIMIT.maxPerWindow) {
       return { ok: false, error: "That's plenty of screenshots for now" };
     }
 
-    const id = newId();
-    const ext = check.meta.type === "image/png" ? "png" : check.meta.type === "image/jpeg" ? "jpg" : "webp";
-    const blobPath = `beta-shots/${slug}/${id}.${ext}`;
-
-    // The `File` is uploaded, not the `Uint8Array` we validated — `put` takes a
-    // stream-like body and the two are the same bytes. The content type is the
-    // SNIFFED one, never `file.type`, so a mislabelled upload is stored under
-    // what it actually is. Same reasoning as `media-actions.ts`.
-    const uploaded = await put(blobPath, file, {
-      access: "public",
-      contentType: check.meta.type,
-      addRandomSuffix: false,
-      allowOverwrite: false,
-      cacheControlMaxAge: 31_536_000,
-    });
+    const stored = await uploadShot(slug, file);
+    if (!stored.ok) return stored;
 
     await beta.createShot({
-      id,
+      id: stored.blobPath.split("/").pop()!.replace(/\.[^.]+$/, ""),
       playerId,
       slug,
-      blobPath,
-      blobUrl: uploaded.url,
-      contentType: check.meta.type,
-      width: check.meta.width,
-      height: check.meta.height,
-      bytes: check.bytes,
+      blobPath: stored.blobPath,
+      blobUrl: stored.blobUrl,
+      contentType: stored.meta.type,
+      width: stored.meta.width,
+      height: stored.meta.height,
+      bytes: stored.bytes,
       kind: "screenshot",
     });
   } catch (error) {

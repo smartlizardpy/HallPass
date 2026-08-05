@@ -175,6 +175,24 @@ export default async function DashboardBetaPage({
                     {report.body}
                   </p>
 
+                  {report.shotUrl && (
+                    // The URL is stored on the row, so rendering evidence costs
+                    // no Blob head() — see migration 017.
+                    <a
+                      href={report.shotUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 block w-fit overflow-hidden rounded-lg border border-border transition hover:border-brand"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={report.shotUrl}
+                        alt={`Screenshot attached to "${report.title}"`}
+                        className="h-32 w-auto"
+                      />
+                    </a>
+                  )}
+
                   {report.clipBlobPath && (
                     <p className="mt-2 text-xs font-bold text-brand">
                       📹 {Math.round(report.clipMs / 1000)}s replay attached

@@ -67,6 +67,13 @@ CREATE TABLE IF NOT EXISTS beta_reports (
   status         TEXT NOT NULL DEFAULT 'open'
                    CHECK (status IN ('open','accepted','rejected','duplicate')),
   clip_blob_path TEXT,
+  -- Evidence pinned to the report by the tester, picked from the session's
+  -- automatic gameplay grabs. Deliberately NOT a `beta_shots` row: that table
+  -- stages images for a game's public gallery and feeds the admin's image
+  -- review queue, which is no place for screenshots of things that are broken.
+  -- `shot_url` is what `put()` returned, so triage renders it with no head().
+  shot_blob_path TEXT,
+  shot_url       TEXT,
   clip_bytes     INTEGER NOT NULL DEFAULT 0,
   clip_ms        INTEGER NOT NULL DEFAULT 0,
   device         TEXT NOT NULL DEFAULT '',

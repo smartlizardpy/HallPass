@@ -128,6 +128,10 @@ export type BetaReport = {
   clipBlobPath: string | null;
   clipBytes: number;
   clipMs: number;
+  /** Blob key of the screenshot pinned to this report, for deletion on resolve. */
+  shotBlobPath: string | null;
+  /** The screenshot's URL, so triage renders evidence without a head(). */
+  shotUrl: string | null;
   device: string;
   createdAt: string;
   resolvedBy: string | null;
@@ -226,6 +230,8 @@ function mapReport(row: Row): BetaReport {
     clipBlobPath: toStrOrNull(row.clip_blob_path),
     clipBytes: toInt(row.clip_bytes),
     clipMs: toInt(row.clip_ms),
+    shotBlobPath: toStrOrNull(row.shot_blob_path),
+    shotUrl: toStrOrNull(row.shot_url),
     device: toStr(row.device),
     createdAt: toIso(row.created_at),
     resolvedBy: toStrOrNull(row.resolved_by),
@@ -499,13 +505,18 @@ export function createBetaStore(sql: Sql) {
       title: string;
       body: string;
       device?: string;
+      /** Evidence picked from the session's automatic grabs, if any. */
+      shotBlobPath?: string | null;
+      shotUrl?: string | null;
     }): Promise<number> {
       const rows = await sql`
         INSERT INTO beta_reports
-          (player_id, assignment_id, slug, kind, severity, title, body, device)
+          (player_id, assignment_id, slug, kind, severity, title, body, device,
+           shot_blob_path, shot_url)
         VALUES (${input.playerId}, ${input.assignmentId}, ${input.slug},
                 ${input.kind}, ${input.severity}, ${input.title}, ${input.body},
-                ${input.device ?? ""})
+                ${input.device ?? ""},
+                ${input.shotBlobPath ?? null}, ${input.shotUrl ?? null})
         RETURNING id
       `;
       return toInt(rows[0]?.id);
@@ -515,7 +526,8 @@ export function createBetaStore(sql: Sql) {
     async reportById(id: number): Promise<BetaReport | null> {
       const rows = await sql`
         SELECT id, player_id, assignment_id, slug, kind, severity, title, body,
-               status, clip_blob_path, clip_bytes, clip_ms, device, created_at,
+               status, clip_blob_path, clip_bytes, clip_ms, shot_blob_path, shot_url,
+               device, created_at,
                resolved_by, resolved_at
         FROM beta_reports
         WHERE id = ${id}
@@ -527,7 +539,8 @@ export function createBetaStore(sql: Sql) {
     async reportsFor(playerId: string, limit = 50): Promise<BetaReport[]> {
       const rows = await sql`
         SELECT id, player_id, assignment_id, slug, kind, severity, title, body,
-               status, clip_blob_path, clip_bytes, clip_ms, device, created_at,
+               status, clip_blob_path, clip_bytes, clip_ms, shot_blob_path, shot_url,
+               device, created_at,
                resolved_by, resolved_at
         FROM beta_reports
         WHERE player_id = ${playerId}
@@ -549,7 +562,8 @@ export function createBetaStore(sql: Sql) {
       const rows = await sql`
         SELECT r.id, r.player_id, r.assignment_id, r.slug, r.kind, r.severity,
                r.title, r.body, r.status, r.clip_blob_path, r.clip_bytes,
-               r.clip_ms, r.device, r.created_at, r.resolved_by, r.resolved_at,
+               r.clip_ms, r.shot_blob_path, r.shot_url,
+               r.device, r.created_at, r.resolved_by, r.resolved_at,
                p.username AS author_username,
                p.handle   AS author_handle,
                p.name     AS author_name
