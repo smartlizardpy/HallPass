@@ -330,6 +330,27 @@ export function createBetaStore(sql: Sql) {
      * rows, so a per-row subquery is the cheap, obviously-correct option.
      */
     async roster(): Promise<RosterEntry[]> {
+      // ── WHY THESE COUNTS ARE HALF LEDGER ──────────────────────────────────
+      // Counting `beta_reports` alone used to be right, and stopped being right
+      // the moment an outcome could DELETE a report. Fixing a tester's bug, or
+      // closing it as a duplicate, removed the row — so their record went DOWN
+      // as a reward for having found something worth acting on. A tester whose
+      // every find got fixed read 0/0 while their XP climbed.
+      //
+      // The ledger survives that delete (`report_id` is ON DELETE SET NULL), so
+      // a removed report is reconstructed from the rows it left behind:
+      //
+      //   * `shot_id IS NULL` — separates report awards from image awards, which
+      //     are the other thing in this table and keep their own id.
+      //   * `report_id IS NULL` — the report is GONE. A live report's awards
+      //     still point at it and are already counted by the row itself, so this
+      //     is what stops every fixed report being counted twice.
+      //   * one removal reason per removed report, so counting them counts
+      //     reports, not awards. A fixed report also carries its acceptance
+      //     award; matching on `fixed`/`duplicate` skips it.
+      //
+      // The reason strings are minted by `config.ts`; `store.test.ts` pins that
+      // these predicates still agree with it.
       const rows = await sql`
         SELECT t.player_id, t.invited_by, t.invited_at, t.revoked_at, t.notes,
                p.username, p.handle, p.name, p.image,
@@ -338,10 +359,18 @@ export function createBetaStore(sql: Sql) {
                (SELECT count(*)::int FROM beta_assignments s
                   WHERE s.player_id = t.player_id
                     AND s.status IN ('assigned', 'in_progress')) AS open_assignments,
-               (SELECT count(*)::int FROM beta_reports r
-                  WHERE r.player_id = t.player_id) AS reports_filed,
-               (SELECT count(*)::int FROM beta_reports r
-                  WHERE r.player_id = t.player_id AND r.status = 'accepted')
+               ((SELECT count(*)::int FROM beta_reports r
+                   WHERE r.player_id = t.player_id)
+                + (SELECT count(*)::int FROM beta_xp_awards a
+                     WHERE a.player_id = t.player_id
+                       AND a.shot_id IS NULL AND a.report_id IS NULL
+                       AND a.reason IN ('fixed', 'duplicate'))) AS reports_filed,
+               ((SELECT count(*)::int FROM beta_reports r
+                   WHERE r.player_id = t.player_id AND r.status = 'accepted')
+                + (SELECT count(*)::int FROM beta_xp_awards a
+                     WHERE a.player_id = t.player_id
+                       AND a.shot_id IS NULL AND a.report_id IS NULL
+                       AND (a.reason LIKE 'bug:%' OR a.reason = 'feature:accepted')))
                  AS reports_accepted
         FROM beta_testers t
         JOIN players p ON p.id = t.player_id

@@ -129,6 +129,71 @@ export const COVER_PROMOTION_XP = 60;
 export const REJECTED_XP = 0;
 
 // ---------------------------------------------------------------------------
+// Ledger reason codes
+// ---------------------------------------------------------------------------
+//
+// `beta_xp_awards.reason` is a short machine string, and it carries more weight
+// than a label. Two things depend on the exact bytes:
+//
+//   1. IDEMPOTENCY. The partial unique index is on (report_id, reason), so a
+//      re-submitted decision is only recognised as a repeat if it produces the
+//      identical string. Two call sites building `bug:${severity}` by hand were
+//      one typo away from paying twice.
+//   2. HISTORY. A removed report leaves nothing behind BUT its ledger rows, so
+//      the reason is the only surviving evidence of what happened to it. The
+//      roster's counts are reconstructed from these codes.
+//
+// Hence one place that mints them, and predicates that read them back.
+
+/** Paid when a report is closed as a duplicate. */
+export const REASON_DUPLICATE = "duplicate";
+/** Paid when a reported bug is actually fixed. Stacks on the acceptance award. */
+export const REASON_FIXED = "fixed";
+/** Prefix for an accepted BUG; the severity follows. */
+export const REASON_BUG_PREFIX = "bug:";
+/** Paid for an accepted feature request. */
+export const REASON_FEATURE_ACCEPTED = "feature:accepted";
+
+/**
+ * The reason code for ACCEPTING a report.
+ *
+ * Describes what was PAID, not merely what the report was — writing the
+ * severity unconditionally once produced ledger lines like "+5 bug:minor" for a
+ * duplicate, contradicting the rate card on /beta that promises 30 for a minor
+ * bug. A bug with no severity falls back to the feature code rather than
+ * emitting `bug:null`, matching `xpForReport`, which pays such a report the
+ * lowest band instead of throwing.
+ */
+export function acceptanceReason(
+  kind: ReportKind,
+  severity: BugSeverity | null,
+): string {
+  return kind === "bug" && severity
+    ? `${REASON_BUG_PREFIX}${severity}`
+    : REASON_FEATURE_ACCEPTED;
+}
+
+/**
+ * Does this reason mean "a report of mine was accepted"?
+ *
+ * The SQL half of this lives in `store.ts`'s roster query and must agree with
+ * it; `store.test.ts` asserts the two match rather than trusting review.
+ */
+export function isAcceptanceReason(reason: string): boolean {
+  return reason.startsWith(REASON_BUG_PREFIX) || reason === REASON_FEATURE_ACCEPTED;
+}
+
+/**
+ * Reasons that only ever appear on a report that has been REMOVED.
+ *
+ * Exactly one is written per removed report — a fix pays one `fixed`, a
+ * duplicate pays one `duplicate`, and a report cannot be both because closing it
+ * as a duplicate deletes it on the spot. That one-to-one property is what lets
+ * the roster count vanished reports by counting these rows.
+ */
+export const REMOVAL_REASONS = [REASON_FIXED, REASON_DUPLICATE] as const;
+
+// ---------------------------------------------------------------------------
 // Ranks
 // ---------------------------------------------------------------------------
 
