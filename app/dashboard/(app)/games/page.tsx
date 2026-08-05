@@ -14,17 +14,19 @@
  *   - `store.listBoards()` — grouped by `gameSlug` into a per-game board count;
  *     `.catch(() => [])` so an unconfigured/unreachable database simply shows
  *     "0 boards" rather than throwing.
- *   - one `list({ prefix: "games/" })` against Vercel Blob — the set of slugs
- *     with a custom `games/<slug>/index.html` override; wrapped in try/catch so a
- *     blob failure just hides the "Custom HTML" chip.
+ *   - `getServingBlobMap()` — the SHARED cached `games/**` listing, mined for the
+ *     set of slugs with a custom `games/<slug>/index.html` override. It already
+ *     fails soft to an empty map, so a blob failure just hides the "Custom HTML"
+ *     chip. Deliberately not its own `list()`: that is a billed advanced
+ *     operation and this page needs data the serving route already caches.
  *
  * Gated with `requireRole("admin")`, the same guard the per-game actions enforce.
  */
 
 import type { Metadata } from "next";
 import Link from "next/link";
-import { list } from "@vercel/blob";
 import { requireRole } from "@/app/lib/auth";
+import { getServingBlobMap } from "@/app/lib/game-serving-blobs";
 import { resolveGames } from "@/app/lib/games-store";
 import { store } from "@/app/lib/scoreboard";
 import { CoverImage } from "@/app/components/CoverImage";
@@ -50,19 +52,23 @@ const GAME_BLOB_RE = /^games\/([^/]+)\/index\.html$/;
 
 /**
  * The set of slugs that have a custom `games/<slug>/index.html` blob override.
- * FAIL-SOFT: any blob error (unconfigured token, network) yields an empty set,
- * so the grid just omits the "Custom HTML" chip rather than erroring.
+ *
+ * Reads the SHARED cached listing rather than issuing its own `list()`. This
+ * page wants exactly the data `getServingBlobMap()` already holds, and `list()`
+ * is a billed Vercel Blob "advanced operation" against a Hobby allowance of only
+ * 2,000/month — spending one per dashboard page view for a decorative chip is
+ * not a good trade. It also fixes a latent bug: the old direct call took only
+ * the FIRST page of results, so past ~1,000 blobs some games would silently lose
+ * their "Custom HTML" chip.
+ *
+ * FAIL-SOFT: `getServingBlobMap()` already degrades to an empty map on any blob
+ * error, so the grid just omits the chip rather than erroring.
  */
 async function customHtmlSlugs(): Promise<Set<string>> {
   const slugs = new Set<string>();
-  try {
-    const { blobs } = await list({ prefix: "games/" });
-    for (const blob of blobs) {
-      const match = GAME_BLOB_RE.exec(blob.pathname);
-      if (match) slugs.add(match[1]);
-    }
-  } catch {
-    // No blob access → no custom-HTML chips; the grid still renders.
+  for (const pathname of (await getServingBlobMap()).keys()) {
+    const match = GAME_BLOB_RE.exec(pathname);
+    if (match) slugs.add(match[1]);
   }
   return slugs;
 }

@@ -41,6 +41,25 @@ const GAMES_PREFIX = "games/";
  */
 export const GAMES_BLOB_CACHE_TAG = "games-serving-blobs";
 
+/**
+ * How long the listing may be reused, in seconds.
+ *
+ * `list()` is a BILLED Vercel Blob "advanced operation", and the Hobby allowance
+ * for those is only 2,000/month — a twentieth of the simple-operation budget.
+ * Measured over 30 days, this listing was 920 of 934 advanced operations, i.e.
+ * ~46% of the entire monthly allowance. It also PAGINATES, so one refresh can be
+ * several operations, and the old 60s window meant the ceiling scaled with
+ * traffic (any minute with a request cost at least one more).
+ *
+ * Correctness does not depend on this value. `bumpGamesVersion()` is the single
+ * funnel for all four source mutators and revalidates {@link GAMES_BLOB_CACHE_TAG}
+ * with `{ expire: 0 }` immediately after writing, so an admin's upload is still
+ * visible on the very next request. The TTL is only a backstop for blobs written
+ * out-of-band (e.g. edited in the Vercel dashboard), which is why an hour is
+ * safe where 60s was merely expensive.
+ */
+const SERVING_BLOBS_TTL_SECONDS = 3600;
+
 type ServingBlobEntry = { pathname: string } & ServingBlob;
 
 /**
@@ -66,7 +85,7 @@ const listServingBlobsCached = unstable_cache(
     return entries;
   },
   ["games-serving-blobs"],
-  { tags: [GAMES_BLOB_CACHE_TAG], revalidate: 60 },
+  { tags: [GAMES_BLOB_CACHE_TAG], revalidate: SERVING_BLOBS_TTL_SECONDS },
 );
 
 /**
