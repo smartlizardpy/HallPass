@@ -32,10 +32,13 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { beta } from "@/app/lib/beta";
 import {
+  acceptanceReason,
   toBugSeverity,
   toReportStatus,
   toShotStatus,
   DUPLICATE_XP,
+  REASON_DUPLICATE,
+  REASON_FIXED,
 } from "@/app/lib/beta/config";
 import { xpForFix, xpForReport, xpForShot } from "@/app/lib/beta/xp";
 import { isResolvedSlug } from "@/app/lib/games-store";
@@ -193,18 +196,13 @@ export async function triageReportAction(formData: FormData): Promise<void> {
 
   const xp = xpForReport({ kind: report.kind, severity, status });
 
-  // The reason must describe WHAT WAS PAID, not merely what the report was.
-  // Encoding the severity unconditionally produced ledger lines like
-  // "+5 bug:minor" for a duplicate, flatly contradicting the rate card on /beta
-  // that promises 30 for a minor bug. Only `accepted` reaches the ledger from
-  // here now — `rejected` pays nothing — so the fallback is unreachable and kept
+  // Minted by `config.ts`, never assembled here: the partial unique index that
+  // makes a double-submit idempotent only recognises a repeat if the string is
+  // identical, and this used to be built by hand in two separate actions.
+  // Only `accepted` reaches the ledger from here — `rejected` pays nothing and
+  // `duplicate` has its own action — so the fallback is unreachable and kept
   // only so a future third status cannot silently write an empty reason.
-  const reason =
-    status === "accepted"
-      ? report.kind === "bug" && severity
-        ? `bug:${severity}`
-        : "feature:accepted"
-      : status;
+  const reason = status === "accepted" ? acceptanceReason(report.kind, severity) : status;
 
   let applied = false;
   try {
@@ -296,11 +294,9 @@ export async function fixReportAction(formData: FormData): Promise<void> {
   const award = xpForFix({ kind: report.kind, severity, status: report.status });
 
   // Must be byte-identical to what `triageReportAction` writes for the same
-  // decision, or the unique index cannot recognise a re-payment. Kept next to
-  // the call rather than shared, because the two actions agreeing is a fact
-  // worth being able to see in one screen.
-  const acceptanceReason =
-    report.kind === "bug" && severity ? `bug:${severity}` : "feature:accepted";
+  // decision, or the unique index cannot recognise a re-payment. Both now call
+  // the same minting function, so they cannot drift apart.
+  const reason = acceptanceReason(report.kind, severity);
 
   let applied = false;
   let clipBlobPath: string | null = null;
@@ -309,8 +305,8 @@ export async function fixReportAction(formData: FormData): Promise<void> {
       id,
       resolvedBy: actor,
       awards: [
-        { amount: award.acceptance, reason: acceptanceReason },
-        { amount: award.bonus, reason: "fixed" },
+        { amount: award.acceptance, reason },
+        { amount: award.bonus, reason: REASON_FIXED },
       ],
     }));
   } catch {
@@ -383,7 +379,7 @@ export async function duplicateReportAction(formData: FormData): Promise<void> {
       // ONE award, and the reason says what was PAID rather than what the report
       // was. Encoding the severity here would put "+5 bug:blocker" in the ledger,
       // flatly contradicting the rate card on /beta.
-      awards: [{ amount: DUPLICATE_XP, reason: "duplicate" }],
+      awards: [{ amount: DUPLICATE_XP, reason: REASON_DUPLICATE }],
     }));
   } catch {
     back("error", "Could not close that as duplicate (database error)");
