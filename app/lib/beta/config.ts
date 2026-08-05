@@ -96,6 +96,22 @@ export const FEATURE_XP = 40;
  */
 export const DUPLICATE_XP = 5;
 
+/**
+ * ADDITIONAL XP when a reported bug is actually FIXED.
+ *
+ * Stacks on top of whatever the report already earned, as a SECOND ledger row —
+ * a fixed blocker pays 150 + 50, a fixed cosmetic 10 + 50. It is deliberately
+ * flat while {@link BUG_XP} is steep, and the two shapes are doing different
+ * jobs: severity prices how much the FIND was worth, and this prices the fact
+ * that it turned into a change. A cosmetic bug an admin cared enough to fix was
+ * a better report than its severity suggests, and a flat bonus says so.
+ *
+ * NOT a replacement for the acceptance award. Paying a flat 50 INSTEAD would
+ * mean fixing a blocker (50) paid a third of merely agreeing with it (150), so
+ * the tester's best outcome would be the one where nobody does anything.
+ */
+export const FIX_BONUS_XP = 50;
+
 /** XP when a submitted image is accepted into a game's gallery. */
 export const SHOT_XP = 15;
 
