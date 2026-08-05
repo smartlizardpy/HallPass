@@ -34,7 +34,7 @@ import {
   getOwnReports,
   requireBetaTester,
 } from "@/app/lib/beta";
-import { BUG_XP, FEATURE_XP, SHOT_XP } from "@/app/lib/beta/config";
+import { BUG_XP, FEATURE_XP, FIX_BONUS_XP, SHOT_XP } from "@/app/lib/beta/config";
 import {
   AssignmentStatusChip,
   KindChip,
@@ -234,6 +234,11 @@ export default async function BetaHomePage() {
               ["Cosmetic nitpick", BUG_XP.cosmetic],
               ["Idea we build", FEATURE_XP],
               ["Screenshot we use", SHOT_XP],
+              // Listed last because it is the only line that STACKS: it is paid
+              // on top of the bug's own award rather than instead of it, which
+              // the label has to say or the table reads as a demotion from
+              // "breaks the game".
+              ["…and again when we fix it", FIX_BONUS_XP],
             ].map(([label, amount]) => (
               <div
                 key={label as string}

@@ -30,7 +30,7 @@ import {
   getRoster,
   getShotQueue,
 } from "@/app/lib/beta";
-import { BUG_SEVERITIES } from "@/app/lib/beta/config";
+import { BUG_SEVERITIES, FIX_BONUS_XP } from "@/app/lib/beta/config";
 import { rankFor } from "@/app/lib/beta/xp";
 import {
   AssignmentStatusChip,
@@ -43,6 +43,7 @@ import { DashHeader } from "../_ui/DashHeader";
 import { Section } from "../_ui/Section";
 import {
   assignGameAction,
+  fixReportAction,
   inviteTesterAction,
   revokeTesterAction,
   reviewShotAction,
@@ -306,9 +307,9 @@ export default async function DashboardBetaPage({
                           ))}
                         </select>
                       )}
-                      {/* Three submit buttons sharing one form: the clicked
-                          button's name/value is what the browser sends, so the
-                          decision travels without any client JS. */}
+                      {/* Submit buttons sharing one form: the clicked button's
+                          name/value is what the browser sends, so the decision
+                          travels without any client JS. */}
                       <button
                         type="submit"
                         name="status"
@@ -316,6 +317,19 @@ export default async function DashboardBetaPage({
                         className="rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-extrabold text-white transition hover:bg-emerald-700"
                       >
                         Accept
+                      </button>
+                      {/* `formAction` retargets THIS button at a different
+                          server action while keeping the form's severity select,
+                          so fixing on sight pays the right band without a second
+                          duplicated dropdown. It sends no `status`, which is
+                          correct — a fixed report is deleted, not re-stated. */}
+                      <button
+                        type="submit"
+                        formAction={fixReportAction}
+                        title={`Pays the severity award plus ${FIX_BONUS_XP} XP, then removes the report`}
+                        className="rounded-full bg-brand px-4 py-1.5 text-xs font-extrabold text-white transition hover:bg-brand-600"
+                      >
+                        Fixed +{FIX_BONUS_XP}
                       </button>
                       <button
                         type="submit"
@@ -335,9 +349,28 @@ export default async function DashboardBetaPage({
                       </button>
                     </form>
                   ) : (
-                    <p className="mt-3 text-xs font-semibold text-muted">
-                      {report.status} by {report.resolvedBy ?? "—"}
-                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <p className="text-xs font-semibold text-muted">
+                        {report.status} by {report.resolvedBy ?? "—"}
+                      </p>
+                      {/* An already-judged report can still be fixed later, which
+                          is the ordinary case: you agree on Monday and ship on
+                          Friday. Pays the bonus only — the severity award is
+                          already in the ledger. Absent for `rejected`, the one
+                          status where "fixed" contradicts the decision. */}
+                      {report.status !== "rejected" && (
+                        <form action={fixReportAction}>
+                          <input type="hidden" name="id" value={report.id} />
+                          <button
+                            type="submit"
+                            title={`Pays ${FIX_BONUS_XP} XP and removes the report`}
+                            className="rounded-full bg-brand px-4 py-1.5 text-xs font-extrabold text-white transition hover:bg-brand-600"
+                          >
+                            Fixed +{FIX_BONUS_XP}
+                          </button>
+                        </form>
+                      )}
+                    </div>
                   )}
                 </li>
               ))}
