@@ -46,6 +46,7 @@ import {
   duplicateReportAction,
   fixReportAction,
   inviteTesterAction,
+  publishAcceptedShotsAction,
   revokeTesterAction,
   reviewShotAction,
   triageReportAction,
@@ -175,6 +176,9 @@ export default async function DashboardBetaPage({
   const active = roster.filter((r) => r.revokedAt == null);
   const openReports = reports.filter((r) => r.status === "open");
   const pendingShots = shots.filter((s) => s.status === "pending");
+  const unpublishedShots = shots.filter(
+    (s) => s.status === "accepted" && s.promotedMediaId == null,
+  );
 
   return (
     <>
@@ -387,6 +391,27 @@ export default async function DashboardBetaPage({
           title="Image review"
           subtitle={`${pendingShots.length} pending of ${shots.length}`}
         >
+          {/* Accepted but never published. Only ever non-empty because
+              acceptance used to award XP without copying the image into the
+              gallery, so these are marked done, paid for, and invisible. Kept as
+              a permanent control rather than a one-off script: it is also the
+              retry when a future publish fails halfway. */}
+          {unpublishedShots.length > 0 && (
+            <form
+              action={publishAcceptedShotsAction}
+              className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3"
+            >
+              <p className="flex-1 text-sm font-semibold text-amber-900">
+                {unpublishedShots.length} accepted image
+                {unpublishedShots.length === 1 ? " is" : "s are"} not on the game
+                page yet.
+              </p>
+              <button type="submit" className={BTN_PRIMARY}>
+                Publish to gallery
+              </button>
+            </form>
+          )}
+
           {shots.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-8 text-center text-sm text-muted">
               No submissions yet.
