@@ -151,12 +151,17 @@ export async function insertMedia(media: {
   bytes: number;
   alt?: string;
 }): Promise<void> {
+  // ON CONFLICT DO NOTHING so an insert can be RETRIED safely. Callers that
+  // derive `id` from something stable — beta shot promotion uses the shot's own
+  // id — can then re-run a half-finished sequence without either duplicating the
+  // gallery entry or having to catch a primary-key violation by error code.
   await sql`
     INSERT INTO game_media (id, slug, kind, blob_path, blob_url, content_type, width, height, bytes, alt, position)
     SELECT ${media.id}, ${media.slug}, ${media.kind}, ${media.blobPath}, ${media.blobUrl},
            ${media.contentType}, ${media.width}, ${media.height}, ${media.bytes},
            ${media.alt ?? ""},
            COALESCE((SELECT max(position) + 1 FROM game_media WHERE slug = ${media.slug}), 0)
+    ON CONFLICT (id) DO NOTHING
   `;
 }
 

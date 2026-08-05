@@ -26,8 +26,8 @@
  * the read-then-write that implies is still safe against a double submit.
  */
 
-import { revalidatePath } from "next/cache";
-import { del } from "@vercel/blob";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { copy, del } from "@vercel/blob";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { beta } from "@/app/lib/beta";
@@ -41,6 +41,9 @@ import {
   REASON_FIXED,
 } from "@/app/lib/beta/config";
 import { xpForFix, xpForReport, xpForShot } from "@/app/lib/beta/xp";
+import { MEDIA_CACHE_TAG, insertMedia } from "@/app/lib/game-media";
+import { mediaBlobPath } from "@/app/lib/game-media-blob";
+import { toImageType } from "@/app/lib/image-meta";
 import { isResolvedSlug } from "@/app/lib/games-store";
 import { social } from "@/app/lib/social";
 
@@ -406,6 +409,68 @@ export async function duplicateReportAction(formData: FormData): Promise<void> {
  * later decision that pays again under a different reason, which is why the
  * store's dedupe index is keyed on `(shot_id, reason)` rather than `shot_id`.
  */
+/**
+ * Copy an approved shot into the public gallery.
+ *
+ * ── WHY A COPY AND NOT A POINTER ────────────────────────────────────────────
+ * `mediaPublicPath()` derives a media row's URL straight from its `blob_path`,
+ * and the only route that serves those is `/game-media/`. A `game_media` row
+ * left pointing at `beta-shots/…` would therefore resolve to a URL nothing
+ * answers — the image would be in the gallery and still invisible. So the object
+ * moves under the `game-media/` prefix, which is what `mediaBlobPath()` builds.
+ *
+ * `copy()` is one ADVANCED Blob operation, and the Hobby allowance is 2,000 a
+ * month. At a handful of accepted shots that is noise, but it is why this
+ * happens once on acceptance rather than on every gallery read.
+ *
+ * ── THE MEDIA ID IS THE SHOT ID, DELIBERATELY ───────────────────────────────
+ * That makes the whole sequence idempotent: `copy()` overwrites the same key,
+ * `insertMedia()` now conflicts away on the primary key, and `markShotPromoted`
+ * is guarded on the pointer still being null. A retry after a half-finished
+ * publish converges instead of creating a second gallery entry.
+ *
+ * Never touches the `games/` prefix — see `game-media.sql` for the seven
+ * behaviours that sweep it — and never calls `bumpGamesVersion()`, which would
+ * force every online client to re-download the whole corpus over one screenshot.
+ */
+async function publishShotToGallery(shot: {
+  id: string;
+  slug: string;
+  blobPath: string;
+  blobUrl: string | null;
+  contentType: string;
+  width: number;
+  height: number;
+  bytes: number;
+}): Promise<string> {
+  const contentType = toImageType(shot.contentType);
+  const blobPath = mediaBlobPath(shot.slug, shot.id, contentType);
+  // `copy` takes the source URL when there is one; the stored path is the
+  // fallback for a row written before `blob_url` existed.
+  const copied = await copy(shot.blobUrl ?? shot.blobPath, blobPath, {
+    access: "public",
+    addRandomSuffix: false,
+  });
+  await insertMedia({
+    id: shot.id,
+    slug: shot.slug,
+    kind: "screenshot",
+    blobPath,
+    blobUrl: copied.url,
+    contentType,
+    width: shot.width,
+    height: shot.height,
+    bytes: shot.bytes,
+  });
+  return shot.id;
+}
+
+/** Drop every cache that could still be serving the old gallery. */
+function revalidateGallery(slug: string): void {
+  revalidateTag(MEDIA_CACHE_TAG, { expire: 0 });
+  revalidatePath(`/game/${slug}`);
+}
+
 export async function reviewShotAction(formData: FormData): Promise<void> {
   const { email: actor } = await requireRole("admin");
 
@@ -417,6 +482,33 @@ export async function reviewShotAction(formData: FormData): Promise<void> {
 
   const xp = status === "accepted" ? xpForShot({ promotedToCover: false }) : 0;
 
+  // ── PUBLISH FIRST, THEN MARK ACCEPTED ─────────────────────────────────────
+  // Without a transaction one half can land alone, so the order is chosen by
+  // which half-finished state is recoverable. Published-but-still-pending simply
+  // shows up in the queue again, and the retry converges because every step is
+  // idempotent. Accepted-but-unpublished is the bug this whole change exists to
+  // fix: the shot is marked done, the tester is paid, and the image is nowhere.
+  let mediaId: string | null = null;
+  let slug: string | null = null;
+  if (status === "accepted") {
+    let shot;
+    try {
+      shot = await beta.shotById(id);
+    } catch {
+      back("error", "Could not load that image");
+    }
+    if (!shot) back("error", "That image no longer exists");
+    slug = shot.slug;
+    try {
+      mediaId = await publishShotToGallery(shot);
+    } catch (error) {
+      console.error(`beta shot publish failed for ${id}:`, error);
+      // Deliberately does NOT fall through to accepting it. Paying for an image
+      // that never reaches the gallery is the failure being removed here.
+      back("error", "Could not publish that image to the gallery — nothing changed");
+    }
+  }
+
   let applied = false;
   try {
     applied = await beta.reviewShot({
@@ -425,6 +517,7 @@ export async function reviewShotAction(formData: FormData): Promise<void> {
       reviewedBy: actor,
       xp,
       reason: "shot:accepted",
+      promotedMediaId: mediaId,
     });
   } catch {
     back("error", "Review failed (database error)");
@@ -432,6 +525,56 @@ export async function reviewShotAction(formData: FormData): Promise<void> {
 
   revalidatePath(BETA_PATH);
   revalidatePath("/beta");
+  if (slug) revalidateGallery(slug);
   if (!applied) back("error", "Someone else reviewed that first");
-  back("ok", xp > 0 ? `Accepted — ${xp} XP awarded` : "Image rejected");
+  back("ok", xp > 0 ? `Accepted — ${xp} XP awarded, image published` : "Image rejected");
+}
+
+/**
+ * Publish shots that were accepted back when acceptance published nothing.
+ *
+ * Ten of these exist on production: marked accepted, paid for, and invisible.
+ * They cannot go back through `reviewShotAction`, which is guarded on `pending`,
+ * so the repair is its own action — and it doubles as the retry for any future
+ * acceptance whose publish half fails.
+ *
+ * Pays nothing. The XP was already awarded when the shot was accepted; this
+ * finishes a job that was left half-done, it does not make a new decision.
+ */
+export async function publishAcceptedShotsAction(): Promise<void> {
+  await requireRole("admin");
+
+  let pending;
+  try {
+    pending = await beta.unpublishedShots();
+  } catch {
+    back("error", "Could not load the unpublished images");
+  }
+  if (pending.length === 0) back("ok", "Every accepted image is already published");
+
+  const slugs = new Set<string>();
+  let published = 0;
+  const failures: string[] = [];
+  for (const shot of pending) {
+    try {
+      const mediaId = await publishShotToGallery(shot);
+      await beta.markShotPromoted(shot.id, mediaId);
+      slugs.add(shot.slug);
+      published += 1;
+    } catch (error) {
+      // One bad blob must not strand the rest of the batch.
+      console.error(`beta shot backfill failed for ${shot.id}:`, error);
+      failures.push(shot.id);
+    }
+  }
+
+  revalidatePath(BETA_PATH);
+  for (const slug of slugs) revalidateGallery(slug);
+  if (published === 0) back("error", "Could not publish any of them");
+  back(
+    "ok",
+    failures.length === 0
+      ? `Published ${published} image${published === 1 ? "" : "s"} to the gallery`
+      : `Published ${published}, but ${failures.length} failed — see the logs`,
+  );
 }

@@ -247,6 +247,21 @@ export function extensionForType(type: ImageType): string {
   return type === "image/png" ? "png" : type === "image/jpeg" ? "jpg" : "webp";
 }
 
+/**
+ * Narrow a stored `content_type` back to {@link ImageType}.
+ *
+ * Database columns come back as `string` even where a CHECK constraint has
+ * already restricted them to exactly these three, so a value crossing back into
+ * typed code needs a real check rather than a cast. Falls back to WebP — every
+ * image this codebase writes itself is WebP, so an unrecognised value is far
+ * more likely to be a stale row than a JPEG in disguise.
+ */
+export function toImageType(value: unknown): ImageType {
+  return value === "image/png" || value === "image/jpeg" || value === "image/webp"
+    ? value
+    : "image/webp";
+}
+
 // ---------------------------------------------------------------------------
 // Upload policy
 // ---------------------------------------------------------------------------
