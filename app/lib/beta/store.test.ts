@@ -227,15 +227,14 @@ describe("triageReport", () => {
   });
 });
 
-describe("markReportFixed", () => {
+describe("payAndRemoveReport", () => {
   const input = {
     id: 7,
-    severity: "major" as const,
     resolvedBy: "a@b.c",
-    acceptanceXp: 75,
-    acceptanceReason: "bug:major",
-    bonusXp: 50,
-    bonusReason: "fixed",
+    awards: [
+      { amount: 75, reason: "bug:major" },
+      { amount: 50, reason: "fixed" },
+    ],
   };
 
   it("PAYS BEFORE IT DELETES", async () => {
@@ -245,7 +244,7 @@ describe("markReportFixed", () => {
     // and the delete completes. Deleted-then-not-paid is unrecoverable — the
     // row is gone, the tester is unpaid, and there is nothing left to click.
     const { sql, calls } = makeFakeSql(() => [{ id: 7, clip_blob_path: null }]);
-    await createBetaStore(sql).markReportFixed(input);
+    await createBetaStore(sql).payAndRemoveReport(input);
 
     expect(calls).toHaveLength(2);
     expect(flat(calls[0].text)).toContain("INSERT INTO beta_xp_awards");
@@ -258,13 +257,13 @@ describe("markReportFixed", () => {
     // which fires at end of statement and would null the pointers on the rows
     // just written.
     const { sql, calls } = makeFakeSql(() => [{ id: 7, clip_blob_path: null }]);
-    await createBetaStore(sql).markReportFixed(input);
+    await createBetaStore(sql).payAndRemoveReport(input);
     expect(flat(calls[0].text)).not.toContain("DELETE");
   });
 
   it("refuses a rejected report in SQL, not only in the action", async () => {
     const { sql, calls } = makeFakeSql(() => [{ id: 7, clip_blob_path: null }]);
-    await createBetaStore(sql).markReportFixed(input);
+    await createBetaStore(sql).payAndRemoveReport(input);
     for (const call of calls) {
       expect(flat(call.text)).toContain("status <> 'rejected'");
     }
@@ -272,23 +271,42 @@ describe("markReportFixed", () => {
 
   it("dedupes both awards on (report_id, reason)", async () => {
     const { sql, calls } = makeFakeSql(() => [{ id: 7, clip_blob_path: null }]);
-    await createBetaStore(sql).markReportFixed(input);
+    await createBetaStore(sql).payAndRemoveReport(input);
     expect(flat(calls[0].text)).toContain(
       "ON CONFLICT (report_id, reason) WHERE report_id IS NOT NULL DO NOTHING",
     );
   });
 
-  it("writes no zero-value ledger line for an already-accepted report", async () => {
+  it("writes no zero-value ledger line for an unused award slot", async () => {
     const { sql, calls } = makeFakeSql(() => [{ id: 7, clip_blob_path: null }]);
-    await createBetaStore(sql).markReportFixed({ ...input, acceptanceXp: 0 });
+    // One award, as Duplicate passes. The second slot is padded to zero and must
+    // vanish rather than leaving a worthless line in the tester's history.
+    await createBetaStore(sql).payAndRemoveReport({
+      ...input,
+      awards: [{ amount: 5, reason: "duplicate" }],
+    });
     // The filter is in SQL rather than in the caller, so a 0 can never reach the
     // ledger regardless of which action assembles the input.
     expect(flat(calls[0].text)).toContain("a.amount > 0");
+    expect(calls[0].values).toContain(5);
+    expect(calls[0].values).toContain("duplicate");
+    // The padded slot is present as a parameter but worth nothing.
+    expect(calls[0].values).toContain(0);
+  });
+
+  it("pays a single award without needing a second", async () => {
+    const { sql, calls } = makeFakeSql(() => [{ id: 7, clip_blob_path: null }]);
+    const result = await createBetaStore(sql).payAndRemoveReport({
+      ...input,
+      awards: [{ amount: 5, reason: "duplicate" }],
+    });
+    expect(result.applied).toBe(true);
+    expect(calls).toHaveLength(2); // still pay-then-delete
   });
 
   it("does not delete when the report was already gone", async () => {
     const { sql, calls } = makeFakeSql(() => []); // target matched nothing
-    const result = await createBetaStore(sql).markReportFixed(input);
+    const result = await createBetaStore(sql).payAndRemoveReport(input);
     expect(result.applied).toBe(false);
     // Crucially it stops after the first statement — it must not fall through
     // and delete a report it did not pay for.
@@ -301,7 +319,7 @@ describe("markReportFixed", () => {
         ? [{ clip_blob_path: "beta-clips/7.webm" }]
         : [{ id: 7 }],
     );
-    const result = await createBetaStore(sql).markReportFixed(input);
+    const result = await createBetaStore(sql).payAndRemoveReport(input);
     expect(result).toEqual({ applied: true, clipBlobPath: "beta-clips/7.webm" });
   });
 });

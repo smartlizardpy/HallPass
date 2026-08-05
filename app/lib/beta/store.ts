@@ -664,7 +664,13 @@ export function createBetaStore(sql: Sql) {
     },
 
     /**
-     * Pay a report's fix award and then REMOVE the report.
+     * Pay a report's closing award(s) and then REMOVE the report.
+     *
+     * Shared by every outcome that ENDS a report rather than filing it: Fixed
+     * (severity award plus the fix bonus) and Duplicate (the consolation award).
+     * Both mean the same thing operationally — there is nothing left to do about
+     * this row — so both delete it, and sharing the method is what stops one of
+     * them from quietly growing a different ordering guarantee than the other.
      *
      * ── WHY THIS IS TWO STATEMENTS AND NOT ONE CTE ──────────────────────────
      * Every other multi-table write in this store is a single data-modifying
@@ -681,8 +687,8 @@ export function createBetaStore(sql: Sql) {
      * PAY, THEN DELETE. Without a transaction one of these can land alone, so
      * the order is chosen by which half-finished state is recoverable:
      *   * paid but not deleted — the report is still in the queue, the admin
-     *     clicks Fixed again, the unique index on (report_id, reason) makes the
-     *     re-payment a no-op, and the delete completes. Self-healing.
+     *     clicks the same button again, the unique index on (report_id, reason)
+     *     makes the re-payment a no-op, and the delete completes. Self-healing.
      *   * deleted but not paid — the report is gone, the tester is unpaid, and
      *     there is nothing left to click. Unrecoverable.
      * Reversing these two lines converts a retry into a silent theft.
@@ -690,16 +696,23 @@ export function createBetaStore(sql: Sql) {
      * Returns the clip path FROM THE DELETE rather than trusting the caller's
      * earlier read, so the blob cleaned up is the one that was actually removed.
      */
-    async markReportFixed(input: {
+    async payAndRemoveReport(input: {
       id: number;
-      severity: BugSeverity | null;
       resolvedBy: string;
-      /** 0 when the report was already accepted and has been paid for once. */
-      acceptanceXp: number;
-      acceptanceReason: string;
-      bonusXp: number;
-      bonusReason: string;
+      /**
+       * What to credit, at most two rows. A zero amount writes nothing, so a
+       * caller with only one award to make passes one and the second slot
+       * disappears rather than leaving a worthless line in the ledger.
+       *
+       * TWO FIXED SLOTS rather than a dynamic VALUES list, because the SQL then
+       * stays a constant string that the store tests can assert against. Nothing
+       * needs a third: Fixed pays acceptance plus bonus, Duplicate pays one.
+       */
+      awards: { amount: number; reason: string }[];
     }): Promise<{ applied: boolean; clipBlobPath: string | null }> {
+      const first = input.awards[0] ?? { amount: 0, reason: "" };
+      const second = input.awards[1] ?? { amount: 0, reason: "" };
+
       // A rejected report is excluded in SQL as well as in the action: "we fixed
       // the thing you told us was not a thing" must not become payable through a
       // second caller that forgets to check.
@@ -709,15 +722,16 @@ export function createBetaStore(sql: Sql) {
           FROM beta_reports
           WHERE id = ${input.id} AND status <> 'rejected'
         ), award(amount, reason) AS (
-          VALUES (${input.acceptanceXp}::int, ${input.acceptanceReason}::text),
-                 (${input.bonusXp}::int, ${input.bonusReason}::text)
+          VALUES (${first.amount}::int, ${first.reason}::text),
+                 (${second.amount}::int, ${second.reason}::text)
         ), inserted AS (
           INSERT INTO beta_xp_awards
             (player_id, amount, reason, report_id, awarded_by)
           SELECT t.player_id, a.amount, a.reason, t.id, ${input.resolvedBy}
           FROM target t CROSS JOIN award a
-          -- The amount filter drops the acceptance row for an already-accepted
-          -- report, so no zero-value line ever clutters the tester's history.
+          -- The amount filter drops an unused slot, and the acceptance row for
+          -- an already-accepted report, so no zero-value line ever reaches the
+          -- ledger regardless of which outcome assembled the input.
           WHERE t.player_id IS NOT NULL AND a.amount > 0
           ON CONFLICT (report_id, reason) WHERE report_id IS NOT NULL DO NOTHING
           RETURNING id

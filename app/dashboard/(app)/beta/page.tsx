@@ -30,7 +30,7 @@ import {
   getRoster,
   getShotQueue,
 } from "@/app/lib/beta";
-import { BUG_SEVERITIES, FIX_BONUS_XP } from "@/app/lib/beta/config";
+import { BUG_SEVERITIES, DUPLICATE_XP, FIX_BONUS_XP } from "@/app/lib/beta/config";
 import { rankFor } from "@/app/lib/beta/xp";
 import {
   AssignmentStatusChip,
@@ -43,6 +43,7 @@ import { DashHeader } from "../_ui/DashHeader";
 import { Section } from "../_ui/Section";
 import {
   assignGameAction,
+  duplicateReportAction,
   fixReportAction,
   inviteTesterAction,
   revokeTesterAction,
@@ -331,10 +332,13 @@ export default async function DashboardBetaPage({
                       >
                         Fixed +{FIX_BONUS_XP}
                       </button>
+                      {/* Retargeted like Fixed, and for the same reason: this
+                          outcome REMOVES the report rather than restating it,
+                          so it sends no `status` at all. */}
                       <button
                         type="submit"
-                        name="status"
-                        value="duplicate"
+                        formAction={duplicateReportAction}
+                        title={`Pays ${DUPLICATE_XP} XP and removes the report`}
                         className={BTN_QUIET}
                       >
                         Duplicate
