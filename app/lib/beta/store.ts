@@ -903,6 +903,41 @@ export function createBetaStore(sql: Sql) {
     },
 
     /**
+     * Record that an ALREADY-accepted shot has reached the gallery.
+     *
+     * The repair path for shots accepted before acceptance published anything —
+     * and for any future acceptance whose publish half fails. {@link reviewShot}
+     * cannot do this job: it is guarded on `status = 'pending'`, which an
+     * accepted shot has long since left.
+     *
+     * Guarded on `promoted_media_id IS NULL` so a double-submitted publish
+     * cannot repoint a shot at a second gallery row and orphan the first.
+     */
+    async markShotPromoted(id: string, mediaId: string): Promise<boolean> {
+      const rows = await sql`
+        UPDATE beta_shots
+        SET promoted_media_id = ${mediaId}
+        WHERE id = ${id} AND status = 'accepted' AND promoted_media_id IS NULL
+        RETURNING id
+      `;
+      return rows.length > 0;
+    },
+
+    /** Accepted shots that never reached the gallery. The repair queue. */
+    async unpublishedShots(limit = 100): Promise<BetaShot[]> {
+      const rows = await sql`
+        SELECT id, player_id, slug, blob_path, blob_url, content_type,
+               width, height, bytes, kind, status, created_at, reviewed_by, reviewed_at,
+               promoted_media_id
+        FROM beta_shots
+        WHERE status = 'accepted' AND promoted_media_id IS NULL
+        ORDER BY created_at
+        LIMIT ${Math.max(1, Math.min(500, limit))}
+      `;
+      return rows.map(mapShot);
+    },
+
+    /**
      * Record a review decision and pay for an acceptance, in ONE statement.
      *
      * Same shape as {@link BetaStore.triageReport}: guarded on `pending`, award
