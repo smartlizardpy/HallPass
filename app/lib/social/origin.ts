@@ -33,12 +33,26 @@
  *
  * Everything a user can actually press one of these buttons on. `/game-html/` is
  * conspicuously absent, which is the entire point.
+ *
+ * ── ADDING A PATH HERE IS ROUTINE; FORGETTING TO IS NOT ──────────────────────
+ * The rule this list encodes is "a first-party page we render", and the only
+ * thing it is really excluding is `/game-html/`. So any NEW app surface that
+ * makes a credentialed write must be added, and the failure mode when it is not
+ * is nasty: the write 403s with a deliberately vague body, the calling UI has no
+ * `reason` to show, and it looks like the feature is broken rather than blocked.
+ *
+ * That is exactly what happened to `/beta/` — the tester session screen posts the
+ * playtest review through the ordinary reviews endpoint, the referrer matched
+ * nothing, and because a review is REQUIRED to finish an assignment, every
+ * assignment on the programme was unfinishable. It was reported as "reviews are
+ * broken", which is all the UI was able to say.
  */
 const ALLOWED_REFERER_PREFIXES = [
   "/play/", // account, friends, sign-in flows
   "/u/", // profile pages
   "/game/", // store pages (friend chip, comment box)
   "/category/",
+  "/beta/", // tester session screen — posts the required playtest review
 ];
 
 /**

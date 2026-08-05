@@ -26,9 +26,25 @@ describe("isTrustedOrigin", () => {
       "/u/ozan",
       "/game/duskfall",
       "/category/shooter",
+      "/beta/session/duskfall",
     ]) {
       expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}${path}`))).toBe(true);
     }
+  });
+
+  it("allows the tester session screen to post its required review", () => {
+    // REGRESSION. `/beta/` shipped without being added here, so the review a
+    // tester MUST leave to finish an assignment 403'd every time — and since
+    // `forbidden()` sends no `reason`, the composer could only say "Could not
+    // post that". The whole programme was blocked on four missing characters.
+    expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}/beta/session/neon-well`))).toBe(true);
+  });
+
+  it("still REJECTS the game frame inside a tester session", () => {
+    // The session screen embeds the game exactly like the store page does, so
+    // widening the allowlist to `/beta/` must not widen it to what the beta page
+    // is hosting. A fetch from the frame still carries `/game-html/…`.
+    expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}/game-html/neon-well/`))).toBe(false);
   });
 
   it("REJECTS a call from inside the game iframe", () => {
