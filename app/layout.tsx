@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Nunito } from "next/font/google";
-import { BetaWelcome } from "./components/BetaWelcome";
 import { FeaturePromo } from "./components/FeaturePromo";
 import { InstallPrompt } from "./components/InstallPrompt";
 import { MobileSplash } from "./components/MobileSplash";
@@ -84,7 +83,6 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         {children}
         <WelcomeToast />
-        <BetaWelcome />
         <PWA />
         <InstallPrompt />
         <FeaturePromo />
