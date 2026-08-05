@@ -37,7 +37,7 @@ import {
   toShotStatus,
   REPORT_STATUSES,
 } from "@/app/lib/beta/config";
-import { xpForReport, xpForShot } from "@/app/lib/beta/xp";
+import { xpForFix, xpForReport, xpForShot } from "@/app/lib/beta/xp";
 import { isResolvedSlug } from "@/app/lib/games-store";
 import { social } from "@/app/lib/social";
 
@@ -237,6 +237,98 @@ export async function triageReportAction(formData: FormData): Promise<void> {
   // reporting a success that did not happen.
   if (!applied) back("error", "Someone else triaged that first");
   back("ok", xp > 0 ? `Accepted — ${xp} XP awarded` : "Report closed");
+}
+
+/**
+ * Mark a report FIXED: pay the fix bonus and remove the report.
+ *
+ * The outcome triage never had. Accept says "you are right"; this says "and it
+ * is done". Those are different facts and only the second one is worth removing
+ * the row for, because only the second one means nothing is outstanding.
+ *
+ * ── WHY IT IS NOT A `status` VALUE ──────────────────────────────────────────
+ * A fixed report is DELETED, so it never needs one. Everything an admin would
+ * later want from the row — that a tester found something real and it shipped —
+ * is in the XP ledger, which survives the delete because `report_id` is
+ * ON DELETE SET NULL. The alternative, a terminal `fixed` status filtered out of
+ * the queue, keeps a growing table of rows nobody reads and still has to be
+ * excluded from every future query by hand.
+ *
+ * ── WORKS FROM `open` AND FROM `accepted`, AND PAYS DIFFERENTLY ─────────────
+ * From `open` it pays the severity award and the bonus together, so fixing
+ * something on sight is one click. From `accepted` it pays the bonus alone,
+ * because the severity award is already in the ledger. `xpForFix()` owns that
+ * split; see its docblock for why the reason strings have to match.
+ *
+ * A `rejected` report is refused. It is the one combination that cannot be made
+ * to mean anything: the fix contradicts the triage, and one of the two is wrong.
+ */
+export async function fixReportAction(formData: FormData): Promise<void> {
+  const { email: actor } = await requireRole("admin");
+
+  const id = Number(readString(formData, "id"));
+  if (!Number.isInteger(id) || id <= 0) back("error", "Missing report");
+
+  let report;
+  try {
+    report = await beta.reportById(id);
+  } catch {
+    back("error", "Could not load that report");
+  }
+  if (!report) back("error", "That report no longer exists");
+  if (report.status === "rejected") {
+    back("error", "That report was rejected — reopen it before marking it fixed");
+  }
+
+  // Same rule as triage: the admin's severity wins over the tester's guess, and
+  // a feature carries none. Only consulted when the report is still open — an
+  // accepted one pays no severity award, so a stray form value cannot change
+  // what it costs.
+  const severity =
+    report.kind === "bug"
+      ? (toBugSeverity(formData.get("severity")) ?? report.severity)
+      : null;
+
+  const award = xpForFix({ kind: report.kind, severity, status: report.status });
+
+  // Must be byte-identical to what `triageReportAction` writes for the same
+  // decision, or the unique index cannot recognise a re-payment. Kept next to
+  // the call rather than shared, because the two actions agreeing is a fact
+  // worth being able to see in one screen.
+  const acceptanceReason =
+    report.kind === "bug" && severity ? `bug:${severity}` : "feature:accepted";
+
+  let applied = false;
+  let clipBlobPath: string | null = null;
+  try {
+    ({ applied, clipBlobPath } = await beta.markReportFixed({
+      id,
+      severity,
+      resolvedBy: actor,
+      acceptanceXp: award.acceptance,
+      acceptanceReason,
+      bonusXp: award.bonus,
+      bonusReason: "fixed",
+    }));
+  } catch {
+    back("error", "Could not mark that fixed (database error)");
+  }
+
+  // AFTER the write, best-effort, exactly as triage does it: a failed blob
+  // delete must never undo a decision. No `clearClip` follows, because the row
+  // that held the pointer is already gone.
+  if (applied && clipBlobPath) {
+    try {
+      await del(clipBlobPath);
+    } catch (error) {
+      console.error(`beta clip cleanup failed for fixed report ${id}:`, error);
+    }
+  }
+
+  revalidatePath(BETA_PATH);
+  revalidatePath("/beta");
+  if (!applied) back("error", "Someone else resolved that first");
+  back("ok", `Fixed — ${award.total} XP awarded, report removed`);
 }
 
 /**

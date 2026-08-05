@@ -104,6 +104,37 @@ const CAPTURE_COPY: Record<CaptureFailure, string> = {
   "no-track": "Couldn't start recording. Try again?",
 };
 
+/**
+ * What to tell a tester when the reviews endpoint refuses without saying why.
+ *
+ * WHY THIS EXISTS AT ALL. `POST /api/v1/games/<slug>/reviews` answers a rejected
+ * write in two different shapes: the validation and rate-limit paths send
+ * `{ reason }`, but the two GUARD paths — `unauthorized()` and `forbidden()` —
+ * send `{ error }` and are deliberately vague, because naming the referrer rule
+ * would tell an embedded game exactly what to spoof.
+ *
+ * The composer only ever read `reason`, so every guard rejection collapsed into
+ * one unactionable string. When `/beta/` was missing from the referrer allowlist
+ * that string was the ENTIRE diagnostic available to the tester, the report they
+ * filed, and the admin triaging it. Nobody could get past "reviews are broken".
+ *
+ * So: fall back on the status code, and put the number in the sentence. It is
+ * mild noise for a child, and it turns the next occurrence of this class of bug
+ * into a one-line report instead of an investigation.
+ */
+function reviewFailureMessage(status: number): string {
+  if (status === 401) return "You've been signed out — sign in again to post this.";
+  if (status === 403) {
+    // Not the tester's fault and not fixable by them: this is a server-side
+    // guard refusing the page itself, so say so rather than implying they typed
+    // something wrong.
+    return "This screen isn't allowed to post reviews right now — please report this (403).";
+  }
+  if (status === 404) return "This game isn't in the catalogue any more.";
+  if (status === 503) return "Reviews aren't switched on yet.";
+  return `Could not post that (error ${status}).`;
+}
+
 export function TestSessionClient({
   game,
   brief,
@@ -484,13 +515,23 @@ export function TestSessionClient({
           body: JSON.stringify({ recommended, body: reviewBody }),
         },
       );
-      const data = (await res.json()) as { ok?: boolean; reason?: string };
+      // `.catch` because a guard response can be bodyless, and an unparseable
+      // body must not fall through to the outer catch — that reports "you appear
+      // to be offline" to somebody who is plainly online, which is worse than no
+      // message at all.
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        reason?: string;
+      };
       if (data.ok) {
         setReviewed(true);
         setReviewOpen(false);
         setToast({ ok: true, text: "Review posted — you can finish now" });
       } else {
-        setToast({ ok: false, text: data.reason ?? "Could not post that." });
+        setToast({
+          ok: false,
+          text: data.reason ?? reviewFailureMessage(res.status),
+        });
       }
     } catch {
       setToast({ ok: false, text: "You appear to be offline." });

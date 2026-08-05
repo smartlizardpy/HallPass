@@ -173,7 +173,12 @@ describe("triageReport", () => {
     expect(text).toContain("WHERE id = ? AND status = 'open'");
     // The award can only fire when the update matched.
     expect(text).toContain("FROM updated");
-    expect(text).toContain("ON CONFLICT (report_id) WHERE report_id IS NOT NULL DO NOTHING");
+    // Keyed on (report_id, reason), not report_id alone, so a report can carry
+    // its acceptance award AND a later fix bonus. A repeat of the SAME decision
+    // still collides, because `reason` is derived from the report either way.
+    expect(text).toContain(
+      "ON CONFLICT (report_id, reason) WHERE report_id IS NOT NULL DO NOTHING",
+    );
     expect(text).toContain("WHERE player_id IS NOT NULL");
   });
 
@@ -219,6 +224,85 @@ describe("triageReport", () => {
     // COALESCE, not a blind overwrite — closing a bug as duplicate must not
     // erase the severity someone already assessed.
     expect(flat(calls[0].text)).toContain("severity = COALESCE(?, severity)");
+  });
+});
+
+describe("markReportFixed", () => {
+  const input = {
+    id: 7,
+    severity: "major" as const,
+    resolvedBy: "a@b.c",
+    acceptanceXp: 75,
+    acceptanceReason: "bug:major",
+    bonusXp: 50,
+    bonusReason: "fixed",
+  };
+
+  it("PAYS BEFORE IT DELETES", async () => {
+    // The single most important property in this file. Without a transaction,
+    // either statement can land alone. Paid-then-not-deleted self-heals: the
+    // report is still in the queue, a retry conflicts away on the unique index
+    // and the delete completes. Deleted-then-not-paid is unrecoverable — the
+    // row is gone, the tester is unpaid, and there is nothing left to click.
+    const { sql, calls } = makeFakeSql(() => [{ id: 7, clip_blob_path: null }]);
+    await createBetaStore(sql).markReportFixed(input);
+
+    expect(calls).toHaveLength(2);
+    expect(flat(calls[0].text)).toContain("INSERT INTO beta_xp_awards");
+    expect(flat(calls[1].text)).toContain("DELETE FROM beta_reports");
+  });
+
+  it("is two statements and NOT one CTE", async () => {
+    // Deliberately not the usual data-modifying CTE. Inserting the awards and
+    // deleting the report in one statement races the FK's ON DELETE SET NULL,
+    // which fires at end of statement and would null the pointers on the rows
+    // just written.
+    const { sql, calls } = makeFakeSql(() => [{ id: 7, clip_blob_path: null }]);
+    await createBetaStore(sql).markReportFixed(input);
+    expect(flat(calls[0].text)).not.toContain("DELETE");
+  });
+
+  it("refuses a rejected report in SQL, not only in the action", async () => {
+    const { sql, calls } = makeFakeSql(() => [{ id: 7, clip_blob_path: null }]);
+    await createBetaStore(sql).markReportFixed(input);
+    for (const call of calls) {
+      expect(flat(call.text)).toContain("status <> 'rejected'");
+    }
+  });
+
+  it("dedupes both awards on (report_id, reason)", async () => {
+    const { sql, calls } = makeFakeSql(() => [{ id: 7, clip_blob_path: null }]);
+    await createBetaStore(sql).markReportFixed(input);
+    expect(flat(calls[0].text)).toContain(
+      "ON CONFLICT (report_id, reason) WHERE report_id IS NOT NULL DO NOTHING",
+    );
+  });
+
+  it("writes no zero-value ledger line for an already-accepted report", async () => {
+    const { sql, calls } = makeFakeSql(() => [{ id: 7, clip_blob_path: null }]);
+    await createBetaStore(sql).markReportFixed({ ...input, acceptanceXp: 0 });
+    // The filter is in SQL rather than in the caller, so a 0 can never reach the
+    // ledger regardless of which action assembles the input.
+    expect(flat(calls[0].text)).toContain("a.amount > 0");
+  });
+
+  it("does not delete when the report was already gone", async () => {
+    const { sql, calls } = makeFakeSql(() => []); // target matched nothing
+    const result = await createBetaStore(sql).markReportFixed(input);
+    expect(result.applied).toBe(false);
+    // Crucially it stops after the first statement — it must not fall through
+    // and delete a report it did not pay for.
+    expect(calls).toHaveLength(1);
+  });
+
+  it("returns the clip path from the DELETE, not from a prior read", async () => {
+    const { sql } = makeFakeSql((call) =>
+      call.text.includes("DELETE")
+        ? [{ clip_blob_path: "beta-clips/7.webm" }]
+        : [{ id: 7 }],
+    );
+    const result = await createBetaStore(sql).markReportFixed(input);
+    expect(result).toEqual({ applied: true, clipBlobPath: "beta-clips/7.webm" });
   });
 });
 

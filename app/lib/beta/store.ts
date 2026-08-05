@@ -22,8 +22,9 @@
  * database — so the amount cannot be computed inside the statement. The write is
  * therefore guarded by `status = 'open'`: if anything changed since the admin
  * loaded the queue, the UPDATE matches zero rows, the CTE yields nothing, and no
- * award is inserted. A partial unique index on `beta_xp_awards(report_id)` closes
- * the remaining gap — a double-submitted form pays once, not twice.
+ * award is inserted. A partial unique index on `beta_xp_awards(report_id, reason)`
+ * closes the remaining gap — a double-submitted form pays once, not twice,
+ * because both callers build `reason` deterministically from the report.
  *
  * TIMESTAMPS come back from `neon()` as strings; every one is funnelled through
  * `toIso()` so callers never see a driver-shaped value. BIGINT and `count(*)`
@@ -643,7 +644,7 @@ export function createBetaStore(sql: Sql) {
             SELECT player_id, ${input.xp}, ${input.reason}, id, ${input.resolvedBy}
             FROM updated
             WHERE player_id IS NOT NULL
-            ON CONFLICT (report_id) WHERE report_id IS NOT NULL DO NOTHING
+            ON CONFLICT (report_id, reason) WHERE report_id IS NOT NULL DO NOTHING
             RETURNING id
           )
           SELECT id FROM updated
@@ -660,6 +661,80 @@ export function createBetaStore(sql: Sql) {
         RETURNING id
       `;
       return rows.length > 0;
+    },
+
+    /**
+     * Pay a report's fix award and then REMOVE the report.
+     *
+     * ── WHY THIS IS TWO STATEMENTS AND NOT ONE CTE ──────────────────────────
+     * Every other multi-table write in this store is a single data-modifying
+     * CTE, because `neon()` cannot span a transaction. This one must not be.
+     * Inserting the awards and deleting the report in one statement puts the
+     * INSERT in a race with the FK's ON DELETE SET NULL action: the awards would
+     * be written pointing at the report and the delete's referential trigger,
+     * firing at end of statement, would immediately null those same pointers.
+     * The awards would survive — but through an ordering that is a Postgres
+     * implementation detail rather than anything the SQL states, which is not a
+     * thing to build payment on.
+     *
+     * ── THE ORDER IS THE SAFETY PROPERTY ────────────────────────────────────
+     * PAY, THEN DELETE. Without a transaction one of these can land alone, so
+     * the order is chosen by which half-finished state is recoverable:
+     *   * paid but not deleted — the report is still in the queue, the admin
+     *     clicks Fixed again, the unique index on (report_id, reason) makes the
+     *     re-payment a no-op, and the delete completes. Self-healing.
+     *   * deleted but not paid — the report is gone, the tester is unpaid, and
+     *     there is nothing left to click. Unrecoverable.
+     * Reversing these two lines converts a retry into a silent theft.
+     *
+     * Returns the clip path FROM THE DELETE rather than trusting the caller's
+     * earlier read, so the blob cleaned up is the one that was actually removed.
+     */
+    async markReportFixed(input: {
+      id: number;
+      severity: BugSeverity | null;
+      resolvedBy: string;
+      /** 0 when the report was already accepted and has been paid for once. */
+      acceptanceXp: number;
+      acceptanceReason: string;
+      bonusXp: number;
+      bonusReason: string;
+    }): Promise<{ applied: boolean; clipBlobPath: string | null }> {
+      // A rejected report is excluded in SQL as well as in the action: "we fixed
+      // the thing you told us was not a thing" must not become payable through a
+      // second caller that forgets to check.
+      const paid = await sql`
+        WITH target AS (
+          SELECT id, player_id
+          FROM beta_reports
+          WHERE id = ${input.id} AND status <> 'rejected'
+        ), award(amount, reason) AS (
+          VALUES (${input.acceptanceXp}::int, ${input.acceptanceReason}::text),
+                 (${input.bonusXp}::int, ${input.bonusReason}::text)
+        ), inserted AS (
+          INSERT INTO beta_xp_awards
+            (player_id, amount, reason, report_id, awarded_by)
+          SELECT t.player_id, a.amount, a.reason, t.id, ${input.resolvedBy}
+          FROM target t CROSS JOIN award a
+          -- The amount filter drops the acceptance row for an already-accepted
+          -- report, so no zero-value line ever clutters the tester's history.
+          WHERE t.player_id IS NOT NULL AND a.amount > 0
+          ON CONFLICT (report_id, reason) WHERE report_id IS NOT NULL DO NOTHING
+          RETURNING id
+        )
+        SELECT id FROM target
+      `;
+      if (paid.length === 0) return { applied: false, clipBlobPath: null };
+
+      const removed = await sql`
+        DELETE FROM beta_reports
+        WHERE id = ${input.id} AND status <> 'rejected'
+        RETURNING clip_blob_path
+      `;
+      return {
+        applied: removed.length > 0,
+        clipBlobPath: toStrOrNull(removed[0]?.clip_blob_path),
+      };
     },
 
     /** Attach an uploaded clip to a report the tester just filed. */

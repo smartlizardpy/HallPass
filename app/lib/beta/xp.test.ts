@@ -5,10 +5,11 @@ import {
   COVER_PROMOTION_XP,
   DUPLICATE_XP,
   FEATURE_XP,
+  FIX_BONUS_XP,
   RANKS,
   SHOT_XP,
 } from "./config";
-import { rankFor, xpForReport, xpForShot } from "./xp";
+import { rankFor, xpForFix, xpForReport, xpForShot } from "./xp";
 
 describe("RANKS is well-formed", () => {
   // rankFor() assumes both of these. Asserting them here rather than trusting the
@@ -102,6 +103,54 @@ describe("xpForShot", () => {
     // Stated intent in config.ts. Pinned so retuning one side cannot silently
     // break the parity the comment promises.
     expect(xpForShot({ promotedToCover: true })).toBe(BUG_XP.major);
+  });
+});
+
+describe("xpForFix", () => {
+  it("pays the severity award AND the bonus when fixing an open report", () => {
+    for (const severity of BUG_SEVERITIES) {
+      const award = xpForFix({ kind: "bug", severity, status: "open" });
+      expect(award.acceptance).toBe(BUG_XP[severity]);
+      expect(award.bonus).toBe(FIX_BONUS_XP);
+      expect(award.total).toBe(BUG_XP[severity] + FIX_BONUS_XP);
+    }
+  });
+
+  it("pays ONLY the bonus once a report has already been accepted", () => {
+    // The severity award is already in the ledger. Paying it again here would
+    // double-credit the find every time an admin fixed something they had
+    // previously agreed with, which is the normal order of events.
+    const award = xpForFix({ kind: "bug", severity: "blocker", status: "accepted" });
+    expect(award.acceptance).toBe(0);
+    expect(award.total).toBe(FIX_BONUS_XP);
+  });
+
+  it("pays a feature the feature rate plus the bonus", () => {
+    const award = xpForFix({ kind: "feature", severity: null, status: "open" });
+    expect(award.total).toBe(FEATURE_XP + FIX_BONUS_XP);
+  });
+
+  it("NEVER pays less than accepting the same report would have", () => {
+    // The property that killed the flat-rate design: if fixing a blocker paid
+    // less than merely accepting it, the tester's best outcome would be the one
+    // where nobody does any work.
+    for (const severity of BUG_SEVERITIES) {
+      const accepted = xpForReport({ kind: "bug", severity, status: "accepted" });
+      const fixed = xpForFix({ kind: "bug", severity, status: "open" }).total;
+      expect(fixed).toBeGreaterThan(accepted);
+    }
+  });
+
+  it("keeps the two-step and one-step routes worth exactly the same", () => {
+    // Accept now, fix later must total the same as fixing on sight, or the
+    // tester's payout depends on the admin's workflow rather than on their work.
+    for (const severity of BUG_SEVERITIES) {
+      const oneStep = xpForFix({ kind: "bug", severity, status: "open" }).total;
+      const twoStep =
+        xpForReport({ kind: "bug", severity, status: "accepted" }) +
+        xpForFix({ kind: "bug", severity, status: "accepted" }).total;
+      expect(oneStep).toBe(twoStep);
+    }
   });
 });
 

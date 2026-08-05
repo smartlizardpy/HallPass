@@ -19,6 +19,7 @@ import {
   COVER_PROMOTION_XP,
   DUPLICATE_XP,
   FEATURE_XP,
+  FIX_BONUS_XP,
   RANKS,
   REJECTED_XP,
   SHOT_XP,
@@ -66,6 +67,51 @@ export function xpForReport(report: {
  */
 export function xpForShot(options: { promotedToCover: boolean }): number {
   return SHOT_XP + (options.promotedToCover ? COVER_PROMOTION_XP : 0);
+}
+
+/** The two ledger rows a "fixed" decision writes. */
+export type FixAward = {
+  /**
+   * The acceptance award, or 0 when the report was already accepted and has
+   * therefore already been paid for.
+   */
+  acceptance: number;
+  /** The flat fix bonus. */
+  bonus: number;
+  total: number;
+};
+
+/**
+ * XP owed when a report is marked FIXED.
+ *
+ * Returns the two components SEPARATELY rather than one number, because they
+ * become two ledger rows with two different reasons. That is not bookkeeping
+ * fussiness — it is what makes the decision idempotent. The unique index on
+ * `beta_xp_awards (report_id, reason)` can only stop a double-payment if the
+ * acceptance row carries the same reason a plain Accept would have written, so
+ * the two paths have to agree on the string, which they do because both build it
+ * from `kind` and `severity`.
+ *
+ * ONE-STEP AND TWO-STEP BOTH WORK, and that is the point of splitting it:
+ *   * `open` → Fixed pays the severity award AND the bonus, so an admin who
+ *     fixes something the moment they read it does not have to click twice.
+ *   * `accepted` → Fixed pays the bonus ONLY, because the severity award is
+ *     already in the ledger and re-paying it would double-credit the find.
+ *
+ * A `rejected` report is refused by the caller, not here: "we fixed the thing
+ * you told us was not a thing" is a triage contradiction, and returning a
+ * number for it would invite a caller to pay it.
+ */
+export function xpForFix(report: {
+  kind: ReportKind;
+  severity: BugSeverity | null;
+  status: ReportStatus;
+}): FixAward {
+  const acceptance =
+    report.status === "open"
+      ? xpForReport({ kind: report.kind, severity: report.severity, status: "accepted" })
+      : 0;
+  return { acceptance, bonus: FIX_BONUS_XP, total: acceptance + FIX_BONUS_XP };
 }
 
 /** A tester's standing on the rank ladder, ready to render. */
