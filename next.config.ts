@@ -53,6 +53,25 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // BETA SURFACES ARE NEVER INDEXED — same two-part signal as `/u/:path*`
+        // above, for the same reason: the `robots` metadata in each page is not
+        // enough on its own, because Next answers a streamed `not-found.js` with
+        // HTTP 200 and a header applies to responses no HTML parser reaches the
+        // `<head>` of.
+        //
+        // What is behind here is unreleased games, a roster of who is testing
+        // them, and screen recordings of children playing — none of which has
+        // any business in a search index. `:path*` rather than a fixed segment
+        // so it covers `/beta/session/<slug>` and anything nested added later.
+        source: "/beta/:path*",
+        headers: [
+          {
+            key: "X-Robots-Tag",
+            value: "noindex, nofollow, noimageindex, noarchive",
+          },
+        ],
+      },
+      {
         // Versioned Scoreboard SDK artifact: loadable cross-origin by standalone
         // games, patchable in place within the same /sdk/v1/ URL. The URL is
         // stable across deploys, so it must revalidate on every load — Next
