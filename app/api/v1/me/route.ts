@@ -17,6 +17,7 @@
  */
 
 import { auth } from "@/app/lib/auth";
+import { isBetaTester } from "@/app/lib/beta";
 import { getPublicIdentity } from "@/app/lib/players";
 import type { Session } from "next-auth";
 import type { MeResponse, PlayerIdentity } from "@/sdk/src/contract";
@@ -52,15 +53,26 @@ export async function GET(): Promise<Response> {
 
   // A DB hiccup here must not 500 the endpoint — degrade to a null identity,
   // which the caller treats exactly like "not signed in".
+  //
+  // Both reads are resolved together rather than in sequence: this endpoint is
+  // on the critical path of every page's account menu, so a second round trip
+  // here is a second round trip everywhere. `isBetaTester` is already fail-soft
+  // to `false` in its own wrapper — a missing entry point is a far smaller harm
+  // than a header that throws on every page of the site.
   let ident: PlayerIdentity | null = null;
+  let betaTester = false;
   try {
-    ident = await getPublicIdentity(playerId);
+    [ident, betaTester] = await Promise.all([
+      getPublicIdentity(playerId),
+      isBetaTester(playerId),
+    ]);
   } catch (error) {
-    console.error("me GET getPublicIdentity failed:", error);
+    console.error("me GET identity read failed:", error);
   }
-  return Response.json({ player: ident, isAdmin, role } satisfies MeResponse, {
-    headers: CORS_HEADERS,
-  });
+  return Response.json(
+    { player: ident, isAdmin, role, isBetaTester: betaTester } satisfies MeResponse,
+    { headers: CORS_HEADERS },
+  );
 }
 
 export async function OPTIONS(): Promise<Response> {

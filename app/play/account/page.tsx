@@ -27,6 +27,7 @@ import { BackButton } from "@/app/components/BackButton";
 import { Wordmark } from "@/app/components/Wordmark";
 import { getPlayerById, effectiveHandle } from "@/app/lib/players";
 import { getUserRole } from "@/app/lib/dashboard-users";
+import { isBetaTester } from "@/app/lib/beta";
 import { store } from "@/app/lib/scoreboard";
 import { social } from "@/app/lib/social";
 import { UsernameCard } from "@/app/components/friends/UsernameCard";
@@ -138,6 +139,11 @@ export default async function PlayAccountPage({
   // so the link is a convenience, not the gate.
   const adminRole = await getUserRole(player.email);
 
+  // Programme membership, for the beta card. Fail-soft to `false` inside the
+  // wrapper, so an unmigrated or unreachable database hides the card rather
+  // than 500ing an account page whose other seven sections are fine.
+  const isTester = await isBetaTester(playerId);
+
   const { ok, error } = await searchParams;
   const errorBanner = errorMessage(error);
   const display = effectiveHandle(player);
@@ -223,6 +229,30 @@ export default async function PlayAccountPage({
             </button>
           </form>
         </section>
+
+        {/* BETA — the mobile way into the programme, mirroring the admin card
+            below. `MobileTabBar` has no beta tab and should not grow one: the
+            bar is for things every visitor uses, and this is for a handful of
+            people. The account tab is where they already come to find "things
+            that are mine". */}
+        {isTester && (
+          <Link
+            href="/beta"
+            className="flex items-center justify-between gap-3 rounded-xl border border-brand/30 bg-brand-50 p-6 transition hover:border-brand"
+          >
+            <div className="min-w-0">
+              <div className="text-sm font-black uppercase tracking-wide text-brand">
+                Beta testing
+              </div>
+              <p className="mt-1 text-xs font-semibold text-muted">
+                Your assigned games, the bugs you&rsquo;ve filed, and your XP.
+              </p>
+            </div>
+            <span aria-hidden className="shrink-0 text-xl font-black text-brand">
+              →
+            </span>
+          </Link>
+        )}
 
         {/* ADMIN — only for a signed-in admin, the mobile way into the dashboard. */}
         {adminRole && (

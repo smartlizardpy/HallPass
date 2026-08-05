@@ -1,0 +1,213 @@
+"use server";
+
+/**
+ * HallPass — beta test session write actions.
+ *
+ * Called imperatively from the session client island rather than through a
+ * `<form action>`, so unlike the dashboard actions these RETURN a result object
+ * instead of redirecting. That is a deliberate deviation from `users/actions.ts`:
+ * the tester is mid-playtest inside a running game, and a redirect would tear
+ * down the iframe — losing their progress to tell them a title was too short.
+ *
+ * Everything else follows the house rules: the actor is derived from the SESSION
+ * and never from an argument, input is narrowed from `unknown`, and the store
+ * write is the only thing inside a try.
+ *
+ * RATE LIMITS ARE PER PLAYER, NEVER PER IP. A school NATs its whole network to
+ * one address, so an IP limit tight enough to matter would take out a computing
+ * lab mid-session. Repeated across `reviews/config.ts` and `achievements/config.ts`
+ * as the most common footgun in this codebase.
+ */
+
+import { revalidatePath } from "next/cache";
+import { put } from "@vercel/blob";
+import { beta, requireBetaTester } from "@/app/lib/beta";
+import {
+  REPORT_BODY_MAX,
+  REPORT_BODY_MIN,
+  REPORT_RATE_LIMIT,
+  REPORT_TITLE_MAX,
+  SHOT_RATE_LIMIT,
+  toBugSeverity,
+  toReportKind,
+} from "@/app/lib/beta/config";
+import { isResolvedSlug } from "@/app/lib/games-store";
+import { validateMediaUpload } from "@/app/lib/image-meta";
+
+export type ActionResult = { ok: true; message: string } | { ok: false; error: string };
+
+/** Random, URL-safe, and matching the `^[a-z0-9][a-z0-9-]*$` CHECK on ids. */
+function newId(): string {
+  return `s${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+}
+
+/**
+ * File a bug or feature request against a game.
+ *
+ * The tester's own severity is recorded as their assessment; triage may
+ * override it, and only triage decides what it pays. A feature carries no
+ * severity at all — the database CHECK enforces that, so it is normalised here
+ * rather than passed through and allowed to 500.
+ */
+export async function submitReportAction(input: {
+  slug: string;
+  kind: string;
+  severity: string | null;
+  title: string;
+  body: string;
+  device?: string;
+}): Promise<ActionResult> {
+  const { playerId } = await requireBetaTester();
+
+  if (!(await isResolvedSlug(input.slug))) {
+    return { ok: false, error: "Unknown game" };
+  }
+
+  const kind = toReportKind(input.kind);
+  if (!kind) return { ok: false, error: "Pick bug or idea" };
+
+  const title = String(input.title ?? "").trim().slice(0, REPORT_TITLE_MAX);
+  if (!title) return { ok: false, error: "Give it a short title" };
+
+  const body = String(input.body ?? "").trim().slice(0, REPORT_BODY_MAX);
+  if (body.length < REPORT_BODY_MIN) {
+    return {
+      ok: false,
+      error: `Describe it in at least ${REPORT_BODY_MIN} characters`,
+    };
+  }
+
+  // A bug must carry a severity and a feature must not.
+  const severity = kind === "bug" ? (toBugSeverity(input.severity) ?? "minor") : null;
+
+  try {
+    const recent = await beta.recentReportCount(
+      playerId,
+      REPORT_RATE_LIMIT.windowSeconds,
+    );
+    if (recent >= REPORT_RATE_LIMIT.maxPerWindow) {
+      return { ok: false, error: "Slow down a moment — try again shortly" };
+    }
+
+    // Attach to the tester's assignment for this game when they have one, so the
+    // report shows up against the work it came from.
+    const assignment = (await beta.assignmentsFor(playerId)).find(
+      (a) => a.slug === input.slug,
+    );
+
+    await beta.createReport({
+      playerId,
+      assignmentId: assignment?.id ?? null,
+      slug: input.slug,
+      kind,
+      severity,
+      title,
+      body,
+      device: String(input.device ?? "").slice(0, 200),
+    });
+
+    // Opening a report means they are actively testing; reflect that in the
+    // queue rather than leaving it reading "To do" forever.
+    if (assignment && assignment.status === "assigned") {
+      await beta.setAssignmentStatus(assignment.id, "in_progress");
+    }
+  } catch (error) {
+    console.error("beta submitReport failed:", error);
+    return { ok: false, error: "Could not save that — try again" };
+  }
+
+  revalidatePath("/beta");
+  revalidatePath("/dashboard/beta");
+  return { ok: true, message: "Report filed — thanks!" };
+}
+
+/**
+ * Submit a captured gameplay still for review.
+ *
+ * The bytes are validated by the SAME `validateMediaUpload` the dashboard's own
+ * gallery upload uses — magic-byte sniffed, never trusting `file.type`, with the
+ * identical size, dimension and aspect policy. An accepted shot is later copied
+ * into `game_media`, so anything that would be rejected there has to be rejected
+ * here or acceptance would fail at the last step.
+ *
+ * Stored under `beta-shots/`. NEVER under `games/`: seven separate behaviours
+ * sweep that prefix — blob deletes, `sync-games.mjs` mirroring into the repo,
+ * the SW precache — and are enumerated in `app/lib/game-media.sql`.
+ */
+export async function submitShotAction(formData: FormData): Promise<ActionResult> {
+  const { playerId } = await requireBetaTester();
+
+  const slug = String(formData.get("slug") ?? "");
+  if (!(await isResolvedSlug(slug))) return { ok: false, error: "Unknown game" };
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) return { ok: false, error: "No image" };
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const check = validateMediaUpload(bytes);
+  if (!check.ok) {
+    return { ok: false, error: `Image rejected (${check.reason})` };
+  }
+
+  try {
+    const recent = await beta.recentShotCount(playerId, SHOT_RATE_LIMIT.windowSeconds);
+    if (recent >= SHOT_RATE_LIMIT.maxPerWindow) {
+      return { ok: false, error: "That's plenty of screenshots for now" };
+    }
+
+    const id = newId();
+    const ext = check.meta.type === "image/png" ? "png" : check.meta.type === "image/jpeg" ? "jpg" : "webp";
+    const blobPath = `beta-shots/${slug}/${id}.${ext}`;
+
+    // The `File` is uploaded, not the `Uint8Array` we validated — `put` takes a
+    // stream-like body and the two are the same bytes. The content type is the
+    // SNIFFED one, never `file.type`, so a mislabelled upload is stored under
+    // what it actually is. Same reasoning as `media-actions.ts`.
+    const uploaded = await put(blobPath, file, {
+      access: "public",
+      contentType: check.meta.type,
+      addRandomSuffix: false,
+      allowOverwrite: false,
+      cacheControlMaxAge: 31_536_000,
+    });
+
+    await beta.createShot({
+      id,
+      playerId,
+      slug,
+      blobPath,
+      blobUrl: uploaded.url,
+      contentType: check.meta.type,
+      width: check.meta.width,
+      height: check.meta.height,
+      bytes: check.bytes,
+      kind: "screenshot",
+    });
+  } catch (error) {
+    console.error("beta submitShot failed:", error);
+    return { ok: false, error: "Upload failed — try again" };
+  }
+
+  revalidatePath("/dashboard/beta");
+  return { ok: true, message: "Sent for review" };
+}
+
+/** Mark an assignment finished from the session screen. */
+export async function finishAssignmentAction(slug: string): Promise<ActionResult> {
+  const { playerId } = await requireBetaTester();
+
+  try {
+    const assignment = (await beta.assignmentsFor(playerId)).find(
+      (a) => a.slug === slug,
+    );
+    if (!assignment) return { ok: false, error: "No assignment for this game" };
+    await beta.setAssignmentStatus(assignment.id, "submitted");
+  } catch (error) {
+    console.error("beta finishAssignment failed:", error);
+    return { ok: false, error: "Could not update that" };
+  }
+
+  revalidatePath("/beta");
+  revalidatePath("/dashboard/beta");
+  return { ok: true, message: "Marked as done" };
+}
