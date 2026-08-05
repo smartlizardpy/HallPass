@@ -20,6 +20,15 @@ export type GameMedia = {
   kind: GameMediaKind;
   /** Blob key, which doubles as the same-origin URL path. */
   blobPath: string;
+  /**
+   * The object's Vercel Blob URL, as returned by `put()` at upload time.
+   *
+   * `null` for rows written before the column existed, and on any read path that
+   * does not select it (the gallery does not need it — it renders
+   * {@link mediaPublicPath}, which is same-origin by design). Only the serving
+   * route consumes this, to avoid spending a billed `head()` per request.
+   */
+  blobUrl: string | null;
   contentType: ImageType;
   width: number;
   height: number;

@@ -42,7 +42,10 @@ import {
   isSafeSegment,
   listGameFiles,
 } from "@/app/lib/game-html-blob";
-import { GAMES_VERSION_BLOB_PATH } from "@/app/lib/games-version-blob";
+import {
+  GAMES_VERSION_BLOB_PATH,
+  GAMES_VERSION_CACHE_TAG,
+} from "@/app/lib/games-version-blob";
 import { games } from "@/app/lib/games";
 
 /** Largest HTML payload we will accept, in characters (~2 MB of text). */
@@ -101,9 +104,14 @@ async function bumpGamesVersion(): Promise<void> {
   // here and are the only writers of `games/**` blobs, so this is the one place
   // that must drop the serving route's cached `list()` — otherwise a just-
   // uploaded game would keep serving the pre-edit copy (or the static twin) until
-  // the 60s soft TTL rolled over. `{ expire: 0 }` for read-your-writes; not in the
+  // the soft TTL rolled over. `{ expire: 0 }` for read-your-writes; not in the
   // try above because a failed sentinel write must not skip the invalidation.
   revalidateTag(GAMES_BLOB_CACHE_TAG, { expire: 0 });
+  // Same argument for the sentinel's own cached `head()`. `/games-version` holds
+  // its lookup for an hour to keep Blob spend off the polling path, so WITHOUT
+  // this the bump we just wrote would stay invisible to clients for up to that
+  // hour and the service worker would keep serving pre-upload game assets.
+  revalidateTag(GAMES_VERSION_CACHE_TAG, { expire: 0 });
 }
 
 /**

@@ -33,7 +33,7 @@
 
 import "server-only";
 import { unstable_cache } from "next/cache";
-import { sql } from "@/app/lib/db";
+import { isMissingColumnError, sql } from "@/app/lib/db";
 import type { ImageType } from "@/app/lib/image-meta";
 import type { GameMedia, GameMediaKind } from "@/app/lib/game-media-blob";
 
@@ -68,6 +68,10 @@ function mapMedia(row: Row): GameMedia {
     slug: String(row.slug),
     kind: (String(row.kind) === "hero" ? "hero" : "screenshot") as GameMediaKind,
     blobPath: String(row.blob_path),
+    // Absent from most SELECTs (only the serving route needs it) and NULL for
+    // rows predating the column, so normalise both to `null` rather than to the
+    // string "undefined" that a bare String() would produce.
+    blobUrl: row.blob_url == null ? null : String(row.blob_url),
     contentType: String(row.content_type) as ImageType,
     width: toInt(row.width),
     height: toInt(row.height),
@@ -140,6 +144,7 @@ export async function insertMedia(media: {
   slug: string;
   kind: GameMediaKind;
   blobPath: string;
+  blobUrl: string;
   contentType: ImageType;
   width: number;
   height: number;
@@ -147,11 +152,34 @@ export async function insertMedia(media: {
   alt?: string;
 }): Promise<void> {
   await sql`
-    INSERT INTO game_media (id, slug, kind, blob_path, content_type, width, height, bytes, alt, position)
-    SELECT ${media.id}, ${media.slug}, ${media.kind}, ${media.blobPath},
+    INSERT INTO game_media (id, slug, kind, blob_path, blob_url, content_type, width, height, bytes, alt, position)
+    SELECT ${media.id}, ${media.slug}, ${media.kind}, ${media.blobPath}, ${media.blobUrl},
            ${media.contentType}, ${media.width}, ${media.height}, ${media.bytes},
            ${media.alt ?? ""},
            COALESCE((SELECT max(position) + 1 FROM game_media WHERE slug = ${media.slug}), 0)
+  `;
+}
+
+/**
+ * Record the Blob URL for a row that predates the `blob_url` column.
+ *
+ * Called by the serving route after it has had to fall back to a `head()`, so
+ * the table self-heals: the first request for an old image costs one billed
+ * operation and every subsequent request costs none. Best-effort by contract —
+ * the caller has already produced a response by this point, and a failure here
+ * only means the next request pays for another `head()`.
+ *
+ * Deliberately NOT tag-invalidating: `blob_url` is invisible to every cached
+ * read (`readAllMediaCached` does not select it), so dropping the gallery cache
+ * would be pure cost for no observable change.
+ */
+export async function setMediaBlobUrl(
+  blobPath: string,
+  blobUrl: string,
+): Promise<void> {
+  await sql`
+    UPDATE game_media SET blob_url = ${blobUrl}
+    WHERE blob_path = ${blobPath} AND blob_url IS NULL
   `;
 }
 
@@ -269,14 +297,37 @@ export async function countMediaForSlug(slug: string): Promise<number> {
  * Look up one row by its blob path. Used by the serving route to confirm a
  * requested object is actually registered media before streaming it, rather than
  * trusting the URL to name any object in the store.
+ *
+ * This is the ONLY read that selects `blob_url`, because it is the only caller
+ * that needs it. Keeping it out of `readAllMediaCached` is deliberate: that
+ * query feeds every gallery on the site and fails soft to an EMPTY map, so
+ * selecting a column that a not-yet-migrated database lacks would make every
+ * screenshot on the site vanish rather than degrade. Here the blast radius is
+ * one image, and even that is covered by the retry below.
+ *
+ * MISSING-COLUMN RETRY. Deploys routinely run ahead of the schema in this repo
+ * (see `HANDOFF.md`), so a 42703 falls back to the pre-migration column list and
+ * yields `blobUrl: null` — which the serving route already knows how to handle
+ * by paying for one `head()`. Two fully-written templates rather than an
+ * interpolated column list, per the parameterise-VALUES-only rule.
  */
 export async function getMediaByBlobPath(
   blobPath: string,
 ): Promise<GameMedia | null> {
-  const rows = await sql`
-    SELECT id, slug, kind, blob_path, content_type, width, height, bytes, alt, position
-    FROM game_media
-    WHERE blob_path = ${blobPath}
-  `;
+  let rows;
+  try {
+    rows = await sql`
+      SELECT id, slug, kind, blob_path, blob_url, content_type, width, height, bytes, alt, position
+      FROM game_media
+      WHERE blob_path = ${blobPath}
+    `;
+  } catch (error) {
+    if (!isMissingColumnError(error)) throw error;
+    rows = await sql`
+      SELECT id, slug, kind, blob_path, content_type, width, height, bytes, alt, position
+      FROM game_media
+      WHERE blob_path = ${blobPath}
+    `;
+  }
   return rows.length > 0 ? mapMedia(rows[0]) : null;
 }
