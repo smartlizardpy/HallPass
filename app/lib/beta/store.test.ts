@@ -30,6 +30,12 @@
 import { describe, expect, it } from "vitest";
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { createBetaStore } from "./store";
+import {
+  REASON_BUG_PREFIX,
+  REASON_DUPLICATE,
+  REASON_FEATURE_ACCEPTED,
+  REASON_FIXED,
+} from "./config";
 
 interface RecordedCall {
   text: string;
@@ -104,6 +110,34 @@ describe("membership", () => {
     const { sql, calls } = makeFakeSql(() => []);
     await createBetaStore(sql).roster();
     expect(calls[0].text).not.toContain("email");
+  });
+
+  it("counts removed reports from the ledger, not only live rows", async () => {
+    const { sql, calls } = makeFakeSql(() => []);
+    await createBetaStore(sql).roster();
+    const text = flat(calls[0].text);
+
+    // Without this the counts go DOWN when a report is fixed or closed as a
+    // duplicate — a tester's record shrinking as a reward for finding something
+    // worth acting on.
+    expect(text).toContain("beta_xp_awards");
+    // `report_id IS NULL` is what stops a LIVE report being counted twice: once
+    // as a row, once via the award still pointing at it.
+    expect(text).toContain("a.shot_id IS NULL AND a.report_id IS NULL");
+  });
+
+  it("keeps the roster's reason predicates in step with config", async () => {
+    const { sql, calls } = makeFakeSql(() => []);
+    await createBetaStore(sql).roster();
+    const text = flat(calls[0].text);
+
+    // The SQL cannot import from `config.ts`, so the strings are duplicated into
+    // the query by hand. Renaming a reason code without updating the query would
+    // silently stop counting — this is the only thing that would catch it.
+    expect(text).toContain(`'${REASON_FIXED}'`);
+    expect(text).toContain(`'${REASON_DUPLICATE}'`);
+    expect(text).toContain(`a.reason LIKE '${REASON_BUG_PREFIX}%'`);
+    expect(text).toContain(`a.reason = '${REASON_FEATURE_ACCEPTED}'`);
   });
 });
 
