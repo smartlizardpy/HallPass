@@ -54,6 +54,18 @@ const SHOT_REJECTION_COPY: Record<MediaRejection, string> = {
   "bad-aspect": "Something went wrong capturing that one — try another.",
 };
 
+/**
+ * Ceilings on everything the browser reports about a clip or an error log.
+ *
+ * All of these arrive from client code that the tester's own devtools can edit,
+ * so every one is re-clamped server-side even though the capture modules already
+ * bound them. The numbers are generous versions of what the client produces.
+ */
+const MAX_CLIP_BYTES = 25 * 1024 * 1024;
+const MAX_CLIP_MS = 120_000;
+const MAX_ERROR_ENTRIES = 100;
+const MAX_ERROR_LOG_CHARS = 60_000;
+
 /** Random, URL-safe, and matching the `^[a-z0-9][a-z0-9-]*$` CHECK on ids. */
 function newId(): string {
   return `s${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
@@ -75,6 +87,22 @@ export async function submitReportAction(
     title: string;
     body: string;
     device?: string;
+    /**
+     * A replay clip already uploaded by the browser, straight to Blob storage.
+     *
+     * The client uploads it (see `api/v1/beta/clip-token`) and reports the
+     * result here, because a 30-second clip exceeds the 4.5 MB request-body cap
+     * a Server Action is subject to. The player is still re-derived from the
+     * SESSION below, so a forged path can only ever attach a clip to the
+     * forger's own report.
+     */
+    clipBlobPath?: string | null;
+    clipUrl?: string | null;
+    clipBytes?: number;
+    clipMs?: number;
+    /** The game's own errors, already capped and serialised by the client. */
+    errorLog?: string | null;
+    errorCount?: number;
   },
   /**
    * An optional screenshot pinned to the report, picked from the session's
@@ -142,6 +170,23 @@ export async function submitReportAction(
       }
     }
 
+    // A clip path must live under this report's own game. The token route
+    // enforced it when minting, and this enforces it again at write time — the
+    // two together mean neither a stolen token nor a hand-rolled call can point
+    // a report at somebody else's object.
+    const clipPath =
+      typeof input.clipBlobPath === "string" &&
+      input.clipBlobPath.startsWith(`beta-clips/${input.slug}/`)
+        ? input.clipBlobPath
+        : null;
+
+    // The client already caps this, but it is client input: re-cap so a crafted
+    // call cannot write an unbounded blob of text into the row.
+    const errors =
+      typeof input.errorLog === "string" && input.errorLog.length > 0
+        ? input.errorLog.slice(0, MAX_ERROR_LOG_CHARS)
+        : null;
+
     await beta.createReport({
       playerId,
       assignmentId: assignment?.id ?? null,
@@ -153,6 +198,17 @@ export async function submitReportAction(
       device: String(input.device ?? "").slice(0, 200),
       shotBlobPath,
       shotUrl,
+      // Belt and braces on a client-supplied path: the token route already
+      // pinned the prefix, but nothing here should trust a string from a
+      // browser to name a blob.
+      clipBlobPath: clipPath,
+      // Only kept when the path validated — a URL without a matching path
+      // would let a crafted call point playback at an arbitrary host.
+      clipUrl: clipPath ? (input.clipUrl ?? null) : null,
+      clipBytes: Math.max(0, Math.min(MAX_CLIP_BYTES, Math.floor(input.clipBytes ?? 0))),
+      clipMs: Math.max(0, Math.min(MAX_CLIP_MS, Math.floor(input.clipMs ?? 0))),
+      errorLog: errors,
+      errorCount: Math.max(0, Math.min(MAX_ERROR_ENTRIES, Math.floor(input.errorCount ?? 0))),
     });
 
     // Opening a report means they are actively testing; reflect that in the

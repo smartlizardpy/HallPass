@@ -48,10 +48,49 @@ import {
   type Shot,
 } from "@/app/lib/capture/tab-capture";
 import {
+  attachToFrame,
+  ErrorLog,
+  attachErrorCapture,
+  type CapturedError,
+  type FrameAttachResult,
+} from "@/app/lib/capture/error-log";
+import {
+  // Aliased: `canRecord` in this file already means "can capture a tab at all".
+  // This one is narrower — whether MediaRecorder can encode that tab's video.
+  canRecord as canRecordVideo,
+  extensionFor,
+  ReplayBuffer,
+  type ReplayClip,
+} from "@/app/lib/capture/replay-buffer";
+import { upload } from "@vercel/blob/client";
+import {
   finishAssignmentAction,
   submitReportAction,
   submitShotAction,
 } from "./actions";
+
+/**
+ * The shortcut that stops the session and opens a bug report.
+ *
+ * Ctrl/Cmd+Shift+B rather than a bare key: the iframe below has focus for most
+ * of a session and games bind letters, digits, arrows and space. A three-key
+ * combination is one nothing in the catalogue uses, and the modifier means a
+ * stray press while typing in the composer cannot fire it either.
+ *
+ * The handler is registered in the CAPTURE phase on `window` so it runs before
+ * the page's own handlers. It cannot reach INSIDE the iframe — a cross-origin
+ * game swallows every key it receives — which is why the shortcut is also a
+ * visible button.
+ */
+const BUG_SHORTCUT_LABEL = "Ctrl/⌘ + Shift + B";
+
+function isBugShortcut(event: KeyboardEvent): boolean {
+  return (
+    (event.ctrlKey || event.metaKey) &&
+    event.shiftKey &&
+    (event.key === "B" || event.key === "b")
+  );
+}
 
 type Game = { slug: string; title: string; externalUrl: string | null };
 
@@ -77,8 +116,18 @@ export function TestSessionClient({
   initiallyReviewed: boolean;
 }) {
   const frameRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const grabberRef = useRef<FrameGrabber | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const replayRef = useRef<ReplayBuffer | null>(null);
+  /**
+   * The error log outlives every re-render and is never state.
+   *
+   * Putting it in `useState` would re-render the whole session — remounting
+   * nothing, but re-running the tree — every time a broken game throws, which
+   * for a game stuck in a bad render loop is sixty times a second.
+   */
+  const errorLogRef = useRef<ErrorLog | null>(null);
 
   const [capturing, setCapturing] = useState(false);
   const [captureNote, setCaptureNote] = useState<string | null>(null);
@@ -116,15 +165,74 @@ export function TestSessionClient({
   /** Which captured still is pinned to the report being written, if any. */
   const [attachedId, setAttachedId] = useState<string | null>(null);
 
+  /** Whether the game's own errors can be seen — false for cross-origin games. */
+  const [errorWatch, setErrorWatch] = useState<FrameAttachResult | null>(null);
+  /** Snapshotted at the moment the shortcut fires, so it cannot drift. */
+  const [pendingErrors, setPendingErrors] = useState<CapturedError[]>([]);
+  /** The replay flushed for the report being written. */
+  const [pendingClip, setPendingClip] = useState<ReplayClip | null>(null);
+  const [clipState, setClipState] = useState<"idle" | "flushing" | "ready">("idle");
+  /**
+   * A still of the moment the shortcut fired, painted over the game.
+   *
+   * An arbitrary game cannot actually be paused — it owns its own loop and most
+   * of the catalogue is cross-origin, so there is no handle to pull. What CAN be
+   * done is stop the tester losing the moment: freeze what they saw, over the
+   * top, while they write. The game keeps running underneath, which is honest
+   * and does not pretend otherwise.
+   */
+  const [freezeFrame, setFreezeFrame] = useState<string | null>(null);
+
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewed, setReviewed] = useState(initiallyReviewed);
   const [recommended, setRecommended] = useState<boolean | null>(null);
   const [reviewBody, setReviewBody] = useState("");
 
+  /**
+   * Start collecting errors as soon as the session opens — before, and
+   * independently of, any recording.
+   *
+   * This needs no permission and no user gesture, so it is the one piece of
+   * evidence gathering that is always on. A tester who never presses the
+   * capture button still files reports carrying the game's stack traces.
+   */
+  useEffect(() => {
+    const log = new ErrorLog(Date.now());
+    errorLogRef.current = log;
+    const detachPage = attachErrorCapture(window, log, "page");
+
+    // The frame's own errors need a listener INSIDE it, which is only reachable
+    // for self-hosted games. `attachToFrame` reports which case this is so the
+    // HUD can say so instead of implying it is watching when it cannot.
+    let detachFrame = () => {};
+    const wire = () => {
+      const frame = iframeRef.current;
+      if (!frame) return;
+      detachFrame();
+      const { result, detach } = attachToFrame(frame, log);
+      detachFrame = detach;
+      setErrorWatch(result);
+    };
+
+    const frame = iframeRef.current;
+    frame?.addEventListener("load", wire);
+    // Already loaded from cache — `load` will not fire again.
+    wire();
+
+    return () => {
+      detachPage();
+      detachFrame();
+      frame?.removeEventListener("load", wire);
+      errorLogRef.current = null;
+    };
+  }, []);
+
   /** Tear down capture. Safe to call twice. */
   const stopCapture = useCallback(() => {
     grabberRef.current?.stop();
     grabberRef.current = null;
+    replayRef.current?.stop();
+    replayRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     setCapturing(false);
@@ -171,8 +279,76 @@ export function TestSessionClient({
     });
     grabberRef.current = grabber;
     await grabber.start();
+
+    // The same stream feeds the replay buffer — one permission prompt, two
+    // consumers. A browser that cannot record simply gets screenshots.
+    if (canRecordVideo()) {
+      const replay = new ReplayBuffer(result.stream);
+      replay.start();
+      replayRef.current = replay;
+    }
+
     setCapturing(true);
   };
+
+  /**
+   * Stop the session and open a bug report with the evidence already gathered.
+   *
+   * Order matters. The freeze-frame and the error snapshot are taken FIRST and
+   * synchronously, because both describe "the moment" and both keep changing —
+   * a game throws more errors and paints more frames while an await resolves.
+   * The replay flush is slow (it finalises a recording) so it runs after, and
+   * the composer opens without waiting for it.
+   */
+  const openBugReport = useCallback(async () => {
+    setKind("bug");
+    setComposerOpen(true);
+    setReviewOpen(false);
+
+    // Snapshot the errors as they are right now.
+    setPendingErrors(errorLogRef.current?.snapshot() ?? []);
+
+    // Freeze the most recent grab over the game, so the tester can look at what
+    // happened while they describe it.
+    const latest = shots[shots.length - 1];
+    if (latest) setFreezeFrame(latest.previewUrl);
+
+    // Best-effort pause request. A same-origin game that listens for it can
+    // honour it; a cross-origin one never receives it, and nothing depends on
+    // either outcome.
+    try {
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: "hallpass:pause" },
+        "*",
+      );
+    } catch {
+      /* cross-origin, as expected for most of the catalogue */
+    }
+
+    const replay = replayRef.current;
+    if (!replay) return;
+    setClipState("flushing");
+    try {
+      const clip = await replay.flush();
+      setPendingClip(clip);
+      setClipState(clip ? "ready" : "idle");
+    } catch {
+      setClipState("idle");
+    }
+  }, [shots]);
+
+  // The shortcut. Capture phase on `window` so it beats the page's own
+  // handlers; it cannot reach inside a cross-origin iframe, which is why the
+  // HUD also carries a button.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!isBugShortcut(event)) return;
+      event.preventDefault();
+      void openBugReport();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [openBugReport]);
 
   const sendShot = async (shot: Shot) => {
     setSentShots((s) => ({ ...s, [shot.id]: "sending" }));
@@ -199,6 +375,37 @@ export function TestSessionClient({
       );
     }
 
+    // Upload the replay STRAIGHT TO BLOB from here, not through the action: a
+    // 30-second clip is 3-6 MB and a Server Action's request body is capped at
+    // 4.5 MB by the platform. See `api/v1/beta/clip-token`.
+    //
+    // A failed clip upload must not cost the report. The words are the point;
+    // the video is supporting material, and losing what a tester typed because
+    // a blob PUT timed out would be the worst possible trade.
+    let clipBlobPath: string | null = null;
+    let clipUrl: string | null = null;
+    let clipBytes = 0;
+    let clipMs = 0;
+    if (pendingClip) {
+      try {
+        const ext = extensionFor(pendingClip.mimeType);
+        const name = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        const path = `beta-clips/${game.slug}/${name}.${ext}`;
+        const uploaded = await upload(path, pendingClip.blob, {
+          access: "public",
+          handleUploadUrl: "/api/v1/beta/clip-token",
+          contentType: pendingClip.mimeType || undefined,
+        });
+        clipBlobPath = uploaded.pathname;
+        clipUrl = uploaded.url;
+        clipBytes = pendingClip.blob.size;
+        clipMs = pendingClip.durationMs;
+      } catch (error) {
+        console.error("replay upload failed:", error);
+        setToast({ ok: false, text: "Clip didn't upload — sending the report anyway" });
+      }
+    }
+
     const result = await submitReportAction(
       {
         slug: game.slug,
@@ -207,6 +414,12 @@ export function TestSessionClient({
         title,
         body,
         device: typeof navigator !== "undefined" ? navigator.userAgent : "",
+        clipBlobPath,
+        clipUrl,
+        clipBytes,
+        clipMs,
+        errorLog: pendingErrors.length ? JSON.stringify(pendingErrors) : null,
+        errorCount: pendingErrors.length,
       },
       shot,
     );
@@ -217,6 +430,10 @@ export function TestSessionClient({
       setBody("");
       setAttachedId(null);
       setComposerOpen(false);
+      setPendingClip(null);
+      setPendingErrors([]);
+      setClipState("idle");
+      setFreezeFrame(null);
     }
   };
 
@@ -308,13 +525,14 @@ export function TestSessionClient({
 
         <button
           type="button"
-          onClick={() => {
-            setKind("bug");
-            setComposerOpen(true);
-          }}
+          onClick={() => void openBugReport()}
+          title={`Shortcut: ${BUG_SHORTCUT_LABEL}`}
           className="rounded-full bg-red-500 px-3 py-1.5 text-xs font-extrabold text-white transition hover:bg-red-600"
         >
           Report bug
+          <span className="ml-1.5 hidden font-bold opacity-70 sm:inline">
+            {BUG_SHORTCUT_LABEL}
+          </span>
         </button>
         <button
           type="button"
@@ -371,6 +589,7 @@ export function TestSessionClient({
             composer beside — is excluded from every captured image. */}
         <div ref={frameRef} className="relative min-w-0 flex-1 bg-black">
           <iframe
+            ref={iframeRef}
             key={game.slug}
             // Trailing slash is load-bearing for bundled games: it makes their
             // relative asset URLs (./main.js) resolve under the folder.
@@ -380,6 +599,33 @@ export function TestSessionClient({
             allow="autoplay; fullscreen; gamepad; pointer-lock"
             allowFullScreen
           />
+
+          {/* The frozen moment, painted over the running game. It is inside the
+              crop target, so a grab taken while it is up would capture the
+              freeze rather than the game — which is why the grabber is the thing
+              that produced it and no new grabs are needed while reporting. */}
+          {freezeFrame && (
+            <div className="absolute inset-0 z-10 bg-black">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={freezeFrame}
+                alt="The moment you reported"
+                className="h-full w-full object-contain"
+              />
+              <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-2 bg-black/70 px-3 py-2 backdrop-blur">
+                <span className="text-xs font-black uppercase tracking-wide text-white">
+                  ⏸ Frozen at the bug
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setFreezeFrame(null)}
+                  className="rounded-full bg-white/20 px-3 py-1 text-xs font-extrabold text-white transition hover:bg-white/30"
+                >
+                  Back to the game
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {reviewOpen && (
@@ -509,6 +755,34 @@ export function TestSessionClient({
                 ? `${REPORT_BODY_MIN - body.trim().length} more characters`
                 : `${REPORT_BODY_MAX - body.length} left`}
             </p>
+
+            {/* What is going with this report, whether or not the tester did
+                anything to arrange it. Stated plainly rather than silently
+                attached: someone filing a report is entitled to know what is
+                being sent on their behalf. */}
+            <div className="mt-4 rounded-lg border border-border bg-surface-2 p-3">
+              <p className="text-[11px] font-black uppercase tracking-wide text-muted">
+                Attached automatically
+              </p>
+              <ul className="mt-1.5 space-y-1 text-xs font-semibold text-zinc-700">
+                <li>
+                  {clipState === "flushing"
+                    ? "📹 Saving the last few seconds…"
+                    : pendingClip
+                      ? `📹 Replay — last ${Math.round(pendingClip.durationMs / 1000)}s`
+                      : capturing
+                        ? "📹 Replay will be attached when you report"
+                        : "📹 No replay — start auto-screenshot to enable it"}
+                </li>
+                <li>
+                  {pendingErrors.length > 0
+                    ? `⚠️ ${pendingErrors.length} error${pendingErrors.length === 1 ? "" : "s"} from the game`
+                    : errorWatch === "cross-origin"
+                      ? "⚠️ This game runs on another site — its errors can't be read"
+                      : "⚠️ No errors so far"}
+                </li>
+              </ul>
+            </div>
 
             {/* Pin one of the automatic grabs to the report. A bug reading
                 "the score resets when you pause" is a claim; the same bug with

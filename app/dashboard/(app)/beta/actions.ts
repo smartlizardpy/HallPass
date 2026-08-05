@@ -27,6 +27,7 @@
  */
 
 import { revalidatePath } from "next/cache";
+import { del } from "@vercel/blob";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { beta } from "@/app/lib/beta";
@@ -213,6 +214,20 @@ export async function triageReportAction(formData: FormData): Promise<void> {
     });
   } catch {
     back("error", "Triage failed (database error)");
+  }
+
+  // A resolved report's replay has done its job, and it is a recording of a
+  // child's screen — there is no reason to keep it and a good reason not to.
+  // Best-effort and deliberately AFTER the triage write: a failed delete must
+  // never undo a decision, and `del()` is free of charge anyway. The row's
+  // pointer is cleared too, so the clip route stops offering a 404'ing video.
+  if (applied && report.clipBlobPath) {
+    try {
+      await del(report.clipBlobPath);
+      await beta.clearClip(id);
+    } catch (error) {
+      console.error(`beta clip cleanup failed for report ${id}:`, error);
+    }
   }
 
   revalidatePath(BETA_PATH);
