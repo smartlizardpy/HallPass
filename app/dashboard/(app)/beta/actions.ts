@@ -35,7 +35,7 @@ import {
   toBugSeverity,
   toReportStatus,
   toShotStatus,
-  REPORT_STATUSES,
+  DUPLICATE_XP,
 } from "@/app/lib/beta/config";
 import { xpForFix, xpForReport, xpForShot } from "@/app/lib/beta/xp";
 import { isResolvedSlug } from "@/app/lib/games-store";
@@ -166,10 +166,13 @@ export async function triageReportAction(formData: FormData): Promise<void> {
   if (!Number.isInteger(id) || id <= 0) back("error", "Missing report");
 
   const status = toReportStatus(formData.get("status"));
-  if (!status || status === "open") {
-    // "open" is the state a report LEAVES; offering it as a decision would let
-    // an admin un-resolve a report and re-trigger its payout.
-    back("error", `Pick one of: ${REPORT_STATUSES.filter((s) => s !== "open").join(", ")}`);
+  // Only the two outcomes that KEEP the row. "open" is the state a report
+  // leaves, and offering it would let an admin un-resolve a report and
+  // re-trigger its payout. `duplicate` is no longer reachable here at all — it
+  // deletes the report now, so it lives in `duplicateReportAction` with the
+  // other removing outcome rather than in the status-setting path.
+  if (status !== "accepted" && status !== "rejected") {
+    back("error", "Pick one of: accepted, rejected");
   }
 
   let report;
@@ -193,8 +196,9 @@ export async function triageReportAction(formData: FormData): Promise<void> {
   // The reason must describe WHAT WAS PAID, not merely what the report was.
   // Encoding the severity unconditionally produced ledger lines like
   // "+5 bug:minor" for a duplicate, flatly contradicting the rate card on /beta
-  // that promises 30 for a minor bug. `rejected` pays nothing and so never
-  // reaches the ledger, leaving `duplicate` as the only non-accepted reason.
+  // that promises 30 for a minor bug. Only `accepted` reaches the ledger from
+  // here now — `rejected` pays nothing — so the fallback is unreachable and kept
+  // only so a future third status cannot silently write an empty reason.
   const reason =
     status === "accepted"
       ? report.kind === "bug" && severity
@@ -301,14 +305,13 @@ export async function fixReportAction(formData: FormData): Promise<void> {
   let applied = false;
   let clipBlobPath: string | null = null;
   try {
-    ({ applied, clipBlobPath } = await beta.markReportFixed({
+    ({ applied, clipBlobPath } = await beta.payAndRemoveReport({
       id,
-      severity,
       resolvedBy: actor,
-      acceptanceXp: award.acceptance,
-      acceptanceReason,
-      bonusXp: award.bonus,
-      bonusReason: "fixed",
+      awards: [
+        { amount: award.acceptance, reason: acceptanceReason },
+        { amount: award.bonus, reason: "fixed" },
+      ],
     }));
   } catch {
     back("error", "Could not mark that fixed (database error)");
@@ -329,6 +332,75 @@ export async function fixReportAction(formData: FormData): Promise<void> {
   revalidatePath("/beta");
   if (!applied) back("error", "Someone else resolved that first");
   back("ok", `Fixed — ${award.total} XP awarded, report removed`);
+}
+
+/**
+ * Close a report as a DUPLICATE: pay the consolation and remove the report.
+ *
+ * Removal is the whole point. A duplicate is, by definition, a bug already
+ * tracked by the report it duplicates — so the row is the one kind of record
+ * that is guaranteed to be redundant the moment it is filed. Leaving it in the
+ * queue behind a status meant re-reading the same bug every time an admin
+ * scrolled past it.
+ *
+ * ── THE REPORTER IS NOT PAID FOR THE FIND ───────────────────────────────────
+ * Only {@link DUPLICATE_XP}, never the severity award, however real the bug
+ * turns out to be. The credit for finding it belongs to whoever filed it first,
+ * and paying both would make the SECOND report the profitable one to file — you
+ * would only have to watch the queue. What the consolation buys is the tester
+ * not learning that reporting is a lottery; `config.ts` argues that at length,
+ * and it is deliberately small enough that farming duplicates is pointless.
+ *
+ * ── OPEN REPORTS ONLY ───────────────────────────────────────────────────────
+ * Unlike Fixed, this does not offer itself on an already-judged report. Calling
+ * something a duplicate AFTER accepting it would have to decide what happens to
+ * the severity award already paid, and there is no answer that is not either a
+ * clawback or a double payment.
+ */
+export async function duplicateReportAction(formData: FormData): Promise<void> {
+  const { email: actor } = await requireRole("admin");
+
+  const id = Number(readString(formData, "id"));
+  if (!Number.isInteger(id) || id <= 0) back("error", "Missing report");
+
+  let report;
+  try {
+    report = await beta.reportById(id);
+  } catch {
+    back("error", "Could not load that report");
+  }
+  if (!report) back("error", "That report no longer exists");
+  if (report.status !== "open") {
+    back("error", "That report was already triaged");
+  }
+
+  let applied = false;
+  let clipBlobPath: string | null = null;
+  try {
+    ({ applied, clipBlobPath } = await beta.payAndRemoveReport({
+      id,
+      resolvedBy: actor,
+      // ONE award, and the reason says what was PAID rather than what the report
+      // was. Encoding the severity here would put "+5 bug:blocker" in the ledger,
+      // flatly contradicting the rate card on /beta.
+      awards: [{ amount: DUPLICATE_XP, reason: "duplicate" }],
+    }));
+  } catch {
+    back("error", "Could not close that as duplicate (database error)");
+  }
+
+  if (applied && clipBlobPath) {
+    try {
+      await del(clipBlobPath);
+    } catch (error) {
+      console.error(`beta clip cleanup failed for duplicate report ${id}:`, error);
+    }
+  }
+
+  revalidatePath(BETA_PATH);
+  revalidatePath("/beta");
+  if (!applied) back("error", "Someone else triaged that first");
+  back("ok", `Duplicate — ${DUPLICATE_XP} XP awarded, report removed`);
 }
 
 /**
