@@ -374,6 +374,41 @@ export function createBetaStore(sql: Sql) {
       return rows.map(mapAssignment);
     },
 
+    /**
+     * Everyone who has FINISHED a playtest, for the public credit on a game
+     * page. Keyed by slug by the caller.
+     *
+     * Only `submitted` and `closed` count. Crediting someone the moment a game
+     * is assigned would publish "this person is testing an unreleased game"
+     * before they have done anything, and would keep crediting them if they
+     * never got round to it.
+     *
+     * PUBLIC DISPLAY FIELDS ONLY — the same rule the roster follows, and it
+     * matters more here: this feeds `/game/[slug]`, which IS indexed. A query
+     * that cannot select `players.email` cannot leak one onto the open web.
+     *
+     * Reads the whole table in one go rather than per slug. It is bounded by the
+     * number of assignments ever completed and the caller caches it under a
+     * single tag, exactly as `readAllMediaCached` does — a per-slug cache would
+     * key on a runtime argument and grow without bound.
+     */
+    async completedTesters(): Promise<
+      { slug: string; handle: string | null; username: string | null }[]
+    > {
+      const rows = await sql`
+        SELECT a.slug, p.handle, p.username
+        FROM beta_assignments a
+        JOIN players p ON p.id = a.player_id
+        WHERE a.status IN ('submitted', 'closed')
+        ORDER BY a.slug ASC, a.completed_at ASC NULLS LAST
+      `;
+      return rows.map((row) => ({
+        slug: String(row.slug),
+        handle: toStrOrNull(row.handle),
+        username: toStrOrNull(row.username),
+      }));
+    },
+
     /** Every assignment, newest first — the admin overview. */
     async allAssignments(): Promise<BetaAssignment[]> {
       const rows = await sql`

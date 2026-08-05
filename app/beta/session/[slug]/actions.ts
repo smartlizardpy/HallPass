@@ -19,9 +19,14 @@
  * as the most common footgun in this codebase.
  */
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { put } from "@vercel/blob";
-import { beta, requireBetaTester } from "@/app/lib/beta";
+import {
+  beta,
+  requireBetaTester,
+  BETA_CREDITS_CACHE_TAG,
+} from "@/app/lib/beta";
+import { reviews } from "@/app/lib/reviews";
 import {
   REPORT_BODY_MAX,
   REPORT_BODY_MIN,
@@ -32,9 +37,21 @@ import {
   toReportKind,
 } from "@/app/lib/beta/config";
 import { isResolvedSlug } from "@/app/lib/games-store";
-import { validateMediaUpload } from "@/app/lib/image-meta";
+import {
+  validateMediaUpload,
+  type MediaRejection,
+} from "@/app/lib/image-meta";
 
 export type ActionResult = { ok: true; message: string } | { ok: false; error: string };
+
+/** Human copy for each rejection, so no reason code reaches a tester. */
+const SHOT_REJECTION_COPY: Record<MediaRejection, string> = {
+  empty: "That image was empty.",
+  "too-large": "That image is too big — 4 MB is the limit.",
+  "not-an-image": "That file isn't a PNG, JPEG or WebP.",
+  "too-narrow": "Something went wrong capturing that one — try another.",
+  "bad-aspect": "Something went wrong capturing that one — try another.",
+};
 
 /** Random, URL-safe, and matching the `^[a-z0-9][a-z0-9-]*$` CHECK on ids. */
 function newId(): string {
@@ -146,7 +163,12 @@ export async function submitShotAction(formData: FormData): Promise<ActionResult
   const bytes = new Uint8Array(await file.arrayBuffer());
   const check = validateMediaUpload(bytes);
   if (!check.ok) {
-    return { ok: false, error: `Image rejected (${check.reason})` };
+    // Never surface the raw reason code. Auto-captured stills are pinned to
+    // 16:9 at a fixed width precisely so `bad-aspect` and `too-narrow` cannot
+    // happen — if one of those appears here it is a bug in the grabber, not
+    // something the tester did or can fix, and the copy should not imply
+    // otherwise.
+    return { ok: false, error: SHOT_REJECTION_COPY[check.reason] };
   }
 
   try {
@@ -192,7 +214,23 @@ export async function submitShotAction(formData: FormData): Promise<ActionResult
   return { ok: true, message: "Sent for review" };
 }
 
-/** Mark an assignment finished from the session screen. */
+/**
+ * Mark an assignment finished.
+ *
+ * A REVIEW IS REQUIRED, not encouraged. The whole point of assigning a game is
+ * to get a verdict on it, and a playtest that produced no bugs currently
+ * produces no output at all — the tester plays for twenty minutes, finds nothing
+ * wrong, and the programme learns nothing. Requiring the review means "it works
+ * fine" is a recorded result rather than silence.
+ *
+ * It is also what the credit on the game page rests on: `completedTesters()`
+ * publishes the names of everyone who finished, so finishing has to mean
+ * something more than pressing a button.
+ *
+ * The check is against the reviews store rather than a flag of our own, so a
+ * review written earlier from the game page counts — a tester who already
+ * reviewed a game they are later assigned should not have to write a second one.
+ */
 export async function finishAssignmentAction(slug: string): Promise<ActionResult> {
   const { playerId } = await requireBetaTester();
 
@@ -201,6 +239,15 @@ export async function finishAssignmentAction(slug: string): Promise<ActionResult
       (a) => a.slug === slug,
     );
     if (!assignment) return { ok: false, error: "No assignment for this game" };
+
+    const review = await reviews.ownReview(slug, playerId);
+    if (!review) {
+      return {
+        ok: false,
+        error: "Write your review of this game first — that's the point of the playtest",
+      };
+    }
+
     await beta.setAssignmentStatus(assignment.id, "submitted");
   } catch (error) {
     console.error("beta finishAssignment failed:", error);
@@ -209,5 +256,26 @@ export async function finishAssignmentAction(slug: string): Promise<ActionResult
 
   revalidatePath("/beta");
   revalidatePath("/dashboard/beta");
-  return { ok: true, message: "Marked as done" };
+  // The game page credits everyone who has finished; this is the moment that
+  // list changes.
+  revalidateTag(BETA_CREDITS_CACHE_TAG, { expire: 0 });
+  revalidatePath(`/game/${slug}`);
+  return { ok: true, message: "Marked as done — thanks!" };
+}
+
+/**
+ * Whether the tester has already reviewed this game.
+ *
+ * Read by the session screen so the "Done" button can explain itself BEFORE it
+ * is pressed, rather than refusing after. Fail-soft to `false`: the worst case
+ * is showing the review prompt to someone who has already written one, and
+ * `finishAssignmentAction` re-checks authoritatively anyway.
+ */
+export async function hasReviewedAction(slug: string): Promise<boolean> {
+  const { playerId } = await requireBetaTester();
+  try {
+    return (await reviews.ownReview(slug, playerId)) != null;
+  } catch {
+    return false;
+  }
 }

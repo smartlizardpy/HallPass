@@ -68,10 +68,13 @@ export function TestSessionClient({
   game,
   brief,
   hasAssignment,
+  initiallyReviewed,
 }: {
   game: Game;
   brief: string;
   hasAssignment: boolean;
+  /** Whether this tester has already reviewed the game, resolved on the server. */
+  initiallyReviewed: boolean;
 }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const grabberRef = useRef<FrameGrabber | null>(null);
@@ -109,6 +112,11 @@ export function TestSessionClient({
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewed, setReviewed] = useState(initiallyReviewed);
+  const [recommended, setRecommended] = useState<boolean | null>(null);
+  const [reviewBody, setReviewBody] = useState("");
 
   /** Tear down capture. Safe to call twice. */
   const stopCapture = useCallback(() => {
@@ -195,6 +203,46 @@ export function TestSessionClient({
   const finish = async () => {
     const result = await finishAssignmentAction(game.slug);
     setToast({ ok: result.ok, text: result.ok ? result.message : result.error });
+    // The action refuses without a review; open the composer rather than leaving
+    // the tester to work out what to do about the message.
+    if (!result.ok) setReviewOpen(true);
+  };
+
+  /**
+   * Post the required review.
+   *
+   * Uses the SAME `/api/v1/games/<slug>/reviews` endpoint the public
+   * `ReviewComposer` posts to, so a tester's review is an ordinary review — it
+   * appears on the game page, it is moderated by the same rules, and it counts
+   * towards the recommend ratio. A separate "tester review" would be a second
+   * kind of review to display, moderate and reason about, for no gain.
+   */
+  const submitReview = async () => {
+    if (recommended === null) return;
+    setBusy(true);
+    try {
+      const res = await fetch(
+        `/api/v1/games/${encodeURIComponent(game.slug)}/reviews`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recommended, body: reviewBody }),
+        },
+      );
+      const data = (await res.json()) as { ok?: boolean; reason?: string };
+      if (data.ok) {
+        setReviewed(true);
+        setReviewOpen(false);
+        setToast({ ok: true, text: "Review posted — you can finish now" });
+      } else {
+        setToast({ ok: false, text: data.reason ?? "Could not post that." });
+      }
+    } catch {
+      setToast({ ok: false, text: "You appear to be offline." });
+    } finally {
+      setBusy(false);
+    }
   };
 
   // Auto-clear the toast so it never sits over the game.
@@ -259,13 +307,30 @@ export function TestSessionClient({
           Idea
         </button>
         {hasAssignment && (
-          <button
-            type="button"
-            onClick={finish}
-            className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-extrabold text-white transition hover:bg-emerald-700"
-          >
-            Done
-          </button>
+          <>
+            {/* The review is REQUIRED to finish, so it gets its own control
+                rather than hiding behind a rejected "Done". */}
+            <button
+              type="button"
+              onClick={() => setReviewOpen(true)}
+              className={`rounded-full px-3 py-1.5 text-xs font-extrabold transition ${
+                reviewed
+                  ? "bg-white/10 text-white hover:bg-white/20"
+                  : "bg-accent-yellow text-zinc-900 hover:brightness-95"
+              }`}
+            >
+              {reviewed ? "✓ Reviewed" : "★ Review (required)"}
+            </button>
+            <button
+              type="button"
+              onClick={finish}
+              disabled={!reviewed}
+              title={reviewed ? undefined : "Write your review first"}
+              className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-extrabold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Done
+            </button>
+          </>
         )}
       </div>
 
@@ -296,6 +361,71 @@ export function TestSessionClient({
             allowFullScreen
           />
         </div>
+
+        {reviewOpen && (
+          <div className="absolute inset-y-0 right-0 z-20 w-full max-w-sm overflow-y-auto border-l border-border bg-surface p-4 shadow-2xl sm:relative sm:shadow-none">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900">
+                Your review
+              </h2>
+              <button
+                type="button"
+                onClick={() => setReviewOpen(false)}
+                aria-label="Close"
+                className="rounded-full px-2 py-1 text-sm font-black text-muted hover:bg-surface-2"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mt-2 text-xs font-semibold text-muted">
+              This one is required — it&rsquo;s the verdict the playtest is for,
+              and it appears on the game&rsquo;s page like any other review.
+            </p>
+
+            <div className="mt-4 flex gap-2">
+              {/* Matches the public composer's thumbs choice, so a tester sees
+                  the same question everyone else answers. */}
+              {[
+                { value: true, label: "👍 Recommend" },
+                { value: false, label: "👎 Not really" },
+              ].map((option) => (
+                <button
+                  key={String(option.value)}
+                  type="button"
+                  onClick={() => setRecommended(option.value)}
+                  className={`flex-1 rounded-full border px-3 py-2 text-xs font-extrabold transition ${
+                    recommended === option.value
+                      ? "border-brand bg-brand-50 text-brand"
+                      : "border-border bg-white text-zinc-700 hover:bg-surface-2"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <label className="mt-3 block text-[11px] font-black uppercase tracking-wide text-muted">
+              What did you think?
+              <textarea
+                value={reviewBody}
+                onChange={(e) => setReviewBody(e.target.value)}
+                rows={5}
+                maxLength={500}
+                placeholder="Is it fun? Does it control well? Would you play it again?"
+                className="mt-1 w-full resize-y rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30"
+              />
+            </label>
+
+            <button
+              type="button"
+              onClick={submitReview}
+              disabled={busy || recommended === null || reviewBody.trim().length < 2}
+              className="mt-4 w-full rounded-full bg-brand px-5 py-2.5 text-sm font-extrabold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {busy ? "Posting…" : "Post review"}
+            </button>
+          </div>
+        )}
 
         {composerOpen && (
           <div className="absolute inset-y-0 right-0 z-10 w-full max-w-sm overflow-y-auto border-l border-border bg-surface p-4 shadow-2xl sm:relative sm:shadow-none">

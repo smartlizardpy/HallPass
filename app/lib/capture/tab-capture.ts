@@ -45,6 +45,21 @@ import {
   type Rect,
 } from "./crop";
 
+/**
+ * The aspect every captured still is cropped to, and the width every one is
+ * drawn at.
+ *
+ * 16:9 (1.78) sits in the middle of `validateMediaUpload`'s accepted 1.2–2.2
+ * band, so a rounding wobble cannot push a shot outside it, and it is the shape
+ * gameplay is actually framed in. 1280 clears the 640px floor with room to
+ * spare while keeping a WebP well under the 4 MB cap.
+ *
+ * These are the reason a capture is valid regardless of window size or whether
+ * a side panel is open — see the crop step in {@link FrameGrabber}.
+ */
+export const DEFAULT_CAPTURE_ASPECT = 16 / 9;
+export const DEFAULT_CAPTURE_WIDTH = 1280;
+
 /** Why a capture attempt did not produce a usable stream. */
 export type CaptureFailure =
   | "unsupported"
@@ -206,16 +221,29 @@ export class FrameGrabber {
         { width: frameW, height: frameH },
       );
 
-      // 2. Centre-crop that to the target aspect, then scale to the max edge.
-      const aspect = this.options.aspect ?? source.width / source.height;
+      // 2. Centre-crop that to a FIXED aspect and draw at a FIXED size.
+      //
+      // Both are load-bearing, and neither was true at first. `validateMediaUpload`
+      // — the same gate the dashboard gallery uses, and the one an accepted shot
+      // must pass again on its way into `game_media` — requires an aspect between
+      // 1.2 and 2.2 and a width of at least 640.
+      //
+      // Cropping to the iframe's own aspect failed both. The iframe is a flex
+      // child, so opening the report or review panel narrows it to roughly 1.12
+      // and every grab from then on was rejected as `bad-aspect`; a small window
+      // produced output under 640px wide and was rejected as `too-narrow`.
+      //
+      // Pinning the crop to 16:9 and the canvas to a constant size makes every
+      // grab valid by construction rather than by hoping the window cooperates.
+      // Upscaling a small source is a real cost, but a slightly soft screenshot
+      // is worth incomparably more than a rejected one.
+      const aspect = this.options.aspect ?? DEFAULT_CAPTURE_ASPECT;
       const inner = centreCrop(source, aspect);
       const cropX = source.x + inner.x;
       const cropY = source.y + inner.y;
 
-      const maxEdge = this.options.maxEdge ?? 1280;
-      const scale = Math.min(1, maxEdge / Math.max(inner.width, inner.height));
-      const outW = Math.max(1, Math.round(inner.width * scale));
-      const outH = Math.max(1, Math.round(inner.height * scale));
+      const outW = this.options.maxEdge ?? DEFAULT_CAPTURE_WIDTH;
+      const outH = Math.max(1, Math.round(outW / aspect));
 
       this.canvas.width = outW;
       this.canvas.height = outH;

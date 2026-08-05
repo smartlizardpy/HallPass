@@ -22,9 +22,11 @@
  */
 
 import "server-only";
+import { unstable_cache } from "next/cache";
 import { redirect } from "next/navigation";
 import { isMissingColumnError, isUnconfiguredDbError, sql } from "@/app/lib/db";
 import { auth } from "@/app/lib/auth";
+import { publicDisplayName } from "@/app/lib/players";
 import { createBetaStore } from "./store";
 import type {
   BetaAssignment,
@@ -220,6 +222,55 @@ export async function getShotQueue(): Promise<BetaShot[]> {
   } catch (error) {
     return degrade("shotQueue", error, []);
   }
+}
+
+/**
+ * Cache tag for {@link readTestersCached}. Invalidated when an assignment
+ * reaches a finished state, so a fresh credit appears without waiting out the
+ * TTL.
+ */
+export const BETA_CREDITS_CACHE_TAG = "beta-game-credits";
+
+/**
+ * Everyone who finished a playtest, grouped by slug.
+ *
+ * THROWS on failure by design. The try/catch lives at the CALL SITE, not inside
+ * the cached primitive: `unstable_cache` only stores a FULFILLED result, so a
+ * transient Neon blip must reject here — swallowing it into an empty map would
+ * cache "nobody tested anything" for the full hour and quietly strip the credit
+ * from every game page. Same argument as `game-serving-blobs.ts`.
+ */
+const readTestersCached = unstable_cache(
+  async (): Promise<{ slug: string; handle: string | null; username: string | null }[]> =>
+    beta.completedTesters(),
+  ["beta-game-credits"],
+  { tags: [BETA_CREDITS_CACHE_TAG], revalidate: 3600 },
+);
+
+/**
+ * Display names of the testers who finished a playtest of `slug`.
+ *
+ * Fail-soft to `[]` — a missing credit line is a far smaller harm than a 500 on
+ * the game page, which is the site's most important route.
+ *
+ * SAFE ON A PRERENDERED PAGE. This reads no cookies, no headers and no session,
+ * so calling it from `/game/[slug]` does not make that route dynamic — which
+ * would drop it from the service-worker precache and silently break offline
+ * play. That constraint is why the credit is a plain cached read and not a
+ * client island.
+ */
+export async function getGameTesters(slug: string): Promise<string[]> {
+  let all: { slug: string; handle: string | null; username: string | null }[];
+  try {
+    all = await readTestersCached();
+  } catch (error) {
+    return degrade("completedTesters", error, []);
+  }
+  const names = all
+    .filter((row) => row.slug === slug)
+    .map((row) => publicDisplayName(row));
+  // A tester assigned the same game twice would otherwise be credited twice.
+  return [...new Set(names)];
 }
 
 /** Every assignment, for the admin overview. Fail-soft to `[]`. */

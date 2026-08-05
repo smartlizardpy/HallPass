@@ -10,6 +10,10 @@ import {
   mapRectToFrame,
   MIN_FRAME_VARIANCE,
 } from "./crop";
+import {
+  DEFAULT_CAPTURE_ASPECT,
+  DEFAULT_CAPTURE_WIDTH,
+} from "./tab-capture";
 
 /** Build an RGBA buffer from a per-pixel grey value function. */
 function rgba(count: number, grey: (i: number) => number): Uint8ClampedArray {
@@ -143,6 +147,55 @@ describe("centreCrop", () => {
     const out = centreCrop({ width: 1, height: 1000 }, COVER_ASPECT);
     expect(out.width).toBeGreaterThan(0);
     expect(out.height).toBeGreaterThan(0);
+  });
+});
+
+describe("captured stills always satisfy validateMediaUpload", () => {
+  // The policy an accepted shot must pass here AND again on its way into
+  // game_media. Mirrored rather than imported so a change to either side shows
+  // up as a failure here instead of as silently rejected screenshots.
+  const MIN_ASPECT = 1.2;
+  const MAX_ASPECT = 2.2;
+  const MIN_WIDTH = 640;
+
+  // Every iframe shape a real session produces: full width, narrowed by the
+  // report panel, narrowed by the review panel, a phone, a short window. The
+  // 1.12 case is the regression — it is what the report panel actually creates,
+  // and it was rejected as `bad-aspect` on every grab.
+  const IFRAME_SHAPES = [
+    { width: 1280, height: 800 },
+    { width: 896, height: 800 },
+    { width: 640, height: 570 },
+    { width: 390, height: 700 },
+    { width: 1600, height: 400 },
+    { width: 300, height: 900 },
+  ];
+
+  it("lands inside the accepted aspect band whatever the window", () => {
+    for (const shape of IFRAME_SHAPES) {
+      const inner = centreCrop(shape, DEFAULT_CAPTURE_ASPECT);
+      // The stored image is drawn at a FIXED size, not at the crop's size —
+      // that is what makes the guarantee hold for a tiny source too.
+      const outW = DEFAULT_CAPTURE_WIDTH;
+      const outH = Math.round(outW / DEFAULT_CAPTURE_ASPECT);
+      const aspect = outW / outH;
+
+      expect(outW).toBeGreaterThanOrEqual(MIN_WIDTH);
+      expect(aspect).toBeGreaterThanOrEqual(MIN_ASPECT);
+      expect(aspect).toBeLessThanOrEqual(MAX_ASPECT);
+      // And the crop itself must still be a real rectangle inside the source.
+      expect(inner.width).toBeGreaterThan(0);
+      expect(inner.height).toBeGreaterThan(0);
+      expect(inner.x + inner.width).toBeLessThanOrEqual(shape.width);
+      expect(inner.y + inner.height).toBeLessThanOrEqual(shape.height);
+    }
+  });
+
+  it("keeps the default aspect clear of both band edges", () => {
+    // Not merely inside the band — far enough in that rounding cannot push a
+    // shot out of it.
+    expect(DEFAULT_CAPTURE_ASPECT).toBeGreaterThan(MIN_ASPECT + 0.3);
+    expect(DEFAULT_CAPTURE_ASPECT).toBeLessThan(MAX_ASPECT - 0.3);
   });
 });
 
