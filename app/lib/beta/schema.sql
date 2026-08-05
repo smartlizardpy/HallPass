@@ -156,12 +156,19 @@ CREATE TABLE IF NOT EXISTS beta_xp_awards (
 CREATE INDEX IF NOT EXISTS beta_xp_awards_player_idx
   ON beta_xp_awards (player_id);
 
--- At most one award per report, and one per shot-and-reason. Triage is a single
--- statement combining a status UPDATE with this INSERT, but a double-submitted
--- admin form would otherwise pay twice for the same decision; the unique index
--- makes the second attempt a no-op rather than a duplicate credit.
-CREATE UNIQUE INDEX IF NOT EXISTS beta_xp_awards_report_uniq
-  ON beta_xp_awards (report_id) WHERE report_id IS NOT NULL;
+-- At most one award per report-and-reason, and one per shot-and-reason. Triage
+-- is a single statement combining a status UPDATE with this INSERT, but a
+-- double-submitted admin form would otherwise pay twice for the same decision;
+-- the unique index makes the second attempt a no-op rather than a duplicate
+-- credit. Both paths derive `reason` deterministically from the row, so a repeat
+-- of the SAME decision collides while a genuinely different one does not.
+--
+-- KEYED ON `reason`, NOT ON THE ROW ALONE, because both a report and a shot earn
+-- in two stages: a report is accepted and then FIXED, and a shot is accepted and
+-- then promoted to cover art. A bare unique key on the id would silently swallow
+-- the second, later award as a duplicate of the first.
+CREATE UNIQUE INDEX IF NOT EXISTS beta_xp_awards_report_reason_uniq
+  ON beta_xp_awards (report_id, reason) WHERE report_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS beta_xp_awards_shot_reason_uniq
   ON beta_xp_awards (shot_id, reason) WHERE shot_id IS NOT NULL;
 
