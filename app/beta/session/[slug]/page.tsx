@@ -59,6 +59,7 @@ export default async function BetaSessionPage({
       brief={assignment?.brief ?? ""}
       hasAssignment={Boolean(assignment)}
       initiallyReviewed={ownReview != null}
+      playerId={playerId}
     />
   );
 }

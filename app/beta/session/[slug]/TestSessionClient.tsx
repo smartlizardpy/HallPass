@@ -63,6 +63,7 @@ import {
   type ReplayClip,
 } from "@/app/lib/capture/replay-buffer";
 import { upload } from "@vercel/blob/client";
+import { SessionTutorial, tutorialSeen } from "./SessionTutorial";
 import {
   finishAssignmentAction,
   submitReportAction,
@@ -108,10 +109,13 @@ export function TestSessionClient({
   brief,
   hasAssignment,
   initiallyReviewed,
+  playerId,
 }: {
   game: Game;
   brief: string;
   hasAssignment: boolean;
+  /** Keys the tutorial's "seen" flag, so a shared computer stays per-person. */
+  playerId: string;
   /** Whether this tester has already reviewed the game, resolved on the server. */
   initiallyReviewed: boolean;
 }) {
@@ -164,6 +168,19 @@ export function TestSessionClient({
 
   /** Which captured still is pinned to the report being written, if any. */
   const [attachedId, setAttachedId] = useState<string | null>(null);
+
+  /**
+   * The first-run walkthrough.
+   *
+   * Starts closed and is opened from an effect rather than initialised from
+   * `localStorage`, which does not exist on the server — reading it during
+   * render is the same hydration mismatch that cost the capture button a
+   * remount of the game.
+   */
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  useEffect(() => {
+    if (!tutorialSeen(playerId)) setTutorialOpen(true);
+  }, [playerId]);
 
   /** Whether the game's own errors can be seen — false for cross-origin games. */
   const [errorWatch, setErrorWatch] = useState<FrameAttachResult | null>(null);
@@ -501,6 +518,16 @@ export function TestSessionClient({
         >
           ← Queue
         </Link>
+
+        <button
+          type="button"
+          onClick={() => setTutorialOpen(true)}
+          aria-label="How this screen works"
+          title="How this screen works"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/10 text-xs font-black text-white transition hover:bg-white/20"
+        >
+          ?
+        </button>
 
         <span className="min-w-0 flex-1 truncate text-sm font-black text-white">
           {game.title}
@@ -875,6 +902,12 @@ export function TestSessionClient({
           </ul>
         </div>
       )}
+
+      <SessionTutorial
+        playerId={playerId}
+        open={tutorialOpen}
+        onClose={() => setTutorialOpen(false)}
+      />
 
       {toast && (
         <div
