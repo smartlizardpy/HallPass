@@ -30,8 +30,26 @@
 --
 -- SAFE ON EXISTING DATA. Every current row is unique on `report_id` alone and is
 -- therefore unique on (report_id, reason) too, so the new index cannot fail to
--- build. Backward compatible in the other direction as well: code that predates
--- this deploy writes one award per report and never notices the wider key.
+-- build. No row is read, written or moved.
+--
+-- ── IT IS NOT SAFE ON EXISTING *CODE*, AND MUST SHIP WITH ITS DEPLOY ────────
+-- This is the one migration in this directory that is NOT backward compatible,
+-- so do not apply it early "to get the schema ahead" the way the beta
+-- migrations before it were. `ON CONFLICT (…)` requires an index matching the
+-- inference clause EXACTLY, and both sides name theirs:
+--   * the code before this deploy says ON CONFLICT (report_id) — which stops
+--     matching anything the moment the old index is dropped;
+--   * the code after it says ON CONFLICT (report_id, reason) — which matches
+--     nothing until the new one exists.
+-- Either mismatch is a hard error, not a silent fallback, so triage returns
+-- "database error" for whichever window is left open. Nothing is corrupted and
+-- nothing is lost — the guard fails closed and no XP is paid — but an admin
+-- pressing Accept in that window gets a banner instead of a decision.
+--
+-- Keeping BOTH indexes to close the window is not a fix: the old one would go
+-- on enforcing one-award-per-report, so the fix bonus would be swallowed by
+-- ON CONFLICT DO NOTHING while the report was still deleted. A silently
+-- underpaid tester is worse than a visibly broken button.
 --
 -- Fully idempotent — every statement guarded, whole file in one transaction.
 
