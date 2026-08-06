@@ -28,6 +28,21 @@ import type { Game } from "../lib/games";
  * placeholder background) with the surface that owns them, and avoids the class
  * collisions that come from merging caller sizing into the <img> itself.
  */
+/**
+ * The cover's URL, or `null` when the game only has the gradient fallback.
+ *
+ * The same first two links of the chain below, exposed for surfaces that need
+ * the URL rather than a rendered element — the store gallery shows the cover as
+ * its first slide, which is a plain `src`, not an absolutely-positioned box.
+ * Kept here so there is still exactly one definition of where cover art lives.
+ */
+export function coverImageSrc(
+  game: Pick<Game, "slug" | "coverUrl" | "externalUrl">,
+): string | null {
+  if (game.externalUrl && !game.coverUrl) return null;
+  return game.coverUrl ?? `/games/${game.slug}/cover.png`;
+}
+
 export function CoverImage({
   game,
   className = "",

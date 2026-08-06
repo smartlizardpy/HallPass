@@ -8,7 +8,7 @@ import { type GameMedia, mediaPublicPath } from "../lib/game-media-blob";
 import { useFavorites } from "../lib/personalization";
 import { useOpenGame } from "./ArcadeShell";
 import { PlatformConfirmSheet, usePlayGuard } from "./PlatformGate";
-import { CoverImage } from "./CoverImage";
+import { CoverImage, coverImageSrc } from "./CoverImage";
 import { GameCard } from "./GameCard";
 import { GameAchievements } from "./GameAchievements";
 import { GameReviews } from "./reviews/GameReviews";
@@ -103,6 +103,12 @@ export function GameStore({
   const categoryHref = `/category/${encodeURIComponent(game.category.toLowerCase())}`;
   const hasShots = media.length > 0;
   const firstShot = media[0];
+  // The cover is a picture of the game like any other, so it leads the gallery
+  // instead of sitting in the rail. On a phone the rail stacks UNDER the media
+  // column, which turned one image region into two stacked ones with no
+  // explanation of why the second was there.
+  const coverSrc = coverImageSrc(game);
+  const hasGallery = hasShots || coverSrc !== null;
 
   const handleToggleFavorite = (slug: string) => {
     const target = slug === game.slug ? game : related.find((g) => g.slug === slug);
@@ -228,8 +234,8 @@ export function GameStore({
                 )
               }
             />
-          ) : hasShots ? (
-            <ScreenshotGallery media={media} title={game.title} />
+          ) : hasGallery ? (
+            <ScreenshotGallery media={media} title={game.title} cover={coverSrc} />
           ) : (
             <div className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl bg-zinc-900">
               <CoverImage
@@ -244,14 +250,6 @@ export function GameStore({
 
         {/* RAIL */}
         <aside className="flex min-w-0 flex-col gap-4">
-          {/* Capsule art, only when the gallery already occupies the left side —
-              otherwise this would be the same image twice. */}
-          {hasShots && (
-            <div className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl bg-zinc-900">
-              <CoverImage game={game} initialClass="text-4xl" />
-            </div>
-          )}
-
           <p className="text-[15px] font-bold leading-snug text-zinc-700">
             {game.tagline}
           </p>

@@ -21,20 +21,47 @@ import { type GameMedia, mediaPublicPath } from "../lib/game-media-blob";
  * Every image carries explicit `width`/`height` from `game_media` so the browser
  * reserves the right box before the bytes arrive — no layout shift.
  */
+export type GallerySlide = {
+  key: string;
+  src: string;
+  alt: string;
+  /** Absent for the cover, whose intrinsic size is not recorded anywhere. */
+  width?: number;
+  height?: number;
+};
+
 export function ScreenshotGallery({
   media,
   title,
+  cover = null,
 }: {
   media: GameMedia[];
   title: string;
+  /** Cover art URL, shown FIRST. `null` when the game has none. */
+  cover?: string | null;
 }) {
   const [index, setIndex] = useState(0);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const pointerStart = useRef<number | null>(null);
   const swipedRef = useRef(false);
 
-  const count = media.length;
-  const current = media[index] ?? media[0];
+  // Cover first, then the screenshots, as ONE list every render site reads from.
+  // Building it here rather than in the caller keeps the "cover leads" rule in
+  // the component that owns the ordering, and means the arrows, the counter, the
+  // thumb strip and the lightbox cannot disagree about what slide 1 is.
+  const slides: GallerySlide[] = [
+    ...(cover ? [{ key: "cover", src: cover, alt: `${title} cover art` }] : []),
+    ...media.map((item, i) => ({
+      key: item.id,
+      src: mediaPublicPath(item),
+      alt: item.alt || `${title} screenshot ${i + 1}`,
+      width: item.width,
+      height: item.height,
+    })),
+  ];
+
+  const count = slides.length;
+  const current = slides[index] ?? slides[0];
 
   const step = (delta: number) => {
     setIndex((i) => (i + delta + count) % count);
@@ -81,15 +108,15 @@ export function ScreenshotGallery({
     >
       {/* Main frame */}
       <div className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl bg-zinc-900">
-        {media.map((item, i) => (
+        {slides.map((item, i) => (
           // All frames stay mounted and crossfade via opacity: swapping `src`
           // would flash the empty frame on every step, and it also means the
           // SSR'd HTML contains every screenshot for crawlers and no-JS readers.
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            key={item.id}
-            src={mediaPublicPath(item)}
-            alt={item.alt || `${title} screenshot ${i + 1}`}
+            key={item.key}
+            src={item.src}
+            alt={item.alt}
             width={item.width}
             height={item.height}
             loading={i === 0 ? "eager" : "lazy"}
@@ -117,7 +144,7 @@ export function ScreenshotGallery({
             horizontally does not change the slide. */}
         <button
           type="button"
-          aria-label={`View ${title} screenshot ${index + 1} full size`}
+          aria-label={`View ${current?.alt ?? title} full size`}
           className="absolute inset-0 cursor-zoom-in focus:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-brand"
           onPointerDown={(e) => {
             pointerStart.current = e.clientX;
@@ -157,12 +184,12 @@ export function ScreenshotGallery({
       {/* Thumb strip — native scroll-snap, no JS. */}
       {count > 1 && (
         <ul className="mt-2 flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1">
-          {media.map((item, i) => (
-            <li key={item.id} className="snap-start">
+          {slides.map((item, i) => (
+            <li key={item.key} className="snap-start">
               <button
                 type="button"
                 onClick={() => setIndex(i)}
-                aria-label={`Show screenshot ${i + 1}`}
+                aria-label={`Show image ${i + 1}`}
                 aria-current={i === index}
                 className={`relative block aspect-[16/10] w-24 shrink-0 overflow-hidden rounded-lg bg-zinc-900 transition ${
                   i === index
@@ -172,7 +199,7 @@ export function ScreenshotGallery({
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={mediaPublicPath(item)}
+                  src={item.src}
                   alt=""
                   width={item.width}
                   height={item.height}
@@ -200,8 +227,8 @@ export function ScreenshotGallery({
           <div className="relative" onClick={(e) => e.stopPropagation()}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={mediaPublicPath(current)}
-              alt={current.alt || `${title} screenshot ${index + 1}`}
+              src={current.src}
+              alt={current.alt}
               width={current.width}
               height={current.height}
               className="max-h-[90dvh] w-auto rounded-2xl"
