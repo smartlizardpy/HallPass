@@ -99,52 +99,85 @@ export function centreCrop(
 }
 
 /**
- * Mean and variance of an RGBA buffer's luminance, both normalised to 0–1.
+ * Minimum edge density for a frame to count as having something in it.
  *
- * `variance` is the interesting one: a loading screen, a fade-to-black and a
- * flat colour-filled menu all have near-zero variance, and those are exactly the
- * frames an interval grabber keeps catching. Rejecting on variance is far more
- * robust than rejecting on brightness, which would throw away a legitimately
- * dark game and keep a plain white screen.
+ * ── WHY VARIANCE WAS THE WRONG MEASUREMENT ──────────────────────────────────
+ * Variance of raw luma measures how dark a frame is at least as much as how
+ * empty it is: squash every value toward zero and variance falls with the SQUARE
+ * of the scale, whatever the picture contains. So a dark game lost frames for
+ * being dark, and the darker the game the more it lost. Measured against the
+ * captures the programme has actually collected:
  *
- * Samples every `step`-th pixel (default 4) — at 1280×720 that is ~57k samples,
- * plenty for a variance estimate and four times cheaper than reading all of it.
+ *   raw variance   x0.006   what it was
+ *   0.0059         0.98x    System.ERROR gameplay — REJECTED as blank
+ *   0.0068         1.13x    Duskfall gameplay — kept, barely
+ *   0.0386         6.4x     Duskfall gameplay
+ *
+ * Three of eleven survivors sat within 20% of being discarded, and the ones that
+ * were discarded never reached the server to be counted. Edge density asks the
+ * question that was actually meant — "does anything CHANGE across this frame" —
+ * and a loading screen fails it however bright it is.
+ *
+ * ── WHY NOT NORMALISE BY DYNAMIC RANGE ──────────────────────────────────────
+ * Dividing edge density by the frame's own 5th–95th percentile span looks more
+ * principled and measures worse: Duskfall's bright sun against dark ground gives
+ * it a large span, which divided its score down to within 6x of a gradient,
+ * while the uniformly-dark System.ERROR scored 40x higher. Raw edge density
+ * separates the same set by 6.6x in the right direction.
+ *
+ * ── THE NUMBER ──────────────────────────────────────────────────────────────
+ * All measured at the default sampling step, which matters — striding inflates
+ * a gradient's apparent edges, so figures taken at step 1 do not transfer.
+ *
+ *   0.000000  solid black, solid white
+ *   0.000108  a gentle splash gradient
+ *   ---------- 0.0015, here ----------
+ *   0.003236  the weakest real capture on record
+ *   0.012729  the busiest
+ *   0.037647  a very dark frame with hard pixel edges
+ *
+ * 14x clear of the worst thing that must be rejected, 2x clear of the weakest
+ * thing that must be kept.
+ *
+ * ── WHAT IT DOES NOT CATCH ──────────────────────────────────────────────────
+ * A smooth gradient sweeping the FULL black-to-white range across the frame
+ * scores 0.0031 — indistinguishable from the weakest real gameplay frame, and
+ * no threshold can separate them. That is accepted rather than solved: nothing
+ * in this catalogue loads on a full-range gradient, and the cost of keeping one
+ * is a candidate the tester does not pick. The cost of the opposite mistake was
+ * an entire dark game losing its screenshots.
  */
-export function luminanceStats(
-  rgba: Uint8ClampedArray,
-  step = 4,
-): { mean: number; variance: number } {
-  const stride = Math.max(1, Math.floor(step)) * 4;
-  let sum = 0;
-  let sumSquares = 0;
-  let n = 0;
-
-  for (let i = 0; i + 2 < rgba.length; i += stride) {
-    // Rec. 601 luma — cheap, and the perceptual weighting matters here because
-    // green dominates most games' mid-tones.
-    const y = (0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2]) / 255;
-    sum += y;
-    sumSquares += y * y;
-    n += 1;
-  }
-  if (n === 0) return { mean: 0, variance: 0 };
-
-  const mean = sum / n;
-  return { mean, variance: Math.max(0, sumSquares / n - mean * mean) };
-}
+export const MIN_FRAME_DETAIL = 0.0015;
 
 /**
- * Below this luminance variance a frame is treated as blank.
+ * Mean absolute luma difference between consecutive sampled pixels.
  *
- * Tuned against real loading screens: a solid fill sits at ~0, a gradient
- * splash around 0.002, and any frame with actual sprites in it clears 0.01
- * comfortably.
+ * Consecutive in the BUFFER, which is horizontally adjacent everywhere except
+ * once per row — at 1280 wide that is one sample in 320, far below the noise
+ * this is measuring. Not worth threading a width through for.
+ *
+ * Brightness-robust where it matters: a frame with edges has edges wherever its
+ * exposure sits, and a frame with none has none however bright it is.
  */
-export const MIN_FRAME_VARIANCE = 0.006;
+export function edgeDensity(rgba: Uint8ClampedArray, step = 4): number {
+  const stride = Math.max(1, Math.floor(step)) * 4;
+  let previous: number | null = null;
+  let sum = 0;
+  let n = 0;
+  for (let i = 0; i + 2 < rgba.length; i += stride) {
+    const y = (0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2]) / 255;
+    if (previous !== null) {
+      sum += Math.abs(y - previous);
+      n += 1;
+    }
+    previous = y;
+  }
+  return n === 0 ? 0 : sum / n;
+}
 
 /** True when a frame is too flat to be worth keeping as a candidate. */
 export function isBlankFrame(rgba: Uint8ClampedArray): boolean {
-  return luminanceStats(rgba).variance < MIN_FRAME_VARIANCE;
+  return edgeDensity(rgba) < MIN_FRAME_DETAIL;
 }
 
 /**
@@ -163,15 +196,37 @@ export function isBlankFrame(rgba: Uint8ClampedArray): boolean {
  */
 export type FrameHash = Uint8Array;
 
-export function averageHash(gray8x8: Uint8ClampedArray): FrameHash {
-  const n = Math.min(64, gray8x8.length);
-  let total = 0;
-  for (let i = 0; i < n; i += 1) total += gray8x8[i];
-  const mean = total / (n || 1);
 
+/**
+ * A difference hash: 64 bits, each "is this cell brighter than the one to its
+ * right", over a 9-wide by 8-tall grayscale buffer.
+ *
+ * ── WHY THIS REPLACED {@link averageHash} FOR DUPLICATE DETECTION ────────────
+ * An average hash thresholds every cell against the frame's MEAN. On a dark
+ * game the whole 8x8 grid sits within a few quantisation steps of that mean, so
+ * which side of it a cell falls on is decided by rounding noise — the hash stops
+ * describing the picture and starts describing the dither. Measured on the
+ * programme's real captures from System.ERROR (mean luma 0.03):
+ *
+ *              aHash                  dHash
+ *   distances  1, 5, 6, 17, 22, 23    4, 22, 22, 28, 28, 32
+ *
+ * Three of six pairs looked like the same picture to aHash, at distances as low
+ * as 1, and they were visibly different scenes. dHash separates the same set
+ * cleanly: one genuinely near-identical pair at 4, everything else past 22.
+ *
+ * It is invariant to brightness by CONSTRUCTION, not by tuning — scaling every
+ * pixel by the same factor cannot change which of two neighbours is larger.
+ * That is the property an average hash lacks and no threshold can restore.
+ */
+export function differenceHash(gray9x8: Uint8ClampedArray): FrameHash {
   const hash = new Uint8Array(64);
-  for (let i = 0; i < n; i += 1) {
-    hash[i] = gray8x8[i] > mean ? 1 : 0;
+  for (let y = 0; y < 8; y += 1) {
+    for (let x = 0; x < 8; x += 1) {
+      const left = gray9x8[y * 9 + x] ?? 0;
+      const right = gray9x8[y * 9 + x + 1] ?? 0;
+      hash[y * 8 + x] = left > right ? 1 : 0;
+    }
   }
   return hash;
 }
@@ -192,6 +247,13 @@ export function hammingDistance(a: FrameHash, b: FrameHash): number {
  * A paused game, a menu left open, or two grabs a few seconds apart in a slow
  * scene all produce near-identical hashes. 10/64 is loose enough to catch those
  * and tight enough that genuinely different scenes survive.
+ *
+ * KEPT AT 10 ON PURPOSE when the hash changed to {@link differenceHash}. Across
+ * the programme's real captures the separation is wide enough that the exact
+ * number barely matters: the one genuinely repeated pair scores 4, and the next
+ * closest pair of distinct scenes scores 20. Anything from about 8 to 15 gives
+ * the same answers, so the previous value was left alone rather than retuned to
+ * a suspiciously precise figure the data does not actually justify.
  */
 export const DUPLICATE_HASH_DISTANCE = 10;
 
