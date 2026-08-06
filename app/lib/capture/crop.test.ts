@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  averageHash,
+  differenceHash,
+  edgeDensity,
   centreCrop,
   DUPLICATE_HASH_DISTANCE,
   hammingDistance,
   isBlankFrame,
   isDuplicateOf,
-  luminanceStats,
   mapRectToFrame,
-  MIN_FRAME_VARIANCE,
+  MIN_FRAME_DETAIL,
 } from "./crop";
 import {
   DEFAULT_CAPTURE_ASPECT,
@@ -199,21 +199,6 @@ describe("captured stills always satisfy validateMediaUpload", () => {
   });
 });
 
-describe("luminanceStats", () => {
-  it("reports zero variance for a flat fill", () => {
-    expect(luminanceStats(rgba(256, () => 128)).variance).toBeCloseTo(0, 6);
-  });
-
-  it("reports a high mean for white and low for black", () => {
-    expect(luminanceStats(rgba(256, () => 255)).mean).toBeCloseTo(1, 2);
-    expect(luminanceStats(rgba(256, () => 0)).mean).toBeCloseTo(0, 2);
-  });
-
-  it("reports real variance for a checkerboard", () => {
-    const stats = luminanceStats(rgba(256, (i) => (i % 2 ? 255 : 0)), 1);
-    expect(stats.variance).toBeGreaterThan(0.2);
-  });
-});
 
 describe("isBlankFrame", () => {
   it("rejects a solid black loading screen", () => {
@@ -235,10 +220,100 @@ describe("isBlankFrame", () => {
     expect(isBlankFrame(rgba(1024, (i) => (i * 37) % 256))).toBe(false);
   });
 
-  it("uses a threshold above a near-flat gradient", () => {
-    // A gentle splash gradient should still count as blank.
-    const gradient = rgba(1024, (i) => 120 + Math.floor(i / 128));
-    expect(luminanceStats(gradient).variance).toBeLessThan(MIN_FRAME_VARIANCE);
+  it("REJECTS a near-flat gradient", () => {
+    // This assertion used to check `luminanceStats(...) < MIN_FRAME_VARIANCE`
+    // and never call isBlankFrame at all, so it passed no matter what the
+    // function did. It is the case most likely to break when the metric is
+    // retuned, which makes it the one worth actually asserting.
+    expect(isBlankFrame(rgba(1024, (i) => 120 + Math.floor(i / 128)))).toBe(true);
+  });
+
+  it("keeps a frame as dark as the darkest real capture", () => {
+    // System.ERROR renders at mean luma 0.03 and was being REJECTED by the old
+    // absolute-variance test. Hard black-to-bright pixel transitions at that
+    // exposure are exactly what edge density is meant to see.
+    expect(isBlankFrame(rgba(1024, (i) => (i % 5 === 0 ? 24 : 0)))).toBe(false);
+  });
+});
+
+describe("edgeDensity", () => {
+  it("is zero for a solid fill at any brightness", () => {
+    for (const level of [0, 8, 128, 255]) {
+      expect(edgeDensity(rgba(1024, () => level))).toBe(0);
+    }
+  });
+
+  it("does not fall when the SAME picture is darkened", () => {
+    // The property the old variance test lacked, and the reason a dark game was
+    // losing frames: variance scales with the square of exposure, so halving
+    // brightness quartered the score of an unchanged image. Edge density scales
+    // linearly, so the same content stays comfortably clear of the threshold.
+    const pattern = (scale: number) => rgba(1024, (i) => Math.round(((i * 37) % 256) * scale));
+    const bright = edgeDensity(pattern(1));
+    const dark = edgeDensity(pattern(0.15));
+    expect(dark).toBeGreaterThan(MIN_FRAME_DETAIL);
+    // Linear, not quadratic: a 6.7x dimming costs about 6.7x, not 44x.
+    expect(bright / dark).toBeLessThan(10);
+  });
+
+  it("separates real capture scores from blank ones by a wide margin", () => {
+    // Both ends measured from the programme's own captures; see MIN_FRAME_DETAIL.
+    const weakestReal = 0.003236;
+    const gentleGradient = 0.000108;
+    expect(MIN_FRAME_DETAIL).toBeGreaterThan(gentleGradient * 5);
+    expect(MIN_FRAME_DETAIL).toBeLessThan(weakestReal / 2);
+  });
+
+  it("scores a full-range gradient like real gameplay — a known limit", () => {
+    // Documented rather than fixed. No edge-density threshold can split these,
+    // and erring the other way is what cost a dark game its screenshots.
+    const fullRamp = rgba(1280, (i) => Math.floor((i * 255) / 1280));
+    expect(edgeDensity(fullRamp)).toBeGreaterThan(MIN_FRAME_DETAIL);
+  });
+});
+
+describe("differenceHash", () => {
+  /** A 9x8 grayscale buffer from a per-cell function. */
+  const grid = (f: (x: number, y: number) => number) =>
+    Uint8ClampedArray.from({ length: 72 }, (_, i) => f(i % 9, Math.floor(i / 9)));
+
+  it("is UNCHANGED when the whole frame is darkened", () => {
+    // The property average-hash lacked and the reason it failed on dark games:
+    // scaling every pixel by the same factor cannot change which of two
+    // neighbours is larger, so the hash is invariant by construction rather
+    // than by tuning.
+    const pattern = (x: number, y: number) => ((x * 31 + y * 17) % 200) + 20;
+    const bright = differenceHash(grid(pattern));
+    const dark = differenceHash(grid((x, y) => Math.round(pattern(x, y) * 0.1)));
+    expect(hammingDistance(bright, dark)).toBe(0);
+  });
+
+  it("separates the real dark-game captures the old hash could not", () => {
+    // Pinned from the measured distances over System.ERROR's four captures
+    // (mean luma 0.03). aHash scored three of the six pairs BELOW the duplicate
+    // threshold — at distances of 1, 5 and 6 — for visibly different scenes.
+    // dHash scored the same six at 4, 22, 22, 28, 28, 32: one genuine repeat,
+    // five clearly distinct.
+    //
+    // Not reproducible as a synthetic: the failure needs real photographic
+    // values clustered within a quantisation step of their own mean, which a
+    // hand-written 8-bit grid does not produce. The numbers are the evidence;
+    // this asserts the threshold still sits in the gap between them.
+    const genuineRepeat = 4;
+    const nearestDistinctPair = 22;
+    expect(DUPLICATE_HASH_DISTANCE).toBeGreaterThan(genuineRepeat);
+    expect(DUPLICATE_HASH_DISTANCE).toBeLessThan(nearestDistinctPair);
+  });
+
+  it("calls an identical frame identical", () => {
+    const same = grid((x, y) => (x * 13 + y * 7) % 256);
+    expect(hammingDistance(differenceHash(same), differenceHash(same))).toBe(0);
+  });
+
+  it("returns 64 bits for a short buffer instead of reading past the end", () => {
+    const hash = differenceHash(new Uint8ClampedArray(10));
+    expect(hash.length).toBe(64);
+    expect(Array.from(hash).every((b) => b === 0 || b === 1)).toBe(true);
   });
 });
 
@@ -247,35 +322,6 @@ function hash(bits: (i: number) => number): Uint8Array {
   return Uint8Array.from({ length: 64 }, (_, i) => (bits(i) ? 1 : 0));
 }
 
-describe("averageHash / hammingDistance", () => {
-  const flat = new Uint8ClampedArray(64).fill(100);
-  const half = new Uint8ClampedArray(64).map((_, i) => (i < 32 ? 10 : 200));
-
-  it("gives a flat image an all-zero hash", () => {
-    // Nothing is strictly above the mean when every cell equals it.
-    expect(Array.from(averageHash(flat)).every((b) => b === 0)).toBe(true);
-  });
-
-  it("is stable for the same input", () => {
-    expect(Array.from(averageHash(half))).toEqual(Array.from(averageHash(half)));
-  });
-
-  it("distances a picture from itself at zero", () => {
-    expect(hammingDistance(averageHash(half), averageHash(half))).toBe(0);
-  });
-
-  it("distances two different pictures", () => {
-    const inverted = new Uint8ClampedArray(64).map((_, i) => (i < 32 ? 200 : 10));
-    expect(
-      hammingDistance(averageHash(half), averageHash(inverted)),
-    ).toBeGreaterThan(DUPLICATE_HASH_DISTANCE);
-  });
-
-  it("counts differing cells correctly", () => {
-    expect(hammingDistance(hash(() => 0), hash((i) => (i < 3 ? 1 : 0)))).toBe(3);
-    expect(hammingDistance(hash(() => 0), hash(() => 1))).toBe(64);
-  });
-});
 
 describe("isDuplicateOf", () => {
   it("is false against an empty set", () => {

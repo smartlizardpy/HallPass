@@ -36,7 +36,7 @@
  */
 
 import {
-  averageHash,
+  differenceHash,
   centreCrop,
   isBlankFrame,
   isDuplicateOf,
@@ -59,6 +59,13 @@ import {
  */
 export const DEFAULT_CAPTURE_ASPECT = 16 / 9;
 export const DEFAULT_CAPTURE_WIDTH = 1280;
+
+/**
+ * Downscale size for the duplicate hash. NINE columns for eight comparisons —
+ * `differenceHash` reads each cell against its right-hand neighbour.
+ */
+const HASH_W = 9;
+const HASH_H = 8;
 
 /** Why a capture attempt did not produce a usable stream. */
 export type CaptureFailure =
@@ -173,8 +180,8 @@ export class FrameGrabber {
     this.video.srcObject = stream;
     this.canvas = document.createElement("canvas");
     this.hashCanvas = document.createElement("canvas");
-    this.hashCanvas.width = 8;
-    this.hashCanvas.height = 8;
+    this.hashCanvas.width = HASH_W;
+    this.hashCanvas.height = HASH_H;
   }
 
   async start(): Promise<void> {
@@ -265,18 +272,20 @@ export class FrameGrabber {
       const pixels = ctx.getImageData(0, 0, outW, outH).data;
       if (isBlankFrame(pixels)) return;
 
-      // 4. Reject a repeat of something already kept. The 8x8 downscale is done
-      //    by the browser because it does it in hardware.
+      // 4. Reject a repeat of something already kept. The downscale is done by
+      //    the browser because it does it in hardware. NINE wide, not eight:
+      //    `differenceHash` compares each cell with its right-hand neighbour, so
+      //    it needs one spare column to produce 8 comparisons per row.
       const hashCtx = this.hashCanvas.getContext("2d", { willReadFrequently: true });
       if (!hashCtx) return;
-      hashCtx.drawImage(this.canvas, 0, 0, 8, 8);
-      const grey = hashCtx.getImageData(0, 0, 8, 8).data;
-      const mono = new Uint8ClampedArray(64);
-      for (let i = 0; i < 64; i += 1) {
+      hashCtx.drawImage(this.canvas, 0, 0, HASH_W, HASH_H);
+      const grey = hashCtx.getImageData(0, 0, HASH_W, HASH_H).data;
+      const mono = new Uint8ClampedArray(HASH_W * HASH_H);
+      for (let i = 0; i < mono.length; i += 1) {
         mono[i] =
           (0.299 * grey[i * 4] + 0.587 * grey[i * 4 + 1] + 0.114 * grey[i * 4 + 2]) | 0;
       }
-      const hash = averageHash(mono);
+      const hash = differenceHash(mono);
       if (isDuplicateOf(hash, this.hashes)) return;
 
       const blob = await new Promise<Blob | null>((resolve) =>
