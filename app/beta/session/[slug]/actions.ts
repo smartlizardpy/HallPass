@@ -19,7 +19,7 @@
  * as the most common footgun in this codebase.
  */
 
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { put } from "@vercel/blob";
 import {
   beta,
@@ -370,7 +370,7 @@ export async function finishAssignmentAction(slug: string): Promise<ActionResult
   revalidatePath("/dashboard/beta");
   // The game page credits everyone who has finished; this is the moment that
   // list changes.
-  revalidateTag(BETA_CREDITS_CACHE_TAG, { expire: 0 });
+  updateTag(BETA_CREDITS_CACHE_TAG);
   revalidatePath(`/game/${slug}`);
   return { ok: true, message: "Marked as done — thanks!" };
 }

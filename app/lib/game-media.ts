@@ -24,7 +24,7 @@
  * building an `ORDER BY`/`CASE` fragment.
  *
  * MUTATIONS ARE UNCACHED. After any of them the calling server action MUST
- * `revalidateTag(MEDIA_CACHE_TAG, { expire: 0 })` and
+ * `updateTag(MEDIA_CACHE_TAG)` and
  * `revalidatePath("/game/<slug>")`. It must NOT call `bumpGamesVersion()` — that
  * sentinel makes every online client re-fetch every `/game-html/` URL with
  * `cache: "no-store"`, i.e. the entire game corpus re-downloaded because someone

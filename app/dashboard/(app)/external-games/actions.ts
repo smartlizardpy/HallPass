@@ -41,7 +41,7 @@
  */
 
 import { del, put } from "@vercel/blob";
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { CREDITS_CACHE_TAG, recordFirstUpload } from "@/app/lib/game-credits";
@@ -110,7 +110,7 @@ function controlTarget(slug: string, key: "ok" | "error", message: string): stri
  * dashboard uses for read-your-own-writes.
  */
 function revalidateExternal(slug: string): void {
-  revalidateTag(EXTERNAL_CACHE_TAG, { expire: 0 });
+  updateTag(EXTERNAL_CACHE_TAG);
   revalidatePath("/");
   revalidatePath("/games");
   revalidatePath(`/game/${slug}`);
@@ -294,7 +294,7 @@ export async function createExternalGameAction(formData: FormData): Promise<void
   // Registering an external game IS its first upload — it is the moment the game
   // appears on the site — so it earns a credit exactly like a bundle does.
   await recordFirstUpload(slug, actorEmail);
-  revalidateTag(CREDITS_CACHE_TAG, { expire: 0 });
+  updateTag(CREDITS_CACHE_TAG);
 
   revalidateExternal(slug);
   // Land on the new game's control center under the unified Games tab, where all
@@ -559,7 +559,7 @@ export async function deleteExternalGameAction(formData: FormData): Promise<void
   try {
     const blobPaths = await deleteAllMediaForSlug(slug);
     await Promise.allSettled(blobPaths.map((path: string) => del(path)));
-    if (blobPaths.length > 0) revalidateTag(MEDIA_CACHE_TAG, { expire: 0 });
+    if (blobPaths.length > 0) updateTag(MEDIA_CACHE_TAG);
   } catch {
     // Best-effort cleanup; the game row is already gone, which is what users see.
   }

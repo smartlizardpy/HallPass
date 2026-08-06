@@ -32,11 +32,11 @@
  * catalogue, wraps the single fallible store write in a try/catch, and issues its
  * `redirect()` OUTSIDE that try (redirect signals via a thrown control object,
  * which a catch-all would otherwise swallow). After a mutation we
- * `revalidateTag(CACHE_TAG)` and `revalidatePath(...)` every public surface that
+ * `updateTag(CACHE_TAG)` and `revalidatePath(...)` every public surface that
  * renders game copy so the edit appears immediately.
  */
 
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { games, toGamePlatform } from "@/app/lib/games";
@@ -67,12 +67,20 @@ function overrideString(
  * own page, the sitemap, and the LLM manifest).
  */
 function revalidateGame(slug: string): void {
-  // `{ expire: 0 }` reproduces the legacy single-arg `revalidateTag` semantics —
-  // immediate expiry — which this Next.js made the deprecated form. It's the
-  // documented choice for read-your-own-writes (the admin must see the edit on
-  // the very next render) and is what invalidates the `unstable_cache`-backed
-  // override read in `games-store.ts`.
-  revalidateTag(CACHE_TAG, { expire: 0 });
+  // `updateTag`, NOT `revalidateTag`. Both invalidate the `unstable_cache`-backed
+  // override read in `games-store.ts`, but they differ in what the NEXT request
+  // gets: `revalidateTag` marks the entry stale and serves the stale copy while
+  // refreshing behind it, so an admin sees their own edit only on the SECOND
+  // load. `updateTag` expires it and makes that request wait for fresh data,
+  // which is the read-your-own-writes behaviour this has always wanted.
+  //
+  // This was previously `revalidateTag(TAG, { expire: 0 })`, written to
+  // reproduce the deprecated single-argument form's immediate expiry. It does
+  // not: the object form selects a custom cache-life profile, which is still
+  // stale-while-revalidate. The symptom was edits appearing to do nothing —
+  // published screenshots missing from a game page and a newly-featured game
+  // absent from the homepage — until the page happened to be requested twice.
+  updateTag(CACHE_TAG);
   revalidatePath("/");
   revalidatePath(`/game/${slug}`);
   revalidatePath("/sitemap.xml");

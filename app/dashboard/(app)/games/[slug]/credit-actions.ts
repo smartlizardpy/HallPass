@@ -23,7 +23,7 @@
  * a wrong or missing credit obviously must win.
  */
 
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { CREDITS_CACHE_TAG, clearCredit, setCredit } from "@/app/lib/game-credits";
@@ -59,7 +59,7 @@ export async function setGameCreditAction(formData: FormData): Promise<void> {
       failed = true;
     }
     if (!failed) {
-      revalidateTag(CREDITS_CACHE_TAG, { expire: 0 });
+      updateTag(CREDITS_CACHE_TAG);
       revalidatePath(`/game/${slug}`);
     }
     redirect(
@@ -80,7 +80,7 @@ export async function setGameCreditAction(formData: FormData): Promise<void> {
     failed = true;
   }
   if (!failed) {
-    revalidateTag(CREDITS_CACHE_TAG, { expire: 0 });
+    updateTag(CREDITS_CACHE_TAG);
     revalidatePath(`/game/${slug}`);
   }
 

@@ -30,7 +30,7 @@
 import { del, put } from "@vercel/blob";
 import { unzipSync } from "fflate";
 import { redirect } from "next/navigation";
-import { revalidateTag } from "next/cache";
+import { updateTag } from "next/cache";
 import { requireRole } from "@/app/lib/auth";
 import { CREDITS_CACHE_TAG, recordFirstUpload } from "@/app/lib/game-credits";
 import { GAMES_BLOB_CACHE_TAG } from "@/app/lib/game-serving-blobs";
@@ -106,12 +106,12 @@ async function bumpGamesVersion(): Promise<void> {
   // uploaded game would keep serving the pre-edit copy (or the static twin) until
   // the soft TTL rolled over. `{ expire: 0 }` for read-your-writes; not in the
   // try above because a failed sentinel write must not skip the invalidation.
-  revalidateTag(GAMES_BLOB_CACHE_TAG, { expire: 0 });
+  updateTag(GAMES_BLOB_CACHE_TAG);
   // Same argument for the sentinel's own cached `head()`. `/games-version` holds
   // its lookup for an hour to keep Blob spend off the polling path, so WITHOUT
   // this the bump we just wrote would stay invisible to clients for up to that
   // hour and the service worker would keep serving pre-upload game assets.
-  revalidateTag(GAMES_VERSION_CACHE_TAG, { expire: 0 });
+  updateTag(GAMES_VERSION_CACHE_TAG);
 }
 
 /**
@@ -290,7 +290,7 @@ export async function uploadHtmlAction(formData: FormData): Promise<void> {
   // missing credit line is cosmetic and a failed upload is not.
   if (saved) {
     await recordFirstUpload(slug, actorEmail);
-    revalidateTag(CREDITS_CACHE_TAG, { expire: 0 });
+    updateTag(CREDITS_CACHE_TAG);
   }
 
   redirect(
@@ -332,7 +332,7 @@ export async function pasteHtmlAction(formData: FormData): Promise<void> {
   // missing credit line is cosmetic and a failed upload is not.
   if (saved) {
     await recordFirstUpload(slug, actorEmail);
-    revalidateTag(CREDITS_CACHE_TAG, { expire: 0 });
+    updateTag(CREDITS_CACHE_TAG);
   }
 
   redirect(
@@ -401,7 +401,7 @@ export async function uploadBundleAction(formData: FormData): Promise<void> {
 
   if (saved) {
     await recordFirstUpload(slug, actorEmail);
-    revalidateTag(CREDITS_CACHE_TAG, { expire: 0 });
+    updateTag(CREDITS_CACHE_TAG);
   }
 
   redirect(

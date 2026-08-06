@@ -19,7 +19,7 @@
  * rather than a single game route.
  */
 
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { CACHE_TAG, renameCategory, renameTag } from "@/app/lib/games-store";
@@ -41,7 +41,7 @@ function target(key: "ok" | "error", message: string): string {
  * so `revalidatePath("/", "layout")` is deliberately broad.
  */
 function revalidateGlobal(): void {
-  revalidateTag(CACHE_TAG, { expire: 0 });
+  updateTag(CACHE_TAG);
   revalidatePath("/", "layout");
 }
 

@@ -18,7 +18,7 @@
  *    client re-fetch EVERY `/game-html/` URL with `cache: "no-store"` — the whole
  *    game corpus (megabytes of bundles) re-downloaded because an admin uploaded a
  *    200 KB screenshot. Screenshot freshness is page data, so it rides on
- *    `revalidateTag` + `revalidatePath` like every other dashboard edit, and the
+ *    `updateTag` + `revalidatePath` like every other dashboard edit, and the
  *    service worker picks new media up through ordinary `cacheFirst` runtime
  *    caching on the next online visit.
  *
@@ -30,7 +30,7 @@
  */
 
 import { del, put } from "@vercel/blob";
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { isResolvedSlug } from "@/app/lib/games-store";
@@ -79,7 +79,7 @@ const err = (slug: string, msg: string) =>
 function revalidateMedia(slug: string): void {
   // Two-arg `{ expire: 0 }` form — the single-arg call is deprecated in this
   // Next.js, and immediate expiry is what gives the admin read-your-own-writes.
-  revalidateTag(MEDIA_CACHE_TAG, { expire: 0 });
+  updateTag(MEDIA_CACHE_TAG);
   revalidatePath(`/game/${slug}`);
 }
 

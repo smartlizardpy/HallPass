@@ -22,7 +22,7 @@
  * {@link CACHE_TAG} tag (1h soft TTL). The catalogue is small and read on every
  * public render, so we serve it from the data cache and invalidate explicitly
  * on edit. MUTATIONS below are deliberately UNCACHED; after any of them a server
- * action MUST call `revalidateTag(CACHE_TAG)` and `revalidatePath(...)` for the
+ * action MUST call `updateTag(CACHE_TAG)` and `revalidatePath(...)` for the
  * affected public routes (home/games/play) so the next render rebuilds the
  * cache — that wiring lives in the action, NOT here.
  *
@@ -45,7 +45,7 @@ import { readExternalGames } from "@/app/lib/external-games-store";
 
 /**
  * The cache tag under which {@link readOverrides} is stored. Re-exported so the
- * server actions that perform the mutations below can `revalidateTag(CACHE_TAG)`
+ * server actions that perform the mutations below can `updateTag(CACHE_TAG)`
  * without re-declaring the literal.
  */
 export const CACHE_TAG = "game-overrides";
@@ -116,7 +116,7 @@ function mapOverride(row: Row): GameOverride {
  * blip must reject here rather than resolve to `[]` — otherwise the empty list
  * would be cached under {@link CACHE_TAG} for the full 1h TTL and wipe every
  * override site-wide. Memoised with a 1h soft revalidate; explicit
- * `revalidateTag` after a mutation makes edits appear immediately.
+ * `updateTag` after a mutation makes edits appear immediately.
  */
 const readOverridesCached = unstable_cache(
   async (): Promise<GameOverride[]> => {
@@ -258,7 +258,7 @@ export async function resolveGenres(): Promise<{ name: string; count: number }[]
 
 /* -------------------------------------------------------------------------- *
  * MUTATIONS — called from server actions. Deliberately UNCACHED. After any of
- * these the caller MUST `revalidateTag(CACHE_TAG)` and `revalidatePath(...)` the
+ * these the caller MUST `updateTag(CACHE_TAG)` and `revalidatePath(...)` the
  * affected public routes so the next render rebuilds the override cache.
  * -------------------------------------------------------------------------- */
 
@@ -322,7 +322,7 @@ export async function clearOverride(slug: string): Promise<void> {
  * {@link upsertOverride}: that helper full-replaces the row and would null every
  * other overridable field. Each helper instead touches ONLY its one flag column,
  * leaving the rest of the override (title/tagline/…) untouched. As with all
- * mutations, the CALLER must `revalidateTag(CACHE_TAG)` + `revalidatePath(...)`.
+ * mutations, the CALLER must `updateTag(CACHE_TAG)` + `revalidatePath(...)`.
  * -------------------------------------------------------------------------- */
 
 /**
@@ -408,7 +408,7 @@ export async function setFeaturedGame(slug: string): Promise<void> {
  * NOT touch `tags`/`is_new`/`is_featured` — the details editor saves through here
  * (instead of {@link upsertOverride}, which full-replaces the row) so a details
  * save never clobbers a curated tag list or a flag. Only bound values are
- * interpolated. Caller must `revalidateTag(CACHE_TAG)` + `revalidatePath(...)`.
+ * interpolated. Caller must `updateTag(CACHE_TAG)` + `revalidatePath(...)`.
  */
 export async function setDetailsOverride(
   slug: string,
@@ -472,7 +472,7 @@ export async function setGameCategory(
  * GLOBAL CURATION — fix a tag/genre across the WHOLE catalogue in one call.
  * These iterate the RESOLVED catalogue and write per-game through the targeted
  * helpers above (so only `tags`/`category` are touched). As with all mutations
- * the CALLER must `revalidateTag(CACHE_TAG)` + `revalidatePath(...)` afterwards.
+ * the CALLER must `updateTag(CACHE_TAG)` + `revalidatePath(...)` afterwards.
  * -------------------------------------------------------------------------- */
 
 /**
