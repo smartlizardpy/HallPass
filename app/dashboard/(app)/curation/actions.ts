@@ -16,11 +16,11 @@
  * first (fails closed), validate the slug against the STATIC catalogue, wrap the
  * single fallible store write in a try/catch, and issue `redirect()` OUTSIDE that
  * try — `redirect()` reports via a thrown control signal a catch-all would
- * otherwise swallow. After a successful write we `revalidateTag(CACHE_TAG)` and
+ * otherwise swallow. After a successful write we `updateTag(CACHE_TAG)` and
  * `revalidatePath(...)` the public surfaces that render the change.
  */
 
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { games } from "@/app/lib/games";
@@ -42,7 +42,7 @@ function target(key: "ok" | "error", message: string): string {
  * own-writes form) plus the home page and the affected game's own page.
  */
 function revalidateCuration(slug: string): void {
-  revalidateTag(CACHE_TAG, { expire: 0 });
+  updateTag(CACHE_TAG);
   revalidatePath("/");
   revalidatePath("/game/" + slug);
 }

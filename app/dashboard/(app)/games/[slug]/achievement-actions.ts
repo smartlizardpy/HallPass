@@ -14,7 +14,7 @@
  * `cache: "no-store"` — the entire ~11 MB game corpus re-downloaded because an
  * admin renamed a trophy. Achievements are PAGE DATA, identical in kind to
  * screenshots: they change what the store page says, never what the playable
- * bundle IS. So they ride on `revalidateTag` + `revalidatePath` like every other
+ * bundle IS. So they ride on `updateTag` + `revalidatePath` like every other
  * dashboard edit, and a player on a metered school connection pays nothing.
  *
  * ── WHY THE SQL IS HERE AND NOT IN `app/lib/achievements/store.ts` ──────────
@@ -49,11 +49,11 @@
  *   4. `redirect()` OUTSIDE that `try` — `redirect` signals by THROWING, and a
  *      catch-all around it swallows the navigation so the action silently does
  *      nothing.
- *   5. `revalidateTag(ACHIEVEMENTS_CACHE_TAG, { expire: 0 })` +
+ *   5. `updateTag(ACHIEVEMENTS_CACHE_TAG)` +
  *      `revalidatePath("/game/<slug>")`.
  */
 
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { sql } from "@/app/lib/db";
@@ -114,7 +114,7 @@ const err = (slug: string, msg: string) =>
 function revalidateAchievements(slug: string): void {
   // Two-arg `{ expire: 0 }` form. The single-arg call is deprecated in this
   // Next.js, and immediate expiry is what gives the admin read-your-own-writes.
-  revalidateTag(ACHIEVEMENTS_CACHE_TAG, { expire: 0 });
+  updateTag(ACHIEVEMENTS_CACHE_TAG);
   revalidatePath(`/game/${slug}`);
 }
 

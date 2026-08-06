@@ -26,7 +26,7 @@
  * the read-then-write that implies is still safe against a double submit.
  */
 
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { copy, del } from "@vercel/blob";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
@@ -467,7 +467,7 @@ async function publishShotToGallery(shot: {
 
 /** Drop every cache that could still be serving the old gallery. */
 function revalidateGallery(slug: string): void {
-  revalidateTag(MEDIA_CACHE_TAG, { expire: 0 });
+  updateTag(MEDIA_CACHE_TAG);
   revalidatePath(`/game/${slug}`);
 }
 

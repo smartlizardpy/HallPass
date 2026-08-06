@@ -26,7 +26,7 @@
  * surface is `uploader_name` only.
  *
  * MUTATIONS ARE UNCACHED. After any of them the calling server action MUST
- * `revalidateTag(CREDITS_CACHE_TAG, { expire: 0 })` and
+ * `updateTag(CREDITS_CACHE_TAG)` and
  * `revalidatePath("/game/<slug>")`. It must NOT call `bumpGamesVersion()` — that
  * sentinel makes every online client re-fetch every `/game-html/` URL with
  * `cache: "no-store"`, i.e. the entire game corpus re-downloaded because a credit

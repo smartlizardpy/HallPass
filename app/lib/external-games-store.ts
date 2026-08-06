@@ -21,7 +21,7 @@
  * Caching: the read is memoised with `unstable_cache` under the
  * {@link EXTERNAL_CACHE_TAG} tag (1h soft TTL). MUTATIONS below are deliberately
  * UNCACHED; after any of them a server action MUST call
- * `revalidateTag(EXTERNAL_CACHE_TAG)` and `revalidatePath(...)` for the affected
+ * `updateTag(EXTERNAL_CACHE_TAG)` and `revalidatePath(...)` for the affected
  * public routes so the next render rebuilds the cache — that wiring lives in the
  * action, NOT here.
  *
@@ -39,7 +39,7 @@ import { toGamePlatform, type Game, type GamePlatform } from "@/app/lib/games";
 /**
  * The cache tag under which {@link readExternalGames} is stored. Re-exported so
  * the server actions that perform the mutations below can
- * `revalidateTag(EXTERNAL_CACHE_TAG)` without re-declaring the literal.
+ * `updateTag(EXTERNAL_CACHE_TAG)` without re-declaring the literal.
  */
 export const EXTERNAL_CACHE_TAG = "external-games";
 
@@ -113,7 +113,7 @@ function mapRow(row: Row): Game {
  * blip must reject here rather than resolve to `[]` — otherwise the empty list
  * would be cached under {@link EXTERNAL_CACHE_TAG} for the full 1h TTL and hide
  * every external game site-wide. Memoised with a 1h soft revalidate; explicit
- * `revalidateTag` after a mutation makes edits appear immediately.
+ * `updateTag` after a mutation makes edits appear immediately.
  */
 const readExternalGamesCached = unstable_cache(
   async (): Promise<Game[]> => {
@@ -146,7 +146,7 @@ export async function readExternalGames(): Promise<Game[]> {
 
 /* -------------------------------------------------------------------------- *
  * MUTATIONS — called from server actions. Deliberately UNCACHED. After any of
- * these the caller MUST `revalidateTag(EXTERNAL_CACHE_TAG)` and
+ * these the caller MUST `updateTag(EXTERNAL_CACHE_TAG)` and
  * `revalidatePath(...)` the affected public routes (home/games/play) so the next
  * render rebuilds the external-games cache.
  * -------------------------------------------------------------------------- */
@@ -199,7 +199,7 @@ export type CreateExternalGameInput = {
 /**
  * Insert a new external game. Every column is written from `input`; `cover_url`
  * may be null. `plays` and the timestamps use their schema defaults. Only bound
- * values are interpolated. Caller must `revalidateTag(EXTERNAL_CACHE_TAG)` +
+ * values are interpolated. Caller must `updateTag(EXTERNAL_CACHE_TAG)` +
  * `revalidatePath(...)` after.
  */
 export async function createExternalGame(
@@ -244,7 +244,7 @@ export type UpdateExternalGameInput = {
  * entry to inherit from, so every column is authoritative), this sets each
  * editable column outright from `input`; `cover_url`, `plays`, and the curation
  * flags are left untouched. Only bound values are interpolated. Caller must
- * `revalidateTag(EXTERNAL_CACHE_TAG)` + `revalidatePath(...)` after.
+ * `updateTag(EXTERNAL_CACHE_TAG)` + `revalidatePath(...)` after.
  */
 export async function updateExternalGameDetails(
   slug: string,

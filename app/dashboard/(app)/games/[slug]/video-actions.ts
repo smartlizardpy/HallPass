@@ -29,7 +29,7 @@
  * than as a bad iframe.
  */
 
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import {
@@ -72,7 +72,7 @@ export async function setGameVideoAction(formData: FormData): Promise<void> {
       failed = true;
     }
     if (!failed) {
-      revalidateTag(VIDEOS_CACHE_TAG, { expire: 0 });
+      updateTag(VIDEOS_CACHE_TAG);
       revalidatePath(`/game/${slug}`);
     }
     redirect(
@@ -112,7 +112,7 @@ export async function setGameVideoAction(formData: FormData): Promise<void> {
     failed = true;
   }
   if (!failed) {
-    revalidateTag(VIDEOS_CACHE_TAG, { expire: 0 });
+    updateTag(VIDEOS_CACHE_TAG);
     revalidatePath(`/game/${slug}`);
   }
 

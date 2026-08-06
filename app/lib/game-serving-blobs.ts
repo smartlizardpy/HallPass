@@ -14,7 +14,7 @@
  *
  * INVALIDATION. The list is tagged {@link GAMES_BLOB_CACHE_TAG}. Every source
  * mutation (`uploadHtmlAction`, `pasteHtmlAction`, `uploadBundleAction`,
- * `clearHtmlAction`) MUST `revalidateTag(GAMES_BLOB_CACHE_TAG, { expire: 0 })`
+ * `clearHtmlAction`) MUST `updateTag(GAMES_BLOB_CACHE_TAG)`
  * after writing, so an admin's upload appears in the next serve with
  * read-your-writes semantics rather than waiting out the soft TTL.
  *

@@ -17,7 +17,7 @@
  * does NOT reliably splice raw SQL fragments. Only bound values appear here.
  *
  * MUTATIONS ARE UNCACHED. After any of them the calling server action MUST
- * `revalidateTag(VIDEOS_CACHE_TAG, { expire: 0 })` and
+ * `updateTag(VIDEOS_CACHE_TAG)` and
  * `revalidatePath("/game/<slug>")`. It must NOT call `bumpGamesVersion()` — that
  * sentinel makes every online client re-fetch every `/game-html/` URL with
  * `cache: "no-store"`, i.e. the entire game corpus re-downloaded because somebody
