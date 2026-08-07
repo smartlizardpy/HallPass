@@ -202,6 +202,16 @@ export function openStealthSettings(): void {
   window.dispatchEvent(new Event(OPEN_STEALTH_EVENT));
 }
 
+/** Window event asking the controller to raise the panic screen (used by the
+ *  settings "Preview" button, so a player can see their disguise on demand). */
+export const PANIC_EVENT = "hp:panic";
+
+/** Trigger the panic screen programmatically. */
+export function triggerPanic(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(PANIC_EVENT));
+}
+
 /* -------------------------------------------------------------------------- *
  * React hook.
  * -------------------------------------------------------------------------- */

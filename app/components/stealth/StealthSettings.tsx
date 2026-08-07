@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CLOAK_LIST } from "../../lib/stealth/cloaks";
 import { PANIC_SCREENS } from "../../lib/stealth/config";
-import { useStealth } from "../../lib/stealth/store";
+import { triggerPanic, useStealth } from "../../lib/stealth/store";
 
 /** Turn a raw `KeyboardEvent.key` into something readable in the UI. */
 function keyLabel(key: string): string {
@@ -167,6 +167,17 @@ export function StealthSettings({ open, onClose }: { open: boolean; onClose: () 
               );
             })}
           </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setListening(false);
+              triggerPanic();
+            }}
+            className="mt-3 w-full rounded-xl border-2 border-dashed border-border py-2.5 text-[13px] font-extrabold text-zinc-700 transition hover:border-brand hover:text-brand"
+          >
+            Preview panic screen — press your key to return
+          </button>
         </section>
       </div>
     </div>

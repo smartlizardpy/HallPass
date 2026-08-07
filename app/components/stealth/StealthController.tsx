@@ -27,7 +27,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cloakById } from "../../lib/stealth/cloaks";
 import { applyFavicon } from "../../lib/stealth/apply";
-import { OPEN_STEALTH_EVENT, useStealth } from "../../lib/stealth/store";
+import { OPEN_STEALTH_EVENT, PANIC_EVENT, useStealth } from "../../lib/stealth/store";
 import { PanicScreen } from "./PanicScreen";
 import { StealthSettings } from "./StealthSettings";
 
@@ -59,6 +59,17 @@ export function StealthController() {
     const open = () => setSettingsOpen(true);
     window.addEventListener(OPEN_STEALTH_EVENT, open);
     return () => window.removeEventListener(OPEN_STEALTH_EVENT, open);
+  }, []);
+
+  // Raise the panic screen on demand (the settings "Preview" button), closing
+  // the settings modal first so the disguise covers the whole viewport.
+  useEffect(() => {
+    const preview = () => {
+      setSettingsOpen(false);
+      setPanicking(true);
+    };
+    window.addEventListener(PANIC_EVENT, preview);
+    return () => window.removeEventListener(PANIC_EVENT, preview);
   }, []);
 
   /* -------------------------- panic hotkey -------------------------- */
