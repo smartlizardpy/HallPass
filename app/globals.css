@@ -178,6 +178,13 @@ body {
 .promo-backdrop { animation: promo-fade 0.2s ease-out; }
 .promo-panel    { animation: promo-rise 0.28s cubic-bezier(0.2, 0.9, 0.2, 1); }
 
+/* Streak toast — drops in from the top edge when a play advances the streak. */
+@keyframes streak-toast-in {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.streak-toast { animation: streak-toast-in 0.26s cubic-bezier(0.2, 0.9, 0.2, 1); }
+
 /* The repo had no reduced-motion guard anywhere; rather than extend that debt,
    this covers the promo AND retrofits the card hover-lift and drawer slide.
    Motion is removed, never the element — hiding content would be worse than
@@ -197,7 +204,8 @@ body {
   }
   .pip,
   .marquee-track,
-  .dice-rolling {
+  .dice-rolling,
+  .streak-toast {
     animation: none;
   }
 }

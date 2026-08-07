@@ -59,7 +59,7 @@ export function StreakToast() {
       style={{ paddingTop: "env(safe-area-inset-top)" }}
     >
       <div
-        className={`pointer-events-auto flex items-center gap-2.5 rounded-full px-5 py-3 text-sm font-black shadow-2xl ${
+        className={`streak-toast pointer-events-auto flex items-center gap-2.5 rounded-full px-5 py-3 text-sm font-black shadow-2xl ${
           toast.milestone
             ? "bg-brand text-white ring-4 ring-brand/25"
             : "bg-accent-yellow text-zinc-900"
