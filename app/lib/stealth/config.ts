@@ -7,6 +7,13 @@
  * per-feature `config.ts` convention (scoreboard, achievements, beta).
  */
 
+/**
+ * localStorage key holding the JSON-encoded stealth prefs. Lives here (not in the
+ * `"use client"` store) so the server-rendered boot script and the client store
+ * share ONE literal — a drift between them would apply the cloak from the wrong key.
+ */
+export const STEALTH_KEY = "hp:stealth";
+
 /** The fake screens the panic key can throw up over the arcade. */
 export const PANIC_SCREENS = [
   { id: "docs", label: "Google Docs" },

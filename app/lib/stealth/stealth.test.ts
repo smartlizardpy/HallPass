@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { cloakById, CLOAK_LIST, DEFAULT_CLOAK_ID } from "./cloaks";
 import { DEFAULT_PREFS, parsePrefs, serializePrefs } from "./store";
-import { isPanicScreen } from "./config";
+import { isPanicScreen, STEALTH_KEY } from "./config";
+import { cloakBootScript } from "./boot";
 
 describe("cloakById", () => {
   it("resolves a known id to its preset", () => {
@@ -71,5 +72,27 @@ describe("isPanicScreen", () => {
     expect(isPanicScreen("docs")).toBe(true);
     expect(isPanicScreen("classroom")).toBe(true);
     expect(isPanicScreen("minesweeper")).toBe(false);
+  });
+});
+
+describe("cloakBootScript", () => {
+  const script = cloakBootScript();
+
+  it("is a self-invoking function wrapped in a try/catch", () => {
+    expect(script.startsWith("(function(){try{")).toBe(true);
+  });
+
+  it("references the shared storage key so it reads the same prefs", () => {
+    expect(script).toContain(STEALTH_KEY);
+  });
+
+  it("embeds the non-off cloak titles but not the off preset's data", () => {
+    expect(script).toContain("Untitled document - Google Docs");
+    // The off preset carries no disguise, so its title must not be in the map.
+    expect(script).not.toContain("HALLPASS — Unblocked Games");
+  });
+
+  it("never contains a closing script tag that could break out of the inline script", () => {
+    expect(script.toLowerCase()).not.toContain("</script");
   });
 });

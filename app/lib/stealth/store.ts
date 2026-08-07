@@ -24,12 +24,14 @@ import { DEFAULT_CLOAK_ID, cloakById } from "./cloaks";
 import {
   DEFAULT_PANIC_KEY,
   DEFAULT_PANIC_SCREEN,
+  STEALTH_KEY,
   type PanicScreenId,
   isPanicScreen,
 } from "./config";
 
-/** localStorage key holding the JSON-encoded {@link StealthPrefs}. */
-export const STEALTH_KEY = "hp:stealth";
+// Re-exported so existing importers of the key keep working; the literal is
+// defined once in `config.ts` and shared with the server boot script.
+export { STEALTH_KEY };
 
 export type StealthPrefs = {
   /** Cloak preset id (see `cloaks.ts`). */
