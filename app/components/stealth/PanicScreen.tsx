@@ -86,7 +86,7 @@ function DocsScreen() {
           <p className="text-[11pt] leading-[1.6] text-[#202124]">
             This essay argues that while the assassination in Sarajevo was the immediate
             trigger, it was the rigidity of the alliance networks that turned a regional
-            dispute into a general war<span className="animate-pulse">|</span>
+            dispute into a general war<span className="animate-pulse motion-reduce:animate-none">|</span>
           </p>
         </div>
       </div>
