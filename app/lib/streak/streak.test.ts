@@ -9,6 +9,7 @@ import {
   lastNDays,
   recordDay,
 } from "./core";
+import { parseState, serializeState } from "./store";
 
 describe("dayKey / isDayKey", () => {
   it("formats a local date as YYYY-MM-DD, zero-padded", () => {
@@ -111,6 +112,28 @@ describe("isMilestone", () => {
     expect(isMilestone(7)).toBe(true);
     expect(isMilestone(30)).toBe(true);
     expect(isMilestone(4)).toBe(false);
+  });
+});
+
+describe("parseState / serializeState", () => {
+  it("returns a fresh empty state for null and malformed input", () => {
+    expect(parseState(null)).toEqual(EMPTY_STATE);
+    expect(parseState(null)).not.toBe(EMPTY_STATE);
+    expect(parseState("{oops")).toEqual(EMPTY_STATE);
+    expect(parseState("[]")).toEqual(EMPTY_STATE);
+  });
+
+  it("drops non-day-key entries and clamps a bad longest", () => {
+    const parsed = parseState(
+      JSON.stringify({ days: ["2026-08-07", "nope", 5], longest: -3 }),
+    );
+    expect(parsed.days).toEqual(["2026-08-07"]);
+    expect(parsed.longest).toBe(0);
+  });
+
+  it("round-trips a valid state", () => {
+    const state = { days: ["2026-08-07", "2026-08-06"], longest: 2 };
+    expect(parseState(serializeState(state))).toEqual(state);
   });
 });
 
