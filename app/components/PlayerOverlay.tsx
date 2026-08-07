@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import posthog from "posthog-js";
 import type { Game } from "../lib/games";
 import { recordPlayServerSide, recordRecentPlay } from "../lib/personalization";
+import { recordPlay as recordStreakPlay } from "../lib/streak/store";
 
 /**
  * The fullscreen game player.
@@ -118,6 +119,9 @@ export function PlayerOverlay({
     // answerable — `hp:recent` above is device-local and never synced. Debounced
     // per slug and a no-op for guests.
     recordPlayServerSide(slug);
+    // Count this open toward the device-local daily streak. Idempotent per
+    // calendar day, so replays later today don't double-count or re-toast.
+    recordStreakPlay();
     posthog.capture("game_started", {
       game_slug: slug,
       game_title: title,
