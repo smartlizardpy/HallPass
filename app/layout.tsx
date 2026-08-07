@@ -7,6 +7,7 @@ import { MobileSplash } from "./components/MobileSplash";
 import { MobileTabBar } from "./components/MobileTabBar";
 import { PWA } from "./components/PWA";
 import { StealthController } from "./components/stealth/StealthController";
+import { StreakToast } from "./components/streak/StreakToast";
 import { WelcomeToast } from "./components/WelcomeToast";
 import { cloakBootScript } from "./lib/stealth/boot";
 import { SITE_URL } from "./lib/site";
@@ -97,6 +98,7 @@ export default function RootLayout({
         <MobileTabBar />
         <MobileSplash />
         <StealthController />
+        <StreakToast />
       </body>
     </html>
   );
