@@ -41,15 +41,13 @@ export function StealthSettings({ open, onClose }: { open: boolean; onClose: () 
     return () => window.removeEventListener("keydown", onKey, true);
   }, [listening, setPanicKey]);
 
-  // Close on Escape (only when not mid-capture, where Escape is a bindable key).
+  // Reset any in-progress key capture when the modal is dismissed. This is the
+  // only close path (backdrop, ✕, or the parent), so no separate effect is needed
+  // to clear `listening` when `open` flips false.
   const handleClose = useCallback(() => {
     setListening(false);
     onClose();
   }, [onClose]);
-
-  useEffect(() => {
-    if (!open) setListening(false);
-  }, [open]);
 
   if (!open) return null;
 
