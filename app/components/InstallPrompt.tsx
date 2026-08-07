@@ -187,8 +187,8 @@ export function InstallPrompt() {
           <p className="text-sm font-bold">Install HALLPASS</p>
           <p className="text-xs font-semibold text-white/70">
             {mode === "install"
-              ? "Add it to your home screen for one-tap play."
-              : "Tap the Share button, then “Add to Home Screen.”"}
+              ? "Add to your home screen — plays offline, even with the wifi off."
+              : "Tap Share, then “Add to Home Screen” — plays offline, wifi or not."}
           </p>
         </div>
         {mode === "install" && (
