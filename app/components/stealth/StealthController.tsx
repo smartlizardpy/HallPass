@@ -27,6 +27,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cloakById } from "../../lib/stealth/cloaks";
 import { applyFavicon } from "../../lib/stealth/apply";
+import { useShakeToPanic } from "../../lib/stealth/shake";
 import { OPEN_STEALTH_EVENT, PANIC_EVENT, useStealth } from "../../lib/stealth/store";
 import { PanicScreen } from "./PanicScreen";
 import { StealthSettings } from "./StealthSettings";
@@ -95,6 +96,15 @@ export function StealthController() {
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [panicKey]);
+
+  /* ---------------------- shake to panic (touch) ---------------------- */
+  // The counterpart to the panic key for phones and tablets with no keyboard.
+  // Deliberately RAISES only (never toggles): a shake reveals homework, and only
+  // a deliberate dismiss — the corner tap, Escape, or the key — brings the arcade
+  // back, so a jostled phone can't expose it. Opt-in via `prefs.shake`; the hook
+  // no-ops when it is off or the device has no motion sensor.
+  const raisePanic = useCallback(() => setPanicking(true), []);
+  useShakeToPanic(prefs.shake, raisePanic);
 
   const dismissPanic = useCallback(() => setPanicking(false), []);
 
