@@ -82,6 +82,19 @@ npm run sync-games
 
 This runs `scripts/sync-games.mjs`: it reads `BLOB_READ_WRITE_TOKEN` (env or `.env.local`), lists every `games/**` blob (skipping the `games/version.txt` sentinel), validates each path, and mirrors each file into `public/games/<slug>/…`. It never deletes local files (`cover.png` lives only in the repo) and exits non-zero if any file fails. Commit the diff and deploy — now the static fallback shipped in the build matches what's in Blob.
 
+## Player features: stealth mode & daily streak
+
+Two device-local, no-backend player features live under `app/lib/{stealth,streak}` and `app/components/{stealth,streak}`. Both are pure client islands that render an empty state on the server and hydrate from `localStorage`, so every page that mounts them stays statically prerenderable (and therefore precached — same rule as the rest of the site).
+
+**Stealth mode** (`app/lib/stealth`) — the boss key and tab cloak.
+- *Tab cloak* disguises the tab's title + favicon as Google Docs / Classroom / Drive / Google / New Tab. Presets (`cloaks.ts`) carry inline `data:` SVG favicons — no network, no shipped third-party bitmaps. `boot.ts` emits a `beforeInteractive` inline script (mounted in `layout.tsx`) that applies the saved cloak during head parse, so a disguised tab never flashes "HALLPASS" on a cold load; `StealthController` keeps the title pinned across Next's per-navigation title rewrites via a `MutationObserver`, remembering the real title so turning the cloak off restores it.
+- *Panic key* (`StealthController`, default `` ` ``) throws a full-viewport fake screen (`PanicScreen`: original, asset-free Docs/Classroom/Search recreations) over the arcade; press again or Escape to dismiss. Caveat: while a game iframe holds focus the browser routes keys to the iframe, so it fires on the catalogue/store pages, not mid-game.
+- Prefs (`store.ts`) persist in `hp:stealth`; the settings modal is reached from the sidebar footer / mobile drawer.
+
+**Daily streak** (`app/lib/streak`) — a consecutive-days-played flame.
+- `core.ts` is the pure, clock-free model (local `YYYY-MM-DD` keys, DST-safe day math); `store.ts` persists `hp:streak` and stamps the day from `recordPlay()`, called in `PlayerOverlay` right where recently-played is recorded (idempotent per calendar day).
+- `StreakChip` (header) shows the live streak with a 7-day popover + all-time best; `StreakToast` celebrates an advance and milestones.
+
 ## Offline / PWA architecture
 
 On the first visit the SW (`public/sw.js`) opens `hp-static-<BUILD_ID>` and precaches every URL in `self.__SW_PRECACHE` (generated at build time): the site shell, every prerendered route, every hashed `_next/static/{chunks,css,media}` asset, every `/game-html/<slug>/` game document (slash form — it must byte-match the iframe URL), and every file under `public/games/<slug>/` (the static twins of the Blob files, covers included). On a typical build this is ~150 URLs.

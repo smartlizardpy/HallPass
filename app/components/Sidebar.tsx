@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect } from "react";
 import type { Game } from "../lib/games";
+import { StealthMenuButton } from "./stealth/StealthMenuButton";
 import { SurpriseButton } from "./SurpriseButton";
 import { Wordmark } from "./Wordmark";
 
@@ -195,6 +196,10 @@ export function Sidebar({
 
         <nav className="flex-1 overflow-y-auto px-3 pb-4">{navList}</nav>
 
+        <div className="border-t border-border px-3 py-2">
+          <StealthMenuButton />
+        </div>
+
         <div className="px-6 pb-6">
           <p className="text-[11px] font-bold uppercase tracking-wider text-muted">
             © {new Date().getFullYear()} hallpass
@@ -247,6 +252,9 @@ export function Sidebar({
             </button>
           </div>
           <nav className="flex-1 overflow-y-auto px-3 pb-6">{navList}</nav>
+          <div className="border-t border-border px-3 py-3">
+            <StealthMenuButton onNavigate={onMobileClose} />
+          </div>
         </aside>
       </div>
     </>

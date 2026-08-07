@@ -1,0 +1,150 @@
+"use client";
+
+/**
+ * HallPass — the stealth-mode CONTROLLER, mounted once in the root layout.
+ *
+ * Owns the two live behaviours behind the prefs held in `lib/stealth/store`:
+ *
+ *  1. THE PANIC KEY. A window-level keydown listener watches for the configured
+ *     panic key and toggles a full-viewport {@link PanicScreen} disguise. Escape
+ *     always dismisses. Caveat: while a game IFRAME holds focus the browser
+ *     routes keystrokes to the iframe, so the panic key fires reliably on the
+ *     catalogue and store pages (where a passer-by actually sees the arcade), not
+ *     mid-game — the honest limitation of any iframe host.
+ *
+ *  2. THE TAB CLOAK. Applies the favicon via {@link applyFavicon} and keeps the
+ *     document title pinned to the cloak, re-asserting it through a
+ *     MutationObserver because Next rewrites `document.title` on every navigation.
+ *     The observer doubles as the record of the REAL title (captured whenever the
+ *     cloak is off, or seeded from the boot script's `__hpRealTitle`) so switching
+ *     the cloak back off restores the genuine page title rather than a guess.
+ *
+ * Renders nothing to the server and reads no session — it stays a pure client
+ * island so the pages that mount it remain statically prerenderable (and thus in
+ * the service-worker precache). Same contract as `WelcomeToast`/`PWA`.
+ */
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { cloakById } from "../../lib/stealth/cloaks";
+import { applyFavicon } from "../../lib/stealth/apply";
+import { OPEN_STEALTH_EVENT, PANIC_EVENT, useStealth } from "../../lib/stealth/store";
+import { PanicScreen } from "./PanicScreen";
+import { StealthSettings } from "./StealthSettings";
+
+/** Site default, used only as the last-resort restore title. */
+const FALLBACK_TITLE = "HALLPASS — Unblocked Games";
+
+/** True when a keystroke landed in an editable field (so a printable panic key
+ *  doesn't fire while the player is typing in search or the settings modal). */
+function isEditableTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    el.isContentEditable === true
+  );
+}
+
+export function StealthController() {
+  const { prefs } = useStealth();
+  const [panicking, setPanicking] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const realTitleRef = useRef<string | null>(null);
+
+  // Open the settings modal when any launcher dispatches the window event.
+  useEffect(() => {
+    const open = () => setSettingsOpen(true);
+    window.addEventListener(OPEN_STEALTH_EVENT, open);
+    return () => window.removeEventListener(OPEN_STEALTH_EVENT, open);
+  }, []);
+
+  // Raise the panic screen on demand (the settings "Preview" button), closing
+  // the settings modal first so the disguise covers the whole viewport.
+  useEffect(() => {
+    const preview = () => {
+      setSettingsOpen(false);
+      setPanicking(true);
+    };
+    window.addEventListener(PANIC_EVENT, preview);
+    return () => window.removeEventListener(PANIC_EVENT, preview);
+  }, []);
+
+  /* -------------------------- panic hotkey -------------------------- */
+  const panicKey = prefs.panicKey;
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      // Never let a browser/OS shortcut (Cmd+`, Ctrl+`) double as the panic key.
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      if (e.key === "Escape") {
+        // Escape only ever dismisses; it never opens (that would fight modals).
+        setPanicking((on) => (on ? false : on));
+        return;
+      }
+
+      if (e.key !== panicKey) return;
+      // A printable panic key typed into a field is the user writing, not hiding.
+      if (panicKey.length === 1 && isEditableTarget(e.target)) return;
+
+      e.preventDefault();
+      setPanicking((on) => !on);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [panicKey]);
+
+  const dismissPanic = useCallback(() => setPanicking(false), []);
+
+  /* --------------------------- tab cloak --------------------------- */
+  const cloakId = prefs.cloak;
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const cloak = cloakById(cloakId);
+    applyFavicon(cloak.favicon);
+
+    const cloakOn = cloak.id !== "off";
+    // Seed the real-title memory: from the boot script's stash if it cloaked at
+    // load, otherwise from whatever the document currently shows.
+    if (realTitleRef.current == null) {
+      const stashed = (window as unknown as { __hpRealTitle?: string }).__hpRealTitle;
+      realTitleRef.current = stashed ?? (cloakOn ? FALLBACK_TITLE : document.title);
+    }
+
+    const enforce = () => {
+      if (cloakOn) {
+        if (document.title !== cloak.title) {
+          // A change we didn't make (a route's real title) — remember it, re-cloak.
+          realTitleRef.current = document.title;
+          document.title = cloak.title;
+        }
+      } else {
+        // Cloak off: the document title IS the real one; keep it current.
+        realTitleRef.current = document.title;
+      }
+    };
+
+    if (cloakOn) {
+      realTitleRef.current = document.title === cloak.title ? realTitleRef.current : document.title;
+      document.title = cloak.title;
+    } else if (realTitleRef.current) {
+      document.title = realTitleRef.current;
+    }
+
+    const titleEl = document.querySelector("title");
+    const observer = new MutationObserver(enforce);
+    if (titleEl) {
+      observer.observe(titleEl, { childList: true, characterData: true, subtree: true });
+    }
+    return () => observer.disconnect();
+  }, [cloakId]);
+
+  return (
+    <>
+      {panicking && <PanicScreen screen={prefs.panicScreen} onDismiss={dismissPanic} />}
+      <StealthSettings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+    </>
+  );
+}

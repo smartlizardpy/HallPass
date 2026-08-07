@@ -1,11 +1,14 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { Nunito } from "next/font/google";
 import { FeaturePromo } from "./components/FeaturePromo";
-import { InstallPrompt } from "./components/InstallPrompt";
 import { MobileSplash } from "./components/MobileSplash";
 import { MobileTabBar } from "./components/MobileTabBar";
 import { PWA } from "./components/PWA";
+import { StealthController } from "./components/stealth/StealthController";
+import { StreakToast } from "./components/streak/StreakToast";
 import { WelcomeToast } from "./components/WelcomeToast";
+import { cloakBootScript } from "./lib/stealth/boot";
 import { SITE_URL } from "./lib/site";
 import "./globals.css";
 
@@ -81,13 +84,19 @@ export default function RootLayout({
       className={`${nunito.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        {/* Applies a saved tab cloak during head parse, before first paint, so a
+            disguised tab never flashes "HALLPASS" on a cold load. */}
+        <Script id="hp-cloak-boot" strategy="beforeInteractive">
+          {cloakBootScript()}
+        </Script>
         {children}
         <WelcomeToast />
         <PWA />
-        <InstallPrompt />
         <FeaturePromo />
         <MobileTabBar />
         <MobileSplash />
+        <StealthController />
+        <StreakToast />
       </body>
     </html>
   );
