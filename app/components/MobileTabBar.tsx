@@ -6,7 +6,7 @@
  * WHY A GLOBAL ISLAND, not part of `ArcadeShell`. The tabs span pages that do NOT
  * share the arcade chrome — `/play/friends` and `/play/account` are standalone
  * `<main>`s with no `ArcadeShell` — so the bar has to live above all of them.
- * Rendering it once in the root layout body (next to `<PWA/>` / `<InstallPrompt/>`)
+ * Rendering it once in the root layout body (next to `<PWA/>` / `<FeaturePromo/>`)
  * makes it route-agnostic and keeps every page otherwise untouched.
  *
  * WHY IT RENDERS NOTHING ON THE SERVER AND ON DESKTOP. `useDevicePlatform()` is
