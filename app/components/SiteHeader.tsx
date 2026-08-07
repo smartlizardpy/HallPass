@@ -180,8 +180,14 @@ export function SiteHeader({
 
       {/* On a phone the account lives in the bottom tab bar and What's New is
           noise, so both come off the header — which is what gives the search
-          field the whole row instead of a cramped sliver. Desktop keeps them. */}
-      {!isMobile && (
+          field the whole row instead of a cramped sliver. Desktop keeps them.
+          The streak flame stays, though: it's the one bit of the cluster worth
+          the space on mobile, and the phone header is otherwise its only home. */}
+      {isMobile ? (
+        <div className="ml-1 shrink-0">
+          <StreakChip />
+        </div>
+      ) : (
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <StreakChip />
           <WhatsNewLink />
