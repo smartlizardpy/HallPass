@@ -7,10 +7,10 @@ import { Wordmark } from "./Wordmark";
 import type { MeResponse } from "@/sdk/src/contract";
 
 /**
- * A one-time announcement modal for the new social features.
+ * A one-time announcement modal for HALLPASS's headline capabilities.
  *
- * Shows the player the ONE thing they are missing — sign in, claim a username,
- * or add friends — and nothing once they have all three. Dismissals are
+ * It shows the player the ONE thing they are missing — install the app, sign in,
+ * claim a username, or add friends — and nothing once none apply. Dismissals are
  * remembered per variant, so declining "sign in" does not suppress a later
  * "claim your username" once they actually have an account.
  *
@@ -31,16 +31,17 @@ import type { MeResponse } from "@/sdk/src/contract";
  */
 
 /**
- * `beta` is different in kind from the other three and is treated accordingly.
+ * `install` and `beta` are different in kind from the social nags and are treated
+ * accordingly.
  *
- * The originals are NAGS — "you are missing a username", "you have no friends
- * yet" — and only the first missing thing is shown. `beta` is NEWS: something
- * the player has just been GIVEN, by an admin, at a moment the site cannot
- * predict. It therefore takes priority over the nags (being told you are in the
- * programme matters more than being reminded to add friends) and it is keyed
- * per player rather than per browser — see {@link dismissKey}.
+ * The social ones are NAGS — "you are missing a username", "you have no friends
+ * yet" — and only the first missing thing is shown. `install` and `beta` are
+ * NEWS: a capability the player has just been given (the app can go offline) or
+ * been granted (the beta programme). Both take priority over the nags and are
+ * decided BEFORE them, and `install` is device-driven — it needs no `/api` data
+ * at all, only what the browser reports about installability.
  */
-type Variant = "beta" | "signin" | "username" | "friends";
+type Variant = "install" | "beta" | "signin" | "username" | "friends";
 
 type SocialCounts = {
   signedIn: boolean;
@@ -48,7 +49,23 @@ type SocialCounts = {
   hasUsername: boolean;
 };
 
+/**
+ * The `beforeinstallprompt` event is not in the standard DOM lib types.
+ * https://developer.mozilla.org/docs/Web/API/BeforeInstallPromptEvent
+ */
+interface BeforeInstallPromptEvent extends Event {
+  readonly platforms: string[];
+  readonly userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+  prompt(): Promise<void>;
+}
+
+/** How the install variant can be completed on this device. */
+type InstallMode = "native" | "ios";
+
 const STORAGE_KEY = "hp:promo-dismissed";
+/** Per-browser visit counter — the install nudge waits for a returning visitor. */
+const VISITS_KEY = "hp:visits";
+const SESSION_KEY = "hp:visitCounted";
 
 /**
  * Routes where a promo would interrupt rather than inform.
@@ -90,12 +107,26 @@ const COPY: Record<
     /**
      * Per-variant selling points. These used to be a single hardcoded list in
      * the markup, which was fine while every variant was pitching the same
-     * social features — the beta variant pitches something else entirely, so
-     * they moved in here rather than growing a conditional in the JSX.
+     * social features — the beta and install variants pitch something else
+     * entirely, so they moved in here rather than growing a conditional in the JSX.
      */
     points: { icon: string; text: string }[];
   }
 > = {
+  install: {
+    badge: "Offline",
+    title: "Play offline, anywhere",
+    body: "Add HALLPASS to your home screen and the whole arcade keeps working with no connection — through school filters, dead zones and locked-down wifi.",
+    cta: "Install app",
+    // Unused: the install variant fires the native prompt from `onPrimary`
+    // rather than navigating anywhere.
+    href: "",
+    points: [
+      { icon: "📴", text: "Every game you've opened plays with no wifi" },
+      { icon: "⚡", text: "One tap from your home screen — no browser, no URL" },
+      { icon: "🚀", text: "Loads instantly, even on a slow school network" },
+    ],
+  },
   beta: {
     badge: "Beta",
     title: "You're a beta tester",
@@ -140,9 +171,9 @@ const COPY: Record<
  * `beta` is keyed PER PLAYER. A single shared key would mean the first tester to
  * use a school computer suppresses the announcement for every other account on
  * that machine — and unlike the social nags, this one is never shown again by
- * any other route, so a missed one is missed permanently. The nags keep their
- * plain per-browser key: seeing "claim your username" once per device is the
- * behaviour that already shipped, and re-keying them would re-nag everyone.
+ * any other route, so a missed one is missed permanently. The nags — and the
+ * install nudge, which is a property of the device, not the account — keep their
+ * plain per-browser key.
  */
 function dismissKey(variant: Variant, playerId: string | null): string {
   return variant === "beta" && playerId ? `beta:${playerId}` : variant;
@@ -172,12 +203,55 @@ function rememberDismissed(key: string): void {
   }
 }
 
+/** Already installed / launched from the home screen — never pitch the install. */
+function isStandalone(): boolean {
+  if (typeof window === "undefined") return false;
+  const mm = window.matchMedia?.("(display-mode: standalone)").matches ?? false;
+  const iosStandalone =
+    (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+  return mm || iosStandalone;
+}
+
+/** iOS never fires `beforeinstallprompt`; it needs a manual Share-sheet hint. */
+function detectIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  const iPhone = /iphone|ipad|ipod/i.test(ua);
+  // iPadOS 13+ masquerades as desktop Safari.
+  const iPadOS = navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+  return iPhone || iPadOS;
+}
+
+/**
+ * This visit's running count, incremented once per tab session. Returns 1 when
+ * storage is blocked — where a dismissal could not be remembered either, so the
+ * conservative "treat as a first visit" keeps the install nudge silent rather
+ * than nagging every session.
+ */
+function bumpVisits(): number {
+  try {
+    if (!sessionStorage.getItem(SESSION_KEY)) {
+      const v = Number(localStorage.getItem(VISITS_KEY) || "0") + 1;
+      localStorage.setItem(VISITS_KEY, String(v));
+      sessionStorage.setItem(SESSION_KEY, "1");
+      return v;
+    }
+    return Number(localStorage.getItem(VISITS_KEY) || "0");
+  } catch {
+    return 1;
+  }
+}
+
 export function FeaturePromo() {
   const pathname = usePathname();
   const router = useRouter();
   const [variant, setVariant] = useState<Variant | null>(null);
   /** Whose beta announcement this is — see {@link dismissKey}. */
   const [playerId, setPlayerId] = useState<string | null>(null);
+  /** Set alongside the install variant so the panel knows which CTA to render. */
+  const [installMode, setInstallMode] = useState<InstallMode | null>(null);
+  /** The captured, deferred `beforeinstallprompt` event — the only way to install. */
+  const deferredRef = useRef<BeforeInstallPromptEvent | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -198,10 +272,68 @@ export function FeaturePromo() {
     if (SUPPRESSED_PREFIXES.some((p) => pathname.startsWith(p))) return;
 
     let active = true;
-    const timer = setTimeout(() => {
+    // A SINGLE decision per navigation. The install path (device event) and the
+    // account-nag path (an `/api` round trip) both race to fill this one slot;
+    // `decided` makes the first winner final and the loser a silent no-op, so
+    // the two can never stack a modal on a modal.
+    let decided = false;
+    const cleanups: Array<() => void> = [];
+
+    const commit = (next: Variant, forPlayer: string | null = null) => {
+      if (!active || decided) return;
       // Something else already owns the screen (the player overlay, the mobile
       // drawer). Do not stack a promo on top of it.
       if (document.body.style.overflow === "hidden") return;
+      decided = true;
+      setPlayerId(forPlayer);
+      setVariant(next);
+      posthog.capture("feature_promo_shown", { variant: next });
+    };
+
+    // ── Install / offline (NEWS, device-driven) ──────────────────────────────
+    // Eligible only when the app is not already installed, the nudge has not been
+    // dismissed, and this is a RETURNING visitor — a first-time visitor is left to
+    // just play. `bumpVisits()` is called exactly once here (session-guarded).
+    const installEligible =
+      !isStandalone() && !readDismissed().has("install") && bumpVisits() >= 2;
+    const ios = detectIOS();
+
+    if (installEligible) {
+      // iOS can never fire `beforeinstallprompt`, so offer the Share-sheet hint on
+      // the same settle delay the nags use.
+      if (ios) {
+        const t = window.setTimeout(() => {
+          setInstallMode("ios");
+          commit("install");
+        }, DELAY_MS);
+        cleanups.push(() => window.clearTimeout(t));
+      }
+      // Chromium/Android: wait for the browser to confirm the app is installable,
+      // capture the event so the CTA can replay it, then offer the one-tap install.
+      const onBeforeInstallPrompt = (e: Event) => {
+        e.preventDefault();
+        deferredRef.current = e as BeforeInstallPromptEvent;
+        const t = window.setTimeout(() => {
+          setInstallMode("native");
+          commit("install");
+        }, DELAY_MS);
+        cleanups.push(() => window.clearTimeout(t));
+      };
+      window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      cleanups.push(() =>
+        window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt),
+      );
+    }
+
+    // ── Account nags (existing behaviour) ────────────────────────────────────
+    const timer = window.setTimeout(() => {
+      if (decided) return;
+      if (document.body.style.overflow === "hidden") return;
+      // Prefer the install nudge whenever it can actually be completed: on iOS
+      // (always) or once a `beforeinstallprompt` has been captured. Its own timer
+      // will show it a beat later; skipping the fetch here avoids a wasted round
+      // trip and keeps the offline pitch ahead of the social ones.
+      if (installEligible && (ios || deferredRef.current)) return;
 
       // Both in parallel: two round trips in sequence would delay the modal by
       // the slower one for no reason, and each is a cheap no-store read.
@@ -214,10 +346,10 @@ export function FeaturePromo() {
           .catch(() => null),
       ])
         .then(([data, me]: [SocialCounts | null, MeResponse | null]) => {
-          if (!active || !data) return;
+          if (!active || !data || decided) return;
 
           const dismissed = readDismissed();
-          const playerId = me?.player?.id ?? null;
+          const nagPlayerId = me?.player?.id ?? null;
 
           // NEWS BEFORE NAGS. Being told you are now a beta tester outranks a
           // reminder to add friends, and it is the only variant the site cannot
@@ -233,14 +365,12 @@ export function FeaturePromo() {
                   : null;
 
           if (!next) return;
-          // A dismissed `beta` must not fall through to a social nag on the same
-          // page load — the player has already been interrupted once by this
+          // A dismissed variant must not fall through to another on the same page
+          // load — the player has already been interrupted once by this
           // component's decision, and stacking a second ask reads as badgering.
-          if (dismissed.has(dismissKey(next, playerId))) return;
+          if (dismissed.has(dismissKey(next, nagPlayerId))) return;
 
-          setPlayerId(playerId);
-          setVariant(next);
-          posthog.capture("feature_promo_shown", { variant: next });
+          commit(next, nagPlayerId);
         })
         .catch(() => {
           // Offline: /api/ is never intercepted by the service worker, so this
@@ -248,10 +378,11 @@ export function FeaturePromo() {
           // cannot act on any of these anyway.
         });
     }, DELAY_MS);
+    cleanups.push(() => window.clearTimeout(timer));
 
     return () => {
       active = false;
-      clearTimeout(timer);
+      for (const fn of cleanups) fn();
     };
   }, [pathname]);
 
@@ -293,6 +424,39 @@ export function FeaturePromo() {
 
   if (!variant) return null;
   const copy = COPY[variant];
+
+  const isInstall = variant === "install";
+  const iosInstall = isInstall && installMode === "ios";
+  // iOS cannot be handed a one-tap install, so the panel becomes instructional
+  // and the CTA just acknowledges it.
+  const body = iosInstall
+    ? "In Safari, tap the Share button, then “Add to Home Screen.” The whole arcade then plays offline — no wifi, no filters, no problem."
+    : copy.body;
+  const ctaLabel = iosInstall ? "Got it" : copy.cta;
+
+  const onPrimary = () => {
+    if (isInstall) {
+      const deferred = deferredRef.current;
+      if (installMode === "native" && deferred) {
+        // Consume the event first: it is single-use, and dismissing before the
+        // async prompt keeps our modal from lingering behind the browser's.
+        deferredRef.current = null;
+        dismiss("accepted");
+        void deferred
+          .prompt()
+          .then(() => deferred.userChoice)
+          .catch(() => {
+            /* user closed the native prompt — nothing to do */
+          });
+        return;
+      }
+      // iOS (or a native event that vanished): the how-to is on screen already.
+      dismiss("accepted");
+      return;
+    }
+    dismiss("accepted");
+    router.push(copy.href);
+  };
 
   return (
     <div
@@ -340,12 +504,11 @@ export function FeaturePromo() {
         */}
         <div className="flex items-center gap-2.5 pr-10">
           <Wordmark />
-          {/* Brand purple for the beta badge, pink for the social "New" ones —
-              the badge names a programme here rather than flagging novelty, and
-              it should read as the same purple the /beta surfaces use. */}
+          {/* Brand purple for the beta and install badges — they name a
+              capability rather than flagging novelty — pink for the social "New" ones. */}
           <span
             className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase leading-none tracking-wider text-white ${
-              variant === "beta" ? "bg-brand" : "bg-accent-pink"
+              variant === "beta" || variant === "install" ? "bg-brand" : "bg-accent-pink"
             }`}
           >
             {copy.badge}
@@ -362,7 +525,7 @@ export function FeaturePromo() {
           id="promo-body"
           className="mt-2 text-[15px] font-semibold leading-relaxed text-muted"
         >
-          {copy.body}
+          {body}
         </p>
 
         <ul className="mt-5 space-y-2">
@@ -376,13 +539,10 @@ export function FeaturePromo() {
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <button
             type="button"
-            onClick={() => {
-              dismiss("accepted");
-              router.push(copy.href);
-            }}
+            onClick={onPrimary}
             className="rounded-full bg-brand px-6 py-3 text-sm font-extrabold text-white transition hover:bg-brand-600"
           >
-            {copy.cta}
+            {ctaLabel}
           </button>
           <button
             type="button"
