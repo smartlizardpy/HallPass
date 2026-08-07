@@ -61,8 +61,23 @@ describe("parsePrefs", () => {
     expect(prefs.panicScreen).toBe(DEFAULT_PREFS.panicScreen);
   });
 
+  it("defaults shake to off and keeps a stored boolean", () => {
+    expect(parsePrefs(null).shake).toBe(false);
+    expect(parsePrefs(JSON.stringify({ shake: true })).shake).toBe(true);
+  });
+
+  it("ignores a non-boolean shake value", () => {
+    expect(parsePrefs(JSON.stringify({ shake: "yes" })).shake).toBe(DEFAULT_PREFS.shake);
+    expect(parsePrefs(JSON.stringify({ shake: 1 })).shake).toBe(DEFAULT_PREFS.shake);
+  });
+
   it("round-trips through serializePrefs", () => {
-    const prefs = { cloak: "classroom", panicKey: "Escape", panicScreen: "search" } as const;
+    const prefs = {
+      cloak: "classroom",
+      panicKey: "Escape",
+      panicScreen: "search",
+      shake: true,
+    } as const;
     expect(parsePrefs(serializePrefs(prefs))).toEqual(prefs);
   });
 });

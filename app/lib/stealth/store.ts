@@ -24,6 +24,7 @@ import { DEFAULT_CLOAK_ID, cloakById } from "./cloaks";
 import {
   DEFAULT_PANIC_KEY,
   DEFAULT_PANIC_SCREEN,
+  DEFAULT_SHAKE_TO_PANIC,
   STEALTH_KEY,
   type PanicScreenId,
   isPanicScreen,
@@ -40,13 +41,19 @@ export type StealthPrefs = {
   panicKey: string;
   /** Which fake screen the panic key raises. */
   panicScreen: PanicScreenId;
+  /** Whether a phone/tablet shake raises the panic screen (opt-in — see config). */
+  shake: boolean;
 };
 
-/** The out-of-the-box prefs: no disguise, backtick panic key, blank-doc screen. */
+/**
+ * The out-of-the-box prefs: no disguise, backtick panic key, blank-doc screen,
+ * shake-to-panic off (it needs an explicit motion-permission grant on iOS).
+ */
 export const DEFAULT_PREFS: StealthPrefs = {
   cloak: DEFAULT_CLOAK_ID,
   panicKey: DEFAULT_PANIC_KEY,
   panicScreen: DEFAULT_PANIC_SCREEN,
+  shake: DEFAULT_SHAKE_TO_PANIC,
 };
 
 /* -------------------------------------------------------------------------- *
@@ -82,7 +89,9 @@ export function parsePrefs(raw: string | null): StealthPrefs {
     typeof obj.panicScreen === "string" && isPanicScreen(obj.panicScreen)
       ? obj.panicScreen
       : DEFAULT_PREFS.panicScreen;
-  return { cloak, panicKey, panicScreen };
+  const shake =
+    typeof obj.shake === "boolean" ? obj.shake : DEFAULT_PREFS.shake;
+  return { cloak, panicKey, panicScreen, shake };
 }
 
 /** Serialise prefs to the canonical JSON string stored in localStorage. */
@@ -185,6 +194,11 @@ export function setPanicScreen(id: PanicScreenId): void {
   commit({ ...snapshot, panicScreen: isPanicScreen(id) ? id : DEFAULT_PREFS.panicScreen });
 }
 
+export function setShake(on: boolean): void {
+  ensureLoaded();
+  commit({ ...snapshot, shake: Boolean(on) });
+}
+
 /* -------------------------------------------------------------------------- *
  * Settings-modal open signal.
  *
@@ -222,6 +236,7 @@ export function useStealth(): {
   setCloak: (id: string) => void;
   setPanicKey: (key: string) => void;
   setPanicScreen: (id: PanicScreenId) => void;
+  setShake: (on: boolean) => void;
 } {
   const prefs = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   return {
@@ -229,5 +244,6 @@ export function useStealth(): {
     setCloak: useCallback((id: string) => setCloak(id), []),
     setPanicKey: useCallback((key: string) => setPanicKey(key), []),
     setPanicScreen: useCallback((id: PanicScreenId) => setPanicScreen(id), []),
+    setShake: useCallback((on: boolean) => setShake(on), []),
   };
 }

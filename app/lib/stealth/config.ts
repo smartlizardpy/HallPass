@@ -37,3 +37,10 @@ export const DEFAULT_PANIC_SCREEN: PanicScreenId = "docs";
  * player overlay. Compared against `KeyboardEvent.key`.
  */
 export const DEFAULT_PANIC_KEY = "`";
+
+/**
+ * Whether shake-to-panic is on out of the box. OFF: it needs a motion-permission
+ * grant on iOS and would otherwise raise the disguise from an accidental jolt, so
+ * it is strictly opt-in from the settings modal.
+ */
+export const DEFAULT_SHAKE_TO_PANIC = false;
