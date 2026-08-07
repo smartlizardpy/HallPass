@@ -37,7 +37,7 @@ var D=${payload};
 var raw=localStorage.getItem(D.key);if(!raw)return;
 var p=JSON.parse(raw);var id=p&&p.cloak;if(!id||id==="off")return;
 var c=D.cloaks[id];if(!c)return;
-if(c.title)document.title=c.title;
+if(c.title){window.__hpRealTitle=document.title;document.title=c.title;}
 if(c.favicon){
 var l=document.querySelector('link[rel~="icon"]:not([rel~="apple-touch-icon"])');
 if(!l){l=document.createElement("link");l.setAttribute("rel","icon");document.head.appendChild(l);}
