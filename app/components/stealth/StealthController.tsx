@@ -27,8 +27,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cloakById } from "../../lib/stealth/cloaks";
 import { applyFavicon } from "../../lib/stealth/apply";
-import { useStealth } from "../../lib/stealth/store";
+import { OPEN_STEALTH_EVENT, useStealth } from "../../lib/stealth/store";
 import { PanicScreen } from "./PanicScreen";
+import { StealthSettings } from "./StealthSettings";
 
 /** Site default, used only as the last-resort restore title. */
 const FALLBACK_TITLE = "HALLPASS — Unblocked Games";
@@ -50,7 +51,15 @@ function isEditableTarget(target: EventTarget | null): boolean {
 export function StealthController() {
   const { prefs } = useStealth();
   const [panicking, setPanicking] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const realTitleRef = useRef<string | null>(null);
+
+  // Open the settings modal when any launcher dispatches the window event.
+  useEffect(() => {
+    const open = () => setSettingsOpen(true);
+    window.addEventListener(OPEN_STEALTH_EVENT, open);
+    return () => window.removeEventListener(OPEN_STEALTH_EVENT, open);
+  }, []);
 
   /* -------------------------- panic hotkey -------------------------- */
   const panicKey = prefs.panicKey;
@@ -121,6 +130,10 @@ export function StealthController() {
     return () => observer.disconnect();
   }, [cloakId]);
 
-  if (!panicking) return null;
-  return <PanicScreen screen={prefs.panicScreen} onDismiss={dismissPanic} />;
+  return (
+    <>
+      {panicking && <PanicScreen screen={prefs.panicScreen} onDismiss={dismissPanic} />}
+      <StealthSettings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+    </>
+  );
 }

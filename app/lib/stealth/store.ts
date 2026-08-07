@@ -186,6 +186,23 @@ export function setPanicScreen(id: PanicScreenId): void {
 }
 
 /* -------------------------------------------------------------------------- *
+ * Settings-modal open signal.
+ *
+ * The modal lives once inside `StealthController` (in the root layout); trigger
+ * buttons can sit anywhere in the tree. Rather than thread state through every
+ * layer, a launcher dispatches this window event and the controller listens for
+ * it. A CustomEvent name is the smallest possible coupling between the two.
+ * -------------------------------------------------------------------------- */
+
+export const OPEN_STEALTH_EVENT = "hp:open-stealth";
+
+/** Ask the mounted controller to open the stealth settings modal. */
+export function openStealthSettings(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(OPEN_STEALTH_EVENT));
+}
+
+/* -------------------------------------------------------------------------- *
  * React hook.
  * -------------------------------------------------------------------------- */
 
