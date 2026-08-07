@@ -6,6 +6,7 @@ import Link from "next/link";
 import { captureSearchNow } from "../lib/use-search-capture";
 import { useDevicePlatform } from "../lib/use-device-platform";
 import { AccountMenu } from "./AccountMenu";
+import { StreakChip } from "./streak/StreakChip";
 import { WhatsNewLink } from "./WhatsNewLink";
 import { Wordmark } from "./Wordmark";
 
@@ -182,6 +183,7 @@ export function SiteHeader({
           field the whole row instead of a cramped sliver. Desktop keeps them. */}
       {!isMobile && (
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          <StreakChip />
           <WhatsNewLink />
           <AccountMenu />
         </div>
