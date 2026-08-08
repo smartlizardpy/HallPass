@@ -12,6 +12,11 @@
  *     catalogue and store pages (where a passer-by actually sees the arcade), not
  *     mid-game — the honest limitation of any iframe host.
  *
+ *     Raising the disguise is more than a render: the arcade behind it also has to
+ *     go quiet ({@link hushArcade}), because a disguise a teacher can HEAR through
+ *     is no disguise. Every such side effect is owned here, as an effect keyed on
+ *     `panicking`, so each one is undone by the same code path that applied it.
+ *
  *  2. THE TAB CLOAK. Applies the favicon via {@link applyFavicon} and keeps the
  *     document title pinned to the cloak, re-asserting it through a
  *     MutationObserver because Next rewrites `document.title` on every navigation.
@@ -27,6 +32,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cloakById } from "../../lib/stealth/cloaks";
 import { applyFavicon } from "../../lib/stealth/apply";
+import { hushArcade } from "../../lib/stealth/hush";
 import { useShakeToPanic } from "../../lib/stealth/shake";
 import { OPEN_STEALTH_EVENT, PANIC_EVENT, useStealth } from "../../lib/stealth/store";
 import { PanicScreen } from "./PanicScreen";
@@ -107,6 +113,15 @@ export function StealthController() {
   useShakeToPanic(prefs.shake, raisePanic);
 
   const dismissPanic = useCallback(() => setPanicking(false), []);
+
+  /* ------------------------- silence the arcade ------------------------- */
+  // Sound betrays the disguise faster than anything on screen, so it is silenced
+  // for exactly as long as the overlay is up and handed back untouched after —
+  // see `lib/stealth/hush` for what the host page can and cannot reach.
+  useEffect(() => {
+    if (!panicking) return;
+    return hushArcade();
+  }, [panicking]);
 
   /* --------------------------- tab cloak --------------------------- */
   const cloakId = prefs.cloak;
