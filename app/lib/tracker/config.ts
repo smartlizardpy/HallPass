@@ -11,6 +11,57 @@
  * it. `config.test.ts` asserts the invariants that a mismatch would break.
  */
 
+import type { Role } from "@/app/lib/dashboard-users";
+
+// ---------------------------------------------------------------------------
+// Who may do what
+// ---------------------------------------------------------------------------
+
+/**
+ * The role required by the two controls only the person building should hold.
+ *
+ * WHY THIS IS A CONSTANT AND NOT `"super_admin"` WRITTEN TWICE. A permission has
+ * two halves that must agree: the guard the server action enforces, and the
+ * condition the page renders the control under. Written out separately they
+ * drift, and the drift is silent in the dangerous direction — a control that
+ * still renders for somebody the action now refuses looks like a broken page,
+ * and one the action still accepts after the control was hidden is an
+ * unenforced rule that nobody notices until it matters. Both halves import from
+ * here, so there is one fact.
+ *
+ * `import type` keeps this module pure: `Role` is erased at compile time, so
+ * config still pulls in no database and no `server-only`.
+ */
+export const TRACKER_DEV_ROLE = "super_admin" as const;
+
+/**
+ * May this role move an item between lanes?
+ *
+ * Status is super-admin-only while everything else on the board is not, and the
+ * asymmetry is deliberate. Briefs, tags and progress notes are collaborative —
+ * the board exists so somebody can paste in what they want built. The STATUS is
+ * a claim about the work itself ("this is being built right now", "this is
+ * live"), and only the person actually building it can make that claim
+ * truthfully. It is also the one field the database ties to another:
+ * `tracker_items_done_at_matches_status` rewrites `done_at` on every move in and
+ * out of a terminal lane.
+ */
+export function canMoveStatus(role: Role): boolean {
+  return role === TRACKER_DEV_ROLE;
+}
+
+/**
+ * May this role permanently delete an item?
+ *
+ * Distinct from archiving, which stays open to every admin: an archive is one
+ * click from being undone and keeps the brief, the notes and the trail, so
+ * sharing it costs nothing. A delete is unrecoverable — the row goes, and
+ * `tracker_item_tags` and `tracker_updates` CASCADE away with it.
+ */
+export function canDeleteItem(role: Role): boolean {
+  return role === TRACKER_DEV_ROLE;
+}
+
 /**
  * Where an item sits, worst-to-best left to right on the board.
  *
