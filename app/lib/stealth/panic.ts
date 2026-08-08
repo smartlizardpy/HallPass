@@ -185,6 +185,38 @@ export function releaseInert(lock: InertLock): void {
 }
 
 /* -------------------------------------------------------------------------- *
+ * Browser UI colour — pure core.
+ * -------------------------------------------------------------------------- */
+
+/** The slice of a `<meta>` element this needs. */
+export type ContentTarget = { content: string };
+
+export type ThemeColorLock = readonly { target: ContentTarget; prior: string }[];
+
+/**
+ * Point every `theme-color` meta at `color`, remembering what each said.
+ *
+ * Next emits this tag from the root layout's viewport export, and a site may emit
+ * several (one per `prefers-color-scheme`), so ALL of them have to move together
+ * or the disguise is correct in one colour scheme and neon purple in the other.
+ */
+export function paintThemeColor(
+  targets: readonly ContentTarget[],
+  color: string,
+): ThemeColorLock {
+  return targets.map((target) => {
+    const prior = target.content;
+    target.content = color;
+    return { target, prior };
+  });
+}
+
+/** Put every `theme-color` meta back to the value it carried before. */
+export function restoreThemeColor(lock: ThemeColorLock): void {
+  for (const { target, prior } of lock) target.content = prior;
+}
+
+/* -------------------------------------------------------------------------- *
  * Browser layer.
  * -------------------------------------------------------------------------- */
 
@@ -202,6 +234,23 @@ export function lockBackgroundScroll(): () => void {
     window.scrollY,
   );
   return () => releaseOverflow(lock, (x, y) => window.scrollTo(x, y));
+}
+
+/**
+ * Repaint the browser's own chrome to match the disguise, returning the undo.
+ *
+ * Only visible where the browser paints with it — the address bar on Android
+ * Chrome, and the status bar of the installed PWA, where the arcade's neon purple
+ * sits in a strip directly above a screen pretending to be a document. That strip
+ * is outside the viewport, so nothing the disguise renders can cover it.
+ */
+export function lockThemeColor(color: string): () => void {
+  if (typeof document === "undefined") return () => {};
+  const metas = Array.from(
+    document.head.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]'),
+  );
+  const lock = paintThemeColor(metas, color);
+  return () => restoreThemeColor(lock);
 }
 
 /**

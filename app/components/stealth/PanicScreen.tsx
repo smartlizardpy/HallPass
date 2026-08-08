@@ -17,10 +17,11 @@
  * state that makes the cover total. A disguise the arcade can still scroll behind
  * is a disguise that moves while nobody is touching it; a disguise the arcade
  * still holds the keyboard behind is one that fills a search box with whatever the
- * player types at it. Both are the kind of wrongness a passer-by notices without
- * knowing why. When and how the overlay
- * mounts is {@link file://./StealthController.tsx}'s job, not this file's; what
- * being mounted DOES to the page is this file's.
+ * player types at it; a disguise that stops at the notch leaves a strip of arcade
+ * above it. All of these are the kind of wrongness a passer-by notices without
+ * knowing why. When and how the overlay mounts is
+ * {@link file://./StealthController.tsx}'s job, not this file's; what being
+ * mounted DOES to the page is this file's.
  *
  * The overlay never renders on the server (the controller only raises it in
  * response to a live keystroke), so layout effects here are safe and are used
@@ -29,8 +30,12 @@
  */
 
 import { useLayoutEffect, useRef, type ReactElement } from "react";
-import type { PanicScreenId } from "../../lib/stealth/config";
-import { isolateOverlay, lockBackgroundScroll } from "../../lib/stealth/panic";
+import { panicScreenById, type PanicScreenId } from "../../lib/stealth/config";
+import {
+  isolateOverlay,
+  lockBackgroundScroll,
+  lockThemeColor,
+} from "../../lib/stealth/panic";
 import { ClassroomScreen } from "./screens/ClassroomScreen";
 import { DocsScreen } from "./screens/DocsScreen";
 import { SearchScreen } from "./screens/SearchScreen";
@@ -42,7 +47,14 @@ function DismissDot({ onDismiss }: { onDismiss: () => void }) {
       type="button"
       onClick={onDismiss}
       aria-label="Return to HALLPASS"
-      className="fixed bottom-0 right-0 z-10 h-11 w-11 cursor-default opacity-0"
+      // Held off the true viewport corner by the safe-area insets: pinned to 0 it
+      // sits under the home indicator on a modern phone, where the OS eats the tap
+      // and the only keyboard-free way out of the disguise stops working.
+      style={{
+        bottom: "env(safe-area-inset-bottom)",
+        right: "env(safe-area-inset-right)",
+      }}
+      className="fixed z-10 h-11 w-11 cursor-default opacity-0"
     />
   );
 }
@@ -71,9 +83,12 @@ export function PanicScreen({
   onDismiss: () => void;
 }) {
   const Screen = SCREENS[screen] ?? DocsScreen;
+  const meta = panicScreenById(screen);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => lockBackgroundScroll(), []);
+
+  useLayoutEffect(() => lockThemeColor(meta.chrome), [meta.chrome]);
 
   useLayoutEffect(() => {
     const el = rootRef.current;
@@ -99,6 +114,19 @@ export function PanicScreen({
       // `overscroll-contain`: scrolling to the end of the disguise must not chain
       // through to the arcade underneath, which on a phone is how the real page
       // rubber-bands into view around the edges of the cover.
+      // Full-bleed to `inset-0` so the disguise's own colour reaches the notch and
+      // the home-indicator strip — the arcade's dark neon showing through there
+      // would give the whole thing away — while the INSETS become padding, so the
+      // screen's content stops short of the hardware instead of sliding under it.
+      // Every inset is 0 on a device without cutouts, which is why this costs the
+      // desktop layout nothing.
+      style={{
+        background: meta.chrome,
+        paddingTop: "env(safe-area-inset-top)",
+        paddingRight: "env(safe-area-inset-right)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+        paddingLeft: "env(safe-area-inset-left)",
+      }}
       className="fixed inset-0 z-[2147483647] overflow-auto overscroll-contain bg-white outline-none"
       // A modal dialog rather than presentation: the shell is focused on mount and
       // everything behind it is inert, which is precisely what those two ARIA

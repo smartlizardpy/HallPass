@@ -35,6 +35,14 @@ export const STEALTH_KEY = "hp:stealth";
  * per product is the whole point of a single source of truth. The `title`s stay
  * spelled out because a screen's tab caption is a property of the SCREEN — a
  * disguise could plausibly want a caption its cloak twin does not.
+ *
+ * `chrome` is the colour of the disguise's TOP CHROME, and it exists for the two
+ * strips of a phone that no amount of markup inside the screen can reach: the
+ * safe-area inset behind a notch, and the status bar of the installed PWA (whose
+ * default is the arcade's neon purple — a violently obvious tell above an
+ * otherwise convincing document). All three impersonate white-chromed surfaces,
+ * so these are near-identical by nature rather than by coincidence; a screen that
+ * grew a coloured header would change its own value here.
  */
 export const PANIC_SCREENS = [
   {
@@ -42,18 +50,21 @@ export const PANIC_SCREENS = [
     label: "Google Docs",
     title: "Untitled document - Google Docs",
     favicon: cloakById("docs").favicon,
+    chrome: "#f9fbfd",
   },
   {
     id: "classroom",
     label: "Google Classroom",
     title: "Classes",
     favicon: cloakById("classroom").favicon,
+    chrome: "#ffffff",
   },
   {
     id: "search",
     label: "Google Search",
     title: "Google",
     favicon: cloakById("search").favicon,
+    chrome: "#ffffff",
   },
 ] as const;
 

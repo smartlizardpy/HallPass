@@ -3,7 +3,9 @@ import {
   isDisguiseTitle,
   lockOverflow,
   makeInert,
+  paintThemeColor,
   reconcileTitle,
+  restoreThemeColor,
   releaseInert,
   releaseOverflow,
   type Inertable,
@@ -154,6 +156,30 @@ describe("makeInert / releaseInert", () => {
   });
 });
 
+describe("paintThemeColor / restoreThemeColor", () => {
+  it("moves every theme-color meta, not just the first", () => {
+    // A site may emit one per colour scheme; a disguise correct in light mode and
+    // neon purple in dark mode is still a tell.
+    const light = { content: "#7c2eef" };
+    const dark = { content: "#1a0b2e" };
+    paintThemeColor([light, dark], "#ffffff");
+    expect(light.content).toBe("#ffffff");
+    expect(dark.content).toBe("#ffffff");
+  });
+
+  it("gives each meta back its own prior colour", () => {
+    const light = { content: "#7c2eef" };
+    const dark = { content: "#1a0b2e" };
+    restoreThemeColor(paintThemeColor([light, dark], "#ffffff"));
+    expect(light.content).toBe("#7c2eef");
+    expect(dark.content).toBe("#1a0b2e");
+  });
+
+  it("copes with a document that has no theme-color at all", () => {
+    expect(() => restoreThemeColor(paintThemeColor([], "#ffffff"))).not.toThrow();
+  });
+});
+
 describe("panicScreenById", () => {
   it("resolves a known id", () => {
     expect(panicScreenById("search").title).toBe(SEARCH_TITLE);
@@ -165,10 +191,13 @@ describe("panicScreenById", () => {
     expect(panicScreenById(undefined).id).toBe("docs");
   });
 
-  it("gives every screen a tab caption and an inline favicon", () => {
+  it("gives every screen a tab caption, an inline favicon and a chrome colour", () => {
     for (const screen of PANIC_SCREENS) {
       expect(screen.title.length).toBeGreaterThan(0);
       expect(screen.favicon).toMatch(/^data:image\/svg\+xml,/);
+      // Opaque and literal: it paints the notch strip and the PWA status bar, and
+      // a transparent or named value in either would show the arcade through.
+      expect(screen.chrome).toMatch(/^#[0-9a-f]{6}$/);
     }
   });
 });
