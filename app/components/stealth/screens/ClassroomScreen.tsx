@@ -21,6 +21,9 @@ import { AppsGrid, Avatar, SANS } from "./chrome";
 /** Icon grey, the one colour every glyph in the app bar shares. */
 const ICON = "#5f6368";
 
+/** The tabs a student sees on a class page, in the product's order. */
+const TABS = ["Stream", "Classwork", "People", "Grades"] as const;
+
 function MenuIcon(): ReactElement {
   return (
     <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden fill={ICON}>
@@ -57,6 +60,38 @@ function ClassroomMark(): ReactElement {
   );
 }
 
+/**
+ * The class tab row. Every class page in the real product carries it, so its
+ * absence is one of the loudest tells the disguise can have — a green-underlined
+ * "Stream" is the single detail that says "a class is open" from across a room.
+ * It scrolls horizontally rather than wrapping, because a second row of tabs on
+ * a phone would look like nothing the product has ever shipped.
+ */
+function TabRow(): ReactElement {
+  return (
+    <nav
+      className="flex overflow-x-auto border-b border-[#dadce0] bg-white px-2 sm:px-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      aria-hidden
+    >
+      {TABS.map((tab) => {
+        const active = tab === "Stream";
+        return (
+          <span
+            key={tab}
+            className="shrink-0 border-b-[3px] px-4 py-4 text-[14px] font-medium tracking-[0.01em]"
+            style={{
+              color: active ? "#1e8e3e" : ICON,
+              borderColor: active ? "#1e8e3e" : "transparent",
+            }}
+          >
+            {tab}
+          </span>
+        );
+      })}
+    </nav>
+  );
+}
+
 export function ClassroomScreen() {
   const stream = [
     {
@@ -73,7 +108,7 @@ export function ClassroomScreen() {
   return (
     <div className="min-h-full bg-[#f5f5f5]" style={{ fontFamily: SANS }}>
       {/* Top app bar */}
-      <header className="flex h-16 items-center gap-4 border-b border-[#dadce0] bg-white px-4">
+      <header className="flex h-16 items-center gap-4 bg-white px-4">
         <MenuIcon />
         <div className="flex items-center gap-2">
           <ClassroomMark />
@@ -85,6 +120,7 @@ export function ClassroomScreen() {
           <Avatar initial="T" size={32} color="#1a73e8" />
         </div>
       </header>
+      <TabRow />
 
       {/* Class banner */}
       <div className="mx-auto mt-6 max-w-[1000px] px-4">
