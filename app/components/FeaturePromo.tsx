@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import posthog from "posthog-js";
+import { openStealthSettings } from "../lib/stealth/store";
 import { Wordmark } from "./Wordmark";
 import type { MeResponse } from "@/sdk/src/contract";
 
@@ -35,13 +36,13 @@ import type { MeResponse } from "@/sdk/src/contract";
  * accordingly.
  *
  * The social ones are NAGS — "you are missing a username", "you have no friends
- * yet" — and only the first missing thing is shown. `install` and `beta` are
- * NEWS: a capability the player has just been given (the app can go offline) or
- * been granted (the beta programme). Both take priority over the nags and are
- * decided BEFORE them, and `install` is device-driven — it needs no `/api` data
- * at all, only what the browser reports about installability.
+ * yet" — and only the first missing thing is shown. `stealth`, `install` and
+ * `beta` are NEWS: a capability the site has (hide the arcade in a blink), one
+ * the device gained (the app can go offline), or one the player was granted (the
+ * beta programme). All three take priority over the nags and are decided BEFORE
+ * them; `stealth` and `install` need no `/api` data at all.
  */
-type Variant = "install" | "beta" | "signin" | "username" | "friends";
+type Variant = "stealth" | "install" | "beta" | "signin" | "username" | "friends";
 
 type SocialCounts = {
   signedIn: boolean;
@@ -113,6 +114,19 @@ const COPY: Record<
     points: { icon: string; text: string }[];
   }
 > = {
+  stealth: {
+    badge: "Stealth",
+    title: "Hide the arcade in a blink",
+    body: "Disguise the tab as Google Docs and throw a fake homework screen over everything the moment someone looks over — set your own escape.",
+    cta: "Set up stealth",
+    // Unused: `onPrimary` opens the stealth settings modal instead of navigating.
+    href: "",
+    points: [
+      { icon: "🕶️", text: "Cloak the tab as Docs, Classroom or Drive" },
+      { icon: "🚨", text: "A panic key hides everything in one press" },
+      { icon: "📳", text: "On a phone or tablet, just give it a shake" },
+    ],
+  },
   install: {
     badge: "Offline",
     title: "Play offline, anywhere",
@@ -290,6 +304,17 @@ export function FeaturePromo() {
       posthog.capture("feature_promo_shown", { variant: next });
     };
 
+    // ── Stealth mode (NEWS, everyone) ────────────────────────────────────────
+    // The site's headline hide-from-the-room feature. Announced once to every
+    // visitor so the cloak, the panic key and shake-to-panic actually get
+    // discovered — needs no `/api` data. Scheduled FIRST so that while it is still
+    // un-dismissed it wins the single slot ahead of install and the nags; they are
+    // all one-time, so whatever loses simply shows on a later visit.
+    if (!readDismissed().has("stealth")) {
+      const t = window.setTimeout(() => commit("stealth"), DELAY_MS);
+      cleanups.push(() => window.clearTimeout(t));
+    }
+
     // ── Install / offline (NEWS, device-driven) ──────────────────────────────
     // Eligible only when the app is not already installed, the nudge has not been
     // dismissed, and this is a RETURNING visitor — a first-time visitor is left to
@@ -454,6 +479,12 @@ export function FeaturePromo() {
       dismiss("accepted");
       return;
     }
+    if (variant === "stealth") {
+      // Open the settings modal `StealthController` owns rather than navigating.
+      dismiss("accepted");
+      openStealthSettings();
+      return;
+    }
     dismiss("accepted");
     router.push(copy.href);
   };
@@ -504,11 +535,13 @@ export function FeaturePromo() {
         */}
         <div className="flex items-center gap-2.5 pr-10">
           <Wordmark />
-          {/* Brand purple for the beta and install badges — they name a
-              capability rather than flagging novelty — pink for the social "New" ones. */}
+          {/* Brand purple for the news badges (stealth, beta, install) — they name
+              a capability rather than flagging novelty — pink for the social "New" ones. */}
           <span
             className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase leading-none tracking-wider text-white ${
-              variant === "beta" || variant === "install" ? "bg-brand" : "bg-accent-pink"
+              variant === "beta" || variant === "install" || variant === "stealth"
+                ? "bg-brand"
+                : "bg-accent-pink"
             }`}
           >
             {copy.badge}
