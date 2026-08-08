@@ -206,6 +206,27 @@ function SearchBox(): ReactElement {
   );
 }
 
+/**
+ * Three bare results and nothing else does not read as a results page. These
+ * two blocks are what a modern SERP fills the column with, and their absence
+ * leaves an expanse of white a real query would never produce.
+ */
+const ASKS: readonly string[] = [
+  "What actually happens during the light-dependent stage?",
+  "Where in the chloroplast do the light reactions take place?",
+  "What is the difference between the light and dark stages?",
+  "Why does chlorophyll reflect green light?",
+];
+
+const RELATED: readonly { lead: string; bold: string }[] = [
+  { lead: "light dependent reactions ", bold: "diagram" },
+  { lead: "light dependent reactions ", bold: "gcse revision" },
+  { lead: "photosynthesis ", bold: "word equation" },
+  { lead: "photosynthesis ", bold: "in the thylakoid membrane" },
+  { lead: "calvin cycle ", bold: "explained simply" },
+  { lead: "chlorophyll ", bold: "absorption spectrum" },
+];
+
 /** The vertical kebab that closes every result's URL line. */
 function KebabIcon(): ReactElement {
   return (
@@ -270,6 +291,91 @@ function Result({ result }: { result: ResultEntry }): ReactElement {
   );
 }
 
+/** The collapsed chevron on every People-also-ask row. */
+function ChevronIcon(): ReactElement {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+      aria-hidden
+      fill="none"
+      stroke="#5f6368"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="shrink-0"
+    >
+      <path d="m6 9.5 6 6 6-6" />
+    </svg>
+  );
+}
+
+/** The boxed accordion of follow-up questions, shown collapsed. */
+function PeopleAlsoAsk(): ReactElement {
+  return (
+    <section className="mb-8 rounded-lg border border-[#dadce0]">
+      <h2 className="px-5 pt-4 pb-1 text-[18px] text-[#202124]">People also ask</h2>
+      <ul>
+        {ASKS.map((question) => (
+          <li
+            key={question}
+            className="flex items-center justify-between gap-6 border-b border-[#ecedef] px-5 py-4 text-[16px] leading-snug text-[#202124]"
+          >
+            <span>{question}</span>
+            <ChevronIcon />
+          </li>
+        ))}
+      </ul>
+      <p className="px-5 py-2 text-right text-[13px] text-[#70757a]">Feedback</p>
+    </section>
+  );
+}
+
+/** The pill grid that closes the column. */
+function RelatedSearches(): ReactElement {
+  return (
+    <section className="mb-8">
+      <h2 className="mb-4 text-[22px] text-[#202124]">Related searches</h2>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {RELATED.map((term) => (
+          <div
+            key={term.bold}
+            className="flex items-center gap-4 rounded-full bg-[#f1f3f4] px-4 py-2.5 text-[16px] leading-snug text-[#202124]"
+          >
+            <MagnifierIcon size={18} color="#5f6368" weight={2.2} />
+            <span>
+              {term.lead}
+              <b className="font-bold">{term.bold}</b>
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** The grey bar at the bottom: where the results think you are, then the links. */
+function Footer(): ReactElement {
+  return (
+    <footer className="mt-6 border-t border-[#dadce0] bg-[#f2f2f2] text-[15px] text-[#70757a]">
+      <div className="border-b border-[#dadce0] px-6 py-3">
+        United Kingdom
+        <span className="px-2">·</span>
+        From your internet address
+        <span className="px-2">·</span>
+        <span className="underline">Update location</span>
+      </div>
+      <div className="flex flex-wrap gap-x-8 gap-y-2 px-6 py-3">
+        <span>Help</span>
+        <span>Send feedback</span>
+        <span>Privacy</span>
+        <span>Terms</span>
+      </div>
+    </footer>
+  );
+}
+
 /** The tab band, with its hairline doubling as the header's bottom edge. */
 function TabRow(): ReactElement {
   return (
@@ -297,7 +403,7 @@ function TabRow(): ReactElement {
 
 export function SearchScreen() {
   return (
-    <div className="min-h-full bg-white" style={{ fontFamily: SANS }}>
+    <div className="flex min-h-full flex-col bg-white" style={{ fontFamily: SANS }}>
       <header>
         <div className="flex items-center px-4 pt-4 sm:px-7 sm:pt-5">
           <div className={LOGO_SLOT}>
@@ -312,16 +418,22 @@ export function SearchScreen() {
         <TabRow />
       </header>
 
-      <main className={RAIL}>
+      <main className={`${RAIL} flex-1`}>
         <div className={COLUMN}>
           <p className="pt-3 pb-4 text-[14px] text-[#70757a]">
             About 4,120,000 results (0.38 seconds)
           </p>
-          {RESULTS.map((result) => (
+          {RESULTS.slice(0, 2).map((result) => (
             <Result key={result.domain} result={result} />
           ))}
+          <PeopleAlsoAsk />
+          {RESULTS.slice(2).map((result) => (
+            <Result key={result.domain} result={result} />
+          ))}
+          <RelatedSearches />
         </div>
       </main>
+      <Footer />
     </div>
   );
 }
