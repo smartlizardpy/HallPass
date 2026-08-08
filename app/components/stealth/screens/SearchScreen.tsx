@@ -26,12 +26,17 @@ const QUERY = "photosynthesis light dependent reactions";
  * numbers live here rather than at each use site because a header and a results
  * column that disagree by a few pixels is exactly the wrongness a passer-by
  * registers before they have read a single word of the page.
+ *
+ * Neither number survives onto a phone. Shake-to-panic is the touch trigger, so
+ * the narrow view is a first-class one: below `sm` the rail collapses to a plain
+ * gutter and every block runs the full width, which is what a real results page
+ * does at 390px.
  */
 const RAIL = "px-4 sm:pl-[180px] sm:pr-8";
 const COLUMN = "w-full sm:max-w-[652px]";
 
 /** The 152px slot the wordmark occupies, which is what puts the box on the rail. */
-const LOGO_SLOT = "flex w-[152px] shrink-0 items-center";
+const LOGO_SLOT = "flex items-center sm:w-[152px] sm:shrink-0";
 
 /**
  * The vertical-search tabs. Nothing else on the page is as instantly diagnostic:
@@ -190,16 +195,22 @@ function MagnifierIcon({
 
 /* -------------------------------- header --------------------------------- */
 
-/** The pill: the query, its clear cross, then voice, lens and the magnifier. */
-function SearchBox(): ReactElement {
+/**
+ * The pill: the query, its clear cross, then voice, lens and the magnifier. The
+ * trailing magnifier is desktop-only — the phone build of the box ends at the
+ * lens, and keeping it would cost width the query needs at 390px.
+ */
+function SearchBox({ className = "" }: { className?: string }): ReactElement {
   return (
-    <div className="flex h-[46px] flex-1 items-center gap-3 rounded-full border border-[#dfe1e5] pl-4 pr-3 sm:max-w-[692px]">
+    <div
+      className={`flex h-[46px] items-center gap-3 rounded-full border border-[#dfe1e5] pl-4 pr-3 ${className}`}
+    >
       <span className="min-w-0 flex-1 truncate text-[16px] text-[#202124]">{QUERY}</span>
       <ClearIcon />
       <span className="h-6 w-px shrink-0 bg-[#dadce0]" />
       <MicIcon />
       <LensIcon />
-      <span className="pl-1">
+      <span className="hidden pl-1 sm:block">
         <MagnifierIcon />
       </span>
     </div>
@@ -359,14 +370,14 @@ function RelatedSearches(): ReactElement {
 function Footer(): ReactElement {
   return (
     <footer className="mt-6 border-t border-[#dadce0] bg-[#f2f2f2] text-[15px] text-[#70757a]">
-      <div className="border-b border-[#dadce0] px-6 py-3">
+      <div className="border-b border-[#dadce0] px-4 py-3 sm:px-6">
         United Kingdom
         <span className="px-2">·</span>
         From your internet address
         <span className="px-2">·</span>
         <span className="underline">Update location</span>
       </div>
-      <div className="flex flex-wrap gap-x-8 gap-y-2 px-6 py-3">
+      <div className="flex flex-wrap gap-x-8 gap-y-2 px-4 py-3 sm:px-6">
         <span>Help</span>
         <span>Send feedback</span>
         <span>Privacy</span>
@@ -376,26 +387,36 @@ function Footer(): ReactElement {
   );
 }
 
-/** The tab band, with its hairline doubling as the header's bottom edge. */
+/**
+ * The tab band, with its hairline doubling as the header's bottom edge. The band
+ * scrolls sideways rather than wrapping or shrinking: seven tabs never fit a
+ * phone, and a wrapped second row of them would be a shape Google never shows.
+ * `min-w-max` is what makes that happen without a breakpoint fighting the rail —
+ * on a wide window the tabs are narrower than the column and the cap wins.
+ */
 function TabRow(): ReactElement {
   return (
-    <nav className={`${RAIL} mt-4 border-b border-[#dadce0] text-[14px]`}>
-      <div className={`${COLUMN} -mb-px flex items-end`}>
-        <ul className="flex gap-6">
-          {TABS.map((tab, i) => (
-            <li
-              key={tab}
-              className={
-                i === 0
-                  ? "border-b-[3px] border-[#1a73e8] pb-3 text-[#1a73e8]"
-                  : "border-b-[3px] border-transparent pb-3 text-[#5f6368]"
-              }
-            >
-              {tab}
-            </li>
-          ))}
-        </ul>
-        <span className="ml-auto pb-3 text-[#5f6368]">Tools</span>
+    <nav className="mt-3 border-b border-[#dadce0] text-[14px] sm:mt-4">
+      <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className={RAIL}>
+          <div className={`${COLUMN} -mb-px flex min-w-max items-end`}>
+            <ul className="flex gap-5 whitespace-nowrap sm:gap-6">
+              {TABS.map((tab, i) => (
+                <li
+                  key={tab}
+                  className={
+                    i === 0
+                      ? "border-b-[3px] border-[#1a73e8] pb-3 text-[#1a73e8]"
+                      : "border-b-[3px] border-transparent pb-3 text-[#5f6368]"
+                  }
+                >
+                  {tab}
+                </li>
+              ))}
+            </ul>
+            <span className="ml-auto hidden pb-3 pl-8 text-[#5f6368] sm:block">Tools</span>
+          </div>
+        </div>
       </div>
     </nav>
   );
@@ -405,13 +426,13 @@ export function SearchScreen() {
   return (
     <div className="flex min-h-full flex-col bg-white" style={{ fontFamily: SANS }}>
       <header>
-        <div className="flex items-center px-4 pt-4 sm:px-7 sm:pt-5">
+        <div className="flex flex-wrap items-center gap-y-3 px-4 pt-3 sm:flex-nowrap sm:gap-y-0 sm:px-7 sm:pt-5">
           <div className={LOGO_SLOT}>
             <GoogleWordmark size={28} />
           </div>
-          <SearchBox />
-          <div className="ml-6 flex shrink-0 items-center gap-4">
-            <AppsGrid />
+          <SearchBox className="order-last w-full sm:order-none sm:max-w-[692px] sm:flex-1" />
+          <div className="ml-auto flex shrink-0 items-center gap-4 sm:order-last sm:ml-6">
+            <AppsGrid className="hidden sm:block" />
             <Avatar initial="S" color="#1a73e8" size={30} />
           </div>
         </div>
