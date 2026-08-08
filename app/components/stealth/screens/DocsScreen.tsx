@@ -449,48 +449,60 @@ const MENUS = ["File", "Edit", "View", "Insert", "Format", "Tools", "Extensions"
  * work than it looks: a bare filename with nothing after it is the single most
  * common tell in a mocked-up editor, because every real document has been
  * starred, filed and saved at least once.
+ *
+ * Below `sm` the row keeps only what a phone browser keeps — the file mark, the
+ * name, Share and the account bubble. The alternative is a header that pushes
+ * the viewport sideways, and a disguise you have to scroll to read is worse
+ * than no disguise at all.
  */
 function Header(): ReactElement {
   return (
-    <div className="flex shrink-0 items-start gap-2.5 bg-white px-4 pt-2.5 pb-1">
+    <div className="flex shrink-0 items-start gap-2 bg-white px-2 pt-2 pb-1 sm:gap-2.5 sm:px-4 sm:pt-2.5">
       <span aria-hidden className="pt-1">
-        <DocsMark />
+        <DocsMark size={32} />
       </span>
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 text-[#444746]">
-          <span className="truncate text-[18px] leading-6 text-[#1f1f1f]">Untitled document</span>
-          <Star />
-          <MoveToFolder />
-          <VersionHistory />
+          <span className="truncate text-[17px] leading-6 text-[#1f1f1f] sm:text-[18px]">
+            Untitled document
+          </span>
+          <span aria-hidden className="hidden items-center gap-2 sm:flex">
+            <Star />
+            <MoveToFolder />
+            <VersionHistory />
+          </span>
         </div>
 
-        <div className="flex items-center text-[14px] text-[#444746]">
+        <div className="flex items-center overflow-x-auto text-[13px] text-[#444746] sm:text-[14px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {MENUS.map((m) => (
-            <span key={m} aria-hidden className="rounded px-2 py-0.5 leading-5">
+            <span key={m} aria-hidden className="shrink-0 rounded px-1.5 py-0.5 leading-5 sm:px-2">
               {m}
             </span>
           ))}
-          <span aria-hidden className="ml-2 text-[13px] text-[#5f6368]">
+          <span aria-hidden className="ml-2 hidden text-[13px] text-[#5f6368] sm:inline">
             Last edit was 4 minutes ago
           </span>
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2 pt-1.5">
+      <div className="flex shrink-0 items-center gap-1.5 pt-1 sm:gap-2 sm:pt-1.5">
         <span
           aria-hidden
-          className="flex h-9 items-center gap-1.5 rounded-full border border-[#747775] px-3 text-[#444746]"
+          className="hidden h-9 items-center gap-1.5 rounded-full border border-[#747775] px-3 text-[#444746] sm:flex"
         >
           <Camera />
           <Chevron size={16} />
         </span>
-        <span aria-hidden className="flex h-9 w-9 items-center justify-center rounded-full">
+        <span
+          aria-hidden
+          className="hidden h-9 w-9 items-center justify-center rounded-full sm:flex"
+        >
           <Comment />
         </span>
         <span
           aria-hidden
-          className="flex h-9 items-center gap-2 rounded-full bg-[#1a73e8] pr-5 pl-4 text-[14px] font-medium text-white"
+          className="flex h-9 items-center gap-1.5 rounded-full bg-[#1a73e8] pr-3.5 pl-3 text-[14px] font-medium text-white sm:gap-2 sm:pr-5 sm:pl-4"
         >
           <SharePerson />
           Share
@@ -509,19 +521,20 @@ function Header(): ReactElement {
  * PAGE rather than a white card, because the grey blocks at either end declare
  * where the margins are before you have looked at the text.
  *
- * Widths are kept in step with the page's horizontal padding by hand; the two
- * only look right when the grey ends line up exactly with where the text starts.
+ * Widths are kept in step with the page's horizontal padding by hand, at both
+ * breakpoints; the two only look right when the grey ends line up exactly with
+ * where the text starts.
  */
 function Ruler(): ReactElement {
   return (
     <div aria-hidden className="sticky top-0 z-10 bg-[#f9fbfd] pt-2 pb-3">
       <div className="relative h-4 w-full bg-white">
-        <span className="absolute inset-y-0 left-0 w-[96px] bg-[#c9ced4]" />
-        <span className="absolute inset-y-0 right-0 w-[96px] bg-[#c9ced4]" />
+        <span className="absolute inset-y-0 left-0 w-6 bg-[#c9ced4] sm:w-[96px]" />
+        <span className="absolute inset-y-0 right-0 w-6 bg-[#c9ced4] sm:w-[96px]" />
 
         {/* First-line and left indent markers, stacked at the left margin. */}
         <svg
-          className="absolute top-0 left-[96px] -ml-[5px]"
+          className="absolute top-0 left-6 -ml-[5px] sm:left-[96px]"
           width="10"
           height="16"
           viewBox="0 0 10 16"
@@ -533,13 +546,13 @@ function Ruler(): ReactElement {
 
         {/* Right indent marker. */}
         <svg
-          className="absolute top-0 right-[96px] -mr-[5px]"
+          className="absolute top-0 right-6 -mr-[5px] sm:right-[96px]"
           width="10"
           height="16"
           viewBox="0 0 10 16"
           fill="#5f6368"
         >
-          <path d="M5 10.5 0 16h10z" />
+          <path d="M5 11 0 16h10z" />
         </svg>
       </div>
     </div>
@@ -584,7 +597,7 @@ const Caret = () => (
 
 function Page(): ReactElement {
   return (
-    <div className="mb-12 min-h-[1056px] w-full bg-white px-[96px] py-[96px] text-[11pt] leading-[1.15] text-black shadow-[0_1px_3px_1px_rgba(60,64,67,0.15)]">
+    <div className="mb-8 min-h-[560px] w-full bg-white px-6 py-10 text-[11pt] leading-[1.15] text-black shadow-[0_1px_3px_1px_rgba(60,64,67,0.15)] sm:mb-12 sm:min-h-[1056px] sm:px-[96px] sm:py-[96px]">
       <p>
         Jordan Ellis
         <br />
@@ -631,9 +644,15 @@ export function DocsScreen() {
         chrome staying put while the page moves is half of what sells it.
         816×1056 is US Letter at Docs' own 96dpi, with 1in margins: get the
         proportions wrong and the page reads as a web card, not a sheet of A4.
+
+        A phone cannot have both: an inch of margin on a 390px screen leaves a
+        column too narrow to read, and a page shrunk to fit leaves type too
+        small to. So the page reflows to the viewport with phone-sized margins,
+        keeping a sliver of canvas at each edge — without it the sheet bleeds
+        into the background and stops reading as a page at all.
       */}
       <div className="flex-1 overflow-auto">
-        <div className="mx-auto w-full max-w-[816px]">
+        <div className="mx-auto w-full max-w-[816px] px-2 sm:px-0">
           <Ruler />
           <Page />
         </div>
