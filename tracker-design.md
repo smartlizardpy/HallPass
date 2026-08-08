@@ -1,199 +1,150 @@
 # Tracker — design
 
-A monday.com-shaped project tracker for the two people who build HallPass. Admin
-surface only: it lives under `/dashboard`, no player ever sees it, and nothing in
-it is public.
+A shared project board on `/dashboard`. Admins paste in what they want built and
+watch its status; I move the status as I build. Tags and status are the whole
+vocabulary.
 
-Status: **design only, nothing built.** This document is the plan to review before
-any code lands.
+Status: **design only, nothing built.**
 
 ---
 
-## 1. What it is, and what it deliberately is not
+## 1. What it is
 
-**Is.** One place to put the work: a captured idea, the context behind it ("info
-about the project"), what state it is in, who owns it, and what happened to it.
-A board you open on a Saturday morning to answer "what am I doing today", and a
-record six months later of why a thing was parked.
+Two directions through one surface:
 
-**Is not:**
+- **In** — an admin writes a title, pastes the details of what they want, tags
+  it, and it lands on the board.
+- **Out** — they open the board and can see what I am building right now, what is
+  queued, what shipped, and what got declined.
 
-- **Not a player-facing suggestion box.** No public submissions, no upvotes, no
-  roadmap page. That was the other reading of "idea tracker" and it is explicitly
-  out — it would drag in the entire moderation stack (rate limits, reports,
-  auto-hide, bans, audit log) that `game_reviews` already needed, for two users
-  who can just type into the box themselves.
-- **Not per-game.** Site features only. Game-specific bugs already have a home in
-  the beta programme (`beta_reports`), and duplicating that here would give the
-  same bug two competing statuses.
-- **Not real monday.com.** No automations, no real-time collaboration, no
-  notifications, no dashboards-of-dashboards, no custom column types. Those
-  features exist because monday sells to 40-person teams. Every one of them is a
-  liability at two users.
+That second direction is the product. A status chip alone does not tell anyone
+anything, so the item detail carries an **Updates** thread — dated notes from me
+about where a thing actually is.
+
+**Not** a player-facing suggestion box (no public writes, no moderation stack).
+**Not** per-game (game bugs live in the beta programme's `beta_reports`).
+**Not** monday.com — no automations, no notifications, no real-time, no custom
+column types. Those exist for 40-person teams and are pure liability here.
+
+### One entity, not two
+
+The earlier draft had Projects containing Items. **Collapsed to one entity: the
+item.** Someone pastes a project's details in — that *is* the item, and its
+status is what they came back to check. A second level would mean deciding
+whether the status lives on the parent or the child, and the answer would be
+wrong half the time.
+
+Tags do the grouping instead. When GitHub issues get connected later, the *issues*
+become the sub-work — which is the level that actually wants a parent/child
+relationship. See §6.
+
+> **Assumption to confirm:** collapsing Project and Item into one thing is my
+> read of "they paste in details about project and they see what I am building".
+> If you pictured a project holding several tracked pieces of work, say so — it
+> is one extra table and a `parent_id`, cheap now and awkward later.
 
 ### Naming
 
-`Boards` is already taken — `/dashboard/boards` is **leaderboards**, and
-`tracker_boards` next to `scoreboard` tables would be a permanent
-readability tax. So:
-
-| monday concept | here | route |
-|---|---|---|
-| Board | **Project** | `/dashboard/tracker/projects` |
-| Group | *(none — the status lane is the group)* | — |
-| Item | **Item** | `/dashboard/tracker/[id]` |
-| Updates | **Updates** (append-only thread) | on the item |
-| Activity log | **Activity** (auto-written events) | on the item |
-
-Nav label: **Tracker**. Table prefix: `tracker_`.
-
-**Why no free-form groups.** monday gives you groups *and* a status column, and
-in practice they fight: the group says "Q3" while the status says "Done". With
-two people the status lane *is* the grouping. One concept, no drift.
+`Boards` is taken — `/dashboard/boards` is **leaderboards**. Route is
+`/dashboard/tracker`, nav label **Tracker**, table prefix `tracker_`.
 
 ---
 
-## 2. The vocabularies
+## 2. The vocabulary
 
-These are the numbers most likely to be widened later by someone who has not read
-this section. They live in `app/lib/tracker/config.ts` — pure, no `server-only`,
-imported by both the store and the UI so the two cannot disagree (same rule as
-`reviews/config.ts` and `beta/config.ts`).
+Lives in `app/lib/tracker/config.ts` — pure, no `server-only`, imported by both
+the store and the UI so the two cannot drift (same rule as `reviews/config.ts`
+and `beta/config.ts`).
 
-### Status — six values, six lanes
+### Status — six values, worded for the person reading, not the person building
 
-```
-inbox → next → building → shipped
-                    ↘ parked
-                    ↘ dropped
-```
+| Status | What it tells the reader |
+|---|---|
+| `new` | Pasted in. I have not looked at it yet. |
+| `planned` | Agreed, queued, not started. |
+| `building` | **Being built right now.** |
+| `shipped` | Live on the site. |
+| `parked` | Not now, still want it. |
+| `declined` | Not doing this. |
 
-- `inbox` — captured, not yet judged. The default. Capture must never require a
-  decision, or you stop capturing.
-- `next` — agreed, queued, has enough context to start.
-- `building` — actively being worked. Stamps `started_at`.
-- `shipped` — live on the site. Terminal. Stamps `done_at`.
-- `parked` — deliberately not now, revisit later. Reversible, no `done_at`.
-- `dropped` — decided against. Terminal, stamps `done_at`, keeps the reasoning.
+`parked` and `declined` stay separate. Collapsing them destroys the one answer a
+board like this exists to give — *"we still want it"* versus *"we already said
+no"* — and without it the same request gets pasted in again every few months.
 
-`parked` and `dropped` are separate on purpose: collapsing them loses the single
-most useful thing a tracker records, which is *"we already thought about this and
-said no"* versus *"we still want this"*. A tracker without that answer gets the
-same idea re-entered every three months.
+`building` stamps `started_at`; `shipped` and `declined` stamp `done_at` and are
+the terminal pair. Nothing else is stamped.
 
-**No `review` lane.** In this repo the gap between merge and live is one Vercel
-deploy, so a lane for it would be empty most of the time and stale the rest.
+### Tags — free-form, first-class
 
-### Priority — `urgent | high | medium | low`
+The only other dimension. Lowercase, hyphenated, `^[a-z0-9][a-z0-9-]{0,23}$`.
+Free-form rather than a fixed enum, because the useful labels here are not
+predictable in advance (`pwa`, `mobile`, `stealth`, `perf`, `needs-art`).
 
-monday's wording, four values. Defaults to `medium`.
+No `tracker_tags` registry table — the tag list for the filter bar and the
+autocomplete is `SELECT DISTINCT tag`, which at this size is one cheap index-only
+scan and cannot drift from what is actually in use.
 
-### Effort — `s | m | l | xl`, nullable
+### Deliberately absent
 
-Sized in sittings, not story points: `s` = one evening, `m` = a weekend, `l` =
-several sessions, `xl` = needs breaking up before it can be started.
-
-Effort earns its place because it is the field that actually decides what gets
-built by two people with school and university in the way. Priority alone
-produces a board where everything is `high` and nothing moves.
-
-Nullable, because an un-sized item in `inbox` is normal and forcing a guess at
-capture time is exactly the friction that kills capture.
+No priority, no effort, no due dates, no assignee. One person builds, so the
+answer to "what is next" is the board order, and a `priority` column on a
+two-person board becomes six items marked `high`. They are one additive migration
+each if the board ever proves otherwise.
 
 ---
 
-## 3. Data model
+## 3. Schema
 
-Migration `021_tracker.sql` (020 is the current head), plus the canonical
-fresh-install DDL at `app/lib/tracker/schema.sql`. The two are kept in lockstep,
-same as `beta/schema.sql` ↔ `016_beta_program.sql`. Fully idempotent, every
-statement guarded, whole file in one `BEGIN; … COMMIT;`.
-
-### `tracker_projects`
-
-The "info about the project" layer — a named container with a written brief.
-
-```sql
-id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-key         TEXT NOT NULL UNIQUE CHECK (key ~ '^[A-Z][A-Z0-9]{1,5}$')  -- "PWA", "SOCIAL"
-name        TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 80)
-brief       TEXT NOT NULL DEFAULT '' CHECK (length(brief) <= 8000)
-accent      TEXT NOT NULL DEFAULT 'brand'
-position    INTEGER NOT NULL DEFAULT 0
-archived_at TIMESTAMPTZ
-created_by  TEXT NOT NULL          -- dashboard_users.email, no FK (see below)
-created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-```
-
-`brief` is where the project description goes. Plain text, rendered
-`whitespace-pre-wrap` — **never** `dangerouslySetInnerHTML`, matching the rule the
-moderation page states for review bodies. No markdown renderer: that is a
-dependency and an XSS surface bought for italics.
+Migration `021_tracker.sql` (020 is the current head), plus canonical
+fresh-install DDL at `app/lib/tracker/schema.sql`, kept in lockstep the way
+`beta/schema.sql` ↔ `016_beta_program.sql` are. Idempotent, every statement
+guarded, whole file in one `BEGIN; … COMMIT;`.
 
 ### `tracker_items`
 
 ```sql
 id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-project_id   BIGINT REFERENCES tracker_projects(id) ON DELETE RESTRICT
 title        TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 140)
-body         TEXT NOT NULL DEFAULT '' CHECK (length(body) <= 8000)
-status       TEXT NOT NULL DEFAULT 'inbox'
-               CHECK (status IN ('inbox','next','building','shipped','parked','dropped'))
-priority     TEXT NOT NULL DEFAULT 'medium'
-               CHECK (priority IN ('urgent','high','medium','low'))
-effort       TEXT CHECK (effort IN ('s','m','l','xl'))
-owner_email  TEXT
-due_on       DATE
+brief        TEXT NOT NULL DEFAULT '' CHECK (length(brief) <= 20000)
+status       TEXT NOT NULL DEFAULT 'new'
+               CHECK (status IN ('new','planned','building','shipped','parked','declined'))
 position     INTEGER NOT NULL DEFAULT 0
-source       TEXT NOT NULL DEFAULT 'admin' CHECK (source IN ('admin','beta','review'))
-source_ref   TEXT
-created_by   TEXT NOT NULL
+created_by   TEXT NOT NULL          -- dashboard_users.email, no FK (see below)
 created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 started_at   TIMESTAMPTZ
 done_at      TIMESTAMPTZ
 archived_at  TIMESTAMPTZ
 
+-- GitHub seam. Nullable, unused in phase 1 — see §6.
+gh_repo         TEXT
+gh_issue_number INTEGER
+gh_synced_at    TIMESTAMPTZ
+
 CONSTRAINT tracker_items_done_at_matches_status
-  CHECK ((status IN ('shipped','dropped')) = (done_at IS NOT NULL))
+  CHECK ((status IN ('shipped','declined')) = (done_at IS NOT NULL))
 ```
 
-Three decisions worth defending:
+`brief` is the pasted detail — **20 000 characters**, because "paste in the
+details" means someone will drop a whole spec, a chat log, or a bullet list in
+there and hitting a limit at that moment is how a tool gets abandoned. Rendered
+`whitespace-pre-wrap`, **never** `dangerouslySetInnerHTML` — the rule the
+moderation page states for review bodies applies to every free-text field on this
+dashboard. No markdown renderer: a dependency and an XSS surface bought for
+italics.
 
-**`project_id` is `ON DELETE RESTRICT`, and nullable.** Nullable because capture
-must not require picking a project — an item with no project is a loose idea, and
-that is a legitimate permanent state. `RESTRICT` because the item is the durable
-record and the project is a folder: deleting a folder must not silently destroy
-twelve items. The UI only ever offers *archive* for a project; a hard delete has
-to move its items out first, and the database is what makes that true rather than
-a rule someone remembers.
-
-**`done_at` is constrained to agree with `status`.** Moving an item back out of
-`shipped` must clear the timestamp, and the CHECK forces the store to do it
-instead of leaving a row that claims to be `next` and to have shipped in March.
-
-**`owner_email` has no foreign key to `dashboard_users`.** Same reasoning as
+`created_by` has **no foreign key** to `dashboard_users`, matching
 `review_moderation_log.actor_email`: removing someone from the admin allow-list
-must not blank out who owned what. It is a string, and history is allowed to name
-people who are no longer listed.
+must not blank out who asked for what.
 
-`source` / `source_ref` are there so a beta tester's accepted feature report can
-be promoted into an item later (phase 3) without a schema change. `source_ref` is
-a plain string, not an FK, so a deleted report can never take an item with it.
-
-Indexes:
+`done_at` is constrained to agree with `status`, so moving an item back out of
+`shipped` has to clear the timestamp instead of leaving a row that claims to be
+`planned` and to have shipped in March.
 
 ```sql
-tracker_items_board_idx   ON (status, position, id DESC) WHERE archived_at IS NULL
-tracker_items_project_idx ON (project_id, status)        WHERE archived_at IS NULL
-tracker_items_owner_idx   ON (owner_email, status)       WHERE archived_at IS NULL
-tracker_items_due_idx     ON (due_on)
-  WHERE archived_at IS NULL AND status NOT IN ('shipped','dropped')
+tracker_items_board_idx  ON (status, position, id DESC) WHERE archived_at IS NULL
+tracker_items_gh_idx     ON (gh_repo, gh_issue_number)  WHERE gh_issue_number IS NOT NULL  -- UNIQUE
 ```
-
-All partial on `archived_at IS NULL`, because every board read filters it and the
-archive only grows.
 
 ### `tracker_item_tags`
 
@@ -203,12 +154,14 @@ tag     TEXT NOT NULL CHECK (tag ~ '^[a-z0-9][a-z0-9-]{0,23}$')
 PRIMARY KEY (item_id, tag)
 ```
 
-A join table rather than a `TEXT[]`, so "everything tagged `pwa`" is an index
-lookup. `TagEditor` already exists in `app/dashboard/(app)/_ui/` and is reused.
+Plus `tracker_item_tags_tag_idx ON (tag, item_id)` so "everything tagged `pwa`"
+is an index lookup. A join table rather than a `TEXT[]` for exactly that reason.
+`TagEditor` already exists in `app/dashboard/(app)/_ui/` and gets reused.
 
 ### `tracker_updates`
 
-The monday "Updates" thread — append-only notes on an item.
+The progress narrative — append-only notes, which is how "they see what I am
+building" becomes real information rather than a coloured chip.
 
 ```sql
 id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
@@ -219,26 +172,23 @@ created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 edited_at    TIMESTAMPTZ
 ```
 
-Separate from `items.body` because the two are different things: `body` is the
-current spec and gets rewritten, an update is a dated note that does not. Losing
-"tried X, it did not work because Y" to a spec rewrite is the failure this
-prevents.
+Separate from `brief` because they are different things: the brief is the current
+ask and gets rewritten, an update is a dated note that does not. Losing "tried X,
+it does not work because Y" to a brief rewrite is the failure this prevents.
 
 ### `tracker_events`
 
-Auto-written activity. **`item_id` and `project_id` are plain `BIGINT` with no
-foreign key** — deliberately, following `review_moderation_log`: the trail has to
-survive the thing it describes, and a CASCADE would erase exactly the history you
-want when you hard-delete something contentious.
+Auto-written activity. `item_id` is a plain `BIGINT` with **no foreign key**,
+following `review_moderation_log` — the trail has to survive the thing it
+describes, and a CASCADE erases exactly the history you want after a hard delete.
 
 ```sql
 id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
 item_id     BIGINT
-project_id  BIGINT
 actor_email TEXT NOT NULL
 action      TEXT NOT NULL CHECK (action IN
-              ('create','status','priority','effort','owner','due','project',
-               'edit','tag','untag','archive','restore','comment','delete'))
+              ('create','status','edit','tag','untag',
+               'archive','restore','comment','link','unlink','delete'))
 from_value  TEXT
 to_value    TEXT
 created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -249,11 +199,12 @@ created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 ## 4. The constraint that shapes every mutation
 
 `app/lib/db.ts` uses the `neon()` HTTP driver: **one stateless request per tagged
-template, so a transaction cannot span two calls.** "Update the item, then log the
-event" as two `await`s has a real window where the first succeeded and the second
-did not, and the activity trail silently loses entries.
+template, so a transaction cannot span two calls.** "Update the status, then log
+the event" as two `await`s has a real window where the first succeeded and the
+second did not, and the activity trail silently loses entries.
 
-So every mutation is **one multi-CTE statement**, exactly like `reviews/store.ts`:
+So every mutation is **one multi-CTE statement**, the idiom `reviews/store.ts`
+already uses:
 
 ```sql
 WITH prev AS (
@@ -264,7 +215,7 @@ WITH prev AS (
      SET status     = ${next},
          started_at = CASE WHEN ${next} = 'building' AND t.started_at IS NULL
                            THEN now() ELSE t.started_at END,
-         done_at    = CASE WHEN ${next} IN ('shipped','dropped')
+         done_at    = CASE WHEN ${next} IN ('shipped','declined')
                            THEN coalesce(t.done_at, now()) ELSE NULL END,
          updated_at = now()
     FROM prev
@@ -277,19 +228,17 @@ SELECT moved.id, ${actor}, 'status', prev.status, moved.status
 RETURNING item_id;
 ```
 
-Two properties fall out: the CTE reads the pre-update snapshot so `from_value` is
-correct without a second round trip, and **an empty result set is the outcome
-code** — no rows means "no such item, or already archived", which is how the
-server action decides between `?ok` and `?error`. Same decode-from-one-statement
-idiom the review store uses.
+Two properties fall out: the CTE reads the pre-update snapshot, so `from_value` is
+correct with no second round trip; and **an empty result set is the outcome code**
+— no rows means "no such item, or already archived", which is how the server
+action picks between `?ok` and `?error`.
 
 **SQL safety.** The `neon()` template parameterises values only and does not
-reliably splice fragments. Nothing here interpolates a fragment. The board's
-filters (project / owner / priority / tag) are **not** built into a dynamic
-`WHERE`: the board reads every non-archived item in one query and groups and
-filters in JS. At the realistic size of this table — tens to low hundreds of rows
-— that is one round trip instead of a combinatorial set of hand-written
-templates, and it is the honest reason, not a performance claim.
+reliably splice fragments. Nothing here interpolates one. The board's tag filter
+is not a dynamic `WHERE`: the board reads every non-archived item plus its tags in
+one query and filters in JS. At tens-to-low-hundreds of rows that is one round
+trip instead of a combinatorial set of hand-written templates — and that, not a
+performance claim, is the honest reason.
 
 ---
 
@@ -297,176 +246,159 @@ templates, and it is the honest reason, not a performance claim.
 
 ```
 app/lib/tracker/
-  config.ts        statuses, priorities, efforts, labels, lane order — pure
-  config.test.ts   invariants (every status has a lane label; terminal set matches the CHECK)
+  config.ts        statuses, labels, lane order, tag regex — pure
+  config.test.ts   invariants (lane order covers every status once; terminal set
+                   matches the done_at CHECK; every value has a label)
   schema.sql       canonical fresh-install DDL
   store.ts         createTrackerStore(sql) factory
-  store.test.ts    fake-tagged-template seam (transitions, timestamps, event pairing)
+  store.test.ts    fake-tagged-template seam
   index.ts         server-only barrel binding the store to the shared `sql`
 
 app/lib/scoreboard/migrations/021_tracker.sql
 
 app/dashboard/(app)/tracker/
-  page.tsx             the board
-  actions.ts           server actions (all requireRole-gated)
-  [id]/page.tsx        item detail
-  projects/page.tsx    project list + brief editor          (phase 2)
-  _ui/QuickAdd.tsx     one-field capture form
-  _ui/Lane.tsx         one status column
-  _ui/ItemCard.tsx     the card
-  _ui/Chips.tsx        status / priority / effort chips     (mirrors beta/_ui/Chips.tsx)
+  page.tsx         the board
+  actions.ts       server actions, all requireRole-gated
+  [id]/page.tsx    item detail — brief, tags, status, Updates, Activity
+  new/page.tsx     the paste-it-in form
+  _ui/Composer.tsx title + big brief textarea + tags
+  _ui/Lane.tsx     one status column
+  _ui/ItemCard.tsx title, tags, last-update timestamp
+  _ui/Chips.tsx    status + tag chips (mirrors beta/_ui/Chips.tsx)
 
 app/dashboard/(app)/_ui/DashNav.tsx   +1 nav entry
 ```
 
-**Server actions, not route handlers.** The convention is stated in
+**Server actions, not route handlers.** Stated as the convention in
 `app/api/v1/games/[slug]/reviews/route.ts`: route handlers are for *player* writes
-with no role; every admin write in this codebase is a `requireRole`-gated server
-action. The tracker is entirely admin writes, so it follows curation/moderation —
-`requireRole("admin")` first, validate, one fallible store call in a try/catch,
-`redirect()` **outside** the try, land back on `?ok=` / `?error=`.
+with no role, and every admin write in this codebase is a `requireRole`-gated
+server action. So the tracker follows curation/moderation — `requireRole("admin")`
+first, validate, one fallible store call in a try/catch, `redirect()` **outside**
+the try, land back on `?ok=` / `?error=`.
 
-### The board (`/dashboard/tracker`)
+### The board
 
-- **Quick add pinned at the top.** One text field, submit, lands in `inbox` with
-  no other decision required. This is the highest-value element on the page — a
-  tracker that asks five questions before accepting an idea stops receiving ideas.
-- Six lanes, ordered `inbox → next → building → shipped → parked → dropped`, each
-  with a count. Desktop: horizontally scrolling columns. Mobile: stacked
-  `<details>` sections, open by default only where the lane is non-empty (the six
-  columns of a real Kanban board are unusable on a phone, and `mobile.md` treats
-  that surface as real).
-- Sort within a lane: `pinned/position`, then priority, then `due_on` nulls last,
-  then `updated_at` desc.
-- Filters as plain links (`?project=`&`?owner=`&`?tag=`) — server-rendered, no
-  client state, shareable, works with the back button.
+Six lanes, `new → planned → building → shipped → parked → declined`, each with a
+count. **`building` renders first and widest** — it is the answer most people open
+this page for. Desktop: horizontally scrolling columns. Mobile: stacked
+`<details>` sections, open only where the lane is non-empty (six Kanban columns are
+unusable on a phone, and `mobile.md` treats that surface as real).
 
-### Item detail (`/dashboard/tracker/[id]`)
+Tag filter as plain links (`?tag=pwa`) — server-rendered, no client state,
+shareable, works with the back button.
 
-Title, `body` spec, and a meta rail: project, status, priority, effort, owner,
-due, tags. Below it the Updates thread, and below that Activity. Each meta field
-is its own tiny `<form>` with a `<select>` and a submit — no JS required, and it
-matches how the rest of the dashboard mutates.
+### The composer
 
-### Nav and badge
+A dedicated `/dashboard/tracker/new` page rather than an inline one-liner, because
+the input here is a *paste*, not a capture: a full-width textarea that can hold a
+spec without fighting a board layout for room. Title + brief + tags, lands in
+`new`. Plain `<form>` + server action, no JS required.
+
+### Item detail
+
+Brief at the top, tags and status beside it, then Updates, then Activity. Status
+is a `<select>` + submit; adding an update is a textarea + submit. No JS required
+anywhere, matching how the rest of the dashboard mutates.
+
+### Nav
 
 `{ href: "/dashboard/tracker", label: "Tracker" }`, placed **third** — after
-Overview and Moderation. Moderation keeps second place; its docblock explains that
-the position is earned by having a child waiting on the other end of it, and a
-personal backlog does not outrank that.
+Overview and Moderation. Moderation keeps second: its docblock explains the
+position is earned by having a child waiting on the other end of it, and this does
+not outrank that.
 
-A count badge (urgent + overdue) is phase 2, and should be **server-rendered and
-passed down from the `(app)` layout**, not a second polling client component.
-`OpenReportBadge` documents why it polls and ends with "if the layout ever grows
-the count, delete the effect and take it as a prop" — two independent 60-second
-pollers in one sidebar is the version of this to avoid.
+A "new items" count badge is possible later, but should be **server-rendered from
+the `(app)` layout**, not a second polling client component — `OpenReportBadge`
+documents why it polls and ends with "if the layout ever grows the count, delete
+the effect and take it as a prop". Two independent 60-second pollers in one
+sidebar is the version to avoid.
+
+### Authorization
+
+`requireRole("admin")` on every page and action, matching Moderation, Curation,
+Games and Beta. Everyone who can reach the dashboard can paste an item in and read
+every status — which is the point. Nothing is exposed through `/api/v1/*`, so no
+SDK contract change and no CORS surface.
 
 ---
 
-## 6. Authorization
+## 6. The GitHub seam (designed now, built later)
 
-`requireRole("admin")` on every page and every action — matching Moderation,
-Curation, Games, and Beta. Only Users and Logs are `super_admin`.
+`gh_repo` / `gh_issue_number` / `gh_synced_at` ship nullable and unused in phase 1
+so that connecting issues later is not a migration.
 
-This is a one-word change if you would rather the tracker be super-admin-only.
-The trade: `admin` means Ateş can file and move items; `super_admin` makes it your
-private notebook. Recommendation is `admin` — a tracker only one person can write
-to is a text file with extra steps. **Flagged as an open question below.**
+The hard part is not the API call — it is **deciding which side owns status**, and
+that decision should be made when the integration is built, not now. The three
+options, so the choice is on the record:
 
-Nothing here is ever exposed by an `/api/v1/*` route, so no SDK contract change
-and no CORS surface.
+1. **Tracker owns status, GitHub is a mirror.** An item can link N issues; closing
+   them does nothing here. Simplest, but the board will drift from reality the
+   first busy week.
+2. **GitHub owns status, tracker mirrors it.** `building` when an issue is open
+   with a linked PR, `shipped` when it closes. Honest and self-maintaining, but
+   `parked` and `declined` have no GitHub equivalent, so the vocabulary would have
+   to shrink to what labels can express.
+3. **Split — tracker owns intake (`new`/`planned`/`parked`/`declined`), GitHub owns
+   execution (`building`/`shipped`).** Each state has exactly one authority. This
+   is the one worth trying, and it is why `started_at`/`done_at` are stamps rather
+   than derived.
+
+Whichever way it goes, runtime GitHub access needs a token or GitHub App
+credential in the Vercel environment — none exists today, and it belongs in the
+env table in the README when it does.
 
 ---
 
 ## 7. Failure modes
 
-Follows the repo rules exactly:
+Follows the repo's existing rules:
 
-- **Schema behind the deploy.** The page catches `isMissingColumnError` and
-  renders "run migration 021" rather than a 500. This matters here because
-  `scripts/migrate.mjs` is not wired into the deploy and `HANDOFF.md` records a
-  live instance of that drift (migration 013 was never applied to prod).
-- **`DATABASE_URL` unset.** `isUnconfiguredDbError` renders its own notice.
-- **Anything else rethrows.** A real Neon outage must not be disguised as an
-  empty board — the same lie the moderation page calls out as its most dangerous.
-- **Neon branching.** 021 must be applied to *every* branch the app runs against.
+- **Schema behind the deploy** — the page catches `isMissingColumnError` and
+  renders "run migration 021" instead of a 500. This matters: `scripts/migrate.mjs`
+  is not wired into the deploy, and `HANDOFF.md` records a live case of that drift
+  (migration 013 never reached prod).
+- **`DATABASE_URL` unset** — `isUnconfiguredDbError` renders its own notice.
+- **Anything else rethrows.** A real Neon outage must not be disguised as an empty
+  board — the same lie the moderation page names as the most dangerous one it
+  could tell.
+- **Neon branching** — 021 must be applied to *every* branch the app runs against.
   `npm run migrate -- --status` prints the target host; check it each time.
 
-### PWA / service worker
-
-Nothing to do. `public/sw.js` never intercepts `/dashboard`, and these pages call
-`auth()` so they are dynamic and never enter `public/sw-manifest.js`. The tracker
-cannot affect offline play — worth stating, because that is the failure mode a
+**PWA:** nothing to do. `public/sw.js` never intercepts `/dashboard`, and these
+pages call `auth()` so they are dynamic and never enter `public/sw-manifest.js`.
+The tracker cannot affect offline play — worth stating, since that is the failure a
 new dashboard route could plausibly introduce.
 
-### Cache
-
-No `unstable_cache`, no cache tags: every read is per-viewer on a dynamic page.
-Actions call `revalidatePath("/dashboard/tracker")` and the item path. No
-`bumpGamesVersion()` — that sentinel makes every client re-fetch the entire game
-corpus, and this is not a PWA concern.
+**Cache:** no `unstable_cache`, no tags — every read is per-viewer on a dynamic
+page. Actions call `revalidatePath("/dashboard/tracker")` and the item path. Never
+`bumpGamesVersion()`; that sentinel makes every client re-fetch the entire game
+corpus.
 
 ---
 
-## 8. Deliberately not building
+## 8. Phasing
 
-| Not building | Why |
-|---|---|
-| Drag and drop | No dnd library in `package.json`, and adding one for a two-person board is the most expensive thing on this page. Phase 2 gets ▲▼ buttons writing `position`; native HTML5 DnD is a phase-3 maybe. |
-| Markdown rendering | A dependency and an XSS surface bought for italics. `whitespace-pre-wrap`. |
-| Notifications / email | Two people who talk to each other. |
-| Real-time sync | Two people who are rarely on it at once. Server actions + revalidate is enough. |
-| Sprints / dates / burndown | Ceremony for a team of two. `due_on` is the whole scheduling model. |
-| Custom column types | monday's core product; here it means building a schema editor. |
-| Subitems | Deferred. A self-referencing `parent_id` is one additive migration if `xl` items turn out to need it. |
+**Phase 1 — the loop works.** Migration 021, `config.ts`, `store.ts` + tests, the
+composer, the board with tag filtering, item detail with status/tags/Updates/
+Activity, nav entry. This is the whole product.
 
----
+**Phase 2 — comfort.** Archive view, `SELECT DISTINCT tag` autocomplete, manual
+ordering via ▲▼ writing `position`, a "new items" count in the sidebar, an
+Overview tile showing what is `building`.
 
-## 9. Phasing
+**Phase 3 — GitHub.** §6, once the ownership question is answered.
 
-**Phase 1 — the board works.** Migration 021, `config.ts`, `store.ts` + tests,
-board page with quick add, item detail with the meta rail, status/priority/effort/
-owner/due mutations, Updates thread, Activity list, nav entry. Projects exist in
-the schema but the UI ships with a single implicit "no project" bucket.
-
-**Phase 2 — organisation.** Projects CRUD with the brief editor, tags + filters,
-manual ordering, the sidebar count badge, an "Overview" tile showing lane counts
-and anything overdue.
-
-**Phase 3 — connections (all optional).** Promote an accepted `beta_reports`
-feature into an item (`source = 'beta'`); a GitHub PR/branch link per item; a
-"shipped since <date>" view to draft the ShipNote changelog from.
-
-Phase 1 is the whole point. Everything after it is convenience.
+Deliberately not building, at any phase: drag-and-drop (no dnd library in
+`package.json`, and it is the most expensive thing on this page), markdown
+rendering, notifications, real-time sync, and sprint/date machinery.
 
 ---
 
-## 10. Tests
+## 9. Open questions
 
-`vitest`, following the existing seam:
-
-- `config.test.ts` — pure invariants: lane order covers every status exactly once;
-  the terminal set (`shipped`, `dropped`) matches what the `done_at` CHECK
-  enforces; every enum value has a label.
-- `store.test.ts` — `createTrackerStore(fakeSql)`, the fake-tagged-template
-  pattern from `reviews/store.test.ts`. What is worth asserting: `building`
-  stamps `started_at` once and does not re-stamp on re-entry; leaving a terminal
-  status clears `done_at`; every mutation emits exactly one event row in the same
-  statement; an archived item is not mutable.
-
----
-
-## 11. Open questions
-
-1. **`admin` or `super_admin`?** Recommendation `admin`, so Ateş can use it. One
-   word either way.
-2. **Owner field** — free-text, or a `<select>` populated from `dashboard_users`?
-   A picker is nicer and is roughly ten extra lines.
-3. **Is `due_on` wanted at all?** For two people, priority + effort may be the
-   whole scheduling model, and an always-empty date column is clutter. Easy to
-   leave in the schema and off the UI.
-4. **Does `shipped` feed the ShipNote changelog?** If yes, phase 3's "shipped
-   since" view is worth pulling forward; if you would rather write release notes
-   by hand, drop it.
-5. **Seed data** — do you want the current in-flight work loaded as items when
-   phase 1 lands, or would you rather type it in yourself?
+1. **One entity or two?** §1 collapses Project and Item. Confirm, or say if a
+   project should hold several tracked pieces of work.
+2. **Should tags be free-form or a short fixed set?** Free-form as designed; a
+   fixed set is tidier but someone has to maintain it.
+3. **Anything to seed?** Happy to load the current in-flight work as items when
+   phase 1 lands, or leave the board empty for you to paste into.
