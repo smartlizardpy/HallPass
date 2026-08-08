@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { floatingBottom } from "../lib/bottom-chrome";
+
 let reloaded = false;
 
 export function PWA() {
@@ -88,11 +90,18 @@ export function PWA() {
 
   if (!offline) return null;
   return (
+    // The pill floats above whatever chrome owns the bottom edge, which on a phone
+    // is the four-tab `MobileTabBar`. Offsetting by the raw safe-area inset (what
+    // this did before) put it ON the bar at `z-50` over the bar's `z-40`, hiding
+    // the middle two tabs for as long as the device stayed offline — and a phone
+    // that just lost signal is exactly when someone reaches for those tabs.
+    // `floatingBottom` clears the published height instead, and falls back to the
+    // bare inset on desktop and on the routes with no bar.
     <div
       role="status"
       aria-live="polite"
       className="pointer-events-none fixed left-1/2 z-50 -translate-x-1/2 rounded-full border border-white/10 bg-black/80 px-3 py-1 text-xs font-semibold text-white shadow-lg backdrop-blur"
-      style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+      style={{ bottom: floatingBottom("0.75rem") }}
     >
       Offline · cached games still playable
     </div>
