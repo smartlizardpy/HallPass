@@ -22,7 +22,16 @@
  * than `window.confirm()` — following the moderation screen: a native dialog
  * blocks the whole browser, cannot be styled, and trains people to dismiss it
  * reflexively. The disclosure keeps the confirmation next to the thing being
- * archived, with room to say what it actually does.
+ * archived, with room to say what it actually does. Permanent deletion uses the
+ * same shape, worded harder.
+ *
+ * TWO CONTROLS ARE SUPER-ADMIN-ONLY — moving the lane and deleting for good. A
+ * plain admin sees the current status as a READ-ONLY CHIP rather than a
+ * `<select>` that would bounce them to `/dashboard` on submit, and sees no
+ * delete section at all. Hiding them is a courtesy, not the enforcement: the
+ * server actions re-check independently, because a hidden form is still a
+ * reachable endpoint. Both halves read `canMoveStatus`/`canDeleteItem` from
+ * `tracker/config` so they cannot drift from the guards.
  *
  * A missing item is a `notFound()`, not an empty page. A database with no
  * migration 021 reaches here as a missing item too, which is acceptable on a
@@ -43,6 +52,8 @@ import {
   TITLE_MAX,
   TRACKER_STATUSES,
   UPDATE_BODY_MAX,
+  canDeleteItem,
+  canMoveStatus,
 } from "@/app/lib/tracker/config";
 import { Section } from "../../_ui/Section";
 import {
@@ -55,6 +66,7 @@ import {
 import {
   addUpdateAction,
   archiveItemAction,
+  deleteItemAction,
   editItemAction,
   restoreItemAction,
   setStatusAction,
@@ -91,6 +103,11 @@ function describe(action: string, from: string | null, to: string | null): strin
       return "archived it";
     case "restore":
       return "restored it";
+    case "delete":
+      // Written for a reader who can no longer open the thing being described:
+      // after a hard delete this line and the title it carries are all that is
+      // left, which is why the store records both the title and the lane.
+      return `deleted “${from ?? ""}” for good (was ${to ?? "?"})`;
     default:
       return action;
   }
@@ -103,7 +120,9 @@ export default async function TrackerItemPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ ok?: string; error?: string }>;
 }) {
-  await requireRole("admin");
+  const { role } = await requireRole("admin");
+  const mayMove = canMoveStatus(role);
+  const mayDelete = canDeleteItem(role);
 
   const { id: rawId } = await params;
   const { ok, error } = await searchParams;
@@ -193,25 +212,46 @@ export default async function TrackerItemPage({
       {/* ---- Status + tags ---------------------------------------------- */}
       <div className="grid gap-4 md:grid-cols-2">
         <Section title="Status">
-          <form action={setStatusAction} className="flex flex-col gap-3">
-            <input type="hidden" name="id" value={item.id} />
-            <select
-              name="status"
-              defaultValue={item.status}
-              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-            >
-              {TRACKER_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {STATUS_LABEL[status]} — {STATUS_HINT[status]}
-                </option>
-              ))}
-            </select>
-            <div>
-              <button type="submit" className={SECONDARY_BUTTON}>
-                Move
-              </button>
+          {mayMove ? (
+            <form action={setStatusAction} className="flex flex-col gap-3">
+              <input type="hidden" name="id" value={item.id} />
+              <select
+                name="status"
+                defaultValue={item.status}
+                className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+              >
+                {TRACKER_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {STATUS_LABEL[status]} — {STATUS_HINT[status]}
+                  </option>
+                ))}
+              </select>
+              <div>
+                <button type="submit" className={SECONDARY_BUTTON}>
+                  Move
+                </button>
+              </div>
+            </form>
+          ) : (
+            /* Read-only, and it SAYS SO. A disabled <select> would look like a
+               control that is temporarily unavailable; the point is that this
+               field belongs to whoever is building the thing, and the way to
+               change it is to ask — or to post an update saying where it
+               actually is, which anybody here can do. */
+            <div className="flex flex-col gap-2">
+              <div>
+                <StatusChip status={item.status} />
+              </div>
+              <p className="text-sm text-muted">
+                {STATUS_HINT[item.status]}.
+              </p>
+              <p className="text-xs text-muted">
+                Only the dev moves items between lanes, so the board&rsquo;s
+                status always means what it says. Post an update below if this
+                one looks wrong.
+              </p>
             </div>
-          </form>
+          )}
         </Section>
 
         <Section title="Tags">
@@ -330,6 +370,39 @@ export default async function TrackerItemPage({
               <input type="hidden" name="id" value={item.id} />
               <button type="submit" className={SECONDARY_BUTTON}>
                 Yes, archive it
+              </button>
+            </form>
+          </details>
+        </Section>
+      )}
+
+      {/* ---- Delete for good -------------------------------------------- */}
+      {mayDelete && (
+        <Section title="Delete permanently">
+          <details>
+            <summary className="cursor-pointer text-sm font-bold text-rose-700 hover:text-rose-800">
+              Delete this item for good
+            </summary>
+            {/* Says exactly what is lost, in the order it will be missed.
+                "Are you sure?" is not a warning — naming the updates is, because
+                they are the part that cannot be reconstructed from memory. */}
+            <p className="mt-3 text-sm text-muted">
+              This cannot be undone. The brief, the tags and all{" "}
+              {updates.length === 1 ? "1 update" : `${updates.length} updates`}{" "}
+              go with it. Only the activity trail survives, recording that you
+              deleted it.
+            </p>
+            <p className="mt-2 text-sm text-muted">
+              Archiving does almost the same thing and can be undone — prefer it
+              unless this was pasted in by mistake.
+            </p>
+            <form action={deleteItemAction} className="mt-3">
+              <input type="hidden" name="id" value={item.id} />
+              <button
+                type="submit"
+                className="rounded-full border border-rose-300 bg-rose-50 px-4 py-1.5 text-xs font-extrabold text-rose-800 transition hover:bg-rose-100"
+              >
+                Yes, delete “{item.title}” for good
               </button>
             </form>
           </details>
