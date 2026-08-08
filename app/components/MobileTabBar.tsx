@@ -15,6 +15,10 @@
  * an actual phone. Desktop never gets it. Same hydration rule as the rest of the
  * mobile shell.
  *
+ * BOTTOM CHROME. Because it owns the bottom edge, it publishes its measured height
+ * to `--hp-bottom-chrome` so other floating elements clear it — see the effect
+ * below and `app/lib/bottom-chrome.ts`.
+ *
  * ADMIN. There is deliberately no admin tab. The dashboard is reachable from the
  * Account tab (`/play/account` renders a role-gated Dashboard link), so the bar
  * never changes shape based on who is signed in.
@@ -26,11 +30,12 @@
  * owns rather than navigating anywhere.
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { useDevicePlatform } from "../lib/use-device-platform";
 import { openStealthSettings } from "../lib/stealth/store";
+import { clearBottomChrome, publishBottomChrome } from "../lib/bottom-chrome";
 
 /** Routes that are their own full-screen world — no player tab bar over them. */
 const HIDDEN_PREFIXES = [
@@ -45,21 +50,50 @@ export function MobileTabBar() {
   const device = useDevicePlatform();
   const isMobile = device === "mobile";
   const pathname = usePathname() ?? "/";
+  const barRef = useRef<HTMLElement | null>(null);
 
   const hidden =
     !isMobile || HIDDEN_PREFIXES.some((p) => pathname.startsWith(p));
 
-  // Reserve space at the bottom of every page so the fixed bar never covers the
-  // last row of content. Done from here (not in global CSS) so the padding exists
-  // exactly when the bar does — on a phone, after mount — and is removed cleanly
-  // on desktop or when the bar is hidden.
+  // The bar covers the bottom edge of the viewport, so it owes two things to the
+  // rest of the app: padding at the end of the page, so it never sits over the
+  // last row of content, and a published height, so anything FLOATING above the
+  // bottom edge clears it (`app/lib/bottom-chrome.ts`). Both are done from here,
+  // not in global CSS, so they exist exactly when the bar does — on a phone, after
+  // mount — and are removed cleanly on desktop or on a route that hides it.
+  //
+  // MEASURED, not the `calc(4rem + env(safe-area-inset-bottom))` constant this
+  // used to hardcode. The constant lies in one real case: `lg:hidden` keeps the
+  // bar off screen on a large tablet that still reports a coarse, hoverless
+  // pointer, and there the component mounts while the bar renders nothing.
+  // `offsetHeight` is 0 for a hidden element, so both the padding and the
+  // published height correctly become "no bar here". It also picks up the bar's
+  // own safe-area padding and its top border, so the number is what the bar
+  // actually costs rather than what it was assumed to cost.
   useEffect(() => {
     if (hidden) return;
-    const prev = document.body.style.paddingBottom;
-    document.body.style.paddingBottom =
-      "calc(4rem + env(safe-area-inset-bottom))";
+    const bar = barRef.current;
+    if (!bar) return;
+
+    const previousPadding = document.body.style.paddingBottom;
+    const measure = () => {
+      const height = bar.offsetHeight;
+      publishBottomChrome(height);
+      document.body.style.paddingBottom =
+        height > 0 ? `${height}px` : previousPadding;
+    };
+
+    measure();
+    // Crossing the `lg` breakpoint and rotating the device (which changes the
+    // safe-area inset) both arrive as a resize; re-measuring is idempotent, so
+    // the noisier triggers — an Android keyboard opening, say — cost nothing.
+    window.addEventListener("resize", measure);
+    window.addEventListener("orientationchange", measure);
     return () => {
-      document.body.style.paddingBottom = prev;
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("orientationchange", measure);
+      clearBottomChrome();
+      document.body.style.paddingBottom = previousPadding;
     };
   }, [hidden]);
 
@@ -71,6 +105,7 @@ export function MobileTabBar() {
 
   return (
     <nav
+      ref={barRef}
       aria-label="Primary"
       className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border bg-white/95 backdrop-blur-xl lg:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}

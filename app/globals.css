@@ -17,6 +17,13 @@
   --accent-yellow: #ffc700;
   --accent-pink: #ff4f8b;
   --accent-cyan: #00cfd6;
+
+  /* How much of the bottom edge is occupied by fixed chrome — read by anything
+     that floats above it (the offline pill in `PWA.tsx`), published over the top
+     of this baseline by whatever owns that chrome (`MobileTabBar`). The baseline
+     is the no-bar answer: clear the device's own safe-area strip and nothing
+     more. See `app/lib/bottom-chrome.ts` for the full contract. */
+  --hp-bottom-chrome: env(safe-area-inset-bottom, 0px);
 }
 
 @theme inline {
