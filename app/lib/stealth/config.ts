@@ -50,7 +50,10 @@ export const PANIC_SCREENS = [
     label: "Google Docs",
     title: "Untitled document - Google Docs",
     favicon: cloakById("docs").favicon,
-    chrome: "#f9fbfd",
+    // White, not the `#f9fbfd` canvas the rest of the screen sits on: the Docs
+    // disguise pins a white header above that canvas, and it is the header — not
+    // the canvas — that meets the notch.
+    chrome: "#ffffff",
   },
   {
     id: "classroom",
