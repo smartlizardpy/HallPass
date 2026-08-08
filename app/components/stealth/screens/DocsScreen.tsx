@@ -546,6 +546,75 @@ function Ruler(): ReactElement {
   );
 }
 
+/* ---------------------------------- page ---------------------------------- */
+
+/**
+ * The document body. Original placeholder homework, written for this file — the
+ * disguise would be worthless if it shipped somebody else's prose, and a topic
+ * a teenager would plausibly be assigned survives a closer look than lorem
+ * ipsum ever could. It ends mid-sentence on purpose: a document frozen halfway
+ * through a thought is what a screen someone was actually working on looks
+ * like, and it gives the caret somewhere honest to sit.
+ *
+ * The type is Docs' own defaults and nothing else — Arial at 11pt over 1.15
+ * line height, paragraphs run together with no gap, black rather than the
+ * chrome's near-black. Anything roomier or softer instantly reads as a web
+ * page that has been styled, which is precisely what this must not look like.
+ */
+const PARAGRAPHS = [
+  "Ask anyone in my year what the hardest part of school is and almost nobody says the work. They say the first two periods, when half the room is still asleep and the other half is pretending not to be. A later start is usually treated as a favour to lazy teenagers, but the argument for it is not about comfort. It is about when a person is actually able to learn anything.",
+  "The research that gets quoted most often makes a simple point: the internal clock shifts later during adolescence, so a fifteen-year-old told to fall asleep at nine is being asked to do something their body is actively resisting. The result is a timetable whose first hour is spent recovering from itself, and a set of grades that measure the schedule at least as much as the effort behind them.",
+  "The objections are practical rather than scientific, and they deserve to be taken seriously. Buses run on a fixed rotation, after-school practice would push into the evening, and families who have built their mornings around the current start would have to rebuild them. Those are real costs. They are also logistical problems, and logistical problems have solutions in a way that biology does not.",
+  "Districts that have already moved their start by an hour tend to report the same unremarkable list: better attendance, fewer students asleep at their desks, and fewer accidents involving students driving to school in the dark. None of that proves the change is free. It suggests the benefit is measurable while the disruption turns out to be temporary, which is the trade most policies never manage.",
+];
+
+/**
+ * The caret. A drawn bar rather than a pipe character, because a text `|` sits
+ * on the baseline at the font's own weight and reads as punctuation. It hangs
+ * out of a zero-width box so it cannot stretch the line it sits on — an inline
+ * block taller than the text silently opens a gap above its own line, which is
+ * the sort of detail that makes a page of prose look subtly mis-set. The
+ * reduced-motion guard is the repo's standing rule and stays.
+ */
+const Caret = () => (
+  <span aria-hidden className="relative inline-block w-0 align-baseline">
+    <span className="absolute top-[-0.95em] left-px h-[1.05em] w-[1.6px] animate-pulse bg-black motion-reduce:animate-none" />
+  </span>
+);
+
+function Page(): ReactElement {
+  return (
+    <div className="mb-12 min-h-[1056px] w-full bg-white px-[96px] py-[96px] text-[11pt] leading-[1.15] text-black shadow-[0_1px_3px_1px_rgba(60,64,67,0.15)]">
+      <p>
+        Jordan Ellis
+        <br />
+        Mr. Whitfield
+        <br />
+        English 10, Period 4
+        <br />
+        14 March
+      </p>
+
+      <h1 className="mt-[20pt] mb-[8pt] text-[20pt] leading-[1.15] font-normal">
+        Should the School Day Start Later?
+      </h1>
+
+      {PARAGRAPHS.map((text) => (
+        <p key={text.slice(0, 24)} className="mb-[10pt]">
+          {text}
+        </p>
+      ))}
+
+      <p>
+        If the point of a timetable is to put students in front of a teacher at an hour when
+        they are capable of learning, then the current start time fails on its own terms, and
+        the case for moving it
+        <Caret />
+      </p>
+    </div>
+  );
+}
+
 /* --------------------------------- screen -------------------------------- */
 
 export function DocsScreen() {
@@ -566,21 +635,7 @@ export function DocsScreen() {
       <div className="flex-1 overflow-auto">
         <div className="mx-auto w-full max-w-[816px]">
           <Ruler />
-          <div className="mb-12 min-h-[1056px] w-full bg-white px-[96px] py-[96px] shadow-[0_1px_3px_1px_rgba(60,64,67,0.15)]">
-            <h1 className="mb-4 text-[20pt] font-normal">The Causes of the First World War</h1>
-            <p className="mb-3 text-[11pt] leading-[1.6] text-[#202124]">
-              The outbreak of war in 1914 was the product of long-building tensions rather
-              than any single event. Historians point to four intertwined pressures:
-              militarism, the alliance system, imperial rivalry, and a surge of nationalism
-              across the continent.
-            </p>
-            <p className="text-[11pt] leading-[1.6] text-[#202124]">
-              This essay argues that while the assassination in Sarajevo was the immediate
-              trigger, it was the rigidity of the alliance networks that turned a regional
-              dispute into a general war
-              <span className="animate-pulse motion-reduce:animate-none">|</span>
-            </p>
-          </div>
+          <Page />
         </div>
       </div>
     </div>
