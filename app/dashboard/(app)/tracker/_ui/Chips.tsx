@@ -18,6 +18,17 @@ import {
   type TrackerStatus,
 } from "@/app/lib/tracker/config";
 
+/**
+ * The dashboard's primary button, copied from `beta/page.tsx` so the tracker
+ * does not introduce a second button style to a surface that already has one.
+ */
+export const PRIMARY_BUTTON =
+  "rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white transition hover:bg-brand-600";
+
+/** The quieter sibling, for submits that sit inside a form row. */
+export const SECONDARY_BUTTON =
+  "rounded-full border border-border px-4 py-1.5 text-xs font-extrabold text-foreground transition hover:bg-surface-2";
+
 export function StatusChip({ status }: { status: TrackerStatus }) {
   return (
     <span
