@@ -29,6 +29,12 @@ type NavItem = { href: string; label: string; exact?: boolean };
 const ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Overview", exact: true },
   { href: "/dashboard/moderation", label: "Moderation" },
+  // THIRD, directly under Moderation, and deliberately not second: Moderation's
+  // placement is earned by being the only link with a child waiting on the other
+  // end of it, and a work board does not outrank that. Third is still the
+  // shortest reach that is going spare, which is right for the surface people
+  // open to answer "what is being built".
+  { href: "/dashboard/tracker", label: "Tracker" },
   { href: "/dashboard/boards", label: "Leaderboards" },
   { href: "/dashboard/games", label: "Games" },
   { href: "/dashboard/curation", label: "Curation" },
