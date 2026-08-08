@@ -92,6 +92,121 @@ function TabRow(): ReactElement {
   );
 }
 
+/**
+ * The banner artwork. The real product ships illustrated themes, never a flat
+ * fill, and a plain gradient behind the class name is the difference between
+ * "a class page" and "a green rectangle with words on it". This is an original
+ * abstract in the same register: a dotted field, soft arcs, and a stack of
+ * books anchored right, all held at low contrast so the class name stays the
+ * brightest thing in the box.
+ *
+ * `slice` on a 1000×240 viewBox means the art crops from the edges as the
+ * banner narrows rather than squashing, which keeps the books the right shape
+ * on a phone.
+ */
+function BannerArt(): ReactElement {
+  return (
+    <svg
+      viewBox="0 0 1000 240"
+      preserveAspectRatio="xMaxYMid slice"
+      className="absolute inset-0 h-full w-full"
+      aria-hidden
+    >
+      <defs>
+        <linearGradient id="hp-cr-field" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#1aa863" />
+          <stop offset="1" stopColor="#0a7b41" />
+        </linearGradient>
+        <pattern id="hp-cr-dots" width="24" height="24" patternUnits="userSpaceOnUse">
+          <circle cx="4" cy="4" r="1.5" fill="#ffffff" opacity="0.16" />
+        </pattern>
+      </defs>
+
+      <rect width="1000" height="240" fill="url(#hp-cr-field)" />
+      <rect width="1000" height="240" fill="url(#hp-cr-dots)" />
+
+      <g fill="none" stroke="#ffffff" strokeOpacity="0.14" strokeWidth="14">
+        <circle cx="742" cy="250" r="150" />
+        <circle cx="742" cy="250" r="210" />
+      </g>
+      <circle cx="176" cy="26" r="104" fill="#ffffff" opacity="0.05" />
+
+      <g transform="translate(712 6)">
+        <rect x="16" y="168" width="204" height="24" rx="4" fill="#ffffff" opacity="0.2" />
+        <rect x="26" y="174" width="8" height="12" rx="2" fill="#0a7b41" opacity="0.3" />
+        <rect x="34" y="142" width="172" height="24" rx="4" fill="#f7c948" opacity="0.28" />
+        <rect x="44" y="148" width="8" height="12" rx="2" fill="#0a7b41" opacity="0.25" />
+        <rect x="8" y="116" width="188" height="24" rx="4" fill="#ffffff" opacity="0.12" />
+        <rect x="18" y="122" width="8" height="12" rx="2" fill="#0a7b41" opacity="0.22" />
+        <g transform="rotate(9 224 148)">
+          <rect x="212" y="100" width="26" height="92" rx="4" fill="#ffffff" opacity="0.16" />
+          <rect x="212" y="126" width="26" height="4" fill="#0a7b41" opacity="0.18" />
+        </g>
+      </g>
+      <g stroke="#ffffff" strokeOpacity="0.13" strokeWidth="6" strokeLinecap="round">
+        <path d="M846 44 L890 22" />
+        <path d="M866 68 L926 38" />
+      </g>
+    </svg>
+  );
+}
+
+/** A left-rail card: the rounded, hairline-bordered box the whole product uses. */
+function RailCard({ children }: { children: React.ReactNode }): ReactElement {
+  return (
+    <div className="rounded-lg border border-[#dadce0] bg-white p-4">{children}</div>
+  );
+}
+
+/** The square-with-arrow the product puts beside a class code to enlarge it. */
+function ExpandIcon(): ReactElement {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden fill={ICON}>
+      <path d="M5 5h6v2H7v4H5V5zm14 0v6h-2V7h-4V5h6zM5 13h2v4h4v2H5v-6zm12 0h2v6h-6v-2h4v-4z" />
+    </svg>
+  );
+}
+
+/**
+ * The left rail. These three cards are the furniture a student's eye expects
+ * down that side, and a bare "Upcoming" box with nothing under it looks like a
+ * page still loading — which invites the second look the disguise exists to
+ * avoid.
+ */
+function LeftRail(): ReactElement {
+  return (
+    <div className="space-y-4">
+      <RailCard>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <div className="text-[14px] text-[#3c4043]">Class code</div>
+            <div className="mt-1 text-[20px] tracking-[0.02em] text-[#1e8e3e]">q7mp4vd</div>
+          </div>
+          <ExpandIcon />
+        </div>
+        <div className="mt-4 border-t border-[#e8eaed] pt-3">
+          <div className="text-[14px] text-[#3c4043]">Meet</div>
+          <div className="mt-2 flex items-center gap-3">
+            <span className="rounded border border-[#dadce0] px-4 py-1.5 text-[13px] font-medium text-[#1e8e3e]">
+              Join
+            </span>
+            <span className="text-[12px] text-[#5f6368]">Link visible to students</span>
+          </div>
+        </div>
+      </RailCard>
+
+      <RailCard>
+        <div className="text-[14px] text-[#3c4043]">Upcoming</div>
+        <div className="mt-3 text-[13px] text-[#5f6368]">Due Friday, 11:59 PM</div>
+        <div className="mt-1 text-[13px] leading-[1.4] text-[#3c4043]">
+          Reading response — Chapter 7
+        </div>
+        <div className="mt-3 text-right text-[13px] font-medium text-[#1967d2]">View all</div>
+      </RailCard>
+    </div>
+  );
+}
+
 export function ClassroomScreen() {
   const stream = [
     {
@@ -124,20 +239,19 @@ export function ClassroomScreen() {
 
       {/* Class banner */}
       <div className="mx-auto mt-6 max-w-[1000px] px-4">
-        <div className="relative h-[240px] overflow-hidden rounded-lg bg-gradient-to-br from-[#0F9D58] to-[#0b8043] p-6 text-white">
-          <div className="absolute bottom-5 left-6">
-            <div className="text-[34px] font-medium">English — Period 4</div>
-            <div className="text-[16px] opacity-90">Section B · Room 214</div>
+        <div className="relative h-[240px] overflow-hidden rounded-lg text-white">
+          <BannerArt />
+          <div className="absolute bottom-6 left-6 right-6">
+            <div className="text-[38px] leading-tight font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]">
+              English — Period 4
+            </div>
+            <div className="mt-1 text-[16px] opacity-95">Section B · Room 214</div>
           </div>
         </div>
 
-        <div className="mt-5 flex gap-5">
+        <div className="mt-5 flex gap-6">
           <aside className="hidden w-[260px] shrink-0 sm:block">
-            <div className="rounded-lg border border-[#e0e0e0] bg-white p-4">
-              <div className="text-[14px] font-medium text-[#3c4043]">Upcoming</div>
-              <div className="mt-2 text-[13px] text-[#5f6368]">Due Friday</div>
-              <div className="text-[13px] text-[#1967d2]">Reading response — Ch. 7</div>
-            </div>
+            <LeftRail />
           </aside>
 
           <div className="flex-1 space-y-4">
