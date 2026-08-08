@@ -28,9 +28,17 @@ const QUERY = "photosynthesis light dependent reactions";
  * registers before they have read a single word of the page.
  */
 const RAIL = "px-4 sm:pl-[180px] sm:pr-8";
+const COLUMN = "w-full sm:max-w-[652px]";
 
 /** The 152px slot the wordmark occupies, which is what puts the box on the rail. */
 const LOGO_SLOT = "flex w-[152px] shrink-0 items-center";
+
+/**
+ * The vertical-search tabs. Nothing else on the page is as instantly diagnostic:
+ * a viewer who never reads a word of the results still expects this band, in
+ * this order, with one entry underlined in blue.
+ */
+const TABS = ["All", "Images", "Videos", "News", "Shopping", "Web", "More"] as const;
 
 /* ------------------------------ iconography ------------------------------ */
 
@@ -128,6 +136,31 @@ function SearchBox(): ReactElement {
   );
 }
 
+/** The tab band, with its hairline doubling as the header's bottom edge. */
+function TabRow(): ReactElement {
+  return (
+    <nav className={`${RAIL} mt-4 border-b border-[#dadce0] text-[14px]`}>
+      <div className={`${COLUMN} -mb-px flex items-end`}>
+        <ul className="flex gap-6">
+          {TABS.map((tab, i) => (
+            <li
+              key={tab}
+              className={
+                i === 0
+                  ? "border-b-[3px] border-[#1a73e8] pb-3 text-[#1a73e8]"
+                  : "border-b-[3px] border-transparent pb-3 text-[#5f6368]"
+              }
+            >
+              {tab}
+            </li>
+          ))}
+        </ul>
+        <span className="ml-auto pb-3 text-[#5f6368]">Tools</span>
+      </div>
+    </nav>
+  );
+}
+
 export function SearchScreen() {
   const results = [
     {
@@ -151,7 +184,7 @@ export function SearchScreen() {
   ];
   return (
     <div className="min-h-full bg-white" style={{ fontFamily: SANS }}>
-      <header className="border-b border-[#ebebeb] pb-4">
+      <header>
         <div className="flex items-center px-4 pt-4 sm:px-7 sm:pt-5">
           <div className={LOGO_SLOT}>
             <GoogleWordmark size={28} />
@@ -162,23 +195,23 @@ export function SearchScreen() {
             <Avatar initial="S" color="#1a73e8" size={30} />
           </div>
         </div>
+        <TabRow />
       </header>
 
-      {/* Result stats */}
-      <div className={`${RAIL} pt-4 text-[13px] text-[#70757a]`}>
-        About 84,900,000 results (0.42 seconds)
-      </div>
-
-      {/* Results */}
-      <div className={`${RAIL} max-w-[832px] py-2`}>
-        {results.map((r, i) => (
-          <div key={i} className="mb-7">
-            <div className="text-[13px] text-[#202124]">{r.url}</div>
-            <a className="text-[20px] leading-tight text-[#1a0dab] hover:underline">{r.title}</a>
-            <p className="mt-1 text-[14px] leading-[1.58] text-[#4d5156]">{r.snippet}</p>
-          </div>
-        ))}
-      </div>
+      <main className={RAIL}>
+        <div className={COLUMN}>
+          <p className="pt-3 pb-4 text-[14px] text-[#70757a]">
+            About 84,900,000 results (0.42 seconds)
+          </p>
+          {results.map((r, i) => (
+            <div key={i} className="mb-7">
+              <div className="text-[13px] text-[#202124]">{r.url}</div>
+              <a className="text-[20px] leading-tight text-[#1a0dab] hover:underline">{r.title}</a>
+              <p className="mt-1 text-[14px] leading-[1.58] text-[#4d5156]">{r.snippet}</p>
+            </div>
+          ))}
+        </div>
+      </main>
     </div>
   );
 }
