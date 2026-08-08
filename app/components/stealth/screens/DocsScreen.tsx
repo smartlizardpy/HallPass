@@ -501,35 +501,86 @@ function Header(): ReactElement {
   );
 }
 
+/* ---------------------------------- ruler --------------------------------- */
+
+/**
+ * The ruler. Docs shows one above every page unless you go and turn it off, so
+ * its absence is loud — and it is also what makes the page below read as a
+ * PAGE rather than a white card, because the grey blocks at either end declare
+ * where the margins are before you have looked at the text.
+ *
+ * Widths are kept in step with the page's horizontal padding by hand; the two
+ * only look right when the grey ends line up exactly with where the text starts.
+ */
+function Ruler(): ReactElement {
+  return (
+    <div aria-hidden className="sticky top-0 z-10 bg-[#f9fbfd] pt-2 pb-3">
+      <div className="relative h-4 w-full bg-white">
+        <span className="absolute inset-y-0 left-0 w-[96px] bg-[#c9ced4]" />
+        <span className="absolute inset-y-0 right-0 w-[96px] bg-[#c9ced4]" />
+
+        {/* First-line and left indent markers, stacked at the left margin. */}
+        <svg
+          className="absolute top-0 left-[96px] -ml-[5px]"
+          width="10"
+          height="16"
+          viewBox="0 0 10 16"
+          fill="#5f6368"
+        >
+          <path d="M0 0h10v3.5L5 7 0 3.5z" />
+          <path d="M5 11 0 16h10z" />
+        </svg>
+
+        {/* Right indent marker. */}
+        <svg
+          className="absolute top-0 right-[96px] -mr-[5px]"
+          width="10"
+          height="16"
+          viewBox="0 0 10 16"
+          fill="#5f6368"
+        >
+          <path d="M5 10.5 0 16h10z" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 /* --------------------------------- screen -------------------------------- */
 
 export function DocsScreen() {
   return (
-    <div
-      className="flex min-h-full flex-col bg-[#f9fbfd] text-[#202124]"
-      style={{ fontFamily: SANS }}
-    >
+    <div className="flex h-full flex-col bg-[#f9fbfd] text-[#202124]" style={{ fontFamily: SANS }}>
       <Header />
 
       <div className="bg-white pb-1">
         <Toolbar />
       </div>
 
-      {/* Page */}
-      <div className="flex flex-1 justify-center overflow-auto py-6">
-        <div className="w-full max-w-[720px] bg-white px-[72px] py-[84px] shadow-[0_1px_3px_rgba(60,64,67,.3)]">
-          <h1 className="mb-4 text-[20pt] font-normal">The Causes of the First World War</h1>
-          <p className="mb-3 text-[11pt] leading-[1.6] text-[#202124]">
-            The outbreak of war in 1914 was the product of long-building tensions rather
-            than any single event. Historians point to four intertwined pressures:
-            militarism, the alliance system, imperial rivalry, and a surge of nationalism
-            across the continent.
-          </p>
-          <p className="text-[11pt] leading-[1.6] text-[#202124]">
-            This essay argues that while the assassination in Sarajevo was the immediate
-            trigger, it was the rigidity of the alliance networks that turned a regional
-            dispute into a general war<span className="animate-pulse motion-reduce:animate-none">|</span>
-          </p>
+      {/*
+        The canvas scrolls under a pinned header, as the real editor does — the
+        chrome staying put while the page moves is half of what sells it.
+        816×1056 is US Letter at Docs' own 96dpi, with 1in margins: get the
+        proportions wrong and the page reads as a web card, not a sheet of A4.
+      */}
+      <div className="flex-1 overflow-auto">
+        <div className="mx-auto w-full max-w-[816px]">
+          <Ruler />
+          <div className="mb-12 min-h-[1056px] w-full bg-white px-[96px] py-[96px] shadow-[0_1px_3px_1px_rgba(60,64,67,0.15)]">
+            <h1 className="mb-4 text-[20pt] font-normal">The Causes of the First World War</h1>
+            <p className="mb-3 text-[11pt] leading-[1.6] text-[#202124]">
+              The outbreak of war in 1914 was the product of long-building tensions rather
+              than any single event. Historians point to four intertwined pressures:
+              militarism, the alliance system, imperial rivalry, and a surge of nationalism
+              across the continent.
+            </p>
+            <p className="text-[11pt] leading-[1.6] text-[#202124]">
+              This essay argues that while the assassination in Sarajevo was the immediate
+              trigger, it was the rigidity of the alliance networks that turned a regional
+              dispute into a general war
+              <span className="animate-pulse motion-reduce:animate-none">|</span>
+            </p>
+          </div>
         </div>
       </div>
     </div>
