@@ -223,7 +223,12 @@ export function useShakeToPanic(enabled: boolean, onShake: () => void): void {
     const onMotion = (event: DeviceMotionEvent) => {
       const a = event.accelerationIncludingGravity;
       if (!a || a.x == null || a.y == null || a.z == null) return;
-      if (detector.push({ x: a.x, y: a.y, z: a.z, t: event.timeStamp })) {
+      // `performance.now()`, NOT `event.timeStamp`. iOS Safari frequently reports a
+      // `timeStamp` of 0 for every DeviceMotionEvent, which pins all samples inside
+      // the detector's cooldown after the first confirmed shake — so shake would
+      // fire exactly once per page load and then never again until a reload. A real
+      // monotonic clock keeps the window and cooldown maths honest on every device.
+      if (detector.push({ x: a.x, y: a.y, z: a.z, t: performance.now() })) {
         onShake();
       }
     };
@@ -234,16 +239,22 @@ export function useShakeToPanic(enabled: boolean, onShake: () => void): void {
       window.addEventListener("devicemotion", onMotion);
     };
 
-    // Re-acquire permission on the first tap when a prompt is owed; otherwise the
-    // sensor is already readable and we can listen straight away.
-    let onFirstGesture: (() => void) | null = null;
+    // Re-acquire permission on a tap when a prompt is owed; otherwise the sensor is
+    // already readable and we can listen straight away. The gesture listener is NOT
+    // `once` — a first tap whose request is dismissed or fails must not disable
+    // shake for the rest of the page load; keep trying until a tap grants it, then
+    // detach.
+    let onGesture: (() => void) | null = null;
     if (motionPermissionNeeded() && !motionGranted) {
-      onFirstGesture = () => {
+      onGesture = () => {
         void requestMotionPermission().then((ok) => {
-          if (ok) attachMotion();
+          if (ok) {
+            attachMotion();
+            if (onGesture) window.removeEventListener("pointerdown", onGesture);
+          }
         });
       };
-      window.addEventListener("pointerdown", onFirstGesture, { once: true });
+      window.addEventListener("pointerdown", onGesture);
     } else {
       attachMotion();
     }
@@ -251,7 +262,7 @@ export function useShakeToPanic(enabled: boolean, onShake: () => void): void {
     return () => {
       detached = true;
       window.removeEventListener("devicemotion", onMotion);
-      if (onFirstGesture) window.removeEventListener("pointerdown", onFirstGesture);
+      if (onGesture) window.removeEventListener("pointerdown", onGesture);
     };
   }, [enabled, onShake]);
 }
