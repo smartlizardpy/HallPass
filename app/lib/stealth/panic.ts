@@ -22,8 +22,16 @@
  * believe is real) so the controller's initial pass and its MutationObserver can
  * both run the SAME decision instead of two hand-rolled branches that disagree.
  *
+ * ── AND THE PAGE UNDERNEATH ────────────────────────────────────────────────
+ * The rest of the module is the same idea applied to the document: an overlay
+ * that covers the arcade visually while the arcade still scrolls behind it is a
+ * disguise that moves when nobody is touching it. Each helper is a LOCK — it
+ * captures what it changed and returns the undo — so no state about "what things
+ * were like before" ever has to be kept in a component.
+ *
  * No `window` in this file — it is imported by client components but stays a
- * pure core, matching `shake.ts`'s split.
+ * pure core, matching `shake.ts`'s split. The two exported browser helpers at the
+ * bottom are the thin layer that finds the real document and hands it over.
  */
 
 import { CLOAK_LIST } from "./cloaks";
@@ -73,4 +81,77 @@ export function reconcileTitle(
 ): TitleDecision {
   const real = isDisguiseTitle(observed) ? remembered : observed;
   return { real, title: disguise ?? real };
+}
+
+/* -------------------------------------------------------------------------- *
+ * Background scroll — pure core.
+ * -------------------------------------------------------------------------- */
+
+/** Anything with an inline `overflow` we can set and put back (an element). */
+export type OverflowTarget = { style: { overflow: string } };
+
+/** Everything needed to undo a lock, and nothing else. */
+export type ScrollLock = {
+  targets: readonly { target: OverflowTarget; prior: string }[];
+  x: number;
+  y: number;
+};
+
+/**
+ * Clamp the given elements' overflow, recording each one's PRIOR INLINE VALUE
+ * rather than assuming it was unset. Locks nest in this app — the promo modal
+ * takes the same lock — and a lock that restores `""` unconditionally would hand
+ * scrolling back to a page whose other modal is still open.
+ *
+ * The scroll offsets ride along because clipping overflow collapses the
+ * document's scrollable height, and the browser clamps the offset to 0 as a
+ * side effect. Left alone, dismissing the disguise would drop the player at the
+ * top of a page they were halfway down.
+ */
+export function lockOverflow(
+  targets: readonly OverflowTarget[],
+  x: number,
+  y: number,
+): ScrollLock {
+  const recorded = targets.map((target) => {
+    const prior = target.style.overflow;
+    target.style.overflow = "hidden";
+    return { target, prior };
+  });
+  return { targets: recorded, x, y };
+}
+
+/**
+ * Undo {@link lockOverflow}, then put the scroll offset back through the caller's
+ * `scrollTo` — injected so the whole lock/release pair stays testable without a
+ * document.
+ */
+export function releaseOverflow(
+  lock: ScrollLock,
+  scrollTo: (x: number, y: number) => void,
+): void {
+  for (const { target, prior } of lock.targets) {
+    target.style.overflow = prior;
+  }
+  scrollTo(lock.x, lock.y);
+}
+
+/* -------------------------------------------------------------------------- *
+ * Browser layer.
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Freeze the page behind the disguise and return the undo. Both the root element
+ * and the body are clamped: which of the two actually scrolls depends on the
+ * layout (`html.h-full` + `body.min-h-full` here), and locking the wrong one
+ * alone is the difference between a frozen page and one that still drifts.
+ */
+export function lockBackgroundScroll(): () => void {
+  if (typeof document === "undefined") return () => {};
+  const lock = lockOverflow(
+    [document.documentElement, document.body],
+    window.scrollX,
+    window.scrollY,
+  );
+  return () => releaseOverflow(lock, (x, y) => window.scrollTo(x, y));
 }

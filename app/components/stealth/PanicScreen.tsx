@@ -10,15 +10,25 @@
  * change to the Docs disguise can never disturb the Search one. Everything the
  * disguises share sits in `screens/chrome.tsx`.
  *
- * The shell owns two things the individual screens must not: the stacking
+ * The shell owns the things the individual screens must not: the stacking
  * context that guarantees the disguise covers EVERYTHING (the arcade, the player
- * overlay, modals), and the dismiss affordance for touch devices with no
- * keyboard. When and how the overlay mounts is
- * {@link file://./StealthController.tsx}'s job, not this file's.
+ * overlay, modals), the dismiss affordance for touch devices with no keyboard,
+ * and — because "covers everything" has to mean more than paint — the document
+ * state that makes the cover total. A disguise the arcade can still scroll behind
+ * is a disguise that moves while nobody is touching it, which is exactly the kind
+ * of wrongness a passer-by notices without knowing why. When and how the overlay
+ * mounts is {@link file://./StealthController.tsx}'s job, not this file's; what
+ * being mounted DOES to the page is this file's.
+ *
+ * The overlay never renders on the server (the controller only raises it in
+ * response to a live keystroke), so layout effects here are safe and are used
+ * deliberately: the page has to be frozen and restored in the same commit that
+ * shows and hides the cover, or the player sees a frame of the wrong thing.
  */
 
-import type { ReactElement } from "react";
+import { useLayoutEffect, useRef, type ReactElement } from "react";
 import type { PanicScreenId } from "../../lib/stealth/config";
+import { lockBackgroundScroll } from "../../lib/stealth/panic";
 import { ClassroomScreen } from "./screens/ClassroomScreen";
 import { DocsScreen } from "./screens/DocsScreen";
 import { SearchScreen } from "./screens/SearchScreen";
@@ -59,8 +69,31 @@ export function PanicScreen({
   onDismiss: () => void;
 }) {
   const Screen = SCREENS[screen] ?? DocsScreen;
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => lockBackgroundScroll(), []);
+
+  // Start the disguise at its top. The overlay is a scroll container of its own,
+  // and a browser is free to hand a fresh one a restored offset (session restore,
+  // a dev-time hot reload, a re-render that swaps the screen while raised) — a
+  // Google Doc that opens halfway down its own page reads as a screenshot.
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    el.scrollTop = 0;
+    el.scrollLeft = 0;
+  }, [screen]);
+
   return (
-    <div className="fixed inset-0 z-[2147483647] overflow-auto bg-white" role="presentation">
+    <div
+      ref={rootRef}
+      data-hp-panic=""
+      // `overscroll-contain`: scrolling to the end of the disguise must not chain
+      // through to the arcade underneath, which on a phone is how the real page
+      // rubber-bands into view around the edges of the cover.
+      className="fixed inset-0 z-[2147483647] overflow-auto overscroll-contain bg-white"
+      role="presentation"
+    >
       <Screen />
       <DismissDot onDismiss={onDismiss} />
     </div>
