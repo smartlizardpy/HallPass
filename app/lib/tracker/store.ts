@@ -504,6 +504,48 @@ export function createTrackerStore(sql: Sql) {
       return rows.length > 0;
     },
 
+    /**
+     * Destroy an item for good. The super-admin-only counterpart to
+     * {@link archiveItem}, and the only unrecoverable operation in this store.
+     *
+     * NO `archived_at` GUARD, unlike every other mutation here. The other guards
+     * exist to stop work happening on something already off the board; this one
+     * IS the removal, and having to archive first before deleting would be
+     * ceremony, not safety. Either state is deletable.
+     *
+     * THE EVENT OUTLIVES THE ROW, and it only can because `tracker_events.item_id`
+     * carries no foreign key — the one deliberate omission in `021_tracker.sql`.
+     * A CASCADE there would erase precisely the record you want afterwards: who
+     * destroyed what, and when. So the trail keeps a dangling `item_id`, on
+     * purpose.
+     *
+     * `tracker_item_tags` and `tracker_updates` DO cascade away with the row.
+     * That is the honest cost of a hard delete and the reason archiving stays
+     * the default: the progress notes are not recoverable.
+     *
+     * One statement, like every mutation here. Postgres runs a data-modifying
+     * CTE exactly once and to completion whether or not the primary query reads
+     * its output, so `logged` is not skippable — the delete cannot land without
+     * its event.
+     *
+     * Returns the title of what was destroyed, so the caller can name it in the
+     * confirmation, or `null` when there was no such item.
+     */
+    async deleteItem(id: number, actor: string): Promise<string | null> {
+      const rows = (await sql`
+        WITH gone AS (
+          DELETE FROM tracker_items WHERE id = ${id}
+          RETURNING id, title, status
+        ), logged AS (
+          INSERT INTO tracker_events (item_id, actor_email, action, from_value, to_value)
+          SELECT gone.id, ${actor}, 'delete', gone.title, gone.status FROM gone
+          RETURNING item_id
+        )
+        SELECT title FROM gone
+      `) as Row[];
+      return rows.length ? String(rows[0].title) : null;
+    },
+
     /** Archived items, newest first — the "deleted" bin. */
     async listArchived(): Promise<TrackerCard[]> {
       const rows = (await sql`

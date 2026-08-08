@@ -4,9 +4,14 @@ A shared project board on `/dashboard`. Admins paste in what they want built and
 watch its status; I move the status as I build. Tags and status are the whole
 vocabulary.
 
-Status: **phase 1 built** (§8). The board, the composer, the item detail page,
-tags, updates and the activity trail are in. Migration `021_tracker.sql` is
-written but **not yet applied to any database** — see §7.
+Status: **phase 1 built and live** (§8). The board, the composer, the item detail
+page, tags, updates and the activity trail are in. Migration `021_tracker.sql` is
+applied to **prod** (Neon branch `main`); the `dashboard-dev` branch is still on
+020, so a local checkout shows the "run migration 021" notice until it is applied
+there too — see §7.
+
+Moving an item between lanes and deleting one for good are **super-admin-only**;
+everything else on the board is open to any admin. See §5, *Authorization*.
 
 ---
 
@@ -97,7 +102,7 @@ each if the board ever proves otherwise.
 
 ## 3. Schema
 
-Migration `021_tracker.sql` (020 is the current head), plus canonical
+Migration `021_tracker.sql` (now the head, applied to prod), plus canonical
 fresh-install DDL at `app/lib/tracker/schema.sql`, kept in lockstep the way
 `beta/schema.sql` ↔ `016_beta_program.sql` are. Idempotent, every statement
 guarded, whole file in one `BEGIN; … COMMIT;`.
@@ -126,6 +131,15 @@ gh_synced_at    TIMESTAMPTZ
 CONSTRAINT tracker_items_done_at_matches_status
   CHECK ((status IN ('shipped','declined')) = (done_at IS NOT NULL))
 ```
+
+> **Stale comment in a shipped migration.** `021_tracker.sql` says of
+> `archived_at`: *"Soft delete. The board filters on it; nothing in the UI
+> hard-deletes."* The second half stopped being true when the super-admin delete
+> landed. It is left uncorrected **on purpose** — `scripts/migrate.mjs` records a
+> sha256 of each file as it is applied and warns (exit 1) when an applied file's
+> contents change, and 021 is already on prod. Editing a shipped migration to fix
+> a comment is exactly the habit that check exists to break. This doc and the
+> README are the live description; the migration is a historical record.
 
 `brief` is the pasted detail — **20 000 characters**, because "paste in the
 details" means someone will drop a whole spec, a chat log, or a bullet list in
@@ -317,10 +331,46 @@ sidebar is the version to avoid.
 
 ### Authorization
 
-`requireRole("admin")` on every page and action, matching Moderation, Curation,
-Games and Beta. Everyone who can reach the dashboard can paste an item in and read
-every status — which is the point. Nothing is exposed through `/api/v1/*`, so no
-SDK contract change and no CORS surface.
+`requireRole("admin")` on every page, and on every action except two, matching
+Moderation, Curation, Games and Beta. Everyone who can reach the dashboard can
+paste an item in and read every status — which is the point. Nothing is exposed
+through `/api/v1/*`, so no SDK contract change and no CORS surface.
+
+**Two actions are `super_admin` only.**
+
+| | admin | super_admin |
+|---|---|---|
+| Paste in, edit, retag, post updates | ✅ | ✅ |
+| Archive / restore | ✅ | ✅ |
+| Move between lanes | — | ✅ |
+| Delete for good | — | ✅ |
+
+*Status,* because it is the one field that is a claim about the work rather than
+a description of the ask. "Building" and "Shipped" mean something only if the
+person who moved them there is the person doing the building; a board where
+anyone can mark anything shipped answers the question it exists to answer
+incorrectly, which is worse than not answering it. It is also the field the
+database ties to another — `tracker_items_done_at_matches_status` rewrites
+`done_at` on every move in and out of a terminal lane. A plain admin sees a
+read-only chip and the lane's hint, and says what they know in an update
+instead; that is a better record anyway, because "still blocked on the API key"
+is information and a lane change is not.
+
+*Delete,* because it is the only unrecoverable thing here. Archive stays shared
+precisely so that the shared control is the reversible one.
+
+The guard and the render condition are **one fact, not two**. Both read
+`TRACKER_DEV_ROLE`, `canMoveStatus` and `canDeleteItem` from `config.ts`. Written
+separately they drift, and the drift is silent in the dangerous direction: an
+action that still accepts what the UI stopped offering is an unenforced rule.
+The actions re-check independently of what the page rendered, because hiding a
+`<select>` does not hide the endpoint behind it — `requireRole` is the
+enforcement, `canMoveStatus` only decides what is worth drawing.
+
+One sharp edge worth knowing: `requireRole` only enforces a *level* when `min`
+is `"super_admin"` (`app/lib/auth.ts`). Passing it `"admin"` admits both roles.
+So `TRACKER_DEV_ROLE` has to be exactly that literal or the guard silently
+becomes a no-op that still reads like a restriction — `config.test.ts` pins it.
 
 ---
 
@@ -383,6 +433,10 @@ corpus.
 **Phase 1 — the loop works.** Migration 021, `config.ts`, `store.ts` + tests, the
 composer, the board with tag filtering, item detail with status/tags/Updates/
 Activity, nav entry. This is the whole product.
+
+**Landed after phase 1.** The super-admin split (§5, *Authorization*) and a
+permanent delete alongside archive. Neither was in the original phasing; both
+came out of the first read of the built board.
 
 **Phase 2 — comfort.** Archive view, `SELECT DISTINCT tag` autocomplete, manual
 ordering via ▲▼ writing `position`, a "new items" count in the sidebar, an

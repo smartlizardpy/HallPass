@@ -256,6 +256,59 @@ describe("archive and restore", () => {
   });
 });
 
+describe("deleteItem", () => {
+  it("destroys the row and logs it in ONE statement", async () => {
+    const { sql, calls } = makeFakeSql([{ title: "Dark mode" }]);
+    const store = createTrackerStore(sql);
+
+    const title = await store.deleteItem(4, "a@b.c");
+
+    expect(title).toBe("Dark mode");
+    expect(calls).toHaveLength(1);
+    const { text, values } = calls[0];
+    expect(text).toContain("DELETE FROM tracker_items");
+    expect(text).toContain("INSERT INTO tracker_events");
+    expect(values).toContain(4);
+    expect(values).toContain("a@b.c");
+  });
+
+  it("records what was destroyed, not just that something was", async () => {
+    // The row is gone, so the event is the ONLY remaining evidence. If it
+    // carried just an item_id it would point at nothing and answer nothing.
+    const { sql, calls } = makeFakeSql([{ title: "Dark mode" }]);
+    await createTrackerStore(sql).deleteItem(4, "a@b.c");
+
+    expect(calls[0].text).toContain("'delete'");
+    expect(calls[0].text).toContain("gone.title");
+    expect(calls[0].text).toContain("gone.status");
+  });
+
+  it("logs from the DELETE's own RETURNING, not a prior read", async () => {
+    // A separate SELECT for the title would be a second round trip, and the
+    // HTTP driver cannot make two calls one transaction — so a crash between
+    // them deletes the item and loses the only record that it ever existed.
+    const { sql, calls } = makeFakeSql([{ title: "t" }]);
+    await createTrackerStore(sql).deleteItem(1, "a");
+
+    expect(calls[0].text).toContain("RETURNING id, title, status");
+    expect(calls[0].text).toContain("FROM gone");
+  });
+
+  it("deletes an archived item too, without an archived_at guard", async () => {
+    // Unlike every other mutation here. Requiring an archive first would be
+    // ceremony: this operation IS the removal.
+    const { sql, calls } = makeFakeSql([{ title: "t" }]);
+    await createTrackerStore(sql).deleteItem(1, "a");
+
+    expect(calls[0].text).not.toContain("archived_at");
+  });
+
+  it("returns null when there was no such item", async () => {
+    const { sql } = makeFakeSql([]);
+    expect(await createTrackerStore(sql).deleteItem(99, "a")).toBeNull();
+  });
+});
+
 describe("reads", () => {
   it("keeps the 20 000-character brief out of the board query", async () => {
     // The board renders a hundred cards, none of which show the brief.

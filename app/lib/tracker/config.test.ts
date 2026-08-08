@@ -18,7 +18,10 @@ import {
   STATUS_LABEL,
   TAG_PATTERN,
   TERMINAL_STATUSES,
+  TRACKER_DEV_ROLE,
   TRACKER_STATUSES,
+  canDeleteItem,
+  canMoveStatus,
   isTerminalStatus,
   normalizeTag,
   parseTags,
@@ -162,5 +165,27 @@ describe("lengths", () => {
     // The number itself is a judgement call; what this pins is the intent. A
     // future "tidy" down to a tweet-sized limit breaks the core use case.
     expect(BRIEF_MAX).toBeGreaterThanOrEqual(10000);
+  });
+});
+
+describe("who may do what", () => {
+  it("refuses a plain admin the two dev-only controls", () => {
+    // The whole point of the split. If this ever passes for "admin", every
+    // admin can silently declare work shipped or destroy an item outright.
+    expect(canMoveStatus("admin")).toBe(false);
+    expect(canDeleteItem("admin")).toBe(false);
+  });
+
+  it("allows the super admin both", () => {
+    expect(canMoveStatus("super_admin")).toBe(true);
+    expect(canDeleteItem("super_admin")).toBe(true);
+  });
+
+  it("asks for a role requireRole can actually enforce", () => {
+    // requireRole only enforces a LEVEL when min === "super_admin"; passing it
+    // "admin" admits both roles. So the constant the actions guard with has to
+    // be exactly this string, or the guard silently becomes a no-op that still
+    // reads like a restriction.
+    expect(TRACKER_DEV_ROLE).toBe("super_admin");
   });
 });

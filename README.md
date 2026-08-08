@@ -109,6 +109,21 @@ now, still want it) and `declined` (not doing it), which stay separate so the
 board can tell those two apart. `tracker_updates` carries dated progress notes,
 `tracker_events` the auto-written activity trail.
 
+**Two things are super-admin-only: moving an item between lanes, and deleting
+one for good.** Everything else is collaborative — any admin can paste a brief
+in, edit it, retag it, post updates and archive. The status is restricted
+because it is a claim about the work ("being built right now", "live on the
+site") that only whoever is building it can make truthfully; a plain admin sees
+it as a read-only chip and says what they know in an update instead. Deleting is
+restricted because it is the one unrecoverable control on the surface: the row
+goes and the tags and updates CASCADE with it, leaving only the activity trail.
+Archiving is the reversible alternative and stays open to everyone.
+
+Both the action guards and the conditions the page renders those controls under
+read `TRACKER_DEV_ROLE` / `canMoveStatus` / `canDeleteItem` from
+`app/lib/tracker/config.ts`, so they cannot drift apart. The server actions
+re-check regardless — a hidden form is still a reachable endpoint.
+
 Backed by `app/lib/tracker/` and migration `021_tracker.sql`. **That migration
 must be applied before the board works** — until then the page renders a
 "run the migration" notice rather than an empty board:

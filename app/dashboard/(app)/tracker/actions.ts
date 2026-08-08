@@ -9,12 +9,27 @@
  * write in this codebase is a `requireRole`-gated server action. The tracker is
  * entirely admin writes, so it belongs with curation and moderation.
  *
+ * TWO PRIVILEGE LEVELS, NOT ONE. Most of this board is collaborative: any admin
+ * may paste a brief in, edit it, retag it, post progress notes, and archive
+ * something off the board. Two actions are `requireRole(TRACKER_DEV_ROLE)`
+ * instead:
+ *   * `setStatusAction` — the status is a claim about the work ("being built
+ *     right now", "live on the site") and only whoever is building it can make
+ *     that claim truthfully.
+ *   * `deleteItemAction` — unrecoverable, where archiving is one click from
+ *     being undone.
+ * Both read the role from `tracker/config` rather than naming `"super_admin"`
+ * here, so the guard and the condition the page renders the control under
+ * cannot drift apart. See the docblock on `TRACKER_DEV_ROLE`.
+ *
  * Control flow mirrors `curation/actions.ts` exactly, and each step is there for
  * a reason:
- *   1. `requireRole("admin")` FIRST, so the action fails closed even though the
+ *   1. `requireRole(...)` FIRST, so the action fails closed even though the
  *      form that posts to it only renders on a gated page. The Next.js forms
  *      guide is explicit that a Server Action is its own entry point and must
- *      re-check authorization itself.
+ *      re-check authorization itself — and here that is load-bearing rather
+ *      than belt-and-braces, because hiding the status control from a plain
+ *      admin hides a `<select>`, not the endpoint behind it.
  *   2. Validate and narrow every field. `FormData` is attacker-editable even on
  *      an admin-only page, and a status that reaches the CHECK constraint
  *      unnarrowed is a 500 rather than a banner.
@@ -38,6 +53,7 @@ import { tracker } from "@/app/lib/tracker";
 import {
   BRIEF_MAX,
   TITLE_MAX,
+  TRACKER_DEV_ROLE,
   UPDATE_BODY_MAX,
   parseTags,
   toStatus,
@@ -110,14 +126,14 @@ export async function createItemAction(formData: FormData): Promise<void> {
 }
 
 /**
- * Move an item to another lane.
+ * Move an item to another lane. Super admin only — see the header.
  *
  * Re-selecting the lane it is already in is reported as success, not as an
  * error: the store treats it as a no-op, and a double-submitted form should not
  * look like a failure.
  */
 export async function setStatusAction(formData: FormData): Promise<void> {
-  const { email } = await requireRole("admin");
+  const { email } = await requireRole(TRACKER_DEV_ROLE);
 
   const id = toId(formData.get("id"));
   const status = toStatus(String(formData.get("status") ?? ""));
@@ -242,6 +258,43 @@ export async function archiveItemAction(formData: FormData): Promise<void> {
 
   revalidateTracker(id);
   redirect(target(BOARD, "ok", "Archived"));
+}
+
+/**
+ * Destroy an item for good. Super admin only.
+ *
+ * Separate from archiving rather than an escalation of it: an archived item can
+ * be deleted, but so can a live one, because forcing an archive first would be
+ * ceremony rather than a safety net.
+ *
+ * It redirects to the BOARD, never back to the item — `back=board` is not even
+ * read here, because the page the caller came from no longer exists and landing
+ * on its `notFound()` would read as a failure rather than the success it is.
+ *
+ * The confirmation is a `<details>` disclosure on the page, matching archive: a
+ * `window.confirm()` blocks the whole browser, cannot be styled, and trains
+ * people to dismiss it reflexively — which is the last habit to build in front
+ * of the one irreversible control on this surface.
+ */
+export async function deleteItemAction(formData: FormData): Promise<void> {
+  const { email } = await requireRole(TRACKER_DEV_ROLE);
+
+  const id = toId(formData.get("id"));
+  if (!id) redirect(target(BOARD, "error", "Unknown item."));
+
+  let title: string | null = null;
+  let saveFailed = false;
+  try {
+    title = await tracker.deleteItem(id, email);
+  } catch (error) {
+    console.error("[tracker] deleteItem failed:", error);
+    saveFailed = true;
+  }
+  if (saveFailed) redirect(target(itemPath(id), "error", "Could not delete."));
+  if (title === null) redirect(target(BOARD, "error", "That item is already gone."));
+
+  revalidateTracker(id);
+  redirect(target(BOARD, "ok", `Deleted “${title}” for good`));
 }
 
 /** Bring an archived item back. */
