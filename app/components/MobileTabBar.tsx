@@ -17,13 +17,20 @@
  *
  * ADMIN. There is deliberately no admin tab. The dashboard is reachable from the
  * Account tab (`/play/account` renders a role-gated Dashboard link), so the bar
- * stays four items for everyone and never changes shape based on who is signed in.
+ * never changes shape based on who is signed in.
+ *
+ * STEALTH. The phone shell drops the genre hamburger, so the sidebar's "Stealth
+ * mode" entry is otherwise unreachable — which left shake-to-panic (a touch-only
+ * trigger) impossible to switch on from a phone. The Stealth tab is that door: a
+ * button (like Search), not a link, because it opens the settings modal
+ * `StealthController` owns rather than navigating anywhere.
  */
 
 import { useCallback, useEffect } from "react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useDevicePlatform } from "../lib/use-device-platform";
+import { openStealthSettings } from "../lib/stealth/store";
 
 /** Routes that are their own full-screen world — no player tab bar over them. */
 const HIDDEN_PREFIXES = [
@@ -104,6 +111,15 @@ export function MobileTabBar() {
       <TabLink href="/play/account" label="Account" active={accountActive}>
         <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 21v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1" />
       </TabLink>
+
+      {/* Sunglasses — a brow bar over two lenses. Opens the stealth settings
+          modal; an action, so a button rather than a link (see the header note). */}
+      <TabButton label="Stealth" active={false} onClick={() => openStealthSettings()}>
+        <path d="M3 9h18" />
+        <path d="M4 9v2a3 3 0 0 0 6 0V9" />
+        <path d="M14 9v2a3 3 0 0 0 6 0V9" />
+        <path d="M10 10h4" />
+      </TabButton>
     </nav>
   );
 }
