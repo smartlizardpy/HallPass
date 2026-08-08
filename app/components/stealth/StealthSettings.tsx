@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CLOAK_LIST } from "../../lib/stealth/cloaks";
 import { PANIC_SCREENS } from "../../lib/stealth/config";
+import { deviceHasMotion, requestMotionPermission } from "../../lib/stealth/shake";
 import { triggerPanic, useStealth } from "../../lib/stealth/store";
 
 /** Turn a raw `KeyboardEvent.key` into something readable in the UI. */
@@ -24,8 +25,36 @@ function keyLabel(key: string): string {
 }
 
 export function StealthSettings({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { prefs, setCloak, setPanicKey, setPanicScreen } = useStealth();
+  const { prefs, setCloak, setPanicKey, setPanicScreen, setShake } = useStealth();
   const [listening, setListening] = useState(false);
+  // Only offer shake-to-panic where it can actually work — a touch device with a
+  // motion sensor. Resolved after mount, deliberately: `deviceHasMotion` reads
+  // `window`/`navigator`, so the post-hydration set is what keeps it off the
+  // server render. Same pattern (and same lint exemption) as the device checks in
+  // `Arcade`/`InstallPrompt`.
+  const [canShake, setCanShake] = useState(false);
+  const [shakeError, setShakeError] = useState<string | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCanShake(deviceHasMotion());
+  }, []);
+
+  // Toggling ON must ask for motion permission from inside this click (iOS only
+  // grants it during a user gesture); enable only if the grant lands. Toggling
+  // OFF is unconditional.
+  const toggleShake = useCallback(async () => {
+    setShakeError(null);
+    if (prefs.shake) {
+      setShake(false);
+      return;
+    }
+    const granted = await requestMotionPermission();
+    if (granted) setShake(true);
+    else
+      setShakeError(
+        "Motion access is blocked. Allow it in your browser or system settings, then try again.",
+      );
+  }, [prefs.shake, setShake]);
 
   // While "listening", the very next keypress becomes the panic key.
   useEffect(() => {
@@ -141,6 +170,41 @@ export function StealthSettings({ open, onClose }: { open: boolean; onClose: () 
             Press it anywhere on the site to instantly hide the arcade — press again to bring it back.
           </p>
         </section>
+
+        {/* Shake to panic — phones & tablets, where there is no keyboard */}
+        {canShake && (
+          <section className="mb-6">
+            <h3 className="mb-2 text-[11px] font-black uppercase tracking-wider text-muted">
+              Shake to panic
+            </h3>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={toggleShake}
+                aria-pressed={prefs.shake}
+                className={`inline-flex min-h-11 items-center gap-2 rounded-full border-2 px-5 py-2.5 text-sm font-extrabold transition ${
+                  prefs.shake
+                    ? "border-brand bg-brand text-white hover:bg-brand-600"
+                    : "border-border bg-white text-zinc-700 hover:border-brand-100"
+                }`}
+              >
+                <span aria-hidden>📳</span>
+                {prefs.shake ? "On" : "Off"}
+              </button>
+              <span className="text-sm font-bold text-zinc-900">
+                {prefs.shake
+                  ? "Give your device a shake to hide the arcade."
+                  : "No keyboard? Hide with a shake instead."}
+              </span>
+            </div>
+            {shakeError && (
+              <p className="mt-2 text-[13px] font-semibold text-accent-pink">{shakeError}</p>
+            )}
+            <p className="mt-2 text-[13px] font-semibold text-muted">
+              Works even mid-game. Shake to hide; tap the bottom-right corner (or press your panic key) to bring it back.
+            </p>
+          </section>
+        )}
 
         {/* Panic screen */}
         <section>
