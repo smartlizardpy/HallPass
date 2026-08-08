@@ -49,3 +49,9 @@ excalidraw.log
 
 # Playwright MCP evaluate() output, written into the repo root by the tool.
 capture-sample.json
+
+# Scratch git worktrees an agent harness checks out inside the repo so parallel
+# agents can work without treading on each other. They are throwaway checkouts of
+# branches this repo already holds, so committing them would vendor a copy of the
+# tree into itself.
+/.claude/worktrees/
