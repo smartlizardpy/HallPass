@@ -100,9 +100,9 @@ function TabRow(): ReactElement {
  * books anchored right, all held at low contrast so the class name stays the
  * brightest thing in the box.
  *
- * `slice` on a 1000×240 viewBox means the art crops from the edges as the
- * banner narrows rather than squashing, which keeps the books the right shape
- * on a phone.
+ * `slice` on a 1000×240 viewBox crops from the left as the banner narrows
+ * rather than squashing, so the books keep their proportions on a phone and the
+ * space the class name needs stays clear.
  */
 function BannerArt(): ReactElement {
   return (
@@ -152,9 +152,17 @@ function BannerArt(): ReactElement {
 }
 
 /** A left-rail card: the rounded, hairline-bordered box the whole product uses. */
-function RailCard({ children }: { children: React.ReactNode }): ReactElement {
+function RailCard({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}): ReactElement {
   return (
-    <div className="rounded-lg border border-[#dadce0] bg-white p-4">{children}</div>
+    <div className={`rounded-lg border border-[#dadce0] bg-white p-4 ${className}`}>
+      {children}
+    </div>
   );
 }
 
@@ -176,7 +184,10 @@ function ExpandIcon(): ReactElement {
 function LeftRail(): ReactElement {
   return (
     <div className="space-y-4">
-      <RailCard>
+      {/* The code and Meet row is desktop-only: the phone layout puts these cards
+          above the stream, and two full cards there would push the posts — the
+          most recognisable part of the page — off the first screen. */}
+      <RailCard className="hidden sm:block">
         <div className="flex items-start justify-between gap-2">
           <div>
             <div className="text-[14px] text-[#3c4043]">Class code</div>
@@ -371,35 +382,43 @@ function Composer(): ReactElement {
 export function ClassroomScreen() {
   return (
     <div className="min-h-full bg-[#f5f5f5]" style={{ fontFamily: SANS }}>
-      {/* Top app bar */}
-      <header className="flex h-16 items-center gap-4 bg-white px-4">
-        <MenuIcon />
-        <div className="flex items-center gap-2">
-          <ClassroomMark />
-          <span className="text-[22px] leading-none text-[#5f6368]">Classroom</span>
-        </div>
-        <div className="ml-auto flex items-center gap-3 sm:gap-5">
-          <PlusIcon />
-          <AppsGrid />
-          <Avatar initial="T" size={32} color="#1a73e8" />
-        </div>
-      </header>
-      <TabRow />
+      {/* Top app bar. Pinned, because the real product pins it and a phone
+          screen is mostly scrolled — an app bar that slides away with the posts
+          takes the one piece of branding on the page with it. */}
+      <div className="sticky top-0 z-10 bg-white">
+        <header className="flex h-14 items-center gap-3 px-4 sm:h-16 sm:gap-4">
+          <MenuIcon />
+          <div className="flex items-center gap-2">
+            <ClassroomMark />
+            <span className="text-[20px] leading-none text-[#5f6368] sm:text-[22px]">
+              Classroom
+            </span>
+          </div>
+          <div className="ml-auto flex items-center gap-3 sm:gap-5">
+            <PlusIcon />
+            <AppsGrid />
+            <Avatar initial="T" size={32} color="#1a73e8" />
+          </div>
+        </header>
+        <TabRow />
+      </div>
 
       {/* Class banner */}
-      <div className="mx-auto mt-6 max-w-[1000px] px-4">
-        <div className="relative h-[240px] overflow-hidden rounded-lg text-white">
+      <div className="mx-auto mt-4 max-w-[1000px] px-4 pb-8 sm:mt-6">
+        <div className="relative h-[124px] overflow-hidden rounded-lg text-white sm:h-[240px]">
           <BannerArt />
-          <div className="absolute bottom-6 left-6 right-6">
-            <div className="text-[38px] leading-tight font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]">
+          <div className="absolute bottom-4 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-6">
+            <div className="text-[22px] leading-tight font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)] sm:text-[38px]">
               English — Period 4
             </div>
-            <div className="mt-1 text-[16px] opacity-95">Section B · Room 214</div>
+            <div className="mt-0.5 text-[13px] opacity-95 sm:mt-1 sm:text-[16px]">
+              Section B · Room 214
+            </div>
           </div>
         </div>
 
-        <div className="mt-5 flex gap-6">
-          <aside className="hidden w-[260px] shrink-0 sm:block">
+        <div className="mt-4 flex flex-col gap-4 sm:mt-5 sm:flex-row sm:gap-6">
+          <aside className="w-full shrink-0 sm:w-[260px]">
             <LeftRail />
           </aside>
 
