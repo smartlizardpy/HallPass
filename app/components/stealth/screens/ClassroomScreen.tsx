@@ -5,11 +5,57 @@
  * content, no third-party logos or copied copy. It only has to survive a glance
  * over the shoulder, which is all a panic screen ever needs.
  *
+ * Every icon here is drawn as inline SVG rather than typed as a glyph (`☰`,
+ * `▦`). A typed symbol inherits the text stroke weight and optical size, so it
+ * lands heavier and larger than the 24px Material icon it stands in for, and a
+ * bar of subtly wrong icons is what a passer-by notices before they read a word
+ * of the page. Drawing them costs a few lines and removes the tell entirely.
+ *
  * Purely presentational. {@link file://../StealthController.tsx} owns when it
  * mounts and every way it dismisses; this file renders and nothing more.
  */
 
-import { SANS } from "./chrome";
+import type { ReactElement } from "react";
+import { AppsGrid, Avatar, SANS } from "./chrome";
+
+/** Icon grey, the one colour every glyph in the app bar shares. */
+const ICON = "#5f6368";
+
+function MenuIcon(): ReactElement {
+  return (
+    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden fill={ICON}>
+      <rect x="3" y="6" width="18" height="2" rx="1" />
+      <rect x="3" y="11" width="18" height="2" rx="1" />
+      <rect x="3" y="16" width="18" height="2" rx="1" />
+    </svg>
+  );
+}
+
+function PlusIcon(): ReactElement {
+  return (
+    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden fill={ICON}>
+      <rect x="11" y="4" width="2" height="16" rx="1" />
+      <rect x="4" y="11" width="16" height="2" rx="1" />
+    </svg>
+  );
+}
+
+/**
+ * The product mark: a green board with a figure at it. An approximation of the
+ * shape language, not a copy — the silhouette is what carries at a glance, and
+ * the real mark is nobody's to ship.
+ */
+function ClassroomMark(): ReactElement {
+  return (
+    <svg viewBox="0 0 40 40" width="30" height="30" aria-hidden>
+      <rect x="3" y="6" width="34" height="28" rx="3" fill="#0F9D58" />
+      <rect x="8" y="11" width="24" height="18" rx="1.5" fill="#fff" />
+      <circle cx="20" cy="18" r="3.2" fill="#0F9D58" />
+      <path d="M13.8 27.5c0-2.9 2.8-4.8 6.2-4.8s6.2 1.9 6.2 4.8z" fill="#0F9D58" />
+      <rect x="3" y="30" width="34" height="4" rx="1" fill="#0b8043" />
+    </svg>
+  );
+}
 
 export function ClassroomScreen() {
   const stream = [
@@ -27,11 +73,18 @@ export function ClassroomScreen() {
   return (
     <div className="min-h-full bg-[#f5f5f5]" style={{ fontFamily: SANS }}>
       {/* Top app bar */}
-      <div className="flex items-center gap-4 bg-white px-5 py-3 shadow-sm">
-        <span className="text-[22px] text-[#5f6368]">☰</span>
-        <span className="text-[22px] text-[#5f6368]">Classroom</span>
-        <span className="ml-auto text-[22px] text-[#5f6368]">▦</span>
-      </div>
+      <header className="flex h-16 items-center gap-4 border-b border-[#dadce0] bg-white px-4">
+        <MenuIcon />
+        <div className="flex items-center gap-2">
+          <ClassroomMark />
+          <span className="text-[22px] leading-none text-[#5f6368]">Classroom</span>
+        </div>
+        <div className="ml-auto flex items-center gap-3 sm:gap-5">
+          <PlusIcon />
+          <AppsGrid />
+          <Avatar initial="T" size={32} color="#1a73e8" />
+        </div>
+      </header>
 
       {/* Class banner */}
       <div className="mx-auto mt-6 max-w-[1000px] px-4">
