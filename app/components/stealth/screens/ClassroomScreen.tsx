@@ -207,19 +207,168 @@ function LeftRail(): ReactElement {
   );
 }
 
+function MoreIcon(): ReactElement {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden fill={ICON}>
+      <circle cx="12" cy="5" r="2" />
+      <circle cx="12" cy="12" r="2" />
+      <circle cx="12" cy="19" r="2" />
+    </svg>
+  );
+}
+
+function SendIcon(): ReactElement {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden fill="#bdc1c6">
+      <path d="M2.5 20.5v-6.2l9-2.3-9-2.3V3.5L21.5 12z" />
+    </svg>
+  );
+}
+
+/** The clipboard that marks a post as coursework rather than an announcement. */
+function ClipboardIcon(): ReactElement {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
+      <rect x="5.5" y="5" width="13" height="15.5" rx="2" fill="#ffffff" />
+      <rect
+        x="9"
+        y="2.8"
+        width="6"
+        height="3.6"
+        rx="1.4"
+        fill="#ffffff"
+        stroke="#1e8e3e"
+        strokeWidth="1.4"
+      />
+      <g fill="#1e8e3e">
+        <rect x="8.2" y="10.6" width="7.6" height="1.5" rx="0.75" />
+        <rect x="8.2" y="14" width="5.4" height="1.5" rx="0.75" />
+      </g>
+    </svg>
+  );
+}
+
+/** The rounded, hairline-bordered box every card in the stream shares. */
+function StreamCard({ children }: { children: React.ReactNode }): ReactElement {
+  return (
+    <div className="rounded-lg border border-[#dadce0] bg-white px-4 py-4">{children}</div>
+  );
+}
+
+/**
+ * The footer every post carries. It is a small row and easy to leave off, but a
+ * card that simply stops after its body reads as a notification, not a post —
+ * the comment affordance is what makes the stream look like something students
+ * write into.
+ */
+function CommentRow({ count }: { count?: number }): ReactElement {
+  return (
+    <div className="mt-4 border-t border-[#e8eaed] pt-3">
+      {count ? (
+        <div className="mb-3 text-[13px] font-medium text-[#3c4043]">
+          {count} class {count === 1 ? "comment" : "comments"}
+        </div>
+      ) : null}
+      <div className="flex items-center gap-3">
+        <Avatar initial="T" size={28} color="#1a73e8" />
+        <span className="text-[13px] text-[#5f6368]">Add class comment</span>
+        <span className="ml-auto">
+          <SendIcon />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Every post the stream renders. Invented copy — generic classwork, no vendor text. */
+type Post =
+  | { kind: "announcement"; who: string; when: string; body: string; comments?: number }
+  | { kind: "assignment"; who: string; when: string; title: string; due: string };
+
+const STREAM: readonly Post[] = [
+  {
+    kind: "announcement",
+    who: "Ms. Aldridge",
+    when: "2:14 PM",
+    body: "Reminder: the reading response for Chapter 7 is due Friday night. Post your questions here if anything in the chapter is unclear and I will answer before Thursday's lesson.",
+    comments: 2,
+  },
+  {
+    kind: "assignment",
+    who: "Ms. Aldridge",
+    when: "1:05 PM",
+    title: "Reading response — Chapter 7",
+    due: "Due Friday",
+  },
+  {
+    kind: "announcement",
+    who: "Ms. Aldridge",
+    when: "Yesterday",
+    body: "Good discussion today, everyone. The slides from the lesson are attached under Classwork if you want to review the timeline before you write.",
+  },
+];
+
+function AnnouncementCard({ post }: { post: Extract<Post, { kind: "announcement" }> }) {
+  return (
+    <StreamCard>
+      <div className="flex items-start gap-3">
+        <Avatar initial="A" size={40} color="#0F9D58" />
+        <div className="min-w-0 flex-1">
+          <div className="text-[14px] leading-tight text-[#3c4043]">{post.who}</div>
+          <div className="mt-0.5 text-[12px] text-[#5f6368]">{post.when}</div>
+        </div>
+        <MoreIcon />
+      </div>
+      <p className="mt-3 text-[14px] leading-[1.5] text-[#3c4043]">{post.body}</p>
+      <CommentRow count={post.comments} />
+    </StreamCard>
+  );
+}
+
+/**
+ * The coursework variant. A stream of nothing but plain announcements is the
+ * quiet tell: real classes are mostly assignments, and the circular clipboard
+ * with a due date beside it is the shape a teacher recognises without reading.
+ */
+function AssignmentCard({ post }: { post: Extract<Post, { kind: "assignment" }> }) {
+  return (
+    <StreamCard>
+      <div className="flex items-start gap-3">
+        <div
+          aria-hidden
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+          style={{ background: "#1e8e3e" }}
+        >
+          <ClipboardIcon />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[14px] leading-[1.45] text-[#3c4043]">
+            {post.who} posted a new assignment: {post.title}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[12px] text-[#5f6368]">
+            <span>{post.when}</span>
+            <span aria-hidden>·</span>
+            <span>{post.due}</span>
+          </div>
+        </div>
+        <MoreIcon />
+      </div>
+      <CommentRow />
+    </StreamCard>
+  );
+}
+
+/** The composer that sits above the stream — the row a student types into. */
+function Composer(): ReactElement {
+  return (
+    <div className="flex items-center gap-4 rounded-lg border border-[#dadce0] bg-white px-4 py-4">
+      <Avatar initial="T" size={40} color="#1a73e8" />
+      <span className="text-[14px] text-[#5f6368]">Announce something to your class</span>
+    </div>
+  );
+}
+
 export function ClassroomScreen() {
-  const stream = [
-    {
-      who: "Ms. Aldridge",
-      when: "Posted 2:14 PM",
-      body: "Reminder: reading response for Chapter 7 is due Friday. Submit through the assignment below.",
-    },
-    {
-      who: "Ms. Aldridge",
-      when: "Yesterday",
-      body: "Great discussion today, everyone. Slides from the lesson are attached to the class materials.",
-    },
-  ];
   return (
     <div className="min-h-full bg-[#f5f5f5]" style={{ fontFamily: SANS }}>
       {/* Top app bar */}
@@ -254,21 +403,15 @@ export function ClassroomScreen() {
             <LeftRail />
           </aside>
 
-          <div className="flex-1 space-y-4">
-            {stream.map((post, i) => (
-              <div key={i} className="rounded-lg border border-[#e0e0e0] bg-white p-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0F9D58] text-[16px] font-medium text-white">
-                    A
-                  </div>
-                  <div>
-                    <div className="text-[14px] text-[#3c4043]">{post.who}</div>
-                    <div className="text-[12px] text-[#5f6368]">{post.when}</div>
-                  </div>
-                </div>
-                <p className="mt-3 text-[14px] leading-[1.5] text-[#3c4043]">{post.body}</p>
-              </div>
-            ))}
+          <div className="min-w-0 flex-1 space-y-4">
+            <Composer />
+            {STREAM.map((post, i) =>
+              post.kind === "assignment" ? (
+                <AssignmentCard key={i} post={post} />
+              ) : (
+                <AnnouncementCard key={i} post={post} />
+              ),
+            )}
           </div>
         </div>
       </div>
