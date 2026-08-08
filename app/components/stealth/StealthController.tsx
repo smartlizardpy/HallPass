@@ -17,12 +17,15 @@
  *     is no disguise. Every such side effect is owned here, as an effect keyed on
  *     `panicking`, so each one is undone by the same code path that applied it.
  *
- *  2. THE TAB CLOAK. Applies the favicon via {@link applyFavicon} and keeps the
- *     document title pinned to the cloak, re-asserting it through a
- *     MutationObserver because Next rewrites `document.title` on every navigation.
- *     The observer doubles as the record of the REAL title (captured whenever the
- *     cloak is off, or seeded from the boot script's `__hpRealTitle`) so switching
- *     the cloak back off restores the genuine page title rather than a guess.
+ *  2. THE TAB. One effect owns the title and the favicon for BOTH disguises: the
+ *     standing cloak, and the panic screen that outranks it while raised. It
+ *     re-asserts through a MutationObserver because Next rewrites
+ *     `document.title` on every navigation, and it keeps a record of the REAL
+ *     title (seeded from the boot script's `__hpRealTitle`, refreshed whenever the
+ *     tab shows something we could not have written) so dropping a disguise
+ *     restores the genuine page title rather than a guess. The rule that keeps
+ *     one disguise's title from being mistaken for the real one lives in
+ *     {@link reconcileTitle}, where it can be tested.
  *
  * Renders nothing to the server and reads no session — it stays a pure client
  * island so the pages that mount it remain statically prerenderable (and thus in
@@ -32,7 +35,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cloakById } from "../../lib/stealth/cloaks";
 import { applyFavicon } from "../../lib/stealth/apply";
+import { panicScreenById } from "../../lib/stealth/config";
 import { hushArcade } from "../../lib/stealth/hush";
+import { isDisguiseTitle, reconcileTitle } from "../../lib/stealth/panic";
 import { useShakeToPanic } from "../../lib/stealth/shake";
 import { OPEN_STEALTH_EVENT, PANIC_EVENT, useStealth } from "../../lib/stealth/store";
 import { PanicScreen } from "./PanicScreen";
@@ -123,48 +128,56 @@ export function StealthController() {
     return hushArcade();
   }, [panicking]);
 
-  /* --------------------------- tab cloak --------------------------- */
+  /* ----------------------- the tab (cloak + panic) ----------------------- */
+  // ONE owner for `document.title` and the favicon, because two would fight.
+  // The panic screen outranks the cloak while it is up — a Google Doc filling the
+  // viewport under a tab reading "HALLPASS" is worse than no disguise at all —
+  // and dropping back to the cloak (or to the real title) is just this same effect
+  // re-running with a different answer for `disguise`.
   const cloakId = prefs.cloak;
+  const panicScreenId = prefs.panicScreen;
   useEffect(() => {
     if (typeof document === "undefined") return;
     const cloak = cloakById(cloakId);
-    applyFavicon(cloak.favicon);
+    const disguise = panicking
+      ? panicScreenById(panicScreenId)
+      : cloak.id === "off"
+        ? null
+        : cloak;
 
-    const cloakOn = cloak.id !== "off";
-    // Seed the real-title memory: from the boot script's stash if it cloaked at
-    // load, otherwise from whatever the document currently shows.
+    // Seed the real-title memory: from the boot script's stash if it cloaked before
+    // first paint, otherwise from the tab itself — unless the tab is already
+    // showing one of ours, which tells us nothing about the real title.
     if (realTitleRef.current == null) {
       const stashed = (window as unknown as { __hpRealTitle?: string }).__hpRealTitle;
-      realTitleRef.current = stashed ?? (cloakOn ? FALLBACK_TITLE : document.title);
+      realTitleRef.current =
+        stashed ?? (isDisguiseTitle(document.title) ? FALLBACK_TITLE : document.title);
     }
 
     const enforce = () => {
-      if (cloakOn) {
-        if (document.title !== cloak.title) {
-          // A change we didn't make (a route's real title) — remember it, re-cloak.
-          realTitleRef.current = document.title;
-          document.title = cloak.title;
-        }
-      } else {
-        // Cloak off: the document title IS the real one; keep it current.
-        realTitleRef.current = document.title;
-      }
+      const { real, title } = reconcileTitle(
+        document.title,
+        disguise?.title ?? null,
+        realTitleRef.current ?? FALLBACK_TITLE,
+      );
+      realTitleRef.current = real;
+      if (document.title !== title) document.title = title;
+      // The favicon needs re-asserting for the same reason the title does: a
+      // navigation re-renders the head and puts the real icon link back, which
+      // would leave a "Google Docs" tab wearing the arcade's icon.
+      applyFavicon(disguise?.favicon ?? null);
     };
+    enforce();
 
-    if (cloakOn) {
-      realTitleRef.current = document.title === cloak.title ? realTitleRef.current : document.title;
-      document.title = cloak.title;
-    } else if (realTitleRef.current) {
-      document.title = realTitleRef.current;
-    }
-
-    const titleEl = document.querySelector("title");
+    // Watch the whole head, not the `<title>` node: a client-side navigation can
+    // REPLACE that element outright, which would leave an observer bound to it
+    // watching a node no longer in the document — the disguise silently losing the
+    // tab exactly when the player navigates behind it. `enforce` is a string
+    // compare, so the extra head churn it sees costs nothing.
     const observer = new MutationObserver(enforce);
-    if (titleEl) {
-      observer.observe(titleEl, { childList: true, characterData: true, subtree: true });
-    }
+    observer.observe(document.head, { childList: true, characterData: true, subtree: true });
     return () => observer.disconnect();
-  }, [cloakId]);
+  }, [cloakId, panicking, panicScreenId]);
 
   return (
     <>
