@@ -2,8 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   isDisguiseTitle,
   lockOverflow,
+  makeInert,
   reconcileTitle,
+  releaseInert,
   releaseOverflow,
+  type Inertable,
   type OverflowTarget,
 } from "./panic";
 import { PANIC_SCREENS, panicScreenById } from "./config";
@@ -101,6 +104,53 @@ describe("lockOverflow / releaseOverflow", () => {
     const scrollTo = vi.fn();
     releaseOverflow(lockOverflow([target()], 12, 940), scrollTo);
     expect(scrollTo).toHaveBeenCalledWith(12, 940);
+  });
+});
+
+describe("makeInert / releaseInert", () => {
+  /** A stand-in element: `holds` is the branch it would `contains()`. */
+  function el(holds?: unknown, attrs: Record<string, string> = {}) {
+    const own = { ...attrs };
+    const node: Inertable & { attrs: Record<string, string> } = {
+      attrs: own,
+      hasAttribute: (n) => n in own,
+      setAttribute: (n, v) => {
+        own[n] = v;
+      },
+      removeAttribute: (n) => {
+        delete own[n];
+      },
+      contains: (other) => other === node || (holds !== undefined && other === holds),
+    };
+    return node;
+  }
+
+  const OVERLAY = Symbol("overlay");
+
+  it("seals every sibling of the overlay", () => {
+    const arcade = el();
+    const toast = el();
+    makeInert([arcade, toast, el(OVERLAY)], OVERLAY);
+    expect(arcade.attrs.inert).toBe("");
+    expect(toast.attrs.inert).toBe("");
+  });
+
+  it("never seals the branch holding the overlay", () => {
+    const host = el(OVERLAY);
+    makeInert([host], OVERLAY);
+    expect(host.attrs.inert).toBeUndefined();
+  });
+
+  it("leaves an element someone else already made inert alone", () => {
+    const other = el(undefined, { inert: "" });
+    releaseInert(makeInert([other], OVERLAY));
+    expect(other.attrs.inert).toBe("");
+  });
+
+  it("hands the background back exactly what it sealed", () => {
+    const arcade = el();
+    releaseInert(makeInert([arcade], OVERLAY));
+    expect(arcade.attrs.inert).toBeUndefined();
   });
 });
 

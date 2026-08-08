@@ -137,6 +137,54 @@ export function releaseOverflow(
 }
 
 /* -------------------------------------------------------------------------- *
+ * Background inertness — pure core.
+ * -------------------------------------------------------------------------- */
+
+/** The slice of `Element` the inert bookkeeping needs. */
+export type Inertable = {
+  hasAttribute(name: string): boolean;
+  setAttribute(name: string, value: string): void;
+  removeAttribute(name: string): void;
+  contains(other: never): boolean;
+};
+
+/** The elements we made inert, so only those are handed back. */
+export type InertLock = readonly Inertable[];
+
+const INERT = "inert";
+
+/**
+ * Mark every top-level element inert EXCEPT the branch holding `keep`.
+ *
+ * `inert` is doing two jobs at once, and both are disguise problems rather than
+ * decoration: it takes the arcade out of the tab order, so a keystroke aimed at
+ * the disguise cannot land on a game link behind it, and it takes the arcade out
+ * of the accessibility tree, so a screen reader is not reading out an arcade the
+ * screen is insisting is a document.
+ *
+ * An element that was ALREADY inert is left out of the lock entirely — something
+ * else owns that, and handing it back would undo their work.
+ */
+export function makeInert<T extends Inertable>(
+  elements: readonly T[],
+  keep: unknown,
+): InertLock {
+  const locked: Inertable[] = [];
+  for (const el of elements) {
+    if (el.contains(keep as never)) continue;
+    if (el.hasAttribute(INERT)) continue;
+    el.setAttribute(INERT, "");
+    locked.push(el);
+  }
+  return locked;
+}
+
+/** Give the background back its tab order and its accessibility tree. */
+export function releaseInert(lock: InertLock): void {
+  for (const el of lock) el.removeAttribute(INERT);
+}
+
+/* -------------------------------------------------------------------------- *
  * Browser layer.
  * -------------------------------------------------------------------------- */
 
@@ -154,4 +202,50 @@ export function lockBackgroundScroll(): () => void {
     window.scrollY,
   );
   return () => releaseOverflow(lock, (x, y) => window.scrollTo(x, y));
+}
+
+/**
+ * Move focus into the disguise and seal the arcade off behind it; returns the
+ * undo, which puts focus back exactly where it was.
+ *
+ * Focus is not a politeness here. Whatever was focused when the panic key fired
+ * is still focused underneath — a search box, a game link, the player overlay —
+ * and every keystroke the player makes while the disguise is up keeps landing
+ * there. Typing into a disguise and watching the arcade's search box fill up
+ * behind it is the tell that survives a perfect-looking screen.
+ *
+ * Focus moves BEFORE the background goes inert so the browser never has to
+ * blur-and-relocate, and inertness is released BEFORE focus returns because a
+ * focus call on an inert element is silently dropped.
+ *
+ * Sealing once is not enough, for the same reason pinning the title once is not:
+ * a client-side navigation BEHIND the cover replaces the page's root element, and
+ * the replacement arrives without the attribute we set on the element it
+ * displaced — handing the arcade its tab order back at the one moment the player
+ * is relying on it not having one. An observer seals whatever the body gains for
+ * as long as the disguise is up.
+ */
+export function isolateOverlay(overlay: HTMLElement): () => void {
+  if (typeof document === "undefined") return () => {};
+  const previous = document.activeElement as HTMLElement | null;
+  overlay.focus({ preventScroll: true });
+
+  const locked: Inertable[] = [...makeInert(Array.from(document.body.children), overlay)];
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      const added = Array.from(record.addedNodes).filter(
+        (node): node is Element => node.nodeType === 1,
+      );
+      locked.push(...makeInert(added, overlay));
+    }
+  });
+  observer.observe(document.body, { childList: true });
+
+  return () => {
+    observer.disconnect();
+    releaseInert(locked);
+    // `preventScroll` for the same reason the scroll lock records offsets: the
+    // browser scrolling a restored element into view would undo that restore.
+    if (previous?.isConnected) previous.focus({ preventScroll: true });
+  };
 }

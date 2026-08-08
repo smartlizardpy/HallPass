@@ -15,8 +15,10 @@
  * overlay, modals), the dismiss affordance for touch devices with no keyboard,
  * and — because "covers everything" has to mean more than paint — the document
  * state that makes the cover total. A disguise the arcade can still scroll behind
- * is a disguise that moves while nobody is touching it, which is exactly the kind
- * of wrongness a passer-by notices without knowing why. When and how the overlay
+ * is a disguise that moves while nobody is touching it; a disguise the arcade
+ * still holds the keyboard behind is one that fills a search box with whatever the
+ * player types at it. Both are the kind of wrongness a passer-by notices without
+ * knowing why. When and how the overlay
  * mounts is {@link file://./StealthController.tsx}'s job, not this file's; what
  * being mounted DOES to the page is this file's.
  *
@@ -28,7 +30,7 @@
 
 import { useLayoutEffect, useRef, type ReactElement } from "react";
 import type { PanicScreenId } from "../../lib/stealth/config";
-import { lockBackgroundScroll } from "../../lib/stealth/panic";
+import { isolateOverlay, lockBackgroundScroll } from "../../lib/stealth/panic";
 import { ClassroomScreen } from "./screens/ClassroomScreen";
 import { DocsScreen } from "./screens/DocsScreen";
 import { SearchScreen } from "./screens/SearchScreen";
@@ -73,6 +75,12 @@ export function PanicScreen({
 
   useLayoutEffect(() => lockBackgroundScroll(), []);
 
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    return isolateOverlay(el);
+  }, []);
+
   // Start the disguise at its top. The overlay is a scroll container of its own,
   // and a browser is free to hand a fresh one a restored offset (session restore,
   // a dev-time hot reload, a re-render that swaps the screen while raised) — a
@@ -91,8 +99,16 @@ export function PanicScreen({
       // `overscroll-contain`: scrolling to the end of the disguise must not chain
       // through to the arcade underneath, which on a phone is how the real page
       // rubber-bands into view around the edges of the cover.
-      className="fixed inset-0 z-[2147483647] overflow-auto overscroll-contain bg-white"
-      role="presentation"
+      className="fixed inset-0 z-[2147483647] overflow-auto overscroll-contain bg-white outline-none"
+      // A modal dialog rather than presentation: the shell is focused on mount and
+      // everything behind it is inert, which is precisely what those two ARIA
+      // attributes describe. The label stays deliberately colourless — assistive
+      // tech should say what this IS without speaking the arcade's name aloud in a
+      // room the disguise is hiding it from.
+      role="dialog"
+      aria-modal="true"
+      aria-label="Screen cover"
+      tabIndex={-1}
     >
       <Screen />
       <DismissDot onDismiss={onDismiss} />
