@@ -18,7 +18,7 @@
  */
 
 import type { ReactElement, ReactNode } from "react";
-import { SANS } from "./chrome";
+import { Avatar, SANS } from "./chrome";
 
 /* ------------------------------ iconography ------------------------------ */
 
@@ -230,6 +230,59 @@ const Chevron = ({ size = 18 }: { size?: number }) => (
   </Glyph>
 );
 
+const Star = () => (
+  <Glyph size={19}>
+    <path d="m12 4 2.45 5.2 5.55.78-4 4.02.94 5.6L12 16.98 7.06 19.6 8 14l-4-4.02 5.55-.78z" />
+  </Glyph>
+);
+
+const MoveToFolder = () => (
+  <Glyph size={19}>
+    <path d="M3.5 7.2a1.5 1.5 0 0 1 1.5-1.5h3.4l1.9 2.1h8.2a1.5 1.5 0 0 1 1.5 1.5v8.5a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5z" />
+  </Glyph>
+);
+
+const VersionHistory = () => (
+  <Glyph size={19}>
+    <path d="M12 7.5V12l3.2 1.9" />
+    <path d="M20 12a8 8 0 1 1-2.35-5.65" />
+    <path d="M20.2 3.6V7.1h-3.5" />
+  </Glyph>
+);
+
+const Camera = () => (
+  <Glyph size={19}>
+    <rect x="3.5" y="7" width="11" height="10" rx="2" />
+    <path d="m14.5 11.2 5.5-3.2v8l-5.5-3.2z" />
+  </Glyph>
+);
+
+/** The person-and-padlock on the Share button — the one glyph nobody misreads. */
+const SharePerson = () => (
+  <Glyph size={18}>
+    <circle cx="9.2" cy="7.8" r="3.2" />
+    <path d="M3.4 19.2c0-3.2 2.6-5.2 5.8-5.2 1 0 1.9.2 2.7.5" />
+    <rect x="14.6" y="14.4" width="6.4" height="5.4" rx="1" />
+    <path d="M16.1 14.4v-1.6a1.7 1.7 0 0 1 3.4 0v1.6" />
+  </Glyph>
+);
+
+/** The Docs file mark: a blue sheet with a lighter folded corner and ruled lines. */
+const DocsMark = ({ size = 36 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
+    <path
+      d="M6.2 2h7.3L19 7.5v13.1A1.4 1.4 0 0 1 17.6 22H6.2a1.4 1.4 0 0 1-1.4-1.4V3.4A1.4 1.4 0 0 1 6.2 2z"
+      fill="#4285F4"
+    />
+    <path d="M13.5 2 19 7.5h-5.5z" fill="#A1C2FA" />
+    <g fill="#fff">
+      <rect x="7.6" y="11" width="8.8" height="1.2" rx=".6" />
+      <rect x="7.6" y="13.8" width="8.8" height="1.2" rx=".6" />
+      <rect x="7.6" y="16.6" width="5.6" height="1.2" rx=".6" />
+    </g>
+  </svg>
+);
+
 /* -------------------------------- toolbar -------------------------------- */
 
 /** A 1px rule between icon groups — the thing that gives the strip its rhythm. */
@@ -387,6 +440,67 @@ function Toolbar(): ReactElement {
   );
 }
 
+/* --------------------------------- header -------------------------------- */
+
+const MENUS = ["File", "Edit", "View", "Insert", "Format", "Tools", "Extensions", "Help"];
+
+/**
+ * The title block. The row of small icons trailing the filename is doing more
+ * work than it looks: a bare filename with nothing after it is the single most
+ * common tell in a mocked-up editor, because every real document has been
+ * starred, filed and saved at least once.
+ */
+function Header(): ReactElement {
+  return (
+    <div className="flex shrink-0 items-start gap-2.5 bg-white px-4 pt-2.5 pb-1">
+      <span aria-hidden className="pt-1">
+        <DocsMark />
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 text-[#444746]">
+          <span className="truncate text-[18px] leading-6 text-[#1f1f1f]">Untitled document</span>
+          <Star />
+          <MoveToFolder />
+          <VersionHistory />
+        </div>
+
+        <div className="flex items-center text-[14px] text-[#444746]">
+          {MENUS.map((m) => (
+            <span key={m} aria-hidden className="rounded px-2 py-0.5 leading-5">
+              {m}
+            </span>
+          ))}
+          <span aria-hidden className="ml-2 text-[13px] text-[#5f6368]">
+            Last edit was 4 minutes ago
+          </span>
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-2 pt-1.5">
+        <span
+          aria-hidden
+          className="flex h-9 items-center gap-1.5 rounded-full border border-[#747775] px-3 text-[#444746]"
+        >
+          <Camera />
+          <Chevron size={16} />
+        </span>
+        <span aria-hidden className="flex h-9 w-9 items-center justify-center rounded-full">
+          <Comment />
+        </span>
+        <span
+          aria-hidden
+          className="flex h-9 items-center gap-2 rounded-full bg-[#1a73e8] pr-5 pl-4 text-[14px] font-medium text-white"
+        >
+          <SharePerson />
+          Share
+        </span>
+        <Avatar initial="S" size={32} color="#0b57d0" />
+      </div>
+    </div>
+  );
+}
+
 /* --------------------------------- screen -------------------------------- */
 
 export function DocsScreen() {
@@ -395,28 +509,9 @@ export function DocsScreen() {
       className="flex min-h-full flex-col bg-[#f9fbfd] text-[#202124]"
       style={{ fontFamily: SANS }}
     >
-      {/* Title bar */}
-      <div className="flex items-center gap-3 px-4 pt-3">
-        <svg width="36" height="36" viewBox="0 0 24 24" aria-hidden>
-          <path d="M6 2h8l4 4v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" fill="#4285F4" />
-          <path d="M14 2l4 4h-4z" fill="#A1C2FA" />
-          <g fill="#fff">
-            <rect x="8" y="9" width="8" height="1.4" rx=".7" />
-            <rect x="8" y="12" width="8" height="1.4" rx=".7" />
-            <rect x="8" y="15" width="5" height="1.4" rx=".7" />
-          </g>
-        </svg>
-        <div className="flex flex-col">
-          <span className="text-[18px] leading-tight">Untitled document</span>
-          <div className="flex gap-4 text-[13px] text-[#5f6368]">
-            {["File", "Edit", "View", "Insert", "Format", "Tools", "Help"].map((m) => (
-              <span key={m}>{m}</span>
-            ))}
-          </div>
-        </div>
-      </div>
+      <Header />
 
-      <div className="mt-2">
+      <div className="bg-white pb-1">
         <Toolbar />
       </div>
 
