@@ -4,7 +4,9 @@ A shared project board on `/dashboard`. Admins paste in what they want built and
 watch its status; I move the status as I build. Tags and status are the whole
 vocabulary.
 
-Status: **design only, nothing built.**
+Status: **phase 1 built** (§8). The board, the composer, the item detail page,
+tags, updates and the activity trail are in. Migration `021_tracker.sql` is
+written but **not yet applied to any database** — see §7.
 
 ---
 

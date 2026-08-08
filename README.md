@@ -31,6 +31,7 @@ app/
     games-version-blob.ts  blob path: games/version.txt
     admin-html-auth.ts  cookie session for /admin/html
     stats.ts            PostHog play-count fetcher (server-side)
+    tracker/            admin project tracker: config, store, schema (see below)
   manifest.ts           PWA manifest route (/manifest.webmanifest)
   layout.tsx            root layout, fonts, metadata, mounts <PWA />
 public/
@@ -94,6 +95,32 @@ Two device-local, no-backend player features live under `app/lib/{stealth,streak
 **Daily streak** (`app/lib/streak`) — a consecutive-days-played flame.
 - `core.ts` is the pure, clock-free model (local `YYYY-MM-DD` keys, DST-safe day math); `store.ts` persists `hp:streak` and stamps the day from `recordPlay()`, called in `PlayerOverlay` right where recently-played is recorded (idempotent per calendar day).
 - `StreakChip` (header) shows the live streak with a 7-day popover + all-time best; `StreakToast` celebrates an advance and milestones.
+
+## Admin project tracker
+
+`/dashboard/tracker` is the internal work board: admins paste in what they want
+built, tag it, and read the status back. It is **admin-only** (`requireRole("admin")`),
+never public, and nothing about it is exposed through `/api/v1/*`.
+
+One entity — the item — because the pasted brief *is* the tracked thing. Tags do
+the grouping; there is no priority, effort, due date or assignee. Six lanes,
+worded for the reader: `new → planned → building → shipped`, plus `parked` (not
+now, still want it) and `declined` (not doing it), which stay separate so the
+board can tell those two apart. `tracker_updates` carries dated progress notes,
+`tracker_events` the auto-written activity trail.
+
+Backed by `app/lib/tracker/` and migration `021_tracker.sql`. **That migration
+must be applied before the board works** — until then the page renders a
+"run the migration" notice rather than an empty board:
+
+```bash
+npm run migrate -- --status   # confirm 021 is PENDING, and check the target host
+npm run migrate
+```
+
+Neon branching means it has to be applied to every branch the app runs against.
+See `tracker-design.md` for the full design, what is deliberately excluded, and
+the deferred GitHub-issues integration (the `gh_*` columns ship unused).
 
 ## Offline / PWA architecture
 
