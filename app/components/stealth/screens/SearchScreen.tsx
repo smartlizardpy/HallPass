@@ -40,6 +40,76 @@ const LOGO_SLOT = "flex w-[152px] shrink-0 items-center";
  */
 const TABS = ["All", "Images", "Videos", "News", "Shopping", "Web", "More"] as const;
 
+/**
+ * Terms the results page bolds inside its snippets. Real Google emphasises the
+ * words it matched on, and a page of uniformly grey snippet text is one of the
+ * quieter tells — the eye expects the ragged bold speckle.
+ */
+const EMPHASIS = /(photosynthesis|light[- ]dependent|chlorophyll|thylakoid)/i;
+const EMPHASIS_SPLIT = new RegExp(EMPHASIS.source, "gi");
+
+/**
+ * The sites are invented, and deliberately so: made-up study sites can carry
+ * made-up copy without borrowing a single word or mark from anyone real, and at
+ * glance distance nobody reads a domain anyway. Their favicons are initials on
+ * a flat colour for the same reason.
+ */
+type ResultEntry = {
+  site: string;
+  domain: string;
+  crumbs: string;
+  mark: string;
+  initial: string;
+  title: string;
+  date?: string;
+  snippet: string;
+};
+
+const RESULTS: readonly ResultEntry[] = [
+  {
+    site: "Open Bio Text",
+    domain: "openbiotext.org",
+    crumbs: "chapters › light-reactions",
+    mark: "#2e7d32",
+    initial: "O",
+    title: "The light-dependent reactions of photosynthesis",
+    snippet:
+      "Pigment molecules held in the thylakoid membrane absorb photons and pass the excited electrons down a transport chain. Water is split, oxygen leaves as waste, and the energy is banked as ATP and NADPH.",
+  },
+  {
+    site: "Revise Notes",
+    domain: "revisenotes.co.uk",
+    crumbs: "biology › a-level › unit-4",
+    mark: "#1565c0",
+    initial: "R",
+    title: "Light-dependent vs light-independent stages — revision summary",
+    date: "14 Mar 2024",
+    snippet:
+      "A side-by-side table for revision: where each stage of photosynthesis happens, what enters, what leaves, and the two things markers most often see written the wrong way round.",
+  },
+  {
+    site: "Plant Science Hub",
+    domain: "plantsciencehub.org",
+    crumbs: "learn › capturing-light",
+    mark: "#ef6c00",
+    initial: "P",
+    title: "How a leaf captures light energy | Plant Science Hub",
+    snippet:
+      "Chlorophyll absorbs strongly at the blue and red ends of the spectrum and reflects green, which is why foliage looks the colour it does. An illustrated walk through the pigments involved.",
+  },
+  {
+    site: "Classroom Lab",
+    domain: "classroomlab.net",
+    crumbs: "practicals › pondweed",
+    mark: "#c62828",
+    initial: "C",
+    title: "Practical: measuring the rate of photosynthesis with pondweed",
+    date: "2 Oct 2023",
+    snippet:
+      "A step-by-step practical for counting oxygen bubbles as light intensity changes, with a blank results table, a worked graph and notes on holding temperature steady.",
+  },
+];
+
 /* ------------------------------ iconography ------------------------------ */
 
 /** The search box's "clear this query" cross. */
@@ -136,6 +206,70 @@ function SearchBox(): ReactElement {
   );
 }
 
+/** The vertical kebab that closes every result's URL line. */
+function KebabIcon(): ReactElement {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden fill="#5f6368" className="shrink-0">
+      <circle cx="12" cy="5.5" r="1.7" />
+      <circle cx="12" cy="12" r="1.7" />
+      <circle cx="12" cy="18.5" r="1.7" />
+    </svg>
+  );
+}
+
+/** An invented site's mark, sitting in the pale disc Google frames favicons in. */
+function Favicon({ mark, initial }: { mark: string; initial: string }): ReactElement {
+  return (
+    <span
+      aria-hidden
+      className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-[#f1f3f4]"
+    >
+      <span
+        className="flex h-[18px] w-[18px] items-center justify-center rounded-[4px] text-[11px] font-bold text-white"
+        style={{ background: mark }}
+      >
+        {initial}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * A result in the modern layout: source identity — favicon, site name and the
+ * breadcrumb path — stacked ABOVE the blue title, rather than the one grey URL
+ * line the older design put there. The two shapes are different enough that
+ * getting it wrong dates the page by several years at a glance.
+ */
+function Result({ result }: { result: ResultEntry }): ReactElement {
+  return (
+    <article className="mb-8">
+      <div className="mb-1 flex items-center gap-3">
+        <Favicon mark={result.mark} initial={result.initial} />
+        <div className="min-w-0 leading-[1.25]">
+          <div className="truncate text-[14px] text-[#202124]">{result.site}</div>
+          <div className="truncate text-[12px] text-[#4d5156]">
+            {result.domain} › {result.crumbs}
+          </div>
+        </div>
+        <KebabIcon />
+      </div>
+      <h3 className="text-[20px] leading-[1.3] text-[#1a0dab]">{result.title}</h3>
+      <p className="mt-1 text-[14px] leading-[1.58] text-[#4d5156]">
+        {result.date ? <span className="text-[#70757a]">{result.date} — </span> : null}
+        {result.snippet.split(EMPHASIS_SPLIT).map((part, i) =>
+          EMPHASIS.test(part) ? (
+            <b key={i} className="font-bold">
+              {part}
+            </b>
+          ) : (
+            <span key={i}>{part}</span>
+          ),
+        )}
+      </p>
+    </article>
+  );
+}
+
 /** The tab band, with its hairline doubling as the header's bottom edge. */
 function TabRow(): ReactElement {
   return (
@@ -162,26 +296,6 @@ function TabRow(): ReactElement {
 }
 
 export function SearchScreen() {
-  const results = [
-    {
-      url: "https://www.britannica.com › science › photosynthesis",
-      title: "Photosynthesis | Definition, Formula, Process & Facts",
-      snippet:
-        "Photosynthesis, the process by which green plants and certain other organisms transform light energy into chemical energy stored in glucose.",
-    },
-    {
-      url: "https://en.wikipedia.org › wiki › Photosynthesis",
-      title: "Photosynthesis - Wikipedia",
-      snippet:
-        "Photosynthesis is a system of biological processes by which photosynthetic organisms, such as most plants, algae, and cyanobacteria, convert light energy.",
-    },
-    {
-      url: "https://www.nationalgeographic.org › encyclopedia › photosynthesis",
-      title: "Photosynthesis - Education | National Geographic",
-      snippet:
-        "Most life on Earth depends on photosynthesis. The process is carried out by plants, algae, and some types of bacteria, which capture energy from sunlight.",
-    },
-  ];
   return (
     <div className="min-h-full bg-white" style={{ fontFamily: SANS }}>
       <header>
@@ -201,14 +315,10 @@ export function SearchScreen() {
       <main className={RAIL}>
         <div className={COLUMN}>
           <p className="pt-3 pb-4 text-[14px] text-[#70757a]">
-            About 84,900,000 results (0.42 seconds)
+            About 4,120,000 results (0.38 seconds)
           </p>
-          {results.map((r, i) => (
-            <div key={i} className="mb-7">
-              <div className="text-[13px] text-[#202124]">{r.url}</div>
-              <a className="text-[20px] leading-tight text-[#1a0dab] hover:underline">{r.title}</a>
-              <p className="mt-1 text-[14px] leading-[1.58] text-[#4d5156]">{r.snippet}</p>
-            </div>
+          {RESULTS.map((result) => (
+            <Result key={result.domain} result={result} />
           ))}
         </div>
       </main>
