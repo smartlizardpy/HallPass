@@ -1,5 +1,5 @@
 /**
- * Server actions for the player account page.
+ * Server actions for the player's own account controls, on `/play/you/settings`.
  *
  * Identity is NEVER taken from the form — a hidden `playerId` field would be
  * trivially forgeable, letting one player rewrite another's handle. The action
@@ -11,9 +11,18 @@
  * usable remains (see `app/lib/players.ts`), so no validation is duplicated here.
  *
  * Errors travel as fixed CODES, never free text: a write failure redirects with
- * `?error=db` and a failed confirmation with `?error=confirm`. The account page
+ * `?error=db` and a failed confirmation with `?error=confirm`. The settings tab
  * maps each code to a server-defined banner message, so nothing the client puts
  * in the querystring is ever reflected back into the UI.
+ *
+ * WHERE THESE LAND. Both forms live on `/play/you/settings` now — the account
+ * page and the friends page were merged into one owner-only surface with three
+ * tabs — so every redirect below points there and NOT at `/play/account`. This
+ * module keeps its path because the actions are imported by the settings tab
+ * rather than colocated with it; the old route is a redirect shim and owns no
+ * UI. Bouncing back to `/play/account` would work (that shim would forward), but
+ * it would cost an extra round trip on every save and would drop the `?ok=1` /
+ * `?error=` marker the banner is keyed on.
  *
  * Write hardening: every store write is wrapped in a try/catch so a Neon outage
  * (or unconfigured `DATABASE_URL`) bounces back to the form with `?error=db`
@@ -32,8 +41,9 @@ export async function setHandleAction(formData: FormData): Promise<void> {
   const session = await auth();
   const playerId = session?.user?.playerId;
 
-  // No verified identity → cannot edit a handle. Send them to sign in.
-  if (!playerId) redirect("/play/signin?callbackUrl=/play/account");
+  // No verified identity → cannot edit a handle. Send them to sign in, and back
+  // to the tab the form they just submitted lives on.
+  if (!playerId) redirect("/play/signin?callbackUrl=/play/you/settings");
 
   const handle = String(formData.get("handle") ?? "");
 
@@ -45,10 +55,10 @@ export async function setHandleAction(formData: FormData): Promise<void> {
   } catch {
     saveFailed = true;
   }
-  if (saveFailed) redirect("/play/account?error=db");
+  if (saveFailed) redirect("/play/you/settings?error=db");
 
-  // Back to the account page with a success marker for the banner.
-  redirect("/play/account?ok=1");
+  // Back to the settings tab with a success marker for the banner.
+  redirect("/play/you/settings?ok=1");
 }
 
 /**
@@ -80,7 +90,7 @@ export async function deleteAccountAction(formData: FormData): Promise<void> {
 
   // Typed confirmation gate — never trust a field for WHO, only for INTENT.
   if (String(formData.get("confirm") ?? "") !== "DELETE") {
-    redirect("/play/account?error=confirm");
+    redirect("/play/you/settings?error=confirm");
   }
 
   // A write failure (Neon down / unconfigured) must not 500: flag it inside the
@@ -93,7 +103,7 @@ export async function deleteAccountAction(formData: FormData): Promise<void> {
   } catch {
     deleteFailed = true;
   }
-  if (deleteFailed) redirect("/play/account?error=db");
+  if (deleteFailed) redirect("/play/you/settings?error=db");
 
   await signOut({ redirectTo: "/" });
 }
