@@ -4,8 +4,8 @@
  * HallPass mobile — the bottom tab bar.
  *
  * WHY A GLOBAL ISLAND, not part of `ArcadeShell`. The tabs span pages that do NOT
- * share the arcade chrome — `/play/friends` and `/play/account` are standalone
- * `<main>`s with no `ArcadeShell` — so the bar has to live above all of them.
+ * share the arcade chrome — the `/play/you` section (profile, friends, settings)
+ * is standalone `<main>`s with no `ArcadeShell` — so the bar has to live above it.
  * Rendering it once in the root layout body (next to `<PWA/>` / `<FeaturePromo/>`)
  * makes it route-agnostic and keeps every page otherwise untouched.
  *
@@ -19,9 +19,9 @@
  * to `--hp-bottom-chrome` so other floating elements clear it — see the effect
  * below and `app/lib/bottom-chrome.ts`.
  *
- * ADMIN. There is deliberately no admin tab. The dashboard is reachable from the
- * Account tab (`/play/account` renders a role-gated Dashboard link), so the bar
- * never changes shape based on who is signed in.
+ * ADMIN. There is deliberately no admin tab. The dashboard is reachable from
+ * inside the You tab (the `/play/you` section carries a role-gated Dashboard
+ * link), so the bar never changes shape based on who is signed in.
  *
  * STEALTH. The phone shell drops the genre hamburger, so the sidebar's "Stealth
  * mode" entry is otherwise unreachable — which left shake-to-panic (a touch-only
@@ -48,6 +48,15 @@ const HIDDEN_PREFIXES = [
   "/play/welcome",
   "/play/auth",
 ];
+
+/**
+ * Is `path` this route or something nested under it? A bare `startsWith` would
+ * also match a sibling that merely shares the prefix (`/play/yourthing` for
+ * `/play/you`), so the separator is part of the test.
+ */
+function isUnder(path: string, route: string) {
+  return path === route || path.startsWith(`${route}/`);
+}
 
 export function MobileTabBar() {
   const device = useDevicePlatform();
@@ -103,8 +112,11 @@ export function MobileTabBar() {
   if (hidden) return null;
 
   const homeActive = pathname === "/" || pathname.startsWith("/category");
-  const friendsActive = pathname.startsWith("/play/friends");
-  const accountActive = pathname.startsWith("/play/account");
+  // Friends lives UNDER the You section, so the two tabs would both light up on
+  // `/play/you/friends` if You matched the whole subtree. Friends wins its own
+  // route; You covers the rest of the section (profile, settings).
+  const friendsActive = isUnder(pathname, "/play/you/friends");
+  const youActive = isUnder(pathname, "/play/you") && !friendsActive;
 
   return (
     <nav
@@ -119,13 +131,13 @@ export function MobileTabBar() {
 
       {/* Two equal heads over one shared base — a symmetric "friends" mark,
           instead of the lopsided big-person/little-person users glyph. */}
-      <TabLink href="/play/friends" label="Friends" active={friendsActive}>
+      <TabLink href="/play/you/friends" label="Friends" active={friendsActive}>
         <circle cx="8" cy="8" r="3" />
         <circle cx="16" cy="8" r="3" />
         <path d="M3 20v-1a5 5 0 0 1 5-5h8a5 5 0 0 1 5 5v1" />
       </TabLink>
 
-      <TabLink href="/play/account" label="Account" active={accountActive}>
+      <TabLink href="/play/you" label="You" active={youActive}>
         <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 21v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1" />
       </TabLink>
 
@@ -178,7 +190,7 @@ function TabInner({
 /**
  * The tab body, rendered INSIDE the `Link` so it can read `useLinkStatus`. A tap
  * lights the tab up the instant navigation starts — `pending` counts as active —
- * so the bar feels responsive even when the destination (e.g. the dynamic account
+ * so the bar feels responsive even when the destination (e.g. the dynamic You
  * page) takes a moment to arrive. The Next docs recommend exactly this pairing:
  * prefetch for speed, `useLinkStatus` for immediate feedback while it completes.
  */
