@@ -27,7 +27,9 @@
  * either direction.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+// `useLayoutEffect` is safe here for the same reason it is in `PanicScreen`: this
+// panel renders null until a live click opens it, so it never runs on the server.
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { acquireOverlayLock } from "../../lib/overlay-lock";
 import { CLOAK_LIST } from "../../lib/stealth/cloaks";
 import { PANIC_SCREENS } from "../../lib/stealth/config";
@@ -174,8 +176,18 @@ export function StealthSettings({
    * re-ran on those would re-take the lock and yank focus back to the ✕ every
    * time the player picked a cloak. Escape lives in its own effect below, where
    * re-registering a listener costs nothing, precisely so this one can stay still.
+   *
+   * A LAYOUT effect, and that is not decoration either. "Preview panic screen"
+   * closes this modal and raises {@link PanicScreen} in the SAME commit, and
+   * `PanicScreen` takes its own scroll lock from a layout effect — so a passive
+   * cleanup here would release ours AFTER the disguise had already recorded our
+   * `hidden` as the page's own value. Dismissing the disguise would then hand the
+   * page back locked, permanently, with no modal open and `isOverlayOpen()` stuck
+   * true for the rest of the session. React runs a layout cleanup in the mutation
+   * phase, ahead of any layout effect the same commit is about to create, which
+   * puts the release back where it belongs: before the disguise looks.
    */
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
     const releaseLock = acquireOverlayLock();
 

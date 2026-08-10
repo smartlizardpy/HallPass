@@ -38,6 +38,15 @@
  * arbitrate between participants, and the remedy is to migrate the stragglers —
  * not to guess here.
  *
+ * ONE ORDERING RULE FOR CALLERS, which follows from that limit. An overlay that
+ * can be torn down in the SAME commit that a NON-participant takes the body must
+ * release from a LAYOUT effect, not a passive one. `PanicScreen` locks from a
+ * layout effect, so a passive release lands after it has already recorded our
+ * `hidden` as the page's own value — and dismissing the disguise then hands the
+ * page back permanently locked. `StealthSettings` is that case today: its
+ * "Preview panic screen" button closes the modal and raises the disguise in one
+ * commit. Overlays with no such path (the player, the promo) are fine as they are.
+ *
  * DOM-only and free of React on purpose (same posture as `bottom-chrome.ts`), so
  * a component takes the lock from whichever effect actually owns its lifetime.
  */
