@@ -87,6 +87,14 @@ export function emit(event: EventName, payload: unknown): void {
   }
 }
 
+/**
+ * How long an abandoned challenge picker is left open before the SDK gives up,
+ * removes it and resolves. Matches the listener's own watchdog in
+ * `challenge.ts`, which only STOPS LISTENING — it cannot remove a frame or
+ * settle a promise, so this is the half that actually cleans up.
+ */
+const PICKER_MAX_MS = 5 * 60 * 1000;
+
 /** Cap on the number of pending claim tokens held in memory. */
 const MAX_CLAIM_TOKENS = 20;
 
@@ -574,9 +582,15 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
           }
 
           let settled = false;
+          let cancelAbandonTimer = (): void => {};
           const finish = (result: ChallengeResult): void => {
             if (settled) return;
             settled = true;
+            try {
+              cancelAbandonTimer();
+            } catch {
+              // Teardown must not stop the promise settling.
+            }
             try {
               unsubscribe();
             } catch {
@@ -608,6 +622,20 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
               finish({ ok: true, sent: false, reason: "closed" }),
             );
           }
+
+          // BACKSTOP, and it has to live here rather than in the subscriber.
+          // `subscribeChallengeSignals` stops listening after its own deadline,
+          // but stopping is all it can do: it cannot remove the frame and cannot
+          // settle this promise. Left to that alone, an inline picker abandoned
+          // for five minutes would be orphaned on the page forever — no signal
+          // could reach it, nothing could close it, and the game's `await`
+          // would never return. Finishing from here tears the frame down and
+          // resolves, which is what an abandoned picker should do anyway.
+          const abandoned = setTimeout(
+            () => finish({ ok: true, sent: false, reason: "closed" }),
+            PICKER_MAX_MS,
+          );
+          cancelAbandonTimer = () => clearTimeout(abandoned);
         } catch {
           resolve({ ok: false, sent: false, reason: "network" });
         }

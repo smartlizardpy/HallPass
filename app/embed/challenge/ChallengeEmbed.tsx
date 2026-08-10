@@ -95,7 +95,13 @@ function closeSelf(): void {
 type Phase =
   | { kind: "picking" }
   | { kind: "sending" }
-  | { kind: "sent"; to: string; targetScore: number }
+  | {
+      kind: "sent";
+      to: string;
+      targetScore: number;
+      /** Carried so the Close button can announce what was sent. */
+      challenge: NonNullable<Signal["challenge"]>;
+    }
   | { kind: "failed"; message: string };
 
 /** What each refusal should say to a player. Never mentions blocks — see the API. */
@@ -124,10 +130,24 @@ export function ChallengeEmbed({
   const [phase, setPhase] = useState<Phase>({ kind: "picking" });
   const [chosen, setChosen] = useState<string | null>(null);
 
-  const dismiss = useCallback((sent: boolean, reason?: string) => {
-    signal({ type: SIGNAL_KEY, sent, reason });
-    closeSelf();
-  }, []);
+  /**
+   * Announce the outcome and ask the host to take the frame away.
+   *
+   * The ONLY place a signal is sent. The SDK tears the frame down on receipt, so
+   * signalling anywhere else would close the panel out from under the player —
+   * which is what "THE PLAYER CLOSES IT, NOT US" in the header means in practice.
+   */
+  const dismiss = useCallback(
+    (
+      sent: boolean,
+      reason?: string,
+      challenge?: NonNullable<Signal["challenge"]>,
+    ) => {
+      signal({ type: SIGNAL_KEY, sent, reason, challenge });
+      closeSelf();
+    },
+    [],
+  );
 
   const send = useCallback(async () => {
     if (!chosen) return;
@@ -154,13 +174,17 @@ export function ChallengeEmbed({
         return;
       }
 
-      // Tell the SDK immediately — the game can react while the player is still
-      // reading the confirmation.
-      signal({ type: SIGNAL_KEY, sent: true, challenge: data.challenge });
+      // DO NOT SIGNAL YET. The SDK tears the frame down the moment a signal
+      // lands, so announcing the send here would destroy the confirmation panel
+      // as it rendered — the player would see the picker vanish and never learn
+      // whether it worked. The signal goes out when they press Close, which is
+      // also exactly what the contract promises: `challenge()` resolves when the
+      // picker closes.
       setPhase({
         kind: "sent",
         to: data.challenge.to,
         targetScore: data.challenge.targetScore,
+        challenge: data.challenge,
       });
     } catch {
       // Offline, or the request never left. `/api/` is never intercepted by the
@@ -186,7 +210,11 @@ export function ChallengeEmbed({
             .
           </p>
           <div className="mt-4 flex justify-end">
-            <button type="button" className={BTN_PRIMARY} onClick={() => dismiss(true)}>
+            <button
+              type="button"
+              className={BTN_PRIMARY}
+              onClick={() => dismiss(true, undefined, phase.challenge)}
+            >
               Close
             </button>
           </div>
