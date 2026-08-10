@@ -15,13 +15,33 @@ const GAMES_VERSION_KEY = "https://hallpass.local/__sw__/games-version";
 
 // Paths whose responses are PER-VIEWER and must never sit in a shared cache.
 // `hp-runtime` is deliberately not keyed by BUILD_ID and is shared by everyone
-// using the browser profile, so a cached `/play/account` is one user's email
-// waiting to be served to the next. Used in two places: the fetch handler skips
-// these entirely, and `activate` purges anything an EARLIER version of this
-// service worker already stored.
+// using the browser profile, so a cached `/play/you` is one user's email and
+// standings waiting to be served to the next. Used in two places: the fetch
+// handler skips these entirely, and `activate` purges anything an EARLIER
+// version of this service worker already stored.
 function isPrivatePath(pathname) {
   return (
+    // The ENTIRE `/play/you` subtree, matched as a prefix rather than tab by
+    // tab. `/play/you` renders the player's own standings and
+    // `/play/you/settings` renders their email address, so every tab that
+    // exists today would qualify on its own merits — but naming them one by one
+    // means the next tab someone adds leaks until somebody remembers to come
+    // back here. A subtree match cannot be forgotten.
+    pathname.startsWith("/play/you") ||
+    // The two OLD profile URLs, which are now 307s into that subtree. This is
+    // NOT about the redirect response itself — a bare 307 carries no PII. It is
+    // about what the service worker actually receives: `networkFirst` calls
+    // `fetch(req)` with the default `redirect: "follow"`, so the response that
+    // comes back is the BODY of the private destination, and it would be stored
+    // under the public key `/play/account`, where `purgePrivateEntries` — which
+    // matches on the cached request's own path — could never find it again.
+    // `isCacheable`'s `!res.redirected` check happens to block that today, but
+    // that check exists to stop redirect-poisoning of iframe sources, not to
+    // protect anyone's email; a privacy guarantee must not rest on a guard kept
+    // for an unrelated reason. Listing them costs nothing: neither route renders
+    // any content of its own any more.
     pathname.startsWith("/play/account") ||
+    pathname.startsWith("/play/friends") ||
     pathname.startsWith("/u/") ||
     // The challenge picker. It renders the viewer's own friend list, and it is
     // loaded as an IFRAME — which still reaches the fetch handler as a navigate
@@ -96,10 +116,13 @@ self.addEventListener("activate", (event) => {
 /**
  * Evict per-viewer responses an earlier service worker already cached.
  *
- * Adding `/play/account` and `/u/` to the never-intercept list stops NEW leaks,
- * but it cannot undo old ones: `hp-runtime` survives deploys by design, so a
- * device that visited the account page before this shipped still holds that
- * user's email and would still be served it on the next offline navigation.
+ * Adding a path to the never-intercept list stops NEW leaks, but it cannot undo
+ * old ones: `hp-runtime` survives deploys by design, so a device that visited
+ * the account page before that path was listed still holds that user's email and
+ * would still be served it on the next offline navigation. This runs
+ * `isPrivatePath` over the existing keys, so each addition to that list is
+ * retroactive as well as preventive — listing the `/play/you` subtree evicts
+ * anything cached from it before the guard shipped.
  * Retroactive, runs once per activation, and is cheap — a cache-key enumeration
  * plus a delete for the rare match.
  */
@@ -140,15 +163,22 @@ self.addEventListener("fetch", (event) => {
   // freshness one. `networkFirst` below writes every HTML navigation into
   // RUNTIME_CACHE, which is deliberately NOT keyed by BUILD_ID and therefore
   // survives deploys — and the cache is shared by everyone using the browser
-  // profile. `/play/account` renders the signed-in player's EMAIL, and `/u/...`
-  // renders a specific person's profile. Caching either means the next user of a
-  // shared school machine can be served the previous user's page from the cache
-  // the moment the network hiccups. Any future route that renders one specific
-  // player's data belongs in this list.
+  // profile. `/play/you/settings` renders the signed-in player's EMAIL,
+  // `/play/you` their standings, and `/u/...` a specific person's profile.
+  // Caching any of them means the next user of a shared school machine can be
+  // served the previous user's page from the cache the moment the network
+  // hiccups. Any future route that renders one specific player's data belongs in
+  // this list.
   //
-  // `/play/friends` is intentionally NOT here: its server shell is PII-free and
-  // all viewer data arrives from `/api/` (never intercepted), so it can be
-  // precached and still work offline without leaking anything.
+  // `/play/friends` USED TO BE deliberately absent, on the grounds that its
+  // server shell read no session and leaked nothing. It is now in the list. The
+  // page became a 307 to `/play/you/friends`, and while a redirect is not itself
+  // PII, this handler never sees the bare redirect: `networkFirst` follows it and
+  // gets the private page's HTML back, which without the listing would be written
+  // into `hp-runtime` under the innocuous key `/play/friends` — a key
+  // `purgePrivateEntries` would never recognise. Same for `/play/account`. The
+  // offline value lost is a heading over an empty box, since the island it used
+  // to host renders nothing without the network anyway.
   if (
     url.pathname.startsWith("/admin") ||
     url.pathname.startsWith("/dashboard") ||
@@ -242,8 +272,10 @@ async function networkFirst(req) {
     //
     // Navigations ONLY. This must never reach `networkFirstWithStaticFallback`,
     // where exact matching of `/game-html/<slug>/` is load-bearing. Nor can it
-    // cross-match private pages: `/play/account`, `/u/`, `/admin`, `/dashboard`,
-    // `/api/` and `/games-version` all return before this strategy is reached.
+    // cross-match private pages: everything `isPrivatePath` covers (`/play/you`,
+    // `/play/account`, `/play/friends`, `/u/`, `/embed/`) plus `/admin`,
+    // `/dashboard`, `/api/` and `/games-version` all return before this strategy
+    // is reached.
     const cached = await caches.match(req);
     if (cached) return cached;
     const loose = await caches.match(req, { ignoreSearch: true });
