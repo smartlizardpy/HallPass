@@ -564,7 +564,7 @@ async function showPush(event) {
     // Shared tag, so four challenges while a phone is in a bag collapse into
     // one banner rather than four.
     tag: data.tag || "hallpass",
-    data: { url: data.url || "/play/friends" },
+    data: { url: data.url || "/play/you/friends" },
   });
 }
 
@@ -576,7 +576,8 @@ self.addEventListener("notificationclick", (event) => {
 // Focus an existing HallPass tab rather than piling up new ones — someone who
 // taps three notifications should end with one window, not three.
 async function openFromNotification(event) {
-  const target = (event.notification.data && event.notification.data.url) || "/play/friends";
+  const target =
+    (event.notification.data && event.notification.data.url) || "/play/you/friends";
   try {
     const clientList = await self.clients.matchAll({
       type: "window",
