@@ -12,9 +12,12 @@
  * intercepts.
  *
  * Renders `null` in every uninteresting case — loading, signed out, nobody has
- * challenged you here, offline — rather than a placeholder. The app has no
- * Suspense boundaries and no skeletons on public pages, and "0 challenges" is a
- * worse thing to show than nothing.
+ * challenged you here, offline — rather than a placeholder. A skeleton would be
+ * actively wrong here: this chip may legitimately have nothing to say, so
+ * reserving height for it would promise a row that never arrives, and
+ * "0 challenges" is a worse thing to show than nothing. A section that ALWAYS
+ * renders is the opposite case and does get a skeleton — see
+ * `reviews/GameReviews.tsx`, which reserves height because content sits below it.
  *
  * It shows the goal rather than the score to beat: "get 4,201 to win" is the
  * number a player can act on, and it comes from `scoreToBeat()` so the screen

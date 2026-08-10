@@ -16,9 +16,12 @@ import { Avatar } from "./Avatar";
  * never intercepts.
  *
  * Renders `null` in every uninteresting case — loading, signed out, no friends
- * play this, offline — rather than a placeholder. The app has no Suspense
- * boundaries and no skeletons on public pages, and a "0 friends" row would be a
- * worse thing to show a new player than nothing at all.
+ * play this, offline — rather than a placeholder. A skeleton would be actively
+ * wrong here: this chip may legitimately have nothing to say, so reserving height
+ * for it would promise a row that never arrives, and a "0 friends" row is a worse
+ * thing to show a new player than nothing at all. A section that ALWAYS renders
+ * is the opposite case and does get a skeleton — see `reviews/GameReviews.tsx`,
+ * which reserves its height precisely because content sits below it.
  *
  * WHERE THE CHIP GOES depends on whether it names ONE person. The whole card is
  * a single anchor — the avatars and the sentence cannot each become their own
