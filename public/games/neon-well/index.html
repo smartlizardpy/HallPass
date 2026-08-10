@@ -271,13 +271,18 @@ canvas{ display:block; }
 .hptitle{ font-family:var(--font-display); font-size:8.5px; letter-spacing:.18em;
   text-transform:uppercase; color:var(--ink-faint); margin-bottom:7px; }
 .hpboard{ margin-bottom:15px; min-height:22px; }
-.hpboard table{ width:100%; border-collapse:collapse;
+/* table-layout:fixed is load-bearing. Without it the browser sizes columns to
+   content and the ellipsis trick on .who collapses a long handle to a single
+   letter instead of truncating it. Fixed layout lets .who simply take whatever
+   the other two columns leave. */
+.hpboard table{ width:100%; border-collapse:collapse; table-layout:fixed;
   font-variant-numeric:tabular-nums; }
 .hpboard td{ padding:3px 0; font-size:11px; }
-.hpboard .rank{ width:22px; color:var(--ink-faint); font-family:var(--font-num); }
+.hpboard .rank{ width:20px; color:var(--ink-faint); font-family:var(--font-num); }
 .hpboard .who{ text-align:left; color:var(--ink-dim);
-  overflow:hidden; text-overflow:ellipsis; max-width:1px; white-space:nowrap; }
-.hpboard .pts{ text-align:right; font-family:var(--font-num); color:var(--ink); }
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.hpboard .pts{ width:34%; text-align:right; font-family:var(--font-num);
+  color:var(--ink); }
 .hpboard .hpv{ color:var(--accent); margin-left:4px; font-size:9px; }
 .hpempty{ font-size:9px; letter-spacing:.14em; text-transform:uppercase;
   color:var(--ink-faint); }
@@ -491,6 +496,27 @@ canvas{ display:block; }
 
   </div>
 </div>
+
+<!-- HallPass: online leaderboard + friend challenges. The stub below installs
+     window.HallPass synchronously so calls made before the bundle lands are
+     queued, never lost, and degrade to a safe no-op if it never arrives. -->
+<script>
+(function(w){if(w.HallPass&&w.HallPass.version!=="0")return;var q=[];
+function e(n){return function(){var a=[].slice.call(arguments);
+return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
+w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
+submitScore:e("submitScore"),getScores:e("getScores"),
+getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
+unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
+getAchievements:e("getAchievements"),challenge:e("challenge"),
+signIn:function(){},signOut:function(){},
+getHandle:function(){return null},setHandle:function(v){return v},
+on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
+off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
+setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:{ok:false,reason:"inert"})})},2000)})(window);
+</script>
+<script src="/sdk/v1/hallpass.js" data-game="neon-well" defer></script>
 
 <script>
 "use strict";
@@ -1942,25 +1968,5 @@ relayout();
 requestAnimationFrame(frame);
 </script>
 
-<!-- HallPass: online leaderboard + friend challenges. The stub below installs
-     window.HallPass synchronously so calls made before the bundle lands are
-     queued, never lost, and degrade to a safe no-op if it never arrives. -->
-<script>
-(function(w){if(w.HallPass&&w.HallPass.version!=="0")return;var q=[];
-function e(n){return function(){var a=[].slice.call(arguments);
-return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
-w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
-submitScore:e("submitScore"),getScores:e("getScores"),
-getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
-unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
-getAchievements:e("getAchievements"),challenge:e("challenge"),
-signIn:function(){},signOut:function(){},
-getHandle:function(){return null},setHandle:function(v){return v},
-on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
-off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
-setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
-q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:{ok:false,reason:"inert"})})},2000)})(window);
-</script>
-<script src="/sdk/v1/hallpass.js" data-game="neon-well" defer></script>
 </body>
 </html>
