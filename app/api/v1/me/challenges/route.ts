@@ -29,6 +29,7 @@ import { challenges, getForGame, getIncoming, getOutgoing } from "@/app/lib/chal
 import type { ChallengeReason } from "@/app/lib/challenges/config";
 import type { CreateOutcome } from "@/app/lib/challenges";
 import { isMissingColumnError } from "@/app/lib/db";
+import { notifyChallenge } from "@/app/lib/push/send";
 import { store } from "@/app/lib/scoreboard";
 import { social } from "@/app/lib/social";
 import {
@@ -165,6 +166,21 @@ export async function POST(req: Request): Promise<Response> {
       boardId: board.boardId,
     });
     if (outcome.id === null) return refuse(refusalFor(outcome));
+
+    // Tell them, on every device they have subscribed.
+    //
+    // AWAITED, not fired into the void: on serverless the response ending can
+    // end the invocation, and a floating promise would be cancelled mid-flight
+    // often enough to make notifications look flaky rather than broken. It is
+    // cheap to wait for — every send is concurrent, individually timed out, and
+    // `notifyChallenge` never rejects, so the challenge is already written and
+    // nothing below can undo it.
+    await notifyChallenge({
+      targetPlayerId: targetId,
+      from: outcome.fromDisplayName,
+      game: outcome.gameSlug,
+      boardTitle: outcome.boardTitle,
+    });
 
     // The name and the game came back from the create statement itself, so
     // confirming the send costs no further round trips.

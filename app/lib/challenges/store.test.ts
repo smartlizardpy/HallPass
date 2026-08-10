@@ -37,6 +37,20 @@ function makeFakeSql(rows: Record<string, unknown>[] = [{ id: 1 }]) {
   return { sql: fn as unknown as NeonQueryFunction<false, false>, calls };
 }
 
+/**
+ * The two values bound immediately after `marker` in a recorded call.
+ *
+ * `text` is the template's static parts joined by "?", so the count of "?"
+ * before a marker is exactly the number of bound values before it. Locating the
+ * pair this way rather than by a fixed index keeps the assertion honest when a
+ * CTE is added ahead of it — which has already happened twice.
+ */
+function pairBoundAt(call: RecordedCall, marker: string): unknown[] {
+  const before = call.text.slice(0, call.text.indexOf(marker));
+  const index = before.split("?").length - 1;
+  return call.values.slice(index, index + 2);
+}
+
 /** A create() result row with every gate passing, overridable per test. */
 function outcomeRow(over: Record<string, unknown> = {}) {
   return {
@@ -150,10 +164,10 @@ describe("create", () => {
       challengerId: "bbb", targetId: "aaa", boardId: "x",
     });
 
-    // Values 2 and 3 are the friendship pair (0 is the board, 1 the target).
-    // Both directions must bind lo then hi, or half the sends miss the row.
-    expect(forward.calls[0].values.slice(2, 4)).toEqual(["aaa", "bbb"]);
-    expect(backward.calls[0].values.slice(2, 4)).toEqual(["aaa", "bbb"]);
+    // Both directions must bind lo then hi at `player_a`/`player_b`, or half
+    // the sends miss the row entirely.
+    expect(pairBoundAt(forward.calls[0], "player_a = ")).toEqual(["aaa", "bbb"]);
+    expect(pairBoundAt(backward.calls[0], "player_a = ")).toEqual(["aaa", "bbb"]);
   });
 
   it("reports the id and the score when every gate passes", async () => {

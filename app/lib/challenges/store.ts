@@ -140,12 +140,18 @@ export type CreateOutcome = {
   id: number | null;
   targetScore: number | null;
   /**
-   * The target's display name and the board's game, selected in the SAME
-   * statement so a successful send can be confirmed without two more round
-   * trips just to render "you challenged Ozan on Duskfall".
+   * Both names, the board's game and its title, selected in the SAME statement.
+   *
+   * `toDisplayName` and `gameSlug` confirm the send back to the picker.
+   * `fromDisplayName` and `boardTitle` are what the push notification needs —
+   * "Ozan challenged you", "Beat their score on Duskfall" — and fetching them
+   * separately would be two more round trips on the send path for text the
+   * statement was already positioned to read.
    */
   toDisplayName: string;
+  fromDisplayName: string;
   gameSlug: string | null;
+  boardTitle: string;
   boardExists: boolean;
   isFriend: boolean;
   isBlocked: boolean;
@@ -335,10 +341,13 @@ export function createChallengeStore(sql: Sql) {
       const { lo, hi } = orderPair(challengerId, targetId);
       const rows = (await sql`
         WITH board AS (
-          SELECT id, sort, game_slug FROM boards WHERE id = ${boardId}
+          SELECT id, sort, game_slug, title FROM boards WHERE id = ${boardId}
         ),
         target AS (
           SELECT handle, username FROM players WHERE id = ${targetId}
+        ),
+        challenger AS (
+          SELECT handle, username FROM players WHERE id = ${challengerId}
         ),
         friend AS (
           SELECT 1 FROM friendships
@@ -401,7 +410,10 @@ export function createChallengeStore(sql: Sql) {
                (SELECT target_score FROM ins)             AS target_score,
                (SELECT handle    FROM target)             AS to_handle,
                (SELECT username  FROM target)             AS to_username,
+               (SELECT handle    FROM challenger)         AS from_handle,
+               (SELECT username  FROM challenger)         AS from_username,
                (SELECT game_slug FROM board)              AS game_slug,
+               (SELECT title     FROM board)              AS board_title,
                EXISTS (SELECT 1 FROM board)               AS board_exists,
                EXISTS (SELECT 1 FROM friend)              AS is_friend,
                EXISTS (SELECT 1 FROM blocked)             AS is_blocked,
@@ -416,7 +428,9 @@ export function createChallengeStore(sql: Sql) {
         id: row.id == null ? null : toInt(row.id),
         targetScore: row.target_score == null ? null : toInt(row.target_score),
         toDisplayName: displayNameFrom(row.to_handle, row.to_username),
+        fromDisplayName: displayNameFrom(row.from_handle, row.from_username),
         gameSlug: toStrOrNull(row.game_slug),
+        boardTitle: String(row.board_title ?? ""),
         boardExists: row.board_exists === true,
         isFriend: row.is_friend === true,
         isBlocked: row.is_blocked === true,
