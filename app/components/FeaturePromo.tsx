@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import posthog from "posthog-js";
+import { acquireOverlayLock, isOverlayOpen } from "../lib/overlay-lock";
 import { openStealthSettings } from "../lib/stealth/store";
 import {
   canUsePush,
@@ -27,8 +28,15 @@ import type { MeResponse } from "@/sdk/src/contract";
  * promo that can cover a running game is worse than no promo, so this is a plain
  * fixed element at `z-[95]`: above the page, below the player. The focus trap,
  * Esc handling and scroll lock that `<dialog>` would have given for free are
- * hand-rolled below. It also refuses to open at all while another modal has
- * locked body scroll, which is belt-and-braces for the same concern.
+ * hand-rolled below. It also refuses to open at all while anything else owns the
+ * screen, which is belt-and-braces for the same concern.
+ *
+ * That last check asks {@link isOverlayOpen} rather than reading
+ * `document.body.style.overflow` itself, and the difference is not cosmetic: the
+ * string is only set by overlays that happen to lock scrolling, so a modal that
+ * did not lock — stealth settings, at `z-[120]` — read as "nothing on screen".
+ * The promo would then mount UNDER it and pull keyboard focus to a Close button
+ * hidden behind an opaque panel. `overlay-lock.ts` has the full account.
  *
  * ── WHY IT DOES NOT BREAK THE PRERENDER ─────────────────────────────────────
  * Everything per-viewer arrives from `/api/`, which the service worker never
@@ -328,8 +336,8 @@ export function FeaturePromo() {
     const commit = (next: Variant, forPlayer: string | null = null) => {
       if (!active || decided) return;
       // Something else already owns the screen (the player overlay, the mobile
-      // drawer). Do not stack a promo on top of it.
-      if (document.body.style.overflow === "hidden") return;
+      // drawer, stealth settings). Do not stack a promo on top of it.
+      if (isOverlayOpen()) return;
       decided = true;
       setPlayerId(forPlayer);
       setVariant(next);
@@ -385,7 +393,7 @@ export function FeaturePromo() {
     // ── Account nags (existing behaviour) ────────────────────────────────────
     const timer = window.setTimeout(() => {
       if (decided) return;
-      if (document.body.style.overflow === "hidden") return;
+      if (isOverlayOpen()) return;
       // Prefer the install nudge whenever it can actually be completed: on iOS
       // (always) or once a `beforeinstallprompt` has been captured. Its own timer
       // will show it a beat later; skipping the fetch here avoids a wasted round
@@ -483,20 +491,19 @@ export function FeaturePromo() {
   }, [pathname]);
 
   // Esc to close, scroll lock, and initial focus — the parts `<dialog>` would
-  // have handled. The previous overflow value is saved and restored rather than
-  // cleared, so this cannot stomp on a lock another component set.
+  // have handled. The lock is ref-counted (see `overlay-lock.ts`), so the page is
+  // handed back to whoever else is holding it rather than to nobody.
   useEffect(() => {
     if (!variant) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") dismiss("dismissed");
     };
     document.addEventListener("keydown", onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const releaseLock = acquireOverlayLock();
     closeRef.current?.focus();
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
+      releaseLock();
     };
   }, [variant, dismiss]);
 

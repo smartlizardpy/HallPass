@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import posthog from "posthog-js";
 import type { Game } from "../lib/games";
+import { acquireOverlayLock } from "../lib/overlay-lock";
 import { recordPlayServerSide, recordRecentPlay } from "../lib/personalization";
 import { recordPlay as recordStreakPlay } from "../lib/streak/store";
 
@@ -82,16 +83,23 @@ export function PlayerOverlay({
     window.history.back();
   }, []);
 
+  // Esc to close, and the page behind frozen for as long as a game is up.
+  //
+  // The lock goes through `overlay-lock` rather than writing
+  // `document.body.style.overflow` here. This used to clear the value to `""` on
+  // close, which is not "unlock" but "unlock whoever else is holding it" — close a
+  // game opened from the mobile drawer and the catalogue started scrolling behind
+  // the still-open drawer. The ref-counted lock hands back only what it took.
   useEffect(() => {
     if (!game) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") requestClose();
     };
     document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
+    const releaseLock = acquireOverlayLock();
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      releaseLock();
     };
   }, [game, requestClose]);
 
