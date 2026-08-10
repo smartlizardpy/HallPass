@@ -40,6 +40,9 @@ import { clearBottomChrome, publishBottomChrome } from "../lib/bottom-chrome";
 /** Routes that are their own full-screen world — no player tab bar over them. */
 const HIDDEN_PREFIXES = [
   "/dashboard",
+  // Same reason the promo is suppressed there: `/embed/*` is a small panel
+  // mounted inside a game, and site navigation has no business inside it.
+  "/embed",
   "/play/signin",
   "/play/signout",
   "/play/welcome",
