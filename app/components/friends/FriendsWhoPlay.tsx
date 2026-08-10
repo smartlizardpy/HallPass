@@ -19,6 +19,24 @@ import { Avatar } from "./Avatar";
  * play this, offline — rather than a placeholder. The app has no Suspense
  * boundaries and no skeletons on public pages, and a "0 friends" row would be a
  * worse thing to show a new player than nothing at all.
+ *
+ * WHERE THE CHIP GOES depends on whether it names ONE person. The whole card is
+ * a single anchor — the avatars and the sentence cannot each become their own
+ * link, because an anchor inside an anchor is invalid HTML — so there is exactly
+ * one destination to choose:
+ *
+ *   * One friend, and they have claimed a username → their profile. The chip
+ *     names a specific person, so "who is that?" is the question it raises, and
+ *     `/u/<username>` is the page that answers it.
+ *   * Two or more, or no username → `/play/friends`. With several names there is
+ *     no single person the card is about, and picking the first would send a
+ *     reader somewhere they did not click. `/u/[username]` is the only profile
+ *     route there is, so a friend without a username is not linkable at all.
+ *
+ * A private or blocked profile is NOT a reason to withhold the link: `profile.ts`
+ * answers those with a minimal profile — a name, a face and no more — precisely
+ * so that hitting one is indistinguishable from hitting a default account. It
+ * renders, so the link is never dead.
  */
 export function FriendsWhoPlay({ slug }: { slug: string }) {
   const [friends, setFriends] = useState<PublicProfile[] | null>(null);
@@ -50,9 +68,16 @@ export function FriendsWhoPlay({ slug }: { slug: string }) {
         ? `${names[0]} and ${names[1]} play this`
         : `${names[0]}, ${names[1]} and ${names.length - 2} more play this`;
 
+  // See the docblock: only a chip that names one identifiable person points at
+  // that person.
+  const only = friends.length === 1 ? friends[0] : null;
+  const href = only?.username
+    ? `/u/${encodeURIComponent(only.username)}`
+    : "/play/friends";
+
   return (
     <Link
-      href="/play/friends"
+      href={href}
       className="mt-4 flex items-center gap-3 rounded-2xl bg-white p-3 transition hover:bg-surface-2"
     >
       {/* Stacked avatars, most-recent first. Negative margin overlaps them; the
