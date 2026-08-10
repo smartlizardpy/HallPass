@@ -162,6 +162,8 @@
   #hpAuthRow{display:flex;gap:10px;align-items:center;margin-top:2px}
   #hpAuthStatus{color:var(--dim);font-size:13px}
   #hpAuthStatus b{color:var(--power);font-weight:700}
+  #hpChallengeMsg{color:var(--dim);font-size:13px;margin:-4px 0 2px}
+  #hpChallengeMsg b{color:var(--power);font-weight:700}
 
   /* game over stats */
   #overStats{display:flex;gap:34px}
@@ -251,6 +253,8 @@
     <div class="hpTitle">DuskFall - High Scores</div>
     <div id="overHpBoard"></div>
     <button class="btn primary" id="btnRetry">RETRY</button>
+    <button class="btn" id="btnChallenge">CHALLENGE A FRIEND</button>
+    <div id="hpChallengeMsg" class="hidden"></div>
     <button class="btn" id="btnChangeLoadout">CHANGE LOADOUT</button>
     <button class="btn" id="btnOverMenu">MAIN MENU</button>
   </div>
@@ -2054,6 +2058,9 @@ const Game = {
     // fresh online top 10.
     const el = document.getElementById('overHpBoard');
     el.innerHTML = '<div class="boardEmpty">submitting score...</div>';
+    // Clear last run's challenge result, or "Dared Ali to beat 4,200" would sit
+    // under a score that is no longer the one being talked about.
+    document.getElementById('hpChallengeMsg').classList.add('hidden');
     HallPass.submitScore(Score.score).then(() => renderHallPassBoard(el));
   },
 
@@ -2117,6 +2124,44 @@ HallPass.on('auth', e => refreshHpAuth(e.player));
 document.getElementById('btnBoard').addEventListener('click', () =>
   renderHallPassBoard(document.getElementById('hpBoardList')));
 
+// ---- Challenge a friend ----
+// Lives on the GAME OVER screen and nowhere else, because that is the only
+// moment challenge()'s three preconditions are all satisfied: finishGameOver()
+// has just posted the run, so the board exists and the challenger has a score
+// on it. Offered from the main menu it would mostly answer "no-score".
+//
+// Only outcomes the PICKER CANNOT EXPLAIN ITSELF are reported here. Server
+// refusals (signed-out, not-friends, no-score...) are rendered inside the panel
+// the player is already looking at; repeating them underneath would say the
+// same thing twice. These three kill the panel before it can speak.
+const CHALLENGE_MSG = {
+  'popup-blocked': 'Your browser blocked the challenge window.',
+  'inert':         'Challenges need the online leaderboard, which is offline here.',
+  'network':       'Could not reach HallPass. Try again in a moment.',
+};
+document.getElementById('btnChallenge').addEventListener('click', async () => {
+  const btn = document.getElementById('btnChallenge');
+  const msg = document.getElementById('hpChallengeMsg');
+  btn.disabled = true;
+  msg.classList.add('hidden');
+  // Never throws - every SDK method resolves, so no try/catch is warranted.
+  const res = await HallPass.challenge();
+  btn.disabled = false;
+  // READ `sent`, NOT `ok`. Dismissing the picker resolves { ok:true, sent:false,
+  // reason:'closed' } - the call worked and the player changed their mind, which
+  // must not be shown to them as a failure.
+  if (res && res.sent && res.challenge) {
+    msg.innerHTML = 'Dared <b></b> to beat <b></b>';
+    const parts = msg.querySelectorAll('b');
+    parts[0].textContent = res.challenge.to;   // textContent: handles are untrusted
+    parts[1].textContent = Number(res.challenge.targetScore).toLocaleString();
+    msg.classList.remove('hidden');
+    return;
+  }
+  const text = res && res.reason ? CHALLENGE_MSG[res.reason] : null;
+  if (text) { msg.textContent = text; msg.classList.remove('hidden'); }
+});
+
 // Console/debug handle - handy for testing and for wiring the remote
 // leaderboard later. step() advances the sim manually (e.g. from devtools
 // while the tab is throttled) and renders one frame.
@@ -2145,12 +2190,14 @@ return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
 w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
 submitScore:e("submitScore"),getScores:e("getScores"),
 getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
+unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
+getAchievements:e("getAchievements"),challenge:e("challenge"),
 signIn:function(){},signOut:function(){},
 getHandle:function(){return null},setHandle:function(v){return v},
 on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
 off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
 setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
-q.splice(0).forEach(function(c){c.r(c.n==="getScores"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:{ok:false,reason:"inert"})})},2000)})(window);
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:{ok:false,reason:"inert"})})},2000)})(window);
 </script>
 <script src="https://hallpass-rouge.vercel.app/sdk/v1/hallpass.js" data-game="duskfall" defer></script>
 </body>
