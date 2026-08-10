@@ -412,8 +412,8 @@ function MobileCatalog({
   );
 }
 
-/** A slimmer {@link Section} for the phone shell — tighter top padding, no
- *  desktop-only "See all" affordance. */
+/** A slimmer {@link Section} for the phone shell — tighter top padding, a
+ *  smaller heading, and no widescreen gutter. */
 function MobileSection({
   title,
   children,
@@ -615,14 +615,9 @@ function Section({
 }) {
   return (
     <section className="px-3 pt-10 sm:px-8">
-      <div className="mb-5 flex items-center justify-between">
-        <h2 className="text-2xl font-black tracking-tight text-zinc-900 sm:text-[28px]">
-          {title}
-        </h2>
-        <button className="hidden text-sm font-extrabold text-brand hover:text-brand-600 sm:block">
-          See all →
-        </button>
-      </div>
+      <h2 className="mb-5 text-2xl font-black tracking-tight text-zinc-900 sm:text-[28px]">
+        {title}
+      </h2>
       {children}
     </section>
   );
