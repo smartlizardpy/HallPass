@@ -48,6 +48,22 @@ function CategoryIcon({ name }: { name: string }) {
 }
 
 /**
+ * The style of one sidebar row, shared by every group in the rail.
+ *
+ * Hoisted out of the category map so the rail reads as ONE system: whatever the
+ * row links to, an active row is `bg-brand-50 text-brand` and an idle one is
+ * zinc-on-hover. Anything that adds a group below (or above) the categories gets
+ * the highlight for free rather than re-typing a class string that then drifts.
+ */
+function itemClass(isActive: boolean): string {
+  return `group flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] font-bold transition lg:py-2.5 ${
+    isActive
+      ? "bg-brand-50 text-brand"
+      : "text-zinc-700 hover:bg-surface-2 hover:text-zinc-900"
+  }`;
+}
+
+/**
  * The public URL for a sidebar item. "All" is the catalog root; "New" and
  * "Trending" are virtual categories the category route already understands.
  * Encoding matches `app/sitemap.ts` and the JSON-LD breadcrumbs byte for byte —
@@ -115,11 +131,6 @@ export function Sidebar({
       <ul className="flex flex-col gap-1">
         {items.map((item) => {
           const isActive = item === active;
-          const itemClass = `group flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] font-bold transition lg:py-2.5 ${
-            isActive
-              ? "bg-brand-50 text-brand"
-              : "text-zinc-700 hover:bg-surface-2 hover:text-zinc-900"
-          }`;
           const inner = (
             <>
               <CategoryIcon name={item} />
@@ -135,7 +146,7 @@ export function Sidebar({
                 <button
                   type="button"
                   onClick={() => handleSelect(item)}
-                  className={itemClass}
+                  className={itemClass(isActive)}
                 >
                   {inner}
                 </button>
@@ -143,7 +154,7 @@ export function Sidebar({
                 <Link
                   href={hrefForItem(item)}
                   onClick={onMobileClose}
-                  className={itemClass}
+                  className={itemClass(isActive)}
                 >
                   {inner}
                 </Link>
