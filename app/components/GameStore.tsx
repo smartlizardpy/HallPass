@@ -255,6 +255,13 @@ export function GameStore({
             {game.tagline}
           </p>
 
+          {/* SPEC SHEET — every row here says something about THIS game.
+              A row whose value is the same for the whole catalogue is filler
+              dressed as data and costs the rows around it their weight, which
+              is why there is no "Plays in — Your browser" row: every game in
+              the catalogue plays in the browser, so it never distinguished one
+              from another. Nullable facts (`credit`, `testers`, `platform`)
+              omit their row rather than render a placeholder. */}
           <dl className="divide-y divide-border rounded-2xl bg-white/70 px-4 text-[13px]">
             <MetaRow label="Plays">{plays.toLocaleString()}</MetaRow>
             <MetaRow label="Genre">
@@ -266,7 +273,14 @@ export function GameStore({
               <MetaRow label="Tags">
                 {/* Plain text, not links: there is no /tag/[tag] route, and
                     /category/<tag> would 404 for any tag that is not also a
-                    category. */}
+                    category. Kept anyway, unlike the constant row this rail
+                    used to carry: tags are per-game, they are the only place
+                    on the site a player can READ them, and they are not the
+                    dead end the missing route makes them look — the arcade's
+                    search matches `game.tags` (see `Arcade`), so a tag scanned
+                    here is a term that works in the box at the top of the
+                    site. Do not turn them into links without a route to
+                    land on. */}
                 {game.tags.join(", ")}
               </MetaRow>
             )}
@@ -302,7 +316,6 @@ export function GameStore({
                     : "Desktop — keyboard controls"}
               </MetaRow>
             )}
-            <MetaRow label="Plays in">Your browser</MetaRow>
           </dl>
 
           <div className="flex items-center gap-2">
