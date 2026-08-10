@@ -471,11 +471,27 @@ function FeaturedBanner({ game }: { game: Game }) {
             {game.tagline}
           </p>
           <div className="mt-1 flex items-center gap-4 sm:mt-2">
+            {/* "View game", NOT "Play now" — the whole banner is a Link to the
+                store page and nothing here launches the player, which is the
+                intended behaviour (see the capture comment above). The label and
+                the chevron both describe the click that actually happens; a play
+                triangle promised a launch the banner never delivered. Anyone
+                tempted to put "Play now" back has to rewire the banner first. */}
             <span className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-7 py-3.5 text-base font-extrabold text-brand shadow-2xl transition group-hover:scale-105">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-                <path d="M3 1.5v11l10-5.5z" />
+              View game
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M4.5 1.5L10 7l-5.5 5.5" />
               </svg>
-              Play now
             </span>
             <span className="hidden text-[13px] font-bold text-white/80 sm:inline">
               {(game.plays ?? 0).toLocaleString()} plays
