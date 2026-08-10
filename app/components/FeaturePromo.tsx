@@ -633,7 +633,7 @@ export function FeaturePromo() {
               variant === "stealth" ||
               variant === "notifications"
                 ? "bg-brand"
-                : "bg-accent-pink"
+                : "bg-accent-pink-ink"
             }`}
           >
             {copy.badge}

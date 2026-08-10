@@ -338,7 +338,7 @@ export function StealthSettings({
               }}
               className={`inline-flex min-h-11 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-extrabold transition ${
                 listening
-                  ? "bg-accent-pink text-white"
+                  ? "bg-accent-pink-ink text-white"
                   : "bg-brand text-white hover:bg-brand-600"
               }`}
             >
@@ -351,7 +351,7 @@ export function StealthSettings({
           {/* `role="alert"`: the refusal arrives in response to a keystroke the
               player made while looking at the button, not at this line. */}
           {keyError && (
-            <p role="alert" className="mt-2 text-[13px] font-semibold text-accent-pink">
+            <p role="alert" className="mt-2 text-[13px] font-semibold text-accent-pink-ink">
               {keyError}
             </p>
           )}
@@ -387,7 +387,7 @@ export function StealthSettings({
               </span>
             </div>
             {shakeError && (
-              <p className="mt-2 text-[13px] font-semibold text-accent-pink">{shakeError}</p>
+              <p className="mt-2 text-[13px] font-semibold text-accent-pink-ink">{shakeError}</p>
             )}
             <p className="mt-2 text-[13px] font-semibold text-muted">
               Works even mid-game. Shake to hide; tap the bottom-right corner (or press your panic key) to bring it back.

@@ -122,7 +122,7 @@ export function AccountMenu() {
           {incoming > 0 && (
             <span
               aria-label={`${incoming} pending friend request${incoming === 1 ? "" : "s"}`}
-              className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-accent-pink px-1 text-[10px] font-black text-white ring-2 ring-white"
+              className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-accent-pink-ink px-1 text-[10px] font-black text-white ring-2 ring-white"
             >
               {incoming > 9 ? "9+" : incoming}
             </span>
@@ -170,7 +170,7 @@ export function AccountMenu() {
           <MenuLink href="/play/friends">
             Friends
             {incoming > 0 && (
-              <span className="ml-2 rounded-full bg-accent-pink px-1.5 py-0.5 text-[10px] font-black text-white">
+              <span className="ml-2 rounded-full bg-accent-pink-ink px-1.5 py-0.5 text-[10px] font-black text-white">
                 {incoming}
               </span>
             )}
