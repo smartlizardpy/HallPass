@@ -279,7 +279,10 @@ function ArcadeRows({
           </Section>
         )}
 
-        {/* Sponsor: Frenchly */}
+        {/* The home page's ONE sponsor strip. There were three: two of them the
+            same advertiser at the same URL under different copy, plus a slot
+            below the grid, so scrolling the page meant passing an ad three
+            times. One placement, mid-page, between the editorial rows. */}
         {category === "All" && !query && <FrenchlyAd />}
 
         {/* Trending row */}
@@ -298,9 +301,6 @@ function ArcadeRows({
             </div>
           </Section>
         )}
-
-        {/* Mid-page ad */}
-        {category === "All" && !query && <AdRow index={1} />}
 
         {/* All games / filtered */}
         <Section
@@ -332,10 +332,6 @@ function ArcadeRows({
             </div>
           )}
         </Section>
-
-        {/* Footer ad — "your ad here" slot */}
-        {category === "All" && !query && <AdRow index={3} />}
-
     </>
   );
 }
@@ -343,12 +339,22 @@ function ArcadeRows({
 /* ===================== Mobile shell ===================== */
 /**
  * The phone catalogue: Favourites on top (only when there are any), then the
- * curated list. No hero, no editorial rows, no genres — "all we need is the games
- * list", per the design. Deliberately sparse.
+ * REST of the curated list. No hero, no editorial rows, no genres — "all we need
+ * is the games list", per the design. Deliberately sparse.
  *
  * `favorites` and `games` are BOTH already filtered to phone-playable by the
  * caller, so the whole shell keeps one promise: everything on it works under a
  * thumb. A short list is the honest state until more games are tagged.
+ *
+ * Which is exactly why the two sections must not overlap. `favorites` is a SUBSET
+ * of `games` — same mobile-playable set, filtered by the same `mobileCatalog` —
+ * so listing both in full showed every favourited game twice, and on a catalogue
+ * this short the second section was largely a repeat of the first. "Games" is
+ * therefore the remainder, and when the remainder is empty (every phone game
+ * favourited) the section is omitted rather than shown empty: its empty state
+ * says "no phone games yet", which would be a flat contradiction of the full grid
+ * sitting directly above it. That message survives only for the case it was
+ * written for — a genuinely empty phone catalogue, where `games` itself is empty.
  */
 function MobileCatalog({
   games,
@@ -369,6 +375,13 @@ function MobileCatalog({
   isFavorite: (slug: string) => boolean;
   onToggleFavorite: (slug: string) => void;
 }) {
+  // Everything not already on show in Favourites above. Keyed by slug, which is
+  // the catalogue's identity everywhere else in this file (`findGame`, the
+  // favourites store, every `key=`), rather than leaning on the two lists
+  // happening to hold the same object references.
+  const favoriteSlugs = new Set(favorites.map((g) => g.slug));
+  const rest = games.filter((g) => !favoriteSlugs.has(g.slug));
+
   const grid = (list: Game[]) => (
     <div className="grid grid-cols-2 gap-x-4 gap-y-6">
       {list.map((g) => (
@@ -397,23 +410,25 @@ function MobileCatalog({
         <MobileSection title="Favourites">{grid(favorites)}</MobileSection>
       )}
 
-      <MobileSection title="Games">
-        {games.length === 0 ? (
+      {games.length === 0 ? (
+        <MobileSection title="Games">
           <div className="rounded-3xl bg-white p-10 text-center">
             <p className="text-[15px] font-bold text-muted">
               No phone games yet — more are on the way.
             </p>
           </div>
-        ) : (
-          grid(games)
-        )}
-      </MobileSection>
+        </MobileSection>
+      ) : (
+        rest.length > 0 && (
+          <MobileSection title="Games">{grid(rest)}</MobileSection>
+        )
+      )}
     </div>
   );
 }
 
-/** A slimmer {@link Section} for the phone shell — tighter top padding, no
- *  desktop-only "See all" affordance. */
+/** A slimmer {@link Section} for the phone shell — tighter top padding, a
+ *  smaller heading, and no widescreen gutter. */
 function MobileSection({
   title,
   children,
@@ -471,11 +486,27 @@ function FeaturedBanner({ game }: { game: Game }) {
             {game.tagline}
           </p>
           <div className="mt-1 flex items-center gap-4 sm:mt-2">
+            {/* "View game", NOT "Play now" — the whole banner is a Link to the
+                store page and nothing here launches the player, which is the
+                intended behaviour (see the capture comment above). The label and
+                the chevron both describe the click that actually happens; a play
+                triangle promised a launch the banner never delivered. Anyone
+                tempted to put "Play now" back has to rewire the banner first. */}
             <span className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-7 py-3.5 text-base font-extrabold text-brand shadow-2xl transition group-hover:scale-105">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-                <path d="M3 1.5v11l10-5.5z" />
+              View game
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M4.5 1.5L10 7l-5.5 5.5" />
               </svg>
-              Play now
             </span>
             <span className="hidden text-[13px] font-bold text-white/80 sm:inline">
               {(game.plays ?? 0).toLocaleString()} plays
@@ -512,6 +543,14 @@ type Ad = {
 const FRENCHLY_URL = "https://frenchly.vercel.app";
 const FRENCHLY_LOGO = "/ads/frenchly.png";
 
+/**
+ * The strip inventory. Only `ADS[0]` is PLACED — the home page carries a single
+ * sponsor strip (see {@link FrenchlyAd}). The rest are kept deliberately: entries
+ * 1 and 2 are alternate Frenchly copy to rotate in, and entry 3 is the
+ * "your ad here" pitch for whenever a second slot is worth selling. They are
+ * inventory, not dead code — anything rendering them fires `ad_clicked` through
+ * {@link AdStrip} unchanged.
+ */
 const ADS: Ad[] = [
   {
     logo: FRENCHLY_LOGO,
@@ -588,19 +627,11 @@ function AdStrip({ ad }: { ad: Ad }) {
   );
 }
 
+/** The home page's only sponsor placement — `ADS[0]`, rendered once, mid-page. */
 function FrenchlyAd() {
   return (
     <section className="px-3 pt-6 sm:px-8">
       <AdStrip ad={ADS[0]} />
-    </section>
-  );
-}
-
-function AdRow({ index }: { index: number }) {
-  const ad = ADS[index % ADS.length];
-  return (
-    <section className="px-3 pt-8 sm:px-8">
-      <AdStrip ad={ad} />
     </section>
   );
 }
@@ -615,14 +646,9 @@ function Section({
 }) {
   return (
     <section className="px-3 pt-10 sm:px-8">
-      <div className="mb-5 flex items-center justify-between">
-        <h2 className="text-2xl font-black tracking-tight text-zinc-900 sm:text-[28px]">
-          {title}
-        </h2>
-        <button className="hidden text-sm font-extrabold text-brand hover:text-brand-600 sm:block">
-          See all →
-        </button>
-      </div>
+      <h2 className="mb-5 text-2xl font-black tracking-tight text-zinc-900 sm:text-[28px]">
+        {title}
+      </h2>
       {children}
     </section>
   );

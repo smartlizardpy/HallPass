@@ -152,42 +152,25 @@ export function Sidebar({
           );
         })}
       </ul>
-
-      <div className="mx-4 my-4 h-px bg-border" />
-
-      <ul className="flex flex-col gap-1">
-        {[
-          { label: "Library", icon: <path d="M4 4h6v16H4zM14 4h6v16h-6z" /> },
-          { label: "Recent", icon: <path d="M12 8v4l3 2M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20z" /> },
-          { label: "Settings", icon: <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /> },
-        ].map((it) => (
-          <li key={it.label}>
-            <button className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] font-bold text-zinc-700 transition hover:bg-surface-2 hover:text-zinc-900 lg:py-2.5">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="shrink-0"
-              >
-                {it.icon}
-              </svg>
-              {it.label}
-            </button>
-          </li>
-        ))}
-      </ul>
     </>
   );
 
   return (
     <>
-      {/* Desktop sidebar — unchanged */}
-      <aside className="hidden w-60 shrink-0 border-r border-border bg-white lg:flex lg:flex-col">
+      {/* Desktop sidebar. PINNED TO THE VIEWPORT (`lg:sticky lg:top-0
+          lg:h-screen`), which it was not: the parent is a `flex min-h-screen`
+          row, so default `align-items: stretch` grew this rail to the height of
+          the whole DOCUMENT. Two things broke as a result — the `flex-1
+          overflow-y-auto` nav below could never overflow, making its scrolling
+          dead code, and the stealth button and copyright that follow it sat at
+          the bottom of the document (below every game on the home page) instead
+          of the bottom of the screen. A definite `100vh` height also stops
+          `stretch` applying, so the rail now measures exactly one viewport, the
+          nav scrolls internally, and the footer blocks sit on the visible rail.
+          This is the behaviour the mobile drawer already had via `absolute
+          inset-y-0` inside a `fixed inset-0`. Scoped to `lg:` because the rail
+          is `hidden` below that breakpoint. */}
+      <aside className="hidden w-60 shrink-0 border-r border-border bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
         <div className="flex h-20 items-center px-6">
           <Link href="/">
             <Wordmark size="text-3xl" dotClass="h-2 w-2" />
@@ -208,13 +191,27 @@ export function Sidebar({
         </div>
       </aside>
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer. The container is always rendered so the panel can
+          animate in and out, which means the CLOSED drawer is still in the
+          document. Neither `-translate-x-full` nor `pointer-events-none`
+          removes anything from the tab order, so every control in here used to
+          stay keyboard-focusable off screen and was reached BEFORE the header —
+          and focusable content inside `aria-hidden="true"` is an ARIA
+          violation besides.
+
+          `inert` is the fix: it drops the whole subtree from the tab order,
+          from hit-testing and from the accessibility tree. It also implies
+          `aria-hidden`, so the explicit attribute is gone rather than
+          duplicated. React 19 (19.2.4 here) takes it as a real boolean prop —
+          `inert={false}` removes the attribute — so no `"" | undefined`
+          dance is needed. The `pointer-events` toggle stays as a cheap
+          belt-and-braces for the animation. */}
       <div
         id="mobile-nav"
         className={`lg:hidden fixed inset-0 z-[90] transition ${
           mobileOpen ? "pointer-events-auto" : "pointer-events-none"
         }`}
-        aria-hidden={!mobileOpen}
+        inert={!mobileOpen}
       >
         {/* Backdrop */}
         <div

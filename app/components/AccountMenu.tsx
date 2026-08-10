@@ -8,11 +8,30 @@
  *
  * Identity is fetched client-side from `/api/v1/me` so the public arcade pages
  * stay statically rendered — the menu just hydrates with whoever's signed in.
+ *
+ * The pending-friend-request badge comes from a SECOND endpoint,
+ * `/api/v1/me/friends/count`, fired in parallel with the identity call. Two
+ * requests rather than one field on `MeResponse` because that type is the
+ * append-only public SDK contract embedded games consume — the count route's own
+ * docblock spells out why social data must not be bolted onto it.
+ *
+ * The two are deliberately NOT awaited together: `loaded` is gated on identity
+ * alone, so the avatar appears the moment we know who is signed in and the badge
+ * follows whenever the count lands. A failed or slow count leaves the badge at
+ * zero and is never allowed to hold up — or throw inside — the menu.
  */
 
 import { useEffect, useRef, useState } from "react";
 import { startSignIn, startSignOut } from "../lib/auth-actions";
 import type { MeResponse } from "@/sdk/src/contract";
+
+/**
+ * The slice of `/api/v1/me/friends/count` this menu reads. The route also
+ * returns `signedIn`, `friends` and `hasUsername` — declared here only as far as
+ * the badge needs, so an unrelated change to the rest of that payload cannot
+ * break this component.
+ */
+type FriendCounts = { incoming?: number };
 
 export function AccountMenu() {
   const [me, setMe] = useState<MeResponse | null>(null);
@@ -28,6 +47,21 @@ export function AccountMenu() {
       .then((d: MeResponse) => active && setMe(d))
       .catch(() => {})
       .finally(() => active && setLoaded(true));
+
+    // Started in the same tick as the identity call, with its own chain rather
+    // than a `Promise.all` — sharing one would make `loaded` wait on the slower
+    // of the two and hold the avatar back for a badge.
+    fetch("/api/v1/me/friends/count", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: FriendCounts | null) => {
+        if (!active || typeof d?.incoming !== "number") return;
+        setIncoming(d.incoming);
+      })
+      // Signed out, offline, or the schema is behind the deploy: no badge. The
+      // route already answers 200-with-zeroes for its own failures, so anything
+      // reaching here is transport, and a badge is never worth an error.
+      .catch(() => {});
+
     return () => {
       active = false;
     };
@@ -88,7 +122,7 @@ export function AccountMenu() {
           {incoming > 0 && (
             <span
               aria-label={`${incoming} pending friend request${incoming === 1 ? "" : "s"}`}
-              className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-accent-pink px-1 text-[10px] font-black text-white ring-2 ring-white"
+              className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-accent-pink-ink px-1 text-[10px] font-black text-white ring-2 ring-white"
             >
               {incoming > 9 ? "9+" : incoming}
             </span>
@@ -136,7 +170,7 @@ export function AccountMenu() {
           <MenuLink href="/play/friends">
             Friends
             {incoming > 0 && (
-              <span className="ml-2 rounded-full bg-accent-pink px-1.5 py-0.5 text-[10px] font-black text-white">
+              <span className="ml-2 rounded-full bg-accent-pink-ink px-1.5 py-0.5 text-[10px] font-black text-white">
                 {incoming}
               </span>
             )}

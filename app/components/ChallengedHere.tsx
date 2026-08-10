@@ -12,13 +12,33 @@
  * intercepts.
  *
  * Renders `null` in every uninteresting case — loading, signed out, nobody has
- * challenged you here, offline — rather than a placeholder. The app has no
- * Suspense boundaries and no skeletons on public pages, and "0 challenges" is a
- * worse thing to show than nothing.
+ * challenged you here, offline — rather than a placeholder. A skeleton would be
+ * actively wrong here: this chip may legitimately have nothing to say, so
+ * reserving height for it would promise a row that never arrives, and
+ * "0 challenges" is a worse thing to show than nothing. A section that ALWAYS
+ * renders is the opposite case and does get a skeleton — see
+ * `reviews/GameReviews.tsx`, which reserves height because content sits below it.
  *
  * It shows the goal rather than the score to beat: "get 4,201 to win" is the
  * number a player can act on, and it comes from `scoreToBeat()` so the screen
  * cannot promise a value the server would reject.
+ *
+ * WHERE THE CHIP GOES follows the same rule as `FriendsWhoPlay`. The whole card
+ * is one anchor — an anchor inside an anchor is invalid HTML — so there is a
+ * single destination to pick:
+ *
+ *   * A single challenge from someone who has claimed a username → the
+ *     challenger's profile. The card names one person and dares the reader to
+ *     beat them; "who is this?" is answered at `/u/<username>`, and the
+ *     challenge itself is answered by simply playing the game this chip sits on.
+ *   * Several challenges, or no username → `/play/friends`, where all of them
+ *     are listed. With "and 3 more" there is no one person the card is about,
+ *     and `/u/[username]` is the only profile route there is, so a challenger
+ *     who has not claimed a username is not linkable.
+ *
+ * A private or blocked profile is no reason to withhold the link: `profile.ts`
+ * serves those as a minimal profile rather than a 404, deliberately, so the
+ * destination always renders.
  */
 
 import { useEffect, useState } from "react";
@@ -52,10 +72,16 @@ export function ChallengedHere({ slug }: { slug: string }) {
   const [first] = challenges;
   const others = challenges.length - 1;
   const goal = scoreToBeat(first.targetScore, first.sort);
+  // See the docblock: only a chip about one identifiable challenger points at
+  // that challenger.
+  const href =
+    others === 0 && first.from.username
+      ? `/u/${encodeURIComponent(first.from.username)}`
+      : "/play/friends";
 
   return (
     <Link
-      href="/play/friends"
+      href={href}
       className="mt-4 flex items-center gap-3 rounded-2xl bg-amber-50 p-3 transition hover:bg-amber-100"
     >
       <span className="shrink-0 rounded-full ring-2 ring-white">

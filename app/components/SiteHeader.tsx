@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { captureSearchNow } from "../lib/use-search-capture";
@@ -11,8 +10,8 @@ import { WhatsNewLink } from "./WhatsNewLink";
 import { Wordmark } from "./Wordmark";
 
 /**
- * The public sticky header: hamburger, mobile wordmark, search, What's New,
- * account menu.
+ * The public sticky header: hamburger, narrow-desktop wordmark, search, What's
+ * New, account menu.
  *
  * Lifted out of `Arcade` so every public page wears the same chrome. It has TWO
  * search modes, and which one you get depends on whether the parent owns a query:
@@ -53,27 +52,8 @@ export function SiteHeader({
   // `null` on the server and first paint, so the header hydrates identical to the
   // prerender and only takes on its phone form on the second paint (same rule as
   // the catalogue swap). On a real phone we drop the genre hamburger — the mobile
-  // shell has no genres — and brand the mark "hallpass · mobile".
+  // shell has no genres — and the wordmark, leaving the row to the search field.
   const isMobile = useDevicePlatform() === "mobile";
-
-  // The bottom tab bar's Search tab navigates to `/#search`; this focuses the
-  // input when that hash arrives (on mount after navigation, or via hashchange
-  // when already on the page), then clears the hash so a repeat tap re-triggers.
-  const searchRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    const focusFromHash = () => {
-      if (window.location.hash !== "#search") return;
-      searchRef.current?.focus();
-      history.replaceState(
-        null,
-        "",
-        window.location.pathname + window.location.search,
-      );
-    };
-    focusFromHash();
-    window.addEventListener("hashchange", focusFromHash);
-    return () => window.removeEventListener("hashchange", focusFromHash);
-  }, []);
 
   const searchInput = (
     <div className="relative ml-1 min-w-0 flex-1 max-w-2xl sm:ml-0">
@@ -90,7 +70,6 @@ export function SiteHeader({
         <path d="m14 14-3-3" strokeLinecap="round" />
       </svg>
       <input
-        ref={searchRef}
         type="search"
         name="q"
         inputMode="search"
@@ -147,11 +126,18 @@ export function SiteHeader({
         </button>
       )}
 
-      {/* Mobile wordmark — was an `<a href="#">`, which went nowhere. Branded
-          "hallpass · mobile" on a real phone. */}
-      <Link href="/" className="lg:hidden">
-        <Wordmark size="text-xl sm:text-2xl" tag={isMobile ? "mobile" : undefined} />
-      </Link>
+      {/* Narrow-desktop wordmark — was an `<a href="#">`, which went nowhere.
+          Dropped on a real phone (`isMobile`): the mark plus its "MOBILE" tag
+          ate roughly 45% of the header row and clipped the search placeholder,
+          and the phone already has its way home in the bottom tab bar. It stays
+          for a narrow DESKTOP window (device `desktop`, or the pre-mount
+          `null`), where the sidebar is hidden below `lg` and this is the only
+          link back to home. */}
+      {!isMobile && (
+        <Link href="/" className="lg:hidden">
+          <Wordmark size="text-xl sm:text-2xl" />
+        </Link>
+      )}
 
       {controlled ? (
         searchInput

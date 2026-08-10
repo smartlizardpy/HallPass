@@ -103,7 +103,7 @@ export function ProfileHeader({
               {profile.friendship === "pending-in" && (
                 <Link
                   href="/play/friends"
-                  className={`${RELATIONSHIP_PILL} bg-accent-pink text-white transition hover:opacity-90`}
+                  className={`${RELATIONSHIP_PILL} bg-accent-pink-ink text-white transition hover:opacity-90`}
                 >
                   Wants to be friends →
                 </Link>

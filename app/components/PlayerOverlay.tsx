@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import posthog from "posthog-js";
 import type { Game } from "../lib/games";
+import { acquireOverlayLock } from "../lib/overlay-lock";
 import { recordPlayServerSide, recordRecentPlay } from "../lib/personalization";
 import { recordPlay as recordStreakPlay } from "../lib/streak/store";
 
@@ -19,6 +20,20 @@ import { recordPlay as recordStreakPlay } from "../lib/streak/store";
  *
  * Expect a step change in the plays chart when this ships — it is the previously
  * uncounted plays appearing, not a traffic spike. Worth annotating in PostHog.
+ *
+ * ── IT IS A DIALOG, AND SAYS SO ─────────────────────────────────────────────
+ * `fixed inset-0` covering the whole viewport is only half of "modal". Without
+ * the ARIA pair a screen reader is still walking the catalogue underneath, and
+ * without an initial focus a keyboard player who launched a game had to Tab
+ * blindly through that hidden catalogue to reach Fullscreen or Close. So: the
+ * root announces itself as a modal dialog named after the game, Close takes focus
+ * when the game opens, and whatever was focused before — the card they launched
+ * from — gets it back on close. Escape has always worked and still does.
+ *
+ * No Tab TRAP, deliberately. Once the iframe has focus the keyboard belongs to
+ * the game and the host cannot see the keystrokes, so a trap would be a promise
+ * this component cannot keep; the honest fix for the background is `inert`, which
+ * belongs with the shell that owns the page, not here.
  */
 export function PlayerOverlay({
   game,
@@ -28,6 +43,7 @@ export function PlayerOverlay({
   onClose: () => void;
 }) {
   const frameWrapRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
 
   // External games embed a third-party origin we don't control. Some sites send
   // X-Frame-Options / frame-ancestors that refuse embedding — and the browser
@@ -82,16 +98,38 @@ export function PlayerOverlay({
     window.history.back();
   }, []);
 
+  // Esc to close, the page behind frozen, and focus moved in and put back — for
+  // as long as a game is up.
+  //
+  // The lock goes through `overlay-lock` rather than writing
+  // `document.body.style.overflow` here. This used to clear the value to `""` on
+  // close, which is not "unlock" but "unlock whoever else is holding it" — close a
+  // game opened from the mobile drawer and the catalogue started scrolling behind
+  // the still-open drawer. The ref-counted lock hands back only what it took.
   useEffect(() => {
     if (!game) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") requestClose();
     };
     document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
+    const releaseLock = acquireOverlayLock();
+
+    // Close first, not the iframe: it is the way OUT of a screen that has just
+    // taken over the whole viewport, and handing focus straight to the game would
+    // leave the player's only exit unreachable by keyboard.
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      releaseLock();
+      // `preventScroll` because the catalogue is a long page and the card they
+      // launched from may be well down it; scrolling it into view would undo the
+      // position the scroll lock was just released back to. `isConnected` guards
+      // the card having been unmounted by a navigation behind the overlay.
+      if (previouslyFocused?.isConnected) {
+        previouslyFocused.focus({ preventScroll: true });
+      }
     };
   }, [game, requestClose]);
 
@@ -177,6 +215,10 @@ export function PlayerOverlay({
       className="fixed inset-0 z-[100] flex flex-col bg-zinc-900/80 backdrop-blur-md"
       style={{ height: "100dvh" }}
       onClick={requestClose}
+      role="dialog"
+      aria-modal="true"
+      // Named by the game, so the dialog announces "Snake" rather than "dialog".
+      aria-labelledby="player-title"
     >
       {/* Top bar */}
       <div
@@ -184,7 +226,10 @@ export function PlayerOverlay({
         className="flex shrink-0 items-center justify-between gap-3 bg-white px-3 sm:h-14 sm:px-5"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
-        <h2 className="min-w-0 flex-1 truncate py-3 text-sm font-extrabold text-zinc-900 sm:py-0 sm:text-base">
+        <h2
+          id="player-title"
+          className="min-w-0 flex-1 truncate py-3 text-sm font-extrabold text-zinc-900 sm:py-0 sm:text-base"
+        >
           {game.title}
           <span className="ml-2 hidden text-sm font-semibold text-muted sm:inline">
             · {game.category}
@@ -238,6 +283,7 @@ export function PlayerOverlay({
             ⛶
           </button>
           <button
+            ref={closeRef}
             type="button"
             onClick={requestClose}
             aria-label="Close game"

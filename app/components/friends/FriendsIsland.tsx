@@ -166,7 +166,7 @@ export function FriendsIsland() {
         <TabButton active={tab === "requests"} onClick={() => setTab("requests")}>
           Requests
           {incomingCount > 0 && (
-            <span className="ml-1.5 rounded-full bg-accent-pink px-2 py-0.5 text-[11px] font-black text-white">
+            <span className="ml-1.5 rounded-full bg-accent-pink-ink px-2 py-0.5 text-[11px] font-black text-white">
               {incomingCount}
             </span>
           )}
@@ -174,7 +174,7 @@ export function FriendsIsland() {
         <TabButton active={tab === "challenges"} onClick={() => setTab("challenges")}>
           Challenges
           {challengeCount > 0 && (
-            <span className="ml-1.5 rounded-full bg-accent-pink px-2 py-0.5 text-[11px] font-black text-white">
+            <span className="ml-1.5 rounded-full bg-accent-pink-ink px-2 py-0.5 text-[11px] font-black text-white">
               {challengeCount}
             </span>
           )}
