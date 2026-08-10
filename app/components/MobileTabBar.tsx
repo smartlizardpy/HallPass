@@ -5,7 +5,7 @@
  *
  * WHY A GLOBAL ISLAND, not part of `ArcadeShell`. The tabs span pages that do NOT
  * share the arcade chrome — the `/play/you` section (profile, friends, settings)
- * is standalone `<main>`s with no `ArcadeShell` — so the bar has to live above it.
+ * is its own `<main>` with no `ArcadeShell` — so the bar has to live above it.
  * Rendering it once in the root layout body (next to `<PWA/>` / `<FeaturePromo/>`)
  * makes it route-agnostic and keeps every page otherwise untouched.
  *
@@ -23,18 +23,21 @@
  * inside the You tab (the `/play/you` section carries a role-gated Dashboard
  * link), so the bar never changes shape based on who is signed in.
  *
- * STEALTH. The phone shell drops the genre hamburger, so the sidebar's "Stealth
- * mode" entry is otherwise unreachable — which left shake-to-panic (a touch-only
- * trigger) impossible to switch on from a phone. The Stealth tab is that door: a
- * button, not a link, because it opens the settings modal `StealthController`
- * owns rather than navigating anywhere.
+ * STEALTH — WHY THERE IS NO TAB ANY MORE. The phone shell drops the genre
+ * hamburger, so the sidebar's "Stealth mode" entry is unreachable on a phone,
+ * which once left shake-to-panic (a touch-only trigger) impossible to switch on
+ * from the one class of device that can fire it. A Stealth tab was that door.
+ * `/play/you/settings` now carries a stealth row, so the door still exists and
+ * the case for spending a whole tab on it is gone. The need behind it has NOT
+ * gone: if that settings row ever disappears, shake-to-panic goes unreachable on
+ * a phone again, so give it another route rather than assuming the sidebar
+ * covers it.
  */
 
 import { useEffect, useRef } from "react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { useDevicePlatform } from "../lib/use-device-platform";
-import { openStealthSettings } from "../lib/stealth/store";
 import { clearBottomChrome, publishBottomChrome } from "../lib/bottom-chrome";
 
 /** Routes that are their own full-screen world — no player tab bar over them. */
@@ -140,15 +143,6 @@ export function MobileTabBar() {
       <TabLink href="/play/you" label="You" active={youActive}>
         <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 21v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1" />
       </TabLink>
-
-      {/* Sunglasses — a brow bar over two lenses. Opens the stealth settings
-          modal; an action, so a button rather than a link (see the header note). */}
-      <TabButton label="Stealth" active={false} onClick={() => openStealthSettings()}>
-        <path d="M3 9h18" />
-        <path d="M4 9v2a3 3 0 0 0 6 0V9" />
-        <path d="M14 9v2a3 3 0 0 0 6 0V9" />
-        <path d="M10 10h4" />
-      </TabButton>
     </nav>
   );
 }
@@ -224,7 +218,7 @@ function TabLink({
 }) {
   return (
     // Prefetch left at the default (auto): the bar is always on screen, so all
-    // four routes warm up ahead of the tap, which is what makes the switch feel
+    // three routes warm up ahead of the tap, which is what makes the switch feel
     // instant in production. `prefetch={false}` here was the mistake — it forced a
     // cold round-trip on every tap.
     <Link
@@ -237,30 +231,5 @@ function TabLink({
         {children}
       </TabLinkContent>
     </Link>
-  );
-}
-
-function TabButton({
-  label,
-  active,
-  onClick,
-  children,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{ touchAction: "manipulation" }}
-      className="flex-1 transition active:opacity-50"
-    >
-      <TabInner label={label} active={active}>
-        {children}
-      </TabInner>
-    </button>
   );
 }
