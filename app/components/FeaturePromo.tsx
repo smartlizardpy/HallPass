@@ -91,6 +91,11 @@ const SESSION_KEY = "hp:visitCounted";
 const SUPPRESSED_PREFIXES = [
   "/dashboard",
   "/admin",
+  // `/embed/*` is a 360x440 panel the SDK mounts INSIDE a game. A full-screen
+  // modal there does not sit beside the picker, it replaces it — the player
+  // pressed "Challenge a friend" and got a stealth advert in a box too small to
+  // show both. Same "mid-flow" reasoning as the sign-in routes below.
+  "/embed",
   "/play/account",
   "/play/friends",
   "/play/signin",
