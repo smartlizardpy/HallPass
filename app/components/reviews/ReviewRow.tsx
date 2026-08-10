@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { Review } from "../../lib/reviews/store";
 import { REPORT_REASONS } from "../../lib/reviews/config";
 import { normalizeTargetLang } from "../../lib/reviews/translate";
@@ -53,6 +54,20 @@ function languageName(code: string): string {
  *    their own review is a two-second attack. The tag is a salted hash of the
  *    player id, never the raw Google subject, which would otherwise be a durable
  *    cross-site identifier for a minor.
+ *
+ *    Both stay legible: the tag is the thing that tells two same-named players
+ *    apart, so it is real content and is sized and coloured as such — a dimmed
+ *    `text-muted/70` lands near 2.9:1, well under AA, on the one element a
+ *    reader has to be able to read to spot an impersonation.
+ *
+ *    THE @USERNAME LINKS TO `/u/<username>`, and only the @username does. The
+ *    display name is not linked: it can be a copied handle, whereas the username
+ *    is the unique address the profile actually lives at, so the linked text and
+ *    the destination always agree. The link is a SIBLING of the helpful/report
+ *    buttons, never an ancestor — a button inside an anchor is invalid HTML that
+ *    browsers resolve inconsistently, the invariant `GameCard` and `PersonRow`
+ *    both document. A player with no username is not linkable at all (`/u/` is
+ *    the only profile route there is) and stays plain text.
  *
  * 2. THE BODY IS PLAIN TEXT. Never `dangerouslySetInnerHTML` — React escapes by
  *    default and that is the entire XSS story here. `whitespace-pre-wrap` keeps
@@ -181,9 +196,12 @@ export function ReviewRow({
               {review.author.displayName}
             </span>
             {review.author.username && (
-              <span className="truncate text-[13px] font-bold text-muted">
+              <Link
+                href={`/u/${encodeURIComponent(review.author.username)}`}
+                className="truncate rounded text-[13px] font-bold text-muted transition hover:text-brand focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30"
+              >
                 @{review.author.username}
-              </span>
+              </Link>
             )}
             {review.author.tag && (
               <span className="text-[11px] font-bold text-muted/70">
