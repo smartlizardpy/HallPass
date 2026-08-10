@@ -101,12 +101,13 @@ w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
 submitScore:e("submitScore"),getScores:e("getScores"),
 getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
 unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
-getAchievements:e("getAchievements"),signIn:function(){},signOut:function(){},
+getAchievements:e("getAchievements"),challenge:e("challenge"),
+signIn:function(){},signOut:function(){},
 getHandle:function(){return null},setHandle:function(v){return v},
 on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
 off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
 setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
-q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:{ok:false,reason:"inert"})})},2000)})(window);
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:{ok:false,reason:"inert"})})},2000)})(window);
 </script>
 <script src="https://hallpass.gg/sdk/v1/hallpass.js" data-game="YOUR-SLUG" defer></script>
 
