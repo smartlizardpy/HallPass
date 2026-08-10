@@ -77,8 +77,32 @@ describe("parsePrefs", () => {
       panicKey: "Escape",
       panicScreen: "search",
       shake: true,
+      quietNotifications: true,
     } as const;
     expect(parsePrefs(serializePrefs(prefs))).toEqual(prefs);
+  });
+
+  it("defaults quiet notifications to OFF and keeps a stored boolean", () => {
+    // Off out of the box, unlike the rest of this module: a phone is personal,
+    // and a nameless notification wastes the feature for most people.
+    expect(parsePrefs(null).quietNotifications).toBe(false);
+    expect(
+      parsePrefs(JSON.stringify({ quietNotifications: true })).quietNotifications,
+    ).toBe(true);
+  });
+
+  it("reads a payload written before quiet notifications existed", () => {
+    // The per-field fallback is what makes adding a preference backwards
+    // compatible rather than a migration — every device already carries a
+    // four-field payload.
+    const old = JSON.stringify({
+      cloak: "classroom",
+      panicKey: "Escape",
+      panicScreen: "search",
+      shake: true,
+    });
+    expect(parsePrefs(old).quietNotifications).toBe(false);
+    expect(parsePrefs(old).cloak).toBe("classroom");
   });
 });
 

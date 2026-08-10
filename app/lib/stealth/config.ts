@@ -104,3 +104,22 @@ export const DEFAULT_PANIC_KEY = "`";
  * it is strictly opt-in from the settings modal.
  */
 export const DEFAULT_SHAKE_TO_PANIC = false;
+
+/**
+ * Whether push notifications are stripped of every identifying detail.
+ *
+ * OFF out of the box, which is a deliberate reversal of what the rest of this
+ * module defaults to. A phone is a personal device, and "HallPass — you have a
+ * new challenge" with no sender and no game wastes the notification for the
+ * majority of people, who are looking at their own screen.
+ *
+ * It lives HERE rather than beside the notification code because this is where
+ * "do not let anyone see what I am doing" already lives — the same setting
+ * screen as the tab cloak and the panic key. Somebody who needs a discreet
+ * banner on a school laptop is already in this modal for the other two.
+ *
+ * The flag is mirrored into IndexedDB by `sw-mirror.ts`: the service worker
+ * renders the notification and CANNOT read `localStorage`, where these
+ * preferences live.
+ */
+export const DEFAULT_QUIET_NOTIFICATIONS = false;
