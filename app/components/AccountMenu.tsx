@@ -115,14 +115,20 @@ export function AccountMenu() {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex h-11 items-center gap-2 rounded-full bg-white pl-1.5 pr-2 text-sm font-bold text-zinc-800 shadow-sm transition hover:text-brand sm:pr-3"
+        // `bg-surface-2`, not `bg-white`: this trigger sits ON `SiteHeader`'s
+        // white bar (see its docblock), where white would erase it. The signed-
+        // out `bg-brand` button above needs no such treatment, and the dropdown
+        // below stays white — it floats over the page, not on the bar.
+        className="flex h-11 items-center gap-2 rounded-full bg-surface-2 pl-1.5 pr-2 text-sm font-bold text-zinc-800 transition hover:text-brand sm:pr-3"
       >
         <span className="relative">
           <Avatar src={player.image} initial={initial} size={32} />
           {incoming > 0 && (
             <span
               aria-label={`${incoming} pending friend request${incoming === 1 ? "" : "s"}`}
-              className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-accent-pink-ink px-1 text-[10px] font-black text-white ring-2 ring-white"
+              // The ring is a cut-out of whatever the pip sits on, so it tracks
+              // the trigger's fill: `ring-surface-2`, not `ring-white`.
+              className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-accent-pink-ink px-1 text-[10px] font-black text-white ring-2 ring-surface-2"
             >
               {incoming > 9 ? "9+" : incoming}
             </span>
