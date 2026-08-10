@@ -186,8 +186,20 @@ export function Sidebar({
 
   return (
     <>
-      {/* Desktop sidebar — unchanged */}
-      <aside className="hidden w-60 shrink-0 border-r border-border bg-white lg:flex lg:flex-col">
+      {/* Desktop sidebar. PINNED TO THE VIEWPORT (`lg:sticky lg:top-0
+          lg:h-screen`), which it was not: the parent is a `flex min-h-screen`
+          row, so default `align-items: stretch` grew this rail to the height of
+          the whole DOCUMENT. Two things broke as a result — the `flex-1
+          overflow-y-auto` nav below could never overflow, making its scrolling
+          dead code, and the stealth button and copyright that follow it sat at
+          the bottom of the document (below every game on the home page) instead
+          of the bottom of the screen. A definite `100vh` height also stops
+          `stretch` applying, so the rail now measures exactly one viewport, the
+          nav scrolls internally, and the footer blocks sit on the visible rail.
+          This is the behaviour the mobile drawer already had via `absolute
+          inset-y-0` inside a `fixed inset-0`. Scoped to `lg:` because the rail
+          is `hidden` below that breakpoint. */}
+      <aside className="hidden w-60 shrink-0 border-r border-border bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
         <div className="flex h-20 items-center px-6">
           <Link href="/">
             <Wordmark size="text-3xl" dotClass="h-2 w-2" />
