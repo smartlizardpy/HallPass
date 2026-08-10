@@ -1005,6 +1005,13 @@ function levelUp(){
   addFloater("LEVEL " + G.level, COLS / 2, 7, 0.8, "hsl(48 100% 72%)");
 }
 
+/* Whether this run's score has already gone to HallPass. gameOver() has two
+   call sites (block out on spawn, lock out on rest) and both return straight
+   after, so a double call is not expected today — but a duplicate row on the
+   leaderboard is not something to leave to that assumption. resetGame() clears
+   it. */
+let hpPosted = false;
+
 function gameOver(){
   G.phase = "over";
   G.piece = null;
@@ -1018,6 +1025,14 @@ function gameOver(){
   const secs = Math.floor(G.elapsed / 1000);
   fTime.textContent = Math.floor(secs / 60) + ":" + String(secs % 60).padStart(2, "0");
   show(overScreen);
+
+  // Post the run. submitScore resolves either way and never throws, so this
+  // cannot stop the game-over screen from appearing or delay it. An anonymous
+  // player posts as a Guest name; a signed-in one posts under their own.
+  if (!hpPosted){
+    hpPosted = true;
+    HallPass.submitScore(G.score);
+  }
 }
 
 function resetGame(){
@@ -1030,6 +1045,7 @@ function resetGame(){
   G.softDropping = false; G.clearingRows = []; G.clearTimer = 0;
   G.dir = 0; G.dasTimer = 0; G.arrTimer = 0;
   HUD.score = 0; HUD.level = 1; HUD.lines = 0;
+  hpPosted = false;
   particles.length = 0; floaters.length = 0; rings.length = 0;
   rowShift = new Array(ROWS).fill(0); rowShiftT = 999;
   shake.amp = 0;
