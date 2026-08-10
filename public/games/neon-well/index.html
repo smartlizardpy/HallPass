@@ -264,6 +264,23 @@ canvas{ display:block; }
 }
 .hpauth{ display:flex; gap:9px; align-items:center; justify-content:center;
   flex-wrap:wrap; margin-top:13px; }
+
+/* Online leaderboard on the game-over screen. Deliberately short — the well is
+   a narrow column, and a list that needs scrolling inside an overlay fights the
+   touch gestures that drive the game. */
+.hptitle{ font-family:var(--font-display); font-size:8.5px; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--ink-faint); margin-bottom:7px; }
+.hpboard{ margin-bottom:15px; min-height:22px; }
+.hpboard table{ width:100%; border-collapse:collapse;
+  font-variant-numeric:tabular-nums; }
+.hpboard td{ padding:3px 0; font-size:11px; }
+.hpboard .rank{ width:22px; color:var(--ink-faint); font-family:var(--font-num); }
+.hpboard .who{ text-align:left; color:var(--ink-dim);
+  overflow:hidden; text-overflow:ellipsis; max-width:1px; white-space:nowrap; }
+.hpboard .pts{ text-align:right; font-family:var(--font-num); color:var(--ink); }
+.hpboard .hpv{ color:var(--accent); margin-left:4px; font-size:9px; }
+.hpempty{ font-size:9px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--ink-faint); }
 #hpAuthStatus{ font-size:9px; letter-spacing:.14em; text-transform:uppercase;
   color:var(--ink-faint); }
 #hpAuthStatus b{ color:var(--accent); font-weight:600; }
@@ -444,6 +461,8 @@ canvas{ display:block; }
                 <div><span>Pieces</span><b id="fPieces">0</b></div>
                 <div><span>Best combo</span><b id="fCombo">0</b></div>
               </div>
+              <div class="hptitle">Neon Well &middot; High Scores</div>
+              <div class="hpboard" id="hpBoard"></div>
               <button class="btn" id="againBtn">Play again</button>
             </div>
           </div>
@@ -1046,9 +1065,13 @@ function gameOver(){
   // Post the run. submitScore resolves either way and never throws, so this
   // cannot stop the game-over screen from appearing or delay it. An anonymous
   // player posts as a Guest name; a signed-in one posts under their own.
+  // Drawn AFTER the post resolves, so the run that just ended is already in the
+  // list rather than appearing only on the next game over.
   if (!hpPosted){
     hpPosted = true;
-    HallPass.submitScore(G.score);
+    const board = document.getElementById("hpBoard");
+    if (board) board.innerHTML = '<div class="hpempty">Posting your score...</div>';
+    HallPass.submitScore(G.score).then(hpRenderBoard);
   }
 }
 
@@ -1783,6 +1806,58 @@ function hpRefreshAuth(player){
     status.textContent = "Playing as Guest";
   }
 }
+
+/* Draw the online top five into the game-over screen.
+
+   FIVE, not ten: the well is a narrow column and the over screen already
+   carries six stat cells, so a longer list would need scrolling — and a
+   scrollable region inside this overlay fights the drag gestures that drive the
+   game. The full board lives on the game's HallPass page.
+
+   Ten are REQUESTED because one player can hold several of the top rows; after
+   collapsing each handle to their best, five is what is left to show. */
+function hpRenderBoard(){
+  const el = document.getElementById("hpBoard");
+  if (!el) return;
+  el.innerHTML = '<div class="hpempty">Loading scores...</div>';
+  HallPass.getScores({ limit: 10 }).then((rows) => {
+    if (!rows || !rows.length){
+      el.innerHTML = '<div class="hpempty">Be the first to score</div>';
+      return;
+    }
+    const seen = new Set();
+    const best = rows.filter((r) => seen.has(r.handle) ? false : (seen.add(r.handle), true))
+                     .slice(0, 5);
+    const table = document.createElement("table");
+    let rank = 0;
+    for (const row of best){
+      const tr = document.createElement("tr");
+      const n = document.createElement("td");
+      n.className = "rank"; n.textContent = ++rank;
+      const who = document.createElement("td");
+      who.className = "who";
+      // textContent throughout: a handle is untrusted and must never be parsed.
+      who.textContent = row.handle;
+      if (row.verified){
+        const tick = document.createElement("span");
+        tick.className = "hpv"; tick.textContent = "✓";
+        who.appendChild(tick);
+      }
+      const pts = document.createElement("td");
+      pts.className = "pts"; pts.textContent = Number(row.score).toLocaleString();
+      tr.append(n, who, pts);
+      table.appendChild(tr);
+    }
+    el.innerHTML = "";
+    el.appendChild(table);
+  });
+}
+
+/* The well restarts the game on any touch that is not a <button> while the over
+   screen is up. That is the right default for the stats, and the wrong one for a
+   leaderboard somebody is reading — so this subtree swallows the event instead
+   of the game eating the screen out from under them. */
+document.getElementById("hpBoard").addEventListener("pointerdown", (e) => e.stopPropagation());
 
 HallPass.getPlayer().then(hpRefreshAuth);
 // The popup does not reload the game, so the label has to be told when it
