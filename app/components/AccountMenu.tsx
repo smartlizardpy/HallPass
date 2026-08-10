@@ -3,8 +3,14 @@
 /**
  * Site-header account control. Logged out → a "Sign in" button that kicks off
  * Google sign-in (via the `startSignIn` server action). Logged in → the player's
- * avatar + handle opening a dropdown (Account settings, Dashboard for admins,
- * Sign out).
+ * avatar + handle opening a dropdown (Friends, Your profile, Beta testing for
+ * testers, Dashboard for admins, Sign out).
+ *
+ * The player-facing entries point INTO the profile at `/play/you`: the profile
+ * itself, and `/play/you/friends` for the tab the badge counts. They are plain
+ * `<a>`s via `MenuLink`, so each is a full navigation rather than a prefetched
+ * client transition — these pages are per-player and there is nothing to gain
+ * from prefetching them behind a closed menu.
  *
  * Identity is fetched client-side from `/api/v1/me` so the public arcade pages
  * stay statically rendered — the menu just hydrates with whoever's signed in.
@@ -173,7 +179,7 @@ export function AccountMenu() {
 
           <div className="my-1 h-px bg-border" />
 
-          <MenuLink href="/play/friends">
+          <MenuLink href="/play/you/friends">
             Friends
             {incoming > 0 && (
               <span className="ml-2 rounded-full bg-accent-pink-ink px-1.5 py-0.5 text-[10px] font-black text-white">
@@ -181,7 +187,10 @@ export function AccountMenu() {
               </span>
             )}
           </MenuLink>
-          <MenuLink href="/play/account">Account settings</MenuLink>
+          {/* "Your profile", not "Account settings": `/play/you` is the player's
+              own profile with settings as one tab among several, so the old
+              label promised a narrower page than the link now opens. */}
+          <MenuLink href="/play/you">Your profile</MenuLink>
           {/* Sits in the same slot as Dashboard: the one entry that is only
               there because of who you are. A tester who is also an admin sees
               both — they are different jobs, not two names for one. */}
