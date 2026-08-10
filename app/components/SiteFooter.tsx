@@ -30,7 +30,14 @@ export function SiteFooter() {
             Games by <span className="text-zinc-900">Ateş Demir</span> · Site by{" "}
             <span className="text-zinc-900">Ozan Kaygusuz</span>
           </p>
-          <p className="mt-1 text-muted/80">
+          {/* Flat `text-muted`, NOT `text-muted/80`. --muted (#6b6b7b) is
+              5.23:1 on this white card — it clears WCAG AA with very little
+              room, which is exactly why an opacity modifier breaks it: /80
+              composites to #898995 and 3.46:1, under the 4.5:1 floor for this
+              13px line. There is no lighter tier of --muted to reach for; if a
+              line needs to recede further than --muted, it needs a different
+              size or weight, not a lower alpha. */}
+          <p className="mt-1 text-muted">
             © {new Date().getFullYear()} · all games unblocked, forever.
           </p>
         </div>
