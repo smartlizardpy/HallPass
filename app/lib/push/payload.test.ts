@@ -93,6 +93,6 @@ describe("challengeNotification", () => {
   });
 
   it("lands on the inbox, which can show all of them", () => {
-    expect(challengeNotification(BASE).url).toBe("/play/friends");
+    expect(challengeNotification(BASE).url).toBe("/play/you/friends");
   });
 });
