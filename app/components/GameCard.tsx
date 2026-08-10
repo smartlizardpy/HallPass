@@ -51,10 +51,18 @@ export function GameCard({
               what the globals.css hover-zoom hooks onto. */}
           <CoverImage game={game} className="card-art" />
 
-          {/* badges overlay */}
+          {/* badges overlay.
+
+              All three badges are 10px type, so all three are held to WCAG AA's
+              4.5:1. "★ Hot" always had it (zinc-900 on --accent-yellow, 11.5:1)
+              and "Mobile"/"Desktop" always had it (white on zinc-900/80); "New"
+              did not — white on --accent-pink is 3.11:1. It uses the darker
+              --accent-pink-ink (4.98:1 against white), which globals.css
+              documents as the token for pink that carries TEXT. Do not swap it
+              back to bg-accent-pink. */}
           <div className="pointer-events-none absolute left-2 top-2 flex gap-1">
             {game.isNew && (
-              <span className="rounded-full bg-accent-pink px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white shadow-lg">
+              <span className="rounded-full bg-accent-pink-ink px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white shadow-lg">
                 New
               </span>
             )}
