@@ -204,7 +204,7 @@ export function ReviewRow({
               </Link>
             )}
             {review.author.tag && (
-              <span className="text-[11px] font-bold text-muted/70">
+              <span className="text-[12px] font-bold text-muted">
                 #{review.author.tag}
               </span>
             )}
