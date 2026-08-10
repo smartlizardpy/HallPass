@@ -128,6 +128,27 @@ if (existsSync(prerenderManifestPath)) {
       route.startsWith("/admin") ||
       route.startsWith("/dashboard") ||
       route.startsWith("/api/") ||
+      // NOTHING UNDER `/play/` IS EVER PRECACHED.
+      //
+      // These are the player's own pages. The ones that render their data are
+      // dynamic, so they never reach the prerender manifest and cannot arrive
+      // here — but `/play/account` and `/play/friends` became STATIC the moment
+      // they were reduced to bare `redirect()`s into `/play/you`, and a static
+      // route DOES land in the manifest. Precaching a redirect is worse than
+      // useless: `sw.js` fetches every precache URL with
+      // `credentials: "same-origin"` and follows redirects, so install would
+      // fetch `/play/account`, follow the 307, and receive the signed-in
+      // player's `/play/you` HTML — their email — as the response body.
+      //
+      // `isCacheable()` refuses it today because `res.redirected` is true, so
+      // nothing is stored. That is a real guard but the WRONG one to depend on:
+      // it exists to stop redirect-poisoning of iframe sources, and someone
+      // relaxing it for that reason would silently turn a shared browser
+      // profile's cache into an email leak. Excluding the prefix here means the
+      // fetch never happens, which also saves every visitor a wasted install-
+      // time request. See `isPrivatePath` in `public/sw.js` for the runtime half.
+      route === "/play" ||
+      route.startsWith("/play/") ||
       route === "/favicon.ico"
     ) {
       continue;

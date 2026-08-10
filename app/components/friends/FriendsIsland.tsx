@@ -14,16 +14,28 @@ import { ChallengeList } from "./ChallengeList";
 /**
  * The friends surface: list, incoming/outgoing requests, and the add flow.
  *
- * A CLIENT ISLAND, and `/play/friends` is a server shell that reads no session —
- * so the shell stays statically prerendered and the service worker can precache
- * it, while every byte of per-viewer data arrives from `/api/` (which the SW
- * never intercepts). That is the same split `AccountMenu` uses, and it is why
- * `/play/friends` can be left OUT of the SW's never-intercept list while
- * `/play/account` had to go in: this page's HTML contains nothing about anyone.
+ * A CLIENT ISLAND: every byte about any actual person arrives from `/api/`,
+ * which the service worker never intercepts. That is the same split
+ * `AccountMenu` uses, and it is still what keeps this component itself free of
+ * per-viewer server data.
+ *
+ * WHAT CHANGED WHEN THIS MOVED TO `/play/you/friends`. It used to hang off
+ * `/play/friends`, a server shell that read no session — so that shell was
+ * statically prerendered, sat in the SW precache, and could be left OUT of the
+ * never-intercept list while `/play/account` had to go in. It now renders as a
+ * tab under `app/play/you/layout.tsx`, which is `auth()`-gated and puts the
+ * owner's identity in a persistent header, so the route is dynamic and the whole
+ * `/play/you` subtree is both never-intercepted (`isPrivatePath` in
+ * `public/sw.js`) and excluded from the precache (`scripts/build-sw-manifest.mjs`).
+ *
+ * That trade cost an empty frame, not a feature: with no network this island had
+ * no data to show anyway, so what offline used to buy was a heading and a
+ * spinner. Do NOT "restore" the old static shell without moving the identity
+ * header out of the layout first — a precacheable page carrying an email is the
+ * exact leak both of those exclusion lists exist to prevent.
  *
  * Renders `null` until loaded rather than a skeleton, matching `AccountMenu`'s
- * `loaded` flag — the app has no Suspense boundaries and adding one here would
- * change the prerender shape of the shell.
+ * `loaded` flag.
  */
 
 type Request = PublicProfile & { requestedAt: string };
