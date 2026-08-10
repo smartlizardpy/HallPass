@@ -101,7 +101,16 @@ export function ArcadeShell({
           onMobileClose={() => setNavOpen(false)}
         />
 
-        <main className="flex-1 overflow-x-hidden">
+        {/* `overflow-x-clip`, NOT `overflow-x-hidden`. Per CSS Overflow 3, when
+            one axis is `hidden` and the other is `visible`, the visible axis
+            computes to `auto` — so `overflow-x-hidden` quietly made this <main>
+            a scroll container, and `SiteHeader`'s `sticky top-0` then resolved
+            against IT rather than the viewport. <main> never scrolls internally,
+            so the header never stuck and scrolled away with the page. `clip`
+            clips the same overflow without establishing a scroll container,
+            which puts the header's sticky containing block back on the viewport.
+            Verified Tailwind v4 emits `overflow-x: clip` for this utility. */}
+        <main className="flex-1 overflow-x-clip">
           <SiteHeader
             navOpen={navOpen}
             onOpenNav={() => setNavOpen(true)}
