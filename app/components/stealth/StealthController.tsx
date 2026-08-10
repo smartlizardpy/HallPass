@@ -137,6 +137,10 @@ export function StealthController() {
   useShakeToPanic(prefs.shake, raisePanic);
 
   const dismissPanic = useCallback(() => setPanicking(false), []);
+  // Stable, not an inline arrow: the settings modal binds its Escape handler to
+  // this, and this component re-renders on every stealth preference the player
+  // touches — which would otherwise churn that listener on every click.
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
   /* ------------------------- silence the arcade ------------------------- */
   // Sound betrays the disguise faster than anything on screen, so it is silenced
@@ -203,7 +207,7 @@ export function StealthController() {
       {panicking && <PanicScreen screen={prefs.panicScreen} onDismiss={dismissPanic} />}
       <StealthSettings
         open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        onClose={closeSettings}
         onRebindingChange={setRebinding}
       />
     </>
