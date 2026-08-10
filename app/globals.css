@@ -253,15 +253,56 @@ body {
 }
 .streak-toast { animation: streak-toast-in 0.26s cubic-bezier(0.2, 0.9, 0.2, 1); }
 
-/* The repo had no reduced-motion guard anywhere; rather than extend that debt,
-   this covers the promo AND retrofits the card hover-lift and drawer slide.
+/* ============================================================
+   Reduced motion.
+
+   The repo had no reduced-motion guard anywhere; rather than extend that debt,
+   this covers everything on the site that MOVES. It takes two halves, because
+   the site animates in two unrelated ways, and the earlier version of this
+   comment described only the first while claiming credit for the second — it
+   named "the drawer slide", which nothing in the block actually reached.
+
+   1. KEYFRAME ANIMATIONS, BY NAME. Every `@keyframes` user in this file is
+      switched off individually below. That list is exhaustive for the whole app:
+      the only other keyframes anywhere are Tailwind's `animate-spin` (one use,
+      in `MobileSplash`, already gated behind `motion-safe:`) and `animate-pulse`
+      (the loading skeletons), which animates opacity alone and so moves nothing.
+
+   2. TRANSITIONS, BY PROPERTY, EVERYWHERE. The pieces that were escaping are the
+      ones that animate with Tailwind utilities and carry no class this
+      stylesheet can name: the mobile drawer's `transition-transform
+      duration-200` (`Sidebar.tsx`), the welcome toast's `transition-all
+      duration-500` (`WelcomeToast.tsx`), the splash overlay (`MobileSplash.tsx`).
+      Those files are not this file's to add hook classes to, so the rule is
+      written from the property side instead: transitions are allowed to continue
+      on COLOUR and OPACITY, and never on transform/position/size. A slide, a
+      lift or a scale therefore lands instantly, while a deliberate crossfade —
+      the screenshot gallery's, the splash's exit — still reads as a fade, which
+      is the recommended substitute for motion rather than something to strip.
+
+      This can never START an animation that was not already there:
+      `transition-duration` defaults to 0s, so an element that declares no
+      transition is untouched by a property list.
+
    Motion is removed, never the element — hiding content would be worse than
-   moving it. */
+   moving it.
+   ============================================================ */
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-property:
+      opacity, color, background-color, border-color, outline-color, fill,
+      stroke, box-shadow !important;
+  }
+
   .promo-backdrop,
   .promo-panel {
     animation: none;
   }
+  /* Still worth naming even though the rule above stops the lift's transition:
+     `transform: none` removes the displaced END STATE too, so the card does not
+     jump 4px on hover. */
   .card,
   .card:hover,
   .card-art,
