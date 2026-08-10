@@ -31,10 +31,10 @@
  *     challenger's profile. The card names one person and dares the reader to
  *     beat them; "who is this?" is answered at `/u/<username>`, and the
  *     challenge itself is answered by simply playing the game this chip sits on.
- *   * Several challenges, or no username → `/play/friends`, where all of them
- *     are listed. With "and 3 more" there is no one person the card is about,
- *     and `/u/[username]` is the only profile route there is, so a challenger
- *     who has not claimed a username is not linkable.
+ *   * Several challenges, or no username → `/play/you/friends`, where all of
+ *     them are listed. With "and 3 more" there is no one person the card is
+ *     about, and `/u/[username]` is the only profile route there is, so a
+ *     challenger who has not claimed a username is not linkable.
  *
  * A private or blocked profile is no reason to withhold the link: `profile.ts`
  * serves those as a minimal profile rather than a 404, deliberately, so the
@@ -77,7 +77,7 @@ export function ChallengedHere({ slug }: { slug: string }) {
   const href =
     others === 0 && first.from.username
       ? `/u/${encodeURIComponent(first.from.username)}`
-      : "/play/friends";
+      : "/play/you/friends";
 
   return (
     <Link

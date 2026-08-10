@@ -51,7 +51,7 @@ export default function ProfileNotFound() {
             Back to games
           </Link>
           <Link
-            href="/play/friends"
+            href="/play/you/friends"
             className="rounded-full border border-border bg-white px-5 py-2.5 text-sm font-bold text-zinc-700 transition hover:bg-surface-2"
           >
             Find a friend
