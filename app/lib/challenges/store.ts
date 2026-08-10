@@ -139,6 +139,13 @@ export type CreateOutcome = {
   /** The challenge id, or `null` when a gate refused it. */
   id: number | null;
   targetScore: number | null;
+  /**
+   * The target's display name and the board's game, selected in the SAME
+   * statement so a successful send can be confirmed without two more round
+   * trips just to render "you challenged Ozan on Duskfall".
+   */
+  toDisplayName: string;
+  gameSlug: string | null;
   boardExists: boolean;
   isFriend: boolean;
   isBlocked: boolean;
@@ -149,22 +156,27 @@ export type CreateOutcome = {
 };
 
 /**
+ * Handle, else `@username`, else "Player".
+ *
+ * Reproduces `PublicProfile`'s rule rather than importing it, keeping the
+ * factory seam free of a cross-store dependency. The Google `name` is
+ * deliberately never a fallback — it is the person's real name on most accounts.
+ */
+function displayNameFrom(handle: unknown, username: unknown): string {
+  const h = handle == null ? null : String(handle).trim();
+  const u = username == null ? null : String(username);
+  return h || (u ? `@${u}` : "Player");
+}
+
+/**
  * The public columns of the other player, joined and aliased identically
  * everywhere so one mapper serves every read.
  */
 function mapParty(row: Row, prefix: string): ChallengeParty {
-  const handle = row[`${prefix}_handle`] == null
-    ? null
-    : String(row[`${prefix}_handle`]).trim();
-  const username = toStrOrNull(row[`${prefix}_username`]);
   return {
     id: String(row[`${prefix}_public_id`]),
-    username,
-    // Reproduces `PublicProfile`'s rule rather than importing it, keeping the
-    // factory seam free of a cross-store dependency: handle, else "@username",
-    // else "Player". The Google `name` is deliberately never a fallback — it is
-    // the person's real name on most accounts.
-    displayName: handle || (username ? `@${username}` : "Player"),
+    username: toStrOrNull(row[`${prefix}_username`]),
+    displayName: displayNameFrom(row[`${prefix}_handle`], row[`${prefix}_username`]),
     image: toStrOrNull(row[`${prefix}_image`]),
   };
 }
@@ -323,7 +335,10 @@ export function createChallengeStore(sql: Sql) {
       const { lo, hi } = orderPair(challengerId, targetId);
       const rows = (await sql`
         WITH board AS (
-          SELECT id, sort FROM boards WHERE id = ${boardId}
+          SELECT id, sort, game_slug FROM boards WHERE id = ${boardId}
+        ),
+        target AS (
+          SELECT handle, username FROM players WHERE id = ${targetId}
         ),
         friend AS (
           SELECT 1 FROM friendships
@@ -384,6 +399,9 @@ export function createChallengeStore(sql: Sql) {
         )
         SELECT (SELECT id FROM ins)                       AS id,
                (SELECT target_score FROM ins)             AS target_score,
+               (SELECT handle    FROM target)             AS to_handle,
+               (SELECT username  FROM target)             AS to_username,
+               (SELECT game_slug FROM board)              AS game_slug,
                EXISTS (SELECT 1 FROM board)               AS board_exists,
                EXISTS (SELECT 1 FROM friend)              AS is_friend,
                EXISTS (SELECT 1 FROM blocked)             AS is_blocked,
@@ -397,6 +415,8 @@ export function createChallengeStore(sql: Sql) {
       return {
         id: row.id == null ? null : toInt(row.id),
         targetScore: row.target_score == null ? null : toInt(row.target_score),
+        toDisplayName: displayNameFrom(row.to_handle, row.to_username),
+        gameSlug: toStrOrNull(row.game_slug),
         boardExists: row.board_exists === true,
         isFriend: row.is_friend === true,
         isBlocked: row.is_blocked === true,

@@ -150,10 +150,10 @@ describe("create", () => {
       challengerId: "bbb", targetId: "aaa", boardId: "x",
     });
 
-    // The pair values land in the same order regardless of who is challenging.
-    expect(forward.calls[0].values.slice(0, 3)).toEqual(
-      backward.calls[0].values.slice(0, 3),
-    );
+    // Values 2 and 3 are the friendship pair (0 is the board, 1 the target).
+    // Both directions must bind lo then hi, or half the sends miss the row.
+    expect(forward.calls[0].values.slice(2, 4)).toEqual(["aaa", "bbb"]);
+    expect(backward.calls[0].values.slice(2, 4)).toEqual(["aaa", "bbb"]);
   });
 
   it("reports the id and the score when every gate passes", async () => {
