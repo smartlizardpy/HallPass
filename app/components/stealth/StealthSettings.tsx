@@ -24,7 +24,24 @@ function keyLabel(key: string): string {
   return key; // Escape, F2, ArrowUp, …
 }
 
-export function StealthSettings({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function StealthSettings({
+  open,
+  onClose,
+  onRebindingChange,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /**
+   * Told whenever this modal starts and stops capturing a new panic key.
+   *
+   * A prop rather than another window event in `lib/stealth/store`, because the
+   * only listener is the parent that renders this component — and the ordering
+   * that makes the capture safe (see the listening effect) depends on the
+   * controller re-registering its hotkey in response, which a fire-and-forget
+   * event could not guarantee.
+   */
+  onRebindingChange: (rebinding: boolean) => void;
+}) {
   const {
     prefs,
     setCloak,
@@ -34,6 +51,8 @@ export function StealthSettings({ open, onClose }: { open: boolean; onClose: () 
     setQuietNotifications,
   } = useStealth();
   const [listening, setListening] = useState(false);
+  /** Why the last captured key was refused, shown under the panic-key control. */
+  const [keyError, setKeyError] = useState<string | null>(null);
   // Only offer shake-to-panic where it can actually work — a touch device with a
   // motion sensor. Resolved after mount, deliberately: `deviceHasMotion` reads
   // `window`/`navigator`, so the post-hydration set is what keeps it off the
@@ -63,25 +82,65 @@ export function StealthSettings({ open, onClose }: { open: boolean; onClose: () 
       );
   }, [prefs.shake, setShake]);
 
-  // While "listening", the very next keypress becomes the panic key.
+  /**
+   * While "listening", the very next keypress becomes the panic key.
+   *
+   * TWO COLLISIONS WITH THE LIVE HOTKEY, both fixed here.
+   *
+   * 1. `StealthController` binds its panic hotkey on `window` with `capture:
+   *    true` — the same target and the same phase as this listener. Pressing the
+   *    CURRENT panic key while rebinding therefore ALSO fired the real thing, and
+   *    the full-screen disguise went up over the settings modal the player was
+   *    standing in. `stopImmediatePropagation` stops the press dead: nothing else
+   *    on `window`, and nothing further down the tree, sees a keystroke that was
+   *    only ever meant for this control. That only works because the controller
+   *    re-registers its listener AFTER this one whenever `onRebindingChange`
+   *    flips — listeners on one target run in registration order — and the
+   *    controller ALSO stands down outright while rebinding, so the fix does not
+   *    rest on that ordering alone.
+   *
+   * 2. Escape is refused. The controller reads Escape as "dismiss the disguise"
+   *    before it reads it as a panic key, so a player who bound Escape got a key
+   *    that could put the arcade back but could never hide it — a panic key that
+   *    does not panic, and no way to tell from the UI. It is refused out loud
+   *    rather than silently ignored, because a "press any key" prompt that
+   *    swallows a key is indistinguishable from a broken one. The capture stops
+   *    on the refusal, so a second Escape closes the modal as usual.
+   */
   useEffect(() => {
-    if (!listening) return;
+    if (!open || !listening) return;
+    onRebindingChange(true);
     const onKey = (e: KeyboardEvent) => {
       e.preventDefault();
+      e.stopImmediatePropagation();
       // Ignore modifier-only presses — wait for a real key to bind.
       if (["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
+      if (e.key === "Escape") {
+        setKeyError(
+          "Escape can’t be the panic key — it always brings the arcade back. Pick another key.",
+        );
+        setListening(false);
+        return;
+      }
+      setKeyError(null);
       setPanicKey(e.key);
       setListening(false);
     };
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [listening, setPanicKey]);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      onRebindingChange(false);
+    };
+  }, [open, listening, setPanicKey, onRebindingChange]);
 
-  // Reset any in-progress key capture when the modal is dismissed. This is the
-  // only close path (backdrop, ✕, or the parent), so no separate effect is needed
-  // to clear `listening` when `open` flips false.
+  // Reset any in-progress key capture — and the refusal it may have left on
+  // screen — when the modal is dismissed. The listening effect is additionally
+  // guarded on `open`, so a close that does NOT come through here (the parent
+  // closing us to raise a panic-screen preview) still cannot leave a window-level
+  // capture listener behind.
   const handleClose = useCallback(() => {
     setListening(false);
+    setKeyError(null);
     onClose();
   }, [onClose]);
 
@@ -160,7 +219,10 @@ export function StealthSettings({ open, onClose }: { open: boolean; onClose: () 
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => setListening((v) => !v)}
+              onClick={() => {
+                setKeyError(null);
+                setListening((v) => !v);
+              }}
               className={`inline-flex min-h-11 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-extrabold transition ${
                 listening
                   ? "bg-accent-pink text-white"
@@ -173,6 +235,13 @@ export function StealthSettings({ open, onClose }: { open: boolean; onClose: () 
               Current: <kbd className="rounded-md bg-surface-2 px-2 py-1 font-mono text-[13px]">{keyLabel(prefs.panicKey)}</kbd>
             </span>
           </div>
+          {/* `role="alert"`: the refusal arrives in response to a keystroke the
+              player made while looking at the button, not at this line. */}
+          {keyError && (
+            <p role="alert" className="mt-2 text-[13px] font-semibold text-accent-pink">
+              {keyError}
+            </p>
+          )}
           <p className="mt-2 text-[13px] font-semibold text-muted">
             Press it anywhere on the site to instantly hide the arcade — press again to bring it back.
           </p>

@@ -7,8 +7,10 @@
  *
  *  1. THE PANIC KEY. A window-level keydown listener watches for the configured
  *     panic key and toggles a full-viewport {@link PanicScreen} disguise. Escape
- *     always dismisses. Caveat: while a game IFRAME holds focus the browser
- *     routes keystrokes to the iframe, so the panic key fires reliably on the
+ *     always dismisses — which is also why Escape cannot BE the panic key, and
+ *     why the hotkey stands down entirely while the settings modal is capturing a
+ *     replacement one (see `rebinding`). Caveat: while a game IFRAME holds focus
+ *     the browser routes keystrokes to it, so the panic key fires reliably on the
  *     catalogue and store pages (where a passer-by actually sees the arcade), not
  *     mid-game — the honest limitation of any iframe host.
  *
@@ -64,6 +66,19 @@ export function StealthController() {
   const { prefs } = useStealth();
   const [panicking, setPanicking] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /**
+   * True while the settings modal is capturing a replacement panic key.
+   *
+   * The hotkey below and that capture are bound on the SAME target in the SAME
+   * phase, and this one is registered first (it mounts with the root layout), so
+   * pressing the current panic key mid-rebind used to raise the disguise over the
+   * modal the player was standing in. Standing down for the duration is the fix
+   * that does not depend on listener ordering; re-registering when this flips —
+   * which putting it in the effect's deps does — is what additionally lets the
+   * modal's `stopImmediatePropagation` work, since a listener added later runs
+   * later.
+   */
+  const [rebinding, setRebinding] = useState(false);
   const realTitleRef = useRef<string | null>(null);
 
   // Open the settings modal when any launcher dispatches the window event.
@@ -88,6 +103,10 @@ export function StealthController() {
   const panicKey = prefs.panicKey;
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // The player is choosing a new panic key: every keystroke belongs to that
+      // control, including the key this listener currently answers to.
+      if (rebinding) return;
+
       // Never let a browser/OS shortcut (Cmd+`, Ctrl+`) double as the panic key.
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
@@ -106,7 +125,7 @@ export function StealthController() {
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [panicKey]);
+  }, [panicKey, rebinding]);
 
   /* ---------------------- shake to panic (touch) ---------------------- */
   // The counterpart to the panic key for phones and tablets with no keyboard.
@@ -182,7 +201,11 @@ export function StealthController() {
   return (
     <>
       {panicking && <PanicScreen screen={prefs.panicScreen} onDismiss={dismissPanic} />}
-      <StealthSettings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <StealthSettings
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onRebindingChange={setRebinding}
+      />
     </>
   );
 }
