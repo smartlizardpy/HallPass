@@ -55,18 +55,13 @@ describe("isSameOrigin", () => {
     expect(isSameOrigin("https://elsewhere.example")).toBe(false);
   });
 
-  it("treats a RELATIVE api as same-origin", () => {
-    // config.ts documents the page origin as `api`'s last resort, so a relative
-    // value genuinely does mean same-origin and the inline frame is correct —
-    // its cookie really will flow.
-    expect(isSameOrigin("")).toBe(true);
-    expect(isSameOrigin("/")).toBe(true);
-  });
-
-  it("does not throw on a value that barely parses", () => {
-    // It resolves against the page and so reads as first-party, which is
-    // harmless: whatever it was meant to be, the frame it opens is ours.
-    expect(() => isSameOrigin("::::")).not.toThrow();
+  it("reads a relative or unparsable api as NOT same-origin", () => {
+    // Parsed with no base, matching the rule client.ts now delegates here. The
+    // cautious answer: false selects the popup and the full-page redirect,
+    // which work in strictly more situations than their alternatives.
+    expect(isSameOrigin("")).toBe(false);
+    expect(isSameOrigin("/")).toBe(false);
+    expect(isSameOrigin("::::")).toBe(false);
   });
 });
 

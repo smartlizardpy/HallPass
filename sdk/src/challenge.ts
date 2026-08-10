@@ -76,23 +76,24 @@ export function pickerUrl(
 /**
  * Is the host page on the same origin as the HallPass API?
  *
- * Decides inline-frame versus popup.
+ * THE SDK'S ONE SAME-ORIGIN RULE. `client.ts` delegates its `sameOriginApi()`
+ * here rather than keeping its own copy, and that matters more than it looks:
+ * the same answer decides whether a cookie-bearing request can work at all,
+ * whether auth uses a popup or a full-page redirect, AND whether the picker is
+ * an inline frame. Two subtly different rules would let `challenge()` open an
+ * inline frame on an origin where `getPlayer()` had already concluded cookies
+ * could not flow — which is precisely the third-party-context failure the frame
+ * choice exists to avoid.
  *
- * RESOLVED AGAINST THE PAGE URL, which is not a detail: `config.ts` allows `api`
- * to be relative (its documented last resort is the page origin), and a relative
- * value genuinely DOES mean "same origin" — so the inline frame is the right
- * answer there, and its cookie really will flow. A value too malformed to
- * resolve even relatively lands on the page origin too, which is harmless for
- * the same reason: whatever it was meant to be, the frame it opens is
- * first-party.
- *
- * With no `window` at all there is nothing to compare, and `false` selects the
- * popup — the option that works in strictly more situations.
+ * Deliberately parsed with NO base, so a relative `api` does NOT resolve against
+ * the page and reads as false. That is the incumbent behaviour and the cautious
+ * one: `false` selects the popup and the full-page redirect, which work in
+ * strictly more situations than their alternatives.
  */
 export function isSameOrigin(api: string): boolean {
   try {
     if (typeof window === "undefined" || !window.location) return false;
-    return new URL(api, window.location.href).origin === window.location.origin;
+    return new URL(api).origin === window.location.origin;
   } catch {
     return false;
   }
