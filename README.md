@@ -137,6 +137,71 @@ Neon branching means it has to be applied to every branch the app runs against.
 See `tracker-design.md` for the full design, what is deliberately excluded, and
 the deferred GitHub-issues integration (the `gh_*` columns ship unused).
 
+## Friend challenges
+
+A **challenge** is a score to beat on a board, aimed at a friend. The game
+triggers it through the Scoreboard SDK, HallPass draws the picker, and the row
+resolves itself the moment the target posts a qualifying score. See
+`challenge-design.md` for the full argument and what is deliberately excluded.
+
+**The loop.** In a game, `HallPass.challenge()` opens a small HallPass-styled
+picker over the canvas — the site's design system, not the game's, and not a
+full-page takeover. The player picks a friend and sends; the score to beat is
+their OWN best on that board, resolved server-side, so nobody can dare a friend
+to beat a number they never scored. The target sees it in the Challenges tab on
+`/play/friends` and as a chip on `/game/<slug>`, presses Play, and beating the
+score closes the challenge automatically from the ordinary score-submission
+path.
+
+**Same-origin vs external games.** Hosted games are served from
+`/game-html/<slug>/` on our own origin, so the picker is an inline frame and the
+session cookie flows. An externally-hosted game is cross-origin, where a nested
+HallPass frame is a third-party context whose cookie the browser may withhold —
+there the SDK opens a popup window instead. The game never has to know which it
+got.
+
+**Accepting.** There is no Accept button: pressing Play stamps `accepted_at`.
+Only friends can challenge you, so consent is already covered, and gating
+resolution on acceptance would mean beating the score after launching from the
+catalogue did not count. Dismissing never reports "declined" back to the sender
+— the same courtesy `social/config.ts` applies to declined friend requests.
+
+**Built to extend.** One table with a `kind` discriminator models *a goal on a
+board*, with participants and time as separate nullable dimensions, so a
+site-wide monthly challenge is later a new kind plus a CHECK rather than a
+rewrite. Resolution never branches on kind. **Nothing builds the `seasonal`
+kind** — it is a seam, not a feature.
+
+Backed by `app/lib/challenges/` and migration `022_challenges.sql`. **That
+migration must be applied before challenges work**; until then every read
+degrades to empty and the surfaces render nothing.
+
+### Notifications
+
+Optional, and **off unless VAPID keys are configured** (see `.env.example`) —
+without them challenges still work, they are just pulled on a visit rather than
+pushed. Backed by `app/lib/push/` and migration `023_push_subscriptions.sql`.
+
+- **Coverage.** Android Chrome, desktop Chrome, Firefox and Edge. On iOS, Web
+  Push works **only for a PWA added to the Home Screen** (16.4+) — in a Safari
+  tab there is nothing, so an iPhone user has to install the app first.
+- **The permission ask** comes through `FeaturePromo`, and only once the player
+  has actually **received** a challenge. Prompting on arrival would spend the
+  one prompt they ever get on a feature they have not seen work, and a denial
+  cannot be re-asked from script.
+- **Quiet notifications** are an opt-in toggle in **Stealth settings**. On, a
+  challenge reads "HallPass — you have a new challenge" with no sender and no
+  game. The default is full detail: a phone is a personal device, and a nameless
+  banner wastes the feature for most people. It is **per device**, so the same
+  person can have detail on their phone and discretion on a school Chromebook.
+- **How that works.** A service worker cannot read `localStorage`, where the
+  stealth preferences live, and a push arrives with no tab open to ask. So the
+  server sends BOTH renderings and `sw.js` picks one by a flag mirrored into
+  IndexedDB. The worker never reconstructs the wording — if it did, the discreet
+  version would exist twice and could drift in the direction that leaks.
+- **No cron is involved anywhere.** Sends happen at challenge-creation, and a
+  dead subscription is deleted the moment a push service answers `410 Gone`.
+
 ## Offline / PWA architecture
 
 On the first visit the SW (`public/sw.js`) opens `hp-static-<BUILD_ID>` and precaches every URL in `self.__SW_PRECACHE` (generated at build time): the site shell, every prerendered route, every hashed `_next/static/{chunks,css,media}` asset, every `/game-html/<slug>/` game document (slash form — it must byte-match the iframe URL), and every file under `public/games/<slug>/` (the static twins of the Blob files, covers included). On a typical build this is ~150 URLs.
@@ -165,6 +230,8 @@ Derived from `process.env.*` references in the codebase. Configure these in Verc
 | `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` | `instrumentation-client.ts` | **Required for any analytics data.** Client-side PostHog capture token (browser → PostHog). `NEXT_PUBLIC_` vars are inlined at **build time**, so it must be set in Vercel *before* the build runs; if it is missing, `posthog.init` no-ops and **zero events** are captured (not even autocapture / pageviews). Find it in PostHog → Project settings. |
 | `BLOB_READ_WRITE_TOKEN` | `@vercel/blob` (`put`, `head`, `del`) | Auto-provisioned by Vercel when a Blob store is linked. |
 | `ADMIN_HTML_PASSWORD` | `app/lib/admin-html-auth.ts` | Plain string; gates `/admin/html`. Required for uploads. |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | `app/lib/push/config.ts` | Optional. Web Push signing pair for challenge notifications; generate with `npx web-push generate-vapid-keys`. Unset means the notification path reports itself unavailable and stays silent — challenges still work, pulled rather than pushed. Deliberately NOT `NEXT_PUBLIC_`: the public key is served at request time from `GET /api/v1/me/push`, so adding it takes effect on the next request rather than the next build. |
+| `VAPID_SUBJECT` | `app/lib/push/config.ts` | A `mailto:` the push service can contact about a misbehaving sender. Required by the VAPID spec. |
 | `POSTHOG_API_HOST` | `app/lib/stats.ts` | Defaults to `https://eu.posthog.com`. |
 | `POSTHOG_PROJECT_ID` | `app/lib/stats.ts` | PostHog project numeric id. |
 | `POSTHOG_PERSONAL_API_KEY` | `app/lib/stats.ts` | Personal API key with read access for play-count queries (server-side read; separate from the client capture token above). |
