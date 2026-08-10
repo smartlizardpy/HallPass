@@ -22,7 +22,14 @@ const GAMES_VERSION_KEY = "https://hallpass.local/__sw__/games-version";
 function isPrivatePath(pathname) {
   return (
     pathname.startsWith("/play/account") ||
-    pathname.startsWith("/u/")
+    pathname.startsWith("/u/") ||
+    // The challenge picker. It renders the viewer's own friend list, and it is
+    // loaded as an IFRAME — which still reaches the fetch handler as a navigate
+    // request, so without this it would be cached into `hp-runtime` and served
+    // to the next person on a shared school machine. It is dynamic (it calls
+    // `auth()`) and so never enters the precache, but that is a separate
+    // mechanism and not a substitute for this one.
+    pathname.startsWith("/embed/")
   );
 }
 
