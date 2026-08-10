@@ -18,10 +18,18 @@
  * markup. If a third launcher ever appears it is worth extracting the button
  * shape; two is not enough to know what the shared shape should be.
  *
- * WHY IT LIVES HERE AT ALL. The mobile tab bar is losing its Stealth tab, and
- * the bar is for things every visitor uses. Stealth settings are a preference,
- * and preferences belong on the settings tab — which is now where a player will
- * already be when they go looking for "things that are mine".
+ * WHY IT LIVES HERE AT ALL. The mobile tab bar lost its Stealth tab, and the bar
+ * is for things every visitor uses. Stealth settings are a preference, and
+ * preferences belong on the settings tab — which is where a player already is
+ * when they go looking for "things that are mine".
+ *
+ * RENDERED TWICE, ON PURPOSE. The Settings tab is only half the story: it sits
+ * behind the subtree's `auth()` check, and on a phone there is no hamburger, no
+ * drawer and no Stealth tab, so a signed-out player would have had no route to
+ * the modal at all. `NotSignedInCard` therefore renders this too — see its
+ * docblock for the full trace. Nothing here needs an account: the preferences
+ * are per-device `localStorage`, so the modal behaves identically either side of
+ * the gate.
  */
 
 import { openStealthSettings } from "@/app/lib/stealth/store";
