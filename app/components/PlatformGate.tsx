@@ -21,7 +21,7 @@
  * owning the player overlay, not adjudicating who may open it.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Game } from "../lib/games";
 import { playsOn, useDevicePlatform } from "../lib/use-device-platform";
 
@@ -73,6 +73,19 @@ export function usePlayGuard(
 /**
  * The sheet itself. Renders nothing when `game` is null, so a page can mount it
  * unconditionally next to its grid.
+ *
+ * EVERY WAY OUT IS A WAY OUT. On a phone this is a bottom sheet, and tapping the
+ * dimmed area above it is the first thing anyone tries — it used to do nothing at
+ * all, on a component whose whole purpose is to be easy to wave away. Escape did
+ * nothing either, and focus stayed on the ▶ behind the sheet, so a keyboard player
+ * was answering a question they had not been shown. Backdrop, Escape and "Back"
+ * now all cancel, and the sheet takes focus when it appears.
+ *
+ * The dialog is what receives focus, not "Play anyway". Landing on the primary
+ * button would mean a stray Enter — from the very keypress that opened the sheet —
+ * silently confirming past a warning the player never read, which is the one
+ * outcome this component exists to prevent. Focusing the panel announces the
+ * heading and leaves "Play anyway" one Tab away.
  */
 export function PlatformConfirmSheet({
   game,
@@ -83,18 +96,56 @@ export function PlatformConfirmSheet({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const open = game !== null;
+
+  // Focus in on appear, and back to the ▶ they pressed on the way out. Keyed on
+  // `open` alone so a caller passing an inline `onCancel` cannot turn a re-render
+  // into a focus jump — the same split `StealthSettings` uses.
+  useEffect(() => {
+    if (!open) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    panelRef.current?.focus();
+    return () => {
+      if (previouslyFocused?.isConnected) {
+        previouslyFocused.focus({ preventScroll: true });
+      }
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onCancel]);
+
   if (!game) return null;
 
   const wantsMobile = game.platform === "mobile";
 
   return (
+    // The backdrop is `presentation` and the panel is the dialog — the arrangement
+    // `FeaturePromo` uses — because the click-to-cancel target must not also be the
+    // thing assistive tech is told to treat as the dialog.
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="platform-gate-title"
+      onClick={onCancel}
+      role="presentation"
     >
-      <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="platform-gate-title"
+        // Clicks inside the sheet are not "outside" it. Without this, every button
+        // press would also hit the backdrop handler on its way up and cancel.
+        onClick={(e) => e.stopPropagation()}
+        tabIndex={-1}
+        className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl outline-none"
+      >
         <h2
           id="platform-gate-title"
           className="text-lg font-black tracking-tight text-zinc-900"
