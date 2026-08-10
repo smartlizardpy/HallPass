@@ -79,7 +79,7 @@ export function ProfileHeader({
               minimal profile: "Friends" on an otherwise-hidden page would tell a
               blocked viewer that the block is the reason the page is empty.
 
-              `pending-in` links to /play/friends rather than offering Accept
+              `pending-in` links to /play/you/friends rather than offering Accept
               here. Accepting is a decision about a person, and the place to make
               it is the screen that shows you every request at once — not a page
               you may have landed on from a link they sent you. */}
@@ -102,7 +102,7 @@ export function ProfileHeader({
               )}
               {profile.friendship === "pending-in" && (
                 <Link
-                  href="/play/friends"
+                  href="/play/you/friends"
                   className={`${RELATIONSHIP_PILL} bg-accent-pink-ink text-white transition hover:opacity-90`}
                 >
                   Wants to be friends →

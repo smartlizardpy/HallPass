@@ -31,10 +31,11 @@ import { Avatar } from "./Avatar";
  *   * One friend, and they have claimed a username → their profile. The chip
  *     names a specific person, so "who is that?" is the question it raises, and
  *     `/u/<username>` is the page that answers it.
- *   * Two or more, or no username → `/play/friends`. With several names there is
- *     no single person the card is about, and picking the first would send a
- *     reader somewhere they did not click. `/u/[username]` is the only profile
- *     route there is, so a friend without a username is not linkable at all.
+ *   * Two or more, or no username → `/play/you/friends`. With several names
+ *     there is no single person the card is about, and picking the first would
+ *     send a reader somewhere they did not click. `/u/[username]` is the only
+ *     profile route there is, so a friend without a username is not linkable at
+ *     all.
  *
  * A private or blocked profile is NOT a reason to withhold the link: `profile.ts`
  * answers those with a minimal profile — a name, a face and no more — precisely
@@ -76,7 +77,7 @@ export function FriendsWhoPlay({ slug }: { slug: string }) {
   const only = friends.length === 1 ? friends[0] : null;
   const href = only?.username
     ? `/u/${encodeURIComponent(only.username)}`
-    : "/play/friends";
+    : "/play/you/friends";
 
   return (
     <Link
