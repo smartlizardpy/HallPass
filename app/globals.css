@@ -190,6 +190,46 @@ body {
   color: color-mix(in oklab, var(--g-accent) 45%, var(--foreground));
 }
 
+/* ============================================================
+   `.tap-44` — a 44px touch target on a control that must stay visually smaller.
+
+   The repo is otherwise disciplined about `h-11`/`min-h-11`, and where a control
+   can simply BE 44px it should be. This is for the handful that cannot: the
+   card's favourite heart (36px) and the gallery's arrows and lightbox close
+   (40px) are all chrome sitting ON artwork, sized down deliberately so they do
+   not cover the picture — and in the heart's case sized to a geometry that is
+   argued out at length in `GameCard.tsx` (the disc is seated concentric with the
+   cover's corner arc; growing it breaks that). They are also exactly the
+   controls a frustrated player stabs at, so they are the worst places to be
+   under the 44px minimum.
+
+   So the HIT AREA grows and the painted disc does not. A transparent 44x44
+   pseudo-element, centred on the host, takes the surrounding pointer events on
+   the host button's behalf — events on it target the button, so nothing about
+   the handler, the hover state or the focus ring changes. Nothing is painted, so
+   the visual result is identical to the pixel.
+
+   It can only ever ADD area: the host's own box still receives events, so
+   putting this on a control already larger than 44px is a no-op rather than a
+   shrink.
+
+   TWO REQUIREMENTS AT THE CALL SITE. The host must be positioned — all three
+   uses are already `absolute` — and this rule deliberately does NOT set
+   `position` itself, so it can never fight the positioning utility on the
+   element. The host must also not be inside an `overflow: hidden` ancestor that
+   the halo would poke out of; each of the three sits at least 6px in from its
+   clip, so the +2px..+4px of halo stays inside.
+   ============================================================ */
+.tap-44::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
 /* Feature-promo modal entrance.
    Sits at z-[95], deliberately BELOW PlayerOverlay's z-[100] — a promo must
    never be able to cover a running game, which is also why it is a plain fixed

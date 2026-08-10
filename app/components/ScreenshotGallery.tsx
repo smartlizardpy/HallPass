@@ -233,11 +233,16 @@ export function ScreenshotGallery({
               height={current.height}
               className="max-h-[90dvh] w-auto rounded-2xl"
             />
+            {/* `tap-44` (globals.css): the disc stays 40px so it does not sit on
+                the picture any harder than it has to, while the hit area is a
+                full 44px. This is the control someone jabs at to get OUT of a
+                full-screen image — the one place a near-miss is least
+                forgivable. */}
             <button
               type="button"
               onClick={() => dialogRef.current?.close()}
               aria-label="Close"
-              className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full bg-white/90 text-zinc-900 shadow-lg transition hover:bg-white"
+              className="tap-44 absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full bg-white/90 text-zinc-900 shadow-lg transition hover:bg-white"
             >
               <svg
                 width="18"
@@ -267,11 +272,15 @@ function GalleryArrow({
 }) {
   const isPrev = direction === "prev";
   return (
+    // `tap-44` (globals.css) lifts the 40px disc to a 44px hit area without
+    // repainting it any larger. The arrows sit `left-2`/`right-2` inside an
+    // `overflow-hidden` frame, so the +2px of halo per side still clears the
+    // clip — do not move them any closer to the edge.
     <button
       type="button"
       onClick={onClick}
       aria-label={isPrev ? "Previous screenshot" : "Next screenshot"}
-      className={`absolute top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-zinc-900 shadow-lg transition hover:bg-white focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/40 ${
+      className={`tap-44 absolute top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-zinc-900 shadow-lg transition hover:bg-white focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/40 ${
         isPrev ? "left-2" : "right-2"
       }`}
     >

@@ -146,7 +146,8 @@ export function GameCard({
       {/* Favorite heart — sibling of the play button, top-RIGHT (badges stay
           top-left). Only rendered when a handler is supplied, so cards without
           personalization render exactly as before. Always visible (not
-          hover-only) so it stays tappable on touch.
+          hover-only) so it stays tappable on touch — see "Touch target" below,
+          which is what makes that claim actually hold.
 
           Styling: a SELF-CONTAINED chip that reads as a full circle on ANY
           background. The disc is the SAME in both states — a near-OPAQUE dark
@@ -167,7 +168,19 @@ export function GameCard({
           disc centre = 6 + 18 = 24px from each edge = the arc centre). That nests
           the disc into the corner with a UNIFORM ~6px gap to the rounded edge all
           the way around, instead of the cramped 3px-at-the-corner / 8px-at-the-
-          edges margin that made the heart look cut off by the corner. */}
+          edges margin that made the heart look cut off by the corner.
+
+          Touch target: the disc is 36px, under the 44px minimum — which worked
+          directly against the "always visible so it stays tappable on touch"
+          rule above. The DISC CANNOT GROW: 36px is what seats it concentric with
+          the 24px corner arc, and any other size breaks the uniform gap the
+          paragraph above exists to protect. So `tap-44` (globals.css) hangs a
+          transparent 44x44 pseudo-element off the button instead, centred on the
+          same point. The hit area gains 4px on every side; the painted circle
+          does not move or resize by a pixel. If you ever change the disc size or
+          its inset, re-read that rule too — the halo is centred on the button,
+          so it follows the disc automatically, but the ~6px corner geometry is
+          hand-derived and does not. */}
       {onToggleFavorite && (
         <button
           type="button"
@@ -179,7 +192,7 @@ export function GameCard({
             e.stopPropagation();
             onToggleFavorite(game.slug);
           }}
-          className={`absolute right-1.5 top-1.5 z-10 grid h-9 w-9 place-items-center rounded-full bg-zinc-900/90 ring-1 ring-white/30 shadow-[0_2px_8px_rgba(0,0,0,0.5)] backdrop-blur-md transition-all duration-150 hover:scale-105 hover:bg-zinc-900 active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-black/40 ${
+          className={`tap-44 absolute right-1.5 top-1.5 z-10 grid h-9 w-9 place-items-center rounded-full bg-zinc-900/90 ring-1 ring-white/30 shadow-[0_2px_8px_rgba(0,0,0,0.5)] backdrop-blur-md transition-all duration-150 hover:scale-105 hover:bg-zinc-900 active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-black/40 ${
             isFavorite ? "text-accent-pink" : "text-white"
           }`}
           style={{ touchAction: "manipulation" }}
