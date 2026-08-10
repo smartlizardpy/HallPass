@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import { openStealthSettings } from "../lib/stealth/store";
+import { canUsePush, enablePush, notificationPermission } from "../lib/push/client";
 import { Wordmark } from "./Wordmark";
 import type { MeResponse } from "@/sdk/src/contract";
 
@@ -42,7 +43,14 @@ import type { MeResponse } from "@/sdk/src/contract";
  * beta programme). All three take priority over the nags and are decided BEFORE
  * them; `stealth` and `install` need no `/api` data at all.
  */
-type Variant = "stealth" | "install" | "beta" | "signin" | "username" | "friends";
+type Variant =
+  | "stealth"
+  | "install"
+  | "notifications"
+  | "beta"
+  | "signin"
+  | "username"
+  | "friends";
 
 type SocialCounts = {
   signedIn: boolean;
@@ -125,6 +133,19 @@ const COPY: Record<
       { icon: "🕶️", text: "Cloak the tab as Docs, Classroom or Drive" },
       { icon: "🚨", text: "A panic key hides everything in one press" },
       { icon: "📳", text: "On a phone or tablet, just give it a shake" },
+    ],
+  },
+  notifications: {
+    badge: "Challenges",
+    title: "Know when you're challenged",
+    body: "A friend has dared you to beat their score. Turn on notifications and you'll know the moment the next one lands — instead of finding out days later.",
+    cta: "Turn on notifications",
+    // Unused: `onPrimary` asks the browser rather than navigating.
+    href: "",
+    points: [
+      { icon: "\u2694\ufe0f", text: "Told the moment a friend challenges you" },
+      { icon: "\ud83d\udd15", text: "On a shared device? Stealth settings hides the details" },
+      { icon: "\ud83d\udcf5", text: "Only challenges — nothing else notifies you" },
     ],
   },
   install: {
@@ -362,6 +383,16 @@ export function FeaturePromo() {
 
       // Both in parallel: two round trips in sequence would delay the modal by
       // the slower one for no reason, and each is a cheap no-store read.
+      // The notification ask is only worth a round trip when it could actually
+      // be accepted: the browser can do push, the player has never answered the
+      // prompt (a denial cannot be re-asked from script), and they have not
+      // dismissed this promo. All three are local checks, so a player who fails
+      // any of them costs nothing extra.
+      const askAboutNotifications =
+        canUsePush() &&
+        notificationPermission() === "default" &&
+        !readDismissed().has("notifications");
+
       Promise.all([
         fetch("/api/v1/me/friends/count", { credentials: "include" })
           .then((r) => (r.ok ? r.json() : null))
@@ -369,19 +400,39 @@ export function FeaturePromo() {
         fetch("/api/v1/me", { credentials: "include" })
           .then((r) => (r.ok ? r.json() : null))
           .catch(() => null),
+        // Only asked for when it could matter — see above.
+        askAboutNotifications
+          ? fetch("/api/v1/me/challenges", { credentials: "include" })
+              .then((r) => (r.ok ? r.json() : null))
+              .catch(() => null)
+          : Promise.resolve(null),
       ])
-        .then(([data, me]: [SocialCounts | null, MeResponse | null]) => {
+        .then(
+          ([data, me, challenges]: [
+            SocialCounts | null,
+            MeResponse | null,
+            { incoming?: unknown[] } | null,
+          ]) => {
           if (!active || !data || decided) return;
 
           const dismissed = readDismissed();
           const nagPlayerId = me?.player?.id ?? null;
+
+          // ASK ABOUT NOTIFICATIONS ONLY ONCE SOMEBODY HAS ACTUALLY BEEN
+          // CHALLENGED. Prompting on arrival spends the one permission prompt a
+          // player will ever get on a feature they have not seen work — and a
+          // denial is close to permanent. Waiting until a real challenge is
+          // sitting there means the ask arrives with its own reason attached.
+          const challenged = (challenges?.incoming?.length ?? 0) > 0;
 
           // NEWS BEFORE NAGS. Being told you are now a beta tester outranks a
           // reminder to add friends, and it is the only variant the site cannot
           // re-offer by another route.
           const next: Variant | null = me?.isBetaTester
             ? "beta"
-            : !data.signedIn
+            : challenged && askAboutNotifications
+              ? "notifications"
+              : !data.signedIn
               ? "signin"
               : !data.hasUsername
                 ? "username"
@@ -396,7 +447,8 @@ export function FeaturePromo() {
           if (dismissed.has(dismissKey(next, nagPlayerId))) return;
 
           commit(next, nagPlayerId);
-        })
+        },
+        )
         .catch(() => {
           // Offline: /api/ is never intercepted by the service worker, so this
           // simply fails and no promo appears. Correct — an offline player
@@ -485,6 +537,16 @@ export function FeaturePromo() {
       openStealthSettings();
       return;
     }
+    if (variant === "notifications") {
+      // Dismiss FIRST, then ask. The browser's permission prompt is modal and
+      // would otherwise appear on top of this panel, and `enablePush` must run
+      // inside this click — a permission request outside a user gesture is
+      // refused, and on some browsers that counts as a denial the player can
+      // never undo from script.
+      dismiss("accepted");
+      void enablePush();
+      return;
+    }
     dismiss("accepted");
     router.push(copy.href);
   };
@@ -535,11 +597,15 @@ export function FeaturePromo() {
         */}
         <div className="flex items-center gap-2.5 pr-10">
           <Wordmark />
-          {/* Brand purple for the news badges (stealth, beta, install) — they name
-              a capability rather than flagging novelty — pink for the social "New" ones. */}
+          {/* Brand purple for the news badges (stealth, beta, install,
+              notifications) — they name a capability rather than flagging
+              novelty — pink for the social "New" ones. */}
           <span
             className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase leading-none tracking-wider text-white ${
-              variant === "beta" || variant === "install" || variant === "stealth"
+              variant === "beta" ||
+              variant === "install" ||
+              variant === "stealth" ||
+              variant === "notifications"
                 ? "bg-brand"
                 : "bg-accent-pink"
             }`}
