@@ -30,6 +30,26 @@
  * "you have no score here" fall out of the same query as everything else, and it
  * makes it impossible to dare somebody to beat a number you never scored.
  *
+ * ── NEVER PUT A BARE PARAMETER CASE INSIDE make_interval() ─────────────────
+ * `make_interval(secs => $1)` works: there is exactly one `make_interval`, so an
+ * unknown-typed parameter coerces to its `double precision` argument.
+ * `make_interval(secs => CASE WHEN … THEN $1 … ELSE $3 END)` DOES NOT. Postgres
+ * resolves the CASE's own type first, and a CASE whose every branch is an
+ * untyped parameter resolves to `text` — for which no implicit cast to
+ * `double precision` exists. The call then fails to resolve entirely:
+ *
+ *     ERROR 42883: function make_interval(secs => text) does not exist
+ *
+ * The Neon HTTP driver sends no type OIDs, so every parameter arrives unknown
+ * and this fires on every call in production. It is also invisible to the tests
+ * below, which assert SQL TEXT rather than execute it, and `42883` is not one of
+ * the codes `isMissingColumnError` matches — so it would surface only as a 503
+ * and a picker saying "Challenges are unavailable at the moment."
+ *
+ * The cooldown branches below are therefore written as three OR'd conditions,
+ * each with its own single-parameter `make_interval`, which is the same shape
+ * `beta/store.ts` and `social/store.ts` already use.
+ *
  * ── ONE MIRRORED PREDICATE, NAMED ──────────────────────────────────────────
  * {@link createChallengeStore.resolveForScore} restates `beats()` from
  * `resolve.ts` in SQL, because resolution has to be a single UPDATE. That is the
@@ -382,10 +402,24 @@ export function createChallengeStore(sql: Sql) {
              AND challenger_id = ${challengerId}
              AND target_id = ${targetId}
              AND board_id = ${boardId}
-             AND created_at >= now() - make_interval(secs => CASE
-                   WHEN resolved_at  IS NOT NULL THEN ${CHALLENGE_RESOLVED_COOLDOWN_SECONDS}
-                   WHEN dismissed_at IS NOT NULL THEN ${CHALLENGE_DISMISSED_COOLDOWN_SECONDS}
-                   ELSE ${CHALLENGE_RESEND_COOLDOWN_SECONDS} END)
+             AND (
+               -- Beaten: a free rematch. The cooldown is 0, so this is never
+               -- true for a row already written; the branch exists to STOP the
+               -- other two applying, not to block anything.
+               (resolved_at IS NOT NULL
+                  AND resolved_at >= now() - make_interval(secs => ${CHALLENGE_RESOLVED_COOLDOWN_SECONDS}))
+               -- Refused: measured from the DISMISSAL, not from when it was
+               -- sent. Measuring from created_at would let somebody who sat on
+               -- a challenge for a day dismiss it and be re-challenged at once,
+               -- because the cooldown would have elapsed before the event it is
+               -- supposed to follow.
+               OR (resolved_at IS NULL AND dismissed_at IS NOT NULL
+                  AND dismissed_at >= now() - make_interval(secs => ${CHALLENGE_DISMISSED_COOLDOWN_SECONDS}))
+               -- Still open: the anti-nag window, which does run from when it
+               -- was sent.
+               OR (resolved_at IS NULL AND dismissed_at IS NULL
+                  AND created_at >= now() - make_interval(secs => ${CHALLENGE_RESEND_COOLDOWN_SECONDS}))
+             )
         ),
         ins AS (
           INSERT INTO challenges (kind, board_id, challenger_id, target_id, target_score)

@@ -152,6 +152,44 @@ describe("create", () => {
     expect(values).toContain(MAX_OPEN_SENT_CHALLENGES);
   });
 
+  it("never wraps a bare-parameter CASE in make_interval", async () => {
+    // Postgres resolves a CASE whose every branch is an untyped parameter to
+    // `text`, and there is no implicit text -> double precision cast, so
+    // `make_interval(secs => CASE …)` fails to resolve at all:
+    //   ERROR 42883: function make_interval(secs => text) does not exist
+    // The Neon HTTP driver sends no type OIDs, so that fires on EVERY call. It
+    // shipped once; this is the guard. 42883 is not matched by
+    // isMissingColumnError either, so it degraded to a 503 saying only that
+    // challenges were unavailable.
+    const { sql, calls } = makeFakeSql([outcomeRow()]);
+    await createChallengeStore(sql).create({
+      challengerId: "a", targetId: "b", boardId: "duskfall",
+    });
+
+    const { text } = calls[0];
+    expect(text).toContain("make_interval");
+    expect(text).not.toMatch(/make_interval\(\s*secs\s*=>\s*CASE/i);
+    // Every make_interval in this statement takes exactly one bind param.
+    for (const call of text.match(/make_interval\([^)]*\)/g) ?? []) {
+      expect(call).toBe("make_interval(secs => ?)");
+    }
+  });
+
+  it("times the dismissal cooldown from dismissed_at, not created_at", async () => {
+    // created_at is reset by ON CONFLICT DO UPDATE, and more importantly it
+    // marks the wrong event: sit on a challenge for a day, dismiss it, and a
+    // cooldown measured from when it was SENT has already elapsed — so the
+    // sender could re-challenge instantly, which is the one thing the dismissal
+    // was asking not to happen.
+    const { sql, calls } = makeFakeSql([outcomeRow()]);
+    await createChallengeStore(sql).create({
+      challengerId: "a", targetId: "b", boardId: "duskfall",
+    });
+
+    expect(calls[0].text).toContain("dismissed_at >= now() - make_interval");
+    expect(calls[0].text).toContain("resolved_at >= now() - make_interval");
+  });
+
   it("orders the friendship pair so either argument order finds the row", async () => {
     // friendships is ONE row per pair with ordered keys; querying with the raw
     // arguments would miss the row half the time.
