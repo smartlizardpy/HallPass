@@ -77,6 +77,12 @@ function shortName(name: string): string {
  */
 export function challengeNotification(input: {
   from: string;
+  /**
+   * The game's DISPLAY TITLE ("Neon Velocity"), never its slug. A slug reads as
+   * "Beat their score on neon-velocity-hyperdrive", which is the sort of thing
+   * that looks fine in a test fixture and wrong on a lock screen. The caller
+   * resolves it; `null` falls back to the board title.
+   */
   game: string | null;
   boardTitle: string;
 }): ChallengePush {

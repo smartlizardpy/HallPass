@@ -30,6 +30,7 @@ import type { ChallengeReason } from "@/app/lib/challenges/config";
 import type { CreateOutcome } from "@/app/lib/challenges";
 import { isMissingColumnError } from "@/app/lib/db";
 import { notifyChallenge } from "@/app/lib/push/send";
+import { findGame } from "@/app/lib/games";
 import { store } from "@/app/lib/scoreboard";
 import { social } from "@/app/lib/social";
 import {
@@ -178,7 +179,12 @@ export async function POST(req: Request): Promise<Response> {
     await notifyChallenge({
       targetPlayerId: targetId,
       from: outcome.fromDisplayName,
-      game: outcome.gameSlug,
+      // The DISPLAY TITLE, not the slug — a notification reading "Beat their
+      // score on neon-velocity-hyperdrive" is not something to put on a lock
+      // screen. `findGame` is the static catalogue, so this is a lookup rather
+      // than a round trip; an external game is not in it and falls back to the
+      // board title.
+      game: outcome.gameSlug ? (findGame(outcome.gameSlug)?.title ?? null) : null,
       boardTitle: outcome.boardTitle,
     });
 

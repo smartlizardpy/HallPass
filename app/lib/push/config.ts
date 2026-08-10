@@ -68,3 +68,46 @@ export const PUSH_DEVICE_CAP = 10;
  * say something is waiting.
  */
 export const CHALLENGE_NOTIFICATION_TAG = "hallpass-challenge";
+
+/**
+ * Hosts a push endpoint may legitimately live on.
+ *
+ * WHY AN ALLOWLIST AND NOT JUST "must be https". `endpoint` is supplied by the
+ * client and the server then POSTs to it — so validating only the scheme makes
+ * this a server-side request forgery primitive: any signed-in account could
+ * register `https://something-internal/` and have the app POST an encrypted blob
+ * at it on a schedule of their choosing. The blast radius is small (a POST with
+ * an opaque body, and the response is never read back) but it is free to close.
+ *
+ * Matched on the registrable suffix, so regional and sharded subdomains — of
+ * which every one of these services has many — do not each need listing.
+ */
+const PUSH_ENDPOINT_HOSTS = [
+  "push.services.mozilla.com", // Firefox
+  "fcm.googleapis.com", // Chrome / Android, current
+  "android.googleapis.com", // Chrome, legacy GCM endpoints still in the wild
+  "notify.windows.com", // Edge / Windows
+  "push.apple.com", // Safari, iOS + macOS
+];
+
+/**
+ * Whether `endpoint` is an https URL on a known push service.
+ *
+ * Rejects anything unparsable. A service that is not listed is refused rather
+ * than allowed-with-a-warning: a subscription we will not push to is a dead row,
+ * and better a browser we do not yet support gets an honest failure at
+ * subscribe time than a silent one at send time.
+ */
+export function isAllowedPushEndpoint(endpoint: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:") return false;
+  const host = url.hostname.toLowerCase();
+  return PUSH_ENDPOINT_HOSTS.some(
+    (allowed) => host === allowed || host.endsWith(`.${allowed}`),
+  );
+}

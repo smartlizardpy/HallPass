@@ -573,9 +573,15 @@ export function createChallengeStore(sql: Sql) {
      * makes the original worth trusting.
      *
      * The window predicate is `isWithinWindow()`, likewise: lower bound
-     * inclusive, upper bound EXCLUSIVE, and a NULL bound is no bound — which is
-     * every `friend` challenge, and is why this statement needs no `kind` filter
-     * and would resolve a live seasonal challenge unchanged.
+     * inclusive, upper bound EXCLUSIVE, and a NULL bound is no bound, which is
+     * every `friend` challenge.
+     *
+     * NOTE WHAT THIS DOES *NOT* ALREADY DO. It needs no `kind` filter, but it
+     * would NOT resolve a seasonal challenge as written: seasonal rows have
+     * `target_id IS NULL` (the challenge is open to everyone) and this matches
+     * `target_id = <player>`. Whoever builds that kind has to add the arm for
+     * it, along with the per-player participation it implies — the seam here is
+     * that the RULE needs no new branch, not that the query is already general.
      *
      * `accepted_at` is deliberately NOT consulted. Beating the score after
      * launching the game from the catalogue counts.

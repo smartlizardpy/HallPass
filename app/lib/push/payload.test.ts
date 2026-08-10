@@ -12,13 +12,22 @@ import { describe, expect, it } from "vitest";
 import { CHALLENGE_NOTIFICATION_TAG } from "./config";
 import { challengeNotification } from "./payload";
 
-const BASE = { from: "Ozan", game: "duskfall", boardTitle: "High score" };
+const BASE = { from: "Ozan", game: "Duskfall", boardTitle: "High score" };
 
 describe("challengeNotification", () => {
   it("names the sender and the game in the full version", () => {
     const push = challengeNotification(BASE);
     expect(push.full.title).toBe("Ozan challenged you");
-    expect(push.full.body).toContain("duskfall");
+    expect(push.full.body).toContain("Duskfall");
+  });
+
+  it("renders whatever label it is given, so the caller must pass a title", () => {
+    // The caller resolves the slug through `findGame`. Passing a slug through
+    // would put "Beat their score on neon-velocity-hyperdrive" on a lock
+    // screen, which reads as broken.
+    expect(
+      challengeNotification({ ...BASE, game: "Neon Velocity" }).full.body,
+    ).toContain("Neon Velocity");
   });
 
   it("omits the SCORE even from the full version", () => {
@@ -34,7 +43,7 @@ describe("challengeNotification", () => {
     const push = challengeNotification(BASE);
     const text = `${push.discreet.title} ${push.discreet.body}`;
     expect(text).not.toContain("Ozan");
-    expect(text).not.toContain("duskfall");
+    expect(text).not.toContain("Duskfall");
     expect(text).not.toContain("High score");
   });
 

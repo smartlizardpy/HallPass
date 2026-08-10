@@ -18,7 +18,11 @@
 
 import { isMissingColumnError } from "@/app/lib/db";
 import { push } from "@/app/lib/push";
-import { isPushConfigured, vapidConfig } from "@/app/lib/push/config";
+import {
+  isAllowedPushEndpoint,
+  isPushConfigured,
+  vapidConfig,
+} from "@/app/lib/push/config";
 import {
   NO_STORE,
   credentialedOptions,
@@ -55,13 +59,10 @@ function readSubscription(
   // All three are required: a row missing a key could only ever carry a
   // contentless push, which this feature has no use for.
   if (!endpoint || !p256dh || !auth) return null;
-  // Endpoints are https URLs issued by the push service. Rejecting anything else
-  // keeps a malformed or hostile value out of the send path entirely.
-  try {
-    if (new URL(endpoint).protocol !== "https:") return null;
-  } catch {
-    return null;
-  }
+  // An https check alone is not enough: the server later POSTs to whatever is
+  // stored here, so accepting any host would make this a request-forgery
+  // primitive. Only known push services are allowed.
+  if (!isAllowedPushEndpoint(endpoint)) return null;
   return { endpoint, p256dh, auth };
 }
 
