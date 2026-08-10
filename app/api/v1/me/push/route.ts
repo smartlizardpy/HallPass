@@ -17,9 +17,8 @@
  */
 
 import { isMissingColumnError } from "@/app/lib/db";
-import { sql } from "@/app/lib/db";
+import { push } from "@/app/lib/push";
 import { isPushConfigured, vapidConfig } from "@/app/lib/push/config";
-import { createPushStore } from "@/app/lib/push/store";
 import {
   NO_STORE,
   credentialedOptions,
@@ -28,8 +27,6 @@ import {
   isTrustedOrigin,
   unauthorized,
 } from "@/app/lib/social/request-guard";
-
-const push = createPushStore(sql);
 
 /**
  * Whether push can be offered, and the key needed to accept.

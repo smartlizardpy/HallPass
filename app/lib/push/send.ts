@@ -29,10 +29,8 @@ import "server-only";
 import webpush from "web-push";
 import { isPushConfigured, vapidConfig } from "./config";
 import { challengeNotification } from "./payload";
-import { createPushStore, type PushDevice } from "./store";
-import { sql } from "@/app/lib/db";
-
-const push = createPushStore(sql);
+import { push } from "./index";
+import type { PushDevice } from "./store";
 
 /** Give up on one push service rather than hold a request open for it. */
 const SEND_TIMEOUT_MS = 5000;
