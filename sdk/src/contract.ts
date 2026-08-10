@@ -363,7 +363,8 @@ export type EventName =
   | "submitted"
   | "error"
   | "auth"
-  | "achievement";
+  | "achievement"
+  | "challenge";
 
 /**
  * Payload for the `"auth"` event: fired when the signed-in player changes. Carries
@@ -480,6 +481,94 @@ export interface GetAchievementsOptions {
   game?: string;
 }
 
+// ---- Challenges -------------------------------------------------------------
+
+/**
+ * Why a `challenge` call did not send.
+ *
+ * The first block mirrors `CHALLENGE_REASONS` in `app/lib/challenges/config.ts`
+ * member for member — kept in lockstep BY HAND for the same reason
+ * {@link UnlockReason} is: this file must not import server code, and
+ * `config.test.ts` pins the server-side list.
+ *
+ * The second block has NO server counterpart and could not: they describe the
+ * popup rather than the request. `"closed"` in particular is the ORDINARY
+ * outcome of opening the picker and changing your mind, so a game must not
+ * treat it as an error — see {@link ChallengeResult.sent}.
+ *
+ * Shaped like {@link SubmitReason} and {@link UnlockReason} so a game handles
+ * every surface the same way. Added in v1 (append-only).
+ */
+export type ChallengeReason =
+  // Server refusals, mirrored from `challenges/config.ts`:
+  | "no-board" // this game has no leaderboard to challenge on
+  | "no-score" // the challenger has no score on that board yet
+  | "not-friends" // the target is not an accepted friend
+  | "blocked" // a block exists in either direction
+  | "self" // you cannot challenge yourself
+  | "signed-out" // no signed-in player (includes every cross-origin embed)
+  | "bad-request" // malformed target or board
+  | "rate-limited" // sender limit, or a pair cooldown, refused it
+  | "unavailable" // feature not provisioned
+  // Popup-only outcomes, with no server counterpart:
+  | "closed" // the picker was dismissed without sending — NOT an error
+  | "popup-blocked" // the browser refused the window and there is no inline path
+  | "inert" // client is inert (sandboxed / no network)
+  | "network"; // the picker could not be reached
+
+/**
+ * Payload of the `"challenge"` event, and of {@link ChallengeResult}'s success
+ * fields: a challenge the player JUST sent.
+ *
+ * Every field is REQUIRED and non-null so a game can render straight from it
+ * without printing `undefined`. Added in v1 (append-only).
+ */
+export interface ChallengeSent {
+  /** The friend's display name — a handle, else `@username`, else "Player". */
+  to: string;
+  /** The score they now have to beat. */
+  targetScore: number;
+  /** The board the challenge is on. */
+  board: string;
+  /** The game slug the board belongs to, when it has one. */
+  game: string | null;
+}
+
+/**
+ * Result of `challenge()`. Always resolved — never rejected.
+ *
+ * Shaped exactly like {@link SubmitResult} and {@link UnlockResult}: `ok` is the
+ * only guaranteed field, because the pre-load inline stub's 2s inert fallback
+ * can only produce `{ ok: false, reason: "inert" }` and lying about the rest
+ * would be worse than omitting it.
+ *
+ * READ `sent`, NOT `ok`, TO DECIDE WHETHER TO CELEBRATE. Closing the picker
+ * without choosing anybody resolves `{ ok: true, sent: false, reason: "closed" }`
+ * — the call worked perfectly and the player simply changed their mind, which is
+ * not a failure and must not be reported to them as one. Added in v1.
+ */
+export interface ChallengeResult {
+  ok: boolean;
+  /** Whether a challenge actually went out. `false` when the picker was closed. */
+  sent?: boolean;
+  /** Present IFF `sent` — the same payload the `"challenge"` event carries. */
+  challenge?: ChallengeSent;
+  error?: string;
+  reason?: ChallengeReason;
+}
+
+/** Options for `challenge`. Added in v1 (append-only). */
+export interface ChallengeOptions {
+  /** Override the configured game slug. */
+  game?: string;
+  /**
+   * Target a specific board. Boards are decoupled from games and one game may
+   * carry several, so a game with more than one must say which; with exactly one
+   * the picker resolves it from `game`.
+   */
+  board?: string;
+}
+
 /**
  * The global the SDK installs at `window.HallPass` (aliased `window.HP`).
  *
@@ -567,4 +656,27 @@ export interface HallPass {
    * throws. Added in v1.
    */
   getAchievements?(opts?: GetAchievementsOptions): Promise<PlayerAchievement[]>;
+  /**
+   * Dare a friend to beat the player's best score on this game's board.
+   *
+   * Opens a SMALL HALLPASS-STYLED PICKER — the site's design system, not the
+   * game's — where the player chooses a friend and sends. It is deliberately not
+   * a full-page takeover: the game stays visible behind it.
+   *
+   * The score to beat is the player's OWN BEST on that board and is resolved by
+   * the server, never passed in here. A game cannot dare somebody to beat a
+   * number its player never scored.
+   *
+   * SAME-ORIGIN EMBEDS get the picker inline in a small nested frame.
+   * CROSS-ORIGIN EMBEDS get it as a popup window instead, because a nested
+   * same-site frame inside a cross-origin one is a third-party context whose
+   * session cookie the browser may withhold — which would show "sign in" to
+   * somebody already signed in. The SDK chooses; the game never has to know.
+   *
+   * Resolves when the picker closes. CHECK `sent`, NOT `ok`: dismissing the
+   * picker without choosing anybody is the ordinary outcome and resolves
+   * `{ ok: true, sent: false, reason: "closed" }`. Requires a signed-in player.
+   * Never throws. Added in v1.
+   */
+  challenge?(opts?: ChallengeOptions): Promise<ChallengeResult>;
 }
