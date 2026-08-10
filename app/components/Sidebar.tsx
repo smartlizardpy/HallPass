@@ -152,35 +152,6 @@ export function Sidebar({
           );
         })}
       </ul>
-
-      <div className="mx-4 my-4 h-px bg-border" />
-
-      <ul className="flex flex-col gap-1">
-        {[
-          { label: "Library", icon: <path d="M4 4h6v16H4zM14 4h6v16h-6z" /> },
-          { label: "Recent", icon: <path d="M12 8v4l3 2M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20z" /> },
-          { label: "Settings", icon: <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /> },
-        ].map((it) => (
-          <li key={it.label}>
-            <button className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] font-bold text-zinc-700 transition hover:bg-surface-2 hover:text-zinc-900 lg:py-2.5">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="shrink-0"
-              >
-                {it.icon}
-              </svg>
-              {it.label}
-            </button>
-          </li>
-        ))}
-      </ul>
     </>
   );
 
