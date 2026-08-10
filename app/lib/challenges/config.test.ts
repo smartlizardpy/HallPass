@@ -119,7 +119,6 @@ describe("reasons", () => {
       "no-board",
       "no-score",
       "not-friends",
-      "blocked",
       "self",
       "signed-out",
       "bad-request",
@@ -128,5 +127,13 @@ describe("reasons", () => {
     ]) {
       expect(CHALLENGE_REASONS).toContain(reason);
     }
+  });
+
+  it("never exposes a 'blocked' reason", () => {
+    // A block deletes the friendship, so this could only ever fire behind a
+    // not-friends that is already true — and reporting it would confirm to
+    // somebody that a specific person blocked them. The gate stays in the SQL;
+    // the disclosure does not.
+    expect(CHALLENGE_REASONS).not.toContain("blocked");
   });
 });

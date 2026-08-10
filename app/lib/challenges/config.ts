@@ -102,12 +102,19 @@ export const CHALLENGE_LIST_LIMIT = 50;
  * member — the same arrangement `UnlockReason` and `SubmitReason` already have,
  * and for the same reason: the contract file must not import server code. Shaped
  * like those two so a game handles all three surfaces identically.
+ *
+ * THERE IS DELIBERATELY NO `"blocked"` MEMBER. A block DELETES the friendship
+ * row (`007_social_graph.sql` states this, and it is why "friends who play this"
+ * needs no block filter), so a blocked pair is never friends and the create
+ * path's block gate can only fire behind a `not-friends` that is already true.
+ * Reporting it separately would therefore be both unreachable and a disclosure —
+ * it would confirm to somebody that a specific person has blocked them, which is
+ * exactly what a block is for avoiding. The gate stays; the reason does not.
  */
 export const CHALLENGE_REASONS = [
   "no-board", // this game has no leaderboard to challenge on
   "no-score", // the challenger has no score on that board yet
-  "not-friends", // the target is not an accepted friend
-  "blocked", // a block exists in either direction
+  "not-friends", // not an accepted friend — ALSO what a block reads as
   "self", // you cannot challenge yourself
   "signed-out", // no signed-in player (includes every cross-origin embed)
   "bad-request", // malformed target or board

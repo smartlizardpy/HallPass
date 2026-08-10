@@ -503,8 +503,10 @@ export type ChallengeReason =
   // Server refusals, mirrored from `challenges/config.ts`:
   | "no-board" // this game has no leaderboard to challenge on
   | "no-score" // the challenger has no score on that board yet
-  | "not-friends" // the target is not an accepted friend
-  | "blocked" // a block exists in either direction
+  | "not-friends" // not an accepted friend — ALSO what a block reads as, on
+  //                 purpose: a block deletes the friendship, so reporting it
+  //                 separately would confirm to somebody that a specific person
+  //                 blocked them.
   | "self" // you cannot challenge yourself
   | "signed-out" // no signed-in player (includes every cross-origin embed)
   | "bad-request" // malformed target or board
