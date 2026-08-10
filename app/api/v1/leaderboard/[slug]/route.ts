@@ -26,6 +26,7 @@ import {
   DEFAULT_LIMIT,
 } from "@/app/lib/scoreboard";
 import { auth } from "@/app/lib/auth";
+import { resolveChallengesForScore } from "@/app/lib/challenges";
 import { getPublicIdentity, upsertPlayerOnLogin } from "@/app/lib/players";
 import type { Session } from "next-auth";
 import type {
@@ -194,6 +195,21 @@ export async function POST(
       429,
       UNAVAILABLE_HEADERS,
     );
+  }
+
+  // The score is now recorded and nothing below may endanger it.
+  //
+  // Close any challenge this score just won. ONLY FOR A SIGNED-IN PLAYER: a
+  // challenge names a specific target, so an anonymous row has nobody to be, and
+  // skipping it here keeps the extra statement off the guest path entirely.
+  //
+  // `resolveChallengesForScore` is the one deliberately wrapped write in
+  // `challenges/index.ts` — it degrades to `[]` rather than throwing, because a
+  // missing or broken challenges table must never turn a successful submission
+  // into an error the player did not cause and cannot act on. An unresolved
+  // challenge is closed by the next qualifying score; a lost score is gone.
+  if (playerId !== null) {
+    await resolveChallengesForScore({ playerId, boardId: slug, score: intScore });
   }
 
   const body: SubmitResponse = {

@@ -15,6 +15,8 @@
 
 import type {
   AuthRedirectOptions,
+  ChallengeOptions,
+  ChallengeResult,
   EventName,
   GetScoresOptions,
   HallPass,
@@ -36,6 +38,13 @@ import {
   subscribeAuthSignals,
   watchPopup,
 } from "./auth-flow";
+import {
+  isSameOrigin,
+  openInlinePicker,
+  openPopupPicker,
+  pickerUrl,
+  subscribeChallengeSignals,
+} from "./challenge";
 import { ensureHandle, getHandle, setHandle } from "./handle";
 import { getJSON, postJSON } from "./transport";
 import { SDK_MAJOR } from "./version";
@@ -77,6 +86,14 @@ export function emit(event: EventName, payload: unknown): void {
     }
   }
 }
+
+/**
+ * How long an abandoned challenge picker is left open before the SDK gives up,
+ * removes it and resolves. Matches the listener's own watchdog in
+ * `challenge.ts`, which only STOPS LISTENING — it cannot remove a frame or
+ * settle a promise, so this is the half that actually cleans up.
+ */
+const PICKER_MAX_MS = 5 * 60 * 1000;
 
 /** Cap on the number of pending claim tokens held in memory. */
 const MAX_CLAIM_TOKENS = 20;
@@ -151,16 +168,16 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
 
   /**
    * True iff the configured API origin equals the page origin, so credentialed
-   * (cookie-bearing) requests and popup auth signalling can actually work. Guarded:
-   * a missing `window`, an unparseable `cfg.api`, or any throw resolves `false`.
+   * (cookie-bearing) requests and popup auth signalling can actually work.
+   *
+   * DELEGATES to `challenge.ts` rather than keeping its own copy, so the SDK has
+   * exactly one same-origin rule. The same answer decides whether a cookie can
+   * flow, whether auth pops up or redirects, and whether the challenge picker is
+   * an inline frame — and two rules that disagreed would let the picker open a
+   * frame on an origin this function had already ruled out.
    */
   function sameOriginApi(): boolean {
-    try {
-      if (typeof window === "undefined" || !window.location) return false;
-      return new URL(cfg.api).origin === window.location.origin;
-    } catch {
-      return false;
-    }
+    return isSameOrigin(cfg.api);
   }
 
   function leaderboardUrl(game: string): string {
@@ -528,6 +545,102 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
     unlockMany: achievements.unlockMany,
     progress: achievements.progress,
     getAchievements: achievements.getAchievements,
+    /**
+     * Open the challenge picker and resolve once it closes.
+     *
+     * Orchestration only — the panel is a first-party HallPass page, so nothing
+     * about the player is read or drawn here. This picks the transport, waits
+     * for one signal, and tears the frame down.
+     *
+     * RESOLVES, NEVER REJECTS, like every other method. And note the two
+     * distinct falsey outcomes: dismissing the picker is `{ ok: true, sent:
+     * false, reason: "closed" }` because the call worked and the player simply
+     * changed their mind, while a blocked popup is `ok: false` because the
+     * player never got to decide.
+     */
+    challenge(opts?: ChallengeOptions): Promise<ChallengeResult> {
+      return new Promise<ChallengeResult>((resolve) => {
+        try {
+          if (mode === "inert") {
+            resolve({ ok: false, sent: false, reason: "inert" });
+            return;
+          }
+          const game = opts?.game ?? cfg.game;
+          const url = pickerUrl(cfg.api, { game, board: opts?.board });
+
+          // Same-origin gets the inline card; anything else gets a popup, whose
+          // top-level context still carries the session cookie. If the inline
+          // path cannot mount either, there is no fallback worth trying — a
+          // popup was already rejected for this origin by construction.
+          const picker = isSameOrigin(cfg.api)
+            ? openInlinePicker(url) ?? openPopupPicker(url)
+            : openPopupPicker(url);
+
+          if (!picker) {
+            resolve({ ok: false, sent: false, reason: "popup-blocked" });
+            return;
+          }
+
+          let settled = false;
+          let cancelAbandonTimer = (): void => {};
+          const finish = (result: ChallengeResult): void => {
+            if (settled) return;
+            settled = true;
+            try {
+              cancelAbandonTimer();
+            } catch {
+              // Teardown must not stop the promise settling.
+            }
+            try {
+              unsubscribe();
+            } catch {
+              // Teardown must not stop the promise settling.
+            }
+            picker.close();
+            resolve(result);
+          };
+
+          const unsubscribe = subscribeChallengeSignals(cfg.api, (signal) => {
+            if (signal.sent && signal.challenge) {
+              // A new event name, which the append-only rule explicitly allows:
+              // a game that never listens for it is unaffected.
+              emitEvent("challenge", signal.challenge);
+              finish({ ok: true, sent: true, challenge: signal.challenge });
+              return;
+            }
+            finish({
+              ok: true,
+              sent: false,
+              reason: (signal.reason as ChallengeResult["reason"]) ?? "closed",
+            });
+          });
+
+          // A popup the player closes by hand sends no signal, so its closing is
+          // the only hint we get. `watchPopup` polls and calls back once.
+          if (picker.window) {
+            watchPopup(picker.window, () =>
+              finish({ ok: true, sent: false, reason: "closed" }),
+            );
+          }
+
+          // BACKSTOP, and it has to live here rather than in the subscriber.
+          // `subscribeChallengeSignals` stops listening after its own deadline,
+          // but stopping is all it can do: it cannot remove the frame and cannot
+          // settle this promise. Left to that alone, an inline picker abandoned
+          // for five minutes would be orphaned on the page forever — no signal
+          // could reach it, nothing could close it, and the game's `await`
+          // would never return. Finishing from here tears the frame down and
+          // resolves, which is what an abandoned picker should do anyway.
+          const abandoned = setTimeout(
+            () => finish({ ok: true, sent: false, reason: "closed" }),
+            PICKER_MAX_MS,
+          );
+          cancelAbandonTimer = () => clearTimeout(abandoned);
+        } catch {
+          resolve({ ok: false, sent: false, reason: "network" });
+        }
+      });
+    },
     on(event: EventName, cb: (payload: unknown) => void): HallPass {
       try {
         if (typeof cb === "function") {

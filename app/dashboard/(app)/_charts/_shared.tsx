@@ -14,7 +14,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 /** Core series colors, straight from the design tokens. */
 export const COLORS = {
@@ -45,13 +45,39 @@ const nf = new Intl.NumberFormat("en-US");
 export const fmt = (n: number) => nf.format(n);
 
 /**
+ * Nothing to subscribe to — the value never changes after hydration.
+ *
+ * MODULE SCOPE, not an inline arrow. `useSyncExternalStore` re-subscribes
+ * whenever this identity changes, so a fresh closure per render would tear down
+ * and re-establish the subscription on every single one.
+ */
+const subscribeToNothing = () => () => {};
+
+/**
  * True once mounted on the client. `ResponsiveContainer` needs real layout to
  * size itself; gating on this avoids SSR/hydration mismatches and a 0×0 flash.
+ *
+ * WHY `useSyncExternalStore` AND NOT `useState` + `useEffect`. The obvious
+ * version — `useEffect(() => setMounted(true), [])` — sets state synchronously
+ * inside an effect, which schedules a second render for every chart on the page
+ * purely to flip a boolean React already knows. It is also what the
+ * `setState`-in-effect lint rule exists to catch, and the rule is right: this is
+ * a cascading render, not a false positive, so silencing it with a disable
+ * comment would keep the cost and hide the reason.
+ *
+ * The server snapshot is `false` and the client snapshot is `true`, so the
+ * prerender and the hydration render agree and the real value arrives on the
+ * render after — the SAME second-paint rule `use-device-platform.ts` documents
+ * for its own override, and the same reason `personalization.ts` keeps a stable
+ * server snapshot. Both snapshots are primitives, so neither can trip React's
+ * "getSnapshot should be cached" guard.
  */
 export function useMounted() {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  return mounted;
+  return useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false,
+  );
 }
 
 /** Fixed-height stand-in rendered until the chart is allowed to mount. */

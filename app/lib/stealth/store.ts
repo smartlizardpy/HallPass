@@ -24,11 +24,13 @@ import { DEFAULT_CLOAK_ID, cloakById } from "./cloaks";
 import {
   DEFAULT_PANIC_KEY,
   DEFAULT_PANIC_SCREEN,
+  DEFAULT_QUIET_NOTIFICATIONS,
   DEFAULT_SHAKE_TO_PANIC,
   STEALTH_KEY,
   type PanicScreenId,
   isPanicScreen,
 } from "./config";
+import { mirrorQuietNotifications } from "./sw-mirror";
 
 // Re-exported so existing importers of the key keep working; the literal is
 // defined once in `config.ts` and shared with the server boot script.
@@ -43,6 +45,14 @@ export type StealthPrefs = {
   panicScreen: PanicScreenId;
   /** Whether a phone/tablet shake raises the panic screen (opt-in — see config). */
   shake: boolean;
+  /**
+   * Whether push notifications are stripped of sender and game (opt-in).
+   *
+   * The one preference here that is ALSO mirrored outside `localStorage`: the
+   * service worker renders the notification and cannot read this key, so
+   * `commit` copies it into IndexedDB via `sw-mirror.ts`.
+   */
+  quietNotifications: boolean;
 };
 
 /**
@@ -54,6 +64,7 @@ export const DEFAULT_PREFS: StealthPrefs = {
   panicKey: DEFAULT_PANIC_KEY,
   panicScreen: DEFAULT_PANIC_SCREEN,
   shake: DEFAULT_SHAKE_TO_PANIC,
+  quietNotifications: DEFAULT_QUIET_NOTIFICATIONS,
 };
 
 /* -------------------------------------------------------------------------- *
@@ -91,7 +102,14 @@ export function parsePrefs(raw: string | null): StealthPrefs {
       : DEFAULT_PREFS.panicScreen;
   const shake =
     typeof obj.shake === "boolean" ? obj.shake : DEFAULT_PREFS.shake;
-  return { cloak, panicKey, panicScreen, shake };
+  // Absent in every payload written before this shipped, so the per-field
+  // fallback is what makes adding it backwards-compatible rather than a
+  // migration.
+  const quietNotifications =
+    typeof obj.quietNotifications === "boolean"
+      ? obj.quietNotifications
+      : DEFAULT_PREFS.quietNotifications;
+  return { cloak, panicKey, panicScreen, shake, quietNotifications };
 }
 
 /** Serialise prefs to the canonical JSON string stored in localStorage. */
@@ -145,6 +163,11 @@ function ensureLoaded(): void {
 function commit(next: StealthPrefs): void {
   snapshot = next;
   safeSet(STEALTH_KEY, serializePrefs(next));
+  // Keep the service worker's copy in step. Mirrored from HERE rather than from
+  // the settings modal so it cannot drift: every path that changes a preference
+  // — the modal, another tab, a future caller — goes through `commit`, and one
+  // that mirrored only from the UI would silently miss the others.
+  void mirrorQuietNotifications(next.quietNotifications);
   emit();
 }
 
@@ -152,6 +175,9 @@ if (typeof window !== "undefined") {
   window.addEventListener("storage", (event: StorageEvent) => {
     if (event.key === STEALTH_KEY || event.key === null) {
       snapshot = parsePrefs(safeGet(STEALTH_KEY));
+      // Another tab changed the preference; this tab's IndexedDB mirror is the
+      // same profile's, so it needs the new value too.
+      void mirrorQuietNotifications(snapshot.quietNotifications);
       emit();
     }
   });
@@ -199,6 +225,11 @@ export function setShake(on: boolean): void {
   commit({ ...snapshot, shake: Boolean(on) });
 }
 
+export function setQuietNotifications(on: boolean): void {
+  ensureLoaded();
+  commit({ ...snapshot, quietNotifications: Boolean(on) });
+}
+
 /* -------------------------------------------------------------------------- *
  * Settings-modal open signal.
  *
@@ -237,6 +268,7 @@ export function useStealth(): {
   setPanicKey: (key: string) => void;
   setPanicScreen: (id: PanicScreenId) => void;
   setShake: (on: boolean) => void;
+  setQuietNotifications: (on: boolean) => void;
 } {
   const prefs = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   return {
@@ -245,5 +277,9 @@ export function useStealth(): {
     setPanicKey: useCallback((key: string) => setPanicKey(key), []),
     setPanicScreen: useCallback((id: PanicScreenId) => setPanicScreen(id), []),
     setShake: useCallback((on: boolean) => setShake(on), []),
+    setQuietNotifications: useCallback(
+      (on: boolean) => setQuietNotifications(on),
+      [],
+    ),
   };
 }

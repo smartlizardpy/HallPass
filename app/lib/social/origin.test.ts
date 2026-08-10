@@ -85,4 +85,23 @@ describe("isTrustedOrigin", () => {
     expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}/?q=racing`))).toBe(true);
     expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}/game/duskfall#top`))).toBe(true);
   });
+
+  it("accepts the challenge picker, which is framed BY a game", () => {
+    // The picker looks like the thing this list excludes, but it is a
+    // first-party page on our origin that the game can neither see into nor
+    // script, and it sends its OWN referrer. Without this the popup 403s with
+    // the deliberately vague body and reads as a broken feature — which is
+    // exactly how the /beta/ outage in the module header presented.
+    expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}/embed/challenge`))).toBe(true);
+    expect(
+      isTrustedOrigin(reqWithReferer(`${ORIGIN}/embed/challenge?board=duskfall`)),
+    ).toBe(true);
+  });
+
+  it("still rejects the game frame itself", () => {
+    // The distinction the whole allowlist rests on.
+    expect(
+      isTrustedOrigin(reqWithReferer(`${ORIGIN}/game-html/duskfall/`)),
+    ).toBe(false);
+  });
 });

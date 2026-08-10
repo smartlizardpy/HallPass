@@ -119,5 +119,10 @@ function safeDefault(name: string, args?: unknown[]): unknown {
     const key = args && typeof args[0] === "string" ? args[0] : undefined;
     return { ok: false, key, unlocked: false, reason: "network" };
   }
+  // A challenge that never reached the picker did not send. Saying so
+  // explicitly matters because `ChallengeResult` asks games to branch on `sent`
+  // rather than `ok`, and an absent `sent` would read as falsey by luck rather
+  // than by contract.
+  if (name === "challenge") return { ok: false, sent: false, reason: "network" };
   return { ok: false, reason: "network" };
 }

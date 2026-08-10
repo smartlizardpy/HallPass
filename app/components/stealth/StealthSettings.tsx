@@ -25,7 +25,14 @@ function keyLabel(key: string): string {
 }
 
 export function StealthSettings({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { prefs, setCloak, setPanicKey, setPanicScreen, setShake } = useStealth();
+  const {
+    prefs,
+    setCloak,
+    setPanicKey,
+    setPanicScreen,
+    setShake,
+    setQuietNotifications,
+  } = useStealth();
   const [listening, setListening] = useState(false);
   // Only offer shake-to-panic where it can actually work — a touch device with a
   // motion sensor. Resolved after mount, deliberately: `deviceHasMotion` reads
@@ -205,6 +212,39 @@ export function StealthSettings({ open, onClose }: { open: boolean; onClose: () 
             </p>
           </section>
         )}
+
+        {/* Quiet notifications — the only setting here that is about what
+            OTHER people see on your screen when you are not looking at it. */}
+        <section className="mb-6">
+          <h3 className="mb-2 text-[11px] font-black uppercase tracking-wider text-muted">
+            Quiet notifications
+          </h3>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setQuietNotifications(!prefs.quietNotifications)}
+              aria-pressed={prefs.quietNotifications}
+              className={`inline-flex min-h-11 items-center gap-2 rounded-full border-2 px-5 py-2.5 text-sm font-extrabold transition ${
+                prefs.quietNotifications
+                  ? "border-brand bg-brand text-white hover:bg-brand-600"
+                  : "border-border bg-white text-zinc-700 hover:border-brand-100"
+              }`}
+            >
+              <span aria-hidden>🔕</span>
+              {prefs.quietNotifications ? "On" : "Off"}
+            </button>
+            <span className="text-sm font-bold text-zinc-900">
+              {prefs.quietNotifications
+                ? "Notifications just say “HallPass”."
+                : "Notifications show who challenged you."}
+            </span>
+          </div>
+          <p className="mt-2 text-[13px] font-semibold text-muted">
+            Turn this on for a shared or school device: a challenge will show as
+            “HallPass — you have a new challenge”, with no name and no game.
+            This is per device, so your own phone can still show the details.
+          </p>
+        </section>
 
         {/* Panic screen */}
         <section>

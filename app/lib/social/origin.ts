@@ -53,6 +53,13 @@ const ALLOWED_REFERER_PREFIXES = [
   "/game/", // store pages (friend chip, comment box)
   "/category/",
   "/beta/", // tester session screen — posts the required playtest review
+  // The challenge picker. It is framed BY a game, which makes it look like the
+  // one thing this list exists to exclude — but it is a first-party page we
+  // render, on our origin, and the game cannot see into it or script it. The
+  // referrer it sends is its own `/embed/…`, never the game's `/game-html/…`.
+  // Omitting it would 403 every challenge with the vague body above, which is
+  // precisely how the `/beta/` outage presented.
+  "/embed/",
 ];
 
 /**

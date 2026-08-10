@@ -22,7 +22,14 @@ const GAMES_VERSION_KEY = "https://hallpass.local/__sw__/games-version";
 function isPrivatePath(pathname) {
   return (
     pathname.startsWith("/play/account") ||
-    pathname.startsWith("/u/")
+    pathname.startsWith("/u/") ||
+    // The challenge picker. It renders the viewer's own friend list, and it is
+    // loaded as an IFRAME — which still reaches the fetch handler as a navigate
+    // request, so without this it would be cached into `hp-runtime` and served
+    // to the next person on a shared school machine. It is dynamic (it calls
+    // `auth()`) and so never enters the precache, but that is a separate
+    // mechanism and not a substitute for this one.
+    pathname.startsWith("/embed/")
   );
 }
 
@@ -410,4 +417,132 @@ async function writeGamesVersion(value) {
       headers: { "content-type": "text/plain" },
     }),
   );
+}
+
+// ---------- push: challenge notifications ----------
+//
+// WHY THE PAYLOAD CARRIES TWO VERSIONS AND THIS FILE ONLY CHOOSES.
+// A service worker cannot read `localStorage`, which is where the stealth
+// preferences live (`hp:stealth`), and a push arrives with no tab open to ask.
+// So the server sends BOTH a full and a discreet rendering (see
+// `app/lib/push/payload.ts`) and this picks one by a flag the page mirrors into
+// IndexedDB — which a worker CAN read.
+//
+// The wording itself is never reconstructed here. If it were, the discreet
+// version would exist in two places and could drift in the direction that
+// leaks. This file's entire share of that decision is `quiet ? a : b`.
+//
+// DEFAULT IS THE FULL VERSION. Discretion is opt-in from stealth settings: a
+// phone is personal, and a vague notification wastes the feature for most
+// people. A device that has never written the mirror gets full detail.
+
+const PUSH_PREFS_DB = "hp-sw-prefs";
+const PUSH_PREFS_STORE = "prefs";
+const QUIET_KEY = "quietNotifications";
+
+// Mirrored from `app/lib/stealth/sw-mirror.ts`, which writes it. The two names
+// must match or the preference silently never applies.
+function openPrefsDb() {
+  return new Promise((resolve, reject) => {
+    try {
+      const request = indexedDB.open(PUSH_PREFS_DB, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(PUSH_PREFS_STORE)) {
+          db.createObjectStore(PUSH_PREFS_STORE);
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+// Reads the mirrored flag. ANY failure — no IndexedDB, a private-mode block, a
+// store that was never written — resolves `false`, i.e. show the full version.
+// Failing to the loud default is deliberate: the quiet mode is opt-in, and
+// silently applying it to everyone whose browser blocked storage would make the
+// feature look broken for the majority.
+async function readQuietPreference() {
+  try {
+    const db = await openPrefsDb();
+    const value = await new Promise((resolve) => {
+      try {
+        const tx = db.transaction(PUSH_PREFS_STORE, "readonly");
+        const request = tx.objectStore(PUSH_PREFS_STORE).get(QUIET_KEY);
+        request.onsuccess = () => resolve(request.result === true);
+        request.onerror = () => resolve(false);
+      } catch {
+        resolve(false);
+      }
+    });
+    db.close();
+    return value;
+  } catch {
+    return false;
+  }
+}
+
+self.addEventListener("push", (event) => {
+  event.waitUntil(showPush(event));
+});
+
+async function showPush(event) {
+  let data = null;
+  try {
+    data = event.data ? event.data.json() : null;
+  } catch {
+    // A push with no payload, or one we cannot parse. Nothing honest to show —
+    // inventing a banner would be worse than staying silent.
+    return;
+  }
+  if (!data || !data.full || !data.discreet) return;
+
+  const quiet = await readQuietPreference();
+  const copy = quiet ? data.discreet : data.full;
+
+  await self.registration.showNotification(copy.title, {
+    body: copy.body,
+    // One icon for both versions: a DIFFERENT icon in quiet mode would defeat
+    // the point by making the quiet notification recognisable as the quiet one.
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    // Shared tag, so four challenges while a phone is in a bag collapse into
+    // one banner rather than four.
+    tag: data.tag || "hallpass",
+    data: { url: data.url || "/play/friends" },
+  });
+}
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(openFromNotification(event));
+});
+
+// Focus an existing HallPass tab rather than piling up new ones — someone who
+// taps three notifications should end with one window, not three.
+async function openFromNotification(event) {
+  const target = (event.notification.data && event.notification.data.url) || "/play/friends";
+  try {
+    const clientList = await self.clients.matchAll({
+      type: "window",
+      includeUncontrolled: true,
+    });
+    for (const client of clientList) {
+      if (new URL(client.url).origin === self.location.origin) {
+        await client.focus();
+        if ("navigate" in client) await client.navigate(target);
+        return;
+      }
+    }
+    await self.clients.openWindow(target);
+  } catch {
+    try {
+      await self.clients.openWindow(target);
+    } catch {
+      /* nothing further we can do */
+    }
+  }
 }
