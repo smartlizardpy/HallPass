@@ -191,13 +191,27 @@ export function Sidebar({
         </div>
       </aside>
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer. The container is always rendered so the panel can
+          animate in and out, which means the CLOSED drawer is still in the
+          document. Neither `-translate-x-full` nor `pointer-events-none`
+          removes anything from the tab order, so every control in here used to
+          stay keyboard-focusable off screen and was reached BEFORE the header —
+          and focusable content inside `aria-hidden="true"` is an ARIA
+          violation besides.
+
+          `inert` is the fix: it drops the whole subtree from the tab order,
+          from hit-testing and from the accessibility tree. It also implies
+          `aria-hidden`, so the explicit attribute is gone rather than
+          duplicated. React 19 (19.2.4 here) takes it as a real boolean prop —
+          `inert={false}` removes the attribute — so no `"" | undefined`
+          dance is needed. The `pointer-events` toggle stays as a cheap
+          belt-and-braces for the animation. */}
       <div
         id="mobile-nav"
         className={`lg:hidden fixed inset-0 z-[90] transition ${
           mobileOpen ? "pointer-events-auto" : "pointer-events-none"
         }`}
-        aria-hidden={!mobileOpen}
+        inert={!mobileOpen}
       >
         {/* Backdrop */}
         <div
