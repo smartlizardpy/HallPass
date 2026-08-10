@@ -209,16 +209,36 @@ async function networkFirst(req) {
     }
     return res;
   } catch {
+    // THIS DEPLOY'S PRECACHE FIRST, and that ordering is the whole point.
+    //
+    // `caches.match` searches every cache in CREATION order, and the comment
+    // that used to sit here assumed that meant `hp-static-<id>` before
+    // `hp-runtime`. That holds only until the first redeploy. `hp-runtime` is
+    // created on a visitor's first-ever navigation and `activate` deliberately
+    // never sweeps it (the games-version sentinel and warm entries have to
+    // survive deploys), while `hp-static-<id>` is rebuilt under a new key on
+    // every deploy — so from the second deploy onward the runtime cache is the
+    // OLDER one and wins the search.
+    //
+    // The effect was that an offline navigation to `/` was answered with
+    // whatever HTML happened to be fetched once, months ago, while the current
+    // build's freshly precached copy of the same URL sat unused behind it. It
+    // never self-corrected: staying offline is exactly the state in which
+    // nothing rewrites the runtime entry. Asking STATIC_CACHE directly is what
+    // makes "precached" mean "served".
+    //
+    // Exact match only, so this cannot shadow a query-string document: `/?q=racing`
+    // (the store page's header search) is not in the precache, misses here, and
+    // still reaches its own runtime entry below.
+    const staticCache = await caches.open(STATIC_CACHE);
+    const precached = await staticCache.match(req);
+    if (precached) return precached;
+
     // Exact first, then loose. `caches.match` is exact on the query string by
     // default and precached documents never carry one, so a navigation to
-    // `/?q=racing` (the store page's header search) would otherwise miss its own
-    // cached document and fall through to the offline page.
-    //
-    // Exact-BEFORE-loose, not loose-only: `caches.match` walks caches in creation
-    // order, `hp-static-<id>` before `hp-runtime`, so a loose match would let the
-    // precached bare `/` shadow an exact `/?q=racing` that an earlier online visit
-    // wrote into the runtime cache. Widening only on miss keeps "serve the
-    // document you actually cached" true.
+    // `/?q=racing` would otherwise miss its own cached document and fall through
+    // to the offline page. Widening only on miss keeps "serve the document you
+    // actually cached" true.
     //
     // Navigations ONLY. This must never reach `networkFirstWithStaticFallback`,
     // where exact matching of `/game-html/<slug>/` is load-bearing. Nor can it
