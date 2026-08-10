@@ -281,6 +281,11 @@ canvas{ display:block; }
 .hpboard .hpv{ color:var(--accent); margin-left:4px; font-size:9px; }
 .hpempty{ font-size:9px; letter-spacing:.14em; text-transform:uppercase;
   color:var(--ink-faint); }
+.hpactions{ margin-top:10px; }
+.hpmsg{ margin-top:9px; font-size:9px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--ink-faint); }
+.hpmsg b{ color:var(--accent); font-weight:600; }
+.hpmsg[hidden]{ display:none; }
 #hpAuthStatus{ font-size:9px; letter-spacing:.14em; text-transform:uppercase;
   color:var(--ink-faint); }
 #hpAuthStatus b{ color:var(--accent); font-weight:600; }
@@ -464,6 +469,10 @@ canvas{ display:block; }
               <div class="hptitle">Neon Well &middot; High Scores</div>
               <div class="hpboard" id="hpBoard"></div>
               <button class="btn" id="againBtn">Play again</button>
+              <div class="hpactions">
+                <button class="btn ghost" id="hpChallenge">Challenge a friend</button>
+              </div>
+              <div class="hpmsg" id="hpChallengeMsg" hidden></div>
             </div>
           </div>
         </div>
@@ -1071,6 +1080,10 @@ function gameOver(){
     hpPosted = true;
     const board = document.getElementById("hpBoard");
     if (board) board.innerHTML = '<div class="hpempty">Posting your score...</div>';
+    // Clear the previous run's result, or "Dared Ali to beat 4,200" would sit
+    // under a score that is no longer the one being talked about.
+    const msg = document.getElementById("hpChallengeMsg");
+    if (msg) msg.hidden = true;
     HallPass.submitScore(G.score).then(hpRenderBoard);
   }
 }
@@ -1858,6 +1871,51 @@ function hpRenderBoard(){
    leaderboard somebody is reading — so this subtree swallows the event instead
    of the game eating the screen out from under them. */
 document.getElementById("hpBoard").addEventListener("pointerdown", (e) => e.stopPropagation());
+
+/* Challenge a friend to beat the run that just ended.
+
+   Offered on GAME OVER only, because that is the one screen where all three of
+   challenge()'s preconditions hold: the board exists, submitScore has just given
+   the challenger a score on it, and there is a session. On the start screen the
+   same button would mostly answer "no-score".
+
+   Only the outcomes the PICKER CANNOT REPORT ITSELF are written here. Server
+   refusals (signed-out, not-friends, no-score...) are already rendered inside
+   the panel the player is looking at, and saying them twice would be noise.
+   These three stop the panel before it can say anything. */
+const HP_CHALLENGE_MSG = {
+  "popup-blocked": "Your browser blocked the challenge window",
+  "inert":         "Challenges need the online leaderboard, offline here",
+  "network":       "Could not reach HallPass - try again shortly",
+};
+
+document.getElementById("hpChallenge").addEventListener("click", async () => {
+  const btn = document.getElementById("hpChallenge");
+  const msg = document.getElementById("hpChallengeMsg");
+  btn.disabled = true;
+  msg.hidden = true;
+  // No try/catch: every SDK method resolves, so there is nothing to catch.
+  const res = await HallPass.challenge();
+  btn.disabled = false;
+
+  // READ `sent`, NOT `ok`. Closing the picker resolves
+  // { ok:true, sent:false, reason:"closed" } — the call worked and the player
+  // changed their mind, which must never be shown to them as a failure.
+  if (res && res.sent && res.challenge){
+    msg.innerHTML = "Dared <b></b> to beat <b></b>";
+    const parts = msg.querySelectorAll("b");
+    parts[0].textContent = res.challenge.to;   // untrusted display name
+    parts[1].textContent = Number(res.challenge.targetScore).toLocaleString();
+    msg.hidden = false;
+    return;
+  }
+  const text = res && res.reason ? HP_CHALLENGE_MSG[res.reason] : null;
+  if (text){ msg.textContent = text; msg.hidden = false; }
+});
+
+// Same reasoning as the board: a <button> is exempt from the well's
+// tap-to-restart, but the message under it is not.
+document.getElementById("hpChallengeMsg").addEventListener("pointerdown", (e) => e.stopPropagation());
 
 HallPass.getPlayer().then(hpRefreshAuth);
 // The popup does not reload the game, so the label has to be told when it
