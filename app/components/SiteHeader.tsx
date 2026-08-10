@@ -92,9 +92,15 @@ export function SiteHeader({
     </div>
   );
 
+  // `border-b` is what makes this read as a bar at all. The fill is
+  // `--background` — the SAME colour as the page behind it — so with no edge and
+  // no contrasting surface the header looked like a search box floating on the
+  // catalogue rather than site chrome, while the sidebar beside it announced
+  // itself with `bg-white` and a `border-r`. The border gives the sticky bar a
+  // bottom edge for content to slide under.
   return (
     <header
-      className="sticky top-0 z-40 flex h-16 items-center gap-2 bg-background/85 px-3 backdrop-blur-xl sm:h-20 sm:gap-4 sm:px-8"
+      className="sticky top-0 z-40 flex h-16 items-center gap-2 border-b border-border bg-background/85 px-3 backdrop-blur-xl sm:h-20 sm:gap-4 sm:px-8"
       style={{ paddingTop: "env(safe-area-inset-top)" }}
     >
       {/* Mobile hamburger — opens the genre drawer. Hidden on an actual phone

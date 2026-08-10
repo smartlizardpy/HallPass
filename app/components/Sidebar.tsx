@@ -115,7 +115,7 @@ export function Sidebar({
       <ul className="flex flex-col gap-1">
         {items.map((item) => {
           const isActive = item === active;
-          const itemClass = `group flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] font-bold transition lg:py-2.5 ${
+          const itemClass = `group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-[15px] font-bold transition lg:py-2.5 ${
             isActive
               ? "bg-brand-50 text-brand"
               : "text-zinc-700 hover:bg-surface-2 hover:text-zinc-900"
@@ -123,7 +123,10 @@ export function Sidebar({
           const inner = (
             <>
               <CategoryIcon name={item} />
-              <span className="flex-1 text-left">{item}</span>
+              {/* `truncate` because categories are dashboard-editable free text:
+                  in the narrower rail a long one would wrap to two lines and
+                  break the row rhythm rather than being clipped. */}
+              <span className="flex-1 truncate text-left">{item}</span>
               {item === "New" && !isActive && (
                 <span className="h-2 w-2 rounded-full bg-accent-pink" />
               )}
@@ -170,10 +173,15 @@ export function Sidebar({
           This is the behaviour the mobile drawer already had via `absolute
           inset-y-0` inside a `fixed inset-0`. Scoped to `lg:` because the rail
           is `hidden` below that breakpoint. */}
-      <aside className="hidden w-60 shrink-0 border-r border-border bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
-        <div className="flex h-20 items-center px-6">
+      {/* `w-48`, down from `w-60`. 240px of permanent rail is a lot of a small
+          laptop's width to spend on a genre filter, and pinning it full-height
+          made that cost visible on every screen rather than only above the fold.
+          192px still clears the longest label comfortably — "Multiplayer" at
+          15px bold is ~90px, plus a 20px icon, a 12px gap and 32px of padding. */}
+      <aside className="hidden w-48 shrink-0 border-r border-border bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
+        <div className="flex h-20 items-center px-4">
           <Link href="/">
-            <Wordmark size="text-3xl" dotClass="h-2 w-2" />
+            <Wordmark size="text-2xl" dotClass="h-1.5 w-1.5" />
           </Link>
         </div>
 
@@ -183,7 +191,7 @@ export function Sidebar({
           <StealthMenuButton />
         </div>
 
-        <div className="px-6 pb-6">
+        <div className="px-4 pb-5">
           <p className="text-[11px] font-bold uppercase tracking-wider text-muted">
             © {new Date().getFullYear()} hallpass
           </p>
