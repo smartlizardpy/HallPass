@@ -279,7 +279,10 @@ function ArcadeRows({
           </Section>
         )}
 
-        {/* Sponsor: Frenchly */}
+        {/* The home page's ONE sponsor strip. There were three: two of them the
+            same advertiser at the same URL under different copy, plus a slot
+            below the grid, so scrolling the page meant passing an ad three
+            times. One placement, mid-page, between the editorial rows. */}
         {category === "All" && !query && <FrenchlyAd />}
 
         {/* Trending row */}
@@ -298,9 +301,6 @@ function ArcadeRows({
             </div>
           </Section>
         )}
-
-        {/* Mid-page ad */}
-        {category === "All" && !query && <AdRow index={1} />}
 
         {/* All games / filtered */}
         <Section
@@ -332,10 +332,6 @@ function ArcadeRows({
             </div>
           )}
         </Section>
-
-        {/* Footer ad — "your ad here" slot */}
-        {category === "All" && !query && <AdRow index={3} />}
-
     </>
   );
 }
@@ -547,6 +543,14 @@ type Ad = {
 const FRENCHLY_URL = "https://frenchly.vercel.app";
 const FRENCHLY_LOGO = "/ads/frenchly.png";
 
+/**
+ * The strip inventory. Only `ADS[0]` is PLACED — the home page carries a single
+ * sponsor strip (see {@link FrenchlyAd}). The rest are kept deliberately: entries
+ * 1 and 2 are alternate Frenchly copy to rotate in, and entry 3 is the
+ * "your ad here" pitch for whenever a second slot is worth selling. They are
+ * inventory, not dead code — anything rendering them fires `ad_clicked` through
+ * {@link AdStrip} unchanged.
+ */
 const ADS: Ad[] = [
   {
     logo: FRENCHLY_LOGO,
@@ -623,19 +627,11 @@ function AdStrip({ ad }: { ad: Ad }) {
   );
 }
 
+/** The home page's only sponsor placement — `ADS[0]`, rendered once, mid-page. */
 function FrenchlyAd() {
   return (
     <section className="px-3 pt-6 sm:px-8">
       <AdStrip ad={ADS[0]} />
-    </section>
-  );
-}
-
-function AdRow({ index }: { index: number }) {
-  const ad = ADS[index % ADS.length];
-  return (
-    <section className="px-3 pt-8 sm:px-8">
-      <AdStrip ad={ad} />
     </section>
   );
 }
