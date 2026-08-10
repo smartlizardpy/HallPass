@@ -6,13 +6,21 @@
  * Split out of the promo that calls it so the sequencing — which is fiddly and
  * easy to get subtly wrong — lives in one place with its reasoning attached.
  *
- * ── THE ORDER MATTERS AND IS NOT OBVIOUS ───────────────────────────────────
- * Ask for the key BEFORE asking for permission. `Notification.requestPermission()`
- * must be called from a user gesture, and a denial is close to permanent — so
- * burning the one prompt a player will ever see, only to then discover the server
- * has no VAPID key configured and cannot subscribe them, would cost them the
- * feature outright. Checking first means a misconfigured deploy declines to ask
- * rather than asking and failing.
+ * ── THE KEY IS FETCHED BEFORE THE CLICK, NOT DURING IT ─────────────────────
+ * Two requirements pull against each other, and both are real:
+ *
+ *   1. Do not spend the permission prompt before knowing the server can
+ *      actually subscribe anybody. A denial is close to permanent, so asking and
+ *      then failing on a missing VAPID key costs the player the feature outright.
+ *   2. `Notification.requestPermission()` needs TRANSIENT USER ACTIVATION. An
+ *      `await fetch()` ahead of it inside the click handler can outlive that
+ *      activation — Safari is strict about this — and the prompt is then refused,
+ *      which some browsers record as a denial.
+ *
+ * Satisfying one by breaking the other is not necessary: {@link fetchPushConfig}
+ * runs while the promo is DECIDING whether to appear, and {@link enablePush}
+ * takes the key it found. So the click does no awaiting before it asks, and the
+ * ask only happens on a deploy that can honour it.
  *
  * ── NOTHING HERE THROWS ────────────────────────────────────────────────────
  * Every step is guarded and the whole thing resolves a boolean. A browser
@@ -68,25 +76,37 @@ function decodeKey(base64: string): Uint8Array<ArrayBuffer> {
 }
 
 /**
- * Ask for permission and register this device. Resolves whether it worked.
+ * The VAPID public key, or `null` when push is not configured server-side.
  *
- * MUST be called from a user gesture — the permission prompt is refused
- * otherwise, and on some browsers that counts as a denial.
+ * Called AHEAD of the click — see the header. Never throws.
  */
-export async function enablePush(): Promise<boolean> {
+export async function fetchPushConfig(): Promise<string | null> {
   try {
-    if (!canUsePush()) return false;
-
-    // 1. Is push even configured server-side? Ask before spending the prompt.
-    const configRes = await fetch("/api/v1/me/push", { credentials: "include" });
-    if (!configRes.ok) return false;
-    const config = (await configRes.json()) as {
+    const res = await fetch("/api/v1/me/push", { credentials: "include" });
+    if (!res.ok) return null;
+    const config = (await res.json()) as {
       configured?: boolean;
       publicKey?: string | null;
     };
-    if (!config.configured || !config.publicKey) return false;
+    return config.configured && config.publicKey ? config.publicKey : null;
+  } catch {
+    return null;
+  }
+}
 
-    // 2. Now spend it.
+/**
+ * Ask for permission and register this device. Resolves whether it worked.
+ *
+ * MUST be called from a user gesture, and `publicKey` MUST already be in hand —
+ * awaiting anything before `requestPermission()` risks losing the activation
+ * that makes the prompt legal. Get it from {@link fetchPushConfig} beforehand.
+ */
+export async function enablePush(publicKey: string): Promise<boolean> {
+  try {
+    if (!canUsePush() || !publicKey) return false;
+
+    // First statement in the handler: no await stands between the click and the
+    // prompt.
     const permission = await Notification.requestPermission();
     if (permission !== "granted") return false;
 
@@ -104,7 +124,7 @@ export async function enablePush(): Promise<boolean> {
         // Required: a subscription that could be used for silent pushes is
         // rejected by Chrome outright.
         userVisibleOnly: true,
-        applicationServerKey: decodeKey(config.publicKey),
+        applicationServerKey: decodeKey(publicKey),
       }));
 
     const res = await fetch("/api/v1/me/push", {

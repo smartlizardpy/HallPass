@@ -4,7 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import { openStealthSettings } from "../lib/stealth/store";
-import { canUsePush, enablePush, notificationPermission } from "../lib/push/client";
+import {
+  canUsePush,
+  enablePush,
+  fetchPushConfig,
+  notificationPermission,
+} from "../lib/push/client";
 import { Wordmark } from "./Wordmark";
 import type { MeResponse } from "@/sdk/src/contract";
 
@@ -285,6 +290,12 @@ export function FeaturePromo() {
   const [playerId, setPlayerId] = useState<string | null>(null);
   /** Set alongside the install variant so the panel knows which CTA to render. */
   const [installMode, setInstallMode] = useState<InstallMode | null>(null);
+  /**
+   * The VAPID public key, fetched while DECIDING rather than on the click.
+   * `requestPermission()` needs transient user activation, and an await ahead of
+   * it in the handler can outlive that — see `push/client.ts`.
+   */
+  const [pushKey, setPushKey] = useState<string | null>(null);
   /** The captured, deferred `beforeinstallprompt` event — the only way to install. */
   const deferredRef = useRef<BeforeInstallPromptEvent | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -406,12 +417,16 @@ export function FeaturePromo() {
               .then((r) => (r.ok ? r.json() : null))
               .catch(() => null)
           : Promise.resolve(null),
+        // In the same batch, so the click handler has the key already and needs
+        // to await nothing before asking for permission.
+        askAboutNotifications ? fetchPushConfig() : Promise.resolve(null),
       ])
         .then(
-          ([data, me, challenges]: [
+          ([data, me, challenges, key]: [
             SocialCounts | null,
             MeResponse | null,
             { incoming?: unknown[] } | null,
+            string | null,
           ]) => {
           if (!active || !data || decided) return;
 
@@ -423,7 +438,11 @@ export function FeaturePromo() {
           // player will ever get on a feature they have not seen work — and a
           // denial is close to permanent. Waiting until a real challenge is
           // sitting there means the ask arrives with its own reason attached.
-          const challenged = (challenges?.incoming?.length ?? 0) > 0;
+          // Both must hold: somebody has actually challenged them, AND the
+          // server can honour a subscription. Offering to turn on notifications
+          // that cannot be sent would spend the prompt for nothing.
+          const challenged = (challenges?.incoming?.length ?? 0) > 0 && key !== null;
+          if (key) setPushKey(key);
 
           // NEWS BEFORE NAGS. Being told you are now a beta tester outranks a
           // reminder to add friends, and it is the only variant the site cannot
@@ -537,14 +556,14 @@ export function FeaturePromo() {
       openStealthSettings();
       return;
     }
-    if (variant === "notifications") {
+    if (variant === "notifications" && pushKey) {
       // Dismiss FIRST, then ask. The browser's permission prompt is modal and
       // would otherwise appear on top of this panel, and `enablePush` must run
       // inside this click — a permission request outside a user gesture is
       // refused, and on some browsers that counts as a denial the player can
       // never undo from script.
       dismiss("accepted");
-      void enablePush();
+      void enablePush(pushKey);
       return;
     }
     dismiss("accepted");
