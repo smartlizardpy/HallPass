@@ -3,8 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { PublicProfile } from "../../lib/social/store";
+import type {
+  IncomingChallenge,
+  OutgoingChallenge,
+} from "../../lib/challenges/store";
 import { formatFriendCode, normalizeFriendCode } from "../../lib/username";
 import { Avatar } from "./Avatar";
+import { ChallengeList } from "./ChallengeList";
 
 /**
  * The friends surface: list, incoming/outgoing requests, and the add flow.
@@ -31,7 +36,18 @@ type FriendsResponse = {
   outgoing: Request[];
 };
 
-type Tab = "friends" | "requests" | "add";
+type Tab = "friends" | "requests" | "challenges" | "add";
+
+/**
+ * `GET /api/v1/me/challenges`. Fetched HERE rather than inside `ChallengeList`
+ * so the tab can carry a count before anybody clicks it — a badge that only
+ * appeared once you opened the tab would be no badge at all.
+ */
+type ChallengesResponse = {
+  signedIn: boolean;
+  incoming: IncomingChallenge[];
+  outgoing: OutgoingChallenge[];
+};
 
 const BTN_PRIMARY =
   "rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white transition hover:bg-brand-600 disabled:opacity-50";
@@ -42,6 +58,7 @@ const INPUT =
 
 export function FriendsIsland() {
   const [data, setData] = useState<FriendsResponse | null>(null);
+  const [challenges, setChallenges] = useState<ChallengesResponse | null>(null);
   const [tab, setTab] = useState<Tab>("friends");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -57,9 +74,29 @@ export function FriendsIsland() {
     }
   }, []);
 
+  /**
+   * Challenges, on their own request and their own state.
+   *
+   * Kept separate from `load` rather than merged into one combined fetch: the
+   * two endpoints fail independently, and a challenges table that is behind the
+   * deploy must not blank the friends list that works perfectly well. Same
+   * reasoning as `AccountMenu` firing its badge call alongside identity instead
+   * of gating on it.
+   */
+  const loadChallenges = useCallback(async () => {
+    try {
+      const res = await fetch("/api/v1/me/challenges", { credentials: "include" });
+      if (!res.ok) return;
+      setChallenges((await res.json()) as ChallengesResponse);
+    } catch {
+      // Offline — keep whatever we already had.
+    }
+  }, []);
+
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadChallenges();
+  }, [load, loadChallenges]);
 
   /** One mutation helper: every action is the same fetch with a different verb. */
   const act = useCallback(
@@ -116,6 +153,9 @@ export function FriendsIsland() {
   }
 
   const incomingCount = data.incoming.length;
+  // Only open challenges aimed at this player earn a badge. The ones they sent
+  // are not a to-do, and counting them would nag somebody about their own move.
+  const challengeCount = challenges?.incoming.length ?? 0;
 
   return (
     <div className="space-y-4">
@@ -128,6 +168,14 @@ export function FriendsIsland() {
           {incomingCount > 0 && (
             <span className="ml-1.5 rounded-full bg-accent-pink px-2 py-0.5 text-[11px] font-black text-white">
               {incomingCount}
+            </span>
+          )}
+        </TabButton>
+        <TabButton active={tab === "challenges"} onClick={() => setTab("challenges")}>
+          Challenges
+          {challengeCount > 0 && (
+            <span className="ml-1.5 rounded-full bg-accent-pink px-2 py-0.5 text-[11px] font-black text-white">
+              {challengeCount}
             </span>
           )}
         </TabButton>
@@ -223,6 +271,16 @@ export function FriendsIsland() {
             )}
           </Panel>
         </div>
+      )}
+
+      {tab === "challenges" && (
+        <Panel>
+          <ChallengeList
+            incoming={challenges?.incoming ?? []}
+            outgoing={challenges?.outgoing ?? []}
+            onChanged={loadChallenges}
+          />
+        </Panel>
       )}
 
       {tab === "add" && <AddFriend onChanged={load} />}
