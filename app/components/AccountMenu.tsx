@@ -3,8 +3,14 @@
 /**
  * Site-header account control. Logged out → a "Sign in" button that kicks off
  * Google sign-in (via the `startSignIn` server action). Logged in → the player's
- * avatar + handle opening a dropdown (Account settings, Dashboard for admins,
- * Sign out).
+ * avatar + handle opening a dropdown (Friends, Your profile, Beta testing for
+ * testers, Dashboard for admins, Sign out).
+ *
+ * The player-facing entries point INTO the profile at `/play/you`: the profile
+ * itself, and `/play/you/friends` for the tab the badge counts. They are plain
+ * `<a>`s via `MenuLink`, so each is a full navigation rather than a prefetched
+ * client transition — these pages are per-player and there is nothing to gain
+ * from prefetching them behind a closed menu.
  *
  * Identity is fetched client-side from `/api/v1/me` so the public arcade pages
  * stay statically rendered — the menu just hydrates with whoever's signed in.
@@ -115,14 +121,20 @@ export function AccountMenu() {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex h-11 items-center gap-2 rounded-full bg-white pl-1.5 pr-2 text-sm font-bold text-zinc-800 shadow-sm transition hover:text-brand sm:pr-3"
+        // `bg-surface-2`, not `bg-white`: this trigger sits ON `SiteHeader`'s
+        // white bar (see its docblock), where white would erase it. The signed-
+        // out `bg-brand` button above needs no such treatment, and the dropdown
+        // below stays white — it floats over the page, not on the bar.
+        className="flex h-11 items-center gap-2 rounded-full bg-surface-2 pl-1.5 pr-2 text-sm font-bold text-zinc-800 transition hover:text-brand sm:pr-3"
       >
         <span className="relative">
           <Avatar src={player.image} initial={initial} size={32} />
           {incoming > 0 && (
             <span
               aria-label={`${incoming} pending friend request${incoming === 1 ? "" : "s"}`}
-              className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-accent-pink-ink px-1 text-[10px] font-black text-white ring-2 ring-white"
+              // The ring is a cut-out of whatever the pip sits on, so it tracks
+              // the trigger's fill: `ring-surface-2`, not `ring-white`.
+              className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-accent-pink-ink px-1 text-[10px] font-black text-white ring-2 ring-surface-2"
             >
               {incoming > 9 ? "9+" : incoming}
             </span>
@@ -167,7 +179,7 @@ export function AccountMenu() {
 
           <div className="my-1 h-px bg-border" />
 
-          <MenuLink href="/play/friends">
+          <MenuLink href="/play/you/friends">
             Friends
             {incoming > 0 && (
               <span className="ml-2 rounded-full bg-accent-pink-ink px-1.5 py-0.5 text-[10px] font-black text-white">
@@ -175,7 +187,10 @@ export function AccountMenu() {
               </span>
             )}
           </MenuLink>
-          <MenuLink href="/play/account">Account settings</MenuLink>
+          {/* "Your profile", not "Account settings": `/play/you` is the player's
+              own profile with settings as one tab among several, so the old
+              label promised a narrower page than the link now opens. */}
+          <MenuLink href="/play/you">Your profile</MenuLink>
           {/* Sits in the same slot as Dashboard: the one entry that is only
               there because of who you are. A tester who is also an admin sees
               both — they are different jobs, not two names for one. */}

@@ -31,6 +31,22 @@ import { Wordmark } from "./Wordmark";
  * `scripts/build-sw-manifest.mjs`. That is the same reason `WelcomeToast` avoids
  * `useSearchParams`.
  *
+ * THE BAR IS CHROME, SO IT IS WHITE. It used to fill with `bg-background/85` —
+ * the same `#f4f4f7` as the page scrolling beneath it — which left a hairline
+ * border doing all the work while the rail next door announced itself with
+ * `bg-white` + `border-r`. It now fills with `bg-surface/85` and keeps the blur
+ * and the bottom border, so the two pieces of chrome read as one L around the
+ * content canvas, and `--background` goes back to meaning "canvas" only.
+ *
+ * That white fill is why every control in here sits on `bg-surface-2` rather
+ * than the `bg-white` they all used to wear: white-on-white would erase them.
+ * Two knock-on rules for anything added to this bar later:
+ *   - Text on `--surface-2` cannot use `--muted` — 4.45:1, just under AA — so
+ *     the placeholder takes `text-zinc-600` (6.57:1). Icons may stay `--muted`,
+ *     which clears the 3:1 non-text floor comfortably.
+ *   - Floating layers (the account dropdown, the streak popover) stay WHITE.
+ *     They sit above the page, not on the bar.
+ *
  * The `paddingTop: env(safe-area-inset-top)` is load-bearing on installed iOS
  * PWAs — without it the header sits under the status bar.
  */
@@ -87,20 +103,14 @@ export function SiteHeader({
           : {})}
         placeholder="Search games"
         aria-label="Search games"
-        className="h-11 w-full rounded-full bg-white pl-11 pr-4 text-base font-semibold text-zinc-900 placeholder:text-muted outline-none transition focus:ring-4 focus:ring-brand/20 sm:h-auto sm:py-3.5 sm:pl-12 sm:pr-5 sm:text-[15px]"
+        className="h-11 w-full rounded-full bg-surface-2 pl-11 pr-4 text-base font-semibold text-zinc-900 placeholder:text-zinc-600 outline-none transition focus:ring-4 focus:ring-brand/20 sm:h-auto sm:py-3.5 sm:pl-12 sm:pr-5 sm:text-[15px]"
       />
     </div>
   );
 
-  // `border-b` is what makes this read as a bar at all. The fill is
-  // `--background` — the SAME colour as the page behind it — so with no edge and
-  // no contrasting surface the header looked like a search box floating on the
-  // catalogue rather than site chrome, while the sidebar beside it announced
-  // itself with `bg-white` and a `border-r`. The border gives the sticky bar a
-  // bottom edge for content to slide under.
   return (
     <header
-      className="sticky top-0 z-40 flex h-16 items-center gap-2 border-b border-border bg-background/85 px-3 backdrop-blur-xl sm:h-20 sm:gap-4 sm:px-8"
+      className="sticky top-0 z-40 flex h-16 items-center gap-2 border-b border-border bg-surface/85 px-3 backdrop-blur-xl sm:h-20 sm:gap-4 sm:px-8"
       style={{ paddingTop: "env(safe-area-inset-top)" }}
     >
       {/* Mobile hamburger — opens the genre drawer. Hidden on an actual phone
@@ -115,7 +125,7 @@ export function SiteHeader({
           aria-expanded={navOpen}
           aria-controls="mobile-nav"
           style={{ touchAction: "manipulation" }}
-          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-zinc-800 transition hover:text-brand lg:hidden"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-2 text-zinc-800 transition hover:text-brand lg:hidden"
         >
           <svg
             width="20"
