@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import type { Game } from "../lib/games";
 import { StealthMenuButton } from "./stealth/StealthMenuButton";
@@ -75,6 +76,113 @@ function hrefForItem(item: string): string {
     : `/category/${encodeURIComponent(item.toLowerCase())}`;
 }
 
+/**
+ * Trailing slashes are LIVE URLs on this site: `next.config.ts` sets
+ * `skipTrailingSlashRedirect: true`, so `/play/you/` is served rather than
+ * redirected, and `usePathname()` reports whatever the browser is actually on.
+ * Normalise before comparing, or the rail silently loses its highlight on the
+ * slashed spelling of the very page it is describing. Same reasoning as the
+ * prefix match in `SurpriseButton`.
+ */
+function normalizePath(pathname: string): string {
+  return pathname.replace(/\/+$/, "") || "/";
+}
+
+/** `base` itself or anything nested under it — and never `/categoryX`. */
+function isUnder(path: string, base: string): boolean {
+  return path === base || path.startsWith(`${base}/`);
+}
+
+/** Same metrics as {@link CategoryIcon}, so both groups sit on one icon grid. */
+function NavIcon({ children }: { children: React.ReactNode }) {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="shrink-0"
+      aria-hidden
+    >
+      {children}
+    </svg>
+  );
+}
+
+/**
+ * The site's top-level destinations, sitting above the genre list.
+ *
+ * WHY IT EXISTS. Friends and the player's own profile were reachable on desktop
+ * ONLY from the avatar dropdown in the header, while the phone's bottom tab bar
+ * gives both a first-class slot — so the mobile information architecture was the
+ * better of the two on a site whose recent feature work is all social. This is
+ * the desktop answer to that bar, and because it lives in `navList` the mobile
+ * drawer gets it from the same insertion.
+ *
+ * REAL LINKS, ALWAYS — never the `<button>` a category falls back to in callback
+ * mode (see `onSelect`). A category in callback mode filters the grid in place,
+ * so there is nothing for a new tab to open; these are destinations, and
+ * middle-click, ⌘-click and "open in new tab" have to work on them.
+ *
+ * MATCHING IS PER-ITEM and asymmetric on purpose:
+ *   * Games owns the catalogue, so it stays lit across `/category/<name>`.
+ *   * Friends matches its own subtree.
+ *   * You matches everything under `/play/you` EXCEPT that Friends subtree
+ *     nested inside it — `/play/you/settings` lights You, `/play/you/friends`
+ *     lights Friends, and never both at once.
+ *
+ * The icons are deliberately none of `ICONS` above: a glyph that already means a
+ * genre would read as one more filter.
+ */
+const PRIMARY_NAV: {
+  href: string;
+  label: string;
+  match: (path: string) => boolean;
+  icon: React.ReactNode;
+}[] = [
+  {
+    href: "/",
+    label: "Games",
+    match: (path) => path === "/" || isUnder(path, "/category"),
+    // A gamepad — d-pad left, two buttons right. Not the Arcade genre's upright
+    // cabinet, and not Puzzle's four squares.
+    icon: (
+      <>
+        <rect x="2" y="7" width="20" height="10" rx="5" />
+        <path d="M7 10v4M5 12h4M15.5 11.5h.01M18 14h.01" />
+      </>
+    ),
+  },
+  {
+    href: "/play/you/friends",
+    label: "Friends",
+    match: (path) => isUnder(path, "/play/you/friends"),
+    // Two equal heads over one shared base, matching the phone tab bar's mark
+    // rather than the Multiplayer genre's lopsided big-person/little-person.
+    icon: (
+      <>
+        <circle cx="8" cy="8" r="3" />
+        <circle cx="16" cy="8" r="3" />
+        <path d="M3 20v-1a5 5 0 0 1 5-5h8a5 5 0 0 1 5 5v1" />
+      </>
+    ),
+  },
+  {
+    href: "/play/you",
+    label: "You",
+    match: (path) =>
+      isUnder(path, "/play/you") && !isUnder(path, "/play/you/friends"),
+    // The single-person mark the phone's Account tab uses.
+    icon: (
+      <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 21v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1" />
+    ),
+  },
+];
+
 export function Sidebar({
   categories,
   games,
@@ -86,6 +194,11 @@ export function Sidebar({
   categories: string[];
   /** The catalogue, used only to pick a random game for "Surprise me". */
   games: Game[];
+  /**
+   * The highlighted GENRE, by name. It says nothing about the primary group
+   * above the genres, which is a set of routes and takes its highlight from the
+   * live pathname instead — see `PRIMARY_NAV`.
+   */
   active: string;
   /**
    * Callback mode (the catalog pages): clicking a category filters in place.
@@ -100,6 +213,12 @@ export function Sidebar({
   onMobileClose?: () => void;
 }) {
   const items = ["All", "New", "Trending", ...categories];
+
+  // `usePathname` is the only source for the primary group's active state: the
+  // `active` prop names a genre, not a route. It is a client hook, which this
+  // component already is, and it re-renders on every navigation — so the
+  // highlight follows a client-side route change with no other wiring.
+  const path = normalizePath(usePathname() ?? "/");
 
   useEffect(() => {
     if (!mobileOpen) return;
@@ -122,13 +241,54 @@ export function Sidebar({
 
   const navList = (
     <>
+      {/* THE SPINE OF THE SITE, and the first thing in the rail. Everything
+          below the rule is a way of browsing the catalogue; these three are
+          where a player goes. See `PRIMARY_NAV` for why they are links and how
+          each one decides it is current. */}
+      <ul className="flex flex-col gap-1">
+        {PRIMARY_NAV.map((entry) => {
+          const isActive = entry.match(path);
+          return (
+            <li key={entry.href}>
+              <Link
+                href={entry.href}
+                onClick={onMobileClose}
+                aria-current={isActive ? "page" : undefined}
+                className={itemClass(isActive)}
+              >
+                <NavIcon>{entry.icon}</NavIcon>
+                <span className="flex-1 text-left">{entry.label}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+
+      {/* The two groups must not read as one list — a destination that stays lit
+          and a filter that swaps the grid underneath you are different promises,
+          and stacking them in one unbroken column said they were the same. */}
+      <hr className="my-3 border-t border-border" />
+
       {/* Above the categories, not among them: it is an action, not a filter,
           and grouping it with the nav items would make it look like a
-          destination that could be "active". Rendered here rather than in each
-          <aside> so the desktop rail and the mobile drawer share one copy. */}
+          destination that could be "active" — which is also why it sits on the
+          browse side of the rule rather than under the primary group, whose rows
+          do light up. Rendered here rather than in each <aside> so the desktop
+          rail and the mobile drawer share one copy. */}
       <SurpriseButton games={games} onNavigate={onMobileClose} />
 
-      <ul className="flex flex-col gap-1">
+      {/* Visual only: the <ul> below carries the same label for assistive tech,
+          so announcing this line too would just say "Browse" twice. An `id` +
+          `aria-labelledby` pair is not an option — `navList` is rendered in both
+          the rail and the drawer, so any id in here exists twice in the DOM. */}
+      <p
+        aria-hidden
+        className="px-4 pb-1 text-[11px] font-bold uppercase tracking-wider text-muted"
+      >
+        Browse
+      </p>
+
+      <ul aria-label="Browse" className="flex flex-col gap-1">
         {items.map((item) => {
           const isActive = item === active;
           const inner = (
