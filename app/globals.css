@@ -18,6 +18,26 @@
   --accent-pink: #ff4f8b;
   --accent-cyan: #00cfd6;
 
+  /* The TEXT-BEARING twin of --accent-pink.
+
+     White on --accent-pink is 3.11:1 — fine behind an icon, a 2px pip or a
+     chart series, and well under the 4.5:1 that WCAG AA asks of the 10-11px
+     badge type it was actually being used for. --accent-yellow already had an
+     answer to exactly this problem: it is never given white text, only
+     `text-zinc-900` (11.5:1). Pink cannot borrow that pairing wholesale, because
+     pink is not a LIGHT surface the way yellow is — zinc-900 on --accent-pink
+     does pass at 5.69:1, but a dark-on-hot-pink chip reads as maroon rather than
+     as the loud little flag these badges exist to be.
+
+     So the SURFACE darkens instead of the text: the same hue to within a tenth
+     of a degree (339.7deg vs 339.5deg), taken from 100%/65% saturation-lightness
+     to 75%/48%, which puts WHITE on it at 4.98:1.
+
+     Use --accent-pink-ink wherever pink carries text. Keep --accent-pink for
+     fills, pips, hearts and washes, where no contrast floor applies — this token
+     is an addition, not a replacement. */
+  --accent-pink-ink: #d61f5d;
+
   /* How much of the bottom edge is occupied by fixed chrome — read by anything
      that floats above it (the offline pill in `PWA.tsx`), published over the top
      of this baseline by whatever owns that chrome (`MobileTabBar`). The baseline
@@ -39,6 +59,7 @@
   --color-brand-100: var(--brand-100);
   --color-accent-yellow: var(--accent-yellow);
   --color-accent-pink: var(--accent-pink);
+  --color-accent-pink-ink: var(--accent-pink-ink);
   --color-accent-cyan: var(--accent-cyan);
   --font-sans: var(--font-nunito);
   --font-display: var(--font-nunito);
