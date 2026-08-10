@@ -392,9 +392,14 @@ export function Sidebar({
           }`}
         />
         {/* Panel */}
+        {/* Labelled "Menu", not "Categories": the drawer now opens onto the
+            primary destinations as well as the genre filter, and it is the
+            header's "Open menu" button (`aria-controls="mobile-nav"`) that
+            announces it. A dialog whose name promises only categories would
+            misdescribe half of what is in it. */}
         <aside
           role="dialog"
-          aria-label="Categories"
+          aria-label="Menu"
           aria-modal="true"
           className={`absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-border bg-white shadow-2xl transition-transform duration-200 ${
             mobileOpen ? "translate-x-0" : "-translate-x-full"
