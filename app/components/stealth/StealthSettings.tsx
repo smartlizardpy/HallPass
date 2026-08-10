@@ -230,9 +230,10 @@ export function StealthSettings({
    * on this particular modal means tabbing onto game cards that a passer-by is not
    * supposed to be seeing.
    *
-   * The disabled-button clause matters here in a way it does not in the promo: the
-   * shake toggle can be absent and sections come and go with the device, so the
-   * first and last focusable are computed per keystroke rather than cached.
+   * The ends are recomputed per keystroke rather than cached on open, because
+   * this panel's contents are not fixed: the shake section only exists on a device
+   * with a motion sensor, and the refusal message can appear and disappear
+   * underneath the panic-key control while the modal is open.
    */
   const onKeyDownTrap = (e: React.KeyboardEvent) => {
     if (e.key !== "Tab" || !panelRef.current) return;
