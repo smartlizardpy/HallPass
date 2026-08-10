@@ -256,6 +256,19 @@ canvas{ display:block; }
 .btn:active{ transform:translateY(1px); }
 .btn:focus-visible, .tbtn:focus-visible, .mute:focus-visible{ outline:2px solid var(--accent); outline-offset:3px; }
 
+/* Secondary action next to a primary .btn — same shape, no fill, so "Start game"
+   and "Play again" stay the obvious thing to press. */
+.btn.ghost{
+  background:none; color:var(--ink); box-shadow:none;
+  border:1px solid var(--edge-hi); padding:10px 18px; font-size:9.5px;
+}
+.hpauth{ display:flex; gap:9px; align-items:center; justify-content:center;
+  flex-wrap:wrap; margin-top:13px; }
+#hpAuthStatus{ font-size:9px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--ink-faint); }
+#hpAuthStatus b{ color:var(--accent); font-weight:600; }
+.hpauth button[hidden]{ display:none; }
+
 .mute{
   display:none;
   position:fixed; top:12px; right:12px; z-index:6;
@@ -404,6 +417,10 @@ canvas{ display:block; }
                 <span>Mute</span><b>M</b>
               </div>
               <button class="btn" id="startBtn">Start game</button>
+              <div class="hpauth">
+                <button class="btn ghost" id="hpSignIn">Sign in</button>
+                <span id="hpAuthStatus">Playing as Guest</span>
+              </div>
             </div>
           </div>
 
@@ -1745,6 +1762,34 @@ function frame(now){
   renderSide();
   renderHUD();
 }
+
+/* --- HallPass ----------------------------------------------------------
+   The inline stub at the end of the body guarantees window.HallPass exists by
+   the time this runs, and every method resolves rather than throwing — so
+   nothing in this section can break the game, even with no network at all. */
+
+/* Paint the start screen's identity row. `player` is null when signed out. */
+function hpRefreshAuth(player){
+  const status = document.getElementById("hpAuthStatus");
+  const btn = document.getElementById("hpSignIn");
+  if (!status || !btn) return;
+  if (player){
+    btn.hidden = true;
+    status.innerHTML = "Signed in as <b></b>";
+    // textContent: a display name is untrusted input and must never be parsed.
+    status.querySelector("b").textContent = player.name;
+  } else {
+    btn.hidden = false;
+    status.textContent = "Playing as Guest";
+  }
+}
+
+HallPass.getPlayer().then(hpRefreshAuth);
+// The popup does not reload the game, so the label has to be told when it
+// finishes — otherwise it reads "Guest" to somebody who just signed in.
+HallPass.on("auth", (e) => hpRefreshAuth(e.player));
+// Must be a real click: browsers block a popup opened without a user gesture.
+document.getElementById("hpSignIn").addEventListener("click", () => HallPass.signIn());
 
 /* --- boot -------------------------------------------------------------- */
 function relayout(){
