@@ -268,6 +268,7 @@ export function useStealth(): {
   setPanicKey: (key: string) => void;
   setPanicScreen: (id: PanicScreenId) => void;
   setShake: (on: boolean) => void;
+  setQuietNotifications: (on: boolean) => void;
 } {
   const prefs = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   return {
@@ -276,5 +277,9 @@ export function useStealth(): {
     setPanicKey: useCallback((key: string) => setPanicKey(key), []),
     setPanicScreen: useCallback((id: PanicScreenId) => setPanicScreen(id), []),
     setShake: useCallback((on: boolean) => setShake(on), []),
+    setQuietNotifications: useCallback(
+      (on: boolean) => setQuietNotifications(on),
+      [],
+    ),
   };
 }
