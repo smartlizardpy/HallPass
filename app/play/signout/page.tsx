@@ -8,6 +8,13 @@
  * caller asked via `?callbackUrl=` (default the home page) — the SDK popup uses
  * this to return to "/play/auth/complete". As with sign-in, `callbackUrl` is
  * attacker-influenceable, so it is validated to a same-origin relative path.
+ *
+ * BACKING OUT HONOURS THE SAME DESTINATION. "Stay signed in" used to be a fixed
+ * link to the account page, so declining a sign-out left the player somewhere
+ * they had never asked to be — and in the SDK popup it parked a full profile
+ * page in a 480x680 window instead of returning to "/play/auth/complete", which
+ * broadcasts to the opener and closes. Both paths now read the one validated
+ * value; only the fallback differs, for the reason given at `cancelTo`.
  */
 
 import type { Metadata } from "next";
@@ -29,6 +36,11 @@ export default async function PlaySignOutPage({
   // `callbackUrl` rides in the query string — harden it to a same-origin
   // relative path before handing it to `signOut({ redirectTo })`.
   const redirectTo = safeRelativePath(callbackUrl, "/");
+  // The same asked-for destination, validated the same way — with a different
+  // fallback when nothing was asked for. A player who just signed out has no
+  // account page to land on, so that path defaults to the home page; a player
+  // who is staying does, so this one defaults to `/play/you`.
+  const cancelTo = safeRelativePath(callbackUrl, "/play/you");
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-6 py-10">
@@ -57,7 +69,7 @@ export default async function PlaySignOutPage({
         </form>
 
         <Link
-          href="/play/account"
+          href={cancelTo}
           className="mt-4 inline-block text-sm font-semibold text-brand hover:text-brand-600"
         >
           Stay signed in
