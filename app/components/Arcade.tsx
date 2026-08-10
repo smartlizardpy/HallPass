@@ -343,12 +343,22 @@ function ArcadeRows({
 /* ===================== Mobile shell ===================== */
 /**
  * The phone catalogue: Favourites on top (only when there are any), then the
- * curated list. No hero, no editorial rows, no genres — "all we need is the games
- * list", per the design. Deliberately sparse.
+ * REST of the curated list. No hero, no editorial rows, no genres — "all we need
+ * is the games list", per the design. Deliberately sparse.
  *
  * `favorites` and `games` are BOTH already filtered to phone-playable by the
  * caller, so the whole shell keeps one promise: everything on it works under a
  * thumb. A short list is the honest state until more games are tagged.
+ *
+ * Which is exactly why the two sections must not overlap. `favorites` is a SUBSET
+ * of `games` — same mobile-playable set, filtered by the same `mobileCatalog` —
+ * so listing both in full showed every favourited game twice, and on a catalogue
+ * this short the second section was largely a repeat of the first. "Games" is
+ * therefore the remainder, and when the remainder is empty (every phone game
+ * favourited) the section is omitted rather than shown empty: its empty state
+ * says "no phone games yet", which would be a flat contradiction of the full grid
+ * sitting directly above it. That message survives only for the case it was
+ * written for — a genuinely empty phone catalogue, where `games` itself is empty.
  */
 function MobileCatalog({
   games,
@@ -369,6 +379,13 @@ function MobileCatalog({
   isFavorite: (slug: string) => boolean;
   onToggleFavorite: (slug: string) => void;
 }) {
+  // Everything not already on show in Favourites above. Keyed by slug, which is
+  // the catalogue's identity everywhere else in this file (`findGame`, the
+  // favourites store, every `key=`), rather than leaning on the two lists
+  // happening to hold the same object references.
+  const favoriteSlugs = new Set(favorites.map((g) => g.slug));
+  const rest = games.filter((g) => !favoriteSlugs.has(g.slug));
+
   const grid = (list: Game[]) => (
     <div className="grid grid-cols-2 gap-x-4 gap-y-6">
       {list.map((g) => (
@@ -397,17 +414,19 @@ function MobileCatalog({
         <MobileSection title="Favourites">{grid(favorites)}</MobileSection>
       )}
 
-      <MobileSection title="Games">
-        {games.length === 0 ? (
+      {games.length === 0 ? (
+        <MobileSection title="Games">
           <div className="rounded-3xl bg-white p-10 text-center">
             <p className="text-[15px] font-bold text-muted">
               No phone games yet — more are on the way.
             </p>
           </div>
-        ) : (
-          grid(games)
-        )}
-      </MobileSection>
+        </MobileSection>
+      ) : (
+        rest.length > 0 && (
+          <MobileSection title="Games">{grid(rest)}</MobileSection>
+        )
+      )}
     </div>
   );
 }
