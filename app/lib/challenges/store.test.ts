@@ -393,6 +393,31 @@ describe("dismiss", () => {
   });
 });
 
+describe("blocks", () => {
+  // Blocking deletes the friendship, but NOT the challenges. Without a filter a
+  // blocked person's open challenge sits in the inbox with their name and
+  // avatar on it — the precise thing a block is for preventing.
+  it.each([
+    ["listIncoming", (s: ReturnType<typeof createChallengeStore>) => s.listIncoming("me")],
+    ["listForGame", (s: ReturnType<typeof createChallengeStore>) => s.listForGame("me", "duskfall")],
+    ["listOutgoing", (s: ReturnType<typeof createChallengeStore>) => s.listOutgoing("me")],
+  ])("%s filters out a block in either direction", async (_name, run) => {
+    const { sql, calls } = makeFakeSql([]);
+    await run(createChallengeStore(sql));
+
+    const { text } = calls[0];
+    expect(text).toContain("player_blocks");
+    expect(text).toContain("pb.blocker_id = ?");
+    expect(text).toContain("pb.blocked_id = ?");
+  });
+
+  it("accept refuses a challenge from someone now blocked", async () => {
+    const { sql, calls } = makeFakeSql([]);
+    await createChallengeStore(sql).accept("me", 3);
+    expect(calls[0].text).toContain("player_blocks");
+  });
+});
+
 describe("listOutgoing", () => {
   it("hides dismissed challenges from the sender", async () => {
     // Telling a child that a named friend binned their challenge is the same

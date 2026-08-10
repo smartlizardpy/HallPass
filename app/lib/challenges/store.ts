@@ -50,6 +50,19 @@
  * each with its own single-parameter `make_interval`, which is the same shape
  * `beta/store.ts` and `social/store.ts` already use.
  *
+ * ── BLOCKS ARE FILTERED AT READ TIME, NOT CLEANED UP ON BLOCK ──────────────
+ * `007_social_graph.sql` notes that blocking DELETES the friendship, which is
+ * why "friends who play this" needs no block filter. Challenges are not
+ * friendship rows, so that reasoning does not carry: block somebody and their
+ * open challenge would otherwise sit in the inbox with their name and avatar on
+ * it — the precise thing a block is for preventing.
+ *
+ * Every read therefore carries a `player_blocks` filter, and `accept` carries the
+ * same gate. Read-side rather than deleting the rows inside `blockPlayer`
+ * because it needs no cross-module write, no backfill for blocks that already
+ * exist, and — the deciding one — it cannot be forgotten by a future write path
+ * the way a clean-up step can.
+ *
  * ── ONE MIRRORED PREDICATE, NAMED ──────────────────────────────────────────
  * {@link createChallengeStore.resolveForScore} restates `beats()` from
  * `resolve.ts` in SQL, because resolution has to be a single UPDATE. That is the
@@ -241,6 +254,11 @@ export function createChallengeStore(sql: Sql) {
           JOIN players p ON p.id = c.challenger_id
          WHERE c.target_id = ${me}
            AND c.resolved_at IS NULL AND c.dismissed_at IS NULL
+           AND NOT EXISTS (
+                 SELECT 1 FROM player_blocks pb
+                  WHERE (pb.blocker_id = ${me} AND pb.blocked_id = c.challenger_id)
+                     OR (pb.blocker_id = c.challenger_id AND pb.blocked_id = ${me})
+               )
          ORDER BY c.id DESC
          LIMIT ${CHALLENGE_LIST_LIMIT}
       `) as Row[];
@@ -277,6 +295,11 @@ export function createChallengeStore(sql: Sql) {
           JOIN players p ON p.id = c.target_id
          WHERE c.challenger_id = ${me}
            AND c.dismissed_at IS NULL
+           AND NOT EXISTS (
+                 SELECT 1 FROM player_blocks pb
+                  WHERE (pb.blocker_id = ${me} AND pb.blocked_id = c.target_id)
+                     OR (pb.blocker_id = c.target_id AND pb.blocked_id = ${me})
+               )
          ORDER BY c.id DESC
          LIMIT ${CHALLENGE_LIST_LIMIT}
       `) as Row[];
@@ -313,6 +336,11 @@ export function createChallengeStore(sql: Sql) {
          WHERE c.target_id = ${me}
            AND b.game_slug = ${gameSlug}
            AND c.resolved_at IS NULL AND c.dismissed_at IS NULL
+           AND NOT EXISTS (
+                 SELECT 1 FROM player_blocks pb
+                  WHERE (pb.blocker_id = ${me} AND pb.blocked_id = c.challenger_id)
+                     OR (pb.blocker_id = c.challenger_id AND pb.blocked_id = ${me})
+               )
          ORDER BY c.id DESC
          LIMIT ${CHALLENGE_LIST_LIMIT}
       `) as Row[];
@@ -494,14 +522,19 @@ export function createChallengeStore(sql: Sql) {
      */
     async accept(me: string, id: number): Promise<boolean> {
       const rows = (await sql`
-        UPDATE challenges
+        UPDATE challenges c
            SET accepted_at = now()
-         WHERE id = ${id}
-           AND target_id = ${me}
-           AND accepted_at IS NULL
-           AND resolved_at IS NULL
-           AND dismissed_at IS NULL
-        RETURNING id
+         WHERE c.id = ${id}
+           AND c.target_id = ${me}
+           AND c.accepted_at IS NULL
+           AND c.resolved_at IS NULL
+           AND c.dismissed_at IS NULL
+           AND NOT EXISTS (
+                 SELECT 1 FROM player_blocks pb
+                  WHERE (pb.blocker_id = ${me} AND pb.blocked_id = c.challenger_id)
+                     OR (pb.blocker_id = c.challenger_id AND pb.blocked_id = ${me})
+               )
+        RETURNING c.id
       `) as Row[];
       return rows.length > 0;
     },
