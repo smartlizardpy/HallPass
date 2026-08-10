@@ -133,7 +133,10 @@ export function FriendsIsland() {
         <p className="text-[15px] font-bold text-muted">
           Sign in to add friends and see what they&rsquo;re playing.
         </p>
-        <a href="/play/signin?callbackUrl=/play/friends" className={`${BTN_PRIMARY} mt-4 inline-block`}>
+        <a
+          href="/play/signin?callbackUrl=/play/you/friends"
+          className={`${BTN_PRIMARY} mt-4 inline-block`}
+        >
           Sign in
         </a>
       </Panel>
