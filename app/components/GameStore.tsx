@@ -13,6 +13,7 @@ import { GameCard } from "./GameCard";
 import { GameAchievements } from "./GameAchievements";
 import { GameReviews } from "./reviews/GameReviews";
 import { GameTrailer } from "./GameTrailer";
+import { ChallengedHere } from "./ChallengedHere";
 import { FriendsWhoPlay } from "./friends/FriendsWhoPlay";
 import { ScreenshotGallery } from "./ScreenshotGallery";
 
@@ -342,6 +343,10 @@ export function GameStore({
             </button>
           </div>
 
+          {/* Above "friends play this": an open challenge is something to act
+              on, while who plays it is context. Both render null when they have
+              nothing, so neither leaves a gap. */}
+          <ChallengedHere slug={game.slug} />
           <FriendsWhoPlay slug={game.slug} />
         </aside>
       </section>
