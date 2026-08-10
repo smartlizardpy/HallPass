@@ -30,39 +30,26 @@ import { Wordmark } from "./Wordmark";
 const SEEN_KEY = "hp-mobile-splash-shown";
 
 /**
- * Ask the service worker to re-fetch every cached game, while the splash covers
- * the wait.
+ * THE SPLASH DOES NOT TRIGGER A GAME SYNC, AND MUST NOT.
  *
- * The splash is the one moment in the app that genuinely means "the player just
- * launched this": it is latched once per session and only ever runs on a real
- * phone. `PWA.tsx` polls `/games-version` every 30 seconds and forwards the
- * result, but a cold PWA launch serves whatever game HTML it already holds until
- * that first poll lands — which, on a school network, is precisely the half
- * minute the player is looking at it. `sw.js` has handled a `SYNC_NOW` message
- * since the sync work landed; nothing had ever sent one.
+ * It used to post `SYNC_NOW` to the service worker here, on the reasoning that a
+ * cold PWA launch serves stale game HTML until `PWA.tsx`'s poll lands "thirty
+ * seconds later". That reasoning was simply wrong. `PWA.tsx` calls `poll()`
+ * immediately after `await navigator.serviceWorker.ready`, and its `30_000`
+ * check is a re-poll THROTTLE measured from `lastPolledAt`, which starts at 0 —
+ * so the first poll always fires at once. There was never a gap to cover.
  *
- * This refreshes GAME HTML, not the catalogue listing. Which games appear on the
- * phone shell comes from the page's own HTML and is a `networkFirst` navigation,
- * so it is already fresh whenever there is a connection.
+ * The cost of getting that wrong was real. `SYNC_NOW` runs `refreshAllGameHtml()`
+ * unconditionally, re-fetching every precached `/game-html/` document AND every
+ * runtime entry (which is where bundle assets live) with `cache: "no-store"` —
+ * a catalogue-wide download burst on exactly the school network the feature was
+ * supposed to help. Worse, on a genuine version change the splash's sync and the
+ * poll's `CHECK_GAMES_VERSION` both reach `refreshAllGameHtml()` concurrently.
  *
- * Fire-and-forget and fully guarded: no service worker (dev, or a browser
- * without one) and no connection both mean this simply does nothing. It is never
- * awaited, so it cannot delay the splash it rides along with.
+ * `CHECK_GAMES_VERSION` is the message that already does this correctly: it
+ * compares against the stored sentinel and no-ops when nothing moved. `PWA.tsx`
+ * owns sending it. Anything added here would be a second sender racing the first.
  */
-function requestGameSync(): void {
-  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
-  // `onLine === false` is a reliable negative; `true` only means "there is an
-  // interface", so it is not worth trusting further. The refresh itself is
-  // best-effort inside the worker either way.
-  if (navigator.onLine === false) return;
-  navigator.serviceWorker.ready
-    .then((registration) => {
-      registration.active?.postMessage({ type: "SYNC_NOW" });
-    })
-    .catch(() => {
-      /* no worker to talk to — nothing to refresh */
-    });
-}
 
 /** Full-screen worlds where a launch splash would be noise, not a welcome. */
 const SKIP_PREFIXES = ["/dashboard", "/play/signin", "/play/signout", "/play/auth"];
@@ -95,9 +82,6 @@ export function MobileSplash() {
       return;
     }
     triggered.current = true;
-    // Behind the same once-per-session latch as the splash itself, so a player
-    // tapping around the arcade does not re-trigger a catalogue-wide refetch.
-    requestGameSync();
     // Showing on the render AFTER mount is the point, not an oversight: the
     // server/first-paint render must be splash-free (it is shared, prerendered and
     // in the SW precache), so the overlay can only appear once the effect has

@@ -8,8 +8,12 @@
  * together in one column, which made "Save" and "Delete my account" look like
  * peers.
  *
- * Identity, the email and the signed-out state are handled once by `layout.tsx`;
- * this component only runs for a signed-in owner.
+ * The identity header and the signed-out state are handled once by `layout.tsx`;
+ * this component only runs for a signed-in owner. THE EMAIL IS THE EXCEPTION and
+ * is rendered here rather than in that shared header: a persistent header shows
+ * it on all three tabs for as long as the player is anywhere in the section, and
+ * on a shared school machine dwell time is half the exposure. Settings is where
+ * account identity is the thing you came to look at.
  *
  * NOTHING ON THIS PAGE IS TRUSTED FOR *WHO* IS ACTING. Both forms post to server
  * actions that re-derive the player from `auth()` themselves — no hidden
@@ -128,6 +132,22 @@ export default async function YouSettingsPage({
       {/* IDENTITY ---------------------------------------------------------- */}
       <section aria-labelledby="settings-identity" className="space-y-4">
         <GroupHeading id="settings-identity">Identity</GroupHeading>
+
+        {/* THE EMAIL LIVES HERE, and only here.
+            It was in `layout.tsx`'s persistent header, which meant it stayed on
+            screen across all three tabs for as long as the player was on any of
+            them. Owner-gating is not the whole of the problem on a shared school
+            machine — dwell time is — so it sits on the one tab where account
+            identity is what you came to look at. Still owner-only: this subtree
+            is keyed on the viewer's own `playerId` and takes no route param. */}
+        <div className="rounded-xl border border-border bg-surface p-6">
+          <div className="text-xs font-black uppercase tracking-wider text-muted">
+            Signed in as
+          </div>
+          <p className="mt-1 truncate text-sm font-semibold text-foreground">
+            {player.email}
+          </p>
+        </div>
 
         <div className="rounded-xl border border-border bg-surface p-6">
           <form action={setHandleAction}>

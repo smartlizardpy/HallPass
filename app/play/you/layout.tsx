@@ -24,9 +24,12 @@
  *   The email is rendered ONLY to the player themselves. It is read from the
  *   server-side `Player` (which carries `email`) rather than the public
  *   projection precisely because the owner is the one viewer allowed to see it,
- *   and the subtree is keyed on the viewer's OWN `session.user.playerId`. It is
- *   now in the persistent header, so it appears on all three tabs — still to the
- *   same one person, still on their own page. Nothing here ever renders another
+ *   and the subtree is keyed on the viewer's OWN `session.user.playerId`.
+ *   It is rendered on the SETTINGS TAB, deliberately NOT in this persistent
+ *   header. It briefly was, which put it on screen for the whole time somebody
+ *   read their badges or answered a friend request; owner-gating answers "who
+ *   may see it" but not "for how long", and on a shared school machine the
+ *   second question is half the exposure. Nothing here ever renders another
  *   player's data; there is no route parameter to make that possible.
  *
  * ⚠ THE SERVICE WORKER MUST NEVER CACHE THIS. `public/sw.js` caches HTML
@@ -186,8 +189,14 @@ export default async function YouLayout({
               {facts.length > 0 && (
                 <p className="mt-1.5 text-xs text-muted">{facts.join(" · ")}</p>
               )}
-              {/* Owner-only: shown to the signed-in player and no one else. */}
-              <p className="truncate text-xs text-muted">{player.email}</p>
+              {/* THE EMAIL IS NOT HERE. It used to be, and that was a quiet
+                  widening: this header is persistent, so putting it here put the
+                  address on screen for the whole time somebody browsed their
+                  badges or answered a friend request — on the shared school
+                  machine this codebase reasons about everywhere else. It lives on
+                  the Settings tab now, where account identity is the subject and
+                  a player is deliberately looking at it. Owner-gating was never
+                  the problem; dwell time was. */}
             </div>
           </div>
         </section>

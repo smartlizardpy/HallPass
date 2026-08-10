@@ -6,8 +6,10 @@
  * every board they have entered, and a way to see the version of themselves that
  * everybody else sees.
  *
- * Identity, the email, and the signed-out state are all handled once by
- * `layout.tsx` — this component only runs for a signed-in owner. It still
+ * The identity header and the signed-out state are handled once by `layout.tsx`
+ * — this component only runs for a signed-in owner. The email is on the Settings
+ * tab, not in that shared header, so it is not on screen while somebody browses
+ * here. It still
  * re-reads the id rather than trusting anything ambient, and every read here is
  * `cache`d or guarded; see `_data.ts`.
  *

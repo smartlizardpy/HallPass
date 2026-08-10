@@ -26,28 +26,38 @@
  */
 export default function Loading() {
   return (
-    <div className="space-y-5 motion-safe:animate-pulse" aria-hidden>
-      <div className="rounded-xl border border-border bg-surface p-6">
-        <div className="h-4 w-40 rounded bg-surface-2" />
-        <div className="mt-3 h-3 w-56 rounded bg-surface-2" />
-      </div>
+    <>
+      {/* The shapes below are `aria-hidden` — they are decoration, and reading
+          out a row of empty boxes helps nobody. But hiding them and nothing else
+          made a tab switch announce NOTHING at all: the layout does not
+          re-render, so to a screen-reader user the tap simply produced silence
+          until the new body arrived. This live region is the announcement. */}
+      <p role="status" className="sr-only">
+        Loading…
+      </p>
+      <div className="space-y-5 motion-safe:animate-pulse" aria-hidden>
+        <div className="rounded-xl border border-border bg-surface p-6">
+          <div className="h-4 w-40 rounded bg-surface-2" />
+          <div className="mt-3 h-3 w-56 rounded bg-surface-2" />
+        </div>
 
-      <div className="rounded-xl border border-border bg-surface p-6">
-        <div className="h-4 w-32 rounded bg-surface-2" />
-        <div className="mt-4 flex flex-wrap gap-2">
-          <div className="h-7 w-24 rounded-full bg-surface-2" />
-          <div className="h-7 w-28 rounded-full bg-surface-2" />
-          <div className="h-7 w-20 rounded-full bg-surface-2" />
+        <div className="rounded-xl border border-border bg-surface p-6">
+          <div className="h-4 w-32 rounded bg-surface-2" />
+          <div className="mt-4 flex flex-wrap gap-2">
+            <div className="h-7 w-24 rounded-full bg-surface-2" />
+            <div className="h-7 w-28 rounded-full bg-surface-2" />
+            <div className="h-7 w-20 rounded-full bg-surface-2" />
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border bg-surface p-6">
+          <div className="h-4 w-36 rounded bg-surface-2" />
+          <div className="mt-4 space-y-2">
+            <div className="h-14 w-full rounded-lg bg-surface-2" />
+            <div className="h-14 w-full rounded-lg bg-surface-2" />
+          </div>
         </div>
       </div>
-
-      <div className="rounded-xl border border-border bg-surface p-6">
-        <div className="h-4 w-36 rounded bg-surface-2" />
-        <div className="mt-4 space-y-2">
-          <div className="h-14 w-full rounded-lg bg-surface-2" />
-          <div className="h-14 w-full rounded-lg bg-surface-2" />
-        </div>
-      </div>
-    </div>
+    </>
   );
 }
