@@ -93,6 +93,17 @@ describe("insertPersonal", () => {
     expect(calls[0].text).not.toContain("seen_at IS");
   });
 
+  it("breaks created_at ties on id, so eviction is deterministic", async () => {
+    // `now()` is the TRANSACTION timestamp in Postgres, so two rows written in
+    // one transaction carry an identical `created_at`. Verified against a real
+    // Postgres 16: with `ORDER BY created_at DESC` alone, a batch of ten with a
+    // cap of three kept the 10th, 2nd and 1st rather than the newest three.
+    // `id` is a monotonic identity column, so it makes the order total.
+    const { sql, calls } = makeFakeSql([{ inserted: 1 }]);
+    await createNotificationStore(sql).insertPersonal(PERSONAL);
+    expect(calls[0].text).toContain("ORDER BY created_at DESC, id DESC");
+  });
+
   it("reports whether a row was actually written", async () => {
     const { sql } = makeFakeSql([{ inserted: 1 }]);
     expect(await createNotificationStore(sql).insertPersonal(PERSONAL)).toBe(true);
@@ -164,7 +175,9 @@ describe("listFor", () => {
 
     expect(calls[0].text).toContain("n.player_id = ?");
     expect(calls[0].text).toContain("n.player_id IS NULL");
-    expect(calls[0].text).toContain("ORDER BY n.created_at DESC");
+    // Tie-broken on id — an inbox that reordered itself between two polls is
+    // the visible half of the eviction bug pinned above.
+    expect(calls[0].text).toContain("ORDER BY n.created_at DESC, n.id DESC");
     expect(page.items[0].isBroadcast).toBe(true);
     expect(page.seenAt).toBe("2026-01-01T00:00:00.000Z");
   });

@@ -110,6 +110,20 @@ export function createNotificationStore(sql: Sql) {
      * player's oldest notification each time, trading a row they might still
      * want to read for one that was never written.
      *
+     * ── WHY THE ORDER CARRIES `id` AS WELL AS `created_at` ──────────────────
+     * `now()` in Postgres is the TRANSACTION timestamp, not the statement's, so
+     * any two rows written in one transaction carry the IDENTICAL `created_at`.
+     * With `ORDER BY created_at DESC` alone those ties resolve arbitrarily, and
+     * the eviction then drops arbitrary rows rather than the oldest — verified
+     * against a real Postgres, where a batch of ten with a cap of three kept the
+     * 10th, 2nd and 1st. `id` is a monotonic identity column, so appending it
+     * makes the order total and the eviction exactly "oldest first".
+     *
+     * The HTTP driver gives each statement its own implicit transaction, so
+     * production ties are unlikely rather than impossible — which is precisely
+     * the kind of ordering bug that would surface later as "a notification
+     * vanished" and be untraceable.
+     *
      * ── WHY THE OUTER STATEMENT IS A SELECT ─────────────────────────────────
      * The caller needs to know whether the insert took, and the prune has to be
      * able to reference it — so neither the INSERT nor the DELETE can be the
@@ -131,7 +145,7 @@ export function createNotificationStore(sql: Sql) {
         excess AS (
           SELECT id FROM notifications
            WHERE player_id = ${playerId}
-           ORDER BY created_at DESC
+           ORDER BY created_at DESC, id DESC
            OFFSET ${Math.max(0, NOTIFICATIONS_KEEP_PER_PLAYER - 1)}
         ),
         pruned AS (
@@ -165,7 +179,7 @@ export function createNotificationStore(sql: Sql) {
         excess AS (
           SELECT id FROM notifications
            WHERE player_id IS NULL
-           ORDER BY created_at DESC
+           ORDER BY created_at DESC, id DESC
            OFFSET ${Math.max(0, NOTIFICATIONS_KEEP_BROADCASTS - 1)}
         ),
         pruned AS (
@@ -188,6 +202,11 @@ export function createNotificationStore(sql: Sql) {
      * round trip. A player with no `notification_state` row yields `null`, which
      * `InboxPage.seenAt` documents as "everything is unread".
      *
+     * Ordered by `id` as well as `created_at`, for the reason set out on
+     * {@link insertPersonal}: `now()` is the transaction timestamp, so ties are
+     * representable, and an inbox that reordered itself between two polls would
+     * be the visible half of the same bug.
+     *
      * NO PREFERENCE FILTERING HAPPENS HERE, deliberately. A broadcast row is
      * shared, so "does this player want it?" cannot be answered by the row — and
      * the answer depends on the DEFAULTS in `config.ts`, which are code. The
@@ -206,7 +225,7 @@ export function createNotificationStore(sql: Sql) {
                  AS seen_at
           FROM notifications n
          WHERE n.player_id = ${playerId} OR n.player_id IS NULL
-         ORDER BY n.created_at DESC
+         ORDER BY n.created_at DESC, n.id DESC
          LIMIT ${limit}
       `) as Row[];
 
