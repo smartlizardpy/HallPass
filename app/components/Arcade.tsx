@@ -48,6 +48,48 @@ function playsFor(game: Game, playCounts: Record<string, number>): number {
  */
 const MIN_PLAYS_SHOWN = 50;
 
+/* ===================== Catalogue grid ===================== */
+/**
+ * THE ONE CATALOGUE GRID. Every desktop row — Jump back in, Your favorites, New
+ * games, Popular this week, and the filtered All-games grid — renders through
+ * this exact string, because five hand-copied class lists is five chances for
+ * the rows to disagree about how wide a card is.
+ *
+ * THE COLUMN COUNTS ARE A MEASUREMENT, NOT A TASTE. `Sidebar` used to be a
+ * permanent 240px rail; it is now a 64px icon strip that only reaches 192px when
+ * PINNED. That handed the grid ~176px of extra width at 1366px — the school
+ * laptop this whole redesign exists for — and the old `lg:grid-cols-4
+ * xl:grid-cols-6` spent every pixel of it inflating cards from the ~164px they
+ * had always been to 193px, rather than fitting more of them on screen. `lg:5
+ * xl:7` spends it the other way round, and 1366px is the width it is tuned for:
+ * seven columns is what puts the whole first row — all seven `isNew` games —
+ * above the fold instead of six of them plus an orphan on a second row.
+ *
+ *   width   collapsed rail       pinned rail
+ *   1024    5 cols, 166px        5 cols, 141px
+ *   1280    7 cols, 151px        7 cols, 133px   <- the narrowest cards ship
+ *   1366    7 cols, 163px        7 cols, 145px   <- the target machine
+ *   1920    7 cols, 242px        7 cols, 224px
+ *
+ * BOTH RAIL STATES ARE IN THAT TABLE ON PURPOSE. A pinned rail costs 128px, and
+ * the grid cannot see the rail from a `min-width` media query, so every count
+ * here has to survive being 128px poorer than it looks. The worst cell is 133px
+ * at exactly `xl` with the rail pinned — narrower than the 175px a phone shows,
+ * but still a legible truncated title, a readable category line and room for the
+ * badge overlay and the 56px hover ▶. That cell is the floor these counts were
+ * chosen against, and it is why the ramp stops at seven columns rather than the
+ * eight that 1366px collapsed would allow on its own.
+ *
+ * (Tempting and WRONG: gating the seventh column on `min-[1344px]` so the narrow
+ * `xl` band keeps six. Tailwind v4 emits arbitrary `min-[…]` variants BEFORE the
+ * named breakpoints, so `xl:grid-cols-6` would simply win at every width above
+ * 1344px and the rule would silently do nothing. Verified in the built CSS. Mix
+ * named and arbitrary width variants on one property and you get whichever the
+ * emitter felt like, not whichever is narrower.)
+ */
+const CATALOG_GRID =
+  "grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-7";
+
 /**
  * The catalog: featured banner, personalized rows, filter grid.
  *
@@ -269,7 +311,7 @@ function ArcadeRows({
         {/* Jump back in — recently played (per-device). Appears post-hydration. */}
         {category === "All" && !query && jumpBackIn.length > 0 && (
           <Section title="Jump back in">
-            <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+            <div className={CATALOG_GRID}>
               {jumpBackIn.map((g) => (
                 <GameCard
                   key={g.slug}
@@ -286,7 +328,7 @@ function ArcadeRows({
         {/* Your favorites — local for everyone, server-synced when signed in. */}
         {category === "All" && !query && favoriteGames.length > 0 && (
           <Section title="Your favorites">
-            <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+            <div className={CATALOG_GRID}>
               {favoriteGames.map((g) => (
                 <GameCard
                   key={g.slug}
@@ -303,7 +345,7 @@ function ArcadeRows({
         {/* New row */}
         {category === "All" && !query && newGames.length > 0 && (
           <Section title="New games">
-            <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+            <div className={CATALOG_GRID}>
               {newGames.map((g) => (
                 <GameCard
                   key={g.slug}
@@ -326,7 +368,7 @@ function ArcadeRows({
         {/* Trending row */}
         {category === "All" && !query && (
           <Section title="Popular this week">
-            <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+            <div className={CATALOG_GRID}>
               {trending.slice(0, 6).map((g) => (
                 <GameCard
                   key={g.slug}
@@ -357,7 +399,7 @@ function ArcadeRows({
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+            <div className={CATALOG_GRID}>
               {ordered.map((g) => (
                 <GameCard
                   key={g.slug}
@@ -515,6 +557,50 @@ function MobileSection({
 }
 
 /* ===================== Featured banner ===================== */
+/**
+ * The promoted game, at the top of the "All" catalogue.
+ *
+ * ── IT IS SIZED IN `svh`, AND THAT IS THE WHOLE POINT ────────────────────────
+ * This banner used to be a POSTER: `sm:p-12`, a `sm:text-6xl` title, a
+ * `sm:text-lg` tagline and a hardcoded `min-h-[280px]` floor under the art. On a
+ * 27" monitor that is exactly right. On the 1366x768 school laptop the site is
+ * actually played on it was 383px of a 768px screen, and it pushed the FIRST ROW
+ * OF GAMES to y=568 — a catalogue whose entire job is showing games was showing
+ * none of them above the fold.
+ *
+ * Nothing in the design knew short screens existed: there was not one
+ * `max-height`, `svh` or `@media (max-height:)` in the app. Rather than add a
+ * height breakpoint (which snaps, and which every later editor has to remember),
+ * the four dimensions that actually drive this banner's height are written as
+ * `clamp(floor, Nsvh, ceiling)` against the SMALL viewport height:
+ *
+ *   dimension        clamp                     768px tall   1080px tall
+ *   text padding     clamp(20px,4svh,48px)        31px         43px
+ *   title size       clamp(30px,4.2svh,60px)      32px         45px
+ *   tagline size     clamp(14px,1.9svh,18px)      15px         18px
+ *   art floor        clamp(150px,26svh,280px)    200px        280px
+ *
+ * Every ceiling is the value this banner already had, so a tall screen renders
+ * the poster UNCHANGED and only a short one yields. Measured, the banner goes
+ * 383px -> ~230px at 768px tall, and the first card row from y=568 to y~400. It
+ * degrades further on its own as the screen shortens, which matters because a
+ * real 768px laptop loses another ~100px to browser chrome — no extra rule
+ * needed, the clamps simply resolve smaller.
+ *
+ * `sm:max-h-[38svh]` on top of that is a GUARD RAIL, not a layout tool: with the
+ * clamps in place the natural height already sits under it (~230px against a
+ * 292px cap at 768px tall), so it never bites on today's copy. It exists so a
+ * future game with a three-line title cannot quietly grow the banner back into
+ * the catalogue's space — the `line-clamp`s below are the first line of that
+ * defence and this is the backstop. The `overflow-hidden` it needs is already on
+ * the Link.
+ *
+ * WHAT WAS NOT CUT: the badges, the title, the tagline, the CTA and the cover
+ * art are all still here, in the same two-column arrangement — this is a cut,
+ * not a deletion. The cover keeps `loading="eager"` / `fetchPriority="high"`
+ * because it is still the LCP element (read the comment at the CoverImage), and
+ * the Link keeps its default prefetch (read the comment above it).
+ */
 function FeaturedBanner({
   game,
   playCounts,
@@ -553,13 +639,17 @@ function FeaturedBanner({
             game_category: game.category,
           });
         }}
-        className="group relative grid w-full overflow-hidden rounded-3xl bg-brand text-left shadow-xl shadow-brand/20 sm:grid-cols-[1.1fr_1fr]"
+        className="group relative grid w-full overflow-hidden rounded-3xl bg-brand text-left shadow-xl shadow-brand/20 sm:max-h-[38svh] sm:grid-cols-[1.1fr_1fr]"
         style={{
           backgroundImage:
             "radial-gradient(circle at 85% 20%, rgba(255,199,0,0.25), transparent 50%), radial-gradient(circle at 15% 90%, rgba(255,79,139,0.35), transparent 55%)",
         }}
       >
-        <div className="relative z-10 flex flex-col justify-center gap-3 p-6 sm:gap-4 sm:p-12">
+        {/* The `sm:` sizes are all viewport-height clamps — see the docblock.
+            The base (below `sm`) sizes are untouched: a phone renders
+            `MobileCatalog`, which has no banner at all, so the only thing that
+            ever sees them is a narrow DESKTOP window. */}
+        <div className="relative z-10 flex flex-col justify-center gap-3 p-6 sm:gap-[clamp(8px,1.6svh,16px)] sm:p-[clamp(20px,4svh,48px)]">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-accent-yellow px-3 py-1 text-[11px] font-black uppercase tracking-wider text-zinc-900">
               ★ Featured
@@ -568,10 +658,14 @@ function FeaturedBanner({
               {game.category}
             </span>
           </div>
-          <h2 className="max-w-xl break-words text-3xl font-black leading-[1.05] tracking-tight text-white sm:text-6xl">
+          {/* `line-clamp-2` is the height guard the `max-h` above is the backstop
+              for: game titles are dashboard-editable free text, and a three-line
+              title would put the banner straight back over the catalogue. Two
+              lines is what the longest title in the catalogue needs at 1024px. */}
+          <h2 className="line-clamp-2 max-w-xl break-words text-3xl font-black leading-[1.05] tracking-tight text-white sm:text-[clamp(30px,4.2svh,60px)]">
             {game.title}
           </h2>
-          <p className="max-w-md text-sm font-semibold text-white/85 sm:text-lg">
+          <p className="line-clamp-2 max-w-md text-sm font-semibold leading-snug text-white/85 sm:text-[clamp(14px,1.9svh,18px)]">
             {game.tagline}
           </p>
           <div className="mt-1 flex items-center gap-4 sm:mt-2">
@@ -581,7 +675,12 @@ function FeaturedBanner({
                 the chevron both describe the click that actually happens; a play
                 triangle promised a launch the banner never delivered. Anyone
                 tempted to put "Play now" back has to rewire the banner first. */}
-            <span className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-7 py-3.5 text-base font-extrabold text-brand shadow-2xl transition group-hover:scale-105">
+            {/* `py-3.5 text-base` made this 52px tall — 8px more than the 44px
+                `min-h-11` already guarantees, i.e. 8px of banner height bought
+                nothing. `py-3 text-[15px]` lands exactly ON the 44px floor, so
+                the tap target is unchanged and the pill still reads as the
+                chunky primary action. */}
+            <span className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-6 py-3 text-[15px] font-extrabold text-brand shadow-2xl transition group-hover:scale-105">
               View game
               <svg
                 width="14"
@@ -605,7 +704,12 @@ function FeaturedBanner({
             )}
           </div>
         </div>
-        <div className="relative hidden h-full min-h-[280px] sm:block">
+        {/* The art column's floor. A flat `min-h-[280px]` was 36% of a 768px
+            screen spent on one cover, and — because it exceeded what the text
+            column needed — it was frequently the thing SETTING the banner's
+            height. Clamped, it keeps the full 280px wherever there is room for
+            it and relaxes to 200px at 768px tall / 150px on anything shorter. */}
+        <div className="relative hidden h-full min-h-[clamp(150px,26svh,280px)] sm:block">
           <div className="absolute inset-4 overflow-hidden rounded-2xl bg-zinc-900">
             {/* The featured banner is above the fold: load its cover eagerly and
                 at high priority, since it is the page's LCP candidate. */}
@@ -729,6 +833,20 @@ function FrenchlyAd() {
 }
 
 /* ===================== Section wrapper ===================== */
+/**
+ * One titled catalogue row.
+ *
+ * The two spacings here are height-clamped for the same reason the banner's are
+ * (see {@link FeaturedBanner}): between the header and the first card sit a
+ * 40px section pad and a 20px heading margin, and on a 768px screen those 60px
+ * are a quarter of a card. Both keep their original value as the CEILING, so a
+ * tall screen is spaced exactly as before and only a short one tightens — 31px
+ * and 15px at 768px tall, which is 14px back for every row on the page.
+ *
+ * The heading's own type size is deliberately NOT clamped. It is the label that
+ * tells you which row you are looking at, and 28px is already the smallest it
+ * reads well at; the 6px available was not worth a wobbling heading.
+ */
 function Section({
   title,
   children,
@@ -737,8 +855,8 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="px-3 pt-10 sm:px-8">
-      <h2 className="mb-5 text-2xl font-black tracking-tight text-zinc-900 sm:text-[28px]">
+    <section className="px-3 pt-[clamp(20px,4svh,40px)] sm:px-8">
+      <h2 className="mb-[clamp(12px,2svh,20px)] text-2xl font-black tracking-tight text-zinc-900 sm:text-[28px]">
         {title}
       </h2>
       {children}
