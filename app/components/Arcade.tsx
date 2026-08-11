@@ -7,6 +7,13 @@ import posthog from "posthog-js";
 import { type Game } from "../lib/games";
 import { useFavorites, useRecentlyPlayed } from "../lib/personalization";
 import { mobileCatalog, playsOn, useDevicePlatform } from "../lib/use-device-platform";
+import {
+  FIRST_SCREEN_COUNT,
+  coverUrls,
+  preloadBudget,
+  preloadImages,
+  readConnection,
+} from "../lib/mobile-preload";
 import { CoverImage } from "./CoverImage";
 import { ArcadeShell, useOpenGame } from "./ArcadeShell";
 import { GameCard } from "./GameCard";
@@ -381,6 +388,36 @@ function MobileCatalog({
   // happening to hold the same object references.
   const favoriteSlugs = new Set(favorites.map((g) => g.slug));
   const rest = games.filter((g) => !favoriteSlugs.has(g.slug));
+
+  /**
+   * Warm the covers this grid is about to paint, in the order it paints them,
+   * while `MobileSplash` is still over the top of it.
+   *
+   * This component is the only place that knows BOTH which games the phone shell
+   * lists and what order they are in, which is why the preload is triggered from
+   * here rather than from the splash — the splash lives in the root layout and
+   * has no catalogue.
+   *
+   * The first screen is counted so the splash can wait for it (see
+   * `pendingFirstScreen`); the remainder is fire-and-forget, and skipped
+   * entirely on a data-saver or 2g connection. Those first few are mostly images
+   * the browser is fetching anyway — an `Image()` for a URL already in flight
+   * costs nothing and simply gives us the `load` event. The real gain is
+   * everything after `FIRST_SCREEN_COUNT`, which `GameCard` renders
+   * `loading="lazy"` and the browser would not ask for until somebody scrolled.
+   */
+  const covers = coverUrls([...favorites, ...rest]);
+  useEffect(() => {
+    preloadImages(covers.slice(0, FIRST_SCREEN_COUNT), { firstScreen: true });
+    if (preloadBudget(readConnection()) === "all") {
+      preloadImages(covers.slice(FIRST_SCREEN_COUNT));
+    }
+    // `covers` is rebuilt on every render (both game lists are), so the joined
+    // URLs are the dependency that actually changes — otherwise this would re-run
+    // on every keystroke in the search box. Re-running is harmless in any case:
+    // `preloadImages` dedupes by URL, so a repeat is a walk over a few strings.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [covers.join("|")]);
 
   const grid = (list: Game[]) => (
     <div className="grid grid-cols-2 gap-x-4 gap-y-6">
