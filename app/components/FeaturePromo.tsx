@@ -171,7 +171,14 @@ const COPY: Record<
     points: [
       { icon: "\u2694\ufe0f", text: "Told the moment a friend challenges you" },
       { icon: "\ud83d\udd15", text: "On a shared device? Stealth settings hides the details" },
-      { icon: "\ud83d\udcf5", text: "Only challenges — nothing else notifies you" },
+      // WAS "Only challenges — nothing else notifies you", which stopped being
+      // true the moment the notification catalogue landed: friend requests, game
+      // drops, achievements and beta assignments can all reach a device now.
+      // REPLACED rather than deleted, because the reassurance it was making —
+      // you are not signing up for a firehose — is still the right thing to say,
+      // and is now backed by a real settings page instead of by there being
+      // nothing else to send.
+      { icon: "\u2699\ufe0f", text: "Choose exactly what notifies you, any time" },
     ],
   },
   install: {
