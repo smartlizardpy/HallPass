@@ -19,6 +19,31 @@
  * to `--hp-bottom-chrome` so other floating elements clear it — see the effect
  * below and `app/lib/bottom-chrome.ts`.
  *
+ * WHERE THE TABS COME FROM. The destinations, their order and — the part that
+ * matters — the rule each one uses to decide it is current all come from
+ * `PRIMARY_NAV` in `./primary-nav`, the same table the desktop rail and the top
+ * bar read. This bar is where those three destinations were first designed (see
+ * that table's docblock, which calls the rail "the desktop answer to that bar"),
+ * and it carried its own hand-written copy of the matching rules until the table
+ * existed. Two copies of the You/Friends carve-out below is exactly the drift the
+ * table was extracted to prevent, so there is now one copy, here as everywhere.
+ *
+ * WHAT STAYS LOCAL, AND WHY. A phone tab is a glyph with a word under it, so this
+ * surface cares about the presentation the other two can shrug off:
+ *
+ *   1. THE ICONS ARE DRAWN, NOT WRAPPED. `PRIMARY_NAV`'s fragments are stroke-only
+ *      line art on a 24-unit viewBox, which is this bar's grid as much as
+ *      `NavIcon`'s — so the fragments come straight from the table, but into the
+ *      local `<svg>` in `TabInner`, at 24x24 rather than `NavIcon`'s 20x20. A tab
+ *      icon has to carry a row on its own at thumb distance; the rail's glyph sits
+ *      next to a label in a scan-column. Do not import `NavIcon` here to "share
+ *      one more thing" — that would silently shrink every tab.
+ *   2. `PHONE_FACE` OVERRIDES THE FACE, NEVER THE DESTINATION. Where the phone
+ *      names or draws a shared destination differently, it says so there and
+ *      nowhere else. It is deliberately not a second tab list: `href`, `match` and
+ *      the order are the table's, and an entry with no override wears the table's
+ *      label and glyph.
+ *
  * ADMIN. There is deliberately no admin tab. The dashboard is reachable from
  * inside the You tab (the `/play/you` section carries a role-gated Dashboard
  * link), so the bar never changes shape based on who is signed in.
@@ -39,6 +64,7 @@ import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { useDevicePlatform } from "../lib/use-device-platform";
 import { clearBottomChrome, publishBottomChrome } from "../lib/bottom-chrome";
+import { PRIMARY_NAV, normalizePath } from "./primary-nav";
 
 /** Routes that are their own full-screen world — no player tab bar over them. */
 const HIDDEN_PREFIXES = [
@@ -53,18 +79,39 @@ const HIDDEN_PREFIXES = [
 ];
 
 /**
- * Is `path` this route or something nested under it? A bare `startsWith` would
- * also match a sibling that merely shares the prefix (`/play/yourthing` for
- * `/play/you`), so the separator is part of the test.
+ * What the phone calls a shared destination, and what it draws for it — keyed by
+ * the `PRIMARY_NAV` href it overrides. Presentation ONLY: nothing in here can add,
+ * remove, reorder or re-point a tab, so this bar and the desktop surfaces cannot
+ * end up disagreeing about where a tab goes or when it is lit.
+ *
+ * Only `/` needs an entry. Friends and You wear the table's own label and glyph,
+ * because those two marks were drawn for this bar in the first place and
+ * `PRIMARY_NAV` adopted them verbatim (its icon comments say so) — sharing them is
+ * how they stay one mark instead of two that drift.
+ *
+ * `/` is the exception on both counts. On desktop that destination is "Games", one
+ * of several places the rail can take you. Here it is the way back out of every
+ * other tab, which is what a phone tab bar's first slot means, so it is "Home"
+ * under a house — the word and the glyph a thumb expects at the bottom-left of a
+ * phone. It is deliberately NOT the table's gamepad, which reads as "the games
+ * section" rather than "back to the start".
  */
-function isUnder(path: string, route: string) {
-  return path === route || path.startsWith(`${route}/`);
-}
+const PHONE_FACE: Record<string, { label?: string; icon?: React.ReactNode }> = {
+  "/": {
+    label: "Home",
+    icon: <path d="M3 11l9-8 9 8M5 10v10h14V10" />,
+  },
+};
 
 export function MobileTabBar() {
   const device = useDevicePlatform();
   const isMobile = device === "mobile";
-  const pathname = usePathname() ?? "/";
+  // Normalised, because `next.config.ts` sets `skipTrailingSlashRedirect: true`:
+  // `/play/you/` is SERVED rather than redirected, so `usePathname()` reports
+  // whatever spelling the browser is on, and `PRIMARY_NAV`'s `match` predicates
+  // compare bare paths and document that the caller owes them this call. Same line
+  // as the rail and the top bar, so all three agree on a slashed URL.
+  const pathname = normalizePath(usePathname() ?? "/");
   const barRef = useRef<HTMLElement | null>(null);
 
   const hidden =
@@ -114,13 +161,6 @@ export function MobileTabBar() {
 
   if (hidden) return null;
 
-  const homeActive = pathname === "/" || pathname.startsWith("/category");
-  // Friends lives UNDER the You section, so the two tabs would both light up on
-  // `/play/you/friends` if You matched the whole subtree. Friends wins its own
-  // route; You covers the rest of the section (profile, settings).
-  const friendsActive = isUnder(pathname, "/play/you/friends");
-  const youActive = isUnder(pathname, "/play/you") && !friendsActive;
-
   return (
     <nav
       ref={barRef}
@@ -128,21 +168,31 @@ export function MobileTabBar() {
       className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border bg-white/95 backdrop-blur-xl lg:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <TabLink href="/" label="Home" active={homeActive}>
-        <path d="M3 11l9-8 9 8M5 10v10h14V10" />
-      </TabLink>
+      {/* One tab per `PRIMARY_NAV` entry, in the table's order — never a
+          hand-typed copy of the hrefs or the matching rules. `entry.match` is why:
+          Friends lives UNDER the You section, so both tabs would light up on
+          `/play/you/friends` if You matched the whole subtree, and that carve-out
+          (Friends wins its own route, You covers the rest of the section — profile,
+          settings) is stated once, in the table, for all three nav surfaces. The
+          copy that used to sit here is exactly the kind that gets "corrected" into
+          a two-tabs-lit bug.
 
-      {/* Two equal heads over one shared base — a symmetric "friends" mark,
-          instead of the lopsided big-person/little-person users glyph. */}
-      <TabLink href="/play/you/friends" label="Friends" active={friendsActive}>
-        <circle cx="8" cy="8" r="3" />
-        <circle cx="16" cy="8" r="3" />
-        <path d="M3 20v-1a5 5 0 0 1 5-5h8a5 5 0 0 1 5 5v1" />
-      </TabLink>
-
-      <TabLink href="/play/you" label="You" active={youActive}>
-        <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 21v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1" />
-      </TabLink>
+          `PHONE_FACE` supplies the label and glyph where the phone's differ; the
+          fragment lands in `TabInner`'s own 24x24 `<svg>`, which shares the table's
+          24-unit grid but not `NavIcon`'s 20px size. */}
+      {PRIMARY_NAV.map((entry) => {
+        const face = PHONE_FACE[entry.href];
+        return (
+          <TabLink
+            key={entry.href}
+            href={entry.href}
+            label={face?.label ?? entry.label}
+            active={entry.match(pathname)}
+          >
+            {face?.icon ?? entry.icon}
+          </TabLink>
+        );
+      })}
     </nav>
   );
 }
