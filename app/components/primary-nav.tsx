@@ -12,11 +12,11 @@
  * NO `"use client"` HERE, DELIBERATELY. Nothing in this file touches state,
  * effects or browser APIs — it is a table, two pure string helpers and an SVG
  * wrapper — so it has no reason to be a client ENTRY POINT. A file with no
- * directive takes the boundary of whoever imports it: pulled into `Sidebar`
- * (which is `"use client"`) it is bundled for the client like any other module
- * in that graph, while a Server Component could read `href`/`label` off it
- * without forcing the file across the network boundary. Adding the directive
- * would buy nothing and throw that second option away.
+ * directive takes the boundary of whoever imports it: pulled into `SiteHeader`
+ * or `MobileTabBar` (both `"use client"`) it is bundled for the client like any
+ * other module in those graphs, while a Server Component could read
+ * `href`/`label` off it without forcing the file across the network boundary.
+ * Adding the directive would buy nothing and throw that second option away.
  *
  * The `match` FUNCTIONS are safe for the same reason. Serializability only
  * constrains PROPS handed from a Server Component to a Client Component; these
@@ -52,12 +52,22 @@ export function isUnder(path: string, base: string): boolean {
  * It travels with the icons rather than staying behind in the rail because the
  * fragments below are drawn for exactly these metrics — a 24-unit viewBox,
  * stroke-only, no per-icon `fill`/`stroke` — and are meaningless without a host
- * that supplies them. Every surface that renders one therefore gets the same
- * grid without restating it.
+ * that supplies them. Anything that renders one therefore gets the same grid
+ * without restating it.
+ *
+ * NOTHING CALLS IT RIGHT NOW, and that is not an oversight. `SiteHeader` renders
+ * the destinations label-only (its docblock costs out the three glyphs against
+ * the search field), and `MobileTabBar` puts the same fragments into its own
+ * `<svg>` at 24x24, because a phone tab's icon carries the row on its own. This
+ * stays because it is where the fragments' host metrics are DEFINED — a surface
+ * that wants them at rail size imports this rather than re-deriving the grid,
+ * and the header's note already points anything reinstating icons back here.
  *
  * 20x20 drawn on a 24x24 grid is also `CategoryIcon`'s geometry over in
- * `Sidebar`: the two groups stack in one rail, so they have to sit on one icon
- * grid. Changing the metrics here means changing them there.
+ * `Sidebar`. The two groups no longer share a surface — the rail kept the genres
+ * and gave up the destinations — so they are no longer judged against each other
+ * for silhouette (see that file's `ICONS` note); the shared grid is what remains,
+ * and changing the metrics here still means changing them there.
  */
 export function NavIcon({ children }: { children: React.ReactNode }) {
   return (
@@ -84,10 +94,15 @@ export function NavIcon({ children }: { children: React.ReactNode }) {
  * WHY IT EXISTS. Friends and the player's own profile were reachable on desktop
  * ONLY from the avatar dropdown in the header, while the phone's bottom tab bar
  * gives both a first-class slot — so the mobile information architecture was the
- * better of the two on a site whose recent feature work is all social. This is
- * the desktop answer to that bar. `Sidebar` renders it above the genre list, and
- * because it does so from `navList`, the mobile drawer gets it from that same
- * single insertion.
+ * better of the two on a site whose recent feature work is all social. This table
+ * is the desktop answer to that bar.
+ *
+ * WHO READS IT: exactly two surfaces. `SiteHeader` draws the three as tabs in the
+ * top bar at `lg` and up, and `MobileTabBar` draws them along the bottom of a
+ * phone. `Sidebar` is NOT one of them any more — it rendered these above the
+ * genre list until the tabs landed in the header, and its mobile drawer inherited
+ * them from that same insertion; both are gone, and the rail now owns the genre
+ * filter and the stealth hatch only.
  *
  * REAL LINKS, ALWAYS — never the `<button>` a category falls back to in callback
  * mode (see `Sidebar`'s `onSelect`). A category in callback mode filters the grid

@@ -21,12 +21,15 @@
  *
  * WHERE THE TABS COME FROM. The destinations, their order and — the part that
  * matters — the rule each one uses to decide it is current all come from
- * `PRIMARY_NAV` in `./primary-nav`, the same table the desktop rail and the top
- * bar read. This bar is where those three destinations were first designed (see
- * that table's docblock, which calls the rail "the desktop answer to that bar"),
- * and it carried its own hand-written copy of the matching rules until the table
- * existed. Two copies of the You/Friends carve-out below is exactly the drift the
- * table was extracted to prevent, so there is now one copy, here as everywhere.
+ * `PRIMARY_NAV` in `./primary-nav`, the same table `SiteHeader` reads for its top
+ * bar. Those two are the table's only consumers: the desktop rail drew these
+ * three as well when the table was extracted, but it has since given the
+ * destinations up to the header and kept only the genre filter. This bar is where
+ * the three were first designed (that table's docblock calls itself "the desktop
+ * answer to that bar"), and it carried its own hand-written copy of the matching
+ * rules until the table existed. Two copies of the You/Friends carve-out below is
+ * exactly the drift the table was extracted to prevent, so there is now one copy,
+ * here as everywhere.
  *
  * WHAT STAYS LOCAL, AND WHY. A phone tab is a glyph with a word under it, so this
  * surface cares about the presentation the other two can shrug off:
@@ -35,9 +38,10 @@
  *      line art on a 24-unit viewBox, which is this bar's grid as much as
  *      `NavIcon`'s — so the fragments come straight from the table, but into the
  *      local `<svg>` in `TabInner`, at 24x24 rather than `NavIcon`'s 20x20. A tab
- *      icon has to carry a row on its own at thumb distance; the rail's glyph sits
- *      next to a label in a scan-column. Do not import `NavIcon` here to "share
- *      one more thing" — that would silently shrink every tab.
+ *      icon has to carry a row on its own at thumb distance; `NavIcon`'s 20px is
+ *      sized for a glyph with a label beside it in a scan-column. Do not import
+ *      `NavIcon` here to "share one more thing" — that would silently shrink
+ *      every tab.
  *   2. `PHONE_FACE` OVERRIDES THE FACE, NEVER THE DESTINATION. Where the phone
  *      names or draws a shared destination differently, it says so there and
  *      nowhere else. It is deliberately not a second tab list: `href`, `match` and

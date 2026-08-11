@@ -11,8 +11,11 @@
  *
  * EVERY DESTINATION IN HERE IS A `next/link`. They used to be plain `<a>`s,
  * justified as "nothing to gain from prefetching them behind a closed menu" —
- * but `Sidebar` renders two of the SAME hrefs as `<Link>`s, so one link was a
- * soft transition from the rail and a cold document reload from the avatar. The
+ * but `/play/you` and `/play/you/friends` are also two of the three entries in
+ * `PRIMARY_NAV`, which `SiteHeader` draws as tabs at `lg` and up and
+ * `MobileTabBar` draws along the bottom of a phone, both as `<Link>`s. One href
+ * was therefore a soft transition from the nav and a cold document reload from
+ * the avatar, depending only on which copy of it you happened to click. The
  * prefetch half of that reasoning was answering a question nobody asked: the
  * whole dropdown sits behind `{open && …}`, so a CLOSED menu has no links in the
  * document to prefetch, and an OPEN one is a player a single click from one of
@@ -244,10 +247,13 @@ export function AccountMenu() {
             </MenuLink>
           )}
 
-          {/* The rule below the destinations, for the same reason `Sidebar`
-              draws one above `SurpriseButton`: what follows is an ACTION, and
-              stacking it into the same unbroken column would promise a route
-              that could be current. */}
+          {/* The rule below the destinations. Everything ABOVE it is a
+              `MenuLink` — a real href you can ⌘-click or open in a new tab, and
+              a page that could be the one you are on; everything BELOW is an
+              ACTION on this session (the stealth launcher, then Sign out).
+              Stacking the two kinds into one unbroken column would promise a
+              route where there is none — see the stealth row's own note on why
+              it carries no `aria-current`. */}
           <div className="my-1 h-px bg-border" />
 
           {/*
