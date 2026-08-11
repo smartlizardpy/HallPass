@@ -122,7 +122,6 @@ export const games: Game[] = [
     gradient: ["#ff2bd6", "#00e5ff"],
     accent: "#ff2bd6",
     art: "speed",
-    isFeatured: true,
     plays: 184213,
     platform: "desktop",
   },
@@ -516,6 +515,7 @@ export const games: Game[] = [
     accent: "#ffb347",
     art: "swarm",
     isNew: true,
+    isFeatured: true,
     platform: "desktop",
   },
   {
