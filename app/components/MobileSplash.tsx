@@ -10,6 +10,12 @@
  * and a spinning wheel, and by the time it fades the mobile shell has mounted
  * underneath.
  *
+ * IT ALSO LOADS SOMETHING NOW, which is what turns it from a curtain into a
+ * loading screen. The beat it holds is spent warming the two surfaces reached
+ * next — see {@link WARM_ROUTES} — and its exit waits (within bounds) for the
+ * covers the grid underneath is about to paint. What it does NOT do is spend that
+ * time on the service worker; see the note further down.
+ *
  * ONCE PER SESSION. Keyed in `sessionStorage`, so it plays on the first load /
  * PWA launch and never again while browsing around — a splash on every tap-through
  * gets old fast.
@@ -25,6 +31,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useDevicePlatform } from "../lib/use-device-platform";
+import { pendingFirstScreen } from "../lib/mobile-preload";
 import { warmSocial } from "../lib/social-cache";
 import { Wordmark } from "./Wordmark";
 
@@ -90,6 +97,26 @@ const WARM_ROUTES = ["/play/you", "/play/you/friends"];
 /** Full-screen worlds where a launch splash would be noise, not a welcome. */
 const SKIP_PREFIXES = ["/dashboard", "/play/signin", "/play/signout", "/play/auth"];
 
+/**
+ * HOW LONG THE SPLASH STAYS, and why it is a range rather than a number.
+ *
+ * The old fixed 700ms covered the second-paint seam and nothing else, which meant
+ * it could lift onto a grid whose covers were still arriving. Now it leaves at
+ * the floor IF the first screen is ready, waits for it if not, and is taken off
+ * by the ceiling either way.
+ *
+ * The ceiling is the part to keep honest: 1600ms is roughly "one slow cover on a
+ * school wifi", and past that a visitor is better served by a half-drawn grid
+ * they can scroll than by a spinner that is technically still working. It only
+ * ever waits on the handful of covers about to be on screen — never on the
+ * friends fetch or the route prefetches, which are fire-and-forget by design.
+ */
+const FLOOR_MS = 700;
+const CEILING_MS = 1600;
+const POLL_MS = 100;
+/** Matches the overlay's `duration-300`, plus a frame. */
+const FADE_MS = 350;
+
 export function MobileSplash() {
   const isMobile = useDevicePlatform() === "mobile";
   const pathname = usePathname() ?? "/";
@@ -105,6 +132,8 @@ export function MobileSplash() {
   // that never fades). A ref carries "already triggered" across renders without
   // being a dependency, so entering "showing" can no longer cancel its own exit.
   const triggered = useRef(false);
+  /** Latches the exit, so the ceiling and the poll cannot both fire it. */
+  const leaving = useRef(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
@@ -133,12 +162,40 @@ export function MobileSplash() {
     // in `Arcade.tsx`.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPhase("showing");
+
     // Deliberately no dep-change cleanup here: these timers are the exit path, and
     // clearing them on any re-run (a pathname change, a device flip) is exactly
     // what stranded the splash before. They're cleared only on real unmount, by
     // the effect below.
-    timers.current.push(setTimeout(() => setPhase("leaving"), 700));
-    timers.current.push(setTimeout(() => setPhase("idle"), 1050));
+    const leave = () => {
+      if (leaving.current) return;
+      leaving.current = true;
+      setPhase("leaving");
+      timers.current.push(setTimeout(() => setPhase("idle"), FADE_MS));
+    };
+
+    // THE CEILING IS SCHEDULED FIRST, AND UNCONDITIONALLY. Everything below it is
+    // an optimisation that may or may not happen; this is the guarantee that the
+    // overlay comes off. No amount of pending work, a hung request, a 404 cover
+    // or a catalogue that never registers anything can outlive it, and the worst
+    // case is the old fixed behaviour arriving late rather than never.
+    timers.current.push(setTimeout(leave, CEILING_MS));
+
+    // Past the floor, leave as soon as the covers the grid is about to paint are
+    // ready — the point of holding the screen at all. `pendingFirstScreen` is a
+    // synchronous count for exactly this reason: polling a number cannot strand
+    // the splash the way awaiting a promise can. When nothing registered (a phone
+    // launching onto a store page, where `Arcade` never mounts) it is already 0
+    // and the timing is unchanged from before.
+    const tick = () => {
+      if (leaving.current) return;
+      if (pendingFirstScreen() === 0) {
+        leave();
+        return;
+      }
+      timers.current.push(setTimeout(tick, POLL_MS));
+    };
+    timers.current.push(setTimeout(tick, FLOOR_MS));
     // `router` is listed because the rule asks for it, and it is harmless: the
     // `triggered` ref already makes a second run of this effect a no-op, which is
     // the whole reason that latch is a ref and not state.
