@@ -65,10 +65,11 @@ import { Wordmark } from "./Wordmark";
  *      rail is still on screen there — the wordmark drops to `text-xl` and
  *      "What's New" collapses to its icon, both back to full size at `xl`.
  *   4. "SURPRISE ME" IS AN ICON, AND DESKTOP-ONLY. It arrived here from the rail,
- *      where it was a full-width gradient button with a label; in this row it
- *      renders `variant="icon"` — a 44px die, 52px with the gap — because a
- *      labelled pill would cost ~140px of the search field for an action nobody
- *      is hunting for by name. It is also inside the `isMobile ? …` else-branch
+ *      where it was a full-width gradient button with a label; in this row it is
+ *      a 44px die, 52px with the gap — because a labelled pill would cost ~140px
+ *      of the search field for an action nobody is hunting for by name. That die
+ *      is now the control's ONLY shape (`SurpriseButton` dropped the rail one
+ *      with its last caller), so there is no variant to select here. It is also inside the `isMobile ? …` else-branch
  *      on purpose: see the note on that branch.
  *      Remeasured at 1024x768 signed-out with the rail and the die present:
  *      search 167px (it was 219px), and the ROW still does not overflow — the
@@ -359,7 +360,7 @@ export function SiteHeader({
               field also keeps it next to the other "find me something" control,
               which is what it is: search's opposite, for when you have nothing to
               type. */}
-          <SurpriseButton games={games} variant="icon" />
+          <SurpriseButton games={games} />
           <StreakChip />
           {/* "What's New" goes icon-only for exactly the `lg`..`xl` band, where
               the tabs have just moved in and the rail is still taking 192px:
