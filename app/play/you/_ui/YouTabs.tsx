@@ -22,11 +22,26 @@ import { usePathname } from "next/navigation";
  * marked with `aria-current="page"`.
  */
 
-/** One tab. Order here is the order on screen. */
+/**
+ * One tab. Order here is the order on screen.
+ *
+ * `short` IS NOT OPTIONAL POLISH — it is what lets a fourth tab exist at all.
+ * The strip divides its width equally (`flex-1`), so on a 390px phone each tab
+ * gets about 80px inside the layout's `px-6` and this strip's own padding, of
+ * which the label may use ~64. "Notifications" needs more than double that: it
+ * would either wrap to two lines or force the strip to overflow. Every entry
+ * carries one so the rule is uniform rather than a special case bolted onto the
+ * one long word, and the full label comes back at `sm`, where there is room.
+ *
+ * This is the same collapse `SiteHeader` already does to "What's New" in the
+ * band where the tabs and the rail are both on screen: shorten the label where
+ * the row cannot pay for it, never drop the control.
+ */
 const TABS = [
-  { href: "/play/you", label: "Profile" },
-  { href: "/play/you/friends", label: "Friends" },
-  { href: "/play/you/settings", label: "Settings" },
+  { href: "/play/you", label: "Profile", short: "Profile" },
+  { href: "/play/you/friends", label: "Friends", short: "Friends" },
+  { href: "/play/you/notifications", label: "Notifications", short: "Alerts" },
+  { href: "/play/you/settings", label: "Settings", short: "Settings" },
 ] as const;
 
 /**
@@ -69,13 +84,21 @@ export function YouTabs() {
             key={tab.href}
             href={tab.href}
             aria-current={current ? "page" : undefined}
-            className={`flex-1 rounded-full px-4 py-2 text-center text-sm font-extrabold transition focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30 ${
+            // `px-2` below `sm` and `whitespace-nowrap` throughout: with four
+            // tabs the horizontal padding is the difference between a label that
+            // fits and one that wraps to a second line, and a wrapped tab would
+            // make the whole strip two rows tall.
+            className={`flex-1 whitespace-nowrap rounded-full px-2 py-2 text-center text-sm font-extrabold transition focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30 sm:px-4 ${
               current
                 ? "bg-brand text-white"
                 : "text-zinc-700 hover:bg-surface-2 hover:text-zinc-900"
             }`}
           >
-            {tab.label}
+            {/* Both rendered, one shown — rather than picking in JS off a
+                viewport measurement, which this component has no way to read
+                during a prerender and would hydrate wrong. */}
+            <span className="sm:hidden">{tab.short}</span>
+            <span className="hidden sm:inline">{tab.label}</span>
           </Link>
         );
       })}
