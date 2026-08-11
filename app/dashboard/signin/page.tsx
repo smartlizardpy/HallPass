@@ -72,7 +72,7 @@ export default async function DashboardSignInPage({
               </p>
             )}
             <Link
-              href="/play/account"
+              href="/play/you"
               className="mt-6 inline-block w-full rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
             >
               Go to your account

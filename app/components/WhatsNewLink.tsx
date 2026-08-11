@@ -5,6 +5,12 @@
  * variants: `header` (a compact pill that collapses to an icon on mobile) and
  * `sidebar` (a nav-style row for the dashboard).
  *
+ * The two variants sit on different surfaces and must not be unified. The
+ * dashboard rail is white, so `sidebar` is a bare row that only fills on hover.
+ * `SiteHeader`'s bar is ALSO white now, so `header` fills with `bg-surface-2` —
+ * it was `bg-white` + a shadow back when the bar was `--background`, and both of
+ * those were doing the job `--surface-2` now does properly.
+ *
  * The changelog URL is centralised here so both entry points stay in sync; update
  * it in one place if the ShipNote slug/domain ever changes.
  */
@@ -45,7 +51,7 @@ export function WhatsNewLink({
       rel="noopener noreferrer"
       title="What's New"
       aria-label="What's New"
-      className="flex h-11 items-center gap-1.5 rounded-full bg-white px-3 text-sm font-bold text-zinc-700 shadow-sm transition hover:text-brand sm:px-4"
+      className="flex h-11 items-center gap-1.5 rounded-full bg-surface-2 px-3 text-sm font-bold text-zinc-700 transition hover:text-brand sm:px-4"
     >
       <Sparkle className="h-[18px] w-[18px] text-brand" />
       <span className="hidden sm:inline">What&apos;s New</span>

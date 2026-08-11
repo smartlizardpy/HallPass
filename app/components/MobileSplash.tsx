@@ -29,6 +29,28 @@ import { Wordmark } from "./Wordmark";
 
 const SEEN_KEY = "hp-mobile-splash-shown";
 
+/**
+ * THE SPLASH DOES NOT TRIGGER A GAME SYNC, AND MUST NOT.
+ *
+ * It used to post `SYNC_NOW` to the service worker here, on the reasoning that a
+ * cold PWA launch serves stale game HTML until `PWA.tsx`'s poll lands "thirty
+ * seconds later". That reasoning was simply wrong. `PWA.tsx` calls `poll()`
+ * immediately after `await navigator.serviceWorker.ready`, and its `30_000`
+ * check is a re-poll THROTTLE measured from `lastPolledAt`, which starts at 0 —
+ * so the first poll always fires at once. There was never a gap to cover.
+ *
+ * The cost of getting that wrong was real. `SYNC_NOW` runs `refreshAllGameHtml()`
+ * unconditionally, re-fetching every precached `/game-html/` document AND every
+ * runtime entry (which is where bundle assets live) with `cache: "no-store"` —
+ * a catalogue-wide download burst on exactly the school network the feature was
+ * supposed to help. Worse, on a genuine version change the splash's sync and the
+ * poll's `CHECK_GAMES_VERSION` both reach `refreshAllGameHtml()` concurrently.
+ *
+ * `CHECK_GAMES_VERSION` is the message that already does this correctly: it
+ * compares against the stored sentinel and no-ops when nothing moved. `PWA.tsx`
+ * owns sending it. Anything added here would be a second sender racing the first.
+ */
+
 /** Full-screen worlds where a launch splash would be noise, not a welcome. */
 const SKIP_PREFIXES = ["/dashboard", "/play/signin", "/play/signout", "/play/auth"];
 

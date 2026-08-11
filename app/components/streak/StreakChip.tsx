@@ -53,10 +53,16 @@ export function StreakChip() {
         aria-label={active ? `${current}-day streak` : "Daily streak"}
         aria-expanded={open}
         title={active ? `${current}-day streak — play today to keep it going` : "Play a game to start a streak"}
+        // The chip lives on `SiteHeader`'s white bar, so the resting state fills
+        // with `--surface-2`; `bg-white` would have left it invisible there. Its
+        // count is `text-zinc-600` rather than `--muted` for the same reason the
+        // header's placeholder is: `--muted` on `--surface-2` is 4.45:1, under
+        // AA for 14px text. The lit state keeps `bg-accent-yellow`, which reads
+        // against white on its own.
         className={`inline-flex h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-black transition ${
           active
             ? "bg-accent-yellow text-zinc-900 hover:brightness-105"
-            : "bg-white text-muted hover:text-zinc-900"
+            : "bg-surface-2 text-zinc-600 hover:text-zinc-900"
         }`}
       >
         <span aria-hidden className={active ? "" : "grayscale opacity-70"}>🔥</span>

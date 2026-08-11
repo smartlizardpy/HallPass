@@ -92,9 +92,9 @@ const SESSION_KEY = "hp:visitCounted";
 /**
  * Routes where a promo would interrupt rather than inform.
  *
- * The dashboard is someone working; the account and friends pages are where the
- * promo would send them anyway; sign-in and the SDK popup are mid-flow. A modal
- * over any of those is an obstacle.
+ * The dashboard is someone working; the player's own `/play/you` pages are where
+ * the promo would send them anyway; sign-in and the SDK popup are mid-flow. A
+ * modal over any of those is an obstacle.
  */
 const SUPPRESSED_PREFIXES = [
   "/dashboard",
@@ -104,6 +104,14 @@ const SUPPRESSED_PREFIXES = [
   // pressed "Challenge a friend" and got a stealth advert in a box too small to
   // show both. Same "mid-flow" reasoning as the sign-in routes below.
   "/embed",
+  // The WHOLE `/play/you` subtree — profile, friends, settings — so a tab added
+  // there later is covered without anyone remembering to come back here. Every
+  // social nag's CTA lands somewhere inside it.
+  "/play/you",
+  // The pre-split paths. They now only redirect into `/play/you`, but a stale
+  // bookmark or an old push notification still passes through them, and a modal
+  // fired during that round trip is the same interruption. Costs one prefix
+  // compare each.
   "/play/account",
   "/play/friends",
   "/play/signin",
@@ -197,7 +205,10 @@ const COPY: Record<
     title: "Usernames, badges and friends are here",
     body: "Sign in to claim your @username, earn badges as you play, and see what your friends are playing.",
     cta: "Sign in",
-    href: "/play/signin?callbackUrl=/play/account",
+    // Back to the profile, not to settings: this variant pitches all three of
+    // usernames, badges and friends, and `/play/you` is the one page that shows
+    // the lot with the other two a tap away.
+    href: "/play/signin?callbackUrl=/play/you",
     points: SOCIAL_POINTS,
   },
   username: {
@@ -205,7 +216,9 @@ const COPY: Record<
     title: "Claim your @username",
     body: "Your username is how friends find you — and it is first come, first served. Grab yours before someone else does.",
     cta: "Claim it now",
-    href: "/play/account",
+    // Settings, not the profile: picking a username is an edit to the account,
+    // and this CTA promises the field itself rather than a page about it.
+    href: "/play/you/settings",
     points: SOCIAL_POINTS,
   },
   friends: {
@@ -213,7 +226,7 @@ const COPY: Record<
     title: "Add your friends",
     body: "See what your friends are playing, right on the game page. Add them by username or share your friend code.",
     cta: "Find friends",
-    href: "/play/friends",
+    href: "/play/you/friends",
     points: SOCIAL_POINTS,
   },
 };

@@ -103,7 +103,7 @@ export function challengeNotification(input: {
     },
     // The inbox rather than the game: a challenge might be one of several, and
     // this is the screen that can show all of them with a way to act on each.
-    url: "/play/friends",
+    url: "/play/you/friends",
     tag: CHALLENGE_NOTIFICATION_TAG,
   };
 }

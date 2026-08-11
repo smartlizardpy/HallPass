@@ -53,6 +53,31 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // THE PLAYER'S OWN PAGES — same two-part signal as `/u/:path*` above, and
+        // for a stronger reason: `/play/you/settings` renders the signed-in
+        // player's EMAIL, and the Profile tab renders their standings and badges.
+        //
+        // Every route under `/play/you` already exports
+        // `robots: { index: false, follow: false }` — the layout AND each tab,
+        // deliberately duplicated, because Next merges metadata shallowly and a
+        // segment that later sets `robots` for any other reason would replace the
+        // inherited value with no error. This header is the belt to that pair of
+        // braces: it applies to responses no HTML parser ever reaches the
+        // `<head>` of, which is not hypothetical here — Next answers a streamed
+        // `not-found.js` with HTTP 200.
+        //
+        // It also covers the two pre-split paths, which are now bare `redirect()`s
+        // into this subtree: a 307 carries no `<head>` at all, so metadata cannot
+        // speak for them and only a header can.
+        source: "/play/:path*",
+        headers: [
+          {
+            key: "X-Robots-Tag",
+            value: "noindex, nofollow, noimageindex, noarchive",
+          },
+        ],
+      },
+      {
         // BETA SURFACES ARE NEVER INDEXED — same two-part signal as `/u/:path*`
         // above, for the same reason: the `robots` metadata in each page is not
         // enough on its own, because Next answers a streamed `not-found.js` with
