@@ -44,6 +44,15 @@ export function WhatsNewLink({
     );
   }
   // Header pill: icon + label on >= sm, icon-only on mobile to save space.
+  //
+  // THIS SHAPE IS TARGETED FROM OUTSIDE. `SiteHeader` wraps this pill and hides
+  // the label for one more breakpoint band with a `[&>a>span]` child selector,
+  // because the header's horizontal budget is the header's problem and not this
+  // component's (the same pill in the dashboard rail has room to spare). That
+  // selector depends on the structure directly below: an `<a>` whose only
+  // `<span>` child is the label, with the sparkle an `<svg>` beside it. Wrap the
+  // label in anything, or add a second `<span>` child, and the header silently
+  // stops collapsing — grep for `[&>a>span]` before you reshape this.
   return (
     <a
       href={WHATS_NEW_URL}
