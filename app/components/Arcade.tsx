@@ -20,6 +20,34 @@ import { GameCard } from "./GameCard";
 import { PlatformConfirmSheet, usePlayGuard } from "./PlatformGate";
 import { useSearchCapture } from "../lib/use-search-capture";
 
+/* ===================== Play counts ===================== */
+/**
+ * The catalogue's ONE play-count resolution: the live count from
+ * `app/lib/stats.ts` first, the static seed in `app/lib/games.ts` second, zero
+ * last.
+ *
+ * Shared rather than written out at each call site so the Trending ranking and
+ * the featured banner can never disagree. They used to: the banner read
+ * `game.plays` directly, so a game with no seed — the featured one, as it
+ * happens — was advertised as "0 plays" while the row beside it ranked on the
+ * live number. `app/game/[slug]/page.tsx` resolves its own copy the same way.
+ */
+function playsFor(game: Game, playCounts: Record<string, number>): number {
+  return playCounts[game.slug] ?? game.plays ?? 0;
+}
+
+/**
+ * Below this many plays the featured banner prints no play count at all.
+ *
+ * The hero is the first copy a new visitor reads, and a genuinely small number
+ * there is worse than silence: "3 plays" on the page whose job is to make the
+ * arcade look worth staying on tells everyone the arcade is dead. A newly
+ * promoted game, or one whose live count has not accumulated yet, therefore
+ * drops the line entirely — no placeholder, no "New" substitute, since either
+ * would only point at the number that is missing.
+ */
+const MIN_PLAYS_SHOWN = 50;
+
 /**
  * The catalog: featured banner, personalized rows, filter grid.
  *
@@ -132,10 +160,13 @@ function ArcadeRows({
   };
 
   const featured = games.find((g) => g.isFeatured) ?? games[0];
-  const trending = useMemo(() => {
-    const playsFor = (g: Game) => playCounts[g.slug] ?? g.plays ?? 0;
-    return [...games].sort((a, b) => playsFor(b) - playsFor(a)).slice(0, 6);
-  }, [games, playCounts]);
+  const trending = useMemo(
+    () =>
+      [...games]
+        .sort((a, b) => playsFor(b, playCounts) - playsFor(a, playCounts))
+        .slice(0, 6),
+    [games, playCounts],
+  );
   const newGames = useMemo(() => games.filter((g) => g.isNew), [games]);
 
   // Personalized rows, resolved from slugs → games (a slug whose game has since
@@ -232,7 +263,7 @@ function ArcadeRows({
 
         {/* Hero / Featured banner */}
         {category === "All" && !query && (
-          <FeaturedBanner game={featured} />
+          <FeaturedBanner game={featured} playCounts={playCounts} />
         )}
 
         {/* Jump back in — recently played (per-device). Appears post-hydration. */}
@@ -484,12 +515,33 @@ function MobileSection({
 }
 
 /* ===================== Featured banner ===================== */
-function FeaturedBanner({ game }: { game: Game }) {
+function FeaturedBanner({
+  game,
+  playCounts,
+}: {
+  game: Game;
+  playCounts: Record<string, number>;
+}) {
+  // Resolved through the shared {@link playsFor}, so the headline number and the
+  // "Popular this week" ranking are always reading the same figure.
+  const plays = playsFor(game, playCounts);
+
   return (
     <section className="px-3 pt-2 sm:px-8">
+      {/* Prefetch is left at the DEFAULT (`auto`), deliberately unlike the game
+          cards, which opt out with `prefetch={false}`. That opt-out is about
+          VOLUME: a screen of 28 cards would warm 28 store pages at once, which
+          is real bandwidth on school wifi (`SurpriseButton` documents the
+          reasoning). This is ONE link, always above the fold, pointing at the
+          single most promoted destination on the site — opting it out bought no
+          bandwidth back and cost a cold round trip on the click we most want to
+          feel instant. `/game/[slug]` is statically prerendered (see its
+          docblock), so the default already prefetches the full route and data;
+          `prefetch={true}` would behave identically here and differ only if
+          that route ever went dynamic. Do not "consistency-fix" this back to
+          match the cards. */}
       <Link
         href={`/game/${game.slug}`}
-        prefetch={false}
         onClick={() => {
           // Renamed from `featured_game_played`: this now means "clicked through
           // to the store page", not "started playing". `game_started` is fired
@@ -545,9 +597,12 @@ function FeaturedBanner({ game }: { game: Game }) {
                 <path d="M4.5 1.5L10 7l-5.5 5.5" />
               </svg>
             </span>
-            <span className="hidden text-[13px] font-bold text-white/80 sm:inline">
-              {(game.plays ?? 0).toLocaleString()} plays
-            </span>
+            {/* Omitted below {@link MIN_PLAYS_SHOWN} — see that constant. */}
+            {plays >= MIN_PLAYS_SHOWN && (
+              <span className="hidden text-[13px] font-bold text-white/80 sm:inline">
+                {plays.toLocaleString()} plays
+              </span>
+            )}
           </div>
         </div>
         <div className="relative hidden h-full min-h-[280px] sm:block">
