@@ -301,6 +301,94 @@
             font-size: 0.8rem;
             border-radius: 4px;
         }
+
+        /* --- HallPass (online leaderboard + friend challenges) --------------
+           Styled from what this file already uses rather than from the SDK's
+           own look: Courier at the sizes the surrounding overlays run at, the
+           cyan/pink/yellow trio the HUD is built on, and no imported font or
+           framework - the game ships neither and gains neither here. */
+        .hp-title {
+            font-size: 0.75rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            font-weight: bold;
+            color: #8a2be2;
+            text-shadow: 0 0 10px #8a2be2;
+            margin-bottom: 6px;
+        }
+        .hp-board {
+            width: 100%;
+            max-width: 320px;
+            min-height: 24px;
+            margin-bottom: 15px;
+        }
+        /* table-layout:fixed is load-bearing. Without it the browser sizes the
+           columns to their content, and the ellipsis on .hp-who then collapses
+           a long handle to a single character instead of truncating it. Fixed
+           layout lets .hp-who take whatever the other two columns leave. */
+        .hp-board table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            font-variant-numeric: tabular-nums;
+        }
+        .hp-board td { padding: 3px 0; font-size: 0.9rem; }
+        .hp-board .hp-rank { width: 24px; text-align: left; color: #666; }
+        .hp-board .hp-who {
+            text-align: left;
+            color: #00ffee;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .hp-board .hp-pts { width: 38%; text-align: right; color: #ffea00; }
+        .hp-board .hp-verified { color: #00ff66; margin-left: 5px; font-size: 0.7rem; }
+        .hp-empty {
+            font-size: 0.75rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #666;
+        }
+
+        /* Secondary actions drop the .btn gradient and keep only its outline,
+           so that BOOT CRAWLER and REBOOT SYSTEM stay the obvious thing to
+           press on their respective screens. */
+        .btn.hp-ghost {
+            background: none;
+            box-shadow: none;
+            border: 1px solid #00ffee;
+            color: #00ffee;
+            padding: 8px 20px;
+            font-size: 0.85rem;
+        }
+        .btn.hp-ghost:hover { box-shadow: 0 0 20px rgba(0, 255, 238, 0.6); }
+
+        .hp-msg {
+            margin-top: 10px;
+            font-size: 0.75rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #666;
+        }
+        .hp-msg b { color: #ffea00; font-weight: bold; }
+        .hp-msg[hidden] { display: none; }
+
+        .hp-auth {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+        .hp-auth button[hidden] { display: none; }
+        #hpAuthStatus {
+            font-size: 0.75rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #666;
+        }
+        #hpAuthStatus b { color: #00ffee; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -317,6 +405,25 @@
             <button class="btn" id="start-btn">BOOT CRAWLER</button>
             <div style="margin-top: 15px; font-size: 0.75rem; color: #666;">
                 Arrows / Mouse / Touch to steer. SHIFT to Dash.
+            </div>
+
+            <!-- HEADS UP, FUTURE READER: this file contains the entire document
+                 TWICE - a second, script-less copy begins after </html> further
+                 down. Every id in here is duplicated there. getElementById
+                 returns the first match, which is this copy, so this copy is the
+                 live game and the HallPass markup is added ONLY here, on
+                 purpose. Do not mirror it into the second copy: that would put a
+                 dead, unwired "Sign in" into the DOM. The duplication itself is
+                 a pre-existing bug, reported separately, and is deliberately
+                 left alone here. -->
+
+            <!-- HallPass identity. Sign-in lives on the menu and nowhere else;
+                 a "Challenge a friend" button on this screen could only ever
+                 answer "no-score", because there is no finished run yet to dare
+                 anybody to beat. -->
+            <div class="hp-auth">
+                <button class="btn hp-ghost" id="hpSignIn">Sign in</button>
+                <span id="hpAuthStatus">Playing as Guest</span>
             </div>
         </div>
 
@@ -336,6 +443,16 @@
                 Final Score: <span class="text-neon-yellow" id="final-score">000000</span><br>
                 Max Combo: <span class="text-neon-pink" id="final-combo">0</span>
             </div>
+
+            <!-- HallPass: the online top five, then the friend dare. Both belong
+                 on this screen and only this screen, because it is the one
+                 moment where a final score exists - to post, and to dare
+                 somebody to beat. (Live copy of the document only; see the note
+                 on the menu screen above.) -->
+            <div class="hp-title">Paddle Crawler &middot; High Scores</div>
+            <div class="hp-board" id="hpBoard"></div>
+            <button class="btn hp-ghost" id="hpChallenge">Challenge a friend</button>
+            <div class="hp-msg" id="hpChallengeMsg" hidden></div>
             <button class="btn" id="restart-btn" style="margin-top: 15px;">REBOOT SYSTEM</button>
         </div>
 
@@ -827,6 +944,9 @@
 
             startGame() {
                 sfx.init();
+                // A fresh run may post again. Defined in the HallPass block at
+                // the end of the body, which is where the reasoning for it is.
+                hpRunStarted();
                 this.score = 0;
                 this.combo = 0;
                 this.maxCombo = 0;
@@ -1068,6 +1188,13 @@
                 document.getElementById('final-score').innerText = Math.floor(this.score).toString().padStart(6, '0');
                 document.getElementById('final-combo').innerText = this.maxCombo;
                 document.getElementById('gameover-screen').classList.remove('hidden');
+
+                // Posted last, after the screen is already up: submitScore
+                // resolves either way and never throws, but the results screen
+                // must not wait on a network round trip to appear. Math.floor
+                // to match what the panel above it just printed - a board row
+                // and the final score the player is reading should not differ.
+                hpPostRun(Math.floor(this.score));
             },
 
             updateScoreUI() {
@@ -1603,6 +1730,198 @@
 
         window.onload = () => { game.init(); };
     </script>
+<!-- HallPass: online leaderboard + friend challenges. The stub below installs
+     window.HallPass synchronously so calls made before the bundle lands are
+     queued, never lost, and degrade to a safe no-op if it never arrives. -->
+<script>
+(function(w){if(w.HallPass&&w.HallPass.version!=="0")return;var q=[];
+function e(n){return function(){var a=[].slice.call(arguments);
+return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
+w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
+submitScore:e("submitScore"),getScores:e("getScores"),
+getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
+unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
+getAchievements:e("getAchievements"),challenge:e("challenge"),
+signIn:function(){},signOut:function(){},
+getHandle:function(){return null},setHandle:function(v){return v},
+on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
+off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
+setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:{ok:false,reason:"inert"})})},2000)})(window);
+</script>
+<script src="/sdk/v1/hallpass.js" data-game="paddle-crawler" defer></script>
+
+<script>
+"use strict";
+/* --- HallPass wiring ---------------------------------------------------
+   This block sits AFTER the stub above rather than inside the game script,
+   because the stub is the thing that guarantees window.HallPass exists and the
+   code below calls getPlayer() the moment it runs. The game script reaches
+   back into here through hpRunStarted() and hpPostRun(), which are ordinary
+   globals and are only ever called from a pointer event - long after both
+   scripts have finished executing.
+
+   Every SDK method resolves rather than throwing, including against a board
+   that has not been provisioned yet, so nothing here can break the game. That
+   is also why there is no try/catch anywhere below: there is nothing to catch.
+
+   Note what is deliberately NOT here: neon-well had to stopPropagation on its
+   board, because that game restarts on any tap on the over screen and would
+   have eaten a leaderboard somebody was reading. Paddle Crawler restarts only
+   from REBOOT SYSTEM's own pointerdown handler, and its window-level input
+   listeners all return early unless the state is 'PLAYING', so there is
+   nothing here to swallow. */
+
+/* One run, one row. handleGameOver() already refuses to run twice - its first
+   line is `if (this.state !== 'PLAYING') return;` - so unlike the games where
+   this latch is the only guard, here it is belt-and-braces. It stays anyway: a
+   duplicate row on a shared board is not a thing worth resting on that one
+   line never moving. */
+let hpPosted = false;
+
+/* Called from startGame(), which is the single entry point for a new run in
+   this game (both BOOT CRAWLER and REBOOT SYSTEM land on it). */
+function hpRunStarted(){
+  hpPosted = false;
+}
+
+/* The board area doubles as its own status line, so its one-line states are
+   built through the DOM like the rows are, rather than by assigning a string of
+   HTML. Nothing untrusted ever reaches innerHTML that way, and there is no
+   second code path to remember when that matters. */
+function hpNote(el, text){
+  el.textContent = "";
+  const note = document.createElement("div");
+  note.className = "hp-empty";
+  note.textContent = text;
+  el.appendChild(note);
+}
+
+function hpPostRun(score){
+  if (hpPosted) return;
+  hpPosted = true;
+  const el = document.getElementById("hpBoard");
+  if (el) hpNote(el, "Posting your score...");
+  /* Clear the previous run's dare. Otherwise "Dared Ali to beat 12,400" sits
+     under a score that is no longer the one being talked about. */
+  const msg = document.getElementById("hpChallengeMsg");
+  if (msg) msg.hidden = true;
+  /* Drawn only after the post resolves, so the run that just ended is already
+     in the list instead of turning up one game over late. */
+  HallPass.submitScore(score).then(hpRenderBoard);
+}
+
+/* Draw the online top five.
+
+   TEN are requested because a single player can hold several of the top rows;
+   after collapsing each handle to its best run, five is what is left to show.
+   FIVE and not ten because this screen already carries three stat lines, two
+   buttons and a message row, and a list that needs scrolling inside an overlay
+   fights the pointer that steers the paddle. The full board lives on the
+   game's HallPass page. */
+function hpRenderBoard(){
+  const el = document.getElementById("hpBoard");
+  if (!el) return;
+  hpNote(el, "Loading scores...");
+  HallPass.getScores({ limit: 10 }).then((rows) => {
+    if (!rows || !rows.length){
+      hpNote(el, "Be the first to score");
+      return;
+    }
+    const seen = new Set();
+    const best = rows.filter((r) => seen.has(r.handle) ? false : (seen.add(r.handle), true))
+                     .slice(0, 5);
+    const table = document.createElement("table");
+    let rank = 0;
+    for (const row of best){
+      const tr = document.createElement("tr");
+      const n = document.createElement("td");
+      n.className = "hp-rank"; n.textContent = ++rank;
+      const who = document.createElement("td");
+      who.className = "hp-who";
+      // textContent throughout: a handle is untrusted input and must never be parsed.
+      who.textContent = row.handle;
+      if (row.verified){
+        const tick = document.createElement("span");
+        tick.className = "hp-verified"; tick.textContent = "✓";
+        who.appendChild(tick);
+      }
+      const pts = document.createElement("td");
+      pts.className = "hp-pts"; pts.textContent = Number(row.score).toLocaleString();
+      tr.append(n, who, pts);
+      table.appendChild(tr);
+    }
+    el.textContent = "";
+    el.appendChild(table);
+  });
+}
+
+/* Paint the menu's identity row. `player` is null when signed out. */
+function hpRefreshAuth(player){
+  const status = document.getElementById("hpAuthStatus");
+  const btn = document.getElementById("hpSignIn");
+  if (!status || !btn) return;
+  status.textContent = "";
+  if (player){
+    btn.hidden = true;
+    const name = document.createElement("b");
+    // textContent: a display name is untrusted input and must never be parsed.
+    name.textContent = player.name;
+    status.append("Signed in as ", name);
+  } else {
+    btn.hidden = false;
+    status.textContent = "Playing as Guest";
+  }
+}
+
+/* Only the outcomes the PICKER CANNOT REPORT ITSELF are written here. Server
+   refusals - signed-out, not-friends, no-score - are already rendered inside
+   the panel the player is looking at, and saying them twice would be noise.
+   These three stop the panel before it can say anything at all. */
+const HP_CHALLENGE_MSG = {
+  "popup-blocked": "Your browser blocked the challenge window",
+  "inert":         "Challenges need the online leaderboard, offline here",
+  "network":       "Could not reach HallPass - try again shortly",
+};
+
+/* pointerdown, not click: every other button in this game - BOOT CRAWLER,
+   REBOOT SYSTEM, the draft cards, the sound toggle - fires on pointerdown, and
+   one button that waited for pointerup would feel broken next to them. It is
+   still a genuine user gesture, which is what the popup blocker cares about. */
+document.getElementById("hpSignIn").addEventListener("pointerdown", () => HallPass.signIn());
+
+document.getElementById("hpChallenge").addEventListener("pointerdown", async () => {
+  const btn = document.getElementById("hpChallenge");
+  const msg = document.getElementById("hpChallengeMsg");
+  btn.disabled = true;
+  msg.hidden = true;
+  const res = await HallPass.challenge();
+  btn.disabled = false;
+
+  /* READ `sent`, NOT `ok`. Closing the picker resolves
+     { ok:true, sent:false, reason:"closed" } - the call worked and the player
+     changed their mind, which must never be shown to them as a failure. */
+  if (res && res.sent && res.challenge){
+    msg.textContent = "";
+    const to = document.createElement("b");
+    to.textContent = res.challenge.to;                                  // untrusted display name
+    const target = document.createElement("b");
+    target.textContent = Number(res.challenge.targetScore).toLocaleString();
+    msg.append("Dared ", to, " to beat ", target);
+    msg.hidden = false;
+    return;
+  }
+  const text = res && res.reason ? HP_CHALLENGE_MSG[res.reason] : null;
+  if (text){ msg.textContent = text; msg.hidden = false; }
+});
+
+HallPass.getPlayer().then(hpRefreshAuth);
+/* The sign-in popup does not reload the game, so the label has to be told when
+   it finishes - otherwise it still reads "Guest" to somebody who has just
+   signed in. */
+HallPass.on("auth", (e) => hpRefreshAuth(e.player));
+</script>
+
 </body>
 </html> <!DOCTYPE html>
 <html lang="en">
