@@ -18,7 +18,10 @@
  */
 
 import { isMissingColumnError } from "@/app/lib/db";
+import { findGame } from "@/app/lib/games";
 import { isResolvedSlug } from "@/app/lib/games-store";
+import { reviewPostedCopy } from "@/app/lib/notifications/copy";
+import { notifyAdmins } from "@/app/lib/notifications/deliver";
 import { authorTagSalt, hashBody, reviews } from "@/app/lib/reviews";
 import type { ReviewSort } from "@/app/lib/reviews";
 import { REVIEWS_PAGE_SIZE } from "@/app/lib/reviews/config";
@@ -151,6 +154,27 @@ export async function POST(
     });
 
     if (outcome === "ok") {
+      // Put it in front of the admins.
+      //
+      // ONCE PER (GAME, AUTHOR), not once per write. `upsertReview` is an
+      // upsert, so every edit a player makes comes back through here — and a
+      // review being reworded is not a new thing to moderate, it is the same
+      // one. The key makes the announcement idempotent for the life of that
+      // review; the moderation queue, which reads the CURRENT text, is what
+      // covers a review edited after the fact.
+      //
+      // The author is deliberately not named. An admin triages by game and
+      // opens the queue to see who wrote what, and a lock-screen banner naming
+      // a pupil beside "new review" is more than the notification needs to do.
+      await notifyAdmins({
+        kind: "review_posted",
+        copy: reviewPostedCopy({
+          gameTitle: findGame(slug)?.title ?? slug,
+          slug,
+        }),
+        dedupeKey: `review_posted:${slug}:${playerId}`,
+      });
+
       return Response.json({ ok: true, pending: verdict === "flagged" }, { headers: NO_STORE });
     }
     return Response.json(

@@ -25,6 +25,8 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { games } from "@/app/lib/games";
 import { CACHE_TAG, setFeaturedGame, setGameNew } from "@/app/lib/games-store";
+import { gameDropCopy } from "@/app/lib/notifications/copy";
+import { notifyEveryone } from "@/app/lib/notifications/deliver";
 
 /** True when `slug` names a game in the static catalogue. */
 function isKnownSlug(slug: string): boolean {
@@ -92,6 +94,38 @@ export async function toggleNewAction(formData: FormData): Promise<void> {
     saveFailed = true;
   }
   if (saveFailed) redirect(target("error", "Could not update New badge"));
+
+  // ── THE GAME DROP ANNOUNCEMENT ──────────────────────────────────────────
+  // Marking a game NEW is the moment an admin says "this is a drop", so it is
+  // the trigger — rather than a game row appearing, which happens while a game
+  // is still being set up, or a separate "announce" button, which would be a
+  // second thing to remember and would drift out of step with the badge.
+  //
+  // ONLY ON THE WAY UP. Removing the badge is not news.
+  //
+  // KEYED ON THE SLUG, so the announcement is once per game FOREVER. Toggling
+  // the badge off and on again — which admins do while curating the homepage
+  // row — files nothing the second time and therefore buzzes nobody. The unique
+  // index in 024 enforces that in the database rather than by convention here,
+  // which matters because this is the one kind that reaches the whole site.
+  //
+  // AWAITED before the redirect, and never allowed to fail it: `notifyEveryone`
+  // does not reject, and `redirect()` throws a control signal, so the two must
+  // not be interleaved.
+  if (value) {
+    await notifyEveryone({
+      kind: "game_drop",
+      copy: gameDropCopy({
+        // The display TITLE from the static catalogue, never the slug —
+        // "neon-velocity-hyperdrive just landed" is not something to put on a
+        // lock screen. The slug is already validated as known above, so this
+        // lookup cannot miss; the fallback is belt and braces.
+        title: games.find((g) => g.slug === slug)?.title ?? slug,
+        slug,
+      }),
+      dedupeKey: `game_drop:${slug}`,
+    });
+  }
 
   revalidateCuration(slug);
   redirect(target("ok", value ? "Marked new" : "New badge removed"));

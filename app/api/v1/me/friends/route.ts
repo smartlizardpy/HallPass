@@ -24,6 +24,12 @@
  */
 
 import { isMissingColumnError } from "@/app/lib/db";
+import { publicNameFor } from "@/app/lib/notifications/actor";
+import {
+  friendAcceptedCopy,
+  friendRequestCopy,
+} from "@/app/lib/notifications/copy";
+import { notifyPlayer } from "@/app/lib/notifications/deliver";
 import { social } from "@/app/lib/social";
 import type { SendResult } from "@/app/lib/social";
 import {
@@ -140,6 +146,37 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     const state = await social.sendRequest(playerId, target);
+
+    // Tell them — but only about the two outcomes that are NEWS to the target.
+    //
+    // `sent` is a new request in their inbox. `accepted` is the auto-accept path
+    // (they had already requested us, so this call completed the pair) and is
+    // the same event their own accept would have produced, so it takes the
+    // accepted copy rather than the request copy.
+    //
+    // Every other state — already friends, rate limited, blocked — means nothing
+    // changed for the target, and notifying on those would turn a refused action
+    // into a way to ping somebody repeatedly. That is the anti-harassment
+    // doctrine `social/config.ts` sets out, and it is the reason this switch is
+    // an allow-list of two rather than "not an error".
+    if (state === "sent" || state === "accepted") {
+      const from = await publicNameFor(playerId);
+      await notifyPlayer(target, {
+        kind: state === "sent" ? "friend_request" : "friend_accepted",
+        copy:
+          state === "sent"
+            ? friendRequestCopy({ from })
+            : friendAcceptedCopy({ from }),
+        // NO DEDUPE KEY, for the same reason the challenge producer has none.
+        // A key on the pair would be permanent: somebody who requested, was
+        // declined, waited out `FRIEND_REQUEST_PAIR_COOLDOWN_SECONDS` and asked
+        // again would arrive silently, forever. The attempt limits in
+        // `social/config.ts` are what bound this — a second delivery here means
+        // a request that already cleared them, which is worth being told about.
+        dedupeKey: null,
+      });
+    }
+
     return Response.json(
       { ok: state === "sent" || state === "accepted", state },
       { status: SEND_STATUS[state], headers: NO_STORE },
@@ -173,6 +210,21 @@ export async function PUT(req: Request): Promise<Response> {
     const target = await social.internalIdFromPublicId(publicId);
     if (!target) return Response.json({ ok: false }, { status: 404, headers: NO_STORE });
     const accepted = await social.acceptRequest(playerId, target);
+
+    // Only on a REAL accept. `false` means there was no pending request from
+    // that player, so notifying would tell somebody their request was accepted
+    // when nothing happened — and would make this endpoint a way to send a
+    // message to any player id, pending request or not.
+    if (accepted) {
+      await notifyPlayer(target, {
+        kind: "friend_accepted",
+        copy: friendAcceptedCopy({ from: await publicNameFor(playerId) }),
+        // An accept is idempotent — `acceptRequest` only returns `true` on the
+        // transition — so a second call answers `false` and never reaches here.
+        dedupeKey: null,
+      });
+    }
+
     // `false` means no pending request from THAT player — reported plainly, not
     // as an error, since the client's view may simply be stale.
     return Response.json({ ok: accepted }, { headers: NO_STORE });
