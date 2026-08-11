@@ -17,8 +17,20 @@ const ROLL_MS = 420;
 /**
  * "Surprise me" — jump to a random game's store page.
  *
- * Lives at the top of the sidebar nav, so it renders in BOTH the desktop rail
- * and the mobile drawer from one insertion (see `Sidebar`'s `navList`).
+ * ONE BEHAVIOUR, TWO SHAPES. Everything below the render — the pick, the arming,
+ * the roll, the guards — is shared verbatim; `variant` only chooses the markup.
+ *
+ *   `rail` (default) — the sidebar button. Sits at the top of the sidebar nav, so
+ *   it renders in BOTH the desktop rail and the mobile drawer from one insertion
+ *   (see `Sidebar`'s `navList`). Full-width, gradient-washed, sheened: it was
+ *   built to be the loudest thing in the rail.
+ *
+ *   `icon` — the compact round button for `SiteHeader`'s control cluster. A PEER
+ *   of `StreakChip` / `WhatsNewLink` / `AccountMenu`, not a primary action, so it
+ *   deliberately drops the gradient, the shadow and the sheen and wears the same
+ *   `h-11 w-11` / `rounded-full` / `bg-surface-2` metrics as the header's other
+ *   icon buttons. See the note on that branch for the accessibility consequences
+ *   of losing the visible label.
  *
  * THE PICK HAPPENS ON INTERACTION, never during render. Every page that mounts
  * this is statically prerendered, so a pick made while rendering would be baked
@@ -44,10 +56,13 @@ const ROLL_MS = 420;
 export function SurpriseButton({
   games,
   onNavigate,
+  variant = "rail",
 }: {
   games: Game[];
-  /** Closes the mobile drawer; omitted on desktop. */
+  /** Closes the mobile drawer; omitted where there is no drawer to close. */
   onNavigate?: () => void;
+  /** Which shape to render — see the VARIANTS note above. */
+  variant?: "rail" | "icon";
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -155,14 +170,114 @@ export function SurpriseButton({
     }, ROLL_MS);
   };
 
+  /**
+   * The behaviour-bearing attributes, shared by both shapes so neither can drift
+   * out of sync with the logic above. Spread FIRST in each branch: React emits
+   * props in insertion order, and putting these ahead of `className`/`style`
+   * reproduces the attribute order the single-shape version had.
+   *
+   * `title` stays on both. On `icon` it is no longer the accessible name (the
+   * `aria-label` there wins) but it is still the hover tooltip, which is the only
+   * way a sighted mouse user learns what a lone die does.
+   */
+  const trigger = {
+    type: "button",
+    onClick: handleClick,
+    onPointerEnter: arm,
+    onFocus: arm,
+    "aria-busy": rolling,
+    title: "Open a random game",
+  } as const;
+
+  /**
+   * The die glyph, shared by both shapes — the tumble is this control's
+   * signature and the icon variant keeps it, which is also what ROLL_MS is still
+   * waiting for there.
+   *
+   * `dice-rolling` is the keyframe; the hover rotate is the resting invitation.
+   * They are mutually exclusive — while rolling the hover transform is dropped so
+   * the two cannot fight over `transform`. The hover rotate needs `group` on the
+   * button, which both branches set.
+   */
+  const die = (className: string) => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className={`${className} ${
+        rolling
+          ? "dice-rolling"
+          : "transition-transform duration-300 group-hover:rotate-90"
+      }`}
+    >
+      <rect x="3" y="3" width="18" height="18" rx="4" />
+      <path d="M8.5 8.5h.01M15.5 15.5h.01M12 12h.01" />
+    </svg>
+  );
+
+  if (variant === "icon") {
+    return (
+      <button
+        {...trigger}
+        // The accessible name, because there is no visible text to derive one
+        // from. It says "Surprise me" rather than echoing the tooltip: that is
+        // the name the control is known by everywhere else on the site, and the
+        // tooltip is left to describe what pressing it does.
+        aria-label="Surprise me"
+        // Deliberately NOT the rail's gradient/shadow/sheen. Those exist to make
+        // the rail button shout; in the header it is one of four controls and
+        // shouting would just move the competition with the featured banner into
+        // the top bar. So it takes the metrics of the header's other icon button
+        // (the hamburger in `SiteHeader`) exactly: h-11 w-11, rounded-full,
+        // `bg-surface-2`, hover to brand.
+        //
+        // `text-zinc-800`, not `--muted`: the header docblock's rule is that text
+        // on `--surface-2` may not use `--muted` (4.45:1, under AA) while icons
+        // may. A lone die IS an icon and would clear the 3:1 non-text floor on
+        // `--muted` — but every sibling control in the cluster is zinc-800/700,
+        // and being a peer is the entire point of this variant.
+        //
+        // No `focus:outline-none` + custom ring either, unlike the rail. The
+        // header controls all rely on the UA focus ring; overriding it here alone
+        // would make this the one control in the row that focuses differently.
+        className="group inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-2 text-zinc-800 transition hover:text-brand"
+        style={{ touchAction: "manipulation" }}
+      >
+        {die("shrink-0")}
+
+        {/* How the roll is announced without a visible label.
+            `aria-busy` is set on the button, but it is not an announcement: it is
+            a state screen readers surface when the node is queried, and toggling
+            it on a plain button does not reliably interrupt to say anything. The
+            rail variant does not need one — its visible text flips to "Rolling…"
+            and the label change is announced for free. Losing that text is
+            exactly what has to be replaced, so this is the replacement: the
+            repo's existing `role="status"` + `sr-only` pattern (see
+            `ReviewsSkeleton` and `app/play/you/loading.tsx`).
+
+            Rendered ALWAYS, empty at rest, rather than mounted when rolling
+            starts: a live region has to be in the accessibility tree before its
+            content changes, or the change that created it is missed.
+
+            Honest caveat: navigation lands ROLL_MS later, so the announcement can
+            be cut short by the page change. It is still strictly better than the
+            silence `aria-busy` alone leaves. */}
+        <span role="status" className="sr-only">
+          {rolling ? "Rolling…" : ""}
+        </span>
+      </button>
+    );
+  }
+
   return (
     <button
-      type="button"
-      onClick={handleClick}
-      onPointerEnter={arm}
-      onFocus={arm}
-      aria-busy={rolling}
-      title="Open a random game"
+      {...trigger}
       className="group relative mb-2 flex w-full items-center gap-3 overflow-hidden rounded-2xl bg-brand px-4 py-3 text-[15px] font-bold text-white shadow-lg shadow-brand/25 transition-[transform,box-shadow] duration-200 hover:shadow-xl hover:shadow-brand/30 active:scale-[0.97] focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30 lg:py-2.5"
       style={{
         // Echoes the featured banner's radial wash rather than the flat fill of
@@ -181,28 +296,7 @@ export function SurpriseButton({
         className="pointer-events-none absolute inset-y-0 -left-full w-1/2 skew-x-[-20deg] bg-white/20 transition-all duration-500 group-hover:left-[150%] motion-reduce:hidden"
       />
 
-      <svg
-        width="20"
-        height="20"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden
-        // `dice-rolling` is the keyframe; the hover rotate is the resting
-        // invitation. They are mutually exclusive — while rolling the hover
-        // transform is dropped so the two cannot fight over `transform`.
-        className={`relative shrink-0 ${
-          rolling
-            ? "dice-rolling"
-            : "transition-transform duration-300 group-hover:rotate-90"
-        }`}
-      >
-        <rect x="3" y="3" width="18" height="18" rx="4" />
-        <path d="M8.5 8.5h.01M15.5 15.5h.01M12 12h.01" />
-      </svg>
+      {die("relative shrink-0")}
 
       <span className="relative flex-1 text-left">
         {rolling ? "Rolling…" : "Surprise me"}
