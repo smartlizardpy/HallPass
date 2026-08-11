@@ -4,9 +4,10 @@
  *
  * WHY THIS EXISTS. A game that carries the SDK is only half-wired: until a row
  * exists in `boards`, `POST /api/v1/leaderboard/<slug>` answers 409 "Board not
- * initialized" and every score is dropped. Ten games were wired in one pass, and
- * ten trips through the dashboard's new-board form is ten chances to fat-finger a
- * slug — a board whose id does not match the game's `data-game` fails silently in
+ * initialized" and every score is dropped. Eleven games were wired in one pass,
+ * and eleven trips through the dashboard's new-board form is eleven chances to
+ * fat-finger a slug — a board whose id does not match the game's `data-game`
+ * fails silently in
  * exactly the way `scripts/migrate.mjs`'s docblock warns about, because the SDK
  * never throws and the game plays on regardless.
  *
@@ -50,7 +51,7 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 /**
  * One entry per game backfilled in this pass.
  *
- * `sort` is `desc` for all ten: every one of them accumulates points, kills or
+ * `sort` is `desc` for all of them: every one accumulates points, kills or
  * distance, so higher always wins. An `asc` board would be a time/golf game and
  * none of these are. `label` names what the number actually counts — two of them
  * post a kill count rather than a score, and calling that "Score" on the board
@@ -74,6 +75,12 @@ const BOARDS = [
   {
     slug: "rhythm-hell-harmonic-flash",
     title: "Rhythm Hell: Harmonic Flash - High Scores",
+    sort: "desc",
+    label: "Score",
+  },
+  {
+    slug: "depths-of-aethelgard",
+    title: "Depths of Aethelgard - High Scores",
     sort: "desc",
     label: "Score",
   },

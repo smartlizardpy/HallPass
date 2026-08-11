@@ -223,6 +223,40 @@
             padding: 5px; font-size: 18px; font-weight: bold;
             opacity: 1; transition: opacity 1s;
         }
+
+        /* --- HallPass ---------------------------------------------------
+           The board lives inside the existing .menu panels, so it borrows
+           their vocabulary rather than introducing a second one: --accent for
+           headings, the gold #f1c40f this game already uses for every number,
+           and the transparent 1px #444 buttons that fill with accent on hover.
+           Nothing here imports a font or a framework. */
+        .hp-title { font-size: 0.85rem; letter-spacing: 4px; text-transform: uppercase; color: var(--accent); margin: 26px 0 8px; }
+        .hp-board { min-height: 26px; width: 100%; max-width: 420px; margin: 0 auto; }
+        /* table-layout:fixed is load-bearing. Left to size columns by their
+           content, the browser hands .hp-who whatever a long handle asks for
+           and the ellipsis never fires — it clips to one letter instead. Fixed
+           layout lets .hp-who take exactly what the other two columns leave. */
+        .hp-board table { width: 100%; border-collapse: collapse; table-layout: fixed; font-variant-numeric: tabular-nums; }
+        .hp-board td { padding: 5px 0; font-size: 1rem; }
+        .hp-board .hp-rank { width: 32px; text-align: left; color: #555; }
+        .hp-board .hp-who { text-align: left; color: #bbb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .hp-board .hp-pts { width: 38%; text-align: right; color: #f1c40f; }
+        .hp-board .hp-v { color: var(--accent); margin-left: 6px; font-size: 0.8rem; }
+        .hp-empty { font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; color: #555; line-height: 1.6; }
+        .hp-btn { font-size: 0.9rem; padding: 10px 26px; margin-top: 12px; }
+        .hp-msg { margin-top: 10px; font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; color: #666; }
+        .hp-msg b { color: #f1c40f; }
+        .hp-msg[hidden] { display: none; }
+        .hp-auth { display: flex; gap: 14px; align-items: center; justify-content: center; flex-wrap: wrap; margin-top: 26px; }
+        .hp-auth button[hidden] { display: none; }
+        #hpAuthStatus { font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; color: #666; }
+        #hpAuthStatus b { color: #f1c40f; }
+        /* The panels are absolutely centred, which clips rather than scrolls
+           once the content outgrows the viewport — and five leaderboard rows
+           plus a second button is roughly 250px of new content. border-box is
+           part of the guard, not decoration: max-height applies to the CONTENT
+           box, so without it the panel renders taller than the cap anyway. */
+        .menu { max-height: 100vh; overflow-y: auto; box-sizing: border-box; }
     </style>
 </head>
 <body>
@@ -234,6 +268,7 @@
         <div class="hud-top">
             <div class="stats-cluster">
                 <div style="font-weight:bold; letter-spacing: 2px; font-size: 0.8rem; color:#888;">FLOOR <span id="floor-display" style="color:#f1c40f; font-size:1rem;">1</span></div>
+                <div style="font-weight:bold; letter-spacing: 2px; font-size: 0.8rem; color:#888;">SCORE <span id="score-display" style="color:#f1c40f; font-size:1rem;">0</span></div>
                 <div class="bar-container"><div class="hp-bar" id="hp-bar"></div></div>
                 <div class="xp-bar"><div class="xp-fill" id="xp-fill"></div></div>
                 <div style="font-size: 0.8rem; color:#666; margin-top:2px;">LVL <span id="level-display" style="color:#fff;">1</span></div>
@@ -271,15 +306,46 @@
             <span style="color:#c3073f">SPACE / CLICK</span> to Attack<br>
             <span style="color:#3498db">SHIFT</span> to Dash<br>
         </div>
+        <!-- Identity only. No challenge button here: challenge() needs a score
+             already on the board, so before a run it could only answer
+             "no-score". -->
+        <div class="hp-auth">
+            <button class="hp-btn" id="hpSignIn">Sign in</button>
+            <span id="hpAuthStatus">Playing as Guest</span>
+        </div>
     </div>
 
     <div class="menu hidden" id="death-menu">
         <h1 style="color: #c0392b;">SLAIN</h1>
         <h2 id="death-stats">Floor: 1</h2>
+        <div class="hp-title">Aethelgard &middot; Deepest Runs</div>
+        <div class="hp-board" id="hpBoard"></div>
         <button onclick="game.start(game.mode)">RESURRECT</button>
+        <div><button class="hp-btn" id="hpChallenge">Challenge a friend</button></div>
+        <div class="hp-msg" id="hpChallengeMsg" hidden></div>
     </div>
 </div>
 
+<!-- HallPass: online leaderboard + friend challenges. The stub below installs
+     window.HallPass synchronously so calls made before the bundle lands are
+     queued, never lost, and degrade to a safe no-op if it never arrives. -->
+<script>
+(function(w){if(w.HallPass&&w.HallPass.version!=="0")return;var q=[];
+function e(n){return function(){var a=[].slice.call(arguments);
+return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
+w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
+submitScore:e("submitScore"),getScores:e("getScores"),
+getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
+unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
+getAchievements:e("getAchievements"),challenge:e("challenge"),
+signIn:function(){},signOut:function(){},
+getHandle:function(){return null},setHandle:function(v){return v},
+on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
+off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
+setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:{ok:false,reason:"inert"})})},2000)})(window);
+</script>
+<script src="/sdk/v1/hallpass.js" data-game="depths-of-aethelgard" defer></script>
 <script>
 /** ---------------- CONFIG & DB ---------------- **/
 const TILE = 48; 
@@ -1079,6 +1145,10 @@ class Enemy {
 
         if (this.hp <= 0) {
             this.active = false; AudioSys.sfx.kill(); game.player.xp += this.isBoss ? 100 : 20;
+            // Score tracks XP's shape on purpose: the same 100/20 split, awarded
+            // right here so the two stay visibly the same event. XP buys power
+            // inside a run; score is what the run is worth once it ends.
+            game.score += this.isBoss ? 100 : 20;
             game.player.checkLevelUp();
             // Drop logic: Use this.floor to ensure correct boss weapon drops
             if (this.isBoss) { game.drop(this.x, this.y, this.floor); game.bossActive = false; game.log("BOSS DEFEATED"); } 
@@ -2031,7 +2101,10 @@ class MapGen {
 
 /** ---------------- MAIN GAME ---------------- **/
 const game = {
-    floor: 1, state: 'start', mode: 'normal', inHub: false, player: null, map: null,
+    /* `score` is the run's ranking number, and it is deliberately NOT part of
+       the save payload — see the note in start(). It accumulates from two
+       places only: kills (Enemy.hit) and floors cleared (nextFloor). */
+    floor: 1, score: 0, state: 'start', mode: 'normal', inHub: false, player: null, map: null,
     enemies: [], projectiles: [], particles: [], texts: [], pickups: [], effects: [], zones: [], footprints: [],
     cam: {x:0, y:0}, shake: 0,
     bossActive: false, bossHp: 0, bossMaxHp: 100, bossName: "",
@@ -2049,6 +2122,37 @@ const game = {
     start: function(mode='normal') {
         this.mode = mode;
         this.load();
+
+        /* DO NOT "FIX" THIS BY PUTTING score INTO THE SAVE.
+
+           load() has just read the save. The score is deliberately absent from
+           that payload, so it starts every start() at zero — including this
+           one, and including RESURRECT.
+
+           That asymmetry is the whole design. The save is written on entering
+           every floor (newFloor) and is only deleted on death (over()), so a
+           player who reloads the page a moment before dying keeps a character —
+           level, xp, maxHp, hp and weapon all survive, because load() rebuilds
+           this.player from them and the guard below only replaces the player
+           when hp has already hit zero. What they cannot keep is the run. The
+           score they were building is gone, and the leaderboard only ever sees
+           a score that was played out in one sitting. Save-scumming therefore
+           costs strictly more than it saves, which is why nothing else in this
+           file has to detect or prevent it.
+
+           Worth knowing, because it surprised us when we measured it: the floor
+           does NOT survive either, though load() looks like it should. load()
+           assigns this.floor from the save, and then the normal-mode branch at
+           the bottom of this function unconditionally sets this.floor = 1 and
+           throws that away. So a reload returns you to floor 1 with a levelled
+           character. That is pre-existing behaviour and is left exactly as it
+           was — it happens to reinforce this design rather than fight it, and
+           changing it is a gameplay decision, not a scoring one.
+
+           It reads like an oversight. It is not one. */
+        this.score = 0;
+        hpPosted = false;
+
         document.getElementById('start-menu').classList.add('hidden');
         document.getElementById('death-menu').classList.add('hidden');
         if(('ontouchstart' in window)) document.getElementById('mobile-controls').style.display='flex';
@@ -2117,6 +2221,16 @@ const game = {
                 AudioSys.sfx.levelup();
             }
         } else {
+            /* The bonus pays for the floor being LEFT, so it has to be read
+               BEFORE the increment. Reversed, floor 1 would be worth 100 and
+               the deepest floor reached — the one the player may well have died
+               on without clearing — would be paid for too. Depth compounds:
+               clearing floor 10 is worth ten times clearing floor 1, which is
+               what makes going deeper beat farming a shallow floor.
+
+               Arena is excluded by the branch above, not by an accident: it
+               never increments floor, so there is no floor being left. */
+            this.score += this.floor * 50;
             this.floor++; AudioSys.sfx.levelup(); this.newFloor();
         }
     },
@@ -2132,6 +2246,9 @@ const game = {
         if(this.inHub) document.getElementById('floor-display').innerText = "HUB";
         else document.getElementById('floor-display').innerText = this.floor;
         document.getElementById('level-display').innerText = this.player.level;
+        // Called every frame from the loop, so the readout is live rather than
+        // only refreshing when a floor changes.
+        document.getElementById('score-display').innerText = this.score.toLocaleString();
 
         let hp = this.player.hp || 0;
         let maxHp = this.player.maxHp || 100;
@@ -2164,7 +2281,10 @@ const game = {
         this.state = 'over';
         localStorage.removeItem('aethelgard_save'); 
         document.getElementById('death-menu').classList.remove('hidden');
-        document.getElementById('death-stats').innerText = "Floor: " + this.floor;
+        // The score is the number being posted, so it has to be the number the
+        // player is looking at. Floor stays alongside it as the run's shape.
+        document.getElementById('death-stats').innerText = "Floor " + this.floor + " · Score " + this.score.toLocaleString();
+        hpEndRun(this.mode, this.score);
     },
 
     save: function() {
@@ -2433,6 +2553,173 @@ if(('ontouchstart' in window) || navigator.maxTouchPoints > 0) {
 
 function resize() { width=window.innerWidth; height=window.innerHeight; canvas.width=width; canvas.height=height; }
 window.onresize = resize; resize();
+
+/* --- HallPass ------------------------------------------------------------
+   Online leaderboard and friend challenges.
+
+   The loader stub sits ABOVE this script, not before </body>, and that is
+   deliberate: this game's script runs from the top of the body to the bottom,
+   so a stub placed after it would not exist yet when the lines at the end of
+   this section run — and a ReferenceError at the top level would abort the
+   rest of the script, taking the input handlers and resize() with it. Putting
+   the stub first reproduces neon-well's layout and removes the hazard instead
+   of working around it.
+
+   Every method on the stub resolves rather than throwing, including when this
+   game has no board on the server yet: submitScore answers { ok:false } and
+   getScores answers []. Nothing below can stop SLAIN from appearing or delay
+   it, and there is no try/catch here because there is nothing to catch. */
+
+/* Whether this run's score has already been posted. over() has a single call
+   site today (Player.hit at hp<=0) and the loop stops the moment state leaves
+   'play', so a second call is not expected — but a duplicate row on the
+   leaderboard is not worth leaving to that assumption. start() clears it, which
+   also covers RESURRECT. */
+let hpPosted = false;
+
+/* End of run. Takes mode and score as arguments rather than reading `game`,
+   so it is obvious at the call site exactly what is being posted.
+
+   THE ARENA GATE: arena runs are never posted. Arena warps straight to any
+   boss floor through the hub portals (loadBoss), never increments floor, and
+   so pays no floor bonus while handing out 100 points a boss on demand — it is
+   a scoreboard farm, not a run. Rather than posting nothing and leaving the
+   player wondering, the panel says so where the board would have been. */
+function hpEndRun(mode, score){
+  if (hpPosted) return;
+  hpPosted = true;
+
+  const board = document.getElementById("hpBoard");
+  const msg = document.getElementById("hpChallengeMsg");
+  // Clear the previous run's result, or "Dared Ali to beat 4,200" would sit
+  // under a score that is no longer the one being talked about.
+  if (msg) msg.hidden = true;
+
+  if (mode !== 'normal'){
+    if (board) board.innerHTML = '<div class="hp-empty">Arena runs are not ranked &mdash; enter the dungeon to post a score</div>';
+    const btn = document.getElementById("hpChallenge");
+    if (btn) btn.hidden = true;
+    return;
+  }
+
+  const btn = document.getElementById("hpChallenge");
+  if (btn) btn.hidden = false;
+  if (board) board.innerHTML = '<div class="hp-empty">Posting your score...</div>';
+  // Drawn AFTER the post resolves, so the run that just ended is already in the
+  // list rather than appearing only on the next death.
+  HallPass.submitScore(score).then(hpRenderBoard);
+}
+
+/* Paint the start screen's identity row. `player` is null when signed out. */
+function hpRefreshAuth(player){
+  const status = document.getElementById("hpAuthStatus");
+  const btn = document.getElementById("hpSignIn");
+  if (!status || !btn) return;
+  if (player){
+    btn.hidden = true;
+    status.innerHTML = "Signed in as <b></b>";
+    // textContent: a display name is untrusted input and must never be parsed.
+    status.querySelector("b").textContent = player.name;
+  } else {
+    btn.hidden = false;
+    status.textContent = "Playing as Guest";
+  }
+}
+
+/* Draw the online top five into the SLAIN panel.
+
+   FIVE rows shown, but TEN requested. One player can hold several of the top
+   rows, and collapsing each handle down to their single best run is what makes
+   the list read as five different delvers rather than one good run repeated.
+   Five is also what fits the panel without it needing to scroll. The full board
+   lives on the game's HallPass page. */
+function hpRenderBoard(){
+  const el = document.getElementById("hpBoard");
+  if (!el) return;
+  el.innerHTML = '<div class="hp-empty">Loading scores...</div>';
+  HallPass.getScores({ limit: 10 }).then((rows) => {
+    if (!rows || !rows.length){
+      el.innerHTML = '<div class="hp-empty">Be the first to score</div>';
+      return;
+    }
+    const seen = new Set();
+    const best = rows.filter((r) => seen.has(r.handle) ? false : (seen.add(r.handle), true))
+                     .slice(0, 5);
+    const table = document.createElement("table");
+    let rank = 0;
+    for (const row of best){
+      const tr = document.createElement("tr");
+      const n = document.createElement("td");
+      n.className = "hp-rank"; n.textContent = ++rank;
+      const who = document.createElement("td");
+      who.className = "hp-who";
+      // textContent throughout: a handle is untrusted and must never be parsed.
+      who.textContent = row.handle;
+      if (row.verified){
+        const tick = document.createElement("span");
+        tick.className = "hp-v"; tick.textContent = "✓";
+        who.appendChild(tick);
+      }
+      const pts = document.createElement("td");
+      pts.className = "hp-pts"; pts.textContent = Number(row.score).toLocaleString();
+      tr.append(n, who, pts);
+      table.appendChild(tr);
+    }
+    el.innerHTML = "";
+    el.appendChild(table);
+  });
+}
+
+/* Challenge a friend to beat the run that just ended.
+
+   Offered on the death screen only, because that is the one moment where all
+   of challenge()'s preconditions hold together: there is a session, and
+   submitScore has just put a score on the board for the dare to point at.
+
+   Only the outcomes the PICKER CANNOT REPORT ITSELF are written here. Server
+   refusals — signed out, not friends, no score — are already rendered inside
+   the panel the player is looking at, and saying them twice would be noise.
+   These three stop that panel before it can say anything at all. */
+const HP_CHALLENGE_MSG = {
+  "popup-blocked": "Your browser blocked the challenge window",
+  "inert":         "Challenges need the online leaderboard, offline here",
+  "network":       "Could not reach HallPass - try again shortly",
+};
+
+document.getElementById("hpChallenge").addEventListener("click", async () => {
+  const btn = document.getElementById("hpChallenge");
+  const msg = document.getElementById("hpChallengeMsg");
+  btn.disabled = true;
+  msg.hidden = true;
+  const res = await HallPass.challenge();
+  btn.disabled = false;
+
+  // READ `sent`, NOT `ok`. Closing the picker resolves
+  // { ok:true, sent:false, reason:"closed" } — the call worked and the player
+  // changed their mind, which must never be reported back as a failure.
+  if (res && res.sent && res.challenge){
+    msg.innerHTML = "Dared <b></b> to beat <b></b>";
+    const parts = msg.querySelectorAll("b");
+    parts[0].textContent = res.challenge.to;   // untrusted display name
+    parts[1].textContent = Number(res.challenge.targetScore).toLocaleString();
+    msg.hidden = false;
+    return;
+  }
+  const text = res && res.reason ? HP_CHALLENGE_MSG[res.reason] : null;
+  if (text){ msg.textContent = text; msg.hidden = false; }
+});
+
+/* The menus restart only from their own buttons — there is no tap-anywhere
+   restart to swallow here — so no stopPropagation is needed. The window-level
+   onmousedown only raises an attack flag, which the loop ignores once state
+   leaves 'play'. */
+
+HallPass.getPlayer().then(hpRefreshAuth);
+// The sign-in popup does not reload the game, so the label has to be told when
+// it finishes — otherwise it still reads "Guest" to somebody who just signed in.
+HallPass.on("auth", (e) => hpRefreshAuth(e.player));
+// Must be a real click: browsers block a popup opened without a user gesture.
+document.getElementById("hpSignIn").addEventListener("click", () => HallPass.signIn());
 </script>
 </body>
 </html>
