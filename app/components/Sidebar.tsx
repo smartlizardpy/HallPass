@@ -46,7 +46,11 @@ const ICONS: Record<string, React.ReactNode> = {
   // An actual jigsaw piece: knob out of the top edge, socket into the left one.
   // The asymmetry is what separates it from All's grid of plain squares.
   Puzzle: <path d="M5 6h5a2.5 2.5 0 0 1 5 0h4v14H5v-5a2.5 2.5 0 0 0 0-5z" />,
-  RPG: <path d="m4 20 8-8M14 8l6-6M14 2h6v6M9 11l4 4" />,
+  // An upright cruciform sword. It was a diagonal blade whose corner arrowhead
+  // read as one more up-and-right arrow next to Trending's chart line — fine
+  // beside a label, not fine in a collapsed icon-only rail where the label is
+  // the thing that goes away. Standing it up is what separates the two.
+  RPG: <path d="M12 2v12M8 14h8M12 14v6M10 20h4" />,
   Horror: <path d="M12 2a8 8 0 0 0-8 8v8l3-2 3 2 2-2 2 2 3-2 3 2v-8a8 8 0 0 0-8-8z" />,
   Arcade: <path d="M4 4h16v16H4zM4 9h16M9 14h.01M15 14h.01M9 18h6" />,
   Sandbox: <path d="M3 7l9-4 9 4-9 4-9-4zM3 12l9 4 9-4M3 17l9 4 9-4" />,
