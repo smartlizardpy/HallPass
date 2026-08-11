@@ -240,6 +240,41 @@ describe("prefsFor", () => {
   });
 });
 
+describe("channelsForKind", () => {
+  it("reads the whole roster in ONE statement", async () => {
+    // The admin fan-out. Asking per admin would be a round trip each on a path
+    // that runs behind somebody else's review being posted.
+    const { sql, calls } = makeFakeSql([
+      { player_id: "a1", channel: "push" },
+      { player_id: "a2", channel: "off" },
+    ]);
+    const channels = await createNotificationStore(sql).channelsForKind(
+      ["a1", "a2", "a3"],
+      "review_reported",
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(channels).toEqual({ a1: "push", a2: "off" });
+  });
+
+  it("omits players with no stored opinion rather than inventing one", async () => {
+    // Sparse. A caller reading absence as "off" would silence every admin who
+    // never visited their settings.
+    const { sql } = makeFakeSql([{ player_id: "a1", channel: "push" }]);
+    const channels = await createNotificationStore(sql).channelsForKind(
+      ["a1", "a2"],
+      "review_reported",
+    );
+    expect("a2" in channels).toBe(false);
+  });
+
+  it("does not go to the database for an empty roster", async () => {
+    const { sql, calls } = makeFakeSql([]);
+    expect(await createNotificationStore(sql).channelsForKind([], "k")).toEqual({});
+    expect(calls).toHaveLength(0);
+  });
+});
+
 describe("setPref", () => {
   it("upserts the explicit choice", async () => {
     const { sql, calls } = makeFakeSql();

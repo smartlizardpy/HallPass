@@ -1,7 +1,7 @@
 /**
- * HallPass — what a challenge notification says.
+ * HallPass — what a push notification looks like on the wire.
  *
- * PURE. No database, no `window`, no clock — so the wording, which is the part
+ * PURE. No database, no `window`, no clock — so the shape, which is the part
  * with a safety argument attached, unit-tests in the plain `node` environment.
  *
  * ── THE PAYLOAD CARRIES BOTH VERSIONS, AND THE DEVICE PICKS ────────────────
@@ -33,77 +33,76 @@
  * "Ozan challenged you on Duskfall" during a lesson works against that — which
  * is why the quiet version exists at all and lives where "hide what I'm doing"
  * already lives.
+ *
+ * ── THIS MODULE NO LONGER KNOWS WHAT A CHALLENGE IS ────────────────────────
+ * It used to build the challenge wording itself, back when a challenge was the
+ * only thing that could push. The wording for every kind now lives in
+ * `notifications/copy.ts` — one file, so the rules that apply across all of them
+ * are checkable side by side — and the discreet counterpart in
+ * `notifications/config.ts`, next to the kind it belongs to.
+ *
+ * What is left here is the ENVELOPE: the exact object `public/sw.js` reads. The
+ * worker's contract is `{ full, discreet, url, tag }` and it renders `full` or
+ * `discreet` by the mirrored flag and nothing else. Keeping the envelope in one
+ * typed builder is what stops a producer hand-rolling a payload that is missing
+ * a branch — the worker drops a payload without both, so a typo there would be
+ * silence rather than an error.
  */
 
-import { CHALLENGE_NOTIFICATION_TAG } from "./config";
-
-/** One rendering of the notification. */
+/** One rendering of the notification, as the service worker renders it. */
 export type NotificationCopy = {
   title: string;
   body: string;
 };
 
 /**
- * A challenge push, ready to encrypt.
+ * A push, ready to encrypt.
  *
  * `full` and `discreet` are BOTH populated; `sw.js` picks one by the device's
  * mirrored preference and renders it. `url` is where a tap lands.
  */
-export type ChallengePush = {
-  kind: "challenge";
+export type NotificationPush = {
+  kind: string;
   full: NotificationCopy;
   discreet: NotificationCopy;
   url: string;
   tag: string;
 };
 
-/** Trim and bound a name so a long handle cannot push the verb off the banner. */
-function shortName(name: string): string {
-  const clean = name.trim();
-  if (clean.length === 0) return "A friend";
-  return clean.length > 24 ? `${clean.slice(0, 23)}…` : clean;
-}
+/**
+ * The name the discreet version shows, for every kind.
+ *
+ * A CONSTANT, not something a caller may vary. A discreet title that changed
+ * with the kind would leak by shape — a bystander seeing "HallPass" one moment
+ * and "Moderation" the next learns more than either banner says on its own, and
+ * the same argument already rules out a different ICON for the quiet version
+ * over in `sw.js`.
+ */
+const DISCREET_TITLE = "HallPass";
 
 /**
- * Build the notification for "somebody challenged you".
+ * Build the envelope for one notification.
  *
- * THE DISCREET VERSION NAMES NOBODY AND NOTHING. Not the sender, not the game,
- * not the score — because the person who switched it on did so to stop a
- * bystander learning any of those. "You have a new challenge" is enough to make
- * them open the site, which is all a notification needs to do.
- *
- * The full version names the sender and the game but still omits the score:
- * the number belongs on the page, where it comes with a Play button.
+ * The caller supplies the full wording (from `notifications/copy.ts`) and the
+ * discreet BODY (from the kind's catalogue entry). It supplies neither the
+ * discreet title nor any way to skip the discreet version — both would be the
+ * shape of mistake this indirection exists to prevent.
  */
-export function challengeNotification(input: {
-  from: string;
-  /**
-   * The game's DISPLAY TITLE ("Neon Velocity"), never its slug. A slug reads as
-   * "Beat their score on neon-velocity-hyperdrive", which is the sort of thing
-   * that looks fine in a test fixture and wrong on a lock screen. The caller
-   * resolves it; `null` falls back to the board title.
-   */
-  game: string | null;
-  boardTitle: string;
-}): ChallengePush {
-  const from = shortName(input.from);
-  const where = input.game ?? input.boardTitle;
-
+export function notificationPush(input: {
+  kind: string;
+  title: string;
+  body: string;
+  url: string;
+  /** The kind's discreet body. Names nobody and nothing — see `config.ts`. */
+  discreet: string;
+  /** Per-kind, so one kind's banner cannot replace another's. */
+  tag: string;
+}): NotificationPush {
   return {
-    kind: "challenge",
-    full: {
-      title: `${from} challenged you`,
-      body: where ? `Beat their score on ${where}.` : "Beat their score.",
-    },
-    discreet: {
-      // Named only "HallPass" — no sender, no game. Anyone glancing at the
-      // screen learns that an app they may not recognise has something waiting.
-      title: "HallPass",
-      body: "You have a new challenge.",
-    },
-    // The inbox rather than the game: a challenge might be one of several, and
-    // this is the screen that can show all of them with a way to act on each.
-    url: "/play/you/friends",
-    tag: CHALLENGE_NOTIFICATION_TAG,
+    kind: input.kind,
+    full: { title: input.title, body: input.body },
+    discreet: { title: DISCREET_TITLE, body: input.discreet },
+    url: input.url,
+    tag: input.tag,
   };
 }

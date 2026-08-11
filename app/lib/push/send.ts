@@ -6,10 +6,12 @@
  * transport in the way.
  *
  * ── EVERY FAILURE IS SWALLOWED, ON PURPOSE ─────────────────────────────────
- * The caller is the challenge-create path, which has already written the row by
- * the time this runs. A push that does not go out is a notification somebody
- * misses; a throw here would be a challenge that appears to have failed and was
- * not sent at all. The second is far worse, so nothing in this file may reject.
+ * The caller is always a path that has ALREADY COMMITTED the thing being
+ * announced — a challenge written, a friend request accepted, a game marked new.
+ * A push that does not go out is a notification somebody misses; a throw here
+ * would turn a successful action into an apparent failure, and the player would
+ * retry something that already happened. The second is far worse, so nothing in
+ * this file may reject.
  *
  * ── HYGIENE HAPPENS HERE BECAUSE THERE IS NO CRON ──────────────────────────
  * A push service answers `404`/`410 Gone` for an endpoint that no longer exists
@@ -19,7 +21,7 @@
  * sweep with, and this is the design that needs none.
  *
  * ── WHY IT IS FIRE-AND-FORGET AT THE CALL SITE ─────────────────────────────
- * `notifyChallenge` is awaited, but it resolves once every device has been
+ * `sendPushToPlayers` is awaited, but it resolves once every device has been
  * ATTEMPTED, not once anybody has read anything. Push services are third parties
  * with their own latency, and a slow one must not hold a player's request open —
  * so each send carries its own timeout and the whole batch runs concurrently.
@@ -28,7 +30,7 @@
 import "server-only";
 import webpush from "web-push";
 import { isPushConfigured, vapidConfig } from "./config";
-import { challengeNotification } from "./payload";
+import type { NotificationPush } from "./payload";
 import { push } from "./index";
 import type { PushDevice } from "./store";
 
@@ -72,45 +74,59 @@ async function sendTo(device: PushDevice, payload: string): Promise<void> {
 }
 
 /**
- * Tell a player, on every device they have subscribed, that they were
- * challenged.
+ * Push one payload to every device belonging to each of `playerIds`.
  *
  * A no-op — silently, and without a database read — when VAPID keys are not
  * configured, so the whole feature ships dark and lights up when the env vars
  * land. That is the same graceful-when-unconfigured contract `db.ts` honours for
  * `DATABASE_URL`.
+ *
+ * ── IT TAKES A BUILT PAYLOAD, NOT THE FACTS TO BUILD ONE ───────────────────
+ * This used to be `notifyChallenge`, which took a challenge and did its own
+ * wording. It takes a finished {@link NotificationPush} now because the SAME
+ * title and body have to reach two places — the stored bell row and the device —
+ * and building them twice is how a notification comes to say one thing in the
+ * inbox and another on a phone. `deliver.ts` builds it once and hands it here.
+ *
+ * ── THE DEVICE LOOKUP IS ONE QUERY PER PLAYER ──────────────────────────────
+ * Fine for the personal kinds, which have one recipient, and for the admin ones,
+ * which have a handful. The BROADCAST path does not come through here with every
+ * player in the site — `deliver.ts` narrows to the opted-in few first, which is
+ * the reason `broadcastPushPlayerIds` exists at all.
  */
-export async function notifyChallenge(input: {
-  targetPlayerId: string;
-  from: string;
-  game: string | null;
-  boardTitle: string;
-}): Promise<void> {
+export async function sendPushToPlayers(
+  playerIds: string[],
+  notification: NotificationPush,
+): Promise<void> {
   try {
     if (!isPushConfigured()) return;
+    if (playerIds.length === 0) return;
 
     const { publicKey, privateKey, subject } = vapidConfig();
     webpush.setVapidDetails(subject, publicKey, privateKey);
 
-    const devices = await push.devicesFor(input.targetPlayerId);
-    if (devices.length === 0) return;
-
     // The payload carries BOTH the full and the discreet wording; the service
     // worker picks by a per-device flag mirrored into IndexedDB. See payload.ts
     // for why that beats redacting here.
-    const payload = JSON.stringify(
-      challengeNotification({
-        from: input.from,
-        game: input.game,
-        boardTitle: input.boardTitle,
-      }),
+    const payload = JSON.stringify(notification);
+
+    const deviceLists = await Promise.all(
+      playerIds.map((playerId) =>
+        // One player's unreadable devices must not cost the others theirs.
+        push.devicesFor(playerId).catch((error) => {
+          console.error(`[push] devicesFor(${playerId}) failed:`, error);
+          return [] as PushDevice[];
+        }),
+      ),
     );
 
     // Concurrent, and every one already resolves — so this cannot reject and
     // one dead device cannot stop another from being reached.
-    await Promise.all(devices.map((device) => sendTo(device, payload)));
+    await Promise.all(
+      deviceLists.flat().map((device) => sendTo(device, payload)),
+    );
   } catch (error) {
     // Includes the missing-table window before migration 023 is applied.
-    console.error("[push] notifyChallenge failed:", error);
+    console.error("[push] sendPushToPlayers failed:", error);
   }
 }

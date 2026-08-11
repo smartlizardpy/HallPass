@@ -249,6 +249,35 @@ export function createNotificationStore(sql: Sql) {
     },
 
     /**
+     * The stored channel for ONE kind across MANY players, as
+     * `playerId -> channel`.
+     *
+     * Exists for the admin fan-out. A moderation event is delivered to every
+     * admin, and asking {@link prefsFor} per admin would be one round trip each
+     * on a path that runs behind somebody else's review being posted. This is
+     * one statement whatever the roster size.
+     *
+     * SPARSE, exactly like `prefsFor`: a player absent from the result has no
+     * opinion stored and takes the catalogue default. The caller must resolve
+     * through `config.resolveChannel` rather than reading absence as "off".
+     */
+    async channelsForKind(
+      playerIds: string[],
+      kind: string,
+    ): Promise<Record<string, string>> {
+      if (playerIds.length === 0) return {};
+      const rows = (await sql`
+        SELECT player_id, channel
+          FROM notification_prefs
+         WHERE kind = ${kind}
+           AND player_id = ANY(${playerIds}::text[])
+      `) as Row[];
+      const channels: Record<string, string> = {};
+      for (const row of rows) channels[String(row.player_id)] = String(row.channel);
+      return channels;
+    },
+
+    /**
      * Record one explicit choice.
      *
      * THE ROW IS WRITTEN EVEN WHEN THE CHOICE MATCHES TODAY'S DEFAULT, and that
