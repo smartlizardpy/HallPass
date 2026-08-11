@@ -313,24 +313,10 @@ body {
   }
   .pip,
   .marquee-track,
-  .dice-rolling,
   .streak-toast {
     animation: none;
   }
 }
-
-/* "Surprise me" die — one tumble per press.
-   `SurpriseButton` toggles `.dice-rolling` and waits ROLL_MS before routing, so
-   the duration here is MIRRORED in that component. If you change one, change
-   both: too short and the die is cut off mid-spin by the navigation, too long
-   and the button feels unresponsive. The overshoot at 50% is what stops it
-   reading as a flat spinner. */
-@keyframes dice-roll {
-  from { transform: rotate(0deg) scale(1); }
-  50%  { transform: rotate(360deg) scale(1.18); }
-  to   { transform: rotate(720deg) scale(1); }
-}
-.dice-rolling { animation: dice-roll 0.42s cubic-bezier(0.3, 0.7, 0.3, 1); }
 
 /* Pulse for the LIVE / NEW pip */
 @keyframes pulse-pip {

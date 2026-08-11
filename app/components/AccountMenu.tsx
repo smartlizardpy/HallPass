@@ -4,13 +4,35 @@
  * Site-header account control. Logged out → a "Sign in" button that kicks off
  * Google sign-in (via the `startSignIn` server action). Logged in → the player's
  * avatar + handle opening a dropdown (Friends, Your profile, Beta testing for
- * testers, Dashboard for admins, Sign out).
+ * testers, Dashboard for admins, Stealth mode, Sign out).
  *
  * The player-facing entries point INTO the profile at `/play/you`: the profile
- * itself, and `/play/you/friends` for the tab the badge counts. They are plain
- * `<a>`s via `MenuLink`, so each is a full navigation rather than a prefetched
- * client transition — these pages are per-player and there is nothing to gain
- * from prefetching them behind a closed menu.
+ * itself, and `/play/you/friends` for the tab the badge counts.
+ *
+ * EVERY DESTINATION IN HERE IS A `next/link`. They used to be plain `<a>`s,
+ * justified as "nothing to gain from prefetching them behind a closed menu" —
+ * but `/play/you` and `/play/you/friends` are also two of the three entries in
+ * `PRIMARY_NAV`, which `SiteHeader` draws as tabs at `lg` and up and
+ * `MobileTabBar` draws along the bottom of a phone, both as `<Link>`s. One href
+ * was therefore a soft transition from the nav and a cold document reload from
+ * the avatar, depending only on which copy of it you happened to click. The
+ * prefetch half of that reasoning was answering a question nobody asked: the
+ * whole dropdown sits behind `{open && …}`, so a CLOSED menu has no links in the
+ * document to prefetch, and an OPEN one is a player a single click from one of
+ * four routes — exactly when a warm route pays. Hence the default `prefetch`
+ * here; `MobileTabBar`'s docblock records what `prefetch={false}` cost the phone.
+ *
+ * SIGN OUT IS NOT ONE OF THEM, and must not become one. It is a `<form>` posting
+ * the `startSignOut` server action rather than a link: clearing the session is a
+ * server round trip, and `signOut({ redirectTo: "/" })` owns where the player
+ * lands. There is nothing here to convert, and converting it would be a
+ * regression rather than a speed-up.
+ *
+ * CLOSING ON NAVIGATION IS NOW THIS COMPONENT'S JOB. A full reload unmounted the
+ * header and took the open menu with it; a client transition keeps `SiteHeader`
+ * — and this dropdown — mounted across the route change, so an open menu would
+ * otherwise hang over the page it just navigated to. See `MenuLink` for which
+ * Link callback does it and why that choice is not arbitrary.
  *
  * Identity is fetched client-side from `/api/v1/me` so the public arcade pages
  * stay statically rendered — the menu just hydrates with whoever's signed in.
@@ -27,8 +49,10 @@
  * zero and is never allowed to hold up — or throw inside — the menu.
  */
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { startSignIn, startSignOut } from "../lib/auth-actions";
+import { openStealthSettings } from "../lib/stealth/store";
 import type { MeResponse } from "@/sdk/src/contract";
 
 /**
@@ -45,6 +69,13 @@ export function AccountMenu() {
   const [open, setOpen] = useState(false);
   const [incoming, setIncoming] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
+  /**
+   * The avatar trigger, so the stealth row can hand focus back to it before the
+   * dropdown it lives in disappears — see that button for the whole sequence.
+   * Separate from `ref` above, which wraps trigger AND dropdown because that is
+   * the region the outside-click test asks about.
+   */
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -93,6 +124,11 @@ export function AccountMenu() {
   const roleLabel =
     me?.role === "super_admin" ? "Super admin" : isAdmin ? "Admin" : null;
 
+  // A plain closure, not a `useCallback`: nothing below is memoised, so a stable
+  // identity would buy exactly nothing and only imply a guarantee that is not
+  // being relied on.
+  const closeMenu = () => setOpen(false);
+
   // Identity not resolved yet → hold space without flashing the wrong state.
   if (!loaded) {
     return <div className="h-11 w-11" aria-hidden />;
@@ -117,6 +153,7 @@ export function AccountMenu() {
   return (
     <div ref={ref} className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
@@ -179,7 +216,7 @@ export function AccountMenu() {
 
           <div className="my-1 h-px bg-border" />
 
-          <MenuLink href="/play/you/friends">
+          <MenuLink href="/play/you/friends" onNavigate={closeMenu}>
             Friends
             {incoming > 0 && (
               <span className="ml-2 rounded-full bg-accent-pink-ink px-1.5 py-0.5 text-[10px] font-black text-white">
@@ -190,19 +227,86 @@ export function AccountMenu() {
           {/* "Your profile", not "Account settings": `/play/you` is the player's
               own profile with settings as one tab among several, so the old
               label promised a narrower page than the link now opens. */}
-          <MenuLink href="/play/you">Your profile</MenuLink>
+          <MenuLink href="/play/you" onNavigate={closeMenu}>
+            Your profile
+          </MenuLink>
           {/* Sits in the same slot as Dashboard: the one entry that is only
               there because of who you are. A tester who is also an admin sees
               both — they are different jobs, not two names for one. */}
           {isBetaTester && (
-            <MenuLink href="/beta">
+            <MenuLink href="/beta" onNavigate={closeMenu}>
               Beta testing
               <span className="ml-2 rounded-full bg-brand-50 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-brand">
                 beta
               </span>
             </MenuLink>
           )}
-          {isAdmin && <MenuLink href="/dashboard">Dashboard</MenuLink>}
+          {isAdmin && (
+            <MenuLink href="/dashboard" onNavigate={closeMenu}>
+              Dashboard
+            </MenuLink>
+          )}
+
+          {/* The rule below the destinations. Everything ABOVE it is a
+              `MenuLink` — a real href you can ⌘-click or open in a new tab, and
+              a page that could be the one you are on; everything BELOW is an
+              ACTION on this session (the stealth launcher, then Sign out).
+              Stacking the two kinds into one unbroken column would promise a
+              route where there is none — see the stealth row's own note on why
+              it carries no `aria-current`. */}
+          <div className="my-1 h-px bg-border" />
+
+          {/*
+            STEALTH MODE — a launcher, not a destination.
+
+            WHY IT IS IN THE ACCOUNT MENU. The rail's `StealthMenuButton` goes
+            away as navigation moves into the top bar, and stealth is the one
+            feature on this site whose entire value is being set up BEFORE
+            somebody walks over — so it must not spend a single release
+            unreachable. `NotSignedInCard` carries the same argument for the
+            phone, and traces every other door; read it before moving this.
+
+            A LOCAL BUTTON, NOT `StealthMenuButton`. That component is shaped for
+            the rail — `rounded-xl`, `font-extrabold`, brand-tinted hover — and it
+            fires `openStealthSettings()` BEFORE its `onNavigate` callback, which
+            is precisely the order this row must not use. `StealthSettingsRow` on
+            the settings tab reached the same conclusion for the same reason: the
+            behaviour is a one-line dispatch, the shape is the part that differs.
+            The 🕶️ is the one thing all three launchers do share.
+
+            A `<button>` with no `href` and no `aria-current`, because an action
+            cannot be "active" — and it wears the `MenuLink` row styling so the
+            column still reads as one list.
+
+            CLOSE FIRST, THEN OPEN, and the focus move in between. All three land
+            in ONE React commit, so:
+              * `StealthSettings`' opening layout effect records the avatar
+                trigger as the element to restore focus to — that button outlives
+                the dropdown, whereas this row (and `document.activeElement`
+                after it is torn down) does not, and a modal that hands focus
+                back to a detached node hands it to nowhere;
+              * the dialog never paints underneath a menu still on screen.
+            The dropdown's outside-click handler cannot swallow the dialog
+            either: it listens for `mousedown` on `document` and only while
+            `open`, so it has already seen THIS press — on a node inside `ref`,
+            hence no close — and is unbound by this same commit. There is no
+            second press for it to misread as "outside".
+          */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              triggerRef.current?.focus();
+              openStealthSettings();
+            }}
+            className="block w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-zinc-800 transition hover:bg-surface-2"
+          >
+            <span aria-hidden className="mr-1.5">
+              🕶️
+            </span>
+            Stealth mode
+          </button>
 
           <form action={startSignOut}>
             <button
@@ -218,15 +322,36 @@ export function AccountMenu() {
   );
 }
 
-function MenuLink({ href, children }: { href: string; children: React.ReactNode }) {
+/**
+ * One dropdown row that goes somewhere.
+ *
+ * `onNavigate` rather than `onClick` closes the menu, and the difference is not
+ * cosmetic. Both fire on an ordinary click, but `onNavigate` runs ONLY once Next
+ * has taken the navigation over — which is exactly the distinction ⌘/Ctrl-click
+ * needs: that opens the route in a background tab and leaves the player looking
+ * at THIS page, still inside the menu they opened, so closing it would be
+ * closing a menu they are using. Next skips `onNavigate` for modified clicks
+ * (and for anything non-local) for that reason; `onClick` would not.
+ */
+function MenuLink({
+  href,
+  onNavigate,
+  children,
+}: {
+  href: string;
+  /** Called when the click becomes a real client-side navigation. */
+  onNavigate: () => void;
+  children: React.ReactNode;
+}) {
   return (
-    <a
+    <Link
       href={href}
+      onNavigate={onNavigate}
       role="menuitem"
       className="block rounded-lg px-3 py-2 text-sm font-semibold text-zinc-800 transition hover:bg-surface-2"
     >
       {children}
-    </a>
+    </Link>
   );
 }
 
