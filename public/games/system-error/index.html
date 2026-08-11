@@ -133,6 +133,115 @@
         }
         
         .hud-text { font-family: 'Share Tech Mono', monospace; text-shadow: 0 0 5px currentColor; }
+
+        /* --- HallPass: online leaderboard + friend challenges ---------------
+           Built from the tokens already in this file rather than a palette of
+           its own: Share Tech Mono for anything numeric (what .hud-text uses
+           for every readout), cyan for data, magenta reserved for death. The
+           panel copies the death screen's own stat-box idiom -- near-black
+           fill, 2px neon border, matching outer glow -- so it reads as another
+           terminal readout instead of a web widget dropped into the game. */
+        .hp-panel {
+            background: rgba(0,0,0,0.9);
+            border: 2px solid var(--cyan);
+            box-shadow: 0 0 30px rgba(0,240,255,0.25);
+            padding: 8px 18px; margin-bottom: 14px;
+            width: 100%; max-width: 420px;
+        }
+        .hp-title {
+            font-family: 'Share Tech Mono', monospace; font-size: 11px;
+            letter-spacing: 0.18em; text-transform: uppercase; text-align: center;
+            color: var(--cyan); text-shadow: 0 0 8px var(--cyan); margin-bottom: 5px;
+        }
+        #hpBoard { min-height: 28px; }
+        /* table-layout:fixed is load-bearing. Without it the browser sizes
+           columns to their content, and the ellipsis on .who then collapses a
+           long handle to a single letter instead of truncating it. Fixed layout
+           lets .who take whatever the other two columns leave. */
+        #hpBoard table {
+            width: 100%; border-collapse: collapse; table-layout: fixed;
+            font-variant-numeric: tabular-nums;
+        }
+        #hpBoard td {
+            padding: 0; font-size: 15px;
+            font-family: 'Share Tech Mono', monospace;
+        }
+        #hpBoard .rank { width: 34px; color: #6b7280; }
+        #hpBoard .who {
+            text-align: left; color: #d1d5db;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        #hpBoard .pts { width: 34%; text-align: right; color: var(--cyan); text-shadow: 0 0 6px var(--cyan); }
+        #hpBoard .hpv { color: var(--green); margin-left: 5px; font-size: 13px; }
+        .hp-empty {
+            font-family: 'Share Tech Mono', monospace; font-size: 13px;
+            letter-spacing: 0.2em; text-transform: uppercase;
+            color: #6b7280; text-align: center;
+        }
+        .hp-actions { margin-top: 6px; text-align: center; }
+        .hp-msg {
+            margin-top: 7px; font-family: 'Share Tech Mono', monospace;
+            font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+            color: #9ca3af; text-align: center;
+        }
+        .hp-msg b { color: var(--gold); font-weight: 700; }
+        .hp-msg[hidden] { display: none; }
+        .hp-auth {
+            display: flex; gap: 16px; align-items: center; justify-content: center;
+            flex-wrap: wrap; margin-top: 14px;
+        }
+        /* The screens' own buttons are deliberately enormous; these are
+           secondary actions and must not compete with INITIALIZE_CHAOS or
+           HARD_REBOOT for the eye. */
+        .cyber-button.hp-small { font-size: 0.8rem; padding: 5px 16px; }
+        #hpAuthStatus {
+            font-family: 'Share Tech Mono', monospace; font-size: 14px;
+            letter-spacing: 0.16em; text-transform: uppercase; color: #6b7280;
+        }
+        #hpAuthStatus b { color: var(--cyan); font-weight: 700; }
+        .hp-auth button[hidden] { display: none; }
+        /* .screen centres its children and never scrolls, so anything that does
+           not fit is not merely ugly -- it is unreachable, and HARD_REBOOT is
+           the first thing over the edge. The death screen already stands ~520px
+           tall before this panel exists, which fits a 1366x768 laptop with very
+           little to spare, so the panel yields in stages as the viewport
+           shortens and stands down completely when there is no honest room
+           left. Every rule here is scoped to the HallPass elements: below the
+           last breakpoint the screen is exactly what it was before the
+           leaderboard existed.
+
+           Each band is sized to fit at its OWN shortest viewport, not its
+           tallest -- a band tuned to its top edge overflows everywhere else in
+           its own range. */
+        @media (min-height: 950px) {
+            /* Only a genuinely tall display can afford the roomy form; the row
+               count is the same five either way. */
+            .hp-panel { padding: 20px 26px; margin-bottom: 48px; max-width: 480px; }
+            .hp-title { font-size: 14px; letter-spacing: 0.3em; margin-bottom: 14px; }
+            #hpBoard td { padding: 4px 0; font-size: 18px; }
+            .hp-actions { margin-top: 16px; }
+            .cyber-button.hp-small { font-size: 1rem; padding: 10px 26px; }
+            .hp-msg { margin-top: 14px; font-size: 13px; }
+            .hp-auth { margin-top: 28px; }
+        }
+        @media (max-height: 760px) {
+            /* A 1366x768 laptop lands here, and the screen's own content already
+               claims ~520 of its ~620 usable pixels. Three rows in what is left
+               is the most that can be shown without evicting HARD_REBOOT. */
+            .hp-panel { padding: 4px 12px; margin-bottom: 4px; }
+            .hp-title { display: none; }
+            #hpBoard td { font-size: 13px; }
+            #hpBoard tr:nth-child(n+4) { display: none; }
+            .hp-actions { margin-top: 5px; }
+            .cyber-button.hp-small { font-size: 0.72rem; padding: 3px 12px; }
+        }
+        @media (max-height: 660px) {
+            /* Below this the screen's own content leaves no honest room. Rather
+               than push HARD_REBOOT off the bottom of an overlay that never
+               scrolls, the board is simply not shown and the death screen is
+               exactly what it was before the leaderboard existed. */
+            .hp-panel { display: none; }
+        }
     </style>
 </head>
 <body>
@@ -176,6 +285,14 @@
             <button onclick="startGame()" class="cyber-button text-2xl px-12 py-5">
                 > INITIALIZE_CHAOS
             </button>
+            <!-- Identity belongs on the menu, where signing in interrupts
+                 nothing. There is deliberately NO challenge button here:
+                 challenge() dares somebody to beat a score you already hold on
+                 the board, so before a run it could only answer "no-score". -->
+            <div class="hp-auth">
+                <button class="cyber-button hp-small" id="hpSignIn">> SIGN_IN</button>
+                <span id="hpAuthStatus">PLAYING AS GUEST</span>
+            </div>
             <div class="mt-20 flex gap-8 md:gap-16 text-gray-400 text-sm md:text-lg font-bold bg-black/80 p-6 border-2 border-[var(--cyan)]/30 backdrop-blur-md shadow-[0_0_30px_rgba(0,0,0,0.8)]">
                 <div class="text-center"><span class="text-[var(--cyan)] block mb-2 text-3xl font-black hud-text">WASD</span> MOVEMENT</div>
                 <div class="text-center"><span class="text-[var(--cyan)] block mb-2 text-3xl font-black hud-text">MOUSE</span> AIM / AUTO-FIRE</div>
@@ -204,16 +321,49 @@
                     <span id="final-time" class="text-[var(--cyan)] hud-text"></span>
                 </div>
                 <div class="flex justify-between gap-16">
-                    <span class="text-gray-500">THREADS_SLAIN:</span> 
+                    <span class="text-gray-500">THREADS_SLAIN:</span>
                     <span id="final-kills" class="text-[var(--cyan)] hud-text"></span>
                 </div>
             </div>
-            
+
+            <!-- The online board ranks THREADS_SLAIN, the same number printed
+                 above it, so the player can read their run and the standing it
+                 earned without moving their eyes anywhere else. -->
+            <div class="hp-panel">
+                <div class="hp-title">GLOBAL_UPLINK :: TOP_OPERATORS</div>
+                <div id="hpBoard"></div>
+                <div class="hp-actions">
+                    <button class="cyber-button hp-small" id="hpChallenge">> CHALLENGE_FRIEND</button>
+                </div>
+                <div class="hp-msg" id="hpChallengeMsg" hidden></div>
+            </div>
+
             <button onclick="resetToMenu()" class="cyber-button text-2xl" style="border-color: var(--magenta); color: var(--magenta); text-shadow: 0 0 15px var(--magenta);">
                 > HARD_REBOOT
             </button>
         </div>
     </div>
+
+<!-- HallPass: online leaderboard + friend challenges. The stub below installs
+     window.HallPass synchronously so calls made before the bundle lands are
+     queued, never lost, and degrade to a safe no-op if it never arrives. -->
+<script>
+(function(w){if(w.HallPass&&w.HallPass.version!=="0")return;var q=[];
+function e(n){return function(){var a=[].slice.call(arguments);
+return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
+w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
+submitScore:e("submitScore"),getScores:e("getScores"),
+getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
+unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
+getAchievements:e("getAchievements"),challenge:e("challenge"),
+signIn:function(){},signOut:function(){},
+getHandle:function(){return null},setHandle:function(v){return v},
+on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
+off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
+setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:{ok:false,reason:"inert"})})},2000)})(window);
+</script>
+<script src="/sdk/v1/hallpass.js" data-game="system-error" defer></script>
 
 <script>
 /** AUDIO SYNTHESIZER - CRANKED UP */
@@ -854,6 +1004,7 @@ function spawnDeathExplosion(x, y, color, type) {
 function startGame() {
     Audio.init();
     state.frame = 0; state.gameTime = 0; state.hitstop = 0; state.kills = 0;
+    hpPosted = false;
     state.camera = { x: 0, y: 0 }; state.difficulty = 1;
     state.player = new Player();
     state.enemies = []; state.bullets = []; state.particles = []; state.xps = []; state.texts = [];
@@ -862,11 +1013,42 @@ function startGame() {
 }
 
 function resetToMenu() { setUI('MENU'); }
+
+/* Whether this run's total has already gone to HallPass.
+
+   This latch is load-bearing, not a precaution. gameOver() is reached from a
+   single place -- the hp<=0 branch in update() -- but nothing there stops it
+   being reached twice. The switch to the GAMEOVER screen is on a 1500 ms
+   setTimeout, so state.ui stays 'PLAYING' for that whole window and the loop
+   keeps calling update(). The only thing holding update() off in the meantime
+   is the matching 1500 ms hitstop, and those two are not the same clock: dt is
+   clamped to 0.1 s per frame, so a stalled or backgrounded tab drains the
+   hitstop counter more slowly than wall time drains the timeout. A frame
+   landing in that gap re-enters the branch and posts the run again.
+   startGame() clears it. */
+let hpPosted = false;
+
 function gameOver() {
     addHitstop(1500);
     const m = Math.floor(state.gameTime / 60).toString().padStart(2, '0'), s = Math.floor(state.gameTime % 60).toString().padStart(2, '0');
     document.getElementById('final-time').innerText = `${m}:${s}`; document.getElementById('final-kills').innerText = state.kills;
     setTimeout(() => setUI('GAMEOVER'), 1500);
+
+    // Post the run. submitScore resolves either way and never throws, so this
+    // can neither block the game-over screen nor delay it -- with no board
+    // provisioned yet it simply resolves { ok:false } and the game plays on.
+    // The board is drawn AFTER the post resolves, so the run that just ended is
+    // already in the list rather than surfacing only on the next death.
+    if (!hpPosted) {
+        hpPosted = true;
+        const board = document.getElementById('hpBoard');
+        if (board) board.innerHTML = '<div class="hp-empty">Posting your score...</div>';
+        // Clear the previous run's result, or "DARED ALI TO BEAT 240" would sit
+        // under a score that is no longer the one being talked about.
+        const msg = document.getElementById('hpChallengeMsg');
+        if (msg) msg.hidden = true;
+        HallPass.submitScore(state.kills).then(hpRenderBoard);
+    }
 }
 
 function triggerLevelFlash() {
@@ -1118,6 +1300,129 @@ function setUI(newUI) {
     }, 50);
 }
 
+/** HALLPASS -- online leaderboard + friend challenges.
+ *
+ *  The inline stub above this script guarantees window.HallPass exists by the
+ *  time any of this runs, and every method resolves rather than throwing. So
+ *  nothing in this section can break the game: no network, no provisioned
+ *  board, no SDK at all still leaves a playable SYSTEM.ERR and a quiet panel.
+ */
+
+/* Paint the menu's identity row. `player` is null when signed out. */
+function hpRefreshAuth(player) {
+    const status = document.getElementById('hpAuthStatus');
+    const btn = document.getElementById('hpSignIn');
+    if (!status || !btn) return;
+    if (player) {
+        btn.hidden = true;
+        status.innerHTML = 'OPERATOR: <b></b>';
+        // textContent: a display name is untrusted input and must never be parsed.
+        status.querySelector('b').textContent = player.name;
+    } else {
+        btn.hidden = false;
+        status.textContent = 'PLAYING AS GUEST';
+    }
+}
+
+/* Draw the online top five into the death screen.
+
+   FIVE rows, not ten: the screen already carries a two-row stat box and two
+   buttons, and a longer list would push HARD_REBOOT off the bottom of a phone.
+   A scrollable region would not help either -- it would just hide the button
+   behind a gesture. The full board lives on the game's HallPass page.
+
+   TEN are REQUESTED because one player can hold several of the top rows; after
+   collapsing each handle down to their best run, five is what is left to show. */
+function hpRenderBoard() {
+    const el = document.getElementById('hpBoard');
+    if (!el) return;
+    el.innerHTML = '<div class="hp-empty">Loading scores...</div>';
+    HallPass.getScores({ limit: 10 }).then(rows => {
+        if (!rows || !rows.length) {
+            el.innerHTML = '<div class="hp-empty">Be the first to score</div>';
+            return;
+        }
+        const seen = new Set();
+        const best = rows.filter(r => seen.has(r.handle) ? false : (seen.add(r.handle), true))
+                         .slice(0, 5);
+        const table = document.createElement('table');
+        let rank = 0;
+        for (const row of best) {
+            const tr = document.createElement('tr');
+            const n = document.createElement('td');
+            n.className = 'rank'; n.textContent = ++rank;
+            const who = document.createElement('td');
+            who.className = 'who';
+            // textContent throughout: a handle is untrusted and must never be parsed.
+            who.textContent = row.handle;
+            if (row.verified) {
+                const tick = document.createElement('span');
+                tick.className = 'hpv'; tick.textContent = '✓';
+                who.appendChild(tick);
+            }
+            const pts = document.createElement('td');
+            pts.className = 'pts'; pts.textContent = Number(row.score).toLocaleString();
+            tr.append(n, who, pts);
+            table.appendChild(tr);
+        }
+        el.innerHTML = '';
+        el.appendChild(table);
+    });
+}
+
+/* Unlike some other games in this collection, the death screen here restarts
+   only from its own button -- the global listeners record keys and mouse state
+   and nothing more -- so the panel needs no stopPropagation guard to stop the
+   game being restarted out from under somebody reading the board. */
+
+/* Challenge a friend to beat the run that just ended.
+
+   Offered on the death screen only, because that is the one moment where all of
+   challenge()'s preconditions hold at once: the board exists, submitScore has
+   just put the challenger on it, and there is a session to challenge from.
+
+   Only the outcomes the PICKER CANNOT REPORT ITSELF are written here. Server
+   refusals (signed-out, not-friends, no-score) are already rendered inside the
+   panel the player is looking at, and saying them twice is just noise. These
+   three stop the panel before it can say anything at all. */
+const HP_CHALLENGE_MSG = {
+    'popup-blocked': 'Your browser blocked the challenge window',
+    'inert':         'Challenges need the online leaderboard, offline here',
+    'network':       'Could not reach HallPass - try again shortly',
+};
+
+document.getElementById('hpChallenge').addEventListener('click', async () => {
+    const btn = document.getElementById('hpChallenge');
+    const msg = document.getElementById('hpChallengeMsg');
+    btn.disabled = true;
+    msg.hidden = true;
+    // No try/catch: every SDK method resolves, so there is nothing to catch.
+    const res = await HallPass.challenge();
+    btn.disabled = false;
+
+    // READ `sent`, NOT `ok`. Closing the picker resolves
+    // { ok:true, sent:false, reason:"closed" } -- the call worked and the player
+    // changed their mind, which must never be shown back to them as a failure.
+    if (res && res.sent && res.challenge) {
+        msg.innerHTML = 'DARED <b></b> TO BEAT <b></b>';
+        const parts = msg.querySelectorAll('b');
+        parts[0].textContent = res.challenge.to;   // untrusted display name
+        parts[1].textContent = Number(res.challenge.targetScore).toLocaleString();
+        msg.hidden = false;
+        return;
+    }
+    const text = res && res.reason ? HP_CHALLENGE_MSG[res.reason] : null;
+    if (text) { msg.textContent = text; msg.hidden = false; }
+});
+
+HallPass.getPlayer().then(hpRefreshAuth);
+// The sign-in popup does not reload the game, so the label has to be told when
+// it finishes -- otherwise it still reads GUEST to somebody who just signed in.
+HallPass.on('auth', e => hpRefreshAuth(e.player));
+// Must be a real click: browsers block a popup opened without a user gesture.
+document.getElementById('hpSignIn').addEventListener('click', () => HallPass.signIn());
+
+/** GAME LOOP DRIVER */
 function loop(timestamp) {
     if (!state.lastTime) state.lastTime = timestamp;
     const dt = Math.min((timestamp - state.lastTime) / 1000, 0.1); 
