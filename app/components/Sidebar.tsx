@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { StealthMenuButton } from "./stealth/StealthMenuButton";
 import { Wordmark } from "./Wordmark";
 
@@ -87,6 +87,84 @@ function CategoryIcon({ name }: { name: string }) {
   );
 }
 
+/* -------------------------------------------------------------------------- *
+ * "Keep the rail expanded" — the pin preference.
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Whether the visitor has pinned the desktop rail open, persisted so the choice
+ * survives a reload.
+ *
+ * A DELIBERATE COPY of `useForceDesktop` in `app/lib/use-device-platform.ts`,
+ * down to the shape: one localStorage key holding `"1"` or nothing, a module
+ * `Set` of listeners, a `storage` listener so a second tab agrees, and
+ * `useSyncExternalStore` on top. Read that file's header for the rationale; the
+ * same rules apply here. It is NOT a `useState` + `useEffect` pair, because the
+ * rail is rendered once per page but the preference is a piece of site state, and
+ * an external store is what lets a future second reader (a settings row, say)
+ * observe the same value without lifting anything.
+ *
+ * Small enough to live in this file rather than `app/lib/`: it is four functions
+ * and a string key, it has exactly one consumer (the rail below), and every
+ * behaviour worth asserting on is DOM behaviour of that rail rather than of the
+ * store. `app/lib/` modules in this repo carry unit tests; a lib file with none
+ * would be the odd one out.
+ *
+ * THE SERVER SNAPSHOT IS ALWAYS `false` — i.e. collapsed — and that is the
+ * hydration contract, not a default nobody thought about. The public pages are
+ * prerendered and precached by the service worker, so the HTML cannot depend on
+ * one visitor's storage; the first client render must match it byte for byte.
+ * `useSyncExternalStore` renders `getServerSnapshot` for the server pass AND for
+ * the hydrating pass, then re-renders with the real value immediately after — the
+ * same "second paint" rule `useRawDevice` follows with its `null`. A pinned rail
+ * therefore paints collapsed for one frame and then expands, which is the correct
+ * trade: the alternative is a hydration mismatch on every prerendered page.
+ */
+const RAIL_PINNED_KEY = "hp-rail-pinned";
+const railListeners = new Set<() => void>();
+
+function railSubscribe(onChange: () => void): () => void {
+  railListeners.add(onChange);
+  window.addEventListener("storage", onChange); // keep tabs in sync
+  return () => {
+    railListeners.delete(onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+function getRailSnapshot(): boolean {
+  try {
+    return localStorage.getItem(RAIL_PINNED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Constant, and constant on purpose — see the docblock above. */
+function getRailServerSnapshot(): boolean {
+  return false;
+}
+
+/** Pin or unpin the rail, then notify every subscriber. */
+function setRailPinned(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(RAIL_PINNED_KEY, "1");
+    else localStorage.removeItem(RAIL_PINNED_KEY);
+  } catch {
+    // Private mode / storage disabled: the toggle simply won't persist.
+  }
+  railListeners.forEach((l) => l());
+}
+
+/** Whether the visitor has asked for the rail to stay expanded. */
+function useRailPinned(): boolean {
+  return useSyncExternalStore(
+    railSubscribe,
+    getRailSnapshot,
+    getRailServerSnapshot,
+  );
+}
+
 /**
  * The style of one sidebar row.
  *
@@ -102,13 +180,24 @@ function CategoryIcon({ name }: { name: string }) {
  * the SAME active fill, so the two surfaces cannot disagree about what "current"
  * looks like.
  */
-function itemClass(isActive: boolean): string {
-  // `px-3`, not `px-4`: the rail is 192px wide (see the <aside> note), and the
-  // nav's own `px-3` already spends 24px of it. At `px-4` a row leaves ~104px
-  // for the label after the 20px icon and its 12px gap, which "Multiplayer"
-  // very nearly fills; `px-3` buys back the margin the truncate would otherwise
-  // start eating.
-  return `group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-[15px] font-bold transition lg:py-2.5 ${
+function itemClass(isActive: boolean, collapsed: boolean): string {
+  // EXPANDED: `px-3`, not `px-4`. The rail is 192px wide (see the <aside> note),
+  // and the nav's own `px-3` already spends 24px of it. At `px-4` a row leaves
+  // ~104px for the label after the 20px icon and its 12px gap, which
+  // "Multiplayer" very nearly fills; `px-3` buys back the margin the truncate
+  // would otherwise start eating.
+  //
+  // COLLAPSED: no horizontal padding at all and `justify-center`, so the 20px
+  // glyph sits on the centre line of the 40px row the 64px strip leaves after
+  // the nav's `px-3`. Padding plus `gap-3` would push it off-centre by the width
+  // of a label that is not being drawn. `relative` is here for the New dot,
+  // which becomes a corner badge at this width (see `renderNavList`).
+  //
+  // The ACTIVE fill is identical either way — that is the point of hoisting this
+  // out, and `SiteHeader`'s tabs share it too, so no surface can disagree about
+  // what "current" looks like.
+  const shape = collapsed ? "relative justify-center px-0" : "gap-3 px-3";
+  return `group flex w-full items-center rounded-2xl py-3 text-[15px] font-bold transition lg:py-2.5 ${shape} ${
     isActive
       ? "bg-brand-50 text-brand"
       : "text-zinc-700 hover:bg-surface-2 hover:text-zinc-900"
@@ -157,6 +246,24 @@ export function Sidebar({
 }) {
   const items = ["All", "New", "Trending", ...categories];
 
+  /* ---------------------------------------------------------------------- *
+   * Rail width state. DESKTOP ONLY — the drawer below never reads any of it.
+   * ---------------------------------------------------------------------- */
+
+  // The persisted choice. `false` on the server and on the hydrating render.
+  const pinned = useRailPinned();
+  // Transient reveals. Hover is the mouse affordance; `focusInside` is the
+  // keyboard one, and without it a tabbing user would land on a row that is a
+  // bare glyph. Both are React state rather than the `hover:` / `focus-within:`
+  // variants they look like, because the collapsed and expanded rows differ in
+  // WHICH ELEMENTS RENDER (`sr-only` label, badge-or-inline dot, tooltip), not
+  // just in a property or two — expressing that in CSS would mean pairing every
+  // utility with a `group-hover:`/`group-focus-within:` twin and then losing the
+  // specificity fight between `not-sr-only` and `truncate`.
+  const [hovering, setHovering] = useState(false);
+  const [focusInside, setFocusInside] = useState(false);
+  const railExpanded = pinned || hovering || focusInside;
+
   useEffect(() => {
     if (!mobileOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -176,7 +283,7 @@ export function Sidebar({
     onMobileClose?.();
   };
 
-  // ONE GROUP, ONE PROMISE: everything in this fragment filters the catalogue.
+  // ONE GROUP, ONE PROMISE: everything this returns filters the catalogue.
   // The primary destinations (Games / Friends / You) and the "Surprise me" button
   // used to sit above the categories, separated by a rule because a destination
   // that stays lit and a filter that swaps the grid underneath you are different
@@ -186,15 +293,36 @@ export function Sidebar({
   // Still rendered by BOTH the desktop rail and the mobile drawer from this one
   // insertion, which is why nothing in here may carry an `id`: it would exist
   // twice in the DOM.
-  const navList = (
+  //
+  // A FUNCTION, not the constant it was, because the two surfaces now want two
+  // widths of the same list and only the rail collapses. The drawer always calls
+  // it with both flags off and so renders exactly what it rendered before — it
+  // is a full-width overlay you opened deliberately, and there is nothing to
+  // save by shrinking it.
+  const renderNavList = ({
+    /** Icon-only: labels go `sr-only`, rows centre, the New dot becomes a badge. */
+    collapsed,
+    /** Add a `title` tooltip — see the note where the rail calls this. */
+    tooltips,
+  }: {
+    collapsed: boolean;
+    tooltips: boolean;
+  }) => (
     <>
       {/* Visual only: the <ul> below carries the same label for assistive tech,
           so announcing this line too would just say "Browse" twice. An `id` +
-          `aria-labelledby` pair is not an option — `navList` is rendered in both
-          the rail and the drawer, so any id in here exists twice in the DOM. */}
+          `aria-labelledby` pair is not an option — this list is rendered in both
+          the rail and the drawer, so any id in here exists twice in the DOM.
+
+          `invisible` rather than unmounted when collapsed: the word does not fit
+          in a 64px strip, but its 19px of box does still have a job, which is to
+          stop the whole list jumping up by that much the instant the rail is
+          hovered. `truncate` keeps it to the one line that height assumes. */}
       <p
         aria-hidden
-        className="px-4 pb-1 text-[11px] font-bold uppercase tracking-wider text-muted"
+        className={`truncate px-4 pb-1 text-[11px] font-bold uppercase tracking-wider text-muted ${
+          collapsed ? "invisible" : ""
+        }`}
       >
         Browse
       </p>
@@ -205,12 +333,28 @@ export function Sidebar({
           const inner = (
             <>
               <CategoryIcon name={item} />
-              {/* `truncate` because categories are dashboard-editable free text:
-                  in the narrower rail a long one would wrap to two lines and
-                  break the row rhythm rather than being clipped. */}
-              <span className="flex-1 truncate text-left">{item}</span>
+              {/* THE LABEL IS ALWAYS RENDERED, and that is what gives a collapsed
+                  row its accessible name: `sr-only` hides it from the eye and
+                  from nobody else, so the row is still "Horror, button" to a
+                  screen reader with no `aria-label` to keep in sync with the
+                  visible text. An icon-only row whose only name were the `title`
+                  below would be the thing to avoid — `title` is unreliable as a
+                  name and unreachable by keyboard.
+
+                  Expanded, `truncate` earns its place because categories are
+                  dashboard-editable free text: a long one would wrap to two lines
+                  and break the row rhythm rather than being clipped. */}
+              <span className={collapsed ? "sr-only" : "flex-1 truncate text-left"}>
+                {item}
+              </span>
               {item === "New" && !isActive && (
-                <span className="h-2 w-2 rounded-full bg-accent-pink" />
+                <span
+                  className={
+                    collapsed
+                      ? "absolute right-1 top-1.5 h-1.5 w-1.5 rounded-full bg-accent-pink"
+                      : "h-2 w-2 rounded-full bg-accent-pink"
+                  }
+                />
               )}
             </>
           );
@@ -220,7 +364,8 @@ export function Sidebar({
                 <button
                   type="button"
                   onClick={() => handleSelect(item)}
-                  className={itemClass(isActive)}
+                  title={tooltips ? item : undefined}
+                  className={itemClass(isActive, collapsed)}
                 >
                   {inner}
                 </button>
@@ -228,7 +373,8 @@ export function Sidebar({
                 <Link
                   href={hrefForItem(item)}
                   onClick={onMobileClose}
-                  className={itemClass(isActive)}
+                  title={tooltips ? item : undefined}
+                  className={itemClass(isActive, collapsed)}
                 >
                   {inner}
                 </Link>
@@ -242,44 +388,206 @@ export function Sidebar({
 
   return (
     <>
-      {/* Desktop sidebar. PINNED TO THE VIEWPORT (`lg:sticky lg:top-0
-          lg:h-screen`), which it was not: the parent is a `flex min-h-screen`
-          row, so default `align-items: stretch` grew this rail to the height of
-          the whole DOCUMENT. Two things broke as a result — the `flex-1
-          overflow-y-auto` nav below could never overflow, making its scrolling
-          dead code, and the blocks that follow it — the stealth button, and back
-          then a copyright line too — sat at the bottom of the document (below
-          every game on the home page) instead of the bottom of the screen. A
-          definite `100vh` height also stops `stretch` applying, so the rail now
-          measures exactly one viewport, the nav scrolls internally, and the
-          stealth button sits on the visible rail.
-          This is the behaviour the mobile drawer already had via `absolute
-          inset-y-0` inside a `fixed inset-0`. Scoped to `lg:` because the rail
-          is `hidden` below that breakpoint. */}
-      {/* `w-48`, down from `w-60`. 240px of permanent rail is a lot of a small
-          laptop's width to spend on a genre filter, and pinning it full-height
-          made that cost visible on every screen rather than only above the fold.
-          192px still clears the longest label comfortably — "Multiplayer" at
-          15px bold is ~90px, plus a 20px icon, a 12px gap and 32px of padding. */}
-      <aside className="hidden w-48 shrink-0 border-r border-border bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
-        <div className="flex h-20 items-center px-4">
-          <Link href="/">
-            <Wordmark size="text-2xl" dotClass="h-1.5 w-1.5" />
-          </Link>
-        </div>
+      {/* DESKTOP SIDEBAR.
+          `w-48`, down from `w-60`, and now only when PINNED. 240px of permanent
+          rail was a lot of a small laptop's width to spend on a genre filter;
+          192px is still 14% of a 1366px school laptop, which is the width this
+          whole redesign is for. So the rail defaults to a 64px icon strip and the
+          full 192px is opt-in. 192px is what the expanded state needs and no
+          more: "Multiplayer" at 15px bold is ~90px, plus a 20px icon, a 12px gap
+          and 32px of padding.
 
-        <nav className="flex-1 overflow-y-auto px-3 pb-4">{navList}</nav>
+          THE <aside> IS NOW ONLY THE LAYOUT SLOT — a spacer of the pinned width,
+          keeping every note below about being PINNED TO THE VIEWPORT (`lg:sticky
+          lg:top-0 lg:h-screen`) true. Recap, because it is easy to undo: the
+          parent is a `flex min-h-screen` row, so default `align-items: stretch`
+          grew this rail to the height of the whole DOCUMENT. Two things broke as
+          a result — the `flex-1 overflow-y-auto` nav could never overflow, making
+          its scrolling dead code, and the blocks after it sat at the bottom of
+          the document (below every game on the home page) instead of the bottom
+          of the screen. A definite `100vh` height also stops `stretch` applying,
+          so the rail measures exactly one viewport, the nav scrolls internally,
+          and the stealth button sits on the visible rail. This is the behaviour
+          the mobile drawer already had via `absolute inset-y-0` inside a `fixed
+          inset-0`. Scoped to `lg:` because the rail is `hidden` below that.
 
-        {/* The last block in the rail — there is deliberately NO copyright line
-            under it any more. A `© year hallpass / all games unblocked.` pair was
-            pinned here, which meant a full-height rail spent its most valuable
-            real estate (the one region that never scrolls away) on boilerplate
-            nobody navigates by. `SiteFooter` already carries the same statement —
-            the mark, the year and "all games unblocked, forever." — at the bottom
-            of every page inside this shell, which is where a colophon belongs, so
-            nothing was lost by deleting it. */}
-        <div className="border-t border-border px-3 py-2">
-          <StealthMenuButton />
+          `sticky` also makes this a positioned ancestor, which is what the panel
+          inside it resolves `absolute inset-y-0` against. The width transition is
+          on the SLOT as well as the panel so that pinning and unpinning move the
+          catalogue and the rail together; a hover never touches it.
+
+          THE `z-50` HAS TO BE HERE, ON THE SLOT, AND NOT ON THE PANEL. `sticky`
+          creates a stacking context unconditionally — z-index `auto` and all —
+          so every z-index inside this element is resolved AGAINST THIS BOX, and
+          from the outside the whole rail paints at the slot's own level. With the
+          z-index on the panel instead, the expanded overlay was painted UNDER
+          `SiteHeader` (`sticky z-40`, so also its own context, at level 40 next
+          to this one's level 0): the header's wordmark swallowed the clicks meant
+          for the pin button, which is how this was caught. Harmless while
+          collapsed — a 64px strip overlaps nothing — and 50 stays below the
+          mobile drawer's `z-[90]`, `FeaturePromo`'s `z-[95]` and
+          `PlayerOverlay`'s `z-[100]`, none of which may ever go under the rail. */}
+      <aside
+        className={`z-50 hidden shrink-0 transition-[width] duration-200 motion-reduce:transition-none lg:sticky lg:top-0 lg:block lg:h-screen ${
+          pinned ? "w-48" : "w-16"
+        }`}
+      >
+        {/* THE PANEL — the rail you actually see, and an OVERLAY when it is not
+            pinned. It is absolutely positioned inside the slot above, so growing
+            it from 64px to 192px on hover paints over `main` instead of resizing
+            it. That is the whole reason for the two-element split: reflowing the
+            entire catalogue every time the pointer crosses the rail would be a
+            worse bug than the 128px this feature exists to reclaim. When PINNED
+            the panel and the slot are the same width, so nothing overlaps and the
+            layout is exactly the pre-collapse one.
+
+            It carries NO z-index of its own — the slot above owns that, and the
+            comment there explains why putting one here does nothing. What it does
+            carry is a shadow, and only while floating: that is what says "this is
+            over the page", and a pinned rail is not over anything.
+
+            WHAT THE FLOATING STATE COVERS, measured rather than guessed: at 192px
+            it reaches the header's own wordmark (96..181px at `lg`, 96..196px at
+            `xl` where it grows back to `text-2xl`) and stops short of the first
+            primary tab, which starts at 197px / 212px respectively. So no header
+            CONTROL is ever swallowed — the one artefact is a ~4px sliver of the
+            wordmark's trailing dot peeking past the edge at `xl` and up, for as
+            long as the pointer is on the rail.
+
+            `overflow-hidden` clips the labels while the width animates, so they
+            are revealed by the growing edge rather than spilling across the grid
+            for 200ms. Focus rings survive it — rows sit 24px in from this edge.
+
+            Hover and focus are tracked HERE, on the one element that contains
+            every control in the rail. The `onBlur` containment check is what stops
+            the rail flickering shut as focus moves from one row to the next:
+            `relatedTarget` is the element receiving focus, and if it is still
+            inside the panel, focus never actually left. */}
+        <div
+          onMouseEnter={() => setHovering(true)}
+          onMouseLeave={() => setHovering(false)}
+          onFocus={() => setFocusInside(true)}
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) setFocusInside(false);
+          }}
+          className={`absolute inset-y-0 left-0 flex flex-col overflow-hidden border-r border-border bg-white transition-[width] duration-200 motion-reduce:transition-none ${
+            railExpanded ? "w-48" : "w-16"
+          } ${railExpanded && !pinned ? "shadow-xl" : ""}`}
+        >
+          {/* The rail's own wordmark is EXPANDED-ONLY. It does not fit in 64px,
+              and nothing is lost when it goes: `SiteHeader` carries the mark at
+              every desktop width (it dropped its `lg:hidden` for exactly this
+              reason), so the top-left of the screen is never without a way home.
+              The slot keeps its `h-20` in both states so the nav below starts on
+              the same line as the header's bottom border either way. */}
+          <div
+            className={`flex h-20 shrink-0 items-center ${
+              railExpanded ? "gap-1 px-4" : "justify-center px-2"
+            }`}
+          >
+            {railExpanded && (
+              <Link href="/" className="min-w-0 flex-1">
+                <Wordmark size="text-2xl" dotClass="h-1.5 w-1.5" />
+              </Link>
+            )}
+
+            {/* THE PIN. A toggle button, so it is `aria-pressed` plus ONE
+                unchanging name — not a label that flips between "Expand" and
+                "Collapse", which reads as a different control appearing each
+                time and leaves a screen reader announcing the action while the
+                pressed state announces the opposite. `title` is the same string,
+                so the tooltip and the accessible name cannot drift.
+
+                Pressed wears `bg-brand-50 text-brand`, the same "current" fill
+                every other lit thing on the site uses (see `itemClass`).
+
+                First in the rail's tab order, which is the sane place for it:
+                tabbing into the rail reveals the labels (`focusInside`) and lands
+                on the control that makes that permanent, before the 12+ rows. */}
+            <button
+              type="button"
+              aria-pressed={pinned}
+              aria-label="Keep sidebar expanded"
+              title="Keep sidebar expanded"
+              onClick={() => setRailPinned(!pinned)}
+              className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${
+                pinned
+                  ? "bg-brand-50 text-brand"
+                  : "text-zinc-500 hover:bg-surface-2 hover:text-zinc-900"
+              }`}
+            >
+              {/* A double chevron pointing the way the rail will move: « to put
+                  it away, » to bring it out. */}
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={`transition-transform duration-200 motion-reduce:transition-none ${
+                  pinned ? "" : "rotate-180"
+                }`}
+              >
+                <path d="M13 6l-6 6 6 6M19 6l-6 6 6 6" />
+              </svg>
+            </button>
+          </div>
+
+          {/* `tooltips` follows PINNED, not the live collapsed state, and that is
+              deliberate: a `title` that only existed while the rail is collapsed
+              would be removed by the very hover that was about to show it. So an
+              unpinned rail keeps its tooltips through the reveal — belt and
+              braces for the mouse, next to the `sr-only` labels that serve the
+              keyboard. A pinned rail has its labels on screen and needs neither. */}
+          <nav className="flex-1 overflow-y-auto px-3 pb-4">
+            {renderNavList({ collapsed: !railExpanded, tooltips: !pinned })}
+          </nav>
+
+          {/* The last block in the rail — there is deliberately NO copyright line
+              under it any more. A `© year hallpass / all games unblocked.` pair was
+              pinned here, which meant a full-height rail spent its most valuable
+              real estate (the one region that never scrolls away) on boilerplate
+              nobody navigates by. `SiteFooter` already carries the same statement —
+              the mark, the year and "all games unblocked, forever." — at the bottom
+              of every page inside this shell, which is where a colophon belongs, so
+              nothing was lost by deleting it.
+
+              THE STEALTH HATCH MUST SURVIVE THE COLLAPSE. It is the only
+              auth-independent door to stealth mode on the whole site —
+              `AccountMenu` renders nothing for a signed-out visitor and never on a
+              phone — so "hide it below 192px" was never an option.
+              `StealthMenuButton` is shared with the drawer and takes no variant
+              prop, so the collapse is done from OUT HERE with child selectors, the
+              same technique (and the same reasoning) as `SiteHeader`'s treatment
+              of `WhatsNewLink`: the pressure is this rail's, not the button's.
+
+              `text-[0px]` on the button, NOT `sr-only` on its label and not
+              `hidden`: the label is a bare text node inside the shared component,
+              so there is no element here to hide, and zeroing the font is the one
+              thing that reaches it from the outside. The emoji sets its own
+              `text-base` and so keeps its size, the text node keeps its place in
+              the accessibility tree (the button is still "Stealth mode" to a
+              screen reader — verified in the browser, not assumed), and `gap-0`
+              removes the 8px that would otherwise sit between the glyph and a
+              label of no width and push it off-centre. All three selectors
+              out-specify the component's own single-class utilities on the
+              descendant combinator, so source order is not load-bearing.
+
+              The tooltip follows the same pinned-not-collapsed rule as the rows
+              above, and for the same reason. */}
+          <div
+            title={pinned ? undefined : "Stealth mode"}
+            className={`shrink-0 border-t border-border py-2 ${
+              railExpanded
+                ? "px-3"
+                : "px-2 [&_button]:justify-center [&_button]:gap-0 [&_button]:px-0 [&_button]:text-[0px]"
+            }`}
+          >
+            <StealthMenuButton />
+          </div>
         </div>
       </aside>
 
@@ -358,7 +666,11 @@ export function Sidebar({
               </svg>
             </button>
           </div>
-          <nav className="flex-1 overflow-y-auto px-3 pb-6">{navList}</nav>
+          {/* Never collapsed, never tooltipped: the drawer is a full-width
+              overlay you opened on purpose, and it has the room. */}
+          <nav className="flex-1 overflow-y-auto px-3 pb-6">
+            {renderNavList({ collapsed: false, tooltips: false })}
+          </nav>
           <div className="border-t border-border px-3 py-3">
             <StealthMenuButton onNavigate={onMobileClose} />
           </div>
