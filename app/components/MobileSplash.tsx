@@ -23,11 +23,47 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useDevicePlatform } from "../lib/use-device-platform";
+import { warmSocial } from "../lib/social-cache";
 import { Wordmark } from "./Wordmark";
 
 const SEEN_KEY = "hp-mobile-splash-shown";
+
+/**
+ * WHAT THE SPLASH WARMS, AND WHY EACH ONE IS WORTH A REQUEST.
+ *
+ * The overlay is on screen for a beat whatever we do. These are the two things a
+ * phone visitor reaches next, both fetched inside that beat so the tab bar's
+ * first tap lands on something that already exists.
+ *
+ * `warmSocial()` — `FriendsIsland` renders nothing until `/api/v1/me/friends`
+ * comes back, so the Friends tab is otherwise a navigation plus two round trips
+ * before any content at all. It also preloads the avatars that come back with it.
+ *
+ * `router.prefetch()` on the two tab routes — and this is NOT what the tab bar
+ * already does. `MobileTabBar`'s links use the default (`auto`) prefetch, and
+ * `03-api-reference/02-components/link.md` is explicit that for a DYNAMIC route
+ * that fetches only "the partial route down to the nearest segment with a
+ * `loading.js` boundary". `/play/you`'s layout is `auth()`-gated and therefore
+ * dynamic, and `05-config/01-next-config-js/staleTimes.md` puts the dynamic
+ * client-cache period at 0 seconds by default, with only the loading boundary
+ * reusable. That same page says the STATIC period (5 minutes) is what applies
+ * "when calling `router.prefetch`" — so one explicit call per route buys a full,
+ * reusable prefetch that the automatic one does not, without raising
+ * `staleTimes.dynamic` for every dynamic route on the site.
+ *
+ * NOT GATED ON BEING SIGNED IN. A signed-out prefetch stops at `auth()` returning
+ * null and renders `NotSignedInCard` with no Neon queries behind it, and
+ * `/api/v1/me/friends` answers a signed-out caller from the session alone. Both
+ * are cheap; finding out first would cost the very round trip this avoids.
+ *
+ * Prefetching is production-only, so none of this is visible under `npm run dev`.
+ * The RSC prefetch is a GET to `/play/you`, which `isPrivatePath` in
+ * `public/sw.js` excludes from interception — no personal payload reaches
+ * `hp-runtime`, and that exclusion is load-bearing for this feature.
+ */
+const WARM_ROUTES = ["/play/you", "/play/you/friends"];
 
 /**
  * THE SPLASH DOES NOT TRIGGER A GAME SYNC, AND MUST NOT.
@@ -57,6 +93,7 @@ const SKIP_PREFIXES = ["/dashboard", "/play/signin", "/play/signout", "/play/aut
 export function MobileSplash() {
   const isMobile = useDevicePlatform() === "mobile";
   const pathname = usePathname() ?? "/";
+  const router = useRouter();
   const [phase, setPhase] = useState<"idle" | "showing" | "leaving">("idle");
 
   // The show-once latch is a REF, not the `phase` state, and that distinction is
@@ -82,6 +119,13 @@ export function MobileSplash() {
       return;
     }
     triggered.current = true;
+
+    // The warm-up rides the same latch as the overlay: phones only, once per
+    // session, never on a `SKIP_PREFIXES` route. Deliberately not awaited —
+    // nothing on screen may wait for a network call.
+    void warmSocial();
+    for (const route of WARM_ROUTES) router.prefetch(route);
+
     // Showing on the render AFTER mount is the point, not an oversight: the
     // server/first-paint render must be splash-free (it is shared, prerendered and
     // in the SW precache), so the overlay can only appear once the effect has
@@ -95,7 +139,10 @@ export function MobileSplash() {
     // the effect below.
     timers.current.push(setTimeout(() => setPhase("leaving"), 700));
     timers.current.push(setTimeout(() => setPhase("idle"), 1050));
-  }, [isMobile, pathname]);
+    // `router` is listed because the rule asks for it, and it is harmless: the
+    // `triggered` ref already makes a second run of this effect a no-op, which is
+    // the whole reason that latch is a ref and not state.
+  }, [isMobile, pathname, router]);
 
   // Clear any pending timers on unmount only — never on a dependency change.
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
