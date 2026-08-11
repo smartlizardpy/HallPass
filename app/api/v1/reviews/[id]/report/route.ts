@@ -15,6 +15,9 @@
  */
 
 import { isMissingColumnError } from "@/app/lib/db";
+import { findGame } from "@/app/lib/games";
+import { reviewReportedCopy } from "@/app/lib/notifications/copy";
+import { notifyAdmins } from "@/app/lib/notifications/deliver";
 import { reviews } from "@/app/lib/reviews";
 import { isReportReason } from "@/app/lib/reviews/config";
 import { clientKeyFromHeaders, hashIp } from "@/app/lib/scoreboard/guard";
@@ -52,12 +55,37 @@ export async function POST(
   }
 
   try {
+    const id = Math.trunc(reviewId);
     await reviews.reportReview(
-      Math.trunc(reviewId),
+      id,
       playerId,
       reason,
       hashIp(clientKeyFromHeaders(req.headers)),
     );
+
+    // Raise it with the admins. This is the loudest of the moderation kinds —
+    // it is the only one that defaults to `push` — because a report is somebody
+    // saying something is wrong NOW, and reports are rare enough that a phone
+    // buzzing for one is not noise.
+    //
+    // KEYED ON THE REVIEW, not on the report. Ten pupils reporting the same
+    // review is ONE thing to look at, and ten identical banners would be the
+    // fastest way to teach an admin to swipe the whole kind away. The tenth
+    // report still lands in the queue with the other nine; it just does not
+    // announce itself again.
+    //
+    // NEITHER THE REPORTER NOR THE REPORTED TEXT IS NAMED — see
+    // `notifications/copy.ts`. The reporter is confidential, and the text is
+    // usually the thing being complained about.
+    const slug = await reviews.slugForReview(id).catch(() => null);
+    await notifyAdmins({
+      kind: "review_reported",
+      copy: reviewReportedCopy({
+        gameTitle: slug ? (findGame(slug)?.title ?? slug) : "a game",
+      }),
+      dedupeKey: `review_reported:${id}`,
+    });
+
     return Response.json({ ok: true }, { headers: NO_STORE });
   } catch (error) {
     if (isMissingColumnError(error)) {

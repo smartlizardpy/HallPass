@@ -45,6 +45,9 @@ import { MEDIA_CACHE_TAG, insertMedia } from "@/app/lib/game-media";
 import { mediaBlobPath } from "@/app/lib/game-media-blob";
 import { toImageType } from "@/app/lib/image-meta";
 import { isResolvedSlug } from "@/app/lib/games-store";
+import { findGame } from "@/app/lib/games";
+import { betaAssignmentCopy } from "@/app/lib/notifications/copy";
+import { notifyPlayer } from "@/app/lib/notifications/deliver";
 import { social } from "@/app/lib/social";
 
 const BETA_PATH = "/dashboard/beta";
@@ -134,6 +137,26 @@ export async function assignGameAction(formData: FormData): Promise<void> {
   } catch {
     back("error", "Assign failed (database error)");
   }
+
+  // Tell the tester. An assignment is work handed to a person, and before this
+  // the only way to discover one was to visit `/beta` and notice a new row.
+  //
+  // NO DEDUPE KEY. `beta.assign` upserts, and its own docblock records that an
+  // admin re-assigning a closed game means "look at this again" — which is a
+  // real instruction to the tester, not a duplicate. A key on the pair would
+  // make exactly that case silent.
+  //
+  // Between the write and the redirect: `back()` throws a control signal, so
+  // nothing may sit after it, and `notifyPlayer` never rejects.
+  await notifyPlayer(playerId, {
+    kind: "beta_assignment",
+    // The display title where the game is in the static catalogue, the slug
+    // otherwise — an external game is exactly the kind most likely to be under
+    // test, so it must still notify.
+    copy: betaAssignmentCopy({ gameTitle: findGame(slug)?.title ?? slug }),
+    dedupeKey: null,
+  });
+
   revalidatePath(BETA_PATH);
   revalidatePath("/beta");
   back("ok", "Game assigned");

@@ -70,12 +70,16 @@
 import { isMissingColumnError } from "@/app/lib/db";
 import { isResolvedSlug } from "@/app/lib/games-store";
 import {
+  getAchievementCatalogue,
   getAchievementRarity,
   getPlayerAchievements,
   recordAchievements,
   type PlayerAchievement,
   type UnlockResult,
 } from "@/app/lib/achievements";
+import { findGame } from "@/app/lib/games";
+import { achievementCopy } from "@/app/lib/notifications/copy";
+import { notifyPlayer } from "@/app/lib/notifications/deliver";
 import {
   ACHIEVEMENT_PLAYER_RATE_LIMIT,
   MAX_BATCH_SIZE,
@@ -86,6 +90,64 @@ import {
   credentialedOptions,
   currentPlayerId,
 } from "@/app/lib/social/request-guard";
+
+/**
+ * File a bell notification for each achievement this call newly unlocked.
+ *
+ * ── IT RESOLVES NAMES, AND ONLY WHEN IT HAS TO ─────────────────────────────
+ * `UnlockResult` carries the `key` — a slug like `no-deaths` — and a
+ * notification reading "You unlocked no-deaths" is the same mistake the
+ * challenge copy exists to avoid. So the catalogue is read for the display
+ * names, and the static game list for the game's title.
+ *
+ * Both reads happen ONLY when something was actually unlocked, which is the rare
+ * path: this route is called on every score event a game reports, and the
+ * overwhelming majority of those unlock nothing. The early return is what keeps
+ * a notification feature off the hot path of a game loop.
+ *
+ * ── A GAME NOT IN THE STATIC CATALOGUE STILL NOTIFIES ──────────────────────
+ * `findGame` covers bundled games; an EXTERNAL game is not in it. Rather than
+ * skip the notification — an external game is a real game a real player really
+ * played, which is the bug `favorites.ts` is cited for elsewhere in this file —
+ * the copy falls back to the slug for the game name only. The achievement's own
+ * name, which is the subject of the sentence, is always the real one.
+ *
+ * Never rejects. The scores and unlocks are already written by the time this
+ * runs, and none of them may be lost to a notification that could not be filed.
+ */
+async function notifyUnlocks(
+  slug: string,
+  playerId: string,
+  results: UnlockResult[],
+): Promise<void> {
+  const unlocked = results.filter((result) => result.unlocked);
+  if (unlocked.length === 0) return;
+
+  try {
+    const catalogue = await getAchievementCatalogue(slug);
+    const names = new Map(catalogue.map((def) => [def.key, def.name]));
+    const gameTitle = findGame(slug)?.title ?? slug;
+
+    // Concurrent. Several achievements can land on one call, and the per-kind
+    // push tag collapses them into a single banner on the device — so the cost
+    // of unlocking five at once is five bell rows and one buzz.
+    await Promise.all(
+      unlocked.map((result) =>
+        notifyPlayer(playerId, {
+          kind: "achievement_unlocked",
+          copy: achievementCopy({
+            achievement: names.get(result.key) ?? result.key,
+            gameTitle,
+            slug,
+          }),
+          dedupeKey: `achievement:${slug}:${result.key}`,
+        }),
+      ),
+    );
+  } catch (error) {
+    console.error("achievement notification failed:", error);
+  }
+}
 
 /**
  * Readable cross-origin by any embed. Paired with a cache header chosen per
@@ -356,6 +418,22 @@ export async function POST(
     });
 
     if (outcome.ok) {
+      // File a bell notification for anything NEWLY unlocked.
+      //
+      // `unlocked` is exactly-once by the store's own guarantee — true only when
+      // the achievement was unearned before the statement and earned after it —
+      // so this cannot fire twice for the same unlock even without a key. The
+      // key is here anyway because it costs nothing and makes a replayed request
+      // idempotent at the database rather than by trusting that guarantee from
+      // two modules away.
+      //
+      // AWAITED, like every other producer: on serverless a floating promise can
+      // be cancelled when the response ends. `notifyUnlocks` never rejects, and
+      // it returns immediately when nothing was unlocked — which is the common
+      // case on this route, since it is called on every score event a game
+      // reports, not only on the rare one that earns something.
+      await notifyUnlocks(slug, playerId, outcome.results);
+
       // `ok:true` with `reason:"unknown-achievement"` is a real, deliberate
       // combination: a game that ships a key before an admin provisions it is
       // not broken, and the reason is a developer diagnostic rather than a

@@ -1,98 +1,90 @@
 /**
- * Tests for what a challenge notification says.
+ * Tests for the push envelope.
  *
- * These are the assertions with a safety argument behind them rather than a
+ * These are assertions with a safety argument behind them rather than a
  * correctness one. The discreet version exists so that a bystander glancing at a
  * school laptop learns nothing, and every way of leaking through it is a
- * one-word edit somebody could make in good faith — so each is pinned here by
- * name.
+ * one-word edit somebody could make in good faith — so each is pinned by name.
+ *
+ * The WORDING each kind carries is tested in `notifications/copy.test.ts`. What
+ * is pinned here is the ENVELOPE: that both branches are always populated, that
+ * the discreet title cannot be varied, and that the object is exactly the shape
+ * `public/sw.js` reads.
  */
 
 import { describe, expect, it } from "vitest";
-import { CHALLENGE_NOTIFICATION_TAG } from "./config";
-import { challengeNotification } from "./payload";
+import { notificationPush } from "./payload";
 
-const BASE = { from: "Ozan", game: "Duskfall", boardTitle: "High score" };
+const BASE = {
+  kind: "challenge_received",
+  title: "Ozan challenged you",
+  body: "Beat their score on Duskfall.",
+  url: "/play/you/friends",
+  discreet: "You have a new challenge.",
+  tag: "hp-challenge_received",
+};
 
-describe("challengeNotification", () => {
-  it("names the sender and the game in the full version", () => {
-    const push = challengeNotification(BASE);
-    expect(push.full.title).toBe("Ozan challenged you");
-    expect(push.full.body).toContain("Duskfall");
-  });
-
-  it("renders whatever label it is given, so the caller must pass a title", () => {
-    // The caller resolves the slug through `findGame`. Passing a slug through
-    // would put "Beat their score on neon-velocity-hyperdrive" on a lock
-    // screen, which reads as broken.
-    expect(
-      challengeNotification({ ...BASE, game: "Neon Velocity" }).full.body,
-    ).toContain("Neon Velocity");
-  });
-
-  it("omits the SCORE even from the full version", () => {
-    // The number belongs on the page, where it arrives with a Play button.
-    const push = challengeNotification(BASE);
-    expect(`${push.full.title} ${push.full.body}`).not.toMatch(/\d/);
-  });
-
-  it("names NOBODY and NOTHING in the discreet version", () => {
-    // The whole point. Anyone who switched this on did so to stop a bystander
-    // learning the sender, the game, or that this is a games site at all
-    // beyond the app's own name.
-    const push = challengeNotification(BASE);
-    const text = `${push.discreet.title} ${push.discreet.body}`;
-    expect(text).not.toContain("Ozan");
-    expect(text).not.toContain("Duskfall");
-    expect(text).not.toContain("High score");
-  });
-
-  it("keeps the discreet version identical whoever it is from", () => {
-    // A discreet notification that varied with the sender would leak by shape:
-    // a bystander seeing two different banners learns there are two people.
-    const a = challengeNotification({ from: "Ozan", game: "duskfall", boardTitle: "A" });
-    const b = challengeNotification({ from: "Ayşe", game: "crimson", boardTitle: "B" });
-    expect(a.discreet).toEqual(b.discreet);
-  });
-
+describe("notificationPush", () => {
   it("always populates BOTH versions", () => {
-    // The service worker picks one at display time; a missing branch would
-    // render an empty banner rather than falling back.
-    const push = challengeNotification(BASE);
+    // The service worker picks one at display time and DROPS a payload missing
+    // either — so a builder that skipped a branch would be silence, not an
+    // error. This is the assertion that makes the indirection worth having.
+    const push = notificationPush(BASE);
     for (const copy of [push.full, push.discreet]) {
       expect(copy.title.length).toBeGreaterThan(0);
       expect(copy.body.length).toBeGreaterThan(0);
     }
   });
 
-  it("falls back to the board title when the board has no game", () => {
-    const push = challengeNotification({ ...BASE, game: null });
-    expect(push.full.body).toContain("High score");
-  });
-
-  it("survives a board with neither a game nor a title", () => {
-    const push = challengeNotification({ from: "Ozan", game: null, boardTitle: "" });
-    expect(push.full.body).toBe("Beat their score.");
-  });
-
-  it("handles a missing or blank sender name", () => {
-    expect(challengeNotification({ ...BASE, from: "   " }).full.title).toBe(
-      "A friend challenged you",
+  it("emits exactly the keys the service worker reads", () => {
+    // `sw.js` checks `data.full && data.discreet`, then reads `tag` and
+    // `data.url`. A renamed key here is a notification that never shows.
+    const push = notificationPush(BASE);
+    expect(Object.keys(push).sort()).toEqual(
+      ["discreet", "full", "kind", "tag", "url"].sort(),
     );
   });
 
-  it("bounds a long name so the verb stays on the banner", () => {
-    const push = challengeNotification({ ...BASE, from: "x".repeat(80) });
-    expect(push.full.title.length).toBeLessThanOrEqual(24 + " challenged you".length);
-    expect(push.full.title).toContain("challenged you");
+  it("carries the caller's full wording through untouched", () => {
+    const push = notificationPush(BASE);
+    expect(push.full.title).toBe("Ozan challenged you");
+    expect(push.full.body).toBe("Beat their score on Duskfall.");
   });
 
-  it("collapses onto one tag so four challenges are one banner", () => {
-    // A player whose phone was in a bag should find one notification, not four.
-    expect(challengeNotification(BASE).tag).toBe(CHALLENGE_NOTIFICATION_TAG);
+  it("names the app and nothing else in the discreet version", () => {
+    // The whole point. Anyone who switched this on did so to stop a bystander
+    // learning the sender, the game, or that this is a games site at all beyond
+    // the app's own name.
+    const push = notificationPush(BASE);
+    const text = `${push.discreet.title} ${push.discreet.body}`;
+    expect(text).not.toContain("Ozan");
+    expect(text).not.toContain("Duskfall");
   });
 
-  it("lands on the inbox, which can show all of them", () => {
-    expect(challengeNotification(BASE).url).toBe("/play/you/friends");
+  it("gives every kind the SAME discreet title", () => {
+    // A discreet title that varied with the kind would leak by shape: a
+    // bystander seeing "HallPass" one moment and "Moderation" the next learns
+    // more than either banner says alone. It is a constant, and there is no
+    // input that can vary it — the same reason `sw.js` refuses to vary the icon.
+    const challenge = notificationPush(BASE);
+    const moderation = notificationPush({
+      ...BASE,
+      kind: "review_reported",
+      title: "A review was reported",
+      body: "On Duskfall.",
+      discreet: "Something needs moderating.",
+      tag: "hp-review_reported",
+    });
+    expect(challenge.discreet.title).toBe(moderation.discreet.title);
+  });
+
+  it("keeps the tag the caller chose, so kinds cannot collapse together", () => {
+    // Same-kind collapsing is a feature — four challenges while a phone is in a
+    // bag should be one banner. Cross-kind collapsing is data loss.
+    expect(notificationPush(BASE).tag).toBe("hp-challenge_received");
+  });
+
+  it("passes the destination through", () => {
+    expect(notificationPush(BASE).url).toBe("/play/you/friends");
   });
 });

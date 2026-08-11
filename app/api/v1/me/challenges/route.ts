@@ -29,7 +29,8 @@ import { challenges, getForGame, getIncoming, getOutgoing } from "@/app/lib/chal
 import type { ChallengeReason } from "@/app/lib/challenges/config";
 import type { CreateOutcome } from "@/app/lib/challenges";
 import { isMissingColumnError } from "@/app/lib/db";
-import { notifyChallenge } from "@/app/lib/push/send";
+import { challengeCopy } from "@/app/lib/notifications/copy";
+import { notifyPlayer } from "@/app/lib/notifications/deliver";
 import { findGame } from "@/app/lib/games";
 import { store } from "@/app/lib/scoreboard";
 import { social } from "@/app/lib/social";
@@ -168,24 +169,36 @@ export async function POST(req: Request): Promise<Response> {
     });
     if (outcome.id === null) return refuse(refusalFor(outcome));
 
-    // Tell them, on every device they have subscribed.
+    // Tell them: in their bell, and on every device they have subscribed if
+    // that is what they asked for. `notifyPlayer` resolves their preference for
+    // this kind — the send is no longer unconditional as it was when a challenge
+    // was the only thing that could notify anybody.
     //
     // AWAITED, not fired into the void: on serverless the response ending can
     // end the invocation, and a floating promise would be cancelled mid-flight
     // often enough to make notifications look flaky rather than broken. It is
     // cheap to wait for — every send is concurrent, individually timed out, and
-    // `notifyChallenge` never rejects, so the challenge is already written and
+    // `notifyPlayer` never rejects, so the challenge is already written and
     // nothing below can undo it.
-    await notifyChallenge({
-      targetPlayerId: targetId,
-      from: outcome.fromDisplayName,
-      // The DISPLAY TITLE, not the slug — a notification reading "Beat their
-      // score on neon-velocity-hyperdrive" is not something to put on a lock
-      // screen. `findGame` is the static catalogue, so this is a lookup rather
-      // than a round trip; an external game is not in it and falls back to the
-      // board title.
-      game: outcome.gameSlug ? (findGame(outcome.gameSlug)?.title ?? null) : null,
-      boardTitle: outcome.boardTitle,
+    await notifyPlayer(targetId, {
+      kind: "challenge_received",
+      copy: challengeCopy({
+        from: outcome.fromDisplayName,
+        // The DISPLAY TITLE, not the slug — a notification reading "Beat their
+        // score on neon-velocity-hyperdrive" is not something to put on a lock
+        // screen. `findGame` is the static catalogue, so this is a lookup rather
+        // than a round trip; an external game is not in it and falls back to the
+        // board title.
+        game: outcome.gameSlug ? (findGame(outcome.gameSlug)?.title ?? null) : null,
+        boardTitle: outcome.boardTitle,
+      }),
+      // NO DEDUPE KEY, deliberately. A challenge row is upserted per
+      // (challenger, target, board) and re-sending is already gated by the
+      // cooldowns in `challenges/config.ts` — so a second delivery here means a
+      // genuinely new challenge that cleared those, which is worth being told
+      // about. Keying on the challenge id would suppress exactly the rematch
+      // loop the feature exists for.
+      dedupeKey: null,
     });
 
     // The name and the game came back from the create statement itself, so

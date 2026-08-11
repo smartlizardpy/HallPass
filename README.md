@@ -178,17 +178,40 @@ degrades to empty and the surfaces render nothing.
 
 ### Notifications
 
-Optional, and **off unless VAPID keys are configured** (see `.env.example`) —
-without them challenges still work, they are just pulled on a visit rather than
-pushed. Backed by `app/lib/push/` and migration `023_push_subscriptions.sql`.
+Two layers, and they fail independently.
 
+**The bell** is the in-app inbox in the site header, plus
+`/play/you/notifications` for the full history and every preference. Backed by
+`app/lib/notifications/` and migration `024_notifications.sql`. **That migration
+must be applied before anything is stored**; until then every read degrades to an
+empty bell and the header is unaffected. It needs no VAPID keys and works
+offline-last (the endpoint is never precached).
+
+**Push** is optional on top, and **off unless VAPID keys are configured** (see
+`.env.example`) — without them everything still lands in the bell, it is just
+pulled on a visit rather than pushed. Backed by `app/lib/push/` and migration
+`023_push_subscriptions.sql`.
+
+- **Kinds and defaults** live in `app/lib/notifications/config.ts`, never in a
+  table: a kind needs a producer and worded copy, so a table would allow one
+  nothing can emit. `notification_prefs` stores only **deviations**, which is
+  what lets a new kind go live for everybody with no backfill. Channels are
+  `off` < `bell` < `push`, and `push` implies `bell`.
+- **What is loud by default** is what is about you personally — a challenge, a
+  friend request, a playtest assignment. A **game drop is bell-only** by default
+  because it fires for the whole site at once; push for drops is one toggle away.
+- **Admin kinds** (new review, reported review, bug report) are resolved against
+  `dashboard_users` plus `SUPER_ADMIN_EMAILS` **at send time**, so losing the
+  role loses the notifications with no cleanup step. An admin who has never
+  signed into the arcade has no player row and simply gets nothing.
 - **Coverage.** Android Chrome, desktop Chrome, Firefox and Edge. On iOS, Web
   Push works **only for a PWA added to the Home Screen** (16.4+) — in a Safari
   tab there is nothing, so an iPhone user has to install the app first.
-- **The permission ask** comes through `FeaturePromo`, and only once the player
-  has actually **received** a challenge. Prompting on arrival would spend the
-  one prompt they ever get on a feature they have not seen work, and a denial
-  cannot be re-asked from script.
+- **The permission ask** has two routes now: the **"This device" card** on
+  `/play/you/notifications`, which is the one somebody can go and find, and
+  `FeaturePromo`, which still only fires once a player has actually **received**
+  a challenge. Prompting on arrival would spend the one prompt they ever get on
+  a feature they have not seen work, and a denial cannot be re-asked from script.
 - **Quiet notifications** are an opt-in toggle in **Stealth settings**. On, a
   challenge reads "HallPass — you have a new challenge" with no sender and no
   game. The default is full detail: a phone is a personal device, and a nameless
@@ -199,8 +222,11 @@ pushed. Backed by `app/lib/push/` and migration `023_push_subscriptions.sql`.
   server sends BOTH renderings and `sw.js` picks one by a flag mirrored into
   IndexedDB. The worker never reconstructs the wording — if it did, the discreet
   version would exist twice and could drift in the direction that leaks.
-- **No cron is involved anywhere.** Sends happen at challenge-creation, and a
-  dead subscription is deleted the moment a push service answers `410 Gone`.
+- **No cron is involved anywhere.** Sends happen inline on the event, a dead
+  subscription is deleted the moment a push service answers `410 Gone`, and
+  notification retention is a cap applied in the same statement as each insert.
+  This is also why **admin alerts for traffic spikes are deliberately not built**
+  — detecting one needs a scheduler. See `notifications-design.md` §7.
 
 ## Offline / PWA architecture
 
@@ -230,7 +256,7 @@ Derived from `process.env.*` references in the codebase. Configure these in Verc
 | `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` | `instrumentation-client.ts` | **Required for any analytics data.** Client-side PostHog capture token (browser → PostHog). `NEXT_PUBLIC_` vars are inlined at **build time**, so it must be set in Vercel *before* the build runs; if it is missing, `posthog.init` no-ops and **zero events** are captured (not even autocapture / pageviews). Find it in PostHog → Project settings. |
 | `BLOB_READ_WRITE_TOKEN` | `@vercel/blob` (`put`, `head`, `del`) | Auto-provisioned by Vercel when a Blob store is linked. |
 | `ADMIN_HTML_PASSWORD` | `app/lib/admin-html-auth.ts` | Plain string; gates `/admin/html`. Required for uploads. |
-| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | `app/lib/push/config.ts` | Optional. Web Push signing pair for challenge notifications; generate with `npx web-push generate-vapid-keys`. Unset means the notification path reports itself unavailable and stays silent — challenges still work, pulled rather than pushed. Deliberately NOT `NEXT_PUBLIC_`: the public key is served at request time from `GET /api/v1/me/push`, so adding it takes effect on the next request rather than the next build. |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | `app/lib/push/config.ts` | Optional. Web Push signing pair for notifications; generate with `npx web-push generate-vapid-keys`. Unset means the push path reports itself unavailable and stays silent — the bell still works, and notifications are pulled rather than pushed. Deliberately NOT `NEXT_PUBLIC_`: the public key is served at request time from `GET /api/v1/me/push`, so adding it takes effect on the next request rather than the next build. |
 | `VAPID_SUBJECT` | `app/lib/push/config.ts` | A `mailto:` the push service can contact about a misbehaving sender. Required by the VAPID spec. |
 | `POSTHOG_API_HOST` | `app/lib/stats.ts` | Defaults to `https://eu.posthog.com`. |
 | `POSTHOG_PROJECT_ID` | `app/lib/stats.ts` | PostHog project numeric id. |

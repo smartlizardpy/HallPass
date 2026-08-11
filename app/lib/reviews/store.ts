@@ -194,6 +194,22 @@ export function createReviewStore(sql: Sql) {
       return rows.length > 0 ? String(rows[0].body) : null;
     },
 
+    /**
+     * Which game a review belongs to, whatever its status.
+     *
+     * For the admin notification a report raises: the alert has to name the
+     * GAME so it is triageable at a glance, and a report carries only the review
+     * id. Deliberately not filtered on `status` — the reviews most worth
+     * reporting are exactly the ones already hidden or flagged, and an alert
+     * that went unnamed for those would be worst where it matters most.
+     */
+    async slugForReview(id: number): Promise<string | null> {
+      const rows = await sql`
+        SELECT slug FROM game_reviews WHERE id = ${id}
+      `;
+      return rows.length > 0 ? String(rows[0].slug) : null;
+    },
+
     /** The caller's own review for a game, if any — so the form can prefill. */
     async ownReview(slug: string, playerId: string): Promise<Review | null> {
       const rows = await sql`

@@ -37,6 +37,9 @@ import {
   toReportKind,
 } from "@/app/lib/beta/config";
 import { isResolvedSlug } from "@/app/lib/games-store";
+import { findGame } from "@/app/lib/games";
+import { bugReportCopy } from "@/app/lib/notifications/copy";
+import { notifyAdmins } from "@/app/lib/notifications/deliver";
 import {
   validateMediaUpload,
   type ImageType,
@@ -220,6 +223,28 @@ export async function submitReportAction(
     console.error("beta submitReport failed:", error);
     return { ok: false, error: "Could not save that — try again" };
   }
+
+  // Tell the admins there is something in the triage queue.
+  //
+  // OUTSIDE the try above, deliberately. In there it would sit between the
+  // report write and the `catch` that reports failure to the tester, so a
+  // notification problem would tell somebody their report was not saved when it
+  // was — and they would file it again. `notifyAdmins` does not reject, but the
+  // placement should not depend on that.
+  //
+  // NO DEDUPE KEY. Every report is a distinct finding, including several against
+  // the same game in one session, and that is what a tester is being paid XP to
+  // produce. The bell defaults to bell-only for this kind precisely because the
+  // volume is expected.
+  //
+  // The report's own title is NOT used as the notification body: it is free text
+  // a tester typed, and this is the same lock-screen argument the review kinds
+  // make. The queue is where the words belong.
+  await notifyAdmins({
+    kind: "bug_report_filed",
+    copy: bugReportCopy({ gameTitle: findGame(input.slug)?.title ?? input.slug }),
+    dedupeKey: null,
+  });
 
   revalidatePath("/beta");
   revalidatePath("/dashboard/beta");

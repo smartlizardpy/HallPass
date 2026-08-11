@@ -60,14 +60,17 @@ export function isPushConfigured(): boolean {
 export const PUSH_DEVICE_CAP = 10;
 
 /**
- * How push notifications are collapsed on the device.
+ * How push notifications are collapsed on the device is decided PER KIND, in
+ * `notifications/config.ts`, and no longer here.
  *
- * All challenge notifications share one tag, so a player who is challenged four
- * times while their phone is in a bag sees ONE notification rather than four.
- * The inbox is the place to read the detail; the notification's only job is to
- * say something is waiting.
+ * There used to be one `CHALLENGE_NOTIFICATION_TAG` constant, back when a
+ * challenge was the only thing that could push. Collapsing is still wanted —
+ * four challenges arriving while a phone is in a bag should be one banner — but
+ * a single site-wide tag would have made a friend request REPLACE the challenge
+ * underneath it, and the player would never have learned the challenge existed.
+ * `notificationTag(kind)` derives one tag per kind, so same-kind collapsing
+ * stays a feature and cross-kind collapsing cannot happen.
  */
-export const CHALLENGE_NOTIFICATION_TAG = "hallpass-challenge";
 
 /**
  * Hosts a push endpoint may legitimately live on.
