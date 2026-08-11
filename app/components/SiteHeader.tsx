@@ -6,6 +6,7 @@ import type { Game } from "../lib/games";
 import { captureSearchNow } from "../lib/use-search-capture";
 import { useDevicePlatform } from "../lib/use-device-platform";
 import { AccountMenu } from "./AccountMenu";
+import { NotificationBell } from "./notifications/NotificationBell";
 import { PRIMARY_NAV, normalizePath } from "./primary-nav";
 import { StreakChip } from "./streak/StreakChip";
 import { SurpriseButton } from "./SurpriseButton";
@@ -347,8 +348,21 @@ export function SiteHeader({
               exactly where it is most expensive.
           If Surprise ever wants a phone home it belongs in the mobile shell's own
           furniture, not wedged into the one row the search field needs. */}
+      {/* THE BELL IS ON BOTH BRANCHES, which makes it the only control besides
+          the streak flame that a phone keeps. It can afford to be: it renders
+          `null` for a signed-out visitor, so the guest header — what most
+          visitors see — is unchanged, and the 44px is only ever spent by
+          somebody who has notifications to read. That is the same bargain the
+          budget note above rejects for "Surprise me", and it comes out the other
+          way for exactly that reason: the die costs every visitor width for an
+          action nobody hunts by name, while this costs only signed-in players
+          width for a count they came back to check.
+
+          Beside the flame rather than in the mobile tab bar, so both surfaces
+          put it where every other site does — top right, next to the account. */}
       {isMobile ? (
-        <div className="ml-1 shrink-0">
+        <div className="ml-1 flex shrink-0 items-center gap-1.5">
+          <NotificationBell />
           <StreakChip />
         </div>
       ) : (
@@ -380,6 +394,10 @@ export function SiteHeader({
           <span className="flex lg:[&>a>span]:hidden xl:[&>a>span]:inline">
             <WhatsNewLink />
           </span>
+          {/* Immediately before the account, which is where every site puts it —
+              and, like `AccountMenu`, its dropdown is anchored to the right edge
+              so the two cannot fight for the same corner. */}
+          <NotificationBell />
           <AccountMenu />
         </div>
       )}

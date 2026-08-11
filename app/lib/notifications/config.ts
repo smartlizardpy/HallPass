@@ -126,6 +126,15 @@ export type NotificationKindDef = {
   /** One line under the label, saying what actually triggers it. */
   description: string;
   /**
+   * The glyph the bell and the settings page draw beside a row.
+   *
+   * PART OF THE CATALOGUE rather than a lookup table next to the components, so
+   * the two surfaces cannot disagree about what a kind looks like and adding a
+   * kind cannot leave one of them blank. Always rendered `aria-hidden` — it
+   * decorates a label that already says the same thing in words.
+   */
+  icon: string;
+  /**
    * What a player who has never touched their settings gets.
    *
    * THE LOUD DEFAULTS ARE THE ONES ABOUT YOU. A friend challenging you is a
@@ -161,6 +170,7 @@ export const NOTIFICATION_KINDS = {
     scope: "personal",
     group: "social",
     label: "Challenges",
+    icon: "⚔️",
     description: "A friend dares you to beat their score.",
     defaultChannel: "push",
     // Unchanged from the pre-024 wording, so the one kind that already shipped
@@ -172,6 +182,7 @@ export const NOTIFICATION_KINDS = {
     scope: "personal",
     group: "social",
     label: "Friend requests",
+    icon: "🤝",
     description: "Someone asks to be your friend.",
     defaultChannel: "push",
     discreet: "You have a new friend request.",
@@ -181,6 +192,7 @@ export const NOTIFICATION_KINDS = {
     scope: "personal",
     group: "social",
     label: "Accepted requests",
+    icon: "✅",
     description: "Someone accepts the request you sent.",
     // Quieter than the request itself: this is good news you will see next time
     // you look, not something that needs your attention now.
@@ -192,6 +204,7 @@ export const NOTIFICATION_KINDS = {
     scope: "broadcast",
     group: "games",
     label: "New games",
+    icon: "🎮",
     description: "A new game lands in the arcade.",
     // Bell by default — see `defaultChannel`'s docblock. This is the kind that
     // fires for everybody at once.
@@ -203,6 +216,7 @@ export const NOTIFICATION_KINDS = {
     scope: "personal",
     group: "games",
     label: "Achievements",
+    icon: "👑",
     description: "You unlock something in a game.",
     // You were looking at the screen when it happened — a push would buzz your
     // pocket about a thing you just did.
@@ -214,6 +228,7 @@ export const NOTIFICATION_KINDS = {
     scope: "personal",
     group: "beta",
     label: "Playtest assignments",
+    icon: "🐛",
     description: "A game is assigned to you to test.",
     // Assignments are work with a queue behind them, and testers asked to be in
     // the programme.
@@ -225,6 +240,7 @@ export const NOTIFICATION_KINDS = {
     scope: "personal",
     group: "moderation",
     label: "New reviews",
+    icon: "📝",
     description: "A player posts a review on a game.",
     // Routine volume. The bell is a queue to work through, not an interruption.
     defaultChannel: "bell",
@@ -235,6 +251,7 @@ export const NOTIFICATION_KINDS = {
     scope: "personal",
     group: "moderation",
     label: "Reported reviews",
+    icon: "🚩",
     description: "A player reports a review for moderation.",
     // A report is somebody saying something is wrong RIGHT NOW, and it is rare
     // enough that a push is not noise.
@@ -246,6 +263,7 @@ export const NOTIFICATION_KINDS = {
     scope: "personal",
     group: "moderation",
     label: "Bug reports",
+    icon: "🔧",
     description: "A beta tester files a bug report.",
     defaultChannel: "bell",
     discreet: "A new bug report was filed.",
