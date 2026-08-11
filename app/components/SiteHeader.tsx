@@ -359,11 +359,24 @@ export function SiteHeader({
           width for a count they came back to check.
 
           Beside the flame rather than in the mobile tab bar, so both surfaces
-          put it where every other site does — top right, next to the account. */}
+          put it where every other site does — top right, next to the account.
+
+          ON MOBILE IT MUST BE THE LAST ITEM IN THE ROW, and that is a layout
+          constraint rather than a preference. Its dropdown is `absolute right-0`,
+          i.e. anchored to the BELL's right edge, and the panel is far wider than
+          the bell — so it extends leftward from wherever the bell happens to sit.
+          With the flame after it, the anchor moved ~70px inboard and the panel
+          ran off the left edge of a 390px screen, clipping its own heading to
+          "otifications".
+
+          Desktop does not have this problem and keeps the bell next to the
+          account: there the panel extends left into hundreds of pixels of empty
+          header. It is only the phone, where the panel is nearly as wide as the
+          viewport, where the anchor has to be the last control in the row. */}
       {isMobile ? (
         <div className="ml-1 flex shrink-0 items-center gap-1.5">
-          <NotificationBell />
           <StreakChip />
+          <NotificationBell />
         </div>
       ) : (
         <div className="ml-auto flex shrink-0 items-center gap-2">

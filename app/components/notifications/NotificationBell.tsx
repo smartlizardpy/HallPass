@@ -262,9 +262,22 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        // Width is clamped against the viewport, not fixed: this control sits at
-        // the right edge of a 390px phone header, and a fixed 22rem panel would
-        // hang off the screen.
+        // ── THIS PANEL'S POSITION DEPENDS ON THE BELL BEING LAST ──────────
+        // `right-0` anchors it to THIS BUTTON's right edge, not the viewport's,
+        // and the panel is far wider than the button — so it grows LEFTWARD
+        // from wherever the bell sits in the row. The `100vw` clamp below is
+        // therefore only a size limit, NOT a position one: it stops the panel
+        // being wider than the screen, and cannot stop it hanging off the left
+        // edge when the anchor is inboard. That is exactly what happened when
+        // the streak chip sat to the right of the bell — the panel started
+        // ~70px in from the right of a 390px screen, ran 40px past the left
+        // edge, and clipped its own heading to "otifications".
+        //
+        // `SiteHeader` keeps the bell LAST in the mobile row for this reason,
+        // and says so at the call site. If a future control is ever added after
+        // it, this panel needs viewport-relative positioning (`fixed` plus a
+        // measured `top`) rather than another width clamp — no width alone can
+        // fix an anchor that is too far inboard.
         <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-border bg-white shadow-2xl">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <span className="text-sm font-black text-zinc-900">Notifications</span>
