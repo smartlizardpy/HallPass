@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { PublicProfile } from "../../lib/social/store";
-import type {
-  IncomingChallenge,
-  OutgoingChallenge,
-} from "../../lib/challenges/store";
+import {
+  refreshChallenges,
+  refreshFriends,
+  useCachedChallenges,
+  useCachedFriends,
+} from "../../lib/social-cache";
 import { formatFriendCode, normalizeFriendCode } from "../../lib/username";
 import { Avatar } from "./Avatar";
 import { ChallengeList } from "./ChallengeList";
@@ -36,30 +38,18 @@ import { ChallengeList } from "./ChallengeList";
  *
  * Renders `null` until loaded rather than a skeleton, matching `AccountMenu`'s
  * `loaded` flag.
- */
-
-type Request = PublicProfile & { requestedAt: string };
-
-type FriendsResponse = {
-  signedIn: boolean;
-  enabled: boolean;
-  friends: PublicProfile[];
-  incoming: Request[];
-  outgoing: Request[];
-};
-
-type Tab = "friends" | "requests" | "challenges" | "add";
-
-/**
- * `GET /api/v1/me/challenges`. Fetched HERE rather than inside `ChallengeList`
- * so the tab can carry a count before anybody clicks it — a badge that only
+ *
+ * WHERE THE DATA LIVES NOW. Both responses are held by `app/lib/social-cache.ts`
+ * rather than in local state, so `MobileSplash` can warm them at launch and this
+ * tab paints the moment it mounts instead of after two round trips. The
+ * behaviour when nothing has been warmed is unchanged — `null`, then a fetch —
+ * and the effect below still revalidates on every mount regardless of what is
+ * cached. Challenges are still fetched HERE rather than inside `ChallengeList`,
+ * so the tab can carry a count before anybody clicks it; a badge that only
  * appeared once you opened the tab would be no badge at all.
  */
-type ChallengesResponse = {
-  signedIn: boolean;
-  incoming: IncomingChallenge[];
-  outgoing: OutgoingChallenge[];
-};
+
+type Tab = "friends" | "requests" | "challenges" | "add";
 
 const BTN_PRIMARY =
   "rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white transition hover:bg-brand-600 disabled:opacity-50";
@@ -69,46 +59,25 @@ const INPUT =
   "w-full rounded-full border border-border bg-white px-4 py-3 text-base font-semibold text-zinc-900 placeholder:text-muted outline-none transition focus:ring-4 focus:ring-brand/20";
 
 export function FriendsIsland() {
-  const [data, setData] = useState<FriendsResponse | null>(null);
-  const [challenges, setChallenges] = useState<ChallengesResponse | null>(null);
+  // Whatever the launch warm-up left behind — `null` on a cold arrival, which is
+  // exactly what this component rendered from before the cache existed. The
+  // store hands React a stable `null` server snapshot, so the SSR pass and the
+  // first client render still agree.
+  const data = useCachedFriends();
+  const challenges = useCachedChallenges();
   const [tab, setTab] = useState<Tab>("friends");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch("/api/v1/me/friends", { credentials: "include" });
-      if (!res.ok) return;
-      setData((await res.json()) as FriendsResponse);
-    } catch {
-      // Offline: /api/ is never intercepted by the service worker, so this simply
-      // fails and the island keeps whatever it already had.
-    }
-  }, []);
-
-  /**
-   * Challenges, on their own request and their own state.
-   *
-   * Kept separate from `load` rather than merged into one combined fetch: the
-   * two endpoints fail independently, and a challenges table that is behind the
-   * deploy must not blank the friends list that works perfectly well. Same
-   * reasoning as `AccountMenu` firing its badge call alongside identity instead
-   * of gating on it.
-   */
-  const loadChallenges = useCallback(async () => {
-    try {
-      const res = await fetch("/api/v1/me/challenges", { credentials: "include" });
-      if (!res.ok) return;
-      setChallenges((await res.json()) as ChallengesResponse);
-    } catch {
-      // Offline — keep whatever we already had.
-    }
-  }, []);
-
+  // Revalidate on mount, always, cached or not: what is in the store may be up
+  // to a minute old, and a friend request accepted on another device should not
+  // wait for a reload. The two reads stay separate — they fail independently,
+  // and a challenges table that is behind the deploy must not blank a friends
+  // list that works perfectly well.
   useEffect(() => {
-    void load();
-    void loadChallenges();
-  }, [load, loadChallenges]);
+    void refreshFriends();
+    void refreshChallenges();
+  }, []);
 
   /** One mutation helper: every action is the same fetch with a different verb. */
   const act = useCallback(
@@ -126,7 +95,7 @@ export function FriendsIsland() {
           setNotice("That didn't work — try again in a moment.");
         } else {
           setNotice(label);
-          await load();
+          await refreshFriends();
         }
       } catch {
         setNotice("You appear to be offline.");
@@ -134,7 +103,7 @@ export function FriendsIsland() {
         setBusy(null);
       }
     },
-    [load],
+    [],
   );
 
   if (!data) return null;
@@ -293,12 +262,12 @@ export function FriendsIsland() {
           <ChallengeList
             incoming={challenges?.incoming ?? []}
             outgoing={challenges?.outgoing ?? []}
-            onChanged={loadChallenges}
+            onChanged={refreshChallenges}
           />
         </Panel>
       )}
 
-      {tab === "add" && <AddFriend onChanged={load} />}
+      {tab === "add" && <AddFriend onChanged={refreshFriends} />}
     </div>
   );
 }

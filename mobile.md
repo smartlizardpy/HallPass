@@ -24,6 +24,12 @@ WASD-controlled runner, gets a game that does not respond to touch, and leaves.
 That is the entire problem. The tag is the fix; everything below is plumbing it
 into the three places game metadata lives and the four places it gets rendered.
 
+> **See also — `preload.md`.** The phone shell's launch splash now warms what a
+> visitor reaches next (the Friends and You tabs, and the covers this tag decides
+> to show). It reads `mobileCatalog()`, so how much the cover half of it is worth
+> is decided by Phase 6 below: at three tagged games the whole grid is above the
+> fold and the browser was fetching it anyway.
+
 ---
 
 ## Scope
