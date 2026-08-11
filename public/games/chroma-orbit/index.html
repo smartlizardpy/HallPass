@@ -168,6 +168,83 @@
             background: #ff0055; color: #fff; box-shadow: 0 0 40px rgba(255, 0, 85, 0.8);
         }
 
+        /* --- HallPass ------------------------------------------------------
+           Online leaderboard and friend challenges. Built out of the palette
+           this game already uses -- cyan #00f0ff for the live number, magenta
+           #ff0055 for danger, #ffe600 for the accent, Courier Prime inherited
+           from body -- so the panel reads as part of the CORE BREACH screen
+           instead of an overlay bolted onto it. No new font, no new framework. */
+
+        /* A quieter sibling of .btn. "Sign in" and "Challenge a friend" are
+           optional side doors: if they carried the full cyan glow they would
+           compete with INITIATE SEQUENCE and REBOOT SYSTEM, which are the two
+           things a player actually came here to press. */
+        .btn.ghost {
+            background: none;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            color: #fff;
+            padding: 8px 18px;
+            font-size: 0.9rem;
+            box-shadow: none;
+            text-shadow: none;
+        }
+        .btn.ghost:hover {
+            background: rgba(0, 240, 255, 0.12);
+            border-color: #00f0ff;
+            color: #00f0ff;
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.35);
+            transform: none;
+        }
+        .btn.ghost:disabled { opacity: 0.4; cursor: default; }
+
+        .hpauth {
+            display: flex; gap: 12px; align-items: center; justify-content: center;
+            flex-wrap: wrap; margin-top: 22px;
+        }
+        .hpauth button[hidden] { display: none; }
+        #hpAuthStatus {
+            font-size: 0.75rem; letter-spacing: 0.18em; text-transform: uppercase;
+            color: #6f7a8a;
+        }
+        #hpAuthStatus b { color: #00f0ff; font-weight: bold; }
+
+        .hppanel { width: 300px; max-width: 80%; margin-bottom: 26px; }
+        .hptitle {
+            font-size: 0.75rem; letter-spacing: 0.22em; text-transform: uppercase;
+            color: #6f7a8a; margin-bottom: 8px;
+        }
+        .hpboard { min-height: 26px; }
+        /* table-layout:fixed is load-bearing. Without it the browser sizes each
+           column to its content, and the ellipsis on .who then truncates a long
+           handle down to a single letter instead of cutting it off at the
+           column edge. Fixed layout lets .who take whatever the rank and points
+           columns leave behind. */
+        .hpboard table {
+            width: 100%; border-collapse: collapse; table-layout: fixed;
+        }
+        .hpboard td { padding: 4px 0; font-size: 0.95rem; }
+        .hpboard .rank { width: 26px; text-align: left; color: #6f7a8a; }
+        .hpboard .who {
+            text-align: left; color: #cbd3dd;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .hpboard .pts {
+            width: 38%; text-align: right; color: #00f0ff; font-weight: bold;
+            text-shadow: 0 0 12px rgba(0, 240, 255, 0.6);
+        }
+        .hpboard .hpv { color: #ffe600; margin-left: 5px; font-size: 0.7rem; }
+        .hpempty {
+            font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase;
+            color: #6f7a8a;
+        }
+        .hpactions { margin-top: 16px; }
+        .hpmsg {
+            margin-top: 12px; font-size: 0.7rem; letter-spacing: 0.16em;
+            text-transform: uppercase; color: #6f7a8a;
+        }
+        .hpmsg b { color: #ffe600; font-weight: bold; }
+        .hpmsg[hidden] { display: none; }
+
         /* Mobile Controls */
         #mobile-controls {
             position: absolute;
@@ -242,6 +319,12 @@
                 <div class="text-right font-bold text-[#ffe600]">C Key:</div><div>OVERCHARGE (Combo 10+)</div>
             </div>
             <button class="btn" onclick="startGame()">INITIATE SEQUENCE</button>
+            <!-- Identity lives on the start screen only. A challenge offered
+                 here would answer "no-score" -- there is no run to beat yet. -->
+            <div class="hpauth">
+                <button class="btn ghost" id="hpSignIn">Sign in</button>
+                <span id="hpAuthStatus">Playing as Guest</span>
+            </div>
         </div>
 
         <div id="game-over-screen" class="hidden">
@@ -249,7 +332,15 @@
             <div class="text-3xl mb-2 text-white mt-6">FINAL SCORE: <span id="final-score" class="text-[#00f0ff] font-bold" style="text-shadow: 0 0 20px #00f0ff;">0</span></div>
             <div class="text-xl mb-4 text-gray-400">MAX COMBO: <span id="final-combo" class="text-[#ff0055]">x0</span></div>
             <div class="text-lg mb-10 text-[#ffe600]" id="final-weapon">FINAL WPN: STANDARD BLASTER</div>
+            <div class="hppanel">
+                <div class="hptitle">Chroma Orbit &middot; High Scores</div>
+                <div class="hpboard" id="hpBoard"></div>
+            </div>
             <button class="btn btn-red" onclick="resetGame()">REBOOT SYSTEM</button>
+            <div class="hpactions">
+                <button class="btn ghost" id="hpChallenge">Challenge a friend</button>
+            </div>
+            <div class="hpmsg" id="hpChallengeMsg" hidden></div>
         </div>
     </div>
 
@@ -271,6 +362,27 @@
         </div>
     </div>
 </div>
+
+<!-- HallPass: online leaderboard + friend challenges. The stub below installs
+     window.HallPass synchronously so calls made before the bundle lands are
+     queued, never lost, and degrade to a safe no-op if it never arrives. -->
+<script>
+(function(w){if(w.HallPass&&w.HallPass.version!=="0")return;var q=[];
+function e(n){return function(){var a=[].slice.call(arguments);
+return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
+w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
+submitScore:e("submitScore"),getScores:e("getScores"),
+getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
+unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
+getAchievements:e("getAchievements"),challenge:e("challenge"),
+signIn:function(){},signOut:function(){},
+getHandle:function(){return null},setHandle:function(v){return v},
+on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
+off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
+setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:{ok:false,reason:"inert"})})},2000)})(window);
+</script>
+<script src="/sdk/v1/hallpass.js" data-game="chroma-orbit" defer></script>
 
 <script>
 /**
@@ -903,6 +1015,16 @@ function triggerNuke() {
     }
 }
 
+/* Whether the run that just ended has already been posted to HallPass.
+
+   This latch is NOT defensive here, it is load-bearing. endGame() is reached
+   through Core.takeDamage(), which is called from inside the per-entity
+   collision pass -- so two enemies that reach the core on the same tick call it
+   twice in a row before the loop next checks gameState. Without the latch that
+   is two identical rows on the leaderboard for one run. startGame() clears it,
+   which covers both the first run and every REBOOT SYSTEM after it. */
+let hpPosted = false;
+
 function startGame() {
     AudioEngine.init();
     document.getElementById('start-screen').classList.add('hidden');
@@ -911,6 +1033,7 @@ function startGame() {
     player = new Player(); core = new Core();
     entities = []; particles = []; floatingTexts = [];
     
+    hpPosted = false;
     score = 0; combo = 1; maxCombo = 1; nukeCharge = 0;
     currentWeaponLevel = 0; document.getElementById('weapon-display').innerText = `WPN: ${WEAPON_NAMES[0]}`;
     gameDifficulty = 1.0; spawnRate = 2000; gameState = 'PLAYING';
@@ -929,6 +1052,22 @@ function endGame() {
     document.getElementById('final-weapon').innerText = `FINAL WPN: ${WEAPON_NAMES[currentWeaponLevel]}`;
     spawnParticles(CENTER_X, CENTER_Y, 'W', 150, 6);
     AudioEngine.heavyExplosion();
+
+    // Post the run. submitScore resolves either way and never throws, so this
+    // cannot stop CORE BREACH from appearing or hold it up. An anonymous player
+    // posts under a Guest name, a signed-in one under their own. The board is
+    // drawn only AFTER the post resolves, so the run that just ended is already
+    // in the list rather than showing up one game over late.
+    if (!hpPosted) {
+        hpPosted = true;
+        const board = document.getElementById('hpBoard');
+        if (board) board.innerHTML = '<div class="hpempty">Posting your score...</div>';
+        // Clear the previous run's result, or "Dared Ali to beat 4,200" would
+        // sit under a score that is no longer the one being talked about.
+        const msg = document.getElementById('hpChallengeMsg');
+        if (msg) msg.hidden = true;
+        HallPass.submitScore(score).then(hpRenderBoard);
+    }
 }
 
 function spawnEnemy() {
@@ -1070,6 +1209,123 @@ function gameLoop(timestamp) {
 
     requestAnimationFrame(gameLoop);
 }
+
+/* --- HallPass --------------------------------------------------------------
+   The inline stub above this script guarantees window.HallPass exists by the
+   time any of this runs, and every method resolves rather than throwing -- so
+   nothing in this section can break the game, even with no network at all, and
+   even before the leaderboard for this game exists server-side. Nothing here is
+   wrapped in try/catch because there is nothing to catch. */
+
+/* Paint the start screen's identity row. `player` is null when signed out. */
+function hpRefreshAuth(player) {
+    const status = document.getElementById('hpAuthStatus');
+    const btn = document.getElementById('hpSignIn');
+    if (!status || !btn) return;
+    if (player) {
+        btn.hidden = true;
+        status.innerHTML = 'Signed in as <b></b>';
+        // textContent: a display name is untrusted input and must never be parsed.
+        status.querySelector('b').textContent = player.name;
+    } else {
+        btn.hidden = false;
+        status.textContent = 'Playing as Guest';
+    }
+}
+
+/* Draw the online top five into the CORE BREACH screen.
+
+   FIVE rows, not ten: this screen already carries three result lines and two
+   buttons inside a fixed square arena, and a list long enough to scroll would
+   both overflow on a phone and put a scrollable region under the touch
+   controls. The full board lives on the game's HallPass page.
+
+   TEN are requested because one player can hold several of the top rows; after
+   collapsing each handle down to their best run, five is what is left to show. */
+function hpRenderBoard() {
+    const el = document.getElementById('hpBoard');
+    if (!el) return;
+    el.innerHTML = '<div class="hpempty">Loading scores...</div>';
+    HallPass.getScores({ limit: 10 }).then((rows) => {
+        if (!rows || !rows.length) {
+            el.innerHTML = '<div class="hpempty">Be the first to score</div>';
+            return;
+        }
+        const seen = new Set();
+        const best = rows.filter((r) => seen.has(r.handle) ? false : (seen.add(r.handle), true))
+                         .slice(0, 5);
+        const table = document.createElement('table');
+        let rank = 0;
+        for (const row of best) {
+            const tr = document.createElement('tr');
+            const n = document.createElement('td');
+            n.className = 'rank'; n.textContent = ++rank;
+            const who = document.createElement('td');
+            who.className = 'who';
+            // textContent throughout: a handle is untrusted and must never be parsed.
+            who.textContent = row.handle;
+            if (row.verified) {
+                const tick = document.createElement('span');
+                tick.className = 'hpv'; tick.textContent = '✓';
+                who.appendChild(tick);
+            }
+            const pts = document.createElement('td');
+            pts.className = 'pts'; pts.textContent = Number(row.score).toLocaleString();
+            tr.append(n, who, pts);
+            table.appendChild(tr);
+        }
+        el.innerHTML = '';
+        el.appendChild(table);
+    });
+}
+
+/* Challenge a friend to beat the run that just ended.
+
+   Offered on CORE BREACH only, because that is the one screen where all three
+   of challenge()'s preconditions hold: the board exists, submitScore has just
+   given the challenger a score on it, and there is a session. On the start
+   screen the same button would mostly answer "no-score".
+
+   Only the outcomes the PICKER CANNOT REPORT ITSELF are written here. Server
+   refusals (signed-out, not-friends, no-score...) are already rendered inside
+   the panel the player is looking at, and saying them twice would be noise.
+   These three stop the panel before it can say anything. */
+const HP_CHALLENGE_MSG = {
+    "popup-blocked": "Your browser blocked the challenge window",
+    "inert":         "Challenges need the online leaderboard, offline here",
+    "network":       "Could not reach HallPass - try again shortly",
+};
+
+document.getElementById('hpChallenge').addEventListener('click', async () => {
+    const btn = document.getElementById('hpChallenge');
+    const msg = document.getElementById('hpChallengeMsg');
+    btn.disabled = true;
+    msg.hidden = true;
+    // No try/catch: every SDK method resolves, so there is nothing to catch.
+    const res = await HallPass.challenge();
+    btn.disabled = false;
+
+    // READ `sent`, NOT `ok`. Closing the picker resolves
+    // { ok:true, sent:false, reason:"closed" } -- the call worked and the player
+    // changed their mind, which must never be shown to them as a failure.
+    if (res && res.sent && res.challenge) {
+        msg.innerHTML = 'Dared <b></b> to beat <b></b>';
+        const parts = msg.querySelectorAll('b');
+        parts[0].textContent = res.challenge.to;   // untrusted display name
+        parts[1].textContent = Number(res.challenge.targetScore).toLocaleString();
+        msg.hidden = false;
+        return;
+    }
+    const text = res && res.reason ? HP_CHALLENGE_MSG[res.reason] : null;
+    if (text) { msg.textContent = text; msg.hidden = false; }
+});
+
+HallPass.getPlayer().then(hpRefreshAuth);
+// The popup does not reload the game, so the label has to be told when it
+// finishes -- otherwise it still reads "Guest" to somebody who just signed in.
+HallPass.on('auth', (e) => hpRefreshAuth(e.player));
+// Must be a real click: browsers block a popup opened without a user gesture.
+document.getElementById('hpSignIn').addEventListener('click', () => HallPass.signIn());
 
 ctx.fillStyle = '#020205'; ctx.fillRect(0, 0, canvas.width, canvas.height);
 
