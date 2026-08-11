@@ -4,10 +4,10 @@
  *
  * WHY THIS EXISTS. A game that carries the SDK is only half-wired: until a row
  * exists in `boards`, `POST /api/v1/leaderboard/<slug>` answers 409 "Board not
- * initialized" and every score is dropped. Eleven games were wired in one pass,
- * and eleven trips through the dashboard's new-board form is eleven chances to
- * fat-finger a slug — a board whose id does not match the game's `data-game`
- * fails silently in
+ * initialized" and every score is dropped. Thirteen games were wired in one
+ * pass, and thirteen trips through the dashboard's new-board form is thirteen
+ * chances to fat-finger a slug — a board whose id does not match the game's
+ * `data-game` fails silently in
  * exactly the way `scripts/migrate.mjs`'s docblock warns about, because the SDK
  * never throws and the game plays on regardless.
  *
@@ -84,6 +84,10 @@ const BOARDS = [
     sort: "desc",
     label: "Score",
   },
+  { slug: "color-clash-3d", title: "Color Clash 3D - High Scores", sort: "desc", label: "Score" },
+  // "Earnings", not "Score": this board ranks everything the player ever earned,
+  // which is a different number from the cash they finished holding.
+  { slug: "sea-mercenary", title: "Sea Mercenary - Top Earnings", sort: "desc", label: "Earnings" },
 ];
 
 const args = process.argv.slice(2);
