@@ -8,25 +8,60 @@ import { StealthMenuButton } from "./stealth/StealthMenuButton";
 import { SurpriseButton } from "./SurpriseButton";
 import { Wordmark } from "./Wordmark";
 
+/**
+ * One glyph per browse row, drawn on the same 24x24 grid {@link CategoryIcon}
+ * renders at 20x20.
+ *
+ * EVERY ENTRY MUST READ AS A DIFFERENT SHAPE AT 20px — that is the whole
+ * constraint, and it is stricter than it sounds. Three groups used to fail it:
+ * Survivor, Sports and Simulation were three spellings of one eight-pointed
+ * asterisk (differing by fractions of a coordinate); Puzzle was All's 2x2 grid
+ * inset by a pixel; New and Strategy were both five-pointed stars. At 20px each
+ * group collapses to a single silhouette, so the rail was labelling rows it
+ * could not tell apart. One member of each group kept its drawing — All, because
+ * a 2x2 grid is the natural "everything" mark, and Strategy, because the star
+ * had no better claimant — and the other five were redrawn.
+ *
+ * So: before adding or editing a glyph, render the whole set at 20x20 and look
+ * at it. Do not trust the path data — two very different `d` strings collapse
+ * to the same silhouette at this size surprisingly often. Check it against
+ * `PRIMARY_NAV` below too; those share the grid and sit in the same rail.
+ *
+ * Keep them stroke-only line art with no per-icon `fill`/`stroke` (the wrapper
+ * owns those), no detail finer than ~2 units, no more than ~6 strokes, and
+ * roughly inside 2..22 so nothing clips.
+ */
 const ICONS: Record<string, React.ReactNode> = {
   All: <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />,
-  New: <path d="M12 2 15 9l7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z" />,
+  // A four-pointed sparkle, not the five-pointed star it was: Strategy already
+  // owns that outline and the two were the same glyph at 20px.
+  New: <path d="M12 3c0 4.5 4.5 9 9 9-4.5 0-9 4.5-9 9 0-4.5-4.5-9-9-9 4.5 0 9-4.5 9-9z" />,
   Trending: <path d="M3 17 9 11l4 4 8-9M14 6h7v7" />,
   Racing: <path d="M3 12h18M5 12V8a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v4M6 16h2M16 16h2" />,
-  Survivor: <path d="M12 2v20M2 12h20M5 5l14 14M19 5 5 19" />,
+  // A heart — lives left, last one standing. Deliberately not a cracked shield
+  // (Defense is the shield) and not a lone figure (Multiplayer and the primary
+  // group's You already carry people).
+  Survivor: <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7z" />,
   Adventure: <path d="M3 21V5l9-3 9 3v16M9 21v-9h6v9" />,
-  Puzzle: <path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" />,
+  // An actual jigsaw piece: knob out of the top edge, socket into the left one.
+  // The asymmetry is what separates it from All's grid of plain squares.
+  Puzzle: <path d="M5 6h5a2.5 2.5 0 0 1 5 0h4v14H5v-5a2.5 2.5 0 0 0 0-5z" />,
   RPG: <path d="m4 20 8-8M14 8l6-6M14 2h6v6M9 11l4 4" />,
   Horror: <path d="M12 2a8 8 0 0 0-8 8v8l3-2 3 2 2-2 2 2 3-2 3 2v-8a8 8 0 0 0-8-8z" />,
   Arcade: <path d="M4 4h16v16H4zM4 9h16M9 14h.01M15 14h.01M9 18h6" />,
   Sandbox: <path d="M3 7l9-4 9 4-9 4-9-4zM3 12l9 4 9-4M3 17l9 4 9-4" />,
   Multiplayer: <path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM17 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M15 21v-2a4 4 0 0 0-3-3.87" />,
-  Sports: <path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93 4.93 19.07" />,
+  // A two-handled trophy. The cup's bowl is one semicircular arc, so it stays a
+  // solid readable mass at 20px where a ball's seam lines would just be noise.
+  Sports: <path d="M6 4h12v4a6 6 0 0 1-12 0zM6 6H3v2a4 4 0 0 0 3.4 4M18 6h3v2a4 4 0 0 1-3.4 4M12 14v6M8 20h8" />,
   Defense: <path d="M12 2 4 5v6c0 5 3.5 9.5 8 11 4.5-1.5 8-6 8-11V5z" />,
   Platformer: <path d="M3 18h6v-4H3zM9 14h6v-4H9zM15 10h6V6h-6z" />,
   Shooter: <path d="M12 2 22 12l-10 10L2 12zM12 8v8M8 12h8" />,
   Strategy: <path d="M12 2l3 6h7l-5 4 2 7-7-4-7 4 2-7-5-4h7z" />,
-  Simulation: <path d="M12 3v18M3 12h18M7 7l10 10M17 7 7 17" />,
+  // Three slider tracks with their handles offset from one another — a control
+  // panel, i.e. the knobs you turn on a simulation. The only glyph in the set
+  // built from horizontal rules, which is what makes it unmistakable.
+  Simulation: <path d="M4 6h16M4 12h16M4 18h16M9 4v4M15 10v4M7 16v4" />,
 };
 
 function CategoryIcon({ name }: { name: string }) {
