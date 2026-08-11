@@ -2322,7 +2322,7 @@ class Game {
         const types = ['Hunt', 'Salvage', 'Escort'];
         for(let i=0; i<3; i++) {
             const type = types[Math.floor(Math.random()*types.length)];
-            const reward = 300 + Math.floor(Math.random() * 500);
+            let reward = 300 + Math.floor(Math.random() * 500);
             let desc = "";
             if (type === 'Hunt') desc = "Sink the Pirate Captain";
             else if (type === 'Salvage') desc = "Recover Stolen Cargo";
