@@ -1,12 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useEffect } from "react";
-import type { Game } from "../lib/games";
-import { NavIcon, PRIMARY_NAV, normalizePath } from "./primary-nav";
 import { StealthMenuButton } from "./stealth/StealthMenuButton";
-import { SurpriseButton } from "./SurpriseButton";
 import { Wordmark } from "./Wordmark";
 
 /**
@@ -25,9 +21,11 @@ import { Wordmark } from "./Wordmark";
  *
  * So: before adding or editing a glyph, render the whole set at 20x20 and look
  * at it. Do not trust the path data — two very different `d` strings collapse
- * to the same silhouette at this size surprisingly often. Check it against
- * `PRIMARY_NAV` in `./primary-nav` too; those share the grid and sit in the
- * same rail.
+ * to the same silhouette at this size surprisingly often. `PRIMARY_NAV`'s icons
+ * in `./primary-nav` are drawn on the same 24-unit grid and were once stacked
+ * directly above these; they no longer share a surface (that group lives in
+ * `SiteHeader`, label-only), so they are no longer part of the silhouette test —
+ * but they remain the reference for what the grid is.
  *
  * Keep them stroke-only line art with no per-icon `fill`/`stroke` (the wrapper
  * owns those), no detail finer than ~2 units, no more than ~6 strokes, and
@@ -41,8 +39,8 @@ const ICONS: Record<string, React.ReactNode> = {
   Trending: <path d="M3 17 9 11l4 4 8-9M14 6h7v7" />,
   Racing: <path d="M3 12h18M5 12V8a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v4M6 16h2M16 16h2" />,
   // A heart — lives left, last one standing. Deliberately not a cracked shield
-  // (Defense is the shield) and not a lone figure (Multiplayer and the primary
-  // group's You already carry people).
+  // (Defense is the shield) and not a lone figure (Multiplayer already carries
+  // people, as does the header's You tab).
   Survivor: <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7z" />,
   Adventure: <path d="M3 21V5l9-3 9 3v16M9 21v-9h6v9" />,
   // An actual jigsaw piece: knob out of the top edge, socket into the left one.
@@ -90,12 +88,19 @@ function CategoryIcon({ name }: { name: string }) {
 }
 
 /**
- * The style of one sidebar row, shared by every group in the rail.
+ * The style of one sidebar row.
  *
- * Hoisted out of the category map so the rail reads as ONE system: whatever the
- * row links to, an active row is `bg-brand-50 text-brand` and an idle one is
- * zinc-on-hover. Anything that adds a group below (or above) the categories gets
- * the highlight for free rather than re-typing a class string that then drifts.
+ * Hoisted out of the category map because a row renders as a `<button>` in
+ * callback mode and a `<Link>` in link mode (see `onSelect`), and those two must
+ * be visually identical — an active row is `bg-brand-50 text-brand`, an idle one
+ * zinc-on-hover — rather than two class strings that drift apart.
+ *
+ * It stays a function, not a constant, for the same reason: the categories are
+ * the only group left in the rail (the primary destinations moved to
+ * `SiteHeader`), so anything added above or below them inherits one highlight
+ * treatment instead of inventing a second. `SiteHeader`'s tabs deliberately use
+ * the SAME active fill, so the two surfaces cannot disagree about what "current"
+ * looks like.
  */
 function itemClass(isActive: boolean): string {
   // `px-3`, not `px-4`: the rail is 192px wide (see the <aside> note), and the
@@ -124,19 +129,18 @@ function hrefForItem(item: string): string {
 
 export function Sidebar({
   categories,
-  games,
   active,
   onSelect,
   mobileOpen = false,
   onMobileClose,
 }: {
   categories: string[];
-  /** The catalogue, used only to pick a random game for "Surprise me". */
-  games: Game[];
   /**
-   * The highlighted GENRE, by name. It says nothing about the primary group
-   * above the genres, which is a set of routes and takes its highlight from the
-   * live pathname instead — see `PRIMARY_NAV`.
+   * The highlighted GENRE, by name — and now the only kind of "current" this rail
+   * has an opinion about. The primary destinations (Games / Friends / You) used to
+   * sit above the genres and take their highlight from the live pathname; they
+   * live in `SiteHeader` alone now, which is why nothing in here reads
+   * `usePathname` any more.
    */
   active: string;
   /**
@@ -152,12 +156,6 @@ export function Sidebar({
   onMobileClose?: () => void;
 }) {
   const items = ["All", "New", "Trending", ...categories];
-
-  // `usePathname` is the only source for the primary group's active state: the
-  // `active` prop names a genre, not a route. It is a client hook, which this
-  // component already is, and it re-renders on every navigation — so the
-  // highlight follows a client-side route change with no other wiring.
-  const path = normalizePath(usePathname() ?? "/");
 
   useEffect(() => {
     if (!mobileOpen) return;
@@ -178,45 +176,18 @@ export function Sidebar({
     onMobileClose?.();
   };
 
+  // ONE GROUP, ONE PROMISE: everything in this fragment filters the catalogue.
+  // The primary destinations (Games / Friends / You) and the "Surprise me" button
+  // used to sit above the categories, separated by a rule because a destination
+  // that stays lit and a filter that swaps the grid underneath you are different
+  // promises. `SiteHeader` owns both now — it is the only copy of either — so the
+  // rule has nothing left to separate and went with them.
+  //
+  // Still rendered by BOTH the desktop rail and the mobile drawer from this one
+  // insertion, which is why nothing in here may carry an `id`: it would exist
+  // twice in the DOM.
   const navList = (
     <>
-      {/* THE SPINE OF THE SITE, and the first thing in the rail. Everything
-          below the rule is a way of browsing the catalogue; these three are
-          where a player goes. They are defined in `./primary-nav` rather than
-          here because the top bar draws the same three; see `PRIMARY_NAV` there
-          for why they are links and how each one decides it is current. */}
-      <ul className="flex flex-col gap-1">
-        {PRIMARY_NAV.map((entry) => {
-          const isActive = entry.match(path);
-          return (
-            <li key={entry.href}>
-              <Link
-                href={entry.href}
-                onClick={onMobileClose}
-                aria-current={isActive ? "page" : undefined}
-                className={itemClass(isActive)}
-              >
-                <NavIcon>{entry.icon}</NavIcon>
-                <span className="flex-1 text-left">{entry.label}</span>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-
-      {/* The two groups must not read as one list — a destination that stays lit
-          and a filter that swaps the grid underneath you are different promises,
-          and stacking them in one unbroken column said they were the same. */}
-      <hr className="my-3 border-t border-border" />
-
-      {/* Above the categories, not among them: it is an action, not a filter,
-          and grouping it with the nav items would make it look like a
-          destination that could be "active" — which is also why it sits on the
-          browse side of the rule rather than under the primary group, whose rows
-          do light up. Rendered here rather than in each <aside> so the desktop
-          rail and the mobile drawer share one copy. */}
-      <SurpriseButton games={games} onNavigate={onMobileClose} />
-
       {/* Visual only: the <ul> below carries the same label for assistive tech,
           so announcing this line too would just say "Browse" twice. An `id` +
           `aria-labelledby` pair is not an option — `navList` is rendered in both
@@ -276,11 +247,12 @@ export function Sidebar({
           row, so default `align-items: stretch` grew this rail to the height of
           the whole DOCUMENT. Two things broke as a result — the `flex-1
           overflow-y-auto` nav below could never overflow, making its scrolling
-          dead code, and the stealth button and copyright that follow it sat at
-          the bottom of the document (below every game on the home page) instead
-          of the bottom of the screen. A definite `100vh` height also stops
-          `stretch` applying, so the rail now measures exactly one viewport, the
-          nav scrolls internally, and the footer blocks sit on the visible rail.
+          dead code, and the blocks that follow it — the stealth button, and back
+          then a copyright line too — sat at the bottom of the document (below
+          every game on the home page) instead of the bottom of the screen. A
+          definite `100vh` height also stops `stretch` applying, so the rail now
+          measures exactly one viewport, the nav scrolls internally, and the
+          stealth button sits on the visible rail.
           This is the behaviour the mobile drawer already had via `absolute
           inset-y-0` inside a `fixed inset-0`. Scoped to `lg:` because the rail
           is `hidden` below that breakpoint. */}
@@ -298,15 +270,16 @@ export function Sidebar({
 
         <nav className="flex-1 overflow-y-auto px-3 pb-4">{navList}</nav>
 
+        {/* The last block in the rail — there is deliberately NO copyright line
+            under it any more. A `© year hallpass / all games unblocked.` pair was
+            pinned here, which meant a full-height rail spent its most valuable
+            real estate (the one region that never scrolls away) on boilerplate
+            nobody navigates by. `SiteFooter` already carries the same statement —
+            the mark, the year and "all games unblocked, forever." — at the bottom
+            of every page inside this shell, which is where a colophon belongs, so
+            nothing was lost by deleting it. */}
         <div className="border-t border-border px-3 py-2">
           <StealthMenuButton />
-        </div>
-
-        <div className="px-4 pb-5">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-muted">
-            © {new Date().getFullYear()} hallpass
-          </p>
-          <p className="mt-1 text-[11px] text-muted">all games unblocked.</p>
         </div>
       </aside>
 
@@ -340,14 +313,27 @@ export function Sidebar({
           }`}
         />
         {/* Panel */}
-        {/* Labelled "Menu", not "Categories": the drawer now opens onto the
-            primary destinations as well as the genre filter, and it is the
-            header's "Open menu" button (`aria-controls="mobile-nav"`) that
-            announces it. A dialog whose name promises only categories would
-            misdescribe half of what is in it. */}
+        {/* Labelled "Categories", not "Menu". "Menu" was a compromise from the
+            phase where this drawer carried the primary destinations (Games /
+            Friends / You) as well as the genre filter: a dialog named for
+            categories would then have misdescribed half of what was in it. Those
+            destinations are gone from `navList` — `SiteHeader` owns them — so the
+            vague name now buys nothing and costs the one thing a dialog name is
+            for, telling a screen-reader user what they just opened.
+
+            The stealth escape hatch in the panel footer is not a counter-example:
+            it is chrome pinned below the nav, exactly as it is in the desktop
+            rail, not one of the things the drawer is FOR.
+
+            The trigger matches — `SiteHeader`'s button is "Open categories" and
+            the close button below is "Close categories". Its
+            `aria-controls="mobile-nav"` still points at this container's id: the
+            id names the drawer, not its contents, and `DashShell` already uses the
+            parallel `dash-mobile-nav`, so renaming it would only break the
+            symmetry. */}
         <aside
           role="dialog"
-          aria-label="Menu"
+          aria-label="Categories"
           aria-modal="true"
           className={`absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-border bg-white shadow-2xl transition-transform duration-200 ${
             mobileOpen ? "translate-x-0" : "-translate-x-full"
@@ -364,7 +350,7 @@ export function Sidebar({
             <button
               type="button"
               onClick={onMobileClose}
-              aria-label="Close menu"
+              aria-label="Close categories"
               className="inline-flex h-11 w-11 items-center justify-center rounded-full text-zinc-700 transition hover:bg-surface-2"
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">

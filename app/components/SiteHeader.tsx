@@ -2,17 +2,19 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
+import type { Game } from "../lib/games";
 import { captureSearchNow } from "../lib/use-search-capture";
 import { useDevicePlatform } from "../lib/use-device-platform";
 import { AccountMenu } from "./AccountMenu";
 import { PRIMARY_NAV, normalizePath } from "./primary-nav";
 import { StreakChip } from "./streak/StreakChip";
+import { SurpriseButton } from "./SurpriseButton";
 import { WhatsNewLink } from "./WhatsNewLink";
 import { Wordmark } from "./Wordmark";
 
 /**
  * The public sticky header: hamburger, wordmark, the primary nav tabs, search,
- * What's New, account menu.
+ * Surprise me, What's New, account menu.
  *
  * Lifted out of `Arcade` so every public page wears the same chrome. It has TWO
  * search modes, and which one you get depends on whether the parent owns a query:
@@ -62,14 +64,32 @@ import { Wordmark } from "./Wordmark";
  *      small, so in the `lg`..`xl` band — the tightest one, because the 192px
  *      rail is still on screen there — the wordmark drops to `text-xl` and
  *      "What's New" collapses to its icon, both back to full size at `xl`.
- *      Measured at 1024x768 signed-out with the rail present: search 219px, no
- *      overflow. Signed in it is ~60px narrower, because the account trigger
- *      carries a handle; still no overflow, which is the property that matters.
+ *   4. "SURPRISE ME" IS AN ICON, AND DESKTOP-ONLY. It arrived here from the rail,
+ *      where it was a full-width gradient button with a label; in this row it
+ *      renders `variant="icon"` — a 44px die, 52px with the gap — because a
+ *      labelled pill would cost ~140px of the search field for an action nobody
+ *      is hunting for by name. It is also inside the `isMobile ? …` else-branch
+ *      on purpose: see the note on that branch.
+ *      Remeasured at 1024x768 signed-out with the rail and the die present:
+ *      search 167px (it was 219px), and the ROW still does not overflow — the
+ *      document is exactly 1024px wide. What the 52px does cost is the tail of
+ *      the placeholder: "Search games" needs 101px of text box and gets 99px at
+ *      exactly 1024, so the final glyph clips. That is a 2px shortfall in a band
+ *      2px wide — 1026px viewport upward it fits, because the field is the only
+ *      thing in the row that grows — so it is accepted rather than paid for by
+ *      hiding the die in the `lg`..`xl` band, which is the only lever left and
+ *      would take Surprise off the whole 1024–1279 range where the rail no longer
+ *      offers it either. Signed in the field is ~60px narrower again (the account
+ *      trigger carries a handle); still no row overflow, which is the property
+ *      that matters.
  *
- * The tabs are duplicated in `Sidebar` for this phase ON PURPOSE, as is the
- * wordmark: the rail keeps rendering both until a later phase deletes it, so
- * every commit in between leaves a working tree rather than a site with no way
- * home. Both surfaces read `PRIMARY_NAV`, so there is one table, not two lists.
+ * NEITHER THE TABS NOR THE WORDMARK NOR THE DIE IS DUPLICATED ANY MORE. All three
+ * were briefly drawn twice — once here, once in `Sidebar` — so that the phase that
+ * added them to this bar could land without a commit in between where the site had
+ * no way home. `Sidebar` has since dropped all three, so this bar is the only
+ * surface that draws them on desktop and `PRIMARY_NAV` has exactly two consumers
+ * left: this header, and `MobileTabBar` on a phone. What the rail still owns is the
+ * genre filter and the stealth button.
  *
  * THE BAR IS CHROME, SO IT IS WHITE. It used to fill with `bg-background/85` —
  * the same `#f4f4f7` as the page scrolling beneath it — which left a hairline
@@ -93,11 +113,22 @@ import { Wordmark } from "./Wordmark";
 export function SiteHeader({
   navOpen,
   onOpenNav,
+  games,
   query,
   onQueryChange,
 }: {
   navOpen: boolean;
   onOpenNav: () => void;
+  /**
+   * The catalogue, used only to pick a random game for "Surprise me" — the die in
+   * the control cluster. It arrives as a PROP from `ArcadeShell`, which already
+   * holds the same array for the player overlay, rather than being fetched here:
+   * this component must stay prerender-safe (no fetching, no session state) so the
+   * pages that mount it keep their place in `prerender-manifest.json` and hence in
+   * the service-worker precache. Threading one array through beats a second data
+   * source, and `SurpriseButton` only ever reads `slug` off it.
+   */
+  games: Game[];
   /** Supply with `onQueryChange` for live filtering; omit for navigate-on-submit. */
   query?: string;
   onQueryChange?: (value: string) => void;
@@ -164,12 +195,19 @@ export function SiteHeader({
       {/* Mobile hamburger — opens the genre drawer. Hidden on an actual phone
           (`isMobile`): the mobile shell has no genres and navigates via the
           bottom tab bar. A narrow DESKTOP window (device `desktop`, or the
-          pre-mount `null`) still gets it, so keyboard users keep the drawer. */}
+          pre-mount `null`) still gets it, so keyboard users keep the drawer.
+
+          "Open categories", not the "Open menu" it used to say. The name has to
+          describe what opens, and what opens is now only the genre list plus the
+          stealth hatch — `Sidebar`'s drawer dropped the primary destinations when
+          the tabs above landed here, and its `role="dialog"` is labelled
+          "Categories" to match. `aria-controls` still points at `mobile-nav`,
+          which is that drawer's container id. */}
       {!isMobile && (
         <button
           type="button"
           onClick={onOpenNav}
-          aria-label="Open menu"
+          aria-label="Open categories"
           aria-expanded={navOpen}
           aria-controls="mobile-nav"
           style={{ touchAction: "manipulation" }}
@@ -287,13 +325,41 @@ export function SiteHeader({
           noise, so both come off the header — which is what gives the search
           field the whole row instead of a cramped sliver. Desktop keeps them.
           The streak flame stays, though: it's the one bit of the cluster worth
-          the space on mobile, and the phone header is otherwise its only home. */}
+          the space on mobile, and the phone header is otherwise its only home.
+
+          "SURPRISE ME" IS DESKTOP-ONLY, i.e. it stays out of the `isMobile`
+          branch. Three reasons, in order of weight:
+            - A PHONE NEVER HAD IT. The die only ever rendered inside `Sidebar`'s
+              `navList`, and on a real phone the rail is `hidden` below `lg` while
+              the hamburger that opens the drawer is itself suppressed by
+              `isMobile` (see the note on that button) — so the drawer is
+              unreachable and the die was already dead on that device. Adding it
+              here would be a NEW phone feature smuggled into a de-duplication
+              change, not the preservation of an existing one.
+            - THE ROW CANNOT PAY FOR IT. 44px plus its gap is ~52px of a 390px
+              header, and the whole reason the wordmark and its tag were dropped
+              on mobile was that they clipped the search placeholder. Spending
+              that width back on a second control undoes the fix.
+            - ITS ARMING IS HOVER-DRIVEN. `SurpriseButton` prefetches the route it
+              picked on `pointerenter`/`focus`; a touch device never hovers, so it
+              gets the cold path anyway — the control is at its least valuable
+              exactly where it is most expensive.
+          If Surprise ever wants a phone home it belongs in the mobile shell's own
+          furniture, not wedged into the one row the search field needs. */}
       {isMobile ? (
         <div className="ml-1 shrink-0">
           <StreakChip />
         </div>
       ) : (
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          {/* FIRST in the cluster, not last. The die is the only ACTION in a row
+              of status and account controls, and `AccountMenu` has to stay
+              rightmost — that corner is where every site puts the account, and
+              its dropdown is anchored there. Sitting immediately after the search
+              field also keeps it next to the other "find me something" control,
+              which is what it is: search's opposite, for when you have nothing to
+              type. */}
+          <SurpriseButton games={games} variant="icon" />
           <StreakChip />
           {/* "What's New" goes icon-only for exactly the `lg`..`xl` band, where
               the tabs have just moved in and the rail is still taking 192px:

@@ -58,7 +58,11 @@ export function ArcadeShell({
   onQueryChange,
   children,
 }: {
-  /** The catalog, used to resolve a slug to the `Game` the overlay renders. */
+  /**
+   * The catalog. Two consumers: resolving a slug to the `Game` the overlay
+   * renders, and `SiteHeader`, which hands it to "Surprise me" to pick from. Both
+   * read the array only — nothing here fetches, so the shell stays prerenderable.
+   */
   games: Game[];
   categories: string[];
   /** Highlighted sidebar item. */
@@ -92,9 +96,11 @@ export function ArcadeShell({
   return (
     <OpenGameContext.Provider value={openGame}>
       <div className="flex min-h-screen flex-1">
+        {/* No `games` here any more: the rail's only use for the catalogue was
+            picking a random game for "Surprise me", and that control now lives in
+            `SiteHeader`, which takes the array instead. */}
         <Sidebar
           categories={categories}
-          games={games}
           active={activeCategory}
           onSelect={onSelectCategory}
           mobileOpen={navOpen}
@@ -114,6 +120,7 @@ export function ArcadeShell({
           <SiteHeader
             navOpen={navOpen}
             onOpenNav={() => setNavOpen(true)}
+            games={games}
             query={query}
             onQueryChange={onQueryChange}
           />
