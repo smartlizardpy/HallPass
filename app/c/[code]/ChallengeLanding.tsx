@@ -39,10 +39,18 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import posthog from "posthog-js";
 import type { Game } from "@/app/lib/games";
 import type { PublicLink } from "@/app/lib/challenges/store";
 import { PlayerOverlay } from "@/app/components/PlayerOverlay";
 import { Wordmark } from "@/app/components/Wordmark";
+import {
+  ESCAPE_BAILOUT_MS,
+  ESCAPE_FLAG,
+  detectInAppBrowser,
+  detectMobileOs,
+  escapeUrlFor,
+} from "./webview";
 
 /** Where the visitor is in the one flow this page has. */
 type Stage =
@@ -96,8 +104,65 @@ export function ChallengeLanding({
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [plays, setPlays] = useState(0);
   const claimed = useRef(false);
+  const escaped = useRef(false);
 
   const score = link.targetScore.toLocaleString("en-US");
+
+  /**
+   * Attempt to reopen this page in the real browser. Returns `true` when an
+   * attempt is in flight, in which case the caller must NOT start the game yet.
+   *
+   * Everything about this is defensive:
+   *
+   *   - OFF unless the PostHog flag says otherwise. The escape schemes are
+   *     undocumented, reportedly patched in some hosts, and absent on TikTok, so
+   *     this ships dark and the telemetry decides whether it earns its place —
+   *     the same posture push took while its VAPID keys were missing.
+   *   - Attempted at most ONCE per visit. A second try after a silent failure
+   *     would just be a second delay.
+   *   - Raced against `ESCAPE_BAILOUT_MS`. A working hop backgrounds this
+   *     document, which `visibilitychange` sees immediately; anything else falls
+   *     through to playing here.
+   */
+  const tryEscapeWebview = useCallback((): boolean => {
+    if (escaped.current) return false;
+    const host = detectInAppBrowser(navigator.userAgent);
+    if (!host) return false;
+    if (posthog.isFeatureEnabled(ESCAPE_FLAG) !== true) return false;
+
+    const target = escapeUrlFor(detectMobileOs(navigator.userAgent), window.location.href);
+    if (!target) return false;
+
+    escaped.current = true;
+    let settled = false;
+    const give = (result: "left" | "stayed") => {
+      if (settled) return;
+      settled = true;
+      document.removeEventListener("visibilitychange", onHide);
+      posthog.capture("challenge_link_escape", { host, result });
+      // Play here after a failed hop. After a successful one this page is in
+      // the background and about to be replaced, so starting the game would
+      // only run it where nobody is looking.
+      if (result === "stayed") {
+        setPlays((n) => n + 1);
+        setStage({ kind: "playing" });
+      }
+    };
+    const onHide = () => {
+      if (document.visibilityState === "hidden") give("left");
+    };
+    document.addEventListener("visibilitychange", onHide);
+    window.setTimeout(() => give("stayed"), ESCAPE_BAILOUT_MS);
+
+    // A blocked scheme typically does nothing at all, which is the failure the
+    // timer above is for. Assigning can still throw in a locked-down webview.
+    try {
+      window.location.href = target;
+    } catch {
+      give("stayed");
+    }
+    return true;
+  }, []);
 
   // Who is looking, asked once. Fail-soft to "signed out", which is the safe
   // assumption: the worst outcome is offering sign-in to somebody who already
@@ -135,9 +200,15 @@ export function ChallengeLanding({
         // A counter is never worth an error in front of a game.
       });
     }
+
+    // Try to leave the chat app's browser before anything exists to lose. See
+    // `webview.ts` — this is the only moment a hop is safe, and it is expected
+    // to fail often, so it is raced against a short timer and never blocks.
+    if (tryEscapeWebview()) return;
+
     setPlays((n) => n + 1);
     setStage({ kind: "playing" });
-  }, [link.code]);
+  }, [link.code, tryEscapeWebview]);
 
   /**
    * They closed the game. Work out what to say.
