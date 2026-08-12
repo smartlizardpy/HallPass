@@ -71,17 +71,33 @@ Adding a brand-new game requires a redeploy — the `games[]` array in `app/lib/
 
 ## Updating an existing game's source
 
-Two paths, depending on whether you want to redeploy.
+**BLOB IS THE LIVE COPY. `public/games/<slug>/` IS A MIRROR OF IT.** Editing a
+game in the repo and merging it does **nothing**: the deploy runs
+`npm run sync-games` *before* the build, which copies Blob→repo unconditionally,
+overwriting the edit and shipping the old blob copy. Nothing fails — the change
+is silently discarded, and the game keeps running the old code. A fix can be
+merged, green, deployed, and still absent in a private window. `sync-games` now
+prints a `WARN: replaced a DIFFERENT local copy` line and an end-of-run summary
+naming every file it did this to, so CI logs answer the question on their own.
 
-**Dashboard upload (no redeploy).** Open `/dashboard/games/<slug>` (admin role) → Source code. Upload/paste a single HTML file, or upload a whole `.zip` bundle (`index.html` at the zip root; ≤300 files, ≤10MB per file, ≤50MB unzipped; "zipped the folder" archives are unwrapped automatically). Publishing **converges** the Blob set to exactly what you upload: a bundle upload deletes blobs missing from the new zip, a single-file upload deletes leftover bundle assets, and "Reset to default" deletes every published blob so the committed copy serves again. Every publish bumps `games/version.txt`; online visitors get the new source on their next play, and PWA clients refresh their cached game files on the next version poll.
+There are two supported ways to change a game:
 
-**Local sync + commit (refreshes the static baseline).** Run:
+1. **The dashboard** — paste or upload the new source. This is the only route
+   for a multi-file bundle, because it also deletes the files a new upload
+   orphans.
+2. **`npm run publish-game -- <slug>`** — publishes the repo's own
+   `public/games/<slug>/index.html` to Blob and bumps the version sentinel, so a
+   repo-authored edit can actually reach players. Dry-run by default; pass
+   `--yes` to write. Single-file games only; it refuses a bundle rather than
+   risk orphaning assets. Needs `BLOB_READ_WRITE_TOKEN` (or `.env.local`).
 
-```bash
-npm run sync-games
-```
+   One caveat: the dashboard revalidates the serving-blob cache tag right after
+   writing, and a script cannot reach Next's data cache — so a publish this way
+   can take up to the listing TTL (1h) to appear. Redeploy to clear it sooner.
 
-This runs `scripts/sync-games.mjs`: it reads `BLOB_READ_WRITE_TOKEN` (env or `.env.local`), lists every `games/**` blob (skipping the `games/version.txt` sentinel), validates each path, and mirrors each file into `public/games/<slug>/…`. It never deletes local files (`cover.png` lives only in the repo) and exits non-zero if any file fails. Commit the diff and deploy — now the static fallback shipped in the build matches what's in Blob.
+Which copy actually serves is decided by `chooseGameSource`: a blob uploaded
+since `MIRROR_SYNCED_AT` is proxied (so a fresh publish is live immediately),
+otherwise the free static twin is 307'd to.
 
 ## Player features: stealth mode & daily streak
 
