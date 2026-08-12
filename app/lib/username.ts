@@ -280,8 +280,16 @@ export const USERNAME_REJECTION_MESSAGES: Record<UsernameRejection, string> = {
 export const FRIEND_CODE_ALPHABET = "0123456789CDFGHJKMNPQRTVWXY";
 export const FRIEND_CODE_LENGTH = 8;
 
-/** Characters a human is likely to type instead of the canonical one. */
-const FRIEND_CODE_FOLD: Record<string, string> = {
+/**
+ * Characters a human is likely to type instead of the canonical one.
+ *
+ * Exported because challenge-link codes draw on the same alphabet and need the
+ * same forgiveness, but must NOT go through {@link normalizeFriendCode} — that
+ * one strips a leading `HP`, which is a display affordance of friend codes
+ * alone. `H` and `P` are both in the alphabet, so a link code beginning `HP`
+ * would be silently truncated by two characters and never resolve.
+ */
+export const FRIEND_CODE_FOLD: Record<string, string> = {
   O: "0",
   I: "1",
   L: "1",
