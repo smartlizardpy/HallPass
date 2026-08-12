@@ -57,8 +57,18 @@ Asked and answered before any code, so they are settled rather than inferred:
 3. **One link per (player, board), score refreshes.** A stable URL that can be
    posted once and reused; it always shows the owner's current best, and each
    taker snapshots the number when they take it up.
-4. **A link shows handle, avatar and score.** The pitch is beat *me*, so the
-   person is the point. Protected the way `/u/<username>` already is — see §7.
+4. **A link shows handle and score. No avatar at all.** The pitch is beat *me*,
+   and a name carries that. See §7 — this started as "handle, avatar and score"
+   and was tightened after `challenge-onboarding-ux.md` §9.3 pointed out what a
+   Google-only product's avatars actually are.
+5. **The hop out of an in-app webview fires on the "Beat it" tap**, never on page
+   load — a user gesture is far more likely to be permitted, and at that moment
+   there is no state to carry. §6.
+6. **Non-beaters get a second, weaker ask on their third attempt.** "Convert on
+   the win" is right, but most people will not beat Alice, so on its own it
+   leaves roughly 70% of everyone who plays with no moment at all.
+7. **Links are only offered on HallPass-hosted games.** Cross-origin games mint
+   no claim token, so the last three steps of the funnel cannot exist there. §5.
 
 ## 4. Modelling: two new kinds, no new table
 
@@ -111,8 +121,8 @@ fits because it restores the target column that seasonal removes.
 Bob opens Alice's link from a group chat. He is signed out, on a phone, and
 quite possibly inside an in-app webview.
 
-1. **`/c/<code>`** — Alice's handle and avatar, the number, the game art, one
-   button. No account, no interstitial, no cookie banner.
+1. **`/c/<code>`** — Alice's handle, the number, the game art, one button. No
+   avatar (§7), no account, no interstitial, no cookie banner.
 2. **Straight into the game, anonymous.** `POST /api/v1/leaderboard/<board>`
    already accepts guest scores and already returns a short-lived HMAC
    `claimToken` for exactly this (`route.ts:225`).
@@ -120,8 +130,12 @@ quite possibly inside an in-app webview.
    - **Beat it** → "You beat Alice — 4,510 to 4,200. Sign in to keep it and send
      one back." This is not a signup request. It is an offer to make a win
      permanent and to hit back, at the one second where both are wanted.
-   - **Fell short** → "Try again" as the primary action, "sign in to save your
-     scores" as a quiet second.
+   - **Fell short** → "Try again" as the primary action. On the **third**
+     attempt, and once only, a quieter "sign in to keep your scores" — which is
+     literally true, since `/api/v1/me/claim` accepts up to `MAX_CLAIM_TOKENS`
+     at a time and the store holds every token from this visit. Without this,
+     the whole flow has nothing to say to the ~70% of players who do not beat
+     the score, which is most of the traffic.
 4. **Sign in → claim → he is on the board**, Alice is notified, and adding her
    as a friend is one tap. Offered, never automatic — consent is not implied by
    having clicked a link.
@@ -150,12 +164,55 @@ Worth noting that this also closes a hole that exists **today**, independent of
 links: play anonymously, sign in afterwards, and your beat does not count
 against an ordinary friend challenge either.
 
-## 6. Constraints inherited, and one new one
+### The ceiling nobody had costed
+
+Google Workspace for Education **blocks under-18 accounts from signing in to
+unconfigured third-party apps by default** (rolled out August 2023; the block
+clears only when a school IT admin marks the app trusted). No school IT admin is
+going to approve an unblocked-games site whose headline feature disguises the
+screen from a teacher. On a school Chromebook the browser's Google account *is*
+the school account.
+
+So for a meaningful share of the audience, step 4 above cannot complete — not
+slowly, not with better copy, at all. Nothing in this design fixes that; the
+honest response is to make the failure legible and recoverable rather than
+mysterious. Force `prompt=select_account` so nobody is silently pushed into
+their school identity, warn in one plain line before the tap, and detect
+*that specific* failure and say what to do about it. Steps 1–3 are unaffected —
+another reason play-first is the right order: the part that always works happens
+first, and the part that sometimes cannot happens last.
+
+This is the binding cap on the funnel and it argues, on the backlog rather than
+here, for a sign-in route that is not Google. `challenge-onboarding-ux.md` §1.6
+carries the sourcing and §6.4 the recovery screen.
+
+## 6. Constraints inherited, and the new ones
 
 Everything in `challenge-design.md:52` still binds — no cron, no cross-statement
 transactions, boards not games, `public_id` on the wire, limit the sender never
 the recipient, `contract.ts` append-only. Plus:
 
+- **THE PAGE HOLDING THE CLAIM TOKENS MUST NEVER NAVIGATE.** This is the single
+  highest-value rule in this document. `sdk/src/client.ts:111` keeps claim
+  tokens **in memory and never in storage**, deliberately, so that the next kid
+  on a shared school computer cannot inherit the last one's scores. They die
+  with the page. So sign-in opens in a **new tab** and the claim is flushed from
+  the opener, "Play again" restarts in place, and there is **no same-tab
+  redirect fallback, ever** — a redirect silently throws away the score the
+  player just earned, which is the whole thing we are asking them to sign in
+  for. `challenge-onboarding-ux.md` §2 puts this step at ~0% versus 93%
+  depending on this one decision.
+- **Only HallPass-hosted games can carry a link.** `client.ts:246` mints a claim
+  token only for a `sameOrigin` submission, so a cross-origin game produces
+  nothing to claim and the conversion half of the funnel cannot exist. The share
+  affordance is therefore absent for external games rather than present and
+  broken.
+- **The webview hop rides the "Beat it" tap.** `x-safari-https://` on iOS,
+  `intent://…package=com.android.chrome` on Android, gated on user-agent
+  detection so an ordinary mobile browser never sees it. Behind a flag with a
+  1200ms bail-out to playing in place: the research rates the escape as patched
+  in some hosts and absent in others, so an unbailed attempt is a delay charged
+  to the highest-traffic step in the funnel.
 - **`/game/[slug]` cannot read `searchParams`.** Not a style preference: it
   makes the route dynamic, which drops all 28 game URLs from the service-worker
   precache with no error. The hand-off from `/c/<code>` into the player is
@@ -174,9 +231,26 @@ the recipient, `contract.ts` append-only. Plus:
 
 ## 7. Safety
 
-**What a link exposes.** A handle, an avatar and a number, to anyone holding the
-URL. The mitigations are the ones `/u/` already uses plus one this needs: an
-opaque code from the friend-code alphabet (`username.ts:269` — digits and
+**What a link exposes: a handle and a number. No face.**
+
+The first draft of this document said handle, avatar and score, reasoning that
+this was the same exposure `/u/<username>` already accepts. That reasoning is
+right in kind and wrong in scale, and the difference matters:
+**`/u/` is a page you have to find; this is a page engineered to be broadcast.**
+Sign-in is Google-only, so a HallPass avatar is frequently a real photograph of
+the account holder — and the account holders are children. Shipping the avatar
+would take that photograph, attach it to a URL the product actively encourages
+them to paste into a public story, and render it into an OG card that WhatsApp,
+iMessage and Snapchat cache on other people's devices. `noindex` stops crawlers,
+not people.
+
+So the landing and the preview card carry **no avatar at all**, not even a
+derived one. A handle and a number carry "beat me" perfectly well, and the
+safest version of a feature this shareable is worth more than the click-through
+a face would buy.
+
+The rest of the mitigations are the ones `/u/` already uses plus one this needs:
+an opaque code from the friend-code alphabet (`username.ts:269` — digits and
 consonants, so no code accidentally spells anything), `noindex, nofollow`, no
 link through to a profile that is not public, and **revocation**. A child must
 be able to kill a link they regret, which on its own rules out the tempting
@@ -242,6 +316,9 @@ app/lib/challenges/link.ts                 PURE: code generation, link state
 app/lib/challenges/link.test.ts
 app/c/[code]/page.tsx                      the landing
 app/c/[code]/ChallengeLanding.tsx          client island: open the game, viewer state
+app/c/[code]/ChallengeResult.tsx           the beat/miss surface and the asks
+app/c/[code]/webview.ts                    PURE: UA detection + escape URLs
+app/c/[code]/webview.test.ts
 app/c/[code]/opengraph-image.tsx           the preview card (phase C)
 app/api/v1/challenges/link/route.ts        POST mint/refresh, DELETE revoke
 app/api/v1/challenges/link/[code]/route.ts POST claim
@@ -307,29 +384,38 @@ Two specific to this work:
 14. `POST`/`DELETE /api/v1/challenges/link`
 15. `POST /api/v1/challenges/link/[code]`
 16. `/c/[code]` landing, server half
-17. `ChallengeLanding` — hand-off into the player
+17. `ChallengeLanding` — hand-off into the player, in place
 18. the beat/miss result surface
-19. `claimScores` returns board and score
-20. resolution on claim + test
-21. `ShareChallenge` — Web Share, clipboard fallback
-22. share buttons on the standings rows and in the picker
-23. `noindex` header + precache exclusion
+19. the third-attempt ask for non-beaters
+20. new-tab sign-in + claim flush from the opener — the never-navigate rule
+21. `claimScores` returns board and score
+22. resolution on claim + test
+23. `ShareChallenge` — Web Share, clipboard fallback
+24. share buttons on the standings rows and in the picker, hosted games only
+25. `noindex` header + precache exclusion
 
 *Phase C — polish*
-24. `challenge_beaten` kind + copy + test
-25. fire it from the resolve path
-26. grouped link outbox in the Challenges tab
-27. "add them as a friend" after a resolved claim
-28. OG preview image
-29. README + the migration deploy note
+26. `challenge_beaten` kind + copy + test
+27. fire it from the resolve path
+28. the webview hop, behind a flag with its bail-out
+29. `prompt=select_account` + the school-account recovery screen
+30. grouped link outbox in the Challenges tab
+31. "add them as a friend" after a resolved claim
+32. OG preview image — game art, handle, number; no avatar
+33. the PostHog funnel events
+34. README + the migration deploy note
 
 ## 12. Deliberately excluded
 
 Leaderboards *per link* (a link is a duel with one number, not a board);
 challenge links to a game with several boards, which stays the ambiguity
-`resolveBoard` already refuses; expiry dates, because there is no cron and
-revocation is the control; anonymous takers appearing in the owner's counters
-beyond the raw `opens` figure, which would need the link code carried onto the
-score-submission path and a second write on the guest path that
+`resolveBoard` already refuses; **links on external games**, per §3.7 — the
+share affordance is absent there rather than present and unable to convert;
+avatars on the landing or the preview card, per §7; expiry dates, because there
+is no cron and revocation is the control; anonymous takers appearing in the
+owner's counters beyond the raw `opens` figure, which would need the link code
+carried onto the score-submission path and a second write on the guest path that
 `leaderboard/[slug]/route.ts:203` deliberately keeps clear; auto-friending;
-rematch chains; and the `seasonal` kind, which this does not build either.
+rematch chains; a non-Google sign-in route, which the ceiling in §5 argues for
+and this branch does not attempt; and the `seasonal` kind, which this does not
+build either.
