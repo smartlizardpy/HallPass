@@ -91,6 +91,33 @@ export const CHALLENGE_RESOLVED_COOLDOWN_SECONDS = 0;
 /** Rows returned per list. Small: this is an inbox, not an archive. */
 export const CHALLENGE_LIST_LIMIT = 50;
 
+/**
+ * How many challenge LINKS one player may take up in a rolling window.
+ *
+ * READ RULE 2 ABOVE BEFORE CHANGING THIS. It says there is no cap on inbound
+ * challenges, and a `link_claim` row is one where the claimer is the TARGET —
+ * so at a glance this looks like exactly the inbound cap that doctrine forbids.
+ * It is not, and the distinction is the whole reason links are safe:
+ *
+ *   - An inbound cap on `friend` challenges is a denial of service aimed at the
+ *     victim, because SOMEBODY ELSE fills it up and their real friends can then
+ *     no longer reach them.
+ *   - A claim is PULLED by the claimer. Nobody else can add a row here. Filling
+ *     this quota requires taking up thirty links yourself, and the only person
+ *     inconvenienced by the ceiling is the person who did it.
+ *
+ * So this is a limit on one's OWN action, which is the same shape as the sender
+ * limit above, and it exists for the same reason: to bound how much a script
+ * can do. Without it a claim flood could pack a link owner's outbox.
+ *
+ * Generous, because taking up links is the ordinary loop of the feature and a
+ * class passing one URL round will produce bursts.
+ */
+export const LINK_CLAIM_RATE_LIMIT = {
+  maxPerWindow: 30,
+  windowSeconds: 3600,
+} as const;
+
 // ---------------------------------------------------------------------------
 // Reasons
 // ---------------------------------------------------------------------------
