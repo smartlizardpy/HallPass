@@ -28,6 +28,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BadgeShelf } from "@/app/components/BadgeShelf";
+import { ChallengeButton } from "./_ui/ChallengeButton";
 import { earnedBadges, lockedBadges } from "@/app/lib/badges";
 import { store } from "@/app/lib/scoreboard";
 import { readBadgeStats, readOwnSocial, readPlayerId } from "./_data";
@@ -164,13 +165,23 @@ export default async function YouProfilePage() {
                     Best {s.best.toLocaleString("en-US")}
                   </div>
                 </div>
-                <span
-                  className={`shrink-0 rounded-full px-3 py-1 text-sm font-black tabular-nums ${rankBadgeClasses(
-                    s.rank,
-                  )}`}
-                >
-                  #{s.rank}
-                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  {/* The one interactive thing on this page. Every board listed
+                      here is one the player has posted a score on, which is
+                      exactly the precondition a challenge needs. */}
+                  <ChallengeButton
+                    boardId={s.boardId}
+                    gameSlug={s.gameSlug}
+                    title={s.title}
+                  />
+                  <span
+                    className={`rounded-full px-3 py-1 text-sm font-black tabular-nums ${rankBadgeClasses(
+                      s.rank,
+                    )}`}
+                  >
+                    #{s.rank}
+                  </span>
+                </div>
               </li>
             ))}
           </ul>
