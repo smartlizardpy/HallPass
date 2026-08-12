@@ -417,6 +417,102 @@
         .control-hint {
             font-size: 10px; color: #888; text-align: right;
         }
+        /* --- HallPass ------------------------------------------------------
+           Online leaderboard and friend challenges: the board plus a Challenge
+           button on the game-over modal, and an identity row on the start
+           screen. Shapes and palette follow the HUD panels above rather than
+           inventing a second look -- the slate rule #4a6fa5 the stats and radar
+           panels use, gold #ffd700 for money exactly as .currency does, and
+           #00ffcc for anything interactive. */
+        .hp-auth {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 25px;
+        }
+        #hpAuthStatus {
+            font-size: 12px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #7f9bb3;
+        }
+        #hpAuthStatus b { color: #00ffcc; font-weight: bold; }
+        .hp-title {
+            font-size: 12px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #7f9bb3;
+            margin: 22px 0 8px;
+        }
+        .hp-board {
+            min-height: 24px;
+            border-top: 1px solid #4a6fa5;
+            border-bottom: 1px solid #4a6fa5;
+            padding: 6px 0;
+        }
+        /* table-layout:fixed is load-bearing. Without it the browser sizes the
+           columns to their content, and the ellipsis on .hp-who then collapses
+           a long handle to a single character instead of truncating it. Fixed
+           layout lets .hp-who take whatever the other two columns leave. */
+        .hp-board table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            font-variant-numeric: tabular-nums;
+        }
+        .hp-board td { padding: 4px 0; font-size: 15px; }
+        .hp-board .hp-rank { width: 28px; text-align: left; color: #7f9bb3; }
+        .hp-board .hp-who {
+            text-align: left;
+            color: #dceaf5;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .hp-board .hp-pts {
+            width: 42%;
+            text-align: right;
+            color: #ffd700;
+            font-weight: bold;
+        }
+        .hp-board .hp-tick { color: #00ffcc; margin-left: 5px; font-size: 12px; }
+        .hp-empty {
+            font-size: 12px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #7f9bb3;
+            padding: 5px 0;
+        }
+        .hp-actions { margin-top: 6px; }
+        .hp-msg {
+            margin-top: 10px;
+            font-size: 12px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #7f9bb3;
+        }
+        .hp-msg b { color: #00ffcc; font-weight: bold; }
+        /* The `hidden` ATTRIBUTE, not the .hidden class. .hidden in this file
+           means "opacity: 0; pointer-events: none" -- it fades the HUD without
+           reclaiming its space, which is right for the HUD and wrong here,
+           where a hidden row must not leave a gap in the modal. */
+        .hp-msg[hidden], .hp-ghost[hidden] { display: none; }
+        /* Secondary action: the shape of the solid buttons above with no fill,
+           so "New Contract" stays the obvious thing to press. Overrides that
+           rule's background and its 20px top margin. */
+        .hp-ghost {
+            background: none;
+            color: #00ffcc;
+            border: 1px solid #00ffcc;
+            padding: 8px 18px;
+            font-size: 13px;
+            margin-top: 0;
+        }
+        .hp-ghost:hover { background: rgba(0, 255, 204, 0.15); color: #ffffff; }
+        .hp-ghost:disabled { opacity: 0.5; cursor: default; }
+
     </style>
 </head>
 <body>
@@ -431,6 +527,14 @@
             <h3>OCEAN WORKER</h3>
             <button id="start-btn" onclick="window.game.startGame()">DEPLOY SHIP</button>
             <button id="tut-btn" onclick="window.game.showTutorial()">FLIGHT SCHOOL</button>
+            <!-- Identity row: Sign in only, never a Challenge button. A
+                 challenge dares somebody to beat a score you have just posted,
+                 and on the start screen there is no such score -- challenge()
+                 could only ever answer "no-score" here. -->
+            <div class="hp-auth">
+                <button id="hpSignIn" class="hp-ghost">Sign in</button>
+                <span id="hpAuthStatus">Playing as Guest</span>
+            </div>
             <div style="margin-top: 30px; font-size: 12px; color: #666;">v5.5.7 - STABLE</div>
         </div>
         
@@ -634,13 +738,41 @@
         </div>
 
         <!-- GAME OVER -->
-        <div id="game-over" class="modal" style="min-width: 300px;">
+        <div id="game-over" class="modal" style="min-width: 420px;">
             <h1 style="color: #ff3333; font-size: 40px; margin-bottom: 10px;">CONTRACT TERMINATED</h1>
             <p>Your ship has sunk.</p>
             <p id="final-score" style="margin: 20px 0; font-size: 24px;">Final Earnings: $0</p>
+            <p id="final-balance" style="margin: -12px 0 0; font-size: 14px; color: #7f9bb3;">Unspent balance: $0</p>
+            <div class="hp-title">Sea Mercenary &middot; Top Earners</div>
+            <div class="hp-board" id="hpBoard"></div>
+            <div class="hp-actions">
+                <button id="hpChallenge" class="hp-ghost">Challenge a friend</button>
+            </div>
+            <div class="hp-msg" id="hpChallengeMsg" hidden></div>
             <button onclick="location.reload()">New Contract</button>
         </div>
     </div>
+
+<!-- HallPass: online leaderboard + friend challenges. The stub below installs
+     window.HallPass synchronously so calls made before the bundle lands are
+     queued, never lost, and degrade to a safe no-op if it never arrives. -->
+<script>
+(function(w){if(w.HallPass&&w.HallPass.version!=="0")return;var q=[];
+function e(n){return function(){var a=[].slice.call(arguments);
+return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
+w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
+submitScore:e("submitScore"),getScores:e("getScores"),
+getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
+unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
+getAchievements:e("getAchievements"),challenge:e("challenge"),
+signIn:function(){},signOut:function(){},
+getHandle:function(){return null},setHandle:function(v){return v},
+on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
+off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
+setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:{ok:false,reason:"inert"})})},2000)})(window);
+</script>
+<script src="/sdk/v1/hallpass.js" data-game="sea-mercenary" defer></script>
 
 <script>
 /**
@@ -2185,6 +2317,19 @@ class Game {
         this.state = STATE.MENU; // Start in Menu
         this.keys = {};
         this.money = 100;
+        /* Lifetime earnings for this run, and the number the leaderboard
+           ranks on. `money` above cannot do that job: it is a spendable
+           balance, so buying a turret LOWERS it, and ranking on it would put
+           the player who hoarded and never upgraded above the player who
+           reinvested and played better.
+
+           STARTS AT 0, NOT 100. The 100 is a starting float the game hands
+           out, not something the player earned; counting it would add a
+           constant offset to every row on the board and quietly credit
+           everybody with a payout they never made. */
+        this.totalEarned = 0;
+        /* gameOver() posts exactly once - see the note there. */
+        this.hpPosted = false;
         this.player = new Player();
         this.wingman = null;
         this.friendlies = []; // Turrets, drones
@@ -2322,7 +2467,7 @@ class Game {
         const types = ['Hunt', 'Salvage', 'Escort'];
         for(let i=0; i<3; i++) {
             const type = types[Math.floor(Math.random()*types.length)];
-            const reward = 300 + Math.floor(Math.random() * 500);
+            let reward = 300 + Math.floor(Math.random() * 500);
             let desc = "";
             if (type === 'Hunt') desc = "Sink the Pirate Captain";
             else if (type === 'Salvage') desc = "Recover Stolen Cargo";
@@ -2435,6 +2580,13 @@ class Game {
 
     addMoney(amount, worldX, worldY) {
         this.money += amount;
+        /* POSITIVE AMOUNTS ONLY. This method is the single funnel every
+           payment goes through, including the purchases, which call it with a
+           negative amount. Those must not subtract from lifetime earnings:
+           spending is how the game is meant to be played, and a score that
+           went down when you bought a hull would be a score that told players
+           not to buy hulls. */
+        if (amount > 0) this.totalEarned += amount;
         this.ui.updateMoney(this.money);
         if (worldX && worldY) {
             const screenX = worldX - this.camera.x + canvas.width/2;
@@ -3022,9 +3174,27 @@ break;
     }
 
     gameOver() {
+        /* TWO different sinkings reach this from Ship.destroy() - the player's
+           own ship, and the escort supply ship on an Escort contract - and
+           nothing upstream stops both being destroyed in the same frame. Every
+           line below is harmless to repeat except the score post, so that one
+           is latched rather than the whole method: showing the modal twice is
+           invisible, posting the run twice is a duplicate row on a public
+           board. The latch is never cleared because it never has to be - the
+           only way back into a new run is the "New Contract" button, which
+           calls location.reload() and takes the whole page with it. */
         this.state = STATE.GAMEOVER;
         document.getElementById('game-over').style.display = 'block';
-        document.getElementById('final-score').innerText = "Final Earnings: $" + Math.floor(this.money);
+        document.getElementById('final-score').innerText =
+            "Final Earnings: $" + Math.floor(this.totalEarned).toLocaleString();
+        // Shown alongside, not instead: the balance is what the run had left
+        // to spend, which is worth seeing but is not what is being ranked.
+        document.getElementById('final-balance').innerText =
+            "Unspent balance: $" + Math.floor(this.money).toLocaleString();
+
+        if (this.hpPosted) return;
+        this.hpPosted = true;
+        hpFinish(this.totalEarned);
     }
 }
 
@@ -3032,6 +3202,165 @@ break;
 window.game = new Game();
 window.game.start();
 
+
+/* --- HallPass --------------------------------------------------------------
+   LOAD ORDER IS DELIBERATE: the inline stub sits ABOVE this script, so
+   window.HallPass is already installed by the time anything here runs. The
+   calls at the foot of this section execute at parse time, and if the stub came
+   after this script they would throw a ReferenceError - which does not merely
+   skip the leaderboard, it aborts the remainder of THIS script, taking
+   `window.game.start()` down with it and leaving a dead page instead of a game.
+
+   Every SDK method RESOLVES - none reject and none throw - including when the
+   board has not been provisioned server-side yet, which simply answers
+   { ok:false }. Nothing here is therefore wrapped in try/catch: a rejection is
+   not one of the outcomes, and a game with no board must play exactly like a
+   game with one.
+
+   No pointer guards in this file, and that is not an oversight: unlike the
+   other games on this board, nothing here listens for mouse or touch events on
+   window - input is `this.keys` plus inline onclick handlers - so there is no
+   game input for a tap on the leaderboard to trigger. */
+
+const hpBoard = document.getElementById('hpBoard');
+const hpChallengeBtn = document.getElementById('hpChallenge');
+const hpChallengeMsg = document.getElementById('hpChallengeMsg');
+const hpSignInBtn = document.getElementById('hpSignIn');
+const hpAuthStatus = document.getElementById('hpAuthStatus');
+
+/* A one-line status where the table goes. Everything in this section builds
+   nodes with createElement and textContent rather than innerHTML: handles and
+   display names come from other players and must never be parsed as markup. */
+function hpNote(text) {
+    hpBoard.textContent = '';
+    const note = document.createElement('div');
+    note.className = 'hp-empty';
+    note.textContent = text;
+    hpBoard.appendChild(note);
+}
+
+/* Post the finished run, then draw the board underneath it.
+
+   Called once, from gameOver(), which owns the latch. The score is passed in
+   rather than read back off window.game, so there is exactly one place the
+   posted number comes from and no chance of it drifting from the number the
+   modal just displayed.
+
+   submitScore resolves either way and never throws, so this cannot stop the
+   game-over modal appearing or delay it. The board is drawn AFTER the post
+   resolves, so the run that just ended is already in the list rather than
+   first appearing to whoever plays next. */
+function hpFinish(finalScore) {
+    hpChallengeMsg.hidden = true;
+    hpNote('Posting your score...');
+    HallPass.submitScore(Math.floor(finalScore)).then(hpRenderBoard);
+}
+
+/* Draw the online top five.
+
+   FIVE, not ten: the modal already carries two totals and two buttons, and
+   .modal is capped at 80vh - a longer list would start scrolling inside a box
+   the player is only passing through on their way to "New Contract".
+
+   TEN ARE REQUESTED because one player can hold several of the top rows; after
+   collapsing each handle to their best, five is what is left to show. */
+function hpRenderBoard() {
+    hpNote('Loading scores...');
+    HallPass.getScores({ limit: 10 }).then((rows) => {
+        if (!rows || !rows.length) {
+            hpNote('Be the first to score');
+            return;
+        }
+        const seen = new Set();
+        const best = rows.filter((r) => seen.has(r.handle) ? false : (seen.add(r.handle), true))
+                         .slice(0, 5);
+        const table = document.createElement('table');
+        let rank = 0;
+        for (const row of best) {
+            const tr = document.createElement('tr');
+            const n = document.createElement('td');
+            n.className = 'hp-rank';
+            n.textContent = ++rank;
+            const who = document.createElement('td');
+            who.className = 'hp-who';
+            who.textContent = row.handle;                  // untrusted
+            if (row.verified) {
+                const tick = document.createElement('span');
+                tick.className = 'hp-tick';
+                tick.textContent = '✓';
+                who.appendChild(tick);
+            }
+            const pts = document.createElement('td');
+            pts.className = 'hp-pts';
+            // "$" prefix and thousands separators, matching ui.updateMoney.
+            pts.textContent = '$' + Number(row.score).toLocaleString();
+            tr.append(n, who, pts);
+            table.appendChild(tr);
+        }
+        hpBoard.textContent = '';
+        hpBoard.appendChild(table);
+    });
+}
+
+/* Paint the start screen's identity row. `player` is null when signed out. */
+function hpRefreshAuth(player) {
+    if (player) {
+        hpSignInBtn.hidden = true;
+        hpAuthStatus.textContent = 'Signed in as ';
+        const name = document.createElement('b');
+        name.textContent = player.name;                    // untrusted
+        hpAuthStatus.appendChild(name);
+    } else {
+        hpSignInBtn.hidden = false;
+        hpAuthStatus.textContent = 'Playing as Guest';
+    }
+}
+
+/* Only the outcomes the PICKER CANNOT REPORT ITSELF are listed here. Server
+   refusals - signed out, not friends, no score - are already rendered inside
+   the panel the player is looking at, and repeating them underneath would be
+   noise. These three stop that panel before it can say anything at all. */
+const HP_CHALLENGE_MSG = {
+    'popup-blocked': 'Your browser blocked the challenge window',
+    'inert': 'Challenges need the online leaderboard, offline here',
+    'network': 'Could not reach HallPass - try again shortly',
+};
+
+hpChallengeBtn.addEventListener('click', async () => {
+    hpChallengeBtn.disabled = true;
+    hpChallengeMsg.hidden = true;
+    // No try/catch: every SDK method resolves, so there is nothing to catch.
+    const res = await HallPass.challenge();
+    hpChallengeBtn.disabled = false;
+
+    /* READ `sent`, NOT `ok`. Closing the picker resolves
+       { ok:true, sent:false, reason:"closed" } - the call worked and the player
+       simply changed their mind, which must never be reported back to them as
+       a failure. */
+    if (res && res.sent && res.challenge) {
+        hpChallengeMsg.textContent = 'Dared ';
+        const who = document.createElement('b');
+        who.textContent = res.challenge.to;                // untrusted
+        const target = document.createElement('b');
+        target.textContent = '$' + Number(res.challenge.targetScore).toLocaleString();
+        hpChallengeMsg.append(who, ' to beat ', target);
+        hpChallengeMsg.hidden = false;
+        return;
+    }
+    const text = res && res.reason ? HP_CHALLENGE_MSG[res.reason] : null;
+    if (text) {
+        hpChallengeMsg.textContent = text;
+        hpChallengeMsg.hidden = false;
+    }
+});
+
+HallPass.getPlayer().then(hpRefreshAuth);
+// The sign-in popup does not reload the game, so the label has to be told when
+// it finishes - otherwise it still reads "Guest" to somebody who has just
+// signed in.
+HallPass.on('auth', (e) => hpRefreshAuth(e.player));
+// Must be a real click: browsers block a popup opened without a user gesture.
+hpSignInBtn.addEventListener('click', () => HallPass.signIn());
 </script>
 </body>
 </html>

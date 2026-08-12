@@ -135,6 +135,85 @@
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #000; }
         ::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 3px; }
+
+        /* --- HallPass ------------------------------------------------------
+           Online leaderboard and friend challenges, drawn from this game's own
+           tokens (--primary, --danger, --bg-glass, Orbitron) so the block reads
+           as another HUD panel rather than a widget from somewhere else.
+
+           Everything here is only ever mounted inside .overlay, which is the
+           element that puts `pointer-events: auto` and `cursor: default` back
+           after body turned them off for the custom crosshair. Outside it these
+           controls would be cursorless and, depending on stacking, dead. */
+
+        /* A quieter sibling of the global button rule. It keeps that rule's
+           bevel, Orbitron and letter-spacing by inheritance and only turns the
+           volume down: "Sign in" and "Challenge a friend" are side doors, and at
+           the full 20px/50px of INITIALIZE SYSTEM they would out-shout the one
+           button the player actually came to the screen to press. */
+        .hpbtn {
+            padding: 10px 24px; font-size: 0.85rem; letter-spacing: 2px;
+            background: none; color: #aaa; border: 1px solid #40505c;
+            box-shadow: none;
+        }
+        .hpbtn:hover {
+            background: rgba(0, 255, 255, 0.1); color: var(--primary);
+            border-color: var(--primary); box-shadow: 0 0 20px rgba(0, 255, 255, 0.25);
+            transform: none;
+        }
+        .hpbtn:disabled { opacity: 0.4; cursor: default; transform: none; }
+        .hpbtn[hidden] { display: none; }
+
+        .hpauth {
+            display: flex; gap: 16px; align-items: center; justify-content: center;
+            flex-wrap: wrap; margin-top: 30px;
+        }
+        #hpAuthStatus {
+            font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase;
+            color: var(--secondary);
+        }
+        #hpAuthStatus b { color: var(--primary); font-weight: 700; }
+
+        .hppanel {
+            width: 340px; max-width: 80%; margin-bottom: 30px; padding: 15px 25px;
+            background: var(--bg-glass); border: 1px solid rgba(0, 255, 255, 0.3);
+            border-left: 4px solid var(--primary);
+            clip-path: polygon(0 0, 100% 0, 100% 90%, 94% 100%, 0 100%);
+        }
+        .hptitle {
+            font-size: 0.7rem; color: var(--secondary); letter-spacing: 2px;
+            margin-bottom: 10px; text-transform: uppercase;
+        }
+        .hpboard { min-height: 24px; }
+        /* table-layout:fixed is load-bearing. Without it the browser sizes each
+           column to its content, and the ellipsis on .who then collapses a long
+           handle to a single letter instead of cutting it off at the column
+           edge. Fixed layout lets .who take whatever the other two leave. */
+        .hpboard table {
+            width: 100%; border-collapse: collapse; table-layout: fixed;
+        }
+        .hpboard td { padding: 4px 0; font-size: 0.9rem; }
+        .hpboard .rank { width: 28px; text-align: left; color: var(--secondary); }
+        .hpboard .who {
+            text-align: left; color: #ddd;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .hpboard .pts {
+            width: 40%; text-align: right; color: var(--primary); font-weight: 700;
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+        .hpboard .hpv { color: var(--warning); margin-left: 5px; font-size: 0.7rem; }
+        .hpempty {
+            font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase;
+            color: var(--secondary);
+        }
+        .hpactions { margin-top: 20px; }
+        .hpmsg {
+            margin-top: 14px; font-size: 0.7rem; letter-spacing: 2px;
+            text-transform: uppercase; color: var(--secondary);
+        }
+        .hpmsg b { color: var(--warning); font-weight: 700; }
+        .hpmsg[hidden] { display: none; }
     </style>
     <script type="importmap">
         { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
@@ -153,6 +232,14 @@
         <div id="top-left" class="hud-panel">
             <div class="stat-label">INTEGRITY</div>
             <div class="bar-container"><div id="hp-bar" class="bar-fill" style="width:100%; background:var(--danger); color:var(--danger);"></div></div>
+            <!-- SCORE gets its own row above LEVEL/CREDITS rather than being
+                 squeezed in beside them: it is the number that gets ranked, and
+                 it grows to five or six digits, which a three-up row of 1.8rem
+                 stat-values cannot hold inside the panel. -->
+            <div style="margin-top:15px;">
+                <div class="stat-label">SCORE</div>
+                <div class="stat-value" style="color:var(--primary);" id="hud-score">0</div>
+            </div>
             <div style="display:flex; justify-content:space-between; margin-top:15px;">
                 <div><div class="stat-label">LEVEL</div><div class="stat-value" id="hud-level-num">1</div></div>
                 <div style="text-align:right;"><div class="stat-label">CREDITS</div><div class="stat-value" style="color:gold;">$ <span id="hud-coins">0</span></div></div>
@@ -189,6 +276,12 @@
     <h1>NEON <span style="color:var(--primary)">PRIME</span></h1>
     <h2>TACTICAL ARCADE SHOOTER</h2>
     <button id="btn-start">INITIALIZE SYSTEM</button>
+    <!-- Identity belongs on the start screen only. A challenge offered here
+         would answer "no-score": there is no run yet to dare anybody to beat. -->
+    <div class="hpauth">
+        <button class="hpbtn" id="hpSignIn">Sign in</button>
+        <span id="hpAuthStatus">Playing as Guest</span>
+    </div>
 </div>
 
 <div id="shop-screen" class="overlay">
@@ -208,9 +301,42 @@
 <div id="game-over-screen" class="overlay">
     <h1 style="color:var(--danger); text-shadow:0 0 50px var(--danger);">CRITICAL FAILURE</h1>
     <h2 style="color:#aaa;">SYSTEM TERMINATED</h2>
+    <!-- The score leads because it is the number that gets posted; waves stay
+         because they are what the screen has always reported and they say
+         something the score does not (how far in, versus how well). -->
+    <p style="font-size:1.5rem; margin-bottom:8px;">FINAL SCORE: <span id="final-points" style="color:var(--primary); font-weight:bold;">0</span></p>
     <p style="font-size:1.5rem; margin-bottom:30px;">WAVES CLEARED: <span id="final-score" style="color:var(--primary); font-weight:bold;">0</span></p>
+    <div class="hppanel">
+        <div class="hptitle">Neon Prime &middot; High Scores</div>
+        <div class="hpboard" id="hpBoard"></div>
+    </div>
     <button id="btn-restart">REBOOT SYSTEM</button>
+    <div class="hpactions">
+        <button class="hpbtn" id="hpChallenge">Challenge a friend</button>
+    </div>
+    <div class="hpmsg" id="hpChallengeMsg" hidden></div>
 </div>
+
+<!-- HallPass: online leaderboard + friend challenges. The stub below installs
+     window.HallPass synchronously so calls made before the bundle lands are
+     queued, never lost, and degrade to a safe no-op if it never arrives. -->
+<script>
+(function(w){if(w.HallPass&&w.HallPass.version!=="0")return;var q=[];
+function e(n){return function(){var a=[].slice.call(arguments);
+return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
+w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
+submitScore:e("submitScore"),getScores:e("getScores"),
+getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
+unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
+getAchievements:e("getAchievements"),challenge:e("challenge"),
+signIn:function(){},signOut:function(){},
+getHandle:function(){return null},setHandle:function(v){return v},
+on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
+off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
+setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:{ok:false,reason:"inert"})})},2000)})(window);
+</script>
+<script src="/sdk/v1/hallpass.js" data-game="color-clash-3d" defer></script>
 
 <script type="module">
     import * as THREE from 'three';
@@ -326,12 +452,48 @@
     let gameState = 'MENU'; let level = 1; let coins = 0; let lastTime = 0; let totalTime = 0; let glitchAmount = 0;
     let grid = []; let entities = []; let particles = []; let powerups = []; let shockwaves = []; let boss = null; let floatingTexts = [];
     let killCount = 0; let lastKillTime = 0;
-    
+
+    /* ------------------------------------------------------------------------
+       RUN SCORE
+
+       `coins` cannot double as the ranked score, and the reason is not
+       cosmetic: coins are the shop's currency, so they go DOWN every time the
+       player spends. A player who reinvests everything into a better weapon
+       would post a smaller number than one who hoarded and bought nothing --
+       the board would be ranking thrift, not play. `level` on its own is no
+       better: it is a small integer, so a board built on it is mostly ties.
+
+       So the score is a separate accumulator that only ever grows. It is paid
+       at exactly the two events that already pay coins -- a kill and a captured
+       tile -- so the two numbers move together and a player can predict one
+       from the other, plus a bonus for finishing a sector.
+
+       Painting is deliberately in there. Capturing ground is this game's actual
+       win condition (60% coverage clears the level); a score that counted only
+       kills would rank the wrong verb.
+       ---------------------------------------------------------------------- */
+    let score = 0;
+
     const player = {
         mesh: null, pos: new THREE.Vector3(0, 10, 0), vel: new THREE.Vector3(0, 0, 0),
         speed: 200, health: 100, maxHealth: 100, weaponIndex: 0,
         canDash: true, dashTimer: 0, isDashing: false, buffs: { rapid: 0, shield: 0 }, lastShot: 0
     };
+
+    /* The loadout every run has to start from, read off the declaration above
+       rather than restated, so the two can never drift apart.
+
+       This exists because of a real bug, and fixing it is a real gameplay
+       change -- a sanctioned one. REBOOT SYSTEM used to reset `level` and
+       `coins` but not `weaponIndex` or `speed`, and initGame() does not touch
+       them either. So a player who died on level 20 holding a legendary MK-8
+       and four THRUSTERS buys began their next run on level 1 still holding all
+       of it, and would of course outscore their own previous attempt. A run
+       whose starting loadout depends on the previous run cannot be ranked
+       against anybody else's, so the leaderboard makes this a correctness
+       issue rather than a curiosity. `health` needs no entry here: initGame()
+       already puts it back to 100 on every level. */
+    const PLAYER_START = { speed: player.speed, weaponIndex: player.weaponIndex };
 
     const keys = { w: false, a: false, s: false, d: false, space: false };
     const mouse = new THREE.Vector2();
@@ -431,7 +593,8 @@
                 paintCtx.fillStyle = owner === 1 ? '#00eeee' : '#ee00ee'; 
                 paintCtx.fillRect(cx, cz, 1, 1);
                 floorTexture.needsUpdate = true;
-                if (owner === 1) { coins += 1; if(Math.random()<0.05) playSound('coin'); }
+                // Same shape as the coin it pays: one tile, one point.
+                if (owner === 1) { coins += 1; score += 1; if(Math.random()<0.05) playSound('coin'); }
             }
         }
     }
@@ -526,8 +689,11 @@
             particles.push({mesh, vel, life: 2.0, isDebris: true});
         }
 
-        if(e.subType === 'BOSS') { spawnPowerup(e.pos.x, e.pos.z); boss = null; document.getElementById('boss-health-container').style.display = 'none'; coins += 500; } 
-        else { if(Math.random()<0.05) spawnPowerup(e.pos.x, e.pos.z); coins += 10; }
+        // killEnemy is the single funnel every kill goes through, so paying the
+        // score here -- in the same branch, at the same value as the coin --
+        // means no kill can ever pay one and not the other.
+        if(e.subType === 'BOSS') { spawnPowerup(e.pos.x, e.pos.z); boss = null; document.getElementById('boss-health-container').style.display = 'none'; coins += 500; score += 500; }
+        else { if(Math.random()<0.05) spawnPowerup(e.pos.x, e.pos.z); coins += 10; score += 10; }
         
         let now = Date.now(); if (now - lastKillTime < 2000) killCount++; else killCount = 1; lastKillTime = now;
         if (killCount === 3) showStreak("TRIPLE KILL"); if (killCount === 5) showStreak("RAMPAGE"); if (killCount === 10) showStreak("GODLIKE");
@@ -761,7 +927,7 @@
 
         updateHUD();
         if (!boss && getCoverage() > 0.6) winLevel();
-        if(player.health <= 0) { gameState = 'GAMEOVER'; document.getElementById('hud').style.display = 'none'; document.getElementById('game-over-screen').style.display = 'flex'; document.getElementById('final-score').innerText = level; }
+        if(player.health <= 0) { gameState = 'GAMEOVER'; document.getElementById('hud').style.display = 'none'; document.getElementById('game-over-screen').style.display = 'flex'; document.getElementById('final-score').innerText = level; document.getElementById('final-points').innerText = score; hpPostRun(); }
         if(boss) document.getElementById('boss-bar').style.width = (boss.health/boss.maxHealth*100) + '%';
         starField.rotation.y += dt * 0.05;
     }
@@ -769,6 +935,7 @@
     function getCoverage() { let pTiles = 0; for(let c=0; c<COLS; c++) for(let r=0; r<ROWS; r++) if(grid[c][r] === 1) pTiles++; return pTiles / (COLS*ROWS); }
     function updateHUD() {
         document.getElementById('hp-bar').style.width = player.health + '%'; document.getElementById('hud-coins').innerText = Math.floor(coins); document.getElementById('hud-level-num').innerText = level;
+        document.getElementById('hud-score').innerText = score;
         let cvg = getCoverage(); document.getElementById('cov-bar').style.width = (cvg*100) + '%'; document.getElementById('hud-pct').innerText = (cvg*100).toFixed(1);
         document.getElementById('hud-weapon').innerText = WEAPONS[player.weaponIndex].name;
         const dEl = document.getElementById('hud-dash'); if(player.dashTimer > 0) { dEl.innerText = player.dashTimer.toFixed(1); dEl.style.color='#888'; } else { dEl.innerText = "READY"; dEl.style.color='#00ff00'; }
@@ -812,8 +979,23 @@
         }; parent.appendChild(div);
     }
 
-    document.getElementById('btn-start').onclick = () => { document.getElementById('start-screen').style.display = 'none'; document.getElementById('hud').style.display = 'block'; initGame(); gameState = 'PLAYING'; if(audioCtx.state === 'suspended') audioCtx.resume(); };
-    document.getElementById('btn-next').onclick = () => { document.getElementById('shop-screen').style.display = 'none'; level++; initGame(); gameState = 'PLAYING'; };
+    /* INITIALIZE SYSTEM is where a run actually begins, so it is where the run
+       state resets. NOT initGame(): DEPLOY TO SECTOR calls that too, on every
+       level, and resetting there would wipe the score each time the player
+       cleared a sector -- the opposite of an accumulator. */
+    document.getElementById('btn-start').onclick = () => {
+        score = 0;
+        hpPosted = false;
+        // Strip the previous run's purchases back to the declared loadout. See
+        // PLAYER_START for why a leaderboard makes this mandatory.
+        player.speed = PLAYER_START.speed;
+        player.weaponIndex = PLAYER_START.weaponIndex;
+        document.getElementById('start-screen').style.display = 'none'; document.getElementById('hud').style.display = 'block'; initGame(); gameState = 'PLAYING'; if(audioCtx.state === 'suspended') audioCtx.resume();
+    };
+    /* The sector bonus is paid for the level being LEFT, which is why it is
+       computed before the increment. Award it after `level++` and every run
+       gets credited for a sector it never actually finished. */
+    document.getElementById('btn-next').onclick = () => { document.getElementById('shop-screen').style.display = 'none'; score += level * 500; level++; initGame(); gameState = 'PLAYING'; };
     document.getElementById('btn-restart').onclick = () => { document.getElementById('game-over-screen').style.display = 'none'; document.getElementById('start-screen').style.display = 'flex'; level = 1; coins = 0; };
 
     window.addEventListener('keydown', e => { if(e.key==='w'||e.key==='ArrowUp') keys.w=true; if(e.key==='s'||e.key==='ArrowDown') keys.s=true; if(e.key==='a'||e.key==='ArrowLeft') keys.a=true; if(e.key==='d'||e.key==='ArrowRight') keys.d=true; if(e.key===' ') keys.space=true; });
@@ -821,6 +1003,159 @@
     window.addEventListener('mousedown', () => mouse.down = true); window.addEventListener('mouseup', () => mouse.down = false);
     window.addEventListener('mousemove', e => { mouse.x = (e.clientX / window.innerWidth) * 2 - 1; mouse.y = -(e.clientY / window.innerHeight) * 2 + 1; });
     window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); composer.setSize(window.innerWidth, window.innerHeight); });
+
+    /* --- HallPass ----------------------------------------------------------
+       The classic stub just above this file's module tag guarantees
+       window.HallPass exists before a single line of this runs -- modules are
+       deferred, classic inline scripts are not -- and every method it installs
+       resolves rather than throwing. So nothing in this section can break the
+       game, with no network at all and with no leaderboard provisioned for this
+       game yet. Nothing is wrapped in try/catch because nothing throws.
+
+       All of it lives INSIDE the module on purpose. `score`, `level` and the
+       button handlers are module-scoped, and the alternative -- hanging game
+       internals off window so a second script tag could reach them -- would
+       make the game's state editable from the console for the sake of tidiness.
+       Not a trade worth making on a page that posts to a leaderboard. */
+
+    /* Whether the run that just ended has already been posted.
+
+       Belt and braces rather than a fix for a known hazard: update() returns
+       immediately unless gameState is 'PLAYING', and the death branch flips it
+       to 'GAMEOVER' in the same statement, so a second entry is not expected
+       today. The latch is here so that a duplicate row on the leaderboard never
+       depends on that continuing to be true. It is cleared where the score is,
+       on INITIALIZE SYSTEM. */
+    let hpPosted = false;
+
+    function hpPostRun() {
+        if (hpPosted) return;
+        hpPosted = true;
+        // submitScore resolves either way and never throws, so this can neither
+        // stop CRITICAL FAILURE appearing nor hold it up. An anonymous player
+        // posts under a Guest name, a signed-in one under their own. The board
+        // is drawn only AFTER the post resolves, so the run that just ended is
+        // already in the list rather than showing up one death late.
+        const board = document.getElementById('hpBoard');
+        if (board) board.innerHTML = '<div class="hpempty">Posting your score...</div>';
+        // Clear the previous run's result, or "Dared Ali to beat 12,400" would
+        // sit under a score nobody is talking about any more.
+        const msg = document.getElementById('hpChallengeMsg');
+        if (msg) msg.hidden = true;
+        HallPass.submitScore(score).then(hpRenderBoard);
+    }
+
+    /* Paint the start screen's identity row. `p` is null when signed out. */
+    function hpRefreshAuth(p) {
+        const status = document.getElementById('hpAuthStatus');
+        const btn = document.getElementById('hpSignIn');
+        if (!status || !btn) return;
+        if (p) {
+            btn.hidden = true;
+            status.innerHTML = 'Signed in as <b></b>';
+            // textContent: a display name is untrusted input and must never be parsed.
+            status.querySelector('b').textContent = p.name;
+        } else {
+            btn.hidden = false;
+            status.textContent = 'Playing as Guest';
+        }
+    }
+
+    /* Draw the online top five into the CRITICAL FAILURE screen.
+
+       FIVE rows, not ten: the screen already carries a headline, two result
+       lines and two buttons, and a list long enough to scroll would put a
+       scroll region over a full-viewport overlay. The full board lives on the
+       game's HallPass page.
+
+       TEN are REQUESTED because one player can hold several of the top rows;
+       after collapsing each handle to their best run, five is what is left. */
+    function hpRenderBoard() {
+        const el = document.getElementById('hpBoard');
+        if (!el) return;
+        el.innerHTML = '<div class="hpempty">Loading scores...</div>';
+        HallPass.getScores({ limit: 10 }).then((rows) => {
+            if (!rows || !rows.length) {
+                el.innerHTML = '<div class="hpempty">Be the first to score</div>';
+                return;
+            }
+            const seen = new Set();
+            const best = rows.filter((r) => seen.has(r.handle) ? false : (seen.add(r.handle), true))
+                             .slice(0, 5);
+            const table = document.createElement('table');
+            let rank = 0;
+            for (const row of best) {
+                const tr = document.createElement('tr');
+                const n = document.createElement('td');
+                n.className = 'rank'; n.textContent = ++rank;
+                const who = document.createElement('td');
+                who.className = 'who';
+                // textContent throughout: a handle is untrusted and must never be parsed.
+                who.textContent = row.handle;
+                if (row.verified) {
+                    const tick = document.createElement('span');
+                    tick.className = 'hpv'; tick.textContent = '✓';
+                    who.appendChild(tick);
+                }
+                const pts = document.createElement('td');
+                pts.className = 'pts'; pts.textContent = Number(row.score).toLocaleString();
+                tr.append(n, who, pts);
+                table.appendChild(tr);
+            }
+            el.innerHTML = '';
+            el.appendChild(table);
+        });
+    }
+
+    /* Challenge a friend to beat the run that just ended.
+
+       Offered on CRITICAL FAILURE only, because that is the one screen where
+       all three of challenge()'s preconditions hold: the board exists,
+       submitScore has just given the challenger a score on it, and there is a
+       session. Note this is also why nothing posts from winLevel() -- clearing
+       a sector opens the shop and the run carries on, so there is no final
+       score there to be dared to beat.
+
+       Only the outcomes the PICKER CANNOT REPORT ITSELF are written here.
+       Server refusals (signed-out, not-friends, no-score...) are already
+       rendered inside the panel the player is looking at, and saying them twice
+       would be noise. These three stop the panel before it can say anything. */
+    const HP_CHALLENGE_MSG = {
+        "popup-blocked": "Your browser blocked the challenge window",
+        "inert":         "Challenges need the online leaderboard, offline here",
+        "network":       "Could not reach HallPass - try again shortly",
+    };
+
+    document.getElementById('hpChallenge').addEventListener('click', async () => {
+        const btn = document.getElementById('hpChallenge');
+        const msg = document.getElementById('hpChallengeMsg');
+        btn.disabled = true;
+        msg.hidden = true;
+        // No try/catch: every SDK method resolves, so there is nothing to catch.
+        const res = await HallPass.challenge();
+        btn.disabled = false;
+
+        // READ `sent`, NOT `ok`. Closing the picker resolves
+        // { ok:true, sent:false, reason:"closed" } -- the call worked and the
+        // player changed their mind, which must never be shown as a failure.
+        if (res && res.sent && res.challenge) {
+            msg.innerHTML = 'Dared <b></b> to beat <b></b>';
+            const parts = msg.querySelectorAll('b');
+            parts[0].textContent = res.challenge.to;   // untrusted display name
+            parts[1].textContent = Number(res.challenge.targetScore).toLocaleString();
+            msg.hidden = false;
+            return;
+        }
+        const text = res && res.reason ? HP_CHALLENGE_MSG[res.reason] : null;
+        if (text) { msg.textContent = text; msg.hidden = false; }
+    });
+
+    HallPass.getPlayer().then(hpRefreshAuth);
+    // The popup does not reload the game, so the label has to be told when it
+    // finishes -- otherwise it still reads "Guest" to somebody who just signed in.
+    HallPass.on('auth', (e) => hpRefreshAuth(e.player));
+    // Must be a real click: browsers block a popup opened without a user gesture.
+    document.getElementById('hpSignIn').addEventListener('click', () => HallPass.signIn());
 
     animate();
 </script>

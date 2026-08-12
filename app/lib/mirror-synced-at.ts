@@ -14,4 +14,4 @@
  *
  * GENERATED — do not edit by hand; `scripts/sync-games.mjs` rewrites the literal.
  */
-export const MIRROR_SYNCED_AT = 0;
+export const MIRROR_SYNCED_AT = 1786463015753;
