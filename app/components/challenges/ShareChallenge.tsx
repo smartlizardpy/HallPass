@@ -118,9 +118,13 @@ export function ShareChallenge({
     }
   }, [boardId, title]);
 
+  // EXPANDED STATES TAKE A WHOLE LINE. `basis-full` inside the caller's
+  // `flex-wrap` row makes the link and the refusal wrap onto their own line
+  // instead of widening the row — which previously pushed the neighbouring
+  // button and the rank badge clean off the card.
   if (state.kind === "done") {
     return (
-      <div className={className}>
+      <div className={className ?? "basis-full"}>
         <p className="text-xs font-bold text-brand">
           {state.copied ? "Link copied" : "Your link"}
         </p>
@@ -141,7 +145,7 @@ export function ShareChallenge({
   }
 
   return (
-    <div className={className}>
+    <div className={state.kind === "failed" ? "basis-full" : className}>
       <button
         type="button"
         onClick={share}
