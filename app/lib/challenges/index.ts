@@ -34,9 +34,14 @@ export const challenges = createChallengeStore(sql);
 
 export type {
   ChallengeParty,
+  ClaimLinkOutcome,
   CreateOutcome,
   IncomingChallenge,
+  LinkOwner,
+  MintLinkOutcome,
   OutgoingChallenge,
+  OwnedLink,
+  PublicLink,
   ResolvedChallenge,
 } from "./store";
 
@@ -118,6 +123,53 @@ export async function resolveChallengesForScore(input: {
   } catch (error) {
     reportUnexpected("resolveForScore", error);
     return [];
+  }
+}
+
+/**
+ * One link by its code, or `null` when it does not exist OR cannot be read.
+ *
+ * COLLAPSING THOSE TWO IS SAFE HERE, unlike everywhere else in this module. The
+ * caller is `/c/<code>`, whose only non-happy path is a page saying the
+ * challenge is not available — which is the honest thing to show for a code
+ * that was mistyped, for one that was never real, and for a database that is
+ * briefly unreachable. The distinction the other reads preserve buys the
+ * landing page nothing, because there is no partial render to protect: no link,
+ * no page. The unexpected case is still logged.
+ */
+export async function getLink(code: string) {
+  try {
+    return await challenges.getLinkByCode(code);
+  } catch (error) {
+    reportUnexpected("getLinkByCode", error);
+    return null;
+  }
+}
+
+/** This player's share links with their counts, or `[]`. */
+export async function getOwnedLinks(me: string) {
+  try {
+    return await challenges.listLinks(me);
+  } catch (error) {
+    reportUnexpected("listLinks", error);
+    return [];
+  }
+}
+
+/**
+ * Count a press of "Beat it" from somebody signed out — THE SECOND WRAPPED WRITE.
+ *
+ * Wrapped for the same reason {@link resolveChallengesForScore} is, and with
+ * even less to argue about: this is a statistic on somebody else's dashboard,
+ * and the caller is standing between a child and the game they were promised.
+ * A missing table, a slow query or a dead link must all end the same way — the
+ * game opens. Losing a count is not a bug worth a single second of delay.
+ */
+export async function noteLinkOpen(code: string): Promise<void> {
+  try {
+    await challenges.noteLinkOpen(code);
+  } catch (error) {
+    reportUnexpected("noteLinkOpen", error);
   }
 }
 
