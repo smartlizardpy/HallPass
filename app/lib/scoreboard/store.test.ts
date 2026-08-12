@@ -286,29 +286,39 @@ describe("appendScore", () => {
 });
 
 describe("claimScores", () => {
-  it("binds the playerId + score ids and returns the atomic CTE count", async () => {
-    const { sql, calls } = makeFakeSql(() => [{ n: 2 }]);
+  it("binds the playerId + score ids and returns what was claimed", async () => {
+    const { sql, calls } = makeFakeSql(() => [
+      { board_id: "snake", score: "4200" },
+      { board_id: "tetris", score: "77" },
+    ]);
     const store = createStore(sql);
 
     const claimed = await store.claimScores("google-sub-1", [10, 20]);
 
-    expect(claimed).toBe(2);
-    // One guarded UPDATE (skipping already-owned rows) wrapped in a count CTE.
+    // The board and the score come BACK, not just a tally: the caller has to
+    // resolve any challenge these scores just won, and cannot do that from a
+    // count. BIGINT egresses as a string and must be coerced.
+    expect(claimed).toEqual([
+      { boardId: "snake", score: 4200 },
+      { boardId: "tetris", score: 77 },
+    ]);
+    // One guarded UPDATE, skipping already-owned rows so a token can never
+    // re-claim or steal a score.
     expect(calls[0].text).toContain("UPDATE scores SET player_id");
     expect(calls[0].text).toContain("player_id IS NULL");
     expect(calls[0].text).toContain("= ANY(");
     expect(calls[0].text).toContain("::bigint[]");
-    expect(calls[0].text).toContain("count(*)::int AS n");
+    expect(calls[0].text).toContain("RETURNING board_id, score");
     // playerId then the ids array are the only bound values.
     expect(calls[0].values[0]).toBe("google-sub-1");
     expect(calls[0].values[1]).toEqual([10, 20]);
   });
 
-  it("short-circuits an empty id list to 0 without querying", async () => {
-    const { sql, calls } = makeFakeSql(() => [{ n: 99 }]);
+  it("short-circuits an empty id list without querying", async () => {
+    const { sql, calls } = makeFakeSql(() => [{ board_id: "x", score: "1" }]);
     const store = createStore(sql);
 
-    expect(await store.claimScores("google-sub-1", [])).toBe(0);
+    expect(await store.claimScores("google-sub-1", [])).toEqual([]);
     // No statement is issued — the empty array never reaches the driver.
     expect(calls).toHaveLength(0);
   });

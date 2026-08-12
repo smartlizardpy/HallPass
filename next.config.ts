@@ -78,6 +78,25 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // CHALLENGE LINKS ARE NEVER INDEXED — and, exactly like `/u/:path*`,
+        // they are deliberately NOT disallowed in `robots.txt`. A `Disallow`
+        // would stop the crawler FETCHING the page and therefore ever seeing
+        // the `noindex`, leaving a discovered-but-unfetched URL that can be
+        // listed as a bare link and then never removed. Crawlable plus this
+        // header is the only combination that actually removes anything.
+        //
+        // These get pasted into public chats and stories by design, so they
+        // WILL be discovered — this is the surface where that argument is least
+        // hypothetical. What it exposes is a child's handle and a score.
+        source: "/c/:path*",
+        headers: [
+          {
+            key: "X-Robots-Tag",
+            value: "noindex, nofollow, noimageindex, noarchive",
+          },
+        ],
+      },
+      {
         // BETA SURFACES ARE NEVER INDEXED — same two-part signal as `/u/:path*`
         // above, for the same reason: the `robots` metadata in each page is not
         // enough on its own, because Next answers a streamed `not-found.js` with

@@ -22,6 +22,9 @@
 
 import { auth } from "@/app/lib/auth";
 import { store, verifyClaimToken, MAX_CLAIM_TOKENS } from "@/app/lib/scoreboard";
+import { resolveChallengesForScore } from "@/app/lib/challenges";
+import { notifyChallengesBeaten } from "@/app/lib/challenges/notify";
+import { getPublicIdentity } from "@/app/lib/players";
 import type { Session } from "next-auth";
 import type { ApiError, ClaimRequest, ClaimResponse } from "@/sdk/src/contract";
 
@@ -66,19 +69,19 @@ export async function POST(req: Request): Promise<Response> {
 
   // Cap the batch, verify each token, and collect the score ids from those that
   // pass. Invalid/expired tokens are dropped silently. `claimScores` handles an
-  // empty list by returning 0, so no valid tokens simply claims nothing.
+  // empty list by returning no rows, so no valid tokens simply claims nothing.
   const scoreIds: number[] = [];
   for (const token of tokens.slice(0, MAX_CLAIM_TOKENS)) {
     const claim = verifyClaimToken(token);
     if (claim) scoreIds.push(claim.scoreId);
   }
 
-  // The only DB write here; degrade gracefully like the leaderboard routes so a
-  // transient Neon blip is a soft 503 (the SDK keeps the tokens and retries on
-  // the next auth signal) rather than a bare 500.
-  let claimed = 0;
+  // Degrade gracefully like the leaderboard routes so a transient Neon blip is
+  // a soft 503 (the SDK keeps the tokens and retries on the next auth signal)
+  // rather than a bare 500.
+  let claimedRows: { boardId: string; score: number }[] = [];
   try {
-    claimed = await store.claimScores(playerId, scoreIds);
+    claimedRows = await store.claimScores(playerId, scoreIds);
   } catch (error) {
     console.error("me/claim POST claimScores failed:", error);
     return Response.json({ error: "Claim temporarily unavailable" } satisfies ApiError, {
@@ -86,7 +89,50 @@ export async function POST(req: Request): Promise<Response> {
       headers: NO_STORE,
     });
   }
-  return Response.json({ ok: true, claimed } satisfies ClaimResponse, { headers: NO_STORE });
+
+  // CLOSE ANY CHALLENGE THESE SCORES JUST WON.
+  //
+  // Without this the whole play-first flow has no ending: somebody follows a
+  // challenge link, plays signed out, beats the score, signs in to keep it —
+  // and the challenge they came for stays open, because resolution had only
+  // ever run on the live submission path, which skips anonymous rows for the
+  // good reason that an anonymous row has nobody to be. It is also the fix for
+  // the same hole on ordinary friend challenges, which predates links.
+  //
+  // AFTER the transfer, and in its own guard, matching the score route exactly:
+  // the scores are already the player's by the time this runs, and a challenge
+  // that stays open a while longer is recoverable — the next qualifying score
+  // closes it — where a claim reported as failed is not. `resolveChallengesForScore`
+  // is the wrapped write in `challenges/index.ts` and never throws, so this is
+  // belt to that brace.
+  //
+  // Sequential rather than concurrent: a claim carries a handful of rows at
+  // most (`MAX_CLAIM_TOKENS`), and each resolution is a single UPDATE against
+  // the same few rows, so firing them together would buy nothing and could have
+  // two of them contend for the same challenge.
+  try {
+    // The winner's display name, for the notification below. Read ONCE and only
+    // when something was actually claimed, so the ordinary "no valid tokens"
+    // call still costs a single statement.
+    let winnerName: string | null = null;
+    for (const row of claimedRows) {
+      const beaten = await resolveChallengesForScore({
+        playerId,
+        boardId: row.boardId,
+        score: row.score,
+      });
+      if (beaten.length === 0) continue;
+      winnerName ??= (await getPublicIdentity(playerId))?.handle ?? "Someone";
+      await notifyChallengesBeaten(beaten, winnerName);
+    }
+  } catch (error) {
+    console.error("me/claim POST challenge resolution failed:", error);
+  }
+
+  return Response.json(
+    { ok: true, claimed: claimedRows.length } satisfies ClaimResponse,
+    { headers: NO_STORE },
+  );
 }
 
 export async function OPTIONS(): Promise<Response> {

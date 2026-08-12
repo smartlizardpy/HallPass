@@ -177,6 +177,25 @@ export const NOTIFICATION_KINDS = {
     // keeps the exact copy `push/payload.test.ts` pins.
     discreet: "You have a new challenge.",
   },
+  challenge_beaten: {
+    audience: "player",
+    scope: "personal",
+    group: "social",
+    label: "Beaten scores",
+    icon: "🏁",
+    description: "Somebody beats a score you dared them to beat.",
+    // BELL, NOT PUSH — and this is the one kind where the channel is a safety
+    // decision rather than a taste one. A challenge link is designed to be
+    // posted to a whole group chat, so ONE link can be taken up by a class and
+    // beaten by a dozen of them within a lesson. On push that is a dozen
+    // buzzes; in the bell it is a list somebody reads once and enjoys.
+    //
+    // It is also good news about something already finished, which is the same
+    // test `friend_accepted` and `achievement_unlocked` are set by: push is for
+    // what needs you now, the bell for what you will be pleased to find.
+    defaultChannel: "bell",
+    discreet: "Someone beat one of your scores.",
+  },
   friend_request: {
     audience: "player",
     scope: "personal",

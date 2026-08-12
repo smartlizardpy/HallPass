@@ -28,7 +28,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BadgeShelf } from "@/app/components/BadgeShelf";
+import { ChallengeButton } from "./_ui/ChallengeButton";
+import { ChallengeLinks } from "./_ui/ChallengeLinks";
+import { ShareChallenge } from "@/app/components/challenges/ShareChallenge";
 import { earnedBadges, lockedBadges } from "@/app/lib/badges";
+import { getOwnedLinks } from "@/app/lib/challenges";
+import { resolveGames } from "@/app/lib/games-store";
 import { store } from "@/app/lib/scoreboard";
 import { readBadgeStats, readOwnSocial, readPlayerId } from "./_data";
 
@@ -57,7 +62,7 @@ export default async function YouProfilePage() {
   // page that quietly assumed identity would be the wrong kind of shortcut.
   if (!playerId) return null;
 
-  const [stats, own, standings] = await Promise.all([
+  const [stats, own, standings, catalogue, links] = await Promise.all([
     // Both `cache`d and already resolved by the layout's header — free here.
     readBadgeStats(),
     readOwnSocial(),
@@ -69,7 +74,27 @@ export default async function YouProfilePage() {
       console.error(`profile standings read failed for ${playerId}:`, error);
       return [];
     }),
+    // Only to learn which games are hosted elsewhere — see `shareable` below.
+    resolveGames().catch(() => []),
+    // Fail-soft in the barrel already: no links, or none readable, renders
+    // nothing rather than costing the page.
+    getOwnedLinks(playerId),
   ]);
+
+  /**
+   * Boards whose game can carry a share link.
+   *
+   * A cross-origin game mints no anonymous claim token (`sdk/src/client.ts`
+   * gates that on `sameOrigin`), so nobody following a link to one could keep
+   * what they scored — the mint endpoint refuses those, and the button is
+   * hidden here rather than offered and then rejected. A board with no game at
+   * all has nowhere off-site to be, so it stays shareable.
+   */
+  const externalSlugs = new Set(
+    catalogue.filter((g) => g.externalUrl).map((g) => g.slug),
+  );
+  const shareable = (gameSlug: string | null) =>
+    gameSlug === null || !externalSlugs.has(gameSlug);
 
   return (
     <div className="space-y-5">
@@ -164,18 +189,35 @@ export default async function YouProfilePage() {
                     Best {s.best.toLocaleString("en-US")}
                   </div>
                 </div>
-                <span
-                  className={`shrink-0 rounded-full px-3 py-1 text-sm font-black tabular-nums ${rankBadgeClasses(
-                    s.rank,
-                  )}`}
-                >
-                  #{s.rank}
-                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  {/* Every board listed here is one the player has posted a
+                      score on, which is exactly the precondition both actions
+                      need — so neither can be offered and then refused for
+                      want of a score. */}
+                  {shareable(s.gameSlug) ? (
+                    <ShareChallenge boardId={s.boardId} title={s.title} />
+                  ) : null}
+                  <ChallengeButton
+                    boardId={s.boardId}
+                    gameSlug={s.gameSlug}
+                    title={s.title}
+                  />
+                  <span
+                    className={`rounded-full px-3 py-1 text-sm font-black tabular-nums ${rankBadgeClasses(
+                      s.rank,
+                    )}`}
+                  >
+                    #{s.rank}
+                  </span>
+                </div>
               </li>
             ))}
           </ul>
         )}
       </section>
+
+      {/* CHALLENGE LINKS ---------------------------------------------------- */}
+      <ChallengeLinks links={links} />
     </div>
   );
 }

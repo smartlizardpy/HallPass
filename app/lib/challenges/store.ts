@@ -79,6 +79,7 @@ import {
   CHALLENGE_RESEND_COOLDOWN_SECONDS,
   CHALLENGE_RESOLVED_COOLDOWN_SECONDS,
   CHALLENGE_SENDER_RATE_LIMIT,
+  LINK_CLAIM_RATE_LIMIT,
   MAX_OPEN_SENT_CHALLENGES,
 } from "./config";
 
@@ -158,6 +159,75 @@ export type OutgoingChallenge = BoardFacts & {
   resolvedScore: number | null;
 };
 
+/**
+ * What `/c/<code>` is allowed to know about the person who posted it.
+ *
+ * DELIBERATELY NOT {@link ChallengeParty}, and this is a safety boundary rather
+ * than a convenience. That type carries `image`, which for a Google-only
+ * product is frequently a real photograph of the account holder — and the
+ * account holders are children. A challenge link is a page ENGINEERED to be
+ * pasted into a public chat and rendered as a preview card cached on other
+ * people's devices, so the photograph must not be in the payload at all.
+ *
+ * Enforcing it in the type rather than in the template is the point: a template
+ * that simply chooses not to render a field is one edit away from rendering it.
+ * `public_id` is absent for the same reason — nothing on this page needs to
+ * identify the owner to a stranger, only to name them.
+ *
+ * See `challenge-sharing-design.md` §7.
+ */
+export type LinkOwner = {
+  username: string | null;
+  displayName: string;
+};
+
+/** A link as the world sees it at `/c/<code>`. */
+export type PublicLink = BoardFacts & {
+  id: number;
+  code: string;
+  owner: LinkOwner;
+  targetScore: number;
+  revokedAt: string | null;
+};
+
+/** A link as its OWNER sees it, with the payoff numbers attached. */
+export type OwnedLink = BoardFacts & {
+  id: number;
+  code: string;
+  targetScore: number;
+  /** Presses of "Beat it", not page views. */
+  opens: number;
+  /** Signed-in people who took it up. */
+  claims: number;
+  /** How many of those beat the score. */
+  beaten: number;
+  revokedAt: string | null;
+  createdAt: string;
+};
+
+/** Everything `mintLink` learned, whether or not it wrote a row. */
+export type MintLinkOutcome = {
+  /** The share code — the existing one when refreshing, else the new one. */
+  code: string | null;
+  targetScore: number | null;
+  gameSlug: string | null;
+  boardTitle: string;
+  boardExists: boolean;
+  hasScore: boolean;
+};
+
+/** Everything `claimLink` learned. */
+export type ClaimLinkOutcome = {
+  id: number | null;
+  targetScore: number | null;
+  linkFound: boolean;
+  isRevoked: boolean;
+  /** The owner opened their own link. Not an error — just nothing to claim. */
+  isSelf: boolean;
+  isBlocked: boolean;
+  overRateLimit: boolean;
+};
+
 /** One row `resolveForScore` just closed, for the "you won" surfaces. */
 export type ResolvedChallenge = {
   id: number;
@@ -165,6 +235,15 @@ export type ResolvedChallenge = {
   challengerId: string;
   targetScore: number;
   boardId: string;
+  /**
+   * The board's game and title, carried out of the UPDATE rather than looked up
+   * afterwards. The statement already joins `boards` to read `sort`, so these
+   * cost nothing — and telling the challenger "somebody beat your 4,200 on
+   * Duskfall" would otherwise be a second round trip on the score path, which
+   * is the one path in this subsystem that must stay cheap.
+   */
+  gameSlug: string | null;
+  boardTitle: string;
 };
 
 /** Everything `create` learned, whether or not it wrote a row. */
@@ -281,6 +360,19 @@ export function createChallengeStore(sql: Sql) {
      * constantly"; telling a child that a specific friend binned their challenge
      * is the same unkindness with a different table behind it. The row stays so
      * the cooldown holds; the sender simply sees it stop being pending.
+     *
+     * `kind = 'friend'` ONLY, and both halves of that matter.
+     *
+     * A `link` row would be dropped by `JOIN players ON p.id = c.target_id`
+     * anyway — its target is NULL, so the inner join never matches — but that
+     * is an accident of the join rather than a decision, and one `LEFT JOIN`
+     * away from silently listing invitations as challenges with no recipient.
+     * The predicate states the intent.
+     *
+     * A `link_claim` WOULD match, and excluding it is the real decision: one
+     * link passed around a class produces a row per person, and a flat list is
+     * the wrong shape for that. {@link createChallengeStore.listLinks} answers
+     * it grouped, which is how a link's takers should be read.
      */
     async listOutgoing(me: string): Promise<OutgoingChallenge[]> {
       const rows = (await sql`
@@ -293,7 +385,8 @@ export function createChallengeStore(sql: Sql) {
           FROM challenges c
           JOIN boards  b ON b.id = c.board_id
           JOIN players p ON p.id = c.target_id
-         WHERE c.challenger_id = ${me}
+         WHERE c.kind = 'friend'
+           AND c.challenger_id = ${me}
            AND c.dismissed_at IS NULL
            AND NOT EXISTS (
                  SELECT 1 FROM player_blocks pb
@@ -414,14 +507,25 @@ export function createChallengeStore(sql: Sql) {
            WHERE s.player_id = ${challengerId}
            GROUP BY board.sort
         ),
+        -- BOTH COUNTERS ARE kind = 'friend', WHICH THEY DID NOT USED TO BE.
+        -- Before links existed, every row whose challenger was this player was
+        -- something they had chosen to send, so an unqualified count was the
+        -- right one. A link_claim breaks that: its challenger is the LINK
+        -- OWNER, but the row is created by whoever took the link up. Counting
+        -- them here would mean a popular link filled its own owner's send quota
+        -- and then locked them out of challenging their actual friends — a
+        -- punishment for the feature working. The quota bounds what one account
+        -- PUSHES at people, and a claim is pulled.
         recent AS (
           SELECT count(*) AS n FROM challenges
-           WHERE challenger_id = ${challengerId}
+           WHERE kind = 'friend'
+             AND challenger_id = ${challengerId}
              AND created_at >= now() - make_interval(secs => ${CHALLENGE_SENDER_RATE_LIMIT.windowSeconds})
         ),
         open_sent AS (
           SELECT count(*) AS n FROM challenges
-           WHERE challenger_id = ${challengerId}
+           WHERE kind = 'friend'
+             AND challenger_id = ${challengerId}
              AND resolved_at IS NULL AND dismissed_at IS NULL
         ),
         cooling AS (
@@ -502,6 +606,283 @@ export function createChallengeStore(sql: Sql) {
           toInt(row.recent_n) >= CHALLENGE_SENDER_RATE_LIMIT.maxPerWindow,
         overOpenCap: toInt(row.open_n) >= MAX_OPEN_SENT_CHALLENGES,
       };
+    },
+
+    // -----------------------------------------------------------------------
+    // Links
+    // -----------------------------------------------------------------------
+
+    /**
+     * Mint or refresh this player's share link for one board.
+     *
+     * ONE LINK PER (owner, board), upserted — so pressing "share" a second time
+     * does NOT hand out a rival URL. The point is that the owner can post one
+     * link and keep posting the same one: the score under it moves up as they
+     * improve, which is what "beat my best" should mean, while each taker keeps
+     * the number they were shown (see {@link createChallengeStore.claimLink}).
+     *
+     * THE CODE IS ONLY REPLACED WHEN THE LINK WAS REVOKED. Refreshing a live
+     * link keeps its code, because the owner may already have posted it and a
+     * silently-rotated URL would break every copy of it. Refreshing a REVOKED
+     * one mints a fresh code, because revoking has to be permanent for the URL
+     * that was revoked — un-revoking the old code would resurrect a link
+     * somebody deliberately killed after regretting where they put it.
+     *
+     * The score is derived in SQL as the owner's own best, exactly as `create`
+     * does, so no caller can post a link to a number they never scored.
+     *
+     * `code` is a PARAMETER rather than generated here: the factory stays free
+     * of `crypto` so it tests deterministically, matching how
+     * `api/v1/me/friend-code` generates before it writes.
+     */
+    async mintLink(input: {
+      ownerId: string;
+      boardId: string;
+      code: string;
+    }): Promise<MintLinkOutcome> {
+      const { ownerId, boardId, code } = input;
+      const rows = (await sql`
+        WITH board AS (
+          SELECT id, sort, game_slug, title FROM boards WHERE id = ${boardId}
+        ),
+        best AS (
+          SELECT CASE WHEN board.sort = 'asc' THEN min(s.score) ELSE max(s.score) END AS score
+            FROM scores s
+            JOIN board ON board.id = s.board_id
+           WHERE s.player_id = ${ownerId}
+           GROUP BY board.sort
+        ),
+        ins AS (
+          INSERT INTO challenges (kind, board_id, challenger_id, target_score, code)
+          SELECT 'link', ${boardId}, ${ownerId}, best.score, ${code}
+            FROM best
+           WHERE best.score IS NOT NULL
+          ON CONFLICT (challenger_id, board_id) WHERE kind = 'link'
+          DO UPDATE SET target_score = EXCLUDED.target_score,
+                        -- Keep a live link's code; replace a revoked one's.
+                        code = CASE WHEN challenges.revoked_at IS NULL
+                                    THEN challenges.code
+                                    ELSE EXCLUDED.code END,
+                        revoked_at = NULL
+          RETURNING code, target_score
+        )
+        SELECT (SELECT code         FROM ins)   AS code,
+               (SELECT target_score FROM ins)   AS target_score,
+               (SELECT game_slug    FROM board) AS game_slug,
+               (SELECT title        FROM board) AS board_title,
+               EXISTS (SELECT 1 FROM board)     AS board_exists,
+               EXISTS (SELECT 1 FROM best WHERE score IS NOT NULL) AS has_score
+      `) as Row[];
+
+      const row = rows[0] ?? {};
+      return {
+        code: toStrOrNull(row.code),
+        targetScore: row.target_score == null ? null : toInt(row.target_score),
+        gameSlug: toStrOrNull(row.game_slug),
+        boardTitle: String(row.board_title ?? ""),
+        boardExists: row.board_exists === true,
+        hasScore: row.has_score === true,
+      };
+    },
+
+    /**
+     * The `/c/<code>` read. `null` when no such link exists.
+     *
+     * Returns a revoked link rather than hiding it, so the landing can say the
+     * challenge is over instead of pretending the URL was never real — a dead
+     * link followed from a chat should explain itself.
+     *
+     * Selects NO avatar and NO `public_id`; see {@link LinkOwner}.
+     */
+    async getLinkByCode(code: string): Promise<PublicLink | null> {
+      const rows = (await sql`
+        SELECT c.id, c.code, c.target_score, c.revoked_at,
+               c.board_id, b.game_slug, b.title AS board_title,
+               b.score_label, b.sort,
+               p.username AS owner_username, p.handle AS owner_handle
+          FROM challenges c
+          JOIN boards  b ON b.id = c.board_id
+          JOIN players p ON p.id = c.challenger_id
+         WHERE c.kind = 'link' AND c.code = ${code}
+         LIMIT 1
+      `) as Row[];
+
+      const row = rows[0];
+      if (!row) return null;
+      return {
+        id: toInt(row.id),
+        code: String(row.code),
+        owner: {
+          username: toStrOrNull(row.owner_username),
+          displayName: displayNameFrom(row.owner_handle, row.owner_username),
+        },
+        targetScore: toInt(row.target_score),
+        revokedAt: toIsoOrNull(row.revoked_at),
+        ...mapBoard(row),
+      };
+    },
+
+    /**
+     * Count a press of "Beat it" by somebody who is not signed in.
+     *
+     * The signed-in path bumps the same counter inside
+     * {@link createChallengeStore.claimLink}, so this is the anonymous half
+     * only. Guarded on `revoked_at IS NULL` so a dead link's number cannot be
+     * driven up by whoever still has the URL.
+     *
+     * Returns nothing and is called fail-soft: a counter is never worth
+     * standing between a player and a game.
+     */
+    async noteLinkOpen(code: string): Promise<void> {
+      await sql`
+        UPDATE challenges SET opens = opens + 1
+         WHERE kind = 'link' AND code = ${code} AND revoked_at IS NULL
+      `;
+    },
+
+    /**
+     * Take a link up: record this player as one of its takers, and count the press.
+     *
+     * ── WHY THIS IS NOT `create()` ─────────────────────────────────────────
+     * `create` requires an accepted friendship, and that gate is the whole
+     * anti-harassment posture of `friend` challenges. A link has no such gate by
+     * design — the entire feature is being challenged by somebody you may not
+     * know yet — so this is a SEPARATE method rather than a flag on that one.
+     * Written apart so nobody can reach the friendless path by passing a
+     * different `kind` to a function whose contract promises friends only.
+     *
+     * What replaces the friendship gate: the claimer initiated it (§7 of the
+     * design doc), blocks are still honoured in both directions, and the
+     * claimer carries their own rate limit.
+     *
+     * ── THE SNAPSHOT DOES NOT MOVE UNDER SOMEBODY MID-ATTEMPT ──────────────
+     * `ON CONFLICT … DO UPDATE SET target_score = challenges.target_score` is a
+     * deliberate no-op write. Taking a link up twice must not re-snapshot the
+     * owner's improved score onto a claim already in flight — but the row still
+     * has to come back, and `DO NOTHING` returns nothing, which would cost a
+     * second round trip to tell "already claimed" from "refused". A no-op update
+     * keeps the original number AND returns the row. It also preserves
+     * `resolved_at`, so re-opening a link you already beat cannot un-win it.
+     */
+    async claimLink(input: {
+      code: string;
+      playerId: string;
+    }): Promise<ClaimLinkOutcome> {
+      const { code, playerId } = input;
+      const rows = (await sql`
+        WITH link AS (
+          SELECT id, challenger_id, board_id, target_score, revoked_at
+            FROM challenges
+           WHERE kind = 'link' AND code = ${code}
+           LIMIT 1
+        ),
+        blocked AS (
+          SELECT 1 FROM player_blocks, link
+           WHERE (blocker_id = ${playerId} AND blocked_id = link.challenger_id)
+              OR (blocker_id = link.challenger_id AND blocked_id = ${playerId})
+           LIMIT 1
+        ),
+        recent AS (
+          SELECT count(*) AS n FROM challenges
+           WHERE kind = 'link_claim'
+             AND target_id = ${playerId}
+             AND created_at >= now() - make_interval(secs => ${LINK_CLAIM_RATE_LIMIT.windowSeconds})
+        ),
+        bump AS (
+          UPDATE challenges SET opens = opens + 1
+           WHERE id = (SELECT id FROM link) AND revoked_at IS NULL
+          RETURNING 1
+        ),
+        ins AS (
+          INSERT INTO challenges
+                 (kind, board_id, challenger_id, target_id, target_score, parent_id)
+          SELECT 'link_claim', link.board_id, link.challenger_id, ${playerId},
+                 link.target_score, link.id
+            FROM link
+           WHERE link.revoked_at IS NULL
+             AND link.challenger_id <> ${playerId}
+             AND NOT EXISTS (SELECT 1 FROM blocked)
+             AND (SELECT n FROM recent) < ${LINK_CLAIM_RATE_LIMIT.maxPerWindow}
+          ON CONFLICT (parent_id, target_id) WHERE kind = 'link_claim'
+          DO UPDATE SET target_score = challenges.target_score
+          RETURNING id, target_score
+        )
+        SELECT (SELECT id           FROM ins)  AS id,
+               (SELECT target_score FROM ins)  AS target_score,
+               EXISTS (SELECT 1 FROM link)     AS link_found,
+               EXISTS (SELECT 1 FROM link WHERE revoked_at IS NOT NULL) AS is_revoked,
+               EXISTS (SELECT 1 FROM link WHERE challenger_id = ${playerId}) AS is_self,
+               EXISTS (SELECT 1 FROM blocked)  AS is_blocked,
+               (SELECT n FROM recent)          AS recent_n
+      `) as Row[];
+
+      const row = rows[0] ?? {};
+      return {
+        id: row.id == null ? null : toInt(row.id),
+        targetScore: row.target_score == null ? null : toInt(row.target_score),
+        linkFound: row.link_found === true,
+        isRevoked: row.is_revoked === true,
+        isSelf: row.is_self === true,
+        isBlocked: row.is_blocked === true,
+        overRateLimit: toInt(row.recent_n) >= LINK_CLAIM_RATE_LIMIT.maxPerWindow,
+      };
+    },
+
+    /**
+     * Kill a link. Idempotent via `revoked_at IS NULL`, and scoped to the owner
+     * so a code alone is not authority to revoke — anybody may hold the code.
+     *
+     * The row and the code SURVIVE. A deleted row would free the code to be
+     * issued again, and a URL somebody killed must stay dead.
+     */
+    async revokeLink(input: { ownerId: string; code: string }): Promise<boolean> {
+      const rows = (await sql`
+        UPDATE challenges SET revoked_at = now()
+         WHERE kind = 'link'
+           AND code = ${input.code}
+           AND challenger_id = ${input.ownerId}
+           AND revoked_at IS NULL
+        RETURNING id
+      `) as Row[];
+      return rows.length > 0;
+    },
+
+    /**
+     * This player's links, with the payoff attached — "14 opened, 3 beat you".
+     *
+     * The counts are correlated subqueries rather than a `GROUP BY` join,
+     * because `beaten` is a filtered count of the same children and expressing
+     * both in one aggregate needs a `FILTER` clause over an outer join that
+     * reads worse for no gain at this cardinality. Both are served by
+     * `challenges_link_children_idx`.
+     */
+    async listLinks(me: string): Promise<OwnedLink[]> {
+      const rows = (await sql`
+        SELECT c.id, c.code, c.target_score, c.opens, c.revoked_at, c.created_at,
+               c.board_id, b.game_slug, b.title AS board_title,
+               b.score_label, b.sort,
+               (SELECT count(*) FROM challenges k
+                 WHERE k.kind = 'link_claim' AND k.parent_id = c.id) AS claims,
+               (SELECT count(*) FROM challenges k
+                 WHERE k.kind = 'link_claim' AND k.parent_id = c.id
+                   AND k.resolved_at IS NOT NULL) AS beaten
+          FROM challenges c
+          JOIN boards b ON b.id = c.board_id
+         WHERE c.kind = 'link' AND c.challenger_id = ${me}
+         ORDER BY c.id DESC
+         LIMIT ${CHALLENGE_LIST_LIMIT}
+      `) as Row[];
+      return rows.map((row) => ({
+        id: toInt(row.id),
+        code: String(row.code),
+        targetScore: toInt(row.target_score),
+        opens: toInt(row.opens),
+        claims: toInt(row.claims),
+        beaten: toInt(row.beaten),
+        revokedAt: toIsoOrNull(row.revoked_at),
+        createdAt: toIso(row.created_at),
+        ...mapBoard(row),
+      }));
     },
 
     // -----------------------------------------------------------------------
@@ -605,13 +986,16 @@ export function createChallengeStore(sql: Sql) {
            AND (c.ends_at   IS NULL OR c.ends_at   >  now())
            AND ((b.sort = 'asc'  AND ${score} < c.target_score)
              OR (b.sort <> 'asc' AND ${score} > c.target_score))
-        RETURNING c.id, c.challenger_id, c.target_score, c.board_id
+        RETURNING c.id, c.challenger_id, c.target_score, c.board_id,
+                  b.game_slug, b.title AS board_title
       `) as Row[];
       return rows.map((row) => ({
         id: toInt(row.id),
         challengerId: String(row.challenger_id),
         targetScore: toInt(row.target_score),
         boardId: String(row.board_id),
+        gameSlug: toStrOrNull(row.game_slug),
+        boardTitle: String(row.board_title ?? ""),
       }));
     },
 

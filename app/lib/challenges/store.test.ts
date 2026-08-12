@@ -20,6 +20,7 @@ import {
   CHALLENGE_DISMISSED_COOLDOWN_SECONDS,
   CHALLENGE_RESEND_COOLDOWN_SECONDS,
   CHALLENGE_SENDER_RATE_LIMIT,
+  LINK_CLAIM_RATE_LIMIT,
   MAX_OPEN_SENT_CHALLENGES,
 } from "./config";
 
@@ -284,7 +285,10 @@ describe("create", () => {
 describe("resolveForScore", () => {
   it("closes every won challenge in ONE statement", async () => {
     const { sql, calls } = makeFakeSql([
-      { id: "3", challenger_id: "a", target_score: "4200", board_id: "duskfall" },
+      {
+        id: "3", challenger_id: "a", target_score: "4200", board_id: "duskfall",
+        game_slug: "duskfall", board_title: "High score",
+      },
     ]);
     const store = createChallengeStore(sql);
 
@@ -294,8 +298,23 @@ describe("resolveForScore", () => {
 
     expect(calls).toHaveLength(1);
     expect(won).toEqual([
-      { id: 3, challengerId: "a", targetScore: 4200, boardId: "duskfall" },
+      {
+        id: 3, challengerId: "a", targetScore: 4200, boardId: "duskfall",
+        gameSlug: "duskfall", boardTitle: "High score",
+      },
     ]);
+  });
+
+  it("carries the board's game and title out of the UPDATE", async () => {
+    // So telling the challenger "somebody beat your 4,200 on Duskfall" needs no
+    // second round trip on the score path. The statement already joins `boards`
+    // to read `sort`, so both come free.
+    const { sql, calls } = makeFakeSql([]);
+    await createChallengeStore(sql).resolveForScore({
+      playerId: "b", boardId: "d", score: 1,
+    });
+    expect(calls[0].text).toContain("b.game_slug");
+    expect(calls[0].text).toContain("b.title AS board_title");
   });
 
   it("mirrors beats() strictly — a tie does not win", async () => {
@@ -468,5 +487,239 @@ describe("listIncoming", () => {
     expect(out[0].from.displayName).toBe("OZ");
     expect(out[0].sort).toBe("asc");
     expect(out[0].gameSlug).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Links
+// ---------------------------------------------------------------------------
+
+describe("mintLink", () => {
+  it("derives the score in SQL and writes in ONE statement", async () => {
+    const { sql, calls } = makeFakeSql([
+      { code: "CDFGHJKMNP", target_score: "4200", game_slug: "snake",
+        board_title: "Snake", board_exists: true, has_score: true },
+    ]);
+    const out = await createChallengeStore(sql).mintLink({
+      ownerId: "alice", boardId: "snake", code: "CDFGHJKMNP",
+    });
+
+    expect(calls).toHaveLength(1);
+    // Never taken from the caller — the same rule `create` follows, so nobody
+    // can publish a link to a number they did not score.
+    expect(calls[0].text).toContain("min(s.score)");
+    expect(calls[0].text).toContain("max(s.score)");
+    expect(calls[0].values).toContain("CDFGHJKMNP");
+    expect(out.code).toBe("CDFGHJKMNP");
+    expect(out.targetScore).toBe(4200);
+  });
+
+  it("upserts on the (owner, board) partial index, so sharing twice is one link", async () => {
+    const { sql, calls } = makeFakeSql([{}]);
+    await createChallengeStore(sql).mintLink({
+      ownerId: "alice", boardId: "snake", code: "CDFGHJKMNP",
+    });
+    // Must match `challenges_link_owner_idx` exactly or Postgres cannot infer it.
+    expect(calls[0].text).toContain(
+      "ON CONFLICT (challenger_id, board_id) WHERE kind = 'link'",
+    );
+  });
+
+  it("keeps a live link's code and replaces a revoked one's", async () => {
+    const { sql, calls } = makeFakeSql([{}]);
+    await createChallengeStore(sql).mintLink({
+      ownerId: "alice", boardId: "snake", code: "NEWCODE123",
+    });
+    // A posted URL must not rotate underneath the people holding it; a revoked
+    // one must never come back to life.
+    expect(calls[0].text).toContain("WHEN challenges.revoked_at IS NULL");
+    expect(calls[0].text).toContain("THEN challenges.code");
+    expect(calls[0].text).toContain("ELSE EXCLUDED.code");
+    expect(calls[0].text).toContain("revoked_at = NULL");
+  });
+
+  it("reports the gates rather than throwing when there is no score", async () => {
+    const { sql } = makeFakeSql([
+      { code: null, target_score: null, game_slug: null, board_title: "Snake",
+        board_exists: true, has_score: false },
+    ]);
+    const out = await createChallengeStore(sql).mintLink({
+      ownerId: "alice", boardId: "snake", code: "CDFGHJKMNP",
+    });
+    expect(out.code).toBeNull();
+    expect(out.boardExists).toBe(true);
+    expect(out.hasScore).toBe(false);
+  });
+});
+
+describe("getLinkByCode", () => {
+  it("never selects an avatar or a public id", async () => {
+    const { sql, calls } = makeFakeSql([
+      { id: "7", code: "CDFGHJKMNP", target_score: "4200", revoked_at: null,
+        board_id: "snake", game_slug: "snake", board_title: "Snake",
+        score_label: "Points", sort: "desc",
+        owner_username: "ozan", owner_handle: "Oz" },
+    ]);
+    const out = await createChallengeStore(sql).getLinkByCode("CDFGHJKMNP");
+
+    // THE SAFETY ASSERTION. A link is built to be pasted into a public chat and
+    // rendered as a preview card on other people's devices, and a Google-only
+    // product's avatar is frequently a real photograph of a child.
+    expect(calls[0].text).not.toContain("image");
+    expect(calls[0].text).not.toContain("public_id");
+    expect(out?.owner).toEqual({ username: "ozan", displayName: "Oz" });
+    expect(out).not.toHaveProperty("owner.image");
+  });
+
+  it("returns a revoked link rather than hiding it", async () => {
+    const { sql } = makeFakeSql([
+      { id: "7", code: "C", target_score: "1", revoked_at: "2026-01-01T00:00:00Z",
+        board_id: "b", game_slug: null, board_title: "T", score_label: "S",
+        sort: "desc", owner_username: null, owner_handle: "Oz" },
+    ]);
+    const out = await createChallengeStore(sql).getLinkByCode("C");
+    // The landing has to explain itself to somebody who followed a dead URL.
+    expect(out?.revokedAt).not.toBeNull();
+  });
+
+  it("is null when there is no such code", async () => {
+    const { sql } = makeFakeSql([]);
+    expect(await createChallengeStore(sql).getLinkByCode("NOPE")).toBeNull();
+  });
+});
+
+describe("claimLink", () => {
+  it("gates on blocks, self and the claimer's own rate limit, in ONE statement", async () => {
+    const { sql, calls } = makeFakeSql([
+      { id: "9", target_score: "4200", link_found: true, is_revoked: false,
+        is_self: false, is_blocked: false, recent_n: "2" },
+    ]);
+    const out = await createChallengeStore(sql).claimLink({
+      code: "CDFGHJKMNP", playerId: "bob",
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].text).toContain("player_blocks");
+    expect(calls[0].text).toContain("link.challenger_id <> ");
+    expect(calls[0].text).toContain("kind = 'link_claim'");
+    expect(out.id).toBe(9);
+    expect(out.overRateLimit).toBe(false);
+  });
+
+  it("does NOT require a friendship — that is the whole feature", async () => {
+    const { sql, calls } = makeFakeSql([{}]);
+    await createChallengeStore(sql).claimLink({ code: "C", playerId: "bob" });
+    // `create` joins `friendships`; this deliberately must not.
+    expect(calls[0].text).not.toContain("friendships");
+  });
+
+  it("keeps the original snapshot when the same link is taken up twice", async () => {
+    const { sql, calls } = makeFakeSql([{}]);
+    await createChallengeStore(sql).claimLink({ code: "C", playerId: "bob" });
+    // A no-op update, so the row still RETURNs but the owner's improved score
+    // cannot move the target under somebody who is already playing for it.
+    expect(calls[0].text).toContain(
+      "ON CONFLICT (parent_id, target_id) WHERE kind = 'link_claim'",
+    );
+    expect(calls[0].text).toContain("DO UPDATE SET target_score = challenges.target_score");
+  });
+
+  it("counts the press on the link it came from", async () => {
+    const { sql, calls } = makeFakeSql([{}]);
+    await createChallengeStore(sql).claimLink({ code: "C", playerId: "bob" });
+    expect(calls[0].text).toContain("SET opens = opens + 1");
+  });
+
+  it("reports the rate limit once the window is full", async () => {
+    const { sql } = makeFakeSql([
+      { id: null, target_score: null, link_found: true, is_revoked: false,
+        is_self: false, is_blocked: false,
+        recent_n: String(LINK_CLAIM_RATE_LIMIT.maxPerWindow) },
+    ]);
+    const out = await createChallengeStore(sql).claimLink({ code: "C", playerId: "bob" });
+    expect(out.overRateLimit).toBe(true);
+    expect(out.id).toBeNull();
+  });
+
+  it("separates a missing link from a revoked one", async () => {
+    const { sql } = makeFakeSql([
+      { id: null, link_found: false, is_revoked: false, is_self: false,
+        is_blocked: false, recent_n: "0" },
+    ]);
+    const out = await createChallengeStore(sql).claimLink({ code: "C", playerId: "bob" });
+    expect(out.linkFound).toBe(false);
+    expect(out.isRevoked).toBe(false);
+  });
+});
+
+describe("noteLinkOpen", () => {
+  it("cannot drive up a revoked link's counter", async () => {
+    const { sql, calls } = makeFakeSql([]);
+    await createChallengeStore(sql).noteLinkOpen("CDFGHJKMNP");
+    expect(calls[0].text).toContain("revoked_at IS NULL");
+    expect(calls[0].values).toContain("CDFGHJKMNP");
+  });
+});
+
+describe("revokeLink", () => {
+  it("is scoped to the owner — holding the code is not authority to kill it", async () => {
+    const { sql, calls } = makeFakeSql([{ id: "3" }]);
+    const ok = await createChallengeStore(sql).revokeLink({
+      ownerId: "alice", code: "CDFGHJKMNP",
+    });
+    expect(calls[0].text).toContain("challenger_id = ");
+    // Idempotent, and it never deletes: the code must stay claimed so a killed
+    // URL can never be reissued to somebody else.
+    expect(calls[0].text).toContain("revoked_at IS NULL");
+    expect(calls[0].text).not.toContain("DELETE");
+    expect(ok).toBe(true);
+  });
+
+  it("reports false when there was nothing to revoke", async () => {
+    const { sql } = makeFakeSql([]);
+    expect(
+      await createChallengeStore(sql).revokeLink({ ownerId: "a", code: "C" }),
+    ).toBe(false);
+  });
+});
+
+describe("listLinks", () => {
+  it("returns the payoff counts alongside each link", async () => {
+    const { sql, calls } = makeFakeSql([
+      { id: "1", code: "CDFGHJKMNP", target_score: "4200", opens: "14",
+        claims: "6", beaten: "2", revoked_at: null,
+        created_at: "2026-01-01T00:00:00Z", board_id: "snake",
+        game_slug: "snake", board_title: "Snake", score_label: "Points",
+        sort: "desc" },
+    ]);
+    const out = await createChallengeStore(sql).listLinks("alice");
+    expect(calls[0].text).toContain("kind = 'link'");
+    expect(out[0].opens).toBe(14);
+    expect(out[0].claims).toBe(6);
+    expect(out[0].beaten).toBe(2);
+  });
+});
+
+describe("kind scoping on the pre-existing reads", () => {
+  it("keeps invitations and link claims out of the outbox", async () => {
+    const { sql, calls } = makeFakeSql([]);
+    await createChallengeStore(sql).listOutgoing("alice");
+    // A `link` row has no target and would be dropped by the inner join anyway;
+    // a `link_claim` WOULD show, and one link round a class is a row per person.
+    expect(calls[0].text).toContain("c.kind = 'friend'");
+  });
+
+  it("does not let a popular link fill its owner's send quota", async () => {
+    const { sql, calls } = makeFakeSql([outcomeRow()]);
+    await createChallengeStore(sql).create({
+      challengerId: "alice", targetId: "bob", boardId: "snake",
+    });
+    // Both counters must be friend-only. A link_claim's challenger is the link
+    // OWNER, but the row is written by whoever took it up — counting those
+    // would lock a popular owner out of challenging their actual friends.
+    const recent = calls[0].text.slice(calls[0].text.indexOf("recent AS"));
+    expect(recent).toContain("kind = 'friend'");
+    const openSent = calls[0].text.slice(calls[0].text.indexOf("open_sent AS"));
+    expect(openSent).toContain("kind = 'friend'");
   });
 });

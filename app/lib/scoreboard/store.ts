@@ -384,28 +384,47 @@ export function createStore(sql: Sql) {
 
   /**
    * Attach previously-anonymous scores to a now-verified player, in ONE
-   * statement, and report how many rows were claimed. The `upd` CTE performs the
-   * UPDATE and the outer `count(*)::int` tallies its `RETURNING` rows. The
-   * `player_id IS NULL` guard makes this ONE-SHOT: an already-owned row (whether
-   * this player's or another's) is skipped, so a token can never re-claim or
-   * steal a score. `scores.handle` is left untouched. Both `playerId` and the
-   * `scoreIds` array are bound; `scoreIds` is cast to `bigint[]` so the driver's
-   * untyped array literal resolves against the BIGINT `id` column. An empty
-   * `scoreIds` early-returns 0 to avoid binding an empty array.
+   * statement, and report WHAT was claimed. The `player_id IS NULL` guard makes
+   * this ONE-SHOT: an already-owned row (whether this player's or another's) is
+   * skipped, so a token can never re-claim or steal a score. `scores.handle` is
+   * left untouched. Both `playerId` and the `scoreIds` array are bound;
+   * `scoreIds` is cast to `bigint[]` so the driver's untyped array literal
+   * resolves against the BIGINT `id` column. An empty `scoreIds` early-returns
+   * to avoid binding an empty array.
+   *
+   * ── WHY THIS RETURNS ROWS AND NOT A COUNT ──────────────────────────────
+   * It used to be `count(*)::int`, which was everything its one caller needed
+   * when claiming meant only "these scores are yours now". It is not enough for
+   * what claiming has to mean once a player can arrive from a challenge link:
+   * they play signed out, beat somebody's score, and only THEN sign in — and
+   * the challenge that score just won is closed by
+   * `resolveChallengesForScore`, which needs the board and the score to do it.
+   *
+   * A count cannot answer that, and re-reading the rows afterwards would be a
+   * second round trip for facts this statement is already holding. So the
+   * `RETURNING` list carries them out, and the caller decides what to do next.
+   *
+   * This is also the fix for a hole that predates links entirely: play a game
+   * anonymously, sign in afterwards, and beating an ordinary FRIEND challenge
+   * did not count either.
    */
-  async function claimScores(playerId: string, scoreIds: number[]): Promise<number> {
+  async function claimScores(
+    playerId: string,
+    scoreIds: number[],
+  ): Promise<{ boardId: string; score: number }[]> {
     if (scoreIds.length === 0) {
-      return 0;
+      return [];
     }
     const rows = await sql`
-      WITH upd AS (
-        UPDATE scores SET player_id = ${playerId}
-        WHERE id = ANY(${scoreIds}::bigint[]) AND player_id IS NULL
-        RETURNING id
-      )
-      SELECT count(*)::int AS n FROM upd
+      UPDATE scores SET player_id = ${playerId}
+       WHERE id = ANY(${scoreIds}::bigint[]) AND player_id IS NULL
+      RETURNING board_id, score
     `;
-    return Number(rows[0]?.n ?? 0);
+    return rows.map((row) => ({
+      boardId: String(row.board_id),
+      // BIGINT egresses from the HTTP driver as a string.
+      score: Number(row.score),
+    }));
   }
 
   /**

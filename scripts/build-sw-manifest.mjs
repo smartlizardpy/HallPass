@@ -149,6 +149,14 @@ if (existsSync(prerenderManifestPath)) {
       // time request. See `isPrivatePath` in `public/sw.js` for the runtime half.
       route === "/play" ||
       route.startsWith("/play/") ||
+      // NO CHALLENGE LINK IS EVER PRECACHED. `/c/<code>` is dynamic (it reads a
+      // per-code row), so it cannot reach the prerender manifest and cannot
+      // arrive here today — this is the same belt-and-braces the `/play/`
+      // exclusion above is written under, and for the same reason: the day one
+      // of these becomes static, precaching it would pin ONE person's challenge
+      // card into a cache shared by everybody on the browser profile, and serve
+      // it under a URL that belongs to somebody else's code.
+      route.startsWith("/c/") ||
       route === "/favicon.ico"
     ) {
       continue;

@@ -44,7 +44,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   session: { strategy: "jwt" },
   pages: { signIn: "/dashboard/signin" },
-  providers: [Google],
+  /**
+   * `prompt=select_account` — ALWAYS SHOW THE ACCOUNT CHOOSER.
+   *
+   * Two reasons, and both are specific to who uses this site.
+   *
+   * SHARED DEVICES. A school laptop or a family tablet usually has somebody
+   * else's Google session already live in the browser. Without this, "sign in"
+   * silently adopts whoever that is — so a child's scores, friends and
+   * notifications attach to their sibling's or their classmate's account, and
+   * the only way out is a sign-out flow they will not find.
+   *
+   * SCHOOL ACCOUNTS. Google Workspace for Education blocks users marked
+   * under 18 from signing in to third-party apps their admin has not approved,
+   * and no school IT admin is going to approve an unblocked-games site. A pupil
+   * on a Chromebook is signed into exactly that account, so the default path is
+   * a hard "Access blocked" they can do nothing about. The chooser is what lets
+   * them pick their personal account instead — it does not fix the block, but
+   * it puts a working option in front of the people who have one.
+   *
+   * Costs one extra tap for everybody else, which is the right trade against
+   * signing somebody in as the wrong person.
+   */
+  providers: [
+    Google({ authorization: { params: { prompt: "select_account" } } }),
+  ],
   callbacks: {
     /**
      * Sign-in is now OPEN to any verified Google identity — players sign in only

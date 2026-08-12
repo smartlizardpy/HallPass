@@ -26,13 +26,13 @@
  */
 
 import { challenges, getForGame, getIncoming, getOutgoing } from "@/app/lib/challenges";
+import { resolveChallengeBoard } from "@/app/lib/challenges/board";
 import type { ChallengeReason } from "@/app/lib/challenges/config";
 import type { CreateOutcome } from "@/app/lib/challenges";
 import { isMissingColumnError } from "@/app/lib/db";
 import { challengeCopy } from "@/app/lib/notifications/copy";
 import { notifyPlayer } from "@/app/lib/notifications/deliver";
 import { findGame } from "@/app/lib/games";
-import { store } from "@/app/lib/scoreboard";
 import { social } from "@/app/lib/social";
 import {
   NO_STORE,
@@ -110,32 +110,6 @@ function refuse(reason: ChallengeReason): Response {
   );
 }
 
-/**
- * Resolve which board a challenge is for.
- *
- * An explicit `board` wins. Otherwise the game's boards are looked up: exactly
- * one is unambiguous, none means the game has no leaderboard to challenge on,
- * and SEVERAL is a question only the game can answer — boards are decoupled from
- * games and one game may carry a "high score" and a "fastest time", which are
- * not interchangeable dares.
- */
-async function resolveBoardId(
-  body: Record<string, unknown>,
-): Promise<{ boardId: string } | { reason: ChallengeReason }> {
-  const board = typeof body.board === "string" ? body.board.trim() : "";
-  if (board) return { boardId: board };
-
-  const game = typeof body.game === "string" ? body.game.trim() : "";
-  if (!game) return { reason: "bad-request" };
-
-  const boards = await store.listBoardsForGame(game);
-  if (boards.length === 0) return { reason: "no-board" };
-  if (boards.length > 1) return { reason: "bad-request" };
-  // `BoardConfig.slug` IS `boards.id` — the field kept its name from before
-  // `001_decouple_boards.sql` split a board's identity from its game's slug.
-  return { boardId: boards[0].slug };
-}
-
 export async function POST(req: Request): Promise<Response> {
   const playerId = await currentPlayerId();
   if (!playerId) return unauthorized();
@@ -152,7 +126,7 @@ export async function POST(req: Request): Promise<Response> {
   if (!to) return refuse("bad-request");
 
   try {
-    const board = await resolveBoardId(body);
+    const board = await resolveChallengeBoard(body);
     if ("reason" in board) return refuse(board.reason);
 
     const targetId = await social.internalIdFromPublicId(to);
