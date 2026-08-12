@@ -283,9 +283,24 @@ export function ChallengeLanding({
                 offer rather than a toll booth, and shown once.
               */}
               {!signedIn && plays >= 3 ? (
-                <button type="button" className={BTN_SECONDARY} onClick={signInPopup}>
-                  Sign in to keep your scores
-                </button>
+                <>
+                  <button type="button" className={BTN_SECONDARY} onClick={signInPopup}>
+                    Sign in to keep your scores
+                  </button>
+                  {/*
+                    WARN BEFORE THE TAP, not after it. Google Workspace for
+                    Education blocks under-18 accounts from apps a school admin
+                    has not approved, and this site will never be approved — so
+                    a pupil on a Chromebook meets a dead "Access blocked" screen
+                    with no explanation and no way forward. One grey line turns
+                    that into a choice they can actually make. `select_account`
+                    in `lib/auth.ts` is what gives them something to switch to.
+                  */}
+                  <p className="max-w-[22rem] text-xs font-semibold text-muted">
+                    Use a personal Google account — school ones are usually
+                    blocked from signing in here.
+                  </p>
+                </>
               ) : null}
             </div>
           </>
