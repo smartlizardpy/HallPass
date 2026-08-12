@@ -28,6 +28,7 @@
  */
 
 import { useCallback, useState } from "react";
+import posthog from "posthog-js";
 
 /** Why a link could not be minted, in words for the person who asked. */
 const REFUSAL_TEXT: Record<string, string> = {
@@ -93,6 +94,10 @@ export function ShareChallenge({
           text: `Think you can beat my score on ${title}?`,
           url,
         });
+        // The other end of the funnel `/c/<code>` measures. `board` rather than
+        // the code, because this is the OWNER's side and the code is already
+        // theirs — nothing here needs to identify a person.
+        posthog.capture("challenge_link_shared", { board: boardId, via: "sheet" });
         setState({ kind: "done", url, copied: false });
         return;
       } catch {
@@ -103,10 +108,12 @@ export function ShareChallenge({
 
     try {
       await navigator.clipboard.writeText(url);
+      posthog.capture("challenge_link_shared", { board: boardId, via: "clipboard" });
       setState({ kind: "done", url, copied: true });
     } catch {
       // No clipboard permission, or an insecure context. The URL is on screen
       // either way, which is the last rung of the ladder and still works.
+      posthog.capture("challenge_link_shared", { board: boardId, via: "manual" });
       setState({ kind: "done", url, copied: false });
     }
   }, [boardId, title]);

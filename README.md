@@ -172,9 +172,73 @@ site-wide monthly challenge is later a new kind plus a CHECK rather than a
 rewrite. Resolution never branches on kind. **Nothing builds the `seasonal`
 kind** — it is a seam, not a feature.
 
+**From your own scores, too.** `/play/you` lists every board you have entered,
+and each row carries **Challenge** (the same picker, reached from a score you
+set last week rather than from inside the game) and **Share** — see below.
+
 Backed by `app/lib/challenges/` and migration `022_challenges.sql`. **That
 migration must be applied before challenges work**; until then every read
 degrades to empty and the surfaces render nothing.
+
+### Challenge links
+
+A **challenge link** is the same dare aimed at nobody in particular: a URL you
+paste into a group chat. Anyone who opens `/c/<code>` sees the score to beat and
+one button, and **plays immediately with no account**. The ask to sign in comes
+only after they have a score worth keeping. See `challenge-sharing-design.md`
+for the argument and `challenge-onboarding-ux.md` for the funnel research.
+
+**Two new kinds on the challenges table.** `link` is the invitation — an owner,
+no target, a code, never resolved and never in an inbox. `link_claim` is one
+person taking it up, and it is target-shaped on purpose: that is what lets the
+ordinary score path resolve it with no new branch.
+
+**One link per (player, board).** Sharing again keeps the same URL and refreshes
+the score under it, so a link posted once stays good. Each taker snapshots the
+number when they take it up, so an owner improving their score never moves the
+target under somebody mid-attempt. Sharing after a **revoke** issues a NEW code
+— a killed URL stays dead.
+
+**The page never navigates, and that is load-bearing.** The SDK holds anonymous
+claim tokens in memory only (so a shared school computer cannot leak one child's
+scores to the next), and they die with the game frame. So the player mounts on
+`/c/<code>` itself and sign-in opens a popup pointed at `/play/auth/complete` —
+the SDK hears that broadcast and flushes the claim from inside the still-live
+frame. A same-tab redirect would silently bin the score being claimed.
+
+**Claiming resolves challenges.** `POST /api/v1/me/claim` now re-runs resolution
+over every score it transfers. Without it the whole flow has no ending; it also
+fixes the same hole for ordinary friend challenges, where playing anonymously
+and signing in later never counted.
+
+**Hosted games only.** A cross-origin game mints no claim token, so nobody
+following such a link could keep what they scored — the Share button is hidden
+for those rather than offered and refused.
+
+**No avatar, anywhere.** The landing and its preview card carry a handle and a
+number. Sign-in is Google-only, so an avatar is frequently a real photograph of
+a child, and this is a page designed to be broadcast and cached on strangers'
+devices. `/c/` is crawlable and `noindex` (the same argument as `/u/`), never
+precached, and revocable from `/play/you`.
+
+**Escaping in-app browsers.** A link's default home is Instagram's or Snapchat's
+webview, where Google refuses OAuth. On the "Beat it" tap — the one moment
+nothing exists to lose — the page may try `x-safari-https:` / `intent://` to
+reopen in the real browser, raced against a 1200ms bail-out. **Off by default**,
+behind the PostHog flag `challenge-link-webview-escape`, because the escape
+schemes are undocumented and unverified against current app builds.
+
+**A cap worth knowing about.** Google Workspace for Education blocks under-18
+accounts from third-party apps a school admin has not approved, and this site
+will not be approved. Pupils signed into a school account on a Chromebook cannot
+complete sign-in at all. Everything before that step still works, which is
+another reason the flow plays first; the account chooser is forced
+(`prompt=select_account`) so anyone with a personal account can switch to it.
+
+Backed by `app/lib/challenges/link.ts`, `app/c/[code]/` and migration
+`025_challenge_links.sql`. **That migration must be applied before links work**;
+until then minting reports the feature unavailable and `/c/<code>` says the
+challenge cannot be found.
 
 ### Notifications
 

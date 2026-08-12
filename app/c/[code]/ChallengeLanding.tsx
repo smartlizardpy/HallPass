@@ -164,6 +164,19 @@ export function ChallengeLanding({
     return true;
   }, []);
 
+  /**
+   * The top of the funnel.
+   *
+   * Every event below carries `code` so one link's journey can be followed end
+   * to end, and NOTHING carries the owner's name or the viewer's identity —
+   * this is a page for people with no account, and a funnel is not a reason to
+   * start profiling children. PostHog no-ops entirely when the project token is
+   * absent, so this is free in development.
+   */
+  useEffect(() => {
+    posthog.capture("challenge_link_viewed", { code: link.code });
+  }, [link.code]);
+
   // Who is looking, asked once. Fail-soft to "signed out", which is the safe
   // assumption: the worst outcome is offering sign-in to somebody who already
   // has an account, and they will simply not press it.
@@ -206,9 +219,10 @@ export function ChallengeLanding({
     // to fail often, so it is raced against a short timer and never blocks.
     if (tryEscapeWebview()) return;
 
+    posthog.capture("challenge_link_started", { code: link.code, attempt: plays + 1 });
     setPlays((n) => n + 1);
     setStage({ kind: "playing" });
-  }, [link.code, tryEscapeWebview]);
+  }, [link.code, plays, tryEscapeWebview]);
 
   /**
    * They closed the game. Work out what to say.
@@ -229,13 +243,18 @@ export function ChallengeLanding({
       );
       const data = (await res.json()) as { incoming?: { boardId: string }[] };
       const stillOpen = (data.incoming ?? []).some((c) => c.boardId === link.boardId);
+      posthog.capture("challenge_link_result", {
+        code: link.code,
+        won: !stillOpen,
+        attempts: plays,
+      });
       setStage({ kind: stillOpen ? "missed" : "won" });
     } catch {
       // Cannot tell. "Not yet" is the honest, non-celebratory default — telling
       // somebody they won when they may not have is far worse than the reverse.
       setStage({ kind: "missed" });
     }
-  }, [signedIn, link.gameSlug, link.boardId]);
+  }, [signedIn, plays, link.code, link.gameSlug, link.boardId]);
 
   if (stage.kind === "playing" && game) {
     return <PlayerOverlay game={game} onClose={finish} />;
@@ -284,7 +303,17 @@ export function ChallengeLanding({
               */}
               {!signedIn && plays >= 3 ? (
                 <>
-                  <button type="button" className={BTN_SECONDARY} onClick={signInPopup}>
+                  <button
+                    type="button"
+                    className={BTN_SECONDARY}
+                    onClick={() => {
+                      posthog.capture("challenge_link_signin", {
+                        code: link.code,
+                        attempts: plays,
+                      });
+                      signInPopup();
+                    }}
+                  >
                     Sign in to keep your scores
                   </button>
                   {/*
