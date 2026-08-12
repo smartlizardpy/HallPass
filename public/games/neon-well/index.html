@@ -211,16 +211,47 @@ canvas{ display:block; }
 /* ============================================================
    OVERLAYS
    ============================================================ */
+/* FIXED AND FULL-VIEWPORT, and it has to live outside `.well` to be either —
+   see the comment above the markup. It used to be `position:absolute` inside
+   the well, which meant the blur stopped at the edge of the board and, worse,
+   the panel was bounded by the board's height: on a phone the game-over screen
+   outgrew it and the buttons below the fold were unreachable, because the well
+   also carries `overflow:hidden` so there was nothing to scroll.
+
+   SCROLLABLE, AND CENTRED WITH `margin:auto` RATHER THAN `align-items:center`.
+   That distinction is the actual fix. A centred flex item whose content is
+   taller than the container overflows in BOTH directions, and the overflow
+   above the top edge cannot be scrolled to — the classic flexbox centring trap,
+   and exactly the bug being reported. `margin:auto` on the item centres it when
+   there is spare room and collapses to a normal top-aligned block when there is
+   not, so a tall panel simply scrolls. */
 .overlay{
-  position:absolute; inset:0; z-index:5;
-  display:grid; place-items:center; text-align:center;
-  background:hsl(228 40% 5% / .55);
+  position:fixed; inset:0; z-index:50;
+  display:flex; text-align:center;
+  overflow-y:auto; overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  background:hsl(228 40% 5% / .62);
   backdrop-filter:blur(16px) saturate(.9);
   -webkit-backdrop-filter:blur(16px) saturate(.9);
-  border-radius:12px; padding:16px;
+  padding:max(16px, env(safe-area-inset-top, 0px)) 16px
+          max(16px, env(safe-area-inset-bottom, 0px));
 }
 .overlay[hidden]{ display:none; }
-.overlay .in{ animation:fadeUp .5s cubic-bezier(.2,.8,.2,1) both; max-width:100%; }
+/* THE PANEL IS NOW DRAWN, not implied. It used to be the overlay's own tinted,
+   rounded box, which read as a card only because the overlay was exactly the
+   size of the well. Once the blur covers the viewport that illusion is gone and
+   the content would float loose on the background, so the card moves onto the
+   content itself. Border and shadow are the well's, so it still looks like part
+   of the same machine. */
+.overlay .in{
+  animation:fadeUp .5s cubic-bezier(.2,.8,.2,1) both;
+  margin:auto; width:100%; max-width:340px;
+  padding:24px 20px;
+  border:1px solid hsl(200 60% 80% / .13);
+  border-radius:16px;
+  background:linear-gradient(180deg, hsl(226 40% 9% / .92), hsl(230 44% 6% / .95));
+  box-shadow:0 24px 70px rgba(0,0,0,.6), inset 0 0 60px rgba(0,0,0,.35);
+}
 @keyframes fadeUp{ from{ opacity:0; transform:translateY(14px);} to{ opacity:1; transform:none;} }
 
 .overlay h2{
@@ -423,63 +454,6 @@ canvas{ display:block; }
         <div class="well" id="well">
           <canvas id="board"></canvas>
 
-          <div class="overlay" id="startScreen">
-            <div class="in">
-              <h2>Neon Well</h2>
-              <div class="sub">Stack. Clear. Repeat.</div>
-              <div class="gestures">
-                <div><i>&#8596;</i><span>Swipe to move</span></div>
-                <div><i>&#8635;</i><span>Tap to rotate</span></div>
-                <div><i>&#8595;</i><span>Drag down to soft drop</span></div>
-                <div><i>&#8681;</i><span>Flick down to hard drop</span></div>
-              </div>
-              <div class="keys">
-                <span>Move</span><b>&larr; &rarr;</b>
-                <span>Rotate</span><b>&uarr; / X &nbsp;&middot;&nbsp; Z / Ctrl</b>
-                <span>Soft drop</span><b>&darr;</b>
-                <span>Hard drop</span><b>Space</b>
-                <span>Hold</span><b>C / Shift</b>
-                <span>Pause</span><b>P</b>
-                <span>Restart</span><b>R</b>
-                <span>Mute</span><b>M</b>
-              </div>
-              <button class="btn" id="startBtn">Start game</button>
-              <div class="hpauth">
-                <button class="btn ghost" id="hpSignIn">Sign in</button>
-                <span id="hpAuthStatus">Playing as Guest</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="overlay" id="pauseScreen" hidden>
-            <div class="in">
-              <h2 class="small">Paused</h2>
-              <div class="sub">Tap resume to keep playing</div>
-              <button class="btn" id="resumeBtn">Resume</button>
-            </div>
-          </div>
-
-          <div class="overlay" id="overScreen" hidden>
-            <div class="in">
-              <h2 class="small">Game over</h2>
-              <div class="sub" id="overSub">The well filled up</div>
-              <div class="finals">
-                <div><span>Score</span><b id="fScore">0</b></div>
-                <div><span>Lines</span><b id="fLines">0</b></div>
-                <div><span>Level</span><b id="fLevel">1</b></div>
-                <div><span>Time</span><b id="fTime">0:00</b></div>
-                <div><span>Pieces</span><b id="fPieces">0</b></div>
-                <div><span>Best combo</span><b id="fCombo">0</b></div>
-              </div>
-              <div class="hptitle">Neon Well &middot; High Scores</div>
-              <div class="hpboard" id="hpBoard"></div>
-              <button class="btn" id="againBtn">Play again</button>
-              <div class="hpactions">
-                <button class="btn ghost" id="hpChallenge">Challenge a friend</button>
-              </div>
-              <div class="hpmsg" id="hpChallengeMsg" hidden></div>
-            </div>
-          </div>
         </div>
       </div>
       <div class="hint">P pause &middot; R restart &middot; M mute</div>
@@ -496,6 +470,70 @@ canvas{ display:block; }
 
   </div>
 </div>
+
+<!-- OVERLAYS live OUTSIDE .well on purpose. That element carries
+     `will-change:transform`, which makes it the containing block for any
+     `position:fixed` descendant, AND `overflow:hidden`, which clips one. So an
+     overlay nested inside it could never cover more than the well, and could
+     never scroll when its content outgrew the board. Referenced by id, so the
+     game logic is unaffected by the move. -->
+        <div class="overlay" id="startScreen">
+          <div class="in">
+            <h2>Neon Well</h2>
+            <div class="sub">Stack. Clear. Repeat.</div>
+            <div class="gestures">
+              <div><i>&#8596;</i><span>Swipe to move</span></div>
+              <div><i>&#8635;</i><span>Tap to rotate</span></div>
+              <div><i>&#8595;</i><span>Drag down to soft drop</span></div>
+              <div><i>&#8681;</i><span>Flick down to hard drop</span></div>
+            </div>
+            <div class="keys">
+              <span>Move</span><b>&larr; &rarr;</b>
+              <span>Rotate</span><b>&uarr; / X &nbsp;&middot;&nbsp; Z / Ctrl</b>
+              <span>Soft drop</span><b>&darr;</b>
+              <span>Hard drop</span><b>Space</b>
+              <span>Hold</span><b>C / Shift</b>
+              <span>Pause</span><b>P</b>
+              <span>Restart</span><b>R</b>
+              <span>Mute</span><b>M</b>
+            </div>
+            <button class="btn" id="startBtn">Start game</button>
+            <div class="hpauth">
+              <button class="btn ghost" id="hpSignIn">Sign in</button>
+              <span id="hpAuthStatus">Playing as Guest</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="overlay" id="pauseScreen" hidden>
+          <div class="in">
+            <h2 class="small">Paused</h2>
+            <div class="sub">Tap resume to keep playing</div>
+            <button class="btn" id="resumeBtn">Resume</button>
+          </div>
+        </div>
+
+        <div class="overlay" id="overScreen" hidden>
+          <div class="in">
+            <h2 class="small">Game over</h2>
+            <div class="sub" id="overSub">The well filled up</div>
+            <div class="finals">
+              <div><span>Score</span><b id="fScore">0</b></div>
+              <div><span>Lines</span><b id="fLines">0</b></div>
+              <div><span>Level</span><b id="fLevel">1</b></div>
+              <div><span>Time</span><b id="fTime">0:00</b></div>
+              <div><span>Pieces</span><b id="fPieces">0</b></div>
+              <div><span>Best combo</span><b id="fCombo">0</b></div>
+            </div>
+            <div class="hptitle">Neon Well &middot; High Scores</div>
+            <div class="hpboard" id="hpBoard"></div>
+            <button class="btn" id="againBtn">Play again</button>
+            <div class="hpactions">
+              <button class="btn ghost" id="hpChallenge">Challenge a friend</button>
+            </div>
+            <div class="hpmsg" id="hpChallengeMsg" hidden></div>
+          </div>
+        </div>
 
 <!-- HallPass: online leaderboard + friend challenges. The stub below installs
      window.HallPass synchronously so calls made before the bundle lands are
