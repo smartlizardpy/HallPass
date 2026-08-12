@@ -33,9 +33,16 @@ export const alt = "A HallPass challenge";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-/** Brand values, inlined — this renders outside the app's CSS entirely. */
+/**
+ * Brand values, inlined — this renders outside the app's CSS entirely, so it
+ * cannot read the custom properties in `globals.css` and these must be kept in
+ * step with them BY HAND. They are the literal values of `--brand`,
+ * `--accent-yellow` and the zinc greys the rest of the site uses; a preview
+ * card in the wrong colour is the first thing anybody sees of HallPass.
+ */
 const INK = "#18181b";
-const BRAND = "#e11d63";
+const BRAND = "#7c2eef"; // --brand
+const DOT = "#ffc700"; // --accent-yellow, the wordmark's full stop
 const PAPER = "#ffffff";
 const MUTED = "#71717a";
 
@@ -78,64 +85,101 @@ export default async function Image({
               width: 14,
               height: 14,
               borderRadius: 99,
-              background: BRAND,
+              background: DOT,
               marginLeft: 8,
             }}
           />
         </div>
 
-        {live ? (
-          <>
+        {/*
+          ONE WRAPPER DIV PER BRANCH, AND NEVER A FRAGMENT. Satori — which is
+          what `ImageResponse` renders with — does not lay a React Fragment out
+          as a flex child: the fragment's children get hoisted and inherit the
+          ROOT's axis, so a column layout silently became a single row running
+          off both edges of the card. It renders without error, which is the
+          dangerous part; the only way to catch it is to look at the PNG.
+
+          Every element also carries an explicit `display: flex`, which Satori
+          requires on anything with more than one child.
+        */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "100%",
+          }}
+        >
+          {live ? (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                width: "100%",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  marginTop: 40,
+                  fontSize: 48,
+                  fontWeight: 700,
+                  color: INK,
+                  textAlign: "center",
+                  // Wraps instead of overflowing when a handle is long.
+                  maxWidth: 1000,
+                  lineHeight: 1.2,
+                }}
+              >
+                {/*
+                  A TEMPLATE LITERAL, NOT JSX TEXT. `{name} says you can&apos;t…`
+                  renders "Ozansays" — the text node's leading space is dropped
+                  when it also carries an HTML entity. Building the whole
+                  sentence in one expression has no JSX text to trim, and it
+                  drops the entity (and the lint rule that forced it) with it.
+                */}
+                {`${live.owner.displayName} says you can't beat this`}
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  marginTop: 20,
+                  fontSize: 150,
+                  fontWeight: 900,
+                  color: BRAND,
+                  lineHeight: 1,
+                }}
+              >
+                {live.targetScore.toLocaleString("en-US")}
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  marginTop: 18,
+                  fontSize: 32,
+                  fontWeight: 600,
+                  color: MUTED,
+                }}
+              >
+                {live.boardTitle} · no account needed
+              </div>
+            </div>
+          ) : (
             <div
               style={{
                 display: "flex",
                 marginTop: 40,
-                fontSize: 52,
+                fontSize: 56,
                 fontWeight: 700,
                 color: INK,
-                textAlign: "center",
-                maxWidth: 980,
               }}
             >
-              {live.owner.displayName} says you can&apos;t beat this
+              Beat somebody&apos;s high score
             </div>
-            <div
-              style={{
-                display: "flex",
-                marginTop: 24,
-                fontSize: 150,
-                fontWeight: 900,
-                color: BRAND,
-                lineHeight: 1,
-              }}
-            >
-              {live.targetScore.toLocaleString("en-US")}
-            </div>
-            <div
-              style={{
-                display: "flex",
-                marginTop: 20,
-                fontSize: 34,
-                fontWeight: 600,
-                color: MUTED,
-              }}
-            >
-              {live.boardTitle} · no account needed
-            </div>
-          </>
-        ) : (
-          <div
-            style={{
-              display: "flex",
-              marginTop: 40,
-              fontSize: 56,
-              fontWeight: 700,
-              color: INK,
-            }}
-          >
-            Beat somebody&apos;s high score
-          </div>
-        )}
+          )}
+        </div>
       </div>
     ),
     size,

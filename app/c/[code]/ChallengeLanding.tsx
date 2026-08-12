@@ -336,7 +336,18 @@ export function ChallengeLanding({
         ) : (
           <>
             <h1 className="mt-4 text-2xl font-black tracking-tight text-zinc-900">
-              {link.owner.displayName} says you can&rsquo;t beat this.
+              {/*
+                THE EXPLICIT `{" "}` IS LOAD-BEARING — do not "tidy" it away.
+                Written the obvious way, as `{name} says you can&rsquo;t…`,
+                this renders "Ozansays": the leading space of the text node is
+                dropped. The identical construction WITHOUT an HTML entity
+                (`{link.scoreLabel} to beat`, below) keeps its space, so the
+                entity looks like the trigger — but that correlation is
+                observed rather than proven, and the fix does not depend on it.
+                Verified by loading the page; no type or unit check can see it.
+              */}
+              {link.owner.displayName}{" "}
+              <span>says you can&rsquo;t beat this.</span>
             </h1>
             <p className="mt-3 text-sm font-semibold text-muted">
               {link.boardTitle}
