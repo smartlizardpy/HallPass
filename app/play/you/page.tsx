@@ -167,33 +167,60 @@ export default async function YouProfilePage() {
           </p>
         ) : (
           <ul className="mt-4 space-y-2">
+            {/*
+              TWO ROWS, NOT ONE. The identity and the rank sit on the first
+              line; the actions get their own beneath it. Squeezing a board
+              title, a score, two buttons and a rank badge onto one line was
+              only ever going to work for short titles — "Depths of
+              Aethelgard - High Scores" collided with the buttons on a desktop
+              width, never mind a phone. The actions also EXPAND: sharing
+              swaps the button for the link itself, and a refusal adds a
+              sentence, neither of which can be allowed to widen a row and
+              push the rank badge off the card.
+            */}
             {standings.map((s) => (
               <li
                 key={s.boardId}
-                className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-2 px-4 py-3"
+                className="rounded-lg border border-border bg-surface-2 px-4 py-3"
               >
-                <div className="min-w-0">
-                  {s.gameSlug ? (
-                    <Link
-                      href={`/game/${s.gameSlug}`}
-                      className="truncate font-bold text-foreground hover:text-brand"
-                    >
-                      {s.title}
-                    </Link>
-                  ) : (
-                    <span className="block truncate font-bold text-foreground">
-                      {s.title}
-                    </span>
-                  )}
-                  <div className="mt-0.5 text-xs text-muted">
-                    Best {s.best.toLocaleString("en-US")}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    {s.gameSlug ? (
+                      // `block` is load-bearing: `truncate` sets overflow and
+                      // text-overflow, and neither applies to a non-replaced
+                      // INLINE box — which is what `<Link>` renders. Without it
+                      // the title does not clip, it just runs under whatever is
+                      // beside it. The `<span>` branch below always had it.
+                      <Link
+                        href={`/game/${s.gameSlug}`}
+                        className="block truncate font-bold text-foreground hover:text-brand"
+                      >
+                        {s.title}
+                      </Link>
+                    ) : (
+                      <span className="block truncate font-bold text-foreground">
+                        {s.title}
+                      </span>
+                    )}
+                    <div className="mt-0.5 text-xs text-muted">
+                      Best {s.best.toLocaleString("en-US")}
+                    </div>
                   </div>
+                  <span
+                    className={`shrink-0 rounded-full px-3 py-1 text-sm font-black tabular-nums ${rankBadgeClasses(
+                      s.rank,
+                    )}`}
+                  >
+                    #{s.rank}
+                  </span>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  {/* Every board listed here is one the player has posted a
-                      score on, which is exactly the precondition both actions
-                      need — so neither can be offered and then refused for
-                      want of a score. */}
+
+                {/* Every board listed here is one the player has posted a score
+                    on, which is exactly the precondition both actions need — so
+                    neither can be offered and then refused for want of a score.
+                    `flex-wrap` lets the share widget take a full line of its own
+                    once it has a URL or a refusal to show. */}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
                   {shareable(s.gameSlug) ? (
                     <ShareChallenge boardId={s.boardId} title={s.title} />
                   ) : null}
@@ -202,13 +229,6 @@ export default async function YouProfilePage() {
                     gameSlug={s.gameSlug}
                     title={s.title}
                   />
-                  <span
-                    className={`rounded-full px-3 py-1 text-sm font-black tabular-nums ${rankBadgeClasses(
-                      s.rank,
-                    )}`}
-                  >
-                    #{s.rank}
-                  </span>
                 </div>
               </li>
             ))}
