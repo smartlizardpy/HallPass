@@ -27,6 +27,7 @@ import {
 } from "@/app/lib/scoreboard";
 import { auth } from "@/app/lib/auth";
 import { resolveChallengesForScore } from "@/app/lib/challenges";
+import { notifyChallengesBeaten } from "@/app/lib/challenges/notify";
 import { getPublicIdentity, upsertPlayerOnLogin } from "@/app/lib/players";
 import type { Session } from "next-auth";
 import type {
@@ -209,7 +210,15 @@ export async function POST(
   // into an error the player did not cause and cannot act on. An unresolved
   // challenge is closed by the next qualifying score; a lost score is gone.
   if (playerId !== null) {
-    await resolveChallengesForScore({ playerId, boardId: slug, score: intScore });
+    const beaten = await resolveChallengesForScore({
+      playerId,
+      boardId: slug,
+      score: intScore,
+    });
+    // And tell whoever set them. `cleanHandle` is the sanitised display name the
+    // score was posted under, which is exactly who the challenger should be told
+    // beat them — never a Google name and never an id.
+    await notifyChallengesBeaten(beaten, cleanHandle);
   }
 
   const body: SubmitResponse = {

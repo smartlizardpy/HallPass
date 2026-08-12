@@ -285,7 +285,10 @@ describe("create", () => {
 describe("resolveForScore", () => {
   it("closes every won challenge in ONE statement", async () => {
     const { sql, calls } = makeFakeSql([
-      { id: "3", challenger_id: "a", target_score: "4200", board_id: "duskfall" },
+      {
+        id: "3", challenger_id: "a", target_score: "4200", board_id: "duskfall",
+        game_slug: "duskfall", board_title: "High score",
+      },
     ]);
     const store = createChallengeStore(sql);
 
@@ -295,8 +298,23 @@ describe("resolveForScore", () => {
 
     expect(calls).toHaveLength(1);
     expect(won).toEqual([
-      { id: 3, challengerId: "a", targetScore: 4200, boardId: "duskfall" },
+      {
+        id: 3, challengerId: "a", targetScore: 4200, boardId: "duskfall",
+        gameSlug: "duskfall", boardTitle: "High score",
+      },
     ]);
+  });
+
+  it("carries the board's game and title out of the UPDATE", async () => {
+    // So telling the challenger "somebody beat your 4,200 on Duskfall" needs no
+    // second round trip on the score path. The statement already joins `boards`
+    // to read `sort`, so both come free.
+    const { sql, calls } = makeFakeSql([]);
+    await createChallengeStore(sql).resolveForScore({
+      playerId: "b", boardId: "d", score: 1,
+    });
+    expect(calls[0].text).toContain("b.game_slug");
+    expect(calls[0].text).toContain("b.title AS board_title");
   });
 
   it("mirrors beats() strictly — a tie does not win", async () => {

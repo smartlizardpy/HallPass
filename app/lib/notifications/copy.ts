@@ -102,6 +102,43 @@ export function challengeCopy(input: {
   });
 }
 
+/**
+ * "Deniz beat your score."
+ *
+ * THE ONE PLACE A NUMBER IS ALLOWED, and only the one the reader already knows.
+ * Every other builder here omits scores on the grounds that the number belongs
+ * on the page, where it arrives with a Play button. This notification IS about
+ * a number changing hands, and "beat your 4,200" is what makes it worth
+ * reading — but it is the RECIPIENT'S OWN score, which they set and which is
+ * already public on the board, so a bystander reading it over their shoulder
+ * learns nothing they could not see on the leaderboard.
+ *
+ * The winning score is deliberately NOT included. That one belongs to somebody
+ * else, and a lock-screen banner is not the place to publish a third party's
+ * result to whoever is holding the phone.
+ *
+ * Lands on the challenges tab rather than the board, because the useful next
+ * action is sending one back rather than looking at a table.
+ */
+export function challengeBeatenCopy(input: {
+  by: string;
+  /** The DISPLAY TITLE, never the slug — see {@link challengeCopy}. */
+  game: string | null;
+  boardTitle: string;
+  /** The recipient's own score, the one that was beaten. */
+  targetScore: number;
+}): NotificationCopy {
+  const by = shortName(input.by, "Someone");
+  const where = input.game ?? input.boardTitle;
+  return bound({
+    title: `${by} beat your score`,
+    body: where
+      ? `Your ${input.targetScore.toLocaleString("en-US")} on ${where} has gone.`
+      : `Your ${input.targetScore.toLocaleString("en-US")} has gone.`,
+    url: "/play/you/friends",
+  });
+}
+
 /** "Ayşe wants to be friends." */
 export function friendRequestCopy(input: { from: string }): NotificationCopy {
   return bound({

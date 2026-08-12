@@ -23,6 +23,8 @@
 import { auth } from "@/app/lib/auth";
 import { store, verifyClaimToken, MAX_CLAIM_TOKENS } from "@/app/lib/scoreboard";
 import { resolveChallengesForScore } from "@/app/lib/challenges";
+import { notifyChallengesBeaten } from "@/app/lib/challenges/notify";
+import { getPublicIdentity } from "@/app/lib/players";
 import type { Session } from "next-auth";
 import type { ApiError, ClaimRequest, ClaimResponse } from "@/sdk/src/contract";
 
@@ -109,12 +111,19 @@ export async function POST(req: Request): Promise<Response> {
   // the same few rows, so firing them together would buy nothing and could have
   // two of them contend for the same challenge.
   try {
+    // The winner's display name, for the notification below. Read ONCE and only
+    // when something was actually claimed, so the ordinary "no valid tokens"
+    // call still costs a single statement.
+    let winnerName: string | null = null;
     for (const row of claimedRows) {
-      await resolveChallengesForScore({
+      const beaten = await resolveChallengesForScore({
         playerId,
         boardId: row.boardId,
         score: row.score,
       });
+      if (beaten.length === 0) continue;
+      winnerName ??= (await getPublicIdentity(playerId))?.handle ?? "Someone";
+      await notifyChallengesBeaten(beaten, winnerName);
     }
   } catch (error) {
     console.error("me/claim POST challenge resolution failed:", error);

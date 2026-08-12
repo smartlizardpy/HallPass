@@ -21,6 +21,7 @@ import {
   achievementCopy,
   betaAssignmentCopy,
   bugReportCopy,
+  challengeBeatenCopy,
   challengeCopy,
   friendAcceptedCopy,
   friendRequestCopy,
@@ -36,6 +37,12 @@ const BASE = { from: "Ozan", game: "Duskfall", boardTitle: "High score" };
 /** One built example of every kind, so set-wide properties can be asserted. */
 const EVERY_KIND: Record<string, NotificationCopy> = {
   challenge_received: challengeCopy(BASE),
+  challenge_beaten: challengeBeatenCopy({
+    by: "Deniz",
+    game: "Duskfall",
+    boardTitle: "High score",
+    targetScore: 4200,
+  }),
   friend_request: friendRequestCopy({ from: "Ayşe" }),
   friend_accepted: friendAcceptedCopy({ from: "Ayşe" }),
   game_drop: gameDropCopy({ title: "Duskfall", slug: "duskfall" }),
@@ -49,6 +56,34 @@ const EVERY_KIND: Record<string, NotificationCopy> = {
   review_reported: reviewReportedCopy({ gameTitle: "Duskfall" }),
   bug_report_filed: bugReportCopy({ gameTitle: "Duskfall" }),
 };
+
+describe("challengeBeatenCopy", () => {
+  it("names the winner and the score that was lost", () => {
+    const copy = challengeBeatenCopy({
+      by: "Deniz", game: "Duskfall", boardTitle: "High score", targetScore: 4200,
+    });
+    expect(copy.title).toBe("Deniz beat your score");
+    expect(copy.body).toContain("4,200");
+    expect(copy.body).toContain("Duskfall");
+  });
+
+  it("names only the RECIPIENT'S score, never the winning one", () => {
+    // The number that was beaten is the reader's own, already public on the
+    // board they set it on, so a bystander learns nothing. The winning score
+    // belongs to somebody else and has no business on a stranger's lock screen.
+    const copy = challengeBeatenCopy({
+      by: "Deniz", game: "Duskfall", boardTitle: "High score", targetScore: 4200,
+    });
+    expect(copy.body).not.toContain("9,999");
+  });
+
+  it("falls back to the board title when there is no game", () => {
+    const copy = challengeBeatenCopy({
+      by: "Deniz", game: null, boardTitle: "Fastest lap", targetScore: 12,
+    });
+    expect(copy.body).toContain("Fastest lap");
+  });
+});
 
 describe("challengeCopy", () => {
   it("names the sender and the game", () => {

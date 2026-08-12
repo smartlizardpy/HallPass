@@ -235,6 +235,15 @@ export type ResolvedChallenge = {
   challengerId: string;
   targetScore: number;
   boardId: string;
+  /**
+   * The board's game and title, carried out of the UPDATE rather than looked up
+   * afterwards. The statement already joins `boards` to read `sort`, so these
+   * cost nothing — and telling the challenger "somebody beat your 4,200 on
+   * Duskfall" would otherwise be a second round trip on the score path, which
+   * is the one path in this subsystem that must stay cheap.
+   */
+  gameSlug: string | null;
+  boardTitle: string;
 };
 
 /** Everything `create` learned, whether or not it wrote a row. */
@@ -977,13 +986,16 @@ export function createChallengeStore(sql: Sql) {
            AND (c.ends_at   IS NULL OR c.ends_at   >  now())
            AND ((b.sort = 'asc'  AND ${score} < c.target_score)
              OR (b.sort <> 'asc' AND ${score} > c.target_score))
-        RETURNING c.id, c.challenger_id, c.target_score, c.board_id
+        RETURNING c.id, c.challenger_id, c.target_score, c.board_id,
+                  b.game_slug, b.title AS board_title
       `) as Row[];
       return rows.map((row) => ({
         id: toInt(row.id),
         challengerId: String(row.challenger_id),
         targetScore: toInt(row.target_score),
         boardId: String(row.board_id),
+        gameSlug: toStrOrNull(row.game_slug),
+        boardTitle: String(row.board_title ?? ""),
       }));
     },
 
