@@ -230,6 +230,53 @@ async function cacheFirst(req) {
   }
 }
 
+/* @pure-start pickFresher */
+/**
+ * Of a precached response and a runtime one for the same URL, the one that
+ * actually reflects the newest content. Either may be absent.
+ *
+ * WHY A COMPARISON AND NOT AN ORDERING. Both caches can be wrong, in opposite
+ * directions, and a fixed preference picks the wrong one half the time:
+ *
+ *   - `hp-runtime` is never swept, so it can hold HTML from a DEPLOY AGO.
+ *     That is the bug the unconditional precache-first rule below was written
+ *     to fix, and it was a real one.
+ *   - `hp-static-<id>` is written ONCE, by the install handler, and never
+ *     refreshed for the life of the deploy. So it can hold content from before
+ *     any amount of same-deploy change — an ISR page that has since
+ *     regenerated, a dashboard edit, a newly tagged game. Offline never
+ *     improved, however many successful online visits happened in between.
+ *
+ * `date` settles it, and the equivalence is exact rather than approximate:
+ * `hp-static-<id>` is created fresh per BUILD_ID and its entries are fetched
+ * with `cache: "reload"` at install, so every precache entry is stamped at THIS
+ * deploy's install time. A runtime entry stamped later than that can only have
+ * been written during this deploy — which is precisely the condition the
+ * precache-first rule was reaching for. An older one is a previous deploy's and
+ * still loses.
+ *
+ * Both dates come from the SAME origin's clock (they are server `Date` headers,
+ * not local time), so a wrong client clock cannot skew the comparison.
+ *
+ * UNCERTAINTY FAVOURS THE PRECACHE. A missing or unparseable header on either
+ * side falls back to the previous behaviour, which is the conservative
+ * direction: this deploy's asset hashes are guaranteed to match its HTML.
+ */
+function pickFresher(precached, warm) {
+  if (!precached) return warm || null;
+  if (!warm) return precached;
+  const at = (res) => {
+    const raw = res.headers && res.headers.get && res.headers.get("date");
+    const ms = raw ? Date.parse(raw) : NaN;
+    return Number.isNaN(ms) ? null : ms;
+  };
+  const staticAt = at(precached);
+  const warmAt = at(warm);
+  if (staticAt === null || warmAt === null) return precached;
+  return warmAt > staticAt ? warm : precached;
+}
+/* @pure-end */
+
 async function networkFirst(req) {
   try {
     const res = await fetch(req);
@@ -239,30 +286,29 @@ async function networkFirst(req) {
     }
     return res;
   } catch {
-    // THIS DEPLOY'S PRECACHE FIRST, and that ordering is the whole point.
+    // THE FRESHER OF THE TWO CACHED COPIES — see {@link pickFresher} for why
+    // this is a comparison rather than a fixed preference, and why comparing
+    // `date` is exactly equivalent to "was this written during this deploy".
     //
-    // `caches.match` searches every cache in CREATION order, and the comment
-    // that used to sit here assumed that meant `hp-static-<id>` before
-    // `hp-runtime`. That holds only until the first redeploy. `hp-runtime` is
-    // created on a visitor's first-ever navigation and `activate` deliberately
-    // never sweeps it (the games-version sentinel and warm entries have to
-    // survive deploys), while `hp-static-<id>` is rebuilt under a new key on
-    // every deploy — so from the second deploy onward the runtime cache is the
-    // OLDER one and wins the search.
-    //
-    // The effect was that an offline navigation to `/` was answered with
-    // whatever HTML happened to be fetched once, months ago, while the current
-    // build's freshly precached copy of the same URL sat unused behind it. It
-    // never self-corrected: staying offline is exactly the state in which
-    // nothing rewrites the runtime entry. Asking STATIC_CACHE directly is what
-    // makes "precached" mean "served".
+    // `caches.match` searches every cache in CREATION order, which cannot be
+    // relied on: `hp-runtime` is created on a visitor's first-ever navigation
+    // and `activate` deliberately never sweeps it (the games-version sentinel
+    // and warm entries have to survive deploys), while `hp-static-<id>` is
+    // rebuilt under a new key on every deploy — so from the second deploy
+    // onward the runtime cache is the OLDER one and would win the search. Both
+    // caches are therefore asked BY NAME and the answer decided here.
     //
     // Exact match only, so this cannot shadow a query-string document: `/?q=racing`
-    // (the store page's header search) is not in the precache, misses here, and
-    // still reaches its own runtime entry below.
+    // (the store page's header search) is not in either cache under that key,
+    // misses here, and still reaches the loose match below.
     const staticCache = await caches.open(STATIC_CACHE);
-    const precached = await staticCache.match(req);
-    if (precached) return precached;
+    const runtimeCache = await caches.open(RUNTIME_CACHE);
+    const [precached, warm] = await Promise.all([
+      staticCache.match(req),
+      runtimeCache.match(req),
+    ]);
+    const best = pickFresher(precached, warm);
+    if (best) return best;
 
     // Exact first, then loose. `caches.match` is exact on the query string by
     // default and precached documents never carry one, so a navigation to
