@@ -56,6 +56,8 @@ const MAX_PATH_SEGMENTS = 10;
 
 let synced = 0;
 let skipped = 0;
+/** Local files whose contents the sync replaced — see the warning at the end. */
+const overwritten = [];
 let failed = 0;
 
 function logItem(pathname, outcome) {
@@ -108,10 +110,26 @@ for (const blob of blobs) {
       throw new Error(`HTTP ${res.status}`);
     }
     const body = Buffer.from(await res.arrayBuffer());
+
+    // REPORT WHAT THIS DESTROYS. The sync is Blob→repo and unconditional, so a
+    // game edited in the repo and merged is silently overwritten here, BEFORE
+    // the build, and the deploy ships the old blob copy instead. That has
+    // already cost one merged, green, deployed fix that never reached a player.
+    // The overwrite still happens — Blob is the live copy and the mirror must
+    // match it — but it is no longer invisible, and the summary names the file
+    // so CI logs answer "why is my change not live?" on their own.
+    const clobbered =
+      existsSync(dest) && !(await readFile(dest)).equals(body);
+
     await mkdir(path.dirname(dest), { recursive: true });
     await writeFile(tmp, body);
     await rename(tmp, dest);
-    logItem(pathname, "ok");
+    if (clobbered) {
+      overwritten.push(pathname);
+      logItem(pathname, "ok (WARN: replaced a DIFFERENT local copy)");
+    } else {
+      logItem(pathname, "ok");
+    }
     synced += 1;
   } catch (err) {
     await rm(tmp, { force: true }).catch(() => {});
@@ -122,6 +140,18 @@ for (const blob of blobs) {
 
 console.log();
 console.log(`synced: ${synced}   skipped: ${skipped}   failed: ${failed}`);
+
+if (overwritten.length > 0) {
+  console.log();
+  console.log(
+    `WARNING: ${overwritten.length} local game file(s) differed from Blob and were replaced:`,
+  );
+  for (const p of overwritten) console.log(`  ${p}`);
+  console.log(
+    "If one of those was an intentional repo edit, it is NOT going to ship —\n" +
+      "Blob is the live copy. Publish it with: npm run publish-game -- <slug> --yes",
+  );
+}
 
 // Stamp the mirror ONLY on a clean run. A partial sync leaves some blobs
 // un-mirrored; advancing the stamp then would make the route treat those missing
