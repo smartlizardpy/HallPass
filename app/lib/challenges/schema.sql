@@ -42,7 +42,25 @@ CREATE TABLE IF NOT EXISTS challenges (
   starts_at      TIMESTAMPTZ,
   ends_at        TIMESTAMPTZ,
 
-  CONSTRAINT challenges_kind_chk CHECK (kind IN ('friend','seasonal')),
+  -- `link` only: the opaque share code, and the owner's kill switch. Revoking
+  -- keeps the row so the code stays claimed and can never be reissued to
+  -- somebody else, resurrecting a URL already pasted into a public chat.
+  code           TEXT,
+  revoked_at     TIMESTAMPTZ,
+  -- `link` only: presses of "Beat it", NOT page views — renders would inflate
+  -- on prefetch and refresh, and answer a less interesting question.
+  opens          INTEGER NOT NULL DEFAULT 0,
+  -- `link_claim` only → the `link` it came from. The foreign key is NAMED below
+  -- rather than written inline: 025 has to `DROP CONSTRAINT IF EXISTS` it by
+  -- name to stay idempotent, and an inline reference here would be auto-named
+  -- `challenges_parent_id_fkey`, so a fresh-install database and a migrated one
+  -- would disagree about what the constraint is called. The other foreign keys
+  -- are inline in both files and so agree already.
+  parent_id      BIGINT,
+
+  CONSTRAINT challenges_kind_chk CHECK (
+    kind IN ('friend','seasonal','link','link_claim')
+  ),
   CONSTRAINT challenges_friend_shape_chk CHECK (
     kind <> 'friend' OR (
       challenger_id IS NOT NULL AND target_id IS NOT NULL
@@ -55,6 +73,34 @@ CREATE TABLE IF NOT EXISTS challenges (
       AND starts_at IS NOT NULL AND ends_at IS NOT NULL
     )
   ),
+  -- An invitation: an owner, no target, a code, and nobody's child.
+  CONSTRAINT challenges_link_shape_chk CHECK (
+    kind <> 'link' OR (
+      challenger_id IS NOT NULL AND target_id IS NULL
+      AND code IS NOT NULL AND parent_id IS NULL
+      AND starts_at IS NULL AND ends_at IS NULL
+    )
+  ),
+  -- A claim: both parties and a parent. Target-shaped ON PURPOSE — that is what
+  -- lets `resolveForScore` close it with no new branch.
+  CONSTRAINT challenges_link_claim_shape_chk CHECK (
+    kind <> 'link_claim' OR (
+      challenger_id IS NOT NULL AND target_id IS NOT NULL
+      AND parent_id IS NOT NULL
+      AND code IS NULL AND revoked_at IS NULL
+      AND starts_at IS NULL AND ends_at IS NULL
+    )
+  ),
+  -- The per-kind checks say nothing about kinds they do not name, so the
+  -- link-only and claim-only columns are fenced off positively as well.
+  CONSTRAINT challenges_link_only_cols_chk CHECK (
+    kind = 'link' OR (code IS NULL AND revoked_at IS NULL)
+  ),
+  CONSTRAINT challenges_parent_only_claims_chk CHECK (
+    kind = 'link_claim' OR parent_id IS NULL
+  ),
+  CONSTRAINT challenges_parent_fk
+    FOREIGN KEY (parent_id) REFERENCES challenges(id) ON DELETE CASCADE,
   CONSTRAINT challenges_no_self_chk CHECK (
     challenger_id IS NULL OR target_id IS NULL OR challenger_id <> target_id
   ),
@@ -84,3 +130,22 @@ CREATE INDEX IF NOT EXISTS challenges_outbox_idx
 CREATE INDEX IF NOT EXISTS challenges_resolve_idx
   ON challenges (board_id, target_id)
   WHERE resolved_at IS NULL AND dismissed_at IS NULL;
+
+-- The `/c/<code>` lookup.
+CREATE UNIQUE INDEX IF NOT EXISTS challenges_link_code_idx
+  ON challenges (code) WHERE kind = 'link';
+
+-- ONE LINK PER (owner, board) — the upsert target, so sharing twice refreshes
+-- the score under a URL already posted rather than minting a rival one.
+-- `ON CONFLICT (challenger_id, board_id) WHERE kind = 'link'` infers this.
+CREATE UNIQUE INDEX IF NOT EXISTS challenges_link_owner_idx
+  ON challenges (challenger_id, board_id) WHERE kind = 'link';
+
+-- Taking the same link up twice is the same claim. Needed separately from
+-- `challenges_friend_pair_idx`, which is partial on `kind = 'friend'`.
+CREATE UNIQUE INDEX IF NOT EXISTS challenges_link_claim_idx
+  ON challenges (parent_id, target_id) WHERE kind = 'link_claim';
+
+-- The grouped outbox: the claims of ONE link.
+CREATE INDEX IF NOT EXISTS challenges_link_children_idx
+  ON challenges (parent_id, id DESC) WHERE kind = 'link_claim';
