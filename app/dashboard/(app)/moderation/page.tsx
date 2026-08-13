@@ -58,6 +58,7 @@ import {
   type ModerationLogEntry,
   type QueueEntry,
   type QueuedReport,
+  type ReviewEntry,
 } from "@/app/lib/reviews/moderation";
 import { DashHeader } from "../_ui/DashHeader";
 import { Section } from "../_ui/Section";
@@ -335,114 +336,18 @@ function QueueCard({
   gameTitle: string | null;
 }) {
   const { review, author, reports } = entry;
-
-  /**
-   * "Did the site hide this by itself?" cannot be answered exactly from one row:
-   * a moderator's own hide of a review that already had three reports looks
-   * identical. What IS certain is that a hidden review still carrying
-   * `report_count >= REVIEW_AUTO_HIDE_REPORTS` crossed the threshold — `unhide()`
-   * resets that counter to zero precisely so a cleared review cannot be re-hidden
-   * by a single later report. So the note claims the threshold was reached, not
-   * who acted; the audit trail below is the authority on that.
-   */
-  const hitThreshold =
-    review.status === "hidden" && review.reportCount >= REVIEW_AUTO_HIDE_REPORTS;
   const people = distinctReporters(reports);
   const tally = tallyReasons(reports);
 
   return (
     <article className="rounded-xl border border-border bg-surface p-5">
-      {/* Who wrote it ------------------------------------------------------- */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          {author.image ? (
-            /* eslint-disable-next-line @next/next/no-img-element -- a Google
-               avatar is a remote URL on a domain we do not control; next/image
-               would proxy every one of them through the optimizer for a 36px
-               square on an admin page. `referrerPolicy="no-referrer"` matches the
-               leaderboard: it stops the avatar request telling Google which
-               dashboard page an admin is on. */
-            <img
-              src={author.image}
-              alt=""
-              width={36}
-              height={36}
-              referrerPolicy="no-referrer"
-              className="h-9 w-9 shrink-0 rounded-full border border-border object-cover"
-            />
-          ) : (
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-100 text-sm font-black text-brand">
-              {author.displayName[0]?.toUpperCase() ?? "?"}
-            </span>
-          )}
+      <ReviewHeader entry={entry} gameTitle={gameTitle} />
 
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              {/* `displayName` is the handle, else "@username", else "Player" —
-                  the Google `name` field is never selected and must never be
-                  rendered: for a school account it is a child's real name. */}
-              <span className="truncate text-sm font-extrabold text-foreground">
-                {author.displayName}
-              </span>
-              {author.banned && <Chip tone="red">Banned from reviews</Chip>}
-            </div>
-            <div className="mt-0.5 truncate text-xs text-muted">
-              {author.username ? `@${author.username}` : "no username"} ·{" "}
-              <span className="font-mono" title={author.id}>
-                {author.id.slice(0, 8)}
-              </span>
-            </div>
-          </div>
-        </div>
+      {/* The open-report count is spelled out in the heading below, so the chip
+          version of it would be the same fact twice on one card. */}
+      <StateChips entry={entry} showOpenReports={false} />
 
-        <div className="text-right text-xs text-muted">
-          <div className="font-semibold text-foreground">
-            {gameTitle ? (
-              <Link
-                href={`/game/${review.slug}`}
-                className="text-brand hover:text-brand-600"
-              >
-                {gameTitle}
-              </Link>
-            ) : (
-              /* The slug no longer resolves — the game was removed. Rendered
-                 flat rather than as a link that would land on a 404. */
-              <span title="This game is no longer in the catalogue">
-                {review.slug}
-              </span>
-            )}
-          </div>
-          <div className="mt-0.5">Review #{review.id}</div>
-          <div className="mt-0.5">Written {formatDateTime(review.createdAt)}</div>
-        </div>
-      </div>
-
-      {/* State -------------------------------------------------------------- */}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <StatusChip status={review.status} />
-        <Chip tone={review.recommended ? "emerald" : "zinc"}>
-          {review.recommended ? "Recommended" : "Not recommended"}
-        </Chip>
-        {review.helpfulCount > 0 && (
-          <Chip tone="zinc">
-            {plural(review.helpfulCount, "helpful vote", "helpful votes")}
-          </Chip>
-        )}
-        {hitThreshold && (
-          <Chip
-            tone="amber"
-            title={`Auto-hide fires at ${REVIEW_AUTO_HIDE_REPORTS} distinct reporters and never resolves the reports — a human still decides.`}
-          >
-            Hit the {REVIEW_AUTO_HIDE_REPORTS}-report auto-hide
-          </Chip>
-        )}
-      </div>
-
-      {/* What it says ------------------------------------------------------- */}
-      {/* TEXT, never markup. See the module docblock. */}
-      <p className="mt-4 whitespace-pre-wrap break-words rounded-lg border border-border bg-surface-2 p-4 text-sm text-foreground">
-        {review.body}
-      </p>
+      <ReviewBody body={review.body} />
 
       {/* Who objected, and why ---------------------------------------------- */}
       <div className="mt-5">
@@ -528,6 +433,176 @@ function QueueCard({
         </ul>
       </div>
 
+      <ReviewVerbs review={review} author={author} />
+    </article>
+  );
+}
+
+/* ------------------------------------------------- the parts a card is made of */
+
+/**
+ * Who wrote it, and where. Shared by both lists, so an author is described
+ * identically whether or not anybody has complained about them.
+ */
+function ReviewHeader({
+  entry,
+  gameTitle,
+}: {
+  entry: ReviewEntry;
+  gameTitle: string | null;
+}) {
+  const { review, author } = entry;
+
+  return (
+    <>
+      {/* Who wrote it ------------------------------------------------------- */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          {author.image ? (
+            /* eslint-disable-next-line @next/next/no-img-element -- a Google
+               avatar is a remote URL on a domain we do not control; next/image
+               would proxy every one of them through the optimizer for a 36px
+               square on an admin page. `referrerPolicy="no-referrer"` matches the
+               leaderboard: it stops the avatar request telling Google which
+               dashboard page an admin is on. */
+            <img
+              src={author.image}
+              alt=""
+              width={36}
+              height={36}
+              referrerPolicy="no-referrer"
+              className="h-9 w-9 shrink-0 rounded-full border border-border object-cover"
+            />
+          ) : (
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-100 text-sm font-black text-brand">
+              {author.displayName[0]?.toUpperCase() ?? "?"}
+            </span>
+          )}
+
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* `displayName` is the handle, else "@username", else "Player" —
+                  the Google `name` field is never selected and must never be
+                  rendered: for a school account it is a child's real name. */}
+              <span className="truncate text-sm font-extrabold text-foreground">
+                {author.displayName}
+              </span>
+              {author.banned && <Chip tone="red">Banned from reviews</Chip>}
+            </div>
+            <div className="mt-0.5 truncate text-xs text-muted">
+              {author.username ? `@${author.username}` : "no username"} ·{" "}
+              <span className="font-mono" title={author.id}>
+                {author.id.slice(0, 8)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="text-right text-xs text-muted">
+          <div className="font-semibold text-foreground">
+            {gameTitle ? (
+              <Link
+                href={`/game/${review.slug}`}
+                className="text-brand hover:text-brand-600"
+              >
+                {gameTitle}
+              </Link>
+            ) : (
+              /* The slug no longer resolves — the game was removed. Rendered
+                 flat rather than as a link that would land on a 404. */
+              <span title="This game is no longer in the catalogue">
+                {review.slug}
+              </span>
+            )}
+          </div>
+          <div className="mt-0.5">Review #{review.id}</div>
+          <div className="mt-0.5">Written {formatDateTime(review.createdAt)}</div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/**
+ * Where the review stands, at a glance.
+ *
+ * `showOpenReports` is off on a queue card, where the count is already the
+ * heading of the reports list beneath it, and on for a review in the latest
+ * list, where it is the only thing saying "this one is also in the queue above".
+ */
+function StateChips({
+  entry,
+  showOpenReports,
+}: {
+  entry: ReviewEntry;
+  showOpenReports: boolean;
+}) {
+  const { review } = entry;
+
+  /**
+   * "Did the site hide this by itself?" cannot be answered exactly from one row:
+   * a moderator's own hide of a review that already had three reports looks
+   * identical. What IS certain is that a hidden review still carrying
+   * `report_count >= REVIEW_AUTO_HIDE_REPORTS` crossed the threshold — `unhide()`
+   * resets that counter to zero precisely so a cleared review cannot be re-hidden
+   * by a single later report. So the note claims the threshold was reached, not
+   * who acted; the audit trail below is the authority on that.
+   */
+  const hitThreshold =
+    review.status === "hidden" && review.reportCount >= REVIEW_AUTO_HIDE_REPORTS;
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <StatusChip status={review.status} />
+      <Chip tone={review.recommended ? "emerald" : "zinc"}>
+        {review.recommended ? "Recommended" : "Not recommended"}
+      </Chip>
+      {review.helpfulCount > 0 && (
+        <Chip tone="zinc">
+          {plural(review.helpfulCount, "helpful vote", "helpful votes")}
+        </Chip>
+      )}
+      {showOpenReports && entry.openReports > 0 && (
+        <Chip tone="red" title="This review is in the report queue at the top of this page.">
+          {plural(entry.openReports, "open report", "open reports")}
+        </Chip>
+      )}
+      {hitThreshold && (
+        <Chip
+          tone="amber"
+          title={`Auto-hide fires at ${REVIEW_AUTO_HIDE_REPORTS} distinct reporters and never resolves the reports — a human still decides.`}
+        >
+          Hit the {REVIEW_AUTO_HIDE_REPORTS}-report auto-hide
+        </Chip>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What it says.
+ *
+ * TEXT, never markup — see the module docblock. One component so that rule has
+ * one place to be broken rather than one per list.
+ */
+function ReviewBody({ body }: { body: string }) {
+  return (
+    <p className="mt-4 whitespace-pre-wrap break-words rounded-lg border border-border bg-surface-2 p-4 text-sm text-foreground">
+      {body}
+    </p>
+  );
+}
+
+/** The verbs, identical on both lists — the same review deserves the same powers. */
+function ReviewVerbs({
+  review,
+  author,
+}: {
+  review: ReviewEntry["review"];
+  author: ReviewEntry["author"];
+}) {
+  return (
+    <>
       {/* Verbs --------------------------------------------------------------- */}
       {/*
         Only the verbs that can actually move this review are rendered. Hide is
@@ -602,7 +677,7 @@ function QueueCard({
           <BanPanel publicId={author.id} displayName={author.displayName} />
         )}
       </div>
-    </article>
+    </>
   );
 }
 
