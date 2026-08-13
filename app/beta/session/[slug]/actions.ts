@@ -41,7 +41,10 @@ import { findGame } from "@/app/lib/games";
 import { bugReportCopy } from "@/app/lib/notifications/copy";
 import { notifyAdmins } from "@/app/lib/notifications/deliver";
 import {
+  extensionForType,
+  validateEvidenceUpload,
   validateMediaUpload,
+  type EvidenceRejection,
   type ImageType,
   type MediaRejection,
 } from "@/app/lib/image-meta";
@@ -55,6 +58,21 @@ const SHOT_REJECTION_COPY: Record<MediaRejection, string> = {
   "not-an-image": "That file isn't a PNG, JPEG or WebP.",
   "too-narrow": "Something went wrong capturing that one — try another.",
   "bad-aspect": "Something went wrong capturing that one — try another.",
+};
+
+/**
+ * The same, for a picture attached to a report.
+ *
+ * Separate copy as well as a separate policy, because these reach a different
+ * person in a different situation: a gallery rejection is about a capture this
+ * app produced, so it apologises for itself, while an evidence rejection is
+ * about a file the TESTER picked and has to tell them what to do instead.
+ */
+const EVIDENCE_REJECTION_COPY: Record<EvidenceRejection, string> = {
+  empty: "the file was empty",
+  "too-large": "it was over the 4 MB limit",
+  "not-an-image": "it wasn't a PNG, JPEG or WebP",
+  "too-small": "it was too small to show anything",
 };
 
 /**
@@ -140,6 +158,16 @@ export async function submitReportAction(
   // A bug must carry a severity and a feature must not.
   const severity = kind === "bug" ? (toBugSeverity(input.severity) ?? "minor") : null;
 
+  /**
+   * Why the attached picture did not make it, if it did not.
+   *
+   * The report is still filed without it — but SILENTLY dropping it was the
+   * original bug here, not the rejection. The tester chose that file on purpose,
+   * and a success message that does not mention its absence teaches them that
+   * attaching pictures works when it did not.
+   */
+  let imageProblem: string | null = null;
+
   try {
     const recent = await beta.recentReportCount(
       playerId,
@@ -160,16 +188,27 @@ export async function submitReportAction(
     // fatal to the report either — the words are the point, the picture is
     // supporting material — so it degrades to a report with no image rather
     // than losing what the tester typed.
+    //
+    // THE PUT HAS ITS OWN `try`, and that is not decoration. Everything below is
+    // inside one catch that answers "could not save that", so a blob outage —
+    // or a school wifi dropping a 2 MB upload — used to take the tester's words
+    // down with it. The failure that this whole path is designed to survive was
+    // the one that was fatal.
     let shotBlobPath: string | null = null;
     let shotUrl: string | null = null;
     const file = shot?.get("file");
     if (file instanceof File && file.size > 0) {
-      const stored = await uploadShot(input.slug, file);
-      if (stored.ok) {
-        shotBlobPath = stored.blobPath;
-        shotUrl = stored.blobUrl;
-      } else {
-        console.error("beta report screenshot rejected:", stored.error);
+      try {
+        const stored = await uploadEvidence(input.slug, file);
+        if (stored.ok) {
+          shotBlobPath = stored.blobPath;
+          shotUrl = stored.blobUrl;
+        } else {
+          imageProblem = stored.error;
+        }
+      } catch (error) {
+        console.error("beta report screenshot upload failed:", error);
+        imageProblem = "the upload didn't go through";
       }
     }
 
@@ -248,7 +287,12 @@ export async function submitReportAction(
 
   revalidatePath("/beta");
   revalidatePath("/dashboard/beta");
-  return { ok: true, message: "Report filed — thanks!" };
+  return {
+    ok: true,
+    message: imageProblem
+      ? `Report filed, but your picture didn't attach — ${imageProblem}.`
+      : "Report filed — thanks!",
+  };
 }
 
 /**
@@ -282,34 +326,58 @@ async function uploadShot(
   const check = validateMediaUpload(bytes);
   if (!check.ok) return { ok: false, error: SHOT_REJECTION_COPY[check.reason] };
 
-  const id = newId();
-  const ext =
-    check.meta.type === "image/png"
-      ? "png"
-      : check.meta.type === "image/jpeg"
-        ? "jpg"
-        : "webp";
-  const blobPath = `beta-shots/${slug}/${id}.${ext}`;
+  const stored = await putImage(slug, file, check.meta.type);
+  return { ok: true, ...stored, meta: check.meta, bytes: check.bytes };
+}
 
-  // The `File` is uploaded, not the `Uint8Array` we validated — `put` takes a
-  // stream-like body and the two are the same bytes. The content type is the
-  // SNIFFED one, never `file.type`, so a mislabelled upload is stored under what
-  // it actually is. Same reasoning as `media-actions.ts`.
+/**
+ * Validate and store one image attached to a REPORT.
+ *
+ * Deliberately not `uploadShot`. That one applies the gallery's policy — 640px
+ * of width, a landscape aspect — which is right for a picture destined for a
+ * game's page and wrong for a picture of a bug: a portrait phone screenshot is
+ * the normal shape here, and the shared function refused it, which is how a
+ * tester on iOS ended up with no way to show anybody anything. See
+ * `validateEvidenceUpload` and `mobile-capture.md`.
+ */
+async function uploadEvidence(
+  slug: string,
+  file: File,
+): Promise<{ ok: true; blobPath: string; blobUrl: string } | { ok: false; error: string }> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const check = validateEvidenceUpload(bytes);
+  if (!check.ok) return { ok: false, error: EVIDENCE_REJECTION_COPY[check.reason] };
+
+  const stored = await putImage(slug, file, check.meta.type);
+  return { ok: true, ...stored };
+}
+
+/**
+ * Put an already-validated image in the blob store under `beta-shots/`.
+ *
+ * NEVER under `games/`: seven separate behaviours sweep that prefix — blob
+ * deletes, `sync-games.mjs` mirroring into the repo, the SW precache — and are
+ * enumerated in `app/lib/game-media.sql`.
+ *
+ * The `File` is uploaded, not the `Uint8Array` that was validated — `put` takes a
+ * stream-like body and the two are the same bytes. The content type is the
+ * SNIFFED one, never `file.type`, so a mislabelled upload is stored under what it
+ * actually is. Same reasoning as `media-actions.ts`.
+ */
+async function putImage(
+  slug: string,
+  file: File,
+  type: ImageType,
+): Promise<{ blobPath: string; blobUrl: string }> {
+  const blobPath = `beta-shots/${slug}/${newId()}.${extensionForType(type)}`;
   const uploaded = await put(blobPath, file, {
     access: "public",
-    contentType: check.meta.type,
+    contentType: type,
     addRandomSuffix: false,
     allowOverwrite: false,
     cacheControlMaxAge: 31_536_000,
   });
-
-  return {
-    ok: true,
-    blobPath,
-    blobUrl: uploaded.url,
-    meta: check.meta,
-    bytes: check.bytes,
-  };
+  return { blobPath, blobUrl: uploaded.url };
 }
 
 export async function submitShotAction(formData: FormData): Promise<ActionResult> {
