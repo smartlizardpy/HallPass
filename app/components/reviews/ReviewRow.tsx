@@ -349,6 +349,18 @@ export function ReviewRow({
           </ul>
         </div>
       )}
+
+      {/* Why it did not send. Amber and quiet, matching the card's own failure
+          notice in `GameReviews` — the reader did nothing wrong, and a red
+          block beside a review they just objected to reads as a telling-off. */}
+      {result && result.kind !== "done" && (
+        <p
+          role="status"
+          className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] font-bold text-amber-900"
+        >
+          {result.message}
+        </p>
+      )}
     </li>
   );
 }
