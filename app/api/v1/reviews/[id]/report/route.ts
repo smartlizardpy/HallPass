@@ -8,10 +8,22 @@
  * per-reporter rate limit, and traceability if reporting itself is abused.
  *
  * The cost is real: a signed-out pupil who sees something awful cannot report
- * it. The mitigation is the mailto in the page footer, not a weaker endpoint.
+ * it. The mitigation is a sign-in link and the mailto in the page footer, not a
+ * weaker endpoint — so the 401 this returns is a REACHABLE state with a way out
+ * of it, not an edge case. `ReviewRow` renders it as one.
  *
- * ALWAYS ANSWERS `ok`, including for a duplicate report, so the response never
- * leaks whether this person had already reported that review.
+ * ANSWERS `ok` FOR A DUPLICATE REPORT, so the response never leaks whether this
+ * person had already reported that review — and for a review that no longer
+ * exists, because "get this off the site" is satisfied either way and a 404 here
+ * would turn the endpoint into an id-existence oracle for hidden reviews.
+ *
+ * IT DOES NOT ANSWER `ok` FOR ANYTHING ELSE, which it used to. A signed-out
+ * caller, a self-report and a database failure all filed nothing and all came
+ * back as success, so the UI thanked the reporter and the moderation queue
+ * stayed empty — the failure mode being reported as "reports don't do
+ * anything", with nothing anywhere to contradict it. Each of those now answers
+ * honestly; only the two cases above are deliberately indistinguishable from a
+ * filed report.
  */
 
 import { isMissingColumnError } from "@/app/lib/db";
