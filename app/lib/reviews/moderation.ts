@@ -66,6 +66,8 @@ type Row = Record<string, unknown>;
  */
 const QUEUE_DEFAULT_LIMIT = 50;
 const QUEUE_MAX_LIMIT = 200;
+const RECENT_DEFAULT_LIMIT = 25;
+const RECENT_MAX_LIMIT = 200;
 const LOG_DEFAULT_LIMIT = 50;
 const LOG_MAX_LIMIT = 200;
 
@@ -362,6 +364,70 @@ export function createModerationStore(sql: Sql) {
         LIMIT ${limit}
       `;
       return rows.map(mapQueueEntry);
+    },
+
+    /**
+     * Every review, newest first, REPORTED OR NOT.
+     *
+     * The queue above answers "what has somebody objected to". This answers
+     * "what has been written", and until it existed the second question had no
+     * answer anywhere in the product — which made two things quietly broken:
+     *
+     *   * The `review_posted` notification says "Open moderation to read it"
+     *     and links here. A brand-new review carries no reports, so the page it
+     *     linked to correctly reported that nothing was waiting. The admin was
+     *     told to go and read something at an address where it provably was not.
+     *   * A review whose text trips a FLAGGED wordlist term is written with
+     *     `status = 'hidden'` — published but held pending review. Held by whom?
+     *     It is off the public page, so nobody can read it, so nobody can report
+     *     it, so it never entered the queue. Flagging a review made it invisible
+     *     to everyone including the moderators it was flagged for, permanently.
+     *
+     * NO STATUS FILTER, for the same reason the queue has none: `hidden` is the
+     * state most likely to need a human, and a `deleted` tombstone is evidence
+     * that a repeat offender should not get to erase one review at a time.
+     *
+     * Ordered by `id` alone rather than `(created_at DESC, id DESC)`, following
+     * `game_reviews_public_idx`'s reasoning: the column is
+     * `GENERATED ALWAYS AS IDENTITY`, so it is already insertion-ordered, and
+     * one comparison column is served straight off the primary key.
+     *
+     * *** NO EMAIL IS SELECTED *** — see `queue()`. Same audience, same rule,
+     * and this read touches every review on the site rather than a reported few.
+     */
+    async recentReviews(opts: { limit?: number } = {}): Promise<ReviewEntry[]> {
+      const limit = clamp(opts.limit, RECENT_DEFAULT_LIMIT, RECENT_MAX_LIMIT);
+      const rows = await sql`
+        SELECT r.id,
+               r.slug,
+               r.body,
+               r.status,
+               r.recommended,
+               r.created_at,
+               r.helpful_count,
+               r.report_count,
+               p.public_id,
+               p.username,
+               p.handle,
+               p.image,
+               (b.player_id IS NOT NULL) AS author_banned,
+               -- A correlated count rather than a join: LIMITed to one screen of
+               -- reviews, so it runs a bounded number of times, and each one is
+               -- served by the partial index on open reports. A GROUP BY join
+               -- would aggregate the whole reports table to annotate 25 rows.
+               (
+                 SELECT count(*) FROM review_reports rp
+                 WHERE rp.review_id = r.id AND rp.status = 'open'
+               )::int AS open_count
+        FROM game_reviews r
+        JOIN players p ON p.id = r.player_id
+        LEFT JOIN review_bans b
+               ON b.player_id = r.player_id
+              AND (b.expires_at IS NULL OR b.expires_at > now())
+        ORDER BY r.id DESC
+        LIMIT ${limit}
+      `;
+      return rows.map(mapReviewEntry);
     },
 
     /**
