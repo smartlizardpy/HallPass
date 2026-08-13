@@ -89,6 +89,14 @@ const moderation = createModerationStore(sql);
 
 /** One screen of work. The store clamps anything larger; this is the product choice. */
 const QUEUE_LIMIT = 50;
+/**
+ * How far back the "everything else" list reads.
+ *
+ * Smaller than the queue on purpose: the queue is work that must be finished,
+ * this is a feed to keep an eye on. A term's worth of reviews down one page
+ * would bury the reported ones the page exists for.
+ */
+const RECENT_LIMIT = 25;
 /** Enough audit rows to see today's work without turning the page into a log viewer. */
 const LOG_LIMIT = 25;
 
@@ -198,17 +206,19 @@ export default async function ModerationPage({
   const ok = asString(params.ok);
   const error = asString(params.error);
 
-  // One try for all three reads: they hit the same tables, so they fail together
+  // One try for all four reads: they hit the same tables, so they fail together
   // or not at all, and a partial render ("no queue, but here is the audit log")
   // would be more confusing than a single honest notice.
   let queue: QueueEntry[] = [];
+  let recent: ReviewEntry[] = [];
   let log: ModerationLogEntry[] = [];
   let openReports = 0;
   let unavailable: "unconfigured" | "schema" | null = null;
 
   try {
-    [queue, openReports, log] = await Promise.all([
+    [queue, recent, openReports, log] = await Promise.all([
       moderation.queue({ limit: QUEUE_LIMIT }),
+      moderation.recentReviews({ limit: RECENT_LIMIT }),
       moderation.openReportCount(),
       moderation.recentActions(LOG_LIMIT),
     ]);
@@ -277,6 +287,20 @@ export default async function ModerationPage({
         </div>
       )}
 
+      {/* A plain heading rather than a `Section`: the cards below are already
+          bordered `bg-surface` panels, and nesting them inside another one puts
+          two borders around every review. */}
+      {!unavailable && (
+        <ListHeading
+          title="Reported"
+          subtitle={
+            queue.length === 0
+              ? "nothing outstanding"
+              : `${plural(queue.length, "review", "reviews")} · newest report first`
+          }
+        />
+      )}
+
       {!unavailable && queue.length === 0 && (
         <div className="rounded-xl border border-border bg-surface p-12 text-center">
           <div aria-hidden className="text-3xl">
@@ -312,6 +336,48 @@ export default async function ModerationPage({
         </p>
       )}
 
+      {/*
+        EVERYTHING THAT HAS BEEN WRITTEN, reported or not, and the reason this
+        page has two lists rather than one.
+
+        The queue above is fed by `review_reports`, so a review nobody has
+        reported cannot appear in it. That left two things silently broken. The
+        `review_posted` notification says "Open moderation to read it" and links
+        here — and a brand-new review has no reports, so the page it linked to
+        truthfully answered "Nothing is waiting on you". And a review whose text
+        trips a FLAGGED wordlist term is saved HIDDEN, pending review: off the
+        public page, therefore unreadable, therefore unreportable, therefore
+        never queued. Flagging a review made it invisible to the very people it
+        was flagged for.
+
+        So this list is not a nice-to-have feed. It is the only surface on which
+        a held review can be read, and it carries the full set of verbs for that
+        reason.
+      */}
+      {!unavailable && (
+        <>
+          <ListHeading
+            title="Every review"
+            subtitle={`newest first · up to ${RECENT_LIMIT} · reported or not`}
+          />
+          {recent.length === 0 ? (
+            <div className="rounded-xl border border-border bg-surface p-12 text-center text-sm text-muted">
+              Nobody has written a review yet.
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {recent.map((entry) => (
+                <ReviewCard
+                  key={entry.review.id}
+                  entry={entry}
+                  gameTitle={titleBySlug.get(entry.review.slug) ?? null}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
       {!unavailable && (
         <div className="mt-8">
           <Section
@@ -323,6 +389,25 @@ export default async function ModerationPage({
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * The label above a list of review cards.
+ *
+ * Deliberately not `Section`, which is a bordered card: these lists are made of
+ * bordered cards already, and nesting the two draws a second frame around every
+ * review. Matches the audit trail's heading style so the page still reads as
+ * one page.
+ */
+function ListHeading({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div className="mb-4 mt-8 flex items-baseline justify-between gap-3">
+      <h2 className="text-sm font-bold uppercase tracking-wide text-muted">
+        {title}
+      </h2>
+      <span className="text-xs text-muted">{subtitle}</span>
+    </div>
   );
 }
 
@@ -434,6 +519,33 @@ function QueueCard({
       </div>
 
       <ReviewVerbs review={review} author={author} />
+    </article>
+  );
+}
+
+/**
+ * A review nobody has reported — the same card, minus the part about who
+ * objected, because nobody has.
+ *
+ * It carries the full set of verbs rather than a read-only view. The reviews
+ * that most need this list are the ones the wordlist FLAGGED: they are already
+ * hidden, they are here because a human has to decide, and a screen that showed
+ * them without letting anyone act would just be a longer route to the same dead
+ * end.
+ */
+function ReviewCard({
+  entry,
+  gameTitle,
+}: {
+  entry: ReviewEntry;
+  gameTitle: string | null;
+}) {
+  return (
+    <article className="rounded-xl border border-border bg-surface p-5">
+      <ReviewHeader entry={entry} gameTitle={gameTitle} />
+      <StateChips entry={entry} showOpenReports />
+      <ReviewBody body={entry.review.body} />
+      <ReviewVerbs review={entry.review} author={entry.author} />
     </article>
   );
 }
