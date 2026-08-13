@@ -55,57 +55,86 @@ type Step = {
   points: { icon: string; text: string }[];
 };
 
-const STEPS: Step[] = [
-  {
-    badge: "1 of 4",
-    title: "This is a playtest",
-    body: "Play the game like you normally would. When something goes wrong, tell us — that is the whole job.",
-    points: [
-      { icon: "🎮", text: "The game runs right here, full size" },
-      { icon: "🐛", text: "Report bugs and ideas without leaving" },
-      { icon: "⭐", text: "Accepted reports earn you XP" },
-    ],
-  },
-  {
-    badge: "2 of 4",
-    title: "Hit the shortcut the moment it breaks",
-    body: "Ctrl/⌘ + Shift + B freezes what you are looking at and opens a report, so you can describe it while it is still on screen.",
-    points: [
-      { icon: "⏸", text: "Freezes the moment over the game" },
-      { icon: "⌨️", text: "Or use the Report bug button" },
-      { icon: "💡", text: "Got an idea instead? Use Idea" },
-    ],
-  },
-  {
-    badge: "3 of 4",
-    title: "We collect the boring parts",
-    body: "You describe what happened. Everything technical is gathered for you and shown before you send.",
-    points: [
-      { icon: "⚠️", text: "The game's own error messages, always" },
-      { icon: "📹", text: "The last few seconds of play, if capture is on" },
-      { icon: "📸", text: "Screenshots you can pin to the report" },
-    ],
-  },
-  {
-    badge: "4 of 4",
-    title: "Turn on auto-screenshot",
-    body: "One tap, pick this tab, and the session quietly grabs good-looking moments. Only the game is ever captured — never these buttons.",
-    points: [
-      { icon: "🖼", text: "Your best shots can end up on the game's page" },
-      { icon: "🔒", text: "We check you picked a tab, not your screen" },
-      { icon: "✍️", text: "Leave a review at the end to finish the test" },
-    ],
-  },
-];
+/**
+ * The walkthrough, told for the device it is being read on.
+ *
+ * ONLY THE LAST STEP BRANCHES, and it has to: it used to open "Turn on
+ * auto-screenshot… pick this tab", which on a phone is an instruction for a
+ * button that is not there, about a permission dialog that cannot appear,
+ * because `getDisplayMedia` does not exist in WebKit. A tutorial whose final
+ * screen cannot be followed is worse than one step shorter.
+ *
+ * The rest is written to be true on both, which is why step 2 leads with the
+ * button rather than the keyboard shortcut — a phone has no Ctrl, and the
+ * shortcut was never more than a faster way to press the same thing.
+ */
+function stepsFor(canRecord: boolean): Step[] {
+  return [
+    {
+      badge: "1 of 4",
+      title: "This is a playtest",
+      body: "Play the game like you normally would. When something goes wrong, tell us — that is the whole job.",
+      points: [
+        { icon: "🎮", text: "The game runs right here, full size" },
+        { icon: "🐛", text: "Report bugs and ideas without leaving" },
+        { icon: "⭐", text: "Accepted reports earn you XP" },
+      ],
+    },
+    {
+      badge: "2 of 4",
+      title: "Report it the moment it breaks",
+      body: "Report bug freezes what you are looking at and opens the form, so you can describe it while it is still on screen.",
+      points: [
+        { icon: "⏸", text: "Freezes the moment over the game" },
+        { icon: "⌨️", text: "On a keyboard: Ctrl/⌘ + Shift + B" },
+        { icon: "💡", text: "Got an idea instead? Use Idea" },
+      ],
+    },
+    {
+      badge: "3 of 4",
+      title: "We collect the boring parts",
+      body: "You describe what happened. Everything technical is gathered for you and shown before you send.",
+      points: [
+        { icon: "⚠️", text: "The game's own error messages, always" },
+        { icon: "📹", text: "The last few seconds of play, if capture is on" },
+        { icon: "📸", text: "Screenshots you can pin to the report" },
+      ],
+    },
+    canRecord
+      ? {
+          badge: "4 of 4",
+          title: "Turn on auto-screenshot",
+          body: "One tap, pick this tab, and the session quietly grabs good-looking moments. Only the game is ever captured — never these buttons.",
+          points: [
+            { icon: "🖼", text: "Your best shots can end up on the game's page" },
+            { icon: "🔒", text: "We check you picked a tab, not your screen" },
+            { icon: "✍️", text: "Leave a review at the end to finish the test" },
+          ],
+        }
+      : {
+          badge: "4 of 4",
+          title: "Pictures, on a phone",
+          body: "This device can't record the screen, so opening a report grabs the game for you — and you can always add a screenshot you took yourself.",
+          points: [
+            { icon: "🎯", text: "Grab the game takes a shot of the game only" },
+            { icon: "📱", text: "Or screenshot as usual and attach it" },
+            { icon: "✍️", text: "Leave a review at the end to finish the test" },
+          ],
+        },
+  ];
+}
 
 export function SessionTutorial({
   playerId,
   open,
   onClose,
+  canRecord,
 }: {
   playerId: string;
   open: boolean;
   onClose: () => void;
+  /** Whether this browser can capture a tab — decides the last step. */
+  canRecord: boolean;
 }) {
   const [step, setStep] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -159,8 +188,9 @@ export function SessionTutorial({
   };
 
   if (!open) return null;
-  const current = STEPS[step];
-  const isLast = step === STEPS.length - 1;
+  const steps = stepsFor(canRecord);
+  const current = steps[step];
+  const isLast = step === steps.length - 1;
 
   return (
     <div
@@ -239,7 +269,7 @@ export function SessionTutorial({
         {/* Progress pips. Decorative — the badge already states the step in
             words, which is what a screen reader gets. */}
         <div aria-hidden className="mt-6 flex justify-center gap-1.5">
-          {STEPS.map((s, i) => (
+          {steps.map((s, i) => (
             <span
               key={s.badge}
               className={`h-1.5 rounded-full transition-all ${

@@ -1141,6 +1141,7 @@ export function TestSessionClient({
         playerId={playerId}
         open={tutorialOpen}
         onClose={() => setTutorialOpen(false)}
+        canRecord={canRecord}
       />
 
       {toast && (
