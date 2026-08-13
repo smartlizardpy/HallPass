@@ -8,6 +8,24 @@
  * resolve it. Nothing here needs a second screen, because a moderation decision
  * deferred is a decision a child is waiting on.
  *
+ * TWO LISTS, AND THE SECOND ONE IS NOT A LUXURY. "Reported" is the work queue.
+ * "Every review" is everything that has been written, reported or not, and it
+ * exists because the queue is built on `review_reports` and therefore cannot
+ * show a review nobody has reported:
+ *
+ *   * `review_posted` notifications say "Open moderation to read it" and link
+ *     here. A new review has no reports, so this page used to answer "Nothing is
+ *     waiting on you" — sending an admin to read something at an address where
+ *     it demonstrably was not.
+ *   * A review whose text trips a FLAGGED wordlist term is stored `hidden`,
+ *     "published but hidden pending review". It is off the public page, so
+ *     nobody can read it, so nobody can report it, so it never reached the
+ *     queue. The flag made it invisible to the moderators it was raised for.
+ *
+ * Both lists render the same card with the same verbs. A review does not become
+ * a different object, or deserve weaker powers, because the thing that surfaced
+ * it was a wordlist rather than a pupil.
+ *
  * *** THE AUTHOR'S EMAIL IS NEVER RENDERED, AND NEVER FETCHED. ***
  *
  * `players.email` is, for this audience, a child's SCHOOL address. It is not
@@ -58,6 +76,7 @@ import {
   type ModerationLogEntry,
   type QueueEntry,
   type QueuedReport,
+  type ReviewEntry,
 } from "@/app/lib/reviews/moderation";
 import { DashHeader } from "../_ui/DashHeader";
 import { Section } from "../_ui/Section";
@@ -74,7 +93,7 @@ import {
 
 export const metadata: Metadata = {
   title: "Moderation",
-  description: "Reported reviews waiting on a decision.",
+  description: "Reported reviews, and every other review that has been written.",
   robots: { index: false, follow: false },
 };
 
@@ -88,6 +107,14 @@ const moderation = createModerationStore(sql);
 
 /** One screen of work. The store clamps anything larger; this is the product choice. */
 const QUEUE_LIMIT = 50;
+/**
+ * How far back the "everything else" list reads.
+ *
+ * Smaller than the queue on purpose: the queue is work that must be finished,
+ * this is a feed to keep an eye on. A term's worth of reviews down one page
+ * would bury the reported ones the page exists for.
+ */
+const RECENT_LIMIT = 25;
 /** Enough audit rows to see today's work without turning the page into a log viewer. */
 const LOG_LIMIT = 25;
 
@@ -197,17 +224,19 @@ export default async function ModerationPage({
   const ok = asString(params.ok);
   const error = asString(params.error);
 
-  // One try for all three reads: they hit the same tables, so they fail together
+  // One try for all four reads: they hit the same tables, so they fail together
   // or not at all, and a partial render ("no queue, but here is the audit log")
   // would be more confusing than a single honest notice.
   let queue: QueueEntry[] = [];
+  let recent: ReviewEntry[] = [];
   let log: ModerationLogEntry[] = [];
   let openReports = 0;
   let unavailable: "unconfigured" | "schema" | null = null;
 
   try {
-    [queue, openReports, log] = await Promise.all([
+    [queue, recent, openReports, log] = await Promise.all([
       moderation.queue({ limit: QUEUE_LIMIT }),
+      moderation.recentReviews({ limit: RECENT_LIMIT }),
       moderation.openReportCount(),
       moderation.recentActions(LOG_LIMIT),
     ]);
@@ -231,9 +260,9 @@ export default async function ModerationPage({
         title="Moderation"
         subtitle={
           unavailable
-            ? "Reported reviews"
+            ? "Reviews"
             : openReports === 0
-              ? "Nothing reported — the queue is clear."
+              ? "Nothing reported — every review is still listed below."
               : `${plural(openReports, "open report", "open reports")} across ${plural(queue.length, "review", "reviews")}`
         }
         action={
@@ -276,6 +305,20 @@ export default async function ModerationPage({
         </div>
       )}
 
+      {/* A plain heading rather than a `Section`: the cards below are already
+          bordered `bg-surface` panels, and nesting them inside another one puts
+          two borders around every review. */}
+      {!unavailable && (
+        <ListHeading
+          title="Reported"
+          subtitle={
+            queue.length === 0
+              ? "nothing outstanding"
+              : `${plural(queue.length, "review", "reviews")} · newest report first`
+          }
+        />
+      )}
+
       {!unavailable && queue.length === 0 && (
         <div className="rounded-xl border border-border bg-surface p-12 text-center">
           <div aria-hidden className="text-3xl">
@@ -287,7 +330,8 @@ export default async function ModerationPage({
           <p className="mt-1 text-sm text-muted">
             Reviews land here the moment somebody reports them. At{" "}
             {REVIEW_AUTO_HIDE_REPORTS} distinct reporters a review hides itself
-            and still queues for a human.
+            and still queues for a human. Everything that has been written is
+            below, reported or not.
           </p>
         </div>
       )}
@@ -311,6 +355,48 @@ export default async function ModerationPage({
         </p>
       )}
 
+      {/*
+        EVERYTHING THAT HAS BEEN WRITTEN, reported or not, and the reason this
+        page has two lists rather than one.
+
+        The queue above is fed by `review_reports`, so a review nobody has
+        reported cannot appear in it. That left two things silently broken. The
+        `review_posted` notification says "Open moderation to read it" and links
+        here — and a brand-new review has no reports, so the page it linked to
+        truthfully answered "Nothing is waiting on you". And a review whose text
+        trips a FLAGGED wordlist term is saved HIDDEN, pending review: off the
+        public page, therefore unreadable, therefore unreportable, therefore
+        never queued. Flagging a review made it invisible to the very people it
+        was flagged for.
+
+        So this list is not a nice-to-have feed. It is the only surface on which
+        a held review can be read, and it carries the full set of verbs for that
+        reason.
+      */}
+      {!unavailable && (
+        <>
+          <ListHeading
+            title="Every review"
+            subtitle={`newest first · up to ${RECENT_LIMIT} · reported or not`}
+          />
+          {recent.length === 0 ? (
+            <div className="rounded-xl border border-border bg-surface p-12 text-center text-sm text-muted">
+              Nobody has written a review yet.
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {recent.map((entry) => (
+                <ReviewCard
+                  key={entry.review.id}
+                  entry={entry}
+                  gameTitle={titleBySlug.get(entry.review.slug) ?? null}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
       {!unavailable && (
         <div className="mt-8">
           <Section
@@ -325,6 +411,25 @@ export default async function ModerationPage({
   );
 }
 
+/**
+ * The label above a list of review cards.
+ *
+ * Deliberately not `Section`, which is a bordered card: these lists are made of
+ * bordered cards already, and nesting the two draws a second frame around every
+ * review. Matches the audit trail's heading style so the page still reads as
+ * one page.
+ */
+function ListHeading({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div className="mb-4 mt-8 flex items-baseline justify-between gap-3">
+      <h2 className="text-sm font-bold uppercase tracking-wide text-muted">
+        {title}
+      </h2>
+      <span className="text-xs text-muted">{subtitle}</span>
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------- one review */
 
 function QueueCard({
@@ -335,114 +440,18 @@ function QueueCard({
   gameTitle: string | null;
 }) {
   const { review, author, reports } = entry;
-
-  /**
-   * "Did the site hide this by itself?" cannot be answered exactly from one row:
-   * a moderator's own hide of a review that already had three reports looks
-   * identical. What IS certain is that a hidden review still carrying
-   * `report_count >= REVIEW_AUTO_HIDE_REPORTS` crossed the threshold — `unhide()`
-   * resets that counter to zero precisely so a cleared review cannot be re-hidden
-   * by a single later report. So the note claims the threshold was reached, not
-   * who acted; the audit trail below is the authority on that.
-   */
-  const hitThreshold =
-    review.status === "hidden" && review.reportCount >= REVIEW_AUTO_HIDE_REPORTS;
   const people = distinctReporters(reports);
   const tally = tallyReasons(reports);
 
   return (
     <article className="rounded-xl border border-border bg-surface p-5">
-      {/* Who wrote it ------------------------------------------------------- */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          {author.image ? (
-            /* eslint-disable-next-line @next/next/no-img-element -- a Google
-               avatar is a remote URL on a domain we do not control; next/image
-               would proxy every one of them through the optimizer for a 36px
-               square on an admin page. `referrerPolicy="no-referrer"` matches the
-               leaderboard: it stops the avatar request telling Google which
-               dashboard page an admin is on. */
-            <img
-              src={author.image}
-              alt=""
-              width={36}
-              height={36}
-              referrerPolicy="no-referrer"
-              className="h-9 w-9 shrink-0 rounded-full border border-border object-cover"
-            />
-          ) : (
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-100 text-sm font-black text-brand">
-              {author.displayName[0]?.toUpperCase() ?? "?"}
-            </span>
-          )}
+      <ReviewHeader entry={entry} gameTitle={gameTitle} />
 
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              {/* `displayName` is the handle, else "@username", else "Player" —
-                  the Google `name` field is never selected and must never be
-                  rendered: for a school account it is a child's real name. */}
-              <span className="truncate text-sm font-extrabold text-foreground">
-                {author.displayName}
-              </span>
-              {author.banned && <Chip tone="red">Banned from reviews</Chip>}
-            </div>
-            <div className="mt-0.5 truncate text-xs text-muted">
-              {author.username ? `@${author.username}` : "no username"} ·{" "}
-              <span className="font-mono" title={author.id}>
-                {author.id.slice(0, 8)}
-              </span>
-            </div>
-          </div>
-        </div>
+      {/* The open-report count is spelled out in the heading below, so the chip
+          version of it would be the same fact twice on one card. */}
+      <StateChips entry={entry} showOpenReports={false} />
 
-        <div className="text-right text-xs text-muted">
-          <div className="font-semibold text-foreground">
-            {gameTitle ? (
-              <Link
-                href={`/game/${review.slug}`}
-                className="text-brand hover:text-brand-600"
-              >
-                {gameTitle}
-              </Link>
-            ) : (
-              /* The slug no longer resolves — the game was removed. Rendered
-                 flat rather than as a link that would land on a 404. */
-              <span title="This game is no longer in the catalogue">
-                {review.slug}
-              </span>
-            )}
-          </div>
-          <div className="mt-0.5">Review #{review.id}</div>
-          <div className="mt-0.5">Written {formatDateTime(review.createdAt)}</div>
-        </div>
-      </div>
-
-      {/* State -------------------------------------------------------------- */}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <StatusChip status={review.status} />
-        <Chip tone={review.recommended ? "emerald" : "zinc"}>
-          {review.recommended ? "Recommended" : "Not recommended"}
-        </Chip>
-        {review.helpfulCount > 0 && (
-          <Chip tone="zinc">
-            {plural(review.helpfulCount, "helpful vote", "helpful votes")}
-          </Chip>
-        )}
-        {hitThreshold && (
-          <Chip
-            tone="amber"
-            title={`Auto-hide fires at ${REVIEW_AUTO_HIDE_REPORTS} distinct reporters and never resolves the reports — a human still decides.`}
-          >
-            Hit the {REVIEW_AUTO_HIDE_REPORTS}-report auto-hide
-          </Chip>
-        )}
-      </div>
-
-      {/* What it says ------------------------------------------------------- */}
-      {/* TEXT, never markup. See the module docblock. */}
-      <p className="mt-4 whitespace-pre-wrap break-words rounded-lg border border-border bg-surface-2 p-4 text-sm text-foreground">
-        {review.body}
-      </p>
+      <ReviewBody body={review.body} />
 
       {/* Who objected, and why ---------------------------------------------- */}
       <div className="mt-5">
@@ -528,6 +537,203 @@ function QueueCard({
         </ul>
       </div>
 
+      <ReviewVerbs review={review} author={author} />
+    </article>
+  );
+}
+
+/**
+ * A review nobody has reported — the same card, minus the part about who
+ * objected, because nobody has.
+ *
+ * It carries the full set of verbs rather than a read-only view. The reviews
+ * that most need this list are the ones the wordlist FLAGGED: they are already
+ * hidden, they are here because a human has to decide, and a screen that showed
+ * them without letting anyone act would just be a longer route to the same dead
+ * end.
+ */
+function ReviewCard({
+  entry,
+  gameTitle,
+}: {
+  entry: ReviewEntry;
+  gameTitle: string | null;
+}) {
+  return (
+    <article className="rounded-xl border border-border bg-surface p-5">
+      <ReviewHeader entry={entry} gameTitle={gameTitle} />
+      <StateChips entry={entry} showOpenReports />
+      <ReviewBody body={entry.review.body} />
+      <ReviewVerbs review={entry.review} author={entry.author} />
+    </article>
+  );
+}
+
+/* ------------------------------------------------- the parts a card is made of */
+
+/**
+ * Who wrote it, and where. Shared by both lists, so an author is described
+ * identically whether or not anybody has complained about them.
+ */
+function ReviewHeader({
+  entry,
+  gameTitle,
+}: {
+  entry: ReviewEntry;
+  gameTitle: string | null;
+}) {
+  const { review, author } = entry;
+
+  return (
+    <>
+      {/* Who wrote it ------------------------------------------------------- */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          {author.image ? (
+            /* eslint-disable-next-line @next/next/no-img-element -- a Google
+               avatar is a remote URL on a domain we do not control; next/image
+               would proxy every one of them through the optimizer for a 36px
+               square on an admin page. `referrerPolicy="no-referrer"` matches the
+               leaderboard: it stops the avatar request telling Google which
+               dashboard page an admin is on. */
+            <img
+              src={author.image}
+              alt=""
+              width={36}
+              height={36}
+              referrerPolicy="no-referrer"
+              className="h-9 w-9 shrink-0 rounded-full border border-border object-cover"
+            />
+          ) : (
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-100 text-sm font-black text-brand">
+              {author.displayName[0]?.toUpperCase() ?? "?"}
+            </span>
+          )}
+
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* `displayName` is the handle, else "@username", else "Player" —
+                  the Google `name` field is never selected and must never be
+                  rendered: for a school account it is a child's real name. */}
+              <span className="truncate text-sm font-extrabold text-foreground">
+                {author.displayName}
+              </span>
+              {author.banned && <Chip tone="red">Banned from reviews</Chip>}
+            </div>
+            <div className="mt-0.5 truncate text-xs text-muted">
+              {author.username ? `@${author.username}` : "no username"} ·{" "}
+              <span className="font-mono" title={author.id}>
+                {author.id.slice(0, 8)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="text-right text-xs text-muted">
+          <div className="font-semibold text-foreground">
+            {gameTitle ? (
+              <Link
+                href={`/game/${review.slug}`}
+                className="text-brand hover:text-brand-600"
+              >
+                {gameTitle}
+              </Link>
+            ) : (
+              /* The slug no longer resolves — the game was removed. Rendered
+                 flat rather than as a link that would land on a 404. */
+              <span title="This game is no longer in the catalogue">
+                {review.slug}
+              </span>
+            )}
+          </div>
+          <div className="mt-0.5">Review #{review.id}</div>
+          <div className="mt-0.5">Written {formatDateTime(review.createdAt)}</div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/**
+ * Where the review stands, at a glance.
+ *
+ * `showOpenReports` is off on a queue card, where the count is already the
+ * heading of the reports list beneath it, and on for a review in the latest
+ * list, where it is the only thing saying "this one is also in the queue above".
+ */
+function StateChips({
+  entry,
+  showOpenReports,
+}: {
+  entry: ReviewEntry;
+  showOpenReports: boolean;
+}) {
+  const { review } = entry;
+
+  /**
+   * "Did the site hide this by itself?" cannot be answered exactly from one row:
+   * a moderator's own hide of a review that already had three reports looks
+   * identical. What IS certain is that a hidden review still carrying
+   * `report_count >= REVIEW_AUTO_HIDE_REPORTS` crossed the threshold — `unhide()`
+   * resets that counter to zero precisely so a cleared review cannot be re-hidden
+   * by a single later report. So the note claims the threshold was reached, not
+   * who acted; the audit trail below is the authority on that.
+   */
+  const hitThreshold =
+    review.status === "hidden" && review.reportCount >= REVIEW_AUTO_HIDE_REPORTS;
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <StatusChip status={review.status} />
+      <Chip tone={review.recommended ? "emerald" : "zinc"}>
+        {review.recommended ? "Recommended" : "Not recommended"}
+      </Chip>
+      {review.helpfulCount > 0 && (
+        <Chip tone="zinc">
+          {plural(review.helpfulCount, "helpful vote", "helpful votes")}
+        </Chip>
+      )}
+      {showOpenReports && entry.openReports > 0 && (
+        <Chip tone="red" title="This review is in the report queue at the top of this page.">
+          {plural(entry.openReports, "open report", "open reports")}
+        </Chip>
+      )}
+      {hitThreshold && (
+        <Chip
+          tone="amber"
+          title={`Auto-hide fires at ${REVIEW_AUTO_HIDE_REPORTS} distinct reporters and never resolves the reports — a human still decides.`}
+        >
+          Hit the {REVIEW_AUTO_HIDE_REPORTS}-report auto-hide
+        </Chip>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What it says.
+ *
+ * TEXT, never markup — see the module docblock. One component so that rule has
+ * one place to be broken rather than one per list.
+ */
+function ReviewBody({ body }: { body: string }) {
+  return (
+    <p className="mt-4 whitespace-pre-wrap break-words rounded-lg border border-border bg-surface-2 p-4 text-sm text-foreground">
+      {body}
+    </p>
+  );
+}
+
+/** The verbs, identical on both lists — the same review deserves the same powers. */
+function ReviewVerbs({
+  review,
+  author,
+}: {
+  review: ReviewEntry["review"];
+  author: ReviewEntry["author"];
+}) {
+  return (
+    <>
       {/* Verbs --------------------------------------------------------------- */}
       {/*
         Only the verbs that can actually move this review are rendered. Hide is
@@ -602,7 +808,7 @@ function QueueCard({
           <BanPanel publicId={author.id} displayName={author.displayName} />
         )}
       </div>
-    </article>
+    </>
   );
 }
 

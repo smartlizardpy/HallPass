@@ -8,10 +8,22 @@
  * per-reporter rate limit, and traceability if reporting itself is abused.
  *
  * The cost is real: a signed-out pupil who sees something awful cannot report
- * it. The mitigation is the mailto in the page footer, not a weaker endpoint.
+ * it. The mitigation is a sign-in link and the mailto in the page footer, not a
+ * weaker endpoint — so the 401 this returns is a REACHABLE state with a way out
+ * of it, not an edge case. `ReviewRow` renders it as one.
  *
- * ALWAYS ANSWERS `ok`, including for a duplicate report, so the response never
- * leaks whether this person had already reported that review.
+ * ANSWERS `ok` FOR A DUPLICATE REPORT, so the response never leaks whether this
+ * person had already reported that review — and for a review that no longer
+ * exists, because "get this off the site" is satisfied either way and a 404 here
+ * would turn the endpoint into an id-existence oracle for hidden reviews.
+ *
+ * IT DOES NOT ANSWER `ok` FOR ANYTHING ELSE, which it used to. A signed-out
+ * caller, a self-report and a database failure all filed nothing and all came
+ * back as success, so the UI thanked the reporter and the moderation queue
+ * stayed empty — the failure mode being reported as "reports don't do
+ * anything", with nothing anywhere to contradict it. Each of those now answers
+ * honestly; only the two cases above are deliberately indistinguishable from a
+ * filed report.
  */
 
 import { isMissingColumnError } from "@/app/lib/db";
@@ -56,12 +68,32 @@ export async function POST(
 
   try {
     const id = Math.trunc(reviewId);
-    await reviews.reportReview(
+    const outcome = await reviews.reportReview(
       id,
       playerId,
       reason,
       hashIp(clientKeyFromHeaders(req.headers)),
     );
+
+    // The author reporting their own review. Suppressed as queue noise rather
+    // than as a security control (see the store), and SAID OUT LOUD rather than
+    // swallowed: this is the one refusal that leaks nothing at all — the person
+    // being told already knows they wrote it — and it is the case a person
+    // testing whether reporting works is most likely to try first.
+    if (outcome === "self") {
+      return Response.json(
+        { ok: false, reason: "You can't report your own review." },
+        { status: 400, headers: NO_STORE },
+      );
+    }
+
+    // A duplicate never re-announces itself either: the announcement below is
+    // keyed on the review, so a second report from the same person would be
+    // deduped anyway, and skipping it keeps the notification tied to something
+    // that actually reached the queue.
+    if (outcome !== "filed") {
+      return Response.json({ ok: true }, { headers: NO_STORE });
+    }
 
     // Raise it with the admins. This is the loudest of the moderation kinds —
     // it is the only one that defaults to `push` — because a report is somebody
@@ -92,9 +124,14 @@ export async function POST(
       return Response.json({ ok: false }, { status: 503, headers: NO_STORE });
     }
     console.error("review report failed:", error);
-    // Still answers ok: a failed report must not tell the reporter anything about
-    // the review's state, and the UI has already thanked them.
-    return Response.json({ ok: true }, { headers: NO_STORE });
+    // A 500 SAYS SO, where this used to answer ok. The old reasoning was that a
+    // failure must not tell the reporter anything about the review's state —
+    // but a 500 says nothing about the review, only that we dropped it, and the
+    // alternative is a site where the report button is broken and every single
+    // person who presses it is told it worked. On a site for children the report
+    // button is the safeguarding path; it is the last thing that should fail
+    // quietly.
+    return Response.json({ ok: false }, { status: 500, headers: NO_STORE });
   }
 }
 

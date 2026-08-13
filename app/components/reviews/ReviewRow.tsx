@@ -40,6 +40,32 @@ function languageName(code: string): string {
 }
 
 /**
+ * What came back from the report endpoint.
+ *
+ * ONE STATE, NOT A `reported` BOOLEAN, and the difference is the bug this
+ * replaces. The boolean was set on every path — including the `catch` — so a
+ * 401, a 403, a 503 and a dead network all rendered the same "Reported" as a
+ * report sitting in the moderation queue. On a site for children the report
+ * button is the safeguarding path: the one thing it must never do is say an
+ * adult has been told when nobody has.
+ *
+ * `signin` is its own case rather than an error string because it is the one
+ * with a WAY OUT. Reporting is signed-in only and deliberately so — an
+ * anonymous report endpoint is a free denial of service on the moderation queue
+ * — but the control is offered to everyone, so a signed-out reader chooses a
+ * reason, gets a 401, and needs a sign-in link rather than an apology. The
+ * composer directly above has always done this ("Sign in to review"); the
+ * report control quietly did not.
+ */
+type ReportResult =
+  | { kind: "done" }
+  | { kind: "signin" }
+  | { kind: "error"; message: string };
+
+/** Says nothing about the review — only that the report did not get through. */
+const REPORT_FAILED = "That report didn't send. Try again.";
+
+/**
  * One review: author, verdict badge, body, helpful vote, report control.
  *
  * The layout follows the reference — avatar left, name and handle on one line, a
@@ -76,15 +102,18 @@ function languageName(code: string): string {
  */
 export function ReviewRow({
   review,
+  slug,
   onChanged,
 }: {
   review: Review;
+  /** The game this review is on — only ever used to come back here after a sign-in. */
+  slug: string;
   onChanged: () => void;
 }) {
   const [helpful, setHelpful] = useState(review.helpfulCount);
   const [voted, setVoted] = useState(false);
   const [reporting, setReporting] = useState(false);
-  const [reported, setReported] = useState(false);
+  const [result, setResult] = useState<ReportResult | null>(null);
   const [busy, setBusy] = useState(false);
 
   // Translation is fetched once, lazily, and then toggled locally. `target` is
@@ -166,19 +195,36 @@ export function ReviewRow({
   const report = async (reason: string) => {
     setBusy(true);
     try {
-      await fetch(`/api/v1/reviews/${review.id}/report`, {
+      const res = await fetch(`/api/v1/reviews/${review.id}/report`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason }),
       });
-      // Always reports success — the endpoint answers ok whether or not this
-      // person had already reported it, so it never leaks that either.
-      setReported(true);
+      if (res.status === 401) {
+        setResult({ kind: "signin" });
+        setReporting(false);
+        return;
+      }
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        reason?: string;
+      };
+      if (res.ok && data.ok) {
+        setResult({ kind: "done" });
+        onChanged();
+      } else {
+        // The endpoint's own words when it has any — it is the half that knows
+        // WHY, and the only refusal it spells out is one that leaks nothing
+        // (reporting your own review). Everything else gets the generic line.
+        setResult({ kind: "error", message: data.reason ?? REPORT_FAILED });
+      }
       setReporting(false);
-      onChanged();
     } catch {
-      setReported(true);
+      // The fetch never completed, so nothing was filed. Saying "Reported" here
+      // — which this used to do — is the version of this bug that hides itself
+      // best: the reader believes an adult has been told, and nobody has.
+      setResult({ kind: "error", message: "You appear to be offline." });
       setReporting(false);
     } finally {
       setBusy(false);
@@ -285,15 +331,23 @@ export function ReviewRow({
         </div>
       </div>
 
-      {/* Report control, top-right as in the reference. */}
-      {reported ? (
+      {/* Report control, top-right as in the reference. It goes away only on a
+          report the server confirmed it filed; a failed one leaves the button
+          there, because the reader's next move is to try again. */}
+      {result?.kind === "done" ? (
         <span className="absolute right-3 top-3 text-[11px] font-bold text-muted">
           Reported
         </span>
       ) : (
         <button
           type="button"
-          onClick={() => setReporting((v) => !v)}
+          onClick={() => {
+            // Drop the previous failure as the panel opens. Leaving "that
+            // didn't send" on screen underneath a fresh list of reasons reads
+            // as the verdict on the attempt being made right now.
+            setResult(null);
+            setReporting((v) => !v);
+          }}
           aria-label="Report this review"
           aria-expanded={reporting}
           className="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full text-muted transition hover:bg-white hover:text-zinc-900"
@@ -333,6 +387,33 @@ export function ReviewRow({
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Why it did not send. Amber and quiet, matching the card's own failure
+          notice in `GameReviews` — the reader did nothing wrong, and a red
+          block beside a review they just objected to reads as a telling-off. */}
+      {result && result.kind !== "done" && (
+        <div
+          role="status"
+          className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] font-bold text-amber-900"
+        >
+          {result.kind === "signin" ? (
+            <>
+              <p>Sign in to report a review.</p>
+              {/* A plain anchor, not a Link: signing in leaves the app and the
+                  callback brings the reader back to this game's page — the same
+                  shape the composer uses for the same journey. */}
+              <a
+                href={`/play/signin?callbackUrl=${encodeURIComponent(`/game/${slug}`)}`}
+                className="shrink-0 rounded-full border border-amber-300 bg-white px-3 py-1 text-[13px] font-extrabold text-amber-900 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-200"
+              >
+                Sign in
+              </a>
+            </>
+          ) : (
+            <p>{result.message}</p>
+          )}
         </div>
       )}
     </li>

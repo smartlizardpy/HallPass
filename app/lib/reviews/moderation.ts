@@ -66,6 +66,8 @@ type Row = Record<string, unknown>;
  */
 const QUEUE_DEFAULT_LIMIT = 50;
 const QUEUE_MAX_LIMIT = 200;
+const RECENT_DEFAULT_LIMIT = 25;
+const RECENT_MAX_LIMIT = 200;
 const LOG_DEFAULT_LIMIT = 50;
 const LOG_MAX_LIMIT = 200;
 
@@ -125,8 +127,16 @@ export type QueuedReport = {
   reporter: { id: string | null; displayName: string };
 };
 
-/** One row of the work list: a reported review with everything needed to judge it. */
-export type QueueEntry = {
+/**
+ * One review as a moderator sees it: the text, who wrote it, and where it stands.
+ *
+ * SHARED BY BOTH READS, which is the point of it existing separately. The queue
+ * shows reviews somebody objected to; `recentReviews` shows reviews nobody has
+ * yet. They are the same object in the same product with the same verbs
+ * available, and splitting them into two unrelated shapes would mean the second
+ * screen slowly growing its own idea of what a review is.
+ */
+export type ReviewEntry = {
   review: {
     id: number;
     slug: string;
@@ -147,8 +157,12 @@ export type QueueEntry = {
     /** So the UI does not offer a ban to someone already banned. */
     banned: boolean;
   };
-  reports: QueuedReport[];
   openReports: number;
+};
+
+/** One row of the work list: a reported review, plus who objected and why. */
+export type QueueEntry = ReviewEntry & {
+  reports: QueuedReport[];
   /** The sort key: newest report first, because a fresh report is a live problem. */
   latestReportAt: string;
 };
@@ -242,7 +256,8 @@ export function createModerationStore(sql: Sql) {
     });
   }
 
-  function mapQueueEntry(row: Row): QueueEntry {
+  /** The columns both reads select, decoded once. */
+  function mapReviewEntry(row: Row): ReviewEntry {
     return {
       review: {
         id: toInt(row.id),
@@ -261,8 +276,14 @@ export function createModerationStore(sql: Sql) {
         image: row.image == null ? null : String(row.image),
         banned: Boolean(row.author_banned),
       },
-      reports: mapReports(row.reports),
       openReports: toInt(row.open_count),
+    };
+  }
+
+  function mapQueueEntry(row: Row): QueueEntry {
+    return {
+      ...mapReviewEntry(row),
+      reports: mapReports(row.reports),
       latestReportAt: toIso(row.newest_report_at),
     };
   }
@@ -343,6 +364,70 @@ export function createModerationStore(sql: Sql) {
         LIMIT ${limit}
       `;
       return rows.map(mapQueueEntry);
+    },
+
+    /**
+     * Every review, newest first, REPORTED OR NOT.
+     *
+     * The queue above answers "what has somebody objected to". This answers
+     * "what has been written", and until it existed the second question had no
+     * answer anywhere in the product — which made two things quietly broken:
+     *
+     *   * The `review_posted` notification says "Open moderation to read it"
+     *     and links here. A brand-new review carries no reports, so the page it
+     *     linked to correctly reported that nothing was waiting. The admin was
+     *     told to go and read something at an address where it provably was not.
+     *   * A review whose text trips a FLAGGED wordlist term is written with
+     *     `status = 'hidden'` — published but held pending review. Held by whom?
+     *     It is off the public page, so nobody can read it, so nobody can report
+     *     it, so it never entered the queue. Flagging a review made it invisible
+     *     to everyone including the moderators it was flagged for, permanently.
+     *
+     * NO STATUS FILTER, for the same reason the queue has none: `hidden` is the
+     * state most likely to need a human, and a `deleted` tombstone is evidence
+     * that a repeat offender should not get to erase one review at a time.
+     *
+     * Ordered by `id` alone rather than `(created_at DESC, id DESC)`, following
+     * `game_reviews_public_idx`'s reasoning: the column is
+     * `GENERATED ALWAYS AS IDENTITY`, so it is already insertion-ordered, and
+     * one comparison column is served straight off the primary key.
+     *
+     * *** NO EMAIL IS SELECTED *** — see `queue()`. Same audience, same rule,
+     * and this read touches every review on the site rather than a reported few.
+     */
+    async recentReviews(opts: { limit?: number } = {}): Promise<ReviewEntry[]> {
+      const limit = clamp(opts.limit, RECENT_DEFAULT_LIMIT, RECENT_MAX_LIMIT);
+      const rows = await sql`
+        SELECT r.id,
+               r.slug,
+               r.body,
+               r.status,
+               r.recommended,
+               r.created_at,
+               r.helpful_count,
+               r.report_count,
+               p.public_id,
+               p.username,
+               p.handle,
+               p.image,
+               (b.player_id IS NOT NULL) AS author_banned,
+               -- A correlated count rather than a join: LIMITed to one screen of
+               -- reviews, so it runs a bounded number of times, and each one is
+               -- served by the partial index on open reports. A GROUP BY join
+               -- would aggregate the whole reports table to annotate 25 rows.
+               (
+                 SELECT count(*) FROM review_reports rp
+                 WHERE rp.review_id = r.id AND rp.status = 'open'
+               )::int AS open_count
+        FROM game_reviews r
+        JOIN players p ON p.id = r.player_id
+        LEFT JOIN review_bans b
+               ON b.player_id = r.player_id
+              AND (b.expires_at IS NULL OR b.expires_at > now())
+        ORDER BY r.id DESC
+        LIMIT ${limit}
+      `;
+      return rows.map(mapReviewEntry);
     },
 
     /**

@@ -199,6 +199,89 @@ describe("queue", () => {
   });
 });
 
+describe("recentReviews", () => {
+  /** A plain review row — no reports aggregate, because this read has none. */
+  function reviewRow(over: Record<string, unknown> = {}) {
+    const row: Record<string, unknown> = { ...queueRow(), open_count: 0, ...over };
+    delete row.reports;
+    delete row.newest_report_at;
+    return row;
+  }
+
+  it("NEVER selects an email column", async () => {
+    const { sql, calls } = makeFakeSql(() => []);
+    await createModerationStore(sql).recentReviews();
+    // Same rule as the queue, and this one reads EVERY review rather than a
+    // reported few, so the blast radius of a careless `p.email` is larger.
+    expect(calls[0].text).not.toMatch(/email/i);
+  });
+
+  it("does not filter on reports at all — that is the entire point of it", async () => {
+    // The queue joins review_reports and therefore cannot show a review nobody
+    // has reported: a brand-new one, or a wordlist-flagged one that is hidden
+    // from the public page and so cannot be reported by anybody. If this read
+    // ever grows a `WHERE ... open` it has become a second copy of the queue.
+    const { sql, calls } = makeFakeSql(() => []);
+    await createModerationStore(sql).recentReviews();
+    expect(calls[0].text).toContain("FROM game_reviews r");
+    expect(calls[0].text).not.toMatch(/JOIN review_reports/);
+  });
+
+  it("does not filter on status — hidden is the state most likely to need a human", async () => {
+    const { sql, calls } = makeFakeSql(() => []);
+    await createModerationStore(sql).recentReviews();
+    expect(calls[0].text).not.toContain("r.status =");
+  });
+
+  it("orders newest first by id, which is insertion-ordered", async () => {
+    const { sql, calls } = makeFakeSql(() => []);
+    await createModerationStore(sql).recentReviews();
+    expect(calls[0].text).toContain("ORDER BY r.id DESC");
+  });
+
+  it("carries the open-report count and the ban state", async () => {
+    const { sql, calls } = makeFakeSql(() => [
+      reviewRow({ open_count: 3, author_banned: true }),
+    ]);
+    const [entry] = await createModerationStore(sql).recentReviews();
+    // So a review already in the queue above is legible as the same review,
+    // and so the UI does not offer a ban to somebody already banned.
+    expect(entry.openReports).toBe(3);
+    expect(entry.author.banned).toBe(true);
+    expect(calls[0].text).toContain("review_bans");
+  });
+
+  it("projects the author publicly: public_id, no subject id, no email, no real name", async () => {
+    const { sql } = makeFakeSql(() => [
+      reviewRow({
+        player_id: "google-subject-id",
+        email: "child@school.test",
+        name: "Real Name",
+      }),
+    ]);
+    const [entry] = await createModerationStore(sql).recentReviews();
+    expect(entry.author.id).toBe("11111111-2222-3333-4444-555555555555");
+    const json = JSON.stringify(entry);
+    expect(json).not.toContain("google-subject-id");
+    expect(json).not.toContain("child@school.test");
+    expect(json).not.toContain("Real Name");
+  });
+
+  it("clamps the limit in JS — LIMIT NULL would read every review ever written", async () => {
+    const a = makeFakeSql(() => []);
+    await createModerationStore(a.sql).recentReviews();
+    expect(a.calls[0].values).toContain(25);
+
+    const b = makeFakeSql(() => []);
+    await createModerationStore(b.sql).recentReviews({ limit: 9999 });
+    expect(b.calls[0].values).toContain(200);
+
+    const c = makeFakeSql(() => []);
+    await createModerationStore(c.sql).recentReviews({ limit: Number.NaN });
+    expect(c.calls[0].values).toContain(25);
+  });
+});
+
 describe("recentActions", () => {
   it("breaks ties on id — a ban and its hide_backlog share one now()", async () => {
     const { sql, calls } = makeFakeSql(() => []);

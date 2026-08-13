@@ -14,7 +14,7 @@ import { createReviewStore } from "./store";
 
 export const reviews = createReviewStore(sql);
 
-export type { Review, ReviewSort, SubmitOutcome } from "./store";
+export type { ReportOutcome, Review, ReviewSort, SubmitOutcome } from "./store";
 
 /**
  * Salt for the per-author display tag (`Alex #7f3a`).

@@ -74,6 +74,20 @@ export type SubmitOutcome =
   | "too-new"
   | "rate-limited";
 
+/**
+ * What a report actually did, decoded from the single write statement.
+ *
+ * Only `filed` puts a row in the moderation queue. The other three are the ways
+ * a report can legitimately do nothing, and they are spelled out rather than
+ * collapsed because the caller owes the reporter a different answer for each:
+ *
+ *   `duplicate` — this person had already reported this review. The dedup index
+ *                 caps them at one, which is the point.
+ *   `self`      — the reporter IS the author. Suppressed as noise; see below.
+ *   `missing`   — no such review. Purged, or an id that never existed.
+ */
+export type ReportOutcome = "filed" | "duplicate" | "self" | "missing";
+
 export function createReviewStore(sql: Sql) {
   function mapReview(row: Row): Review {
     const handle = row.handle == null ? null : String(row.handle).trim();
@@ -379,17 +393,27 @@ export function createReviewStore(sql: Sql) {
      * threshold moves the review to `hidden` (reversible), never `deleted`, and
      * deliberately does NOT resolve the open reports — human review is the point,
      * and auto-hide only shortens the window in which harm is visible.
+     *
+     * IT RETURNS WHAT HAPPENED, and that is not decoration. Three of the four
+     * outcomes file no row at all, so a `void` return made every one of them
+     * indistinguishable from success to the route above — which is exactly how a
+     * report that never reaches the queue gets answered with "Thanks, reported".
+     * The route decides what each outcome is worth telling the reporter; the
+     * store's job is only to stop pretending they are all the same.
+     *
+     * The `target` CTE is what makes `self` observable: the old guard was a
+     * `NOT EXISTS` subquery hanging off the insert, which suppressed the row
+     * without leaving any trace that it had fired. Same single statement, same
+     * self-report rule, one extra column.
      */
     async reportReview(
       reviewId: number,
       reporterId: string,
       reason: string,
       ipHash: string | null,
-    ): Promise<void> {
-      await sql`
-        WITH ins AS (
-          INSERT INTO review_reports (review_id, reporter_id, reason, ip_hash)
-          SELECT ${reviewId}, ${reporterId}, ${reason}, ${ipHash}
+    ): Promise<ReportOutcome> {
+      const rows = await sql`
+        WITH target AS (
           -- NOBODY REPORTS THEMSELVES. Not a security control — auto-hide needs
           -- three DISTINCT reporters and the dedup index caps one person at one
           -- report, so a self-report can never hide anything. It is a noise
@@ -397,13 +421,20 @@ export function createReviewStore(sql: Sql) {
           -- enough that a human actually reads it. An author who wants their own
           -- review gone already has the delete button.
           --
-          -- Selected rather than VALUES so the guard lives in the same statement
-          -- as the insert; a check-then-write split would need a second round
-          -- trip the HTTP driver cannot make transactional.
-          WHERE NOT EXISTS (
-            SELECT 1 FROM game_reviews
-            WHERE id = ${reviewId} AND player_id = ${reporterId}
-          )
+          -- Resolved in the same statement as the insert; a check-then-write
+          -- split would need a second round trip the HTTP driver cannot make
+          -- transactional.
+          SELECT id, (player_id = ${reporterId}) AS own
+          FROM game_reviews
+          WHERE id = ${reviewId}
+        ),
+        ins AS (
+          INSERT INTO review_reports (review_id, reporter_id, reason, ip_hash)
+          -- Selected FROM target, so a report against a review that does not
+          -- exist inserts nothing rather than tripping the foreign key.
+          SELECT t.id, ${reporterId}::text, ${reason}::text, ${ipHash}::text
+          FROM target t
+          WHERE NOT t.own
           ON CONFLICT (review_id, reporter_id) DO NOTHING
           RETURNING 1
         ),
@@ -421,8 +452,14 @@ export function createReviewStore(sql: Sql) {
           WHERE id = ${reviewId}
           RETURNING id
         )
-        SELECT (SELECT count(*) FROM upd)::int AS updated
+        SELECT (SELECT count(*) FROM target)::int        AS found,
+               COALESCE((SELECT own FROM target), false) AS own,
+               (SELECT count(*) FROM ins)::int           AS filed
       `;
+      const row = rows[0] ?? {};
+      if (toInt(row.found) === 0) return "missing";
+      if (row.own === true || row.own === "t") return "self";
+      return toInt(row.filed) > 0 ? "filed" : "duplicate";
     },
 
     /** Whether the caller is currently banned from reviewing. */
