@@ -74,6 +74,20 @@ export type SubmitOutcome =
   | "too-new"
   | "rate-limited";
 
+/**
+ * What a report actually did, decoded from the single write statement.
+ *
+ * Only `filed` puts a row in the moderation queue. The other three are the ways
+ * a report can legitimately do nothing, and they are spelled out rather than
+ * collapsed because the caller owes the reporter a different answer for each:
+ *
+ *   `duplicate` — this person had already reported this review. The dedup index
+ *                 caps them at one, which is the point.
+ *   `self`      — the reporter IS the author. Suppressed as noise; see below.
+ *   `missing`   — no such review. Purged, or an id that never existed.
+ */
+export type ReportOutcome = "filed" | "duplicate" | "self" | "missing";
+
 export function createReviewStore(sql: Sql) {
   function mapReview(row: Row): Review {
     const handle = row.handle == null ? null : String(row.handle).trim();
