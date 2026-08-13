@@ -40,6 +40,18 @@ function languageName(code: string): string {
 }
 
 /**
+ * What came back from the report endpoint.
+ *
+ * ONE STATE, NOT A `reported` BOOLEAN, and the difference is the bug this
+ * replaces. The boolean was set on every path — including the `catch` — so a
+ * 401, a 403, a 503 and a dead network all rendered the same "Reported" as a
+ * report sitting in the moderation queue. On a site for children the report
+ * button is the safeguarding path: the one thing it must never do is say an
+ * adult has been told when nobody has.
+ */
+type ReportResult = { kind: "done" } | { kind: "error"; message: string };
+
+/**
  * One review: author, verdict badge, body, helpful vote, report control.
  *
  * The layout follows the reference — avatar left, name and handle on one line, a
@@ -84,7 +96,7 @@ export function ReviewRow({
   const [helpful, setHelpful] = useState(review.helpfulCount);
   const [voted, setVoted] = useState(false);
   const [reporting, setReporting] = useState(false);
-  const [reported, setReported] = useState(false);
+  const [result, setResult] = useState<ReportResult | null>(null);
   const [busy, setBusy] = useState(false);
 
   // Translation is fetched once, lazily, and then toggled locally. `target` is
@@ -174,11 +186,11 @@ export function ReviewRow({
       });
       // Always reports success — the endpoint answers ok whether or not this
       // person had already reported it, so it never leaks that either.
-      setReported(true);
+      setResult({ kind: "done" });
       setReporting(false);
       onChanged();
     } catch {
-      setReported(true);
+      setResult({ kind: "done" });
       setReporting(false);
     } finally {
       setBusy(false);
@@ -285,8 +297,10 @@ export function ReviewRow({
         </div>
       </div>
 
-      {/* Report control, top-right as in the reference. */}
-      {reported ? (
+      {/* Report control, top-right as in the reference. It goes away only on a
+          report the server confirmed it filed; a failed one leaves the button
+          there, because the reader's next move is to try again. */}
+      {result?.kind === "done" ? (
         <span className="absolute right-3 top-3 text-[11px] font-bold text-muted">
           Reported
         </span>
