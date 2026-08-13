@@ -393,14 +393,26 @@ export function createReviewStore(sql: Sql) {
      * threshold moves the review to `hidden` (reversible), never `deleted`, and
      * deliberately does NOT resolve the open reports — human review is the point,
      * and auto-hide only shortens the window in which harm is visible.
+     *
+     * IT RETURNS WHAT HAPPENED, and that is not decoration. Three of the four
+     * outcomes file no row at all, so a `void` return made every one of them
+     * indistinguishable from success to the route above — which is exactly how a
+     * report that never reaches the queue gets answered with "Thanks, reported".
+     * The route decides what each outcome is worth telling the reporter; the
+     * store's job is only to stop pretending they are all the same.
+     *
+     * The `target` CTE is what makes `self` observable: the old guard was a
+     * `NOT EXISTS` subquery hanging off the insert, which suppressed the row
+     * without leaving any trace that it had fired. Same single statement, same
+     * self-report rule, one extra column.
      */
     async reportReview(
       reviewId: number,
       reporterId: string,
       reason: string,
       ipHash: string | null,
-    ): Promise<void> {
-      await sql`
+    ): Promise<ReportOutcome> {
+      const rows = await sql`
         WITH target AS (
           -- NOBODY REPORTS THEMSELVES. Not a security control — auto-hide needs
           -- three DISTINCT reporters and the dedup index caps one person at one
@@ -444,6 +456,10 @@ export function createReviewStore(sql: Sql) {
                COALESCE((SELECT own FROM target), false) AS own,
                (SELECT count(*) FROM ins)::int           AS filed
       `;
+      const row = rows[0] ?? {};
+      if (toInt(row.found) === 0) return "missing";
+      if (row.own === true || row.own === "t") return "self";
+      return toInt(row.filed) > 0 ? "filed" : "duplicate";
     },
 
     /** Whether the caller is currently banned from reviewing. */
