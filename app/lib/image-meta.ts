@@ -278,38 +278,122 @@ export const MIN_MEDIA_WIDTH = 640;
 export const MIN_MEDIA_ASPECT = 1.2;
 export const MAX_MEDIA_ASPECT = 2.2;
 
-export type MediaRejection =
-  | "empty"
-  | "too-large"
-  | "not-an-image"
-  | "too-narrow"
-  | "bad-aspect";
+/**
+ * Longest edge below which an image cannot show anything useful about a bug.
+ *
+ * Deliberately far below anything a real capture produces — the smallest phone
+ * screenshot is 750px on its long edge, and a photo of a screen is larger still.
+ * It exists to catch a mis-tap that attaches an icon, not to have an opinion
+ * about picture quality, so it must never be tightened into one.
+ */
+export const MIN_EVIDENCE_EDGE = 240;
+
+/**
+ * Why an upload was refused, whatever it was for: not an image, too big, or
+ * nothing at all. Every caller has to handle these three.
+ */
+export type UploadRejection = "empty" | "too-large" | "not-an-image";
+
+/** Additionally, why an image was refused as a GALLERY candidate. */
+export type MediaRejection = UploadRejection | "too-narrow" | "bad-aspect";
+
+/** Additionally, why an image was refused as bug EVIDENCE. */
+export type EvidenceRejection = UploadRejection | "too-small";
 
 export type MediaValidation =
   | { ok: true; meta: ImageMeta; bytes: number }
   | { ok: false; reason: MediaRejection };
 
+export type EvidenceValidation =
+  | { ok: true; meta: ImageMeta; bytes: number }
+  | { ok: false; reason: EvidenceRejection };
+
 /**
- * The whole accept/reject decision for one uploaded file, as a discriminated
- * union so the caller can map each reason to its own message — the same shape
- * `parseCreateBoardInput` uses in `scoreboard/board-input.ts`.
+ * The checks every upload gets, whatever it is destined for: it exists, it fits
+ * the cap, and its own bytes say it is one of the three accepted formats.
  *
  * Order matters: size is checked before decoding so a huge file is rejected
- * without walking its bytes, and the type check precedes the dimension checks
+ * without walking its bytes, and the type check precedes any dimension check
  * because dimensions are meaningless for something that is not an image.
  */
-export function validateMediaUpload(bytes: Uint8Array): MediaValidation {
+function readUpload(
+  bytes: Uint8Array,
+): { ok: true; meta: ImageMeta } | { ok: false; reason: UploadRejection } {
   if (bytes.length === 0) return { ok: false, reason: "empty" };
   if (bytes.length > MAX_MEDIA_BYTES) return { ok: false, reason: "too-large" };
 
   const meta = readImageMeta(bytes);
   if (!meta) return { ok: false, reason: "not-an-image" };
 
-  if (meta.width < MIN_MEDIA_WIDTH) return { ok: false, reason: "too-narrow" };
+  return { ok: true, meta };
+}
 
-  const aspect = meta.width / meta.height;
-  if (aspect < MIN_MEDIA_ASPECT || aspect > MAX_MEDIA_ASPECT) {
+/**
+ * The whole accept/reject decision for one image headed for a game's GALLERY, as
+ * a discriminated union so the caller can map each reason to its own message —
+ * the same shape `parseCreateBoardInput` uses in `scoreboard/board-input.ts`.
+ *
+ * The dimension and aspect rules here are about how the image will be DISPLAYED:
+ * every surface that renders a screenshot assumes a landscape frame. An accepted
+ * `beta_shot` is later copied into `game_media`, so this is also the gate that
+ * has to hold for acceptance to succeed at the far end — see
+ * {@link validateEvidenceUpload} for the policy that deliberately does not.
+ */
+export function validateMediaUpload(bytes: Uint8Array): MediaValidation {
+  const read = readUpload(bytes);
+  if (!read.ok) return read;
+  const { meta } = read;
+
+  if (meta.width < MIN_MEDIA_WIDTH) return { ok: false, reason: "too-narrow" };
+  if (!isGalleryShape(meta.width, meta.height)) {
     return { ok: false, reason: "bad-aspect" };
+  }
+
+  return { ok: true, meta, bytes: bytes.length };
+}
+
+/**
+ * Whether an image of this size would be accepted into a game's gallery.
+ *
+ * Exported so a CLIENT can ask the question before offering the upload. The
+ * session's filmstrip captures at whatever shape a game actually renders — a
+ * portrait phone game is not 16:9 — and offering "use this as a screenshot" on
+ * something the server is bound to refuse is a button that exists to fail. Same
+ * rule, one definition, both ends.
+ */
+export function isGalleryShape(width: number, height: number): boolean {
+  if (width < MIN_MEDIA_WIDTH || height <= 0) return false;
+  const aspect = width / height;
+  return aspect >= MIN_MEDIA_ASPECT && aspect <= MAX_MEDIA_ASPECT;
+}
+
+/**
+ * The same decision for an image attached to a BUG REPORT.
+ *
+ * WHY THIS IS NOT {@link validateMediaUpload}. The two were one function while
+ * every image came from the same 16:9 grabber, and that hid a real difference:
+ * the gallery rules are about publishing a picture on a game's page, and none of
+ * them apply to a picture an admin glances at once in a triage list. A portrait
+ * phone screenshot — aspect about 0.46 — is the NORMAL shape of evidence from a
+ * tester on a phone, and the shared function rejected it as `bad-aspect`, which
+ * is how iOS testers came to have no way of showing anybody anything.
+ *
+ * What survives is everything that is about safety or cost rather than looks:
+ * magic-byte sniffing (never `file.type` — see the module docblock, and the SVG
+ * argument in particular), the size cap, and a floor that only catches a
+ * mis-attached icon. What goes is the landscape requirement and the 640px width.
+ *
+ * Nothing downstream constrains it further: `beta_reports.shot_blob_path` and
+ * `shot_url` are plain `TEXT` with no dimension columns, and triage renders the
+ * image `h-32 w-auto`, which is shape-agnostic by construction.
+ */
+export function validateEvidenceUpload(bytes: Uint8Array): EvidenceValidation {
+  const read = readUpload(bytes);
+  if (!read.ok) return read;
+  const { meta } = read;
+
+  if (Math.max(meta.width, meta.height) < MIN_EVIDENCE_EDGE) {
+    return { ok: false, reason: "too-small" };
   }
 
   return { ok: true, meta, bytes: bytes.length };

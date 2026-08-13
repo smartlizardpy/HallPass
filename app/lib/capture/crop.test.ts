@@ -4,9 +4,11 @@ import {
   edgeDensity,
   centreCrop,
   DUPLICATE_HASH_DISTANCE,
+  fitWithin,
   hammingDistance,
   isBlankFrame,
   isDuplicateOf,
+  isEmptyFrame,
   mapRectToFrame,
   MIN_FRAME_DETAIL,
 } from "./crop";
@@ -200,6 +202,38 @@ describe("captured stills always satisfy validateMediaUpload", () => {
 });
 
 
+describe("fitWithin", () => {
+  it("bounds the longest edge and keeps the aspect", () => {
+    expect(fitWithin({ width: 2560, height: 1440 }, 1280)).toEqual({
+      width: 1280,
+      height: 720,
+    });
+  });
+
+  it("bounds the longest edge of a PORTRAIT source, not its width", () => {
+    // A phone screenshot. Bounding width alone would leave 1179x2556 untouched
+    // and well over the upload cap — the whole reason this is not `fitWidth`.
+    expect(fitWithin({ width: 1179, height: 2556 }, 1280)).toEqual({
+      width: 590,
+      height: 1280,
+    });
+  });
+
+  it("never upscales", () => {
+    expect(fitWithin({ width: 480, height: 320 }, 1280)).toEqual({
+      width: 480,
+      height: 320,
+    });
+  });
+
+  it("survives a degenerate size rather than emitting a zero dimension", () => {
+    // A zero would make `canvas.width = 0`, and `drawImage` throws on that.
+    expect(fitWithin({ width: 0, height: 0 }, 1280)).toEqual({ width: 1, height: 1 });
+    expect(fitWithin({ width: 2000, height: 1 }, 1280).height).toBe(1);
+    expect(fitWithin({ width: 800, height: 600 }, 0)).toEqual({ width: 1, height: 1 });
+  });
+});
+
 describe("isBlankFrame", () => {
   it("rejects a solid black loading screen", () => {
     expect(isBlankFrame(rgba(1024, () => 0))).toBe(true);
@@ -233,6 +267,50 @@ describe("isBlankFrame", () => {
     // absolute-variance test. Hard black-to-bright pixel transitions at that
     // exposure are exactly what edge density is meant to see.
     expect(isBlankFrame(rgba(1024, (i) => (i % 5 === 0 ? 24 : 0)))).toBe(false);
+  });
+});
+
+describe("isEmptyFrame", () => {
+  /** RGBA where every pixel shares one colour and alpha. */
+  function flat(count: number, grey: number, alpha: number): Uint8ClampedArray {
+    const buf = new Uint8ClampedArray(count * 4);
+    for (let i = 0; i < count; i += 1) {
+      buf[i * 4] = grey;
+      buf[i * 4 + 1] = grey;
+      buf[i * 4 + 2] = grey;
+      buf[i * 4 + 3] = alpha;
+    }
+    return buf;
+  }
+
+  it("calls an untouched drawing buffer empty", () => {
+    // What a WebGL canvas reads back as without preserveDrawingBuffer.
+    expect(isEmptyFrame(flat(4096, 0, 0))).toBe(true);
+  });
+
+  it("does NOT call a dark frame empty", () => {
+    // The measured regression: these games read back fine and were being
+    // discarded by the candidate filter for being dim. Opaque black is a
+    // picture — of a black screen, which is frequently the bug being reported.
+    expect(isEmptyFrame(flat(4096, 0, 255))).toBe(false);
+    expect(isEmptyFrame(flat(4096, 4, 255))).toBe(false);
+  });
+
+  it("disagrees with isBlankFrame on exactly that case", () => {
+    const darkButPainted = flat(4096, 2, 255);
+    expect(isBlankFrame(darkButPainted)).toBe(true); // "not worth keeping"
+    expect(isEmptyFrame(darkButPainted)).toBe(false); // "but it IS a readback"
+  });
+
+  it("is not fooled by one painted pixel among transparent ones", () => {
+    const buf = flat(4096, 0, 0);
+    // Alpha of the very last sampled pixel. The stride must still reach it.
+    buf[buf.length - 1] = 255;
+    expect(isEmptyFrame(buf, 1)).toBe(false);
+  });
+
+  it("treats a zero-length buffer as empty rather than throwing", () => {
+    expect(isEmptyFrame(new Uint8ClampedArray(0))).toBe(true);
   });
 });
 

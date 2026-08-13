@@ -99,6 +99,34 @@ export function centreCrop(
 }
 
 /**
+ * Scale a size down until its longest edge fits `maxEdge`, keeping the aspect.
+ *
+ * WHY THE LONGEST EDGE AND NOT THE WIDTH. Everything the tab capture produces is
+ * landscape, so bounding the width was the same question. Evidence from a phone
+ * is not: a 1179x2556 screenshot bounded by width alone comes back unchanged and
+ * sails past the upload cap in the one place — a phone, on a school network —
+ * where a failed 8 MB upload costs the most.
+ *
+ * NEVER UPSCALES. A game rendering at 480x320 is stored at 480x320. Nothing
+ * downstream requires a minimum size for evidence (see `validateEvidenceUpload`),
+ * so inventing pixels would only cost bytes; the opposite trade is right for
+ * `FrameGrabber`, which upscales deliberately because the gallery DOES have a
+ * floor and a soft screenshot beats a rejected one.
+ */
+export function fitWithin(
+  source: { width: number; height: number },
+  maxEdge: number,
+): { width: number; height: number } {
+  const longest = Math.max(source.width, source.height);
+  if (longest <= 0 || maxEdge <= 0) return { width: 1, height: 1 };
+  const scale = Math.min(1, maxEdge / longest);
+  return {
+    width: Math.max(1, Math.round(source.width * scale)),
+    height: Math.max(1, Math.round(source.height * scale)),
+  };
+}
+
+/**
  * Minimum edge density for a frame to count as having something in it.
  *
  * ── WHY VARIANCE WAS THE WRONG MEASUREMENT ──────────────────────────────────
@@ -178,6 +206,46 @@ export function edgeDensity(rgba: Uint8ClampedArray, step = 4): number {
 /** True when a frame is too flat to be worth keeping as a candidate. */
 export function isBlankFrame(rgba: Uint8ClampedArray): boolean {
   return edgeDensity(rgba) < MIN_FRAME_DETAIL;
+}
+
+/**
+ * True when NOTHING was drawn — every sampled pixel fully transparent.
+ *
+ * ── WHY THIS IS NOT {@link isBlankFrame} ────────────────────────────────────
+ * They answer different questions and the difference was measured, not guessed.
+ * `isBlankFrame` asks "is this frame worth KEEPING", which is the right question
+ * for the automatic grabber: it fires unattended every 8 seconds and its output
+ * is a set of candidates for a game's page, so a loading screen is noise.
+ *
+ * An explicit grab is the opposite situation. A tester pressed a button, about a
+ * frame they are looking at, to attach to a bug report — and a plain frame is
+ * frequently the very thing being reported. Running the candidate filter over it
+ * threw away real pictures of real games. Measured across the catalogue at rest:
+ *
+ *   game            opaque   mean luma   edge density
+ *   chroma-orbit      100%      0.0092     0          } read back FINE,
+ *   neon-snake        100%      0.0164     0.000698   } rejected as "blank"
+ *   symbiosis         100%      0.0187     0.001009   } by the 0.0015 floor
+ *   pixel-slicer      100%      0.0925     0.001397   }
+ *   ---------------------------------------------------
+ *   system-error        0%      0          0         <- genuinely nothing there
+ *   silence             0%      0          0         <- genuinely nothing there
+ *
+ * Four of six were dark or low-contrast rather than empty, and `pixel-slicer`
+ * missed the threshold by 0.0001. The two real failures are distinguished by
+ * ALPHA, not by detail: a WebGL drawing buffer that was not preserved reads back
+ * fully TRANSPARENT, so `alpha > 0` anywhere is proof that something painted.
+ *
+ * That makes this a fact about the readback rather than a judgement about the
+ * picture — which is what the caller actually needs to know before it tells a
+ * tester their game cannot be read.
+ */
+export function isEmptyFrame(rgba: Uint8ClampedArray, step = 4): boolean {
+  const stride = Math.max(1, Math.floor(step)) * 4;
+  for (let i = 0; i + 3 < rgba.length; i += stride) {
+    if (rgba[i + 3] !== 0) return false;
+  }
+  return true;
 }
 
 /**

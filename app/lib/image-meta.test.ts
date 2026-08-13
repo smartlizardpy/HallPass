@@ -12,8 +12,10 @@ import {
   extensionForType,
   readImageMeta,
   sniffImageType,
+  validateEvidenceUpload,
   validateMediaUpload,
   MAX_MEDIA_BYTES,
+  MIN_EVIDENCE_EDGE,
 } from "./image-meta";
 
 /** PNG: 8-byte signature, IHDR length+type, then width/height as BE uint32. */
@@ -244,6 +246,64 @@ describe("validateMediaUpload", () => {
   it("accepts the aspect-ratio boundaries", () => {
     expect(validateMediaUpload(png(1200, 1000)).ok).toBe(true); // 1.2
     expect(validateMediaUpload(png(2200, 1000)).ok).toBe(true); // 2.2
+  });
+});
+
+describe("validateEvidenceUpload", () => {
+  /**
+   * The whole reason this function exists. A screenshot taken on an iPhone is
+   * 1179x2556 — aspect 0.46 — and the gallery policy calls that `bad-aspect`,
+   * which left a tester on a phone with no way to attach a picture to anything.
+   */
+  it("accepts a portrait phone screenshot the gallery would reject", () => {
+    const shot = png(1179, 2556);
+    expect(validateMediaUpload(shot)).toEqual({ ok: false, reason: "bad-aspect" });
+
+    const result = validateEvidenceUpload(shot);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.meta.width).toBe(1179);
+      expect(result.meta.height).toBe(2556);
+    }
+  });
+
+  it("accepts a narrow image the gallery would reject as too small to publish", () => {
+    // 320px wide is under MIN_MEDIA_WIDTH and perfectly legible as evidence.
+    expect(validateMediaUpload(png(320, 200)).ok).toBe(false);
+    expect(validateEvidenceUpload(png(320, 200)).ok).toBe(true);
+  });
+
+  it("keeps every check that is about safety rather than looks", () => {
+    expect(validateEvidenceUpload(new Uint8Array(0))).toEqual({
+      ok: false,
+      reason: "empty",
+    });
+    expect(validateEvidenceUpload(new Uint8Array(MAX_MEDIA_BYTES + 1))).toEqual({
+      ok: false,
+      reason: "too-large",
+    });
+    // An SVG is a scriptable document and an XSS vector served from our origin;
+    // sniffing is what keeps it out, and evidence is not exempt from that.
+    const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" />');
+    expect(validateEvidenceUpload(svg)).toEqual({
+      ok: false,
+      reason: "not-an-image",
+    });
+  });
+
+  it("rejects something too small to show anything, on its LONGEST edge", () => {
+    expect(validateEvidenceUpload(png(64, 64))).toEqual({
+      ok: false,
+      reason: "too-small",
+    });
+    // Tall and thin still counts: the floor asks whether the image can show
+    // anything, not whether it is wide.
+    expect(validateEvidenceUpload(png(60, MIN_EVIDENCE_EDGE)).ok).toBe(true);
+  });
+
+  it("accepts every format the sniffer accepts", () => {
+    expect(validateEvidenceUpload(jpeg(1179, 2556)).ok).toBe(true);
+    expect(validateEvidenceUpload(webpLossy(1179, 2556)).ok).toBe(true);
   });
 });
 
