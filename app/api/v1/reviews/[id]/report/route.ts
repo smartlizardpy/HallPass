@@ -75,6 +75,14 @@ export async function POST(
       );
     }
 
+    // A duplicate never re-announces itself either: the announcement below is
+    // keyed on the review, so a second report from the same person would be
+    // deduped anyway, and skipping it keeps the notification tied to something
+    // that actually reached the queue.
+    if (outcome !== "filed") {
+      return Response.json({ ok: true }, { headers: NO_STORE });
+    }
+
     // Raise it with the admins. This is the loudest of the moderation kinds —
     // it is the only one that defaults to `push` — because a report is somebody
     // saying something is wrong NOW, and reports are rare enough that a phone
