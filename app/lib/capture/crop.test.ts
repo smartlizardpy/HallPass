@@ -4,6 +4,7 @@ import {
   edgeDensity,
   centreCrop,
   DUPLICATE_HASH_DISTANCE,
+  fitWithin,
   hammingDistance,
   isBlankFrame,
   isDuplicateOf,
@@ -199,6 +200,38 @@ describe("captured stills always satisfy validateMediaUpload", () => {
   });
 });
 
+
+describe("fitWithin", () => {
+  it("bounds the longest edge and keeps the aspect", () => {
+    expect(fitWithin({ width: 2560, height: 1440 }, 1280)).toEqual({
+      width: 1280,
+      height: 720,
+    });
+  });
+
+  it("bounds the longest edge of a PORTRAIT source, not its width", () => {
+    // A phone screenshot. Bounding width alone would leave 1179x2556 untouched
+    // and well over the upload cap — the whole reason this is not `fitWidth`.
+    expect(fitWithin({ width: 1179, height: 2556 }, 1280)).toEqual({
+      width: 590,
+      height: 1280,
+    });
+  });
+
+  it("never upscales", () => {
+    expect(fitWithin({ width: 480, height: 320 }, 1280)).toEqual({
+      width: 480,
+      height: 320,
+    });
+  });
+
+  it("survives a degenerate size rather than emitting a zero dimension", () => {
+    // A zero would make `canvas.width = 0`, and `drawImage` throws on that.
+    expect(fitWithin({ width: 0, height: 0 }, 1280)).toEqual({ width: 1, height: 1 });
+    expect(fitWithin({ width: 2000, height: 1 }, 1280).height).toBe(1);
+    expect(fitWithin({ width: 800, height: 600 }, 0)).toEqual({ width: 1, height: 1 });
+  });
+});
 
 describe("isBlankFrame", () => {
   it("rejects a solid black loading screen", () => {

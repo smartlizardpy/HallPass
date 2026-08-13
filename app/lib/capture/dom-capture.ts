@@ -40,7 +40,7 @@
  * whether it can double as a gallery candidate.
  */
 
-import { isBlankFrame } from "./crop";
+import { fitWithin, isBlankFrame } from "./crop";
 import type { Shot } from "./tab-capture";
 
 /** Why a grab produced nothing. Every one of these is reported, never swallowed. */
@@ -104,26 +104,6 @@ export function pickGameCanvas<T extends CanvasCandidate>(
     }
   }
   return best;
-}
-
-/**
- * Longest-edge-bounded output size, preserving the source's own aspect.
- *
- * Never upscales: a game that renders at 480x320 is stored at 480x320 rather
- * than blown up to a soft 1280, because nothing downstream requires a minimum
- * for evidence and inventing pixels only costs bytes.
- */
-export function fitWithin(
-  source: { width: number; height: number },
-  maxEdge: number,
-): { width: number; height: number } {
-  const longest = Math.max(source.width, source.height);
-  if (longest <= 0) return { width: 1, height: 1 };
-  const scale = Math.min(1, maxEdge / longest);
-  return {
-    width: Math.max(1, Math.round(source.width * scale)),
-    height: Math.max(1, Math.round(source.height * scale)),
-  };
 }
 
 /**

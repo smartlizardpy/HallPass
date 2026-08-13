@@ -99,6 +99,34 @@ export function centreCrop(
 }
 
 /**
+ * Scale a size down until its longest edge fits `maxEdge`, keeping the aspect.
+ *
+ * WHY THE LONGEST EDGE AND NOT THE WIDTH. Everything the tab capture produces is
+ * landscape, so bounding the width was the same question. Evidence from a phone
+ * is not: a 1179x2556 screenshot bounded by width alone comes back unchanged and
+ * sails past the upload cap in the one place — a phone, on a school network —
+ * where a failed 8 MB upload costs the most.
+ *
+ * NEVER UPSCALES. A game rendering at 480x320 is stored at 480x320. Nothing
+ * downstream requires a minimum size for evidence (see `validateEvidenceUpload`),
+ * so inventing pixels would only cost bytes; the opposite trade is right for
+ * `FrameGrabber`, which upscales deliberately because the gallery DOES have a
+ * floor and a soft screenshot beats a rejected one.
+ */
+export function fitWithin(
+  source: { width: number; height: number },
+  maxEdge: number,
+): { width: number; height: number } {
+  const longest = Math.max(source.width, source.height);
+  if (longest <= 0 || maxEdge <= 0) return { width: 1, height: 1 };
+  const scale = Math.min(1, maxEdge / longest);
+  return {
+    width: Math.max(1, Math.round(source.width * scale)),
+    height: Math.max(1, Math.round(source.height * scale)),
+  };
+}
+
+/**
  * Minimum edge density for a frame to count as having something in it.
  *
  * ── WHY VARIANCE WAS THE WRONG MEASUREMENT ──────────────────────────────────

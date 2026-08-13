@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { fitWithin, MIN_CANVAS_AREA, pickGameCanvas } from "./dom-capture";
+import { MIN_CANVAS_AREA, pickGameCanvas } from "./dom-capture";
 
 /** A candidate whose backing store and rendered size agree, as most do. */
 function visible(width: number, height: number) {
@@ -53,33 +53,3 @@ describe("pickGameCanvas", () => {
   });
 });
 
-describe("fitWithin", () => {
-  it("bounds the longest edge and keeps the aspect", () => {
-    expect(fitWithin({ width: 2560, height: 1440 }, 1280)).toEqual({
-      width: 1280,
-      height: 720,
-    });
-  });
-
-  it("bounds the longest edge of a PORTRAIT source, not its width", () => {
-    // A phone-shaped game. Bounding width alone would leave a 1179x2556 still
-    // untouched and well over the upload cap.
-    expect(fitWithin({ width: 1179, height: 2556 }, 1280)).toEqual({
-      width: 590,
-      height: 1280,
-    });
-  });
-
-  it("never upscales a small game", () => {
-    expect(fitWithin({ width: 480, height: 320 }, 1280)).toEqual({
-      width: 480,
-      height: 320,
-    });
-  });
-
-  it("survives a degenerate canvas rather than emitting a zero dimension", () => {
-    // A zero here would make `canvas.width = 0` and `drawImage` throw.
-    expect(fitWithin({ width: 0, height: 0 }, 1280)).toEqual({ width: 1, height: 1 });
-    expect(fitWithin({ width: 2000, height: 1 }, 1280).height).toBe(1);
-  });
-});
