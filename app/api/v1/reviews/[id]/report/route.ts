@@ -56,12 +56,24 @@ export async function POST(
 
   try {
     const id = Math.trunc(reviewId);
-    await reviews.reportReview(
+    const outcome = await reviews.reportReview(
       id,
       playerId,
       reason,
       hashIp(clientKeyFromHeaders(req.headers)),
     );
+
+    // The author reporting their own review. Suppressed as queue noise rather
+    // than as a security control (see the store), and SAID OUT LOUD rather than
+    // swallowed: this is the one refusal that leaks nothing at all — the person
+    // being told already knows they wrote it — and it is the case a person
+    // testing whether reporting works is most likely to try first.
+    if (outcome === "self") {
+      return Response.json(
+        { ok: false, reason: "You can't report your own review." },
+        { status: 400, headers: NO_STORE },
+      );
+    }
 
     // Raise it with the admins. This is the loudest of the moderation kinds —
     // it is the only one that defaults to `push` — because a report is somebody
