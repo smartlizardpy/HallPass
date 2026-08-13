@@ -7,12 +7,17 @@
  * can be asserted without a database.
  *
  * This file starts narrow, covering `reportReview`, because that statement's
- * important properties live in the SQL text rather than in the return value —
- * it returns nothing at all. A live-database test could observe that a
- * self-report produced no row, but it could not tell the difference between the
- * guard being present and the insert simply failing for some other reason, and
- * it would pass just as happily if the guard were moved into a second round trip
- * (which the HTTP driver cannot make transactional).
+ * important properties live in the SQL text as well as in the return value. A
+ * live-database test could observe that a self-report produced no row, but it
+ * could not tell the difference between the guard being present and the insert
+ * simply failing for some other reason, and it would pass just as happily if the
+ * guard were moved into a second round trip (which the HTTP driver cannot make
+ * transactional).
+ *
+ * The outcome mapping is tested from the other end — canned result rows in,
+ * outcome out — because that is the half the report ROUTE reads, and answering
+ * "filed" to a report that filed nothing is the specific bug that let reports
+ * disappear silently between the button and the moderation queue.
  */
 
 import { describe, expect, it } from "vitest";
@@ -25,13 +30,24 @@ interface RecordedCall {
   values: unknown[];
 }
 
-function makeFakeSql(rows: Record<string, unknown>[] = [{ updated: 1 }]) {
+function makeFakeSql(
+  rows: Record<string, unknown>[] = [{ found: 1, own: false, filed: 1 }],
+) {
   const calls: RecordedCall[] = [];
   const fn = (strings: TemplateStringsArray, ...values: unknown[]) => {
     calls.push({ text: strings.join("?"), values });
     return Promise.resolve(rows);
   };
   return { sql: fn as unknown as NeonQueryFunction<false, false>, calls };
+}
+
+/** The three columns the report statement ends on, as the driver returns them. */
+function reportRow(
+  found: number,
+  own: boolean,
+  filed: number,
+): Record<string, unknown> {
+  return { found, own, filed };
 }
 
 describe("reportReview", () => {
@@ -41,10 +57,10 @@ describe("reportReview", () => {
     // hide anything. It is a noise control — the moderation queue's whole value
     // is being short enough that a human actually reads it, and an author who
     // wants their own review gone already has the delete button.
-    const { sql, calls } = makeFakeSql();
+    const { sql, calls } = makeFakeSql([reportRow(1, true, 0)]);
     const store = createReviewStore(sql);
 
-    await store.reportReview(1, "player-1", "spam", null);
+    expect(await store.reportReview(1, "player-1", "spam", null)).toBe("self");
 
     expect(calls).toHaveLength(1);
     const text = calls[0].text;
@@ -57,6 +73,39 @@ describe("reportReview", () => {
     // to hang a WHERE clause and would force the check into a second statement.
     expect(text).toMatch(/INSERT INTO review_reports[\s\S]*SELECT/);
     expect(text).not.toMatch(/INSERT INTO review_reports\s*\([^)]*\)\s*VALUES/);
+  });
+
+  it("reports what actually happened, so nothing can answer ok for a report it dropped", async () => {
+    // The whole point of the return value. Three of these four file no row, and
+    // when they were indistinguishable the route thanked the reporter for a
+    // report that never reached the queue.
+    const cases: [Record<string, unknown>, string][] = [
+      [reportRow(1, false, 1), "filed"],
+      [reportRow(1, false, 0), "duplicate"],
+      [reportRow(1, true, 0), "self"],
+      [reportRow(0, false, 0), "missing"],
+    ];
+
+    for (const [row, expected] of cases) {
+      const { sql } = makeFakeSql([row]);
+      expect(await createReviewStore(sql).reportReview(1, "p", "spam", null)).toBe(
+        expected,
+      );
+    }
+  });
+
+  it("reads the boolean whichever way the driver hands it back", async () => {
+    // `own` is a Postgres boolean. The HTTP driver's type parsers return it as
+    // `true`, but a raw-text path (or a fake `sql` here) yields 't' — and a
+    // truthiness check on the string would call every outcome `self` while a
+    // strict `=== true` would call every one of them a filed report. Both
+    // spellings, one meaning.
+    for (const own of [true, "t"]) {
+      const { sql } = makeFakeSql([{ found: 1, own, filed: 0 }]);
+      expect(await createReviewStore(sql).reportReview(1, "p", "spam", null)).toBe(
+        "self",
+      );
+    }
   });
 
   it("still files, dedupes and auto-hides in ONE statement", async () => {
