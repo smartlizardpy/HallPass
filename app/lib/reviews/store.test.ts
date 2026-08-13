@@ -48,9 +48,11 @@ describe("reportReview", () => {
 
     expect(calls).toHaveLength(1);
     const text = calls[0].text;
-    // The guard must be a NOT EXISTS against game_reviews inside the insert...
-    expect(text).toContain("NOT EXISTS");
+    // The guard compares the review's author to the reporter, in the same
+    // statement as the insert...
     expect(text).toContain("game_reviews");
+    expect(text).toMatch(/AS own/);
+    expect(text).toContain("WHERE NOT t.own");
     // ...and it must be an INSERT ... SELECT, because a VALUES list has nowhere
     // to hang a WHERE clause and would force the check into a second statement.
     expect(text).toMatch(/INSERT INTO review_reports[\s\S]*SELECT/);

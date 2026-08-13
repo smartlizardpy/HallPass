@@ -401,9 +401,7 @@ export function createReviewStore(sql: Sql) {
       ipHash: string | null,
     ): Promise<void> {
       await sql`
-        WITH ins AS (
-          INSERT INTO review_reports (review_id, reporter_id, reason, ip_hash)
-          SELECT ${reviewId}, ${reporterId}, ${reason}, ${ipHash}
+        WITH target AS (
           -- NOBODY REPORTS THEMSELVES. Not a security control — auto-hide needs
           -- three DISTINCT reporters and the dedup index caps one person at one
           -- report, so a self-report can never hide anything. It is a noise
@@ -411,13 +409,20 @@ export function createReviewStore(sql: Sql) {
           -- enough that a human actually reads it. An author who wants their own
           -- review gone already has the delete button.
           --
-          -- Selected rather than VALUES so the guard lives in the same statement
-          -- as the insert; a check-then-write split would need a second round
-          -- trip the HTTP driver cannot make transactional.
-          WHERE NOT EXISTS (
-            SELECT 1 FROM game_reviews
-            WHERE id = ${reviewId} AND player_id = ${reporterId}
-          )
+          -- Resolved in the same statement as the insert; a check-then-write
+          -- split would need a second round trip the HTTP driver cannot make
+          -- transactional.
+          SELECT id, (player_id = ${reporterId}) AS own
+          FROM game_reviews
+          WHERE id = ${reviewId}
+        ),
+        ins AS (
+          INSERT INTO review_reports (review_id, reporter_id, reason, ip_hash)
+          -- Selected FROM target, so a report against a review that does not
+          -- exist inserts nothing rather than tripping the foreign key.
+          SELECT t.id, ${reporterId}::text, ${reason}::text, ${ipHash}::text
+          FROM target t
+          WHERE NOT t.own
           ON CONFLICT (review_id, reporter_id) DO NOTHING
           RETURNING 1
         ),
@@ -435,7 +440,9 @@ export function createReviewStore(sql: Sql) {
           WHERE id = ${reviewId}
           RETURNING id
         )
-        SELECT (SELECT count(*) FROM upd)::int AS updated
+        SELECT (SELECT count(*) FROM target)::int        AS found,
+               COALESCE((SELECT own FROM target), false) AS own,
+               (SELECT count(*) FROM ins)::int           AS filed
       `;
     },
 
