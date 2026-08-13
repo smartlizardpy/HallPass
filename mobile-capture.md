@@ -127,6 +127,39 @@ that covers the entire game on a phone. Under `sm` it becomes a bottom sheet, so
 the game stays visible while a bug is described — which is the same argument the
 component's own docblock makes for not pausing the game.
 
+### 4. Two things that stopped being silent
+
+**A rejected picture is now said out loud.** The report write degrades rather
+than fails when evidence cannot be stored — the words are the point — but the
+tester picked that file deliberately, and "Report filed — thanks!" taught them
+attaching works when it had not.
+
+**A failed upload no longer takes the report with it.** The `put()` sat inside
+the one `try` that answers "could not save that", so a blob outage — or school
+wifi dropping a 2 MB upload — destroyed what the tester had typed. It has its own
+`try` now. The path documented itself as surviving exactly this and did not.
+
+### 5. Where a picture came from is recorded
+
+`Shot.origin` is `"grab"` for anything this app produced out of the game, and
+`"attach"` for a file out of somebody's photo library. Only a grab is ever
+offered to a game's public gallery, and only if `isGalleryShape()` agrees — asked
+in the browser with the same predicate the server validates with, so the button
+cannot offer an upload that is bound to be refused.
+
+The same distinction fixed a bug the feature would have introduced: the
+freeze-frame painted over the game took the newest still in the filmstrip, which
+after this change could be a camera-roll photo shown captioned "frozen at the
+bug". It takes the newest *grab* now, and only while capture is running;
+otherwise it grabs the moment fresh.
+
+### 6. The walkthrough stops lying on a phone
+
+Its last step was "Turn on auto-screenshot — one tap, pick this tab": a button
+that is not rendered on iOS and a picker that cannot open there. It branches on
+capture support now, and step 2 leads with the **Report bug** button rather than
+`Ctrl/⌘ + Shift + B`, which is true on both kinds of device.
+
 ---
 
 ## Phase 2 — the screen recording, designed not built
