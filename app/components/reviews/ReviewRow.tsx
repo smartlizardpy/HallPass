@@ -341,7 +341,13 @@ export function ReviewRow({
       ) : (
         <button
           type="button"
-          onClick={() => setReporting((v) => !v)}
+          onClick={() => {
+            // Drop the previous failure as the panel opens. Leaving "that
+            // didn't send" on screen underneath a fresh list of reasons reads
+            // as the verdict on the attempt being made right now.
+            setResult(null);
+            setReporting((v) => !v);
+          }}
           aria-label="Report this review"
           aria-expanded={reporting}
           className="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full text-muted transition hover:bg-white hover:text-zinc-900"
