@@ -47,6 +47,16 @@ import {
   type CaptureFailure,
   type Shot,
 } from "@/app/lib/capture/tab-capture";
+import { grabGameFrame, type GrabFailure } from "@/app/lib/capture/dom-capture";
+import {
+  prepareAttachment,
+  type AttachFailure,
+} from "@/app/lib/capture/attach-image";
+import {
+  extensionForType,
+  isGalleryShape,
+  toImageType,
+} from "@/app/lib/image-meta";
 import {
   attachToFrame,
   ErrorLog,
@@ -103,6 +113,46 @@ const CAPTURE_COPY: Record<CaptureFailure, string> = {
     "Please pick THIS TAB, not a window or your whole screen — we only ever capture the game.",
   "no-track": "Couldn't start recording. Try again?",
 };
+
+/**
+ * Human copy for each way the no-permission canvas grab can come back empty.
+ *
+ * Every one of them ends by pointing at the manual attach, because on the device
+ * where this path matters — a phone, where tab capture does not exist — it is the
+ * only route left, and a tester who is told "couldn't grab that" and nothing else
+ * reasonably concludes that pictures are not a thing here.
+ */
+const GRAB_COPY: Record<GrabFailure, string> = {
+  "cross-origin":
+    "This game runs on another site, so we can't read its screen. Take a screenshot and attach it to your report.",
+  "no-canvas":
+    "Couldn't find this game's picture to grab. Take a screenshot and attach it to your report.",
+  blank:
+    "This game's picture can't be read from outside it. Take a screenshot and attach it to your report.",
+  tainted:
+    "This game's picture is locked to it. Take a screenshot and attach it to your report.",
+  failed: "Couldn't grab that one. Take a screenshot and attach it instead.",
+};
+
+/** Human copy for a file the tester picked that we cannot use. */
+const ATTACH_COPY: Record<AttachFailure, string> = {
+  unreadable: "That file isn't a picture we can read — try a screenshot.",
+  "too-small": "That image is too small to show anything — try a screenshot.",
+  "too-heavy": "That image is enormous. A screenshot works better than a photo.",
+};
+
+/**
+ * Whether a still may also be offered to the game's public gallery.
+ *
+ * Two conditions, and the first is the important one. A hand-picked file is
+ * evidence only, whatever shape it is — we have no idea what else is in it. A
+ * grab is the game by construction, so it only has to clear the gallery's shape
+ * rules, asked here with the SAME predicate the server validates with so the
+ * button cannot offer something the upload is bound to refuse.
+ */
+function canOfferToGallery(shot: Shot): boolean {
+  return shot.origin === "grab" && isGalleryShape(shot.width, shot.height);
+}
 
 /**
  * What to tell a tester when the reviews endpoint refuses without saying why.
@@ -298,6 +348,57 @@ export function TestSessionClient({
     };
   }, [stopCapture]);
 
+  /**
+   * Add a still to the filmstrip, oldest evicted once it is full.
+   *
+   * `FrameGrabber` bounds itself, but grabs and attachments arrive from outside
+   * it and would otherwise grow an unbounded array of decoded bitmaps in a tab
+   * that stays open for a 40-minute playtest. The evicted preview is revoked
+   * here, since dropping the reference alone leaks the whole image.
+   */
+  const pushShot = useCallback((shot: Shot) => {
+    setShots((current) => {
+      const next = [...current, shot];
+      while (next.length > MAX_COVER_CANDIDATES) {
+        const dropped = next.shift();
+        if (dropped) URL.revokeObjectURL(dropped.previewUrl);
+      }
+      return next;
+    });
+  }, []);
+
+  /**
+   * Read a still straight out of the game's canvas — no permission, no stream.
+   *
+   * The fallback for every device without `getDisplayMedia`, which is every
+   * iPhone and iPad. Returns the shot so a caller can attach it immediately.
+   */
+  const grabFromGame = useCallback(async (): Promise<Shot | null> => {
+    const result = await grabGameFrame(iframeRef.current);
+    if (!result.ok) {
+      setCaptureNote(GRAB_COPY[result.reason]);
+      return null;
+    }
+    setCaptureNote(null);
+    pushShot(result.shot);
+    return result.shot;
+  }, [pushShot]);
+
+  /** Prepare and pin a file the tester picked out of their own photo library. */
+  const attachFile = useCallback(
+    async (file: File) => {
+      setCaptureNote(null);
+      const result = await prepareAttachment(file);
+      if (!result.ok) {
+        setToast({ ok: false, text: ATTACH_COPY[result.reason] });
+        return;
+      }
+      pushShot(result.shot);
+      setAttachedId(result.shot.id);
+    },
+    [pushShot],
+  );
+
   const startCapture = async () => {
     setCaptureNote(null);
     const result = await acquireTabCapture();
@@ -373,6 +474,22 @@ export function TestSessionClient({
       /* cross-origin, as expected for most of the catalogue */
     }
 
+    // Nothing captured — which on a phone is the ONLY case, since tab capture
+    // does not exist there. Read the game's canvas directly and pin the result to
+    // the report being written. Costs no gesture and no prompt, so it can happen
+    // here rather than asking a tester mid-bug to go and press something first.
+    //
+    // Deliberately not awaited before the composer opens: the composer is already
+    // on screen and the tester can start typing while this resolves.
+    if (!latest) {
+      void grabFromGame().then((shot) => {
+        if (!shot) return;
+        setFreezeFrame(shot.previewUrl);
+        // Only pin it if they have not chosen something else in the meantime.
+        setAttachedId((current) => current ?? shot.id);
+      });
+    }
+
     const replay = replayRef.current;
     if (!replay) return;
     setClipState("flushing");
@@ -383,7 +500,7 @@ export function TestSessionClient({
     } catch {
       setClipState("idle");
     }
-  }, [shots]);
+  }, [shots, grabFromGame]);
 
   // The shortcut. Capture phase on `window` so it beats the page's own
   // handlers; it cannot reach inside a cross-origin iframe, which is why the
@@ -416,10 +533,15 @@ export function TestSessionClient({
     let shot: FormData | undefined;
     const attached = shots.find((s) => s.id === attachedId);
     if (attached) {
+      // The type is read off the blob rather than assumed to be WebP: an
+      // attachment falls back to JPEG on a browser that cannot encode WebP, and
+      // while the server sniffs the bytes anyway, handing it a filename and a
+      // type that contradict its contents is how a future reader gets misled.
+      const type = toImageType(attached.blob.type);
       shot = new FormData();
       shot.set(
         "file",
-        new File([attached.blob], `${attached.id}.webp`, { type: "image/webp" }),
+        new File([attached.blob], `${attached.id}.${extensionForType(type)}`, { type }),
       );
     }
 
@@ -580,15 +702,30 @@ export function TestSessionClient({
             Capturing
           </span>
         ) : (
-          canRecord && (
-            <button
-              type="button"
-              onClick={startCapture}
-              className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-extrabold text-white transition hover:bg-white/20"
-            >
-              📸 Auto-screenshot
-            </button>
-          )
+          <>
+            {canRecord && (
+              <button
+                type="button"
+                onClick={startCapture}
+                className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-extrabold text-white transition hover:bg-white/20"
+              >
+                📸 Auto-screenshot
+              </button>
+            )}
+            {/* The no-permission grab. Offered whenever the game is one we can
+                actually read — `errorWatch` already answered that question when
+                it attached the error listeners — and it is the ONLY capture
+                control on a phone, where the one above cannot exist. */}
+            {errorWatch === "attached" && (
+              <button
+                type="button"
+                onClick={() => void grabFromGame()}
+                className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-extrabold text-white transition hover:bg-white/20"
+              >
+                🎯 Grab the game
+              </button>
+            )}
+          </>
         )}
 
         <button
@@ -697,7 +834,12 @@ export function TestSessionClient({
         </div>
 
         {reviewOpen && (
-          <div className="absolute inset-y-0 right-0 z-20 w-full max-w-sm overflow-y-auto border-l border-border bg-surface p-4 shadow-2xl sm:relative sm:shadow-none">
+          // A bottom sheet on a phone, a side panel from `sm` up. Full-height and
+          // full-width, which is what this was everywhere, buries the game — and
+          // the whole design of this screen is that the game keeps running and
+          // stays visible while you write about it. See the layout note at the
+          // top of this file.
+          <div className="absolute inset-x-0 bottom-0 z-20 max-h-[70dvh] w-full overflow-y-auto rounded-t-2xl border-t border-border bg-surface p-4 shadow-2xl sm:relative sm:inset-y-0 sm:left-auto sm:right-0 sm:max-h-none sm:max-w-sm sm:rounded-none sm:border-l sm:border-t-0 sm:shadow-none">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900">
                 Your review
@@ -762,7 +904,9 @@ export function TestSessionClient({
         )}
 
         {composerOpen && (
-          <div className="absolute inset-y-0 right-0 z-10 w-full max-w-sm overflow-y-auto border-l border-border bg-surface p-4 shadow-2xl sm:relative sm:shadow-none">
+          // Bottom sheet on a phone, side panel from `sm` up — see the review
+          // panel above.
+          <div className="absolute inset-x-0 bottom-0 z-10 max-h-[70dvh] w-full overflow-y-auto rounded-t-2xl border-t border-border bg-surface p-4 shadow-2xl sm:relative sm:inset-y-0 sm:left-auto sm:right-0 sm:max-h-none sm:max-w-sm sm:rounded-none sm:border-l sm:border-t-0 sm:shadow-none">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900">
                 {kind === "bug" ? "Report a bug" : "Suggest an idea"}
@@ -840,7 +984,12 @@ export function TestSessionClient({
                       ? `📹 Replay — last ${Math.round(pendingClip.durationMs / 1000)}s`
                       : capturing
                         ? "📹 Replay will be attached when you report"
-                        : "📹 No replay — start auto-screenshot to enable it"}
+                        : canRecord
+                          ? "📹 No replay — start auto-screenshot to enable it"
+                          : // Telling a phone to "start auto-screenshot" is advice
+                            // it cannot take: the control does not exist there,
+                            // because the API behind it does not exist there.
+                            "📹 No replay — this device can't record the screen"}
                 </li>
                 <li>
                   {pendingErrors.length > 0
@@ -850,6 +999,39 @@ export function TestSessionClient({
                       : "⚠️ No errors so far"}
                 </li>
               </ul>
+            </div>
+
+            {/* Bring your own picture.
+
+                The route that works on a phone, where nothing else does: hit the
+                bug, take a screenshot the way you always do, attach it here.
+                `capture` is deliberately NOT set — that would force the camera,
+                and the thing being photographed is the screen itself. */}
+            <div className="mt-4">
+              <label className="block text-[11px] font-black uppercase tracking-wide text-muted">
+                Add your own screenshot
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    // Cleared so picking the SAME file twice fires `change` again
+                    // — otherwise a tester who removed one and changed their mind
+                    // gets nothing and no explanation.
+                    e.target.value = "";
+                    if (file) void attachFile(file);
+                  }}
+                  className="mt-1 block w-full text-xs font-semibold text-zinc-700 file:mr-3 file:rounded-full file:border-0 file:bg-brand file:px-3 file:py-1.5 file:text-xs file:font-extrabold file:text-white"
+                />
+              </label>
+              {/* Said out loud, not buried. Everything else attached here is
+                  cropped to the game by construction; this one is whatever the
+                  tester photographed, and they are entitled to know that before
+                  they send it rather than after. */}
+              <p className="mt-1 text-[11px] font-semibold text-muted">
+                Whatever is in the picture gets sent — check it before you attach
+                it.
+              </p>
             </div>
 
             {/* Pin one of the automatic grabs to the report. A bug reading
@@ -910,7 +1092,8 @@ export function TestSessionClient({
       {shots.length > 0 && (
         <div className="shrink-0 border-t border-white/10 px-3 py-2">
           <p className="mb-1.5 text-[11px] font-black uppercase tracking-wide text-white/60">
-            Screenshots — pick the good ones for the game&rsquo;s page
+            Screenshots — attach them to a report, or send the good ones to the
+            game&rsquo;s page
           </p>
           <ul className="flex gap-2 overflow-x-auto pb-1">
             {shots.map((shot) => {
@@ -923,20 +1106,30 @@ export function TestSessionClient({
                     alt=""
                     className="h-20 w-auto rounded-lg border border-white/20"
                   />
-                  <button
-                    type="button"
-                    onClick={() => sendShot(shot)}
-                    disabled={state === "sending" || state === "sent"}
-                    className="absolute inset-x-1 bottom-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-black text-white backdrop-blur transition hover:bg-black/90 disabled:opacity-70"
-                  >
-                    {state === "sent"
-                      ? "✓ Sent"
-                      : state === "sending"
-                        ? "…"
-                        : state === "failed"
-                          ? "Retry"
-                          : "Use this"}
-                  </button>
+                  {/* No "use this" on anything the gallery would refuse: a photo
+                      from a camera roll, or a grab of a game that is not the
+                      landscape shape a game page renders. The alternative is a
+                      button whose only outcome is a rejection. */}
+                  {canOfferToGallery(shot) ? (
+                    <button
+                      type="button"
+                      onClick={() => sendShot(shot)}
+                      disabled={state === "sending" || state === "sent"}
+                      className="absolute inset-x-1 bottom-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-black text-white backdrop-blur transition hover:bg-black/90 disabled:opacity-70"
+                    >
+                      {state === "sent"
+                        ? "✓ Sent"
+                        : state === "sending"
+                          ? "…"
+                          : state === "failed"
+                            ? "Retry"
+                            : "Use this"}
+                    </button>
+                  ) : (
+                    <span className="absolute inset-x-1 bottom-1 rounded-full bg-black/70 px-2 py-1 text-center text-[10px] font-black text-white/70 backdrop-blur">
+                      Report only
+                    </span>
+                  )}
                 </li>
               );
             })}

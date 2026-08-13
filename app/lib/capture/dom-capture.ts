@@ -194,6 +194,9 @@ export async function grabGameFrame(
       previewUrl: URL.createObjectURL(blob),
       width: out.width,
       height: out.height,
+      // Read straight out of the game's own canvas, so it is the game and
+      // nothing else — gallery-eligible if its shape allows.
+      origin: "grab",
     },
   };
 }

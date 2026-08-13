@@ -140,7 +140,22 @@ export type Shot = {
   previewUrl: string;
   width: number;
   height: number;
+  /**
+   * Where the pixels came from.
+   *
+   * `"grab"` is a frame this app produced from the game itself — a tab capture
+   * cropped to the iframe, or a read of the game's own canvas. It shows the game
+   * and nothing else, by construction.
+   *
+   * `"attach"` is a file the tester picked out of their own photo library. It is
+   * evidence, and it is never offered to a game's public gallery: we have no idea
+   * what else is in the picture, and a child's camera roll is the last place to
+   * find out by publishing it.
+   */
+  origin: ShotOrigin;
 };
+
+export type ShotOrigin = "grab" | "attach";
 
 /**
  * Pulls frames off a capture stream on an interval and keeps the good ones.
@@ -300,6 +315,7 @@ export class FrameGrabber {
         previewUrl: URL.createObjectURL(blob),
         width: outW,
         height: outH,
+        origin: "grab",
       });
     } finally {
       this.busy = false;
