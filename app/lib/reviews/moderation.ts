@@ -125,8 +125,16 @@ export type QueuedReport = {
   reporter: { id: string | null; displayName: string };
 };
 
-/** One row of the work list: a reported review with everything needed to judge it. */
-export type QueueEntry = {
+/**
+ * One review as a moderator sees it: the text, who wrote it, and where it stands.
+ *
+ * SHARED BY BOTH READS, which is the point of it existing separately. The queue
+ * shows reviews somebody objected to; `recentReviews` shows reviews nobody has
+ * yet. They are the same object in the same product with the same verbs
+ * available, and splitting them into two unrelated shapes would mean the second
+ * screen slowly growing its own idea of what a review is.
+ */
+export type ReviewEntry = {
   review: {
     id: number;
     slug: string;
@@ -147,8 +155,12 @@ export type QueueEntry = {
     /** So the UI does not offer a ban to someone already banned. */
     banned: boolean;
   };
-  reports: QueuedReport[];
   openReports: number;
+};
+
+/** One row of the work list: a reported review, plus who objected and why. */
+export type QueueEntry = ReviewEntry & {
+  reports: QueuedReport[];
   /** The sort key: newest report first, because a fresh report is a live problem. */
   latestReportAt: string;
 };
@@ -242,7 +254,8 @@ export function createModerationStore(sql: Sql) {
     });
   }
 
-  function mapQueueEntry(row: Row): QueueEntry {
+  /** The columns both reads select, decoded once. */
+  function mapReviewEntry(row: Row): ReviewEntry {
     return {
       review: {
         id: toInt(row.id),
@@ -261,8 +274,14 @@ export function createModerationStore(sql: Sql) {
         image: row.image == null ? null : String(row.image),
         banned: Boolean(row.author_banned),
       },
-      reports: mapReports(row.reports),
       openReports: toInt(row.open_count),
+    };
+  }
+
+  function mapQueueEntry(row: Row): QueueEntry {
+    return {
+      ...mapReviewEntry(row),
+      reports: mapReports(row.reports),
       latestReportAt: toIso(row.newest_report_at),
     };
   }
