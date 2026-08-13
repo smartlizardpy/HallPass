@@ -421,7 +421,7 @@ export function TestSessionClient({
         const r = el.getBoundingClientRect();
         return { x: r.x, y: r.y, width: r.width, height: r.height };
       },
-      onShot: (shot) => setShots((current) => [...current, shot]),
+      onShot: pushShot,
       maxShots: MAX_COVER_CANDIDATES,
       intervalMs: 8000,
       maxEdge: 1280,
@@ -457,10 +457,19 @@ export function TestSessionClient({
     // Snapshot the errors as they are right now.
     setPendingErrors(errorLogRef.current?.snapshot() ?? []);
 
-    // Freeze the most recent grab over the game, so the tester can look at what
-    // happened while they describe it.
-    const latest = shots[shots.length - 1];
-    if (latest) setFreezeFrame(latest.previewUrl);
+    // Freeze what was on screen, so the tester can look at what happened while
+    // they describe it.
+    //
+    // ONLY EVER A GRAB, and only while capture is actually running. The newest
+    // still in the filmstrip is not necessarily the moment: once a tester can
+    // attach their own pictures, it might be a photo from their camera roll, and
+    // painting that over the game captioned "frozen at the bug" would be a lie
+    // told by an off-by-one. When capture is off, the honest freeze is a fresh
+    // grab taken right now — which is the branch below.
+    const latestGrab = capturing
+      ? [...shots].reverse().find((s) => s.origin === "grab")
+      : undefined;
+    if (latestGrab) setFreezeFrame(latestGrab.previewUrl);
 
     // Best-effort pause request. A same-origin game that listens for it can
     // honour it; a cross-origin one never receives it, and nothing depends on
@@ -474,14 +483,15 @@ export function TestSessionClient({
       /* cross-origin, as expected for most of the catalogue */
     }
 
-    // Nothing captured — which on a phone is the ONLY case, since tab capture
-    // does not exist there. Read the game's canvas directly and pin the result to
-    // the report being written. Costs no gesture and no prompt, so it can happen
-    // here rather than asking a tester mid-bug to go and press something first.
+    // No running capture to freeze — which on a phone is the ONLY case, since tab
+    // capture does not exist there. Read the game's canvas directly and pin the
+    // result to the report being written. Costs no gesture and no prompt, so it
+    // can happen here rather than asking a tester mid-bug to go and press
+    // something first.
     //
     // Deliberately not awaited before the composer opens: the composer is already
     // on screen and the tester can start typing while this resolves.
-    if (!latest) {
+    if (!latestGrab) {
       void grabFromGame().then((shot) => {
         if (!shot) return;
         setFreezeFrame(shot.previewUrl);
@@ -500,7 +510,7 @@ export function TestSessionClient({
     } catch {
       setClipState("idle");
     }
-  }, [shots, grabFromGame]);
+  }, [shots, capturing, grabFromGame]);
 
   // The shortcut. Capture phase on `window` so it beats the page's own
   // handlers; it cannot reach inside a cross-origin iframe, which is why the
