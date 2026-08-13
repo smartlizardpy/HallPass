@@ -8,6 +8,24 @@
  * resolve it. Nothing here needs a second screen, because a moderation decision
  * deferred is a decision a child is waiting on.
  *
+ * TWO LISTS, AND THE SECOND ONE IS NOT A LUXURY. "Reported" is the work queue.
+ * "Every review" is everything that has been written, reported or not, and it
+ * exists because the queue is built on `review_reports` and therefore cannot
+ * show a review nobody has reported:
+ *
+ *   * `review_posted` notifications say "Open moderation to read it" and link
+ *     here. A new review has no reports, so this page used to answer "Nothing is
+ *     waiting on you" — sending an admin to read something at an address where
+ *     it demonstrably was not.
+ *   * A review whose text trips a FLAGGED wordlist term is stored `hidden`,
+ *     "published but hidden pending review". It is off the public page, so
+ *     nobody can read it, so nobody can report it, so it never reached the
+ *     queue. The flag made it invisible to the moderators it was raised for.
+ *
+ * Both lists render the same card with the same verbs. A review does not become
+ * a different object, or deserve weaker powers, because the thing that surfaced
+ * it was a wordlist rather than a pupil.
+ *
  * *** THE AUTHOR'S EMAIL IS NEVER RENDERED, AND NEVER FETCHED. ***
  *
  * `players.email` is, for this audience, a child's SCHOOL address. It is not
@@ -75,7 +93,7 @@ import {
 
 export const metadata: Metadata = {
   title: "Moderation",
-  description: "Reported reviews waiting on a decision.",
+  description: "Reported reviews, and every other review that has been written.",
   robots: { index: false, follow: false },
 };
 
@@ -242,9 +260,9 @@ export default async function ModerationPage({
         title="Moderation"
         subtitle={
           unavailable
-            ? "Reported reviews"
+            ? "Reviews"
             : openReports === 0
-              ? "Nothing reported — the queue is clear."
+              ? "Nothing reported — every review is still listed below."
               : `${plural(openReports, "open report", "open reports")} across ${plural(queue.length, "review", "reviews")}`
         }
         action={
@@ -312,7 +330,8 @@ export default async function ModerationPage({
           <p className="mt-1 text-sm text-muted">
             Reviews land here the moment somebody reports them. At{" "}
             {REVIEW_AUTO_HIDE_REPORTS} distinct reporters a review hides itself
-            and still queues for a human.
+            and still queues for a human. Everything that has been written is
+            below, reported or not.
           </p>
         </div>
       )}
