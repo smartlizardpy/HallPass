@@ -112,9 +112,14 @@ export async function POST(
       return Response.json({ ok: false }, { status: 503, headers: NO_STORE });
     }
     console.error("review report failed:", error);
-    // Still answers ok: a failed report must not tell the reporter anything about
-    // the review's state, and the UI has already thanked them.
-    return Response.json({ ok: true }, { headers: NO_STORE });
+    // A 500 SAYS SO, where this used to answer ok. The old reasoning was that a
+    // failure must not tell the reporter anything about the review's state —
+    // but a 500 says nothing about the review, only that we dropped it, and the
+    // alternative is a site where the report button is broken and every single
+    // person who presses it is told it worked. On a site for children the report
+    // button is the safeguarding path; it is the last thing that should fail
+    // quietly.
+    return Response.json({ ok: false }, { status: 500, headers: NO_STORE });
   }
 }
 
