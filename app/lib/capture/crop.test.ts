@@ -8,6 +8,7 @@ import {
   hammingDistance,
   isBlankFrame,
   isDuplicateOf,
+  isEmptyFrame,
   mapRectToFrame,
   MIN_FRAME_DETAIL,
 } from "./crop";
@@ -266,6 +267,50 @@ describe("isBlankFrame", () => {
     // absolute-variance test. Hard black-to-bright pixel transitions at that
     // exposure are exactly what edge density is meant to see.
     expect(isBlankFrame(rgba(1024, (i) => (i % 5 === 0 ? 24 : 0)))).toBe(false);
+  });
+});
+
+describe("isEmptyFrame", () => {
+  /** RGBA where every pixel shares one colour and alpha. */
+  function flat(count: number, grey: number, alpha: number): Uint8ClampedArray {
+    const buf = new Uint8ClampedArray(count * 4);
+    for (let i = 0; i < count; i += 1) {
+      buf[i * 4] = grey;
+      buf[i * 4 + 1] = grey;
+      buf[i * 4 + 2] = grey;
+      buf[i * 4 + 3] = alpha;
+    }
+    return buf;
+  }
+
+  it("calls an untouched drawing buffer empty", () => {
+    // What a WebGL canvas reads back as without preserveDrawingBuffer.
+    expect(isEmptyFrame(flat(4096, 0, 0))).toBe(true);
+  });
+
+  it("does NOT call a dark frame empty", () => {
+    // The measured regression: these games read back fine and were being
+    // discarded by the candidate filter for being dim. Opaque black is a
+    // picture — of a black screen, which is frequently the bug being reported.
+    expect(isEmptyFrame(flat(4096, 0, 255))).toBe(false);
+    expect(isEmptyFrame(flat(4096, 4, 255))).toBe(false);
+  });
+
+  it("disagrees with isBlankFrame on exactly that case", () => {
+    const darkButPainted = flat(4096, 2, 255);
+    expect(isBlankFrame(darkButPainted)).toBe(true); // "not worth keeping"
+    expect(isEmptyFrame(darkButPainted)).toBe(false); // "but it IS a readback"
+  });
+
+  it("is not fooled by one painted pixel among transparent ones", () => {
+    const buf = flat(4096, 0, 0);
+    // Alpha of the very last sampled pixel. The stride must still reach it.
+    buf[buf.length - 1] = 255;
+    expect(isEmptyFrame(buf, 1)).toBe(false);
+  });
+
+  it("treats a zero-length buffer as empty rather than throwing", () => {
+    expect(isEmptyFrame(new Uint8ClampedArray(0))).toBe(true);
   });
 });
 

@@ -209,6 +209,46 @@ export function isBlankFrame(rgba: Uint8ClampedArray): boolean {
 }
 
 /**
+ * True when NOTHING was drawn — every sampled pixel fully transparent.
+ *
+ * ── WHY THIS IS NOT {@link isBlankFrame} ────────────────────────────────────
+ * They answer different questions and the difference was measured, not guessed.
+ * `isBlankFrame` asks "is this frame worth KEEPING", which is the right question
+ * for the automatic grabber: it fires unattended every 8 seconds and its output
+ * is a set of candidates for a game's page, so a loading screen is noise.
+ *
+ * An explicit grab is the opposite situation. A tester pressed a button, about a
+ * frame they are looking at, to attach to a bug report — and a plain frame is
+ * frequently the very thing being reported. Running the candidate filter over it
+ * threw away real pictures of real games. Measured across the catalogue at rest:
+ *
+ *   game            opaque   mean luma   edge density
+ *   chroma-orbit      100%      0.0092     0          } read back FINE,
+ *   neon-snake        100%      0.0164     0.000698   } rejected as "blank"
+ *   symbiosis         100%      0.0187     0.001009   } by the 0.0015 floor
+ *   pixel-slicer      100%      0.0925     0.001397   }
+ *   ---------------------------------------------------
+ *   system-error        0%      0          0         <- genuinely nothing there
+ *   silence             0%      0          0         <- genuinely nothing there
+ *
+ * Four of six were dark or low-contrast rather than empty, and `pixel-slicer`
+ * missed the threshold by 0.0001. The two real failures are distinguished by
+ * ALPHA, not by detail: a WebGL drawing buffer that was not preserved reads back
+ * fully TRANSPARENT, so `alpha > 0` anywhere is proof that something painted.
+ *
+ * That makes this a fact about the readback rather than a judgement about the
+ * picture — which is what the caller actually needs to know before it tells a
+ * tester their game cannot be read.
+ */
+export function isEmptyFrame(rgba: Uint8ClampedArray, step = 4): boolean {
+  const stride = Math.max(1, Math.floor(step)) * 4;
+  for (let i = 0; i + 3 < rgba.length; i += stride) {
+    if (rgba[i + 3] !== 0) return false;
+  }
+  return true;
+}
+
+/**
  * A perceptual average hash: 64 one-bit values, one per cell of an already
  * downscaled 8×8 grayscale buffer.
  *

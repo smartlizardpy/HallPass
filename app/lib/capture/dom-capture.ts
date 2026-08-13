@@ -24,8 +24,9 @@
  *     `preserveDrawingBuffer: true`, which is the game's choice and not ours. We
  *     cannot inject a shim to force it either: most games 307 to the static
  *     mirror under `/games/`, so the HTML we serve is never rewritten on the way
- *     past. Caught by the same {@link isBlankFrame} that rejects loading
- *     screens. → `blank`
+ *     past. Recognised by {@link isEmptyFrame} — a cleared buffer reads back
+ *     fully TRANSPARENT, which is a fact about the readback rather than an
+ *     opinion about the picture. → `blank`
  *   * A CANVAS TAINTED by a cross-origin texture throws `SecurityError` on
  *     readback, even though the canvas itself is same-origin. → `tainted`
  *   * DOM-ONLY GAMES have no canvas to read. → `no-canvas`
@@ -40,7 +41,7 @@
  * whether it can double as a gallery candidate.
  */
 
-import { fitWithin, isBlankFrame } from "./crop";
+import { fitWithin, isEmptyFrame } from "./crop";
 import type { Shot } from "./tab-capture";
 
 /** Why a grab produced nothing. Every one of these is reported, never swallowed. */
@@ -177,9 +178,13 @@ export async function grabGameFrame(
     return { ok: false, reason: "tainted" };
   }
 
-  // A WebGL canvas without `preserveDrawingBuffer` reads back as a cleared
-  // buffer, which is exactly what this check was written to recognise.
-  if (isBlankFrame(pixels)) return { ok: false, reason: "blank" };
+  // A WebGL canvas without `preserveDrawingBuffer` reads back fully transparent.
+  //
+  // NOT the candidate filter `FrameGrabber` uses. Running that here rejected a
+  // quarter of the catalogue for being dark rather than empty — the tester is
+  // looking at the frame and asked for it, and a plain screen is often the bug
+  // itself. See {@link isEmptyFrame} for the measurements.
+  if (isEmptyFrame(pixels)) return { ok: false, reason: "blank" };
 
   const blob = await new Promise<Blob | null>((resolve) =>
     canvas.toBlob((b) => resolve(b), "image/webp", 0.9),

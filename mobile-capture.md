@@ -110,10 +110,14 @@ It does not work everywhere, and the honest list matters more than the feature:
 - **DOM-only games have no canvas at all.**
 
 Every one of those is *detectable*, which is what makes the feature honest rather
-than flaky: blank readback is caught by the existing `isBlankFrame()` — the same
-check that rejects loading screens — and the rest are caught at the probe. A
-failure says which case it hit and points at the manual attach. It never claims
-to have grabbed something it did not.
+than flaky: an unpreserved WebGL buffer reads back fully transparent and is caught
+by `isEmptyFrame()`, and the rest are caught at the probe. A failure says which
+case it hit and points at the manual attach. It never claims to have grabbed
+something it did not.
+
+**Measured, not assumed: 19 of the 28 bundled games grab at their title screen**,
+which is a floor — see _Gotcha 1_, which is also where the first version of this
+paragraph turned out to be wrong.
 
 Wired in two places: a **Grab the game** button that replaces the absent
 auto-screenshot control, and one automatic attempt when a bug report is opened
@@ -200,7 +204,37 @@ that is an assumption to verify on a real device, not in a simulator.
 
 ## Gotchas
 
-### 1. The gallery policy is load-bearing in two directions
+### 1. "Blank" and "empty" are different questions
+
+The grabber first reused `isBlankFrame()` — the filter that keeps loading screens
+out of the AUTOMATIC capture — to decide whether a canvas had read back. Driving
+all 28 bundled games through the real module in headless Chromium said that was
+wrong: **11 of 28 grabbed**, and four of the six failures inspected had read back
+perfectly and were merely dark.
+
+```
+game            opaque   mean luma   edge density
+chroma-orbit      100%      0.0092     0          } read back FINE,
+neon-snake        100%      0.0164     0.000698   } rejected as "blank"
+symbiosis         100%      0.0187     0.001009   } by the 0.0015 floor
+pixel-slicer      100%      0.0925     0.001397   }   (0.0001 short)
+system-error        0%      0          0          <- genuinely nothing
+silence             0%      0          0          <- genuinely nothing
+```
+
+The filter asks "is this frame worth keeping", which is right for an unattended
+grabber choosing gallery candidates and wrong for a tester who pressed a button
+about a frame they are looking at — where a plain screen is often the bug. The
+two real failures differ by ALPHA: an unpreserved WebGL buffer reads back fully
+transparent, so `alpha > 0` proves something painted. `isEmptyFrame()` asks that
+instead, and coverage went to **19 of 28**.
+
+Both numbers are a FLOOR, measured seconds after load with a synthetic click, so
+most games were still on a title screen. A tester grabs mid-play, with the canvas
+up and painted. The three `no-canvas` games are the same artefact: they build
+their canvas when the game starts, not when the page loads.
+
+### 2. The gallery policy is load-bearing in two directions
 
 An accepted `beta_shot` is later copied into `game_media`, so anything that would
 be rejected there has to be rejected on the way in — otherwise acceptance fails
@@ -208,14 +242,14 @@ at the last step, in the dashboard, in front of an admin who cannot do anything
 about it. That is why `submitShotAction` keeps `validateMediaUpload` unchanged
 and only the *report attachment* path moved to the evidence policy.
 
-### 2. A dropped attachment must be said out loud
+### 3. A dropped attachment must be said out loud
 
 The report write deliberately degrades rather than fails when evidence cannot be
 stored — the words are the point. But the tester chose that file on purpose, so
 the result now says the image did not make it instead of quietly filing without
 it. Silence was the original bug, not the rejection.
 
-### 3. `canCapture()` is answered through `useSyncExternalStore`
+### 4. `canCapture()` is answered through `useSyncExternalStore`
 
 Reading `navigator` during render made the button absent from the SSR HTML and
 present after hydration — a mismatch React recovers from by re-rendering the
@@ -223,7 +257,7 @@ tree, which on this page means **remounting the game**. Any new
 capability probe in this component follows the same shape, with a `() => false`
 server snapshot. It is written up at the `canRecord` declaration.
 
-### 4. Object URLs are owned
+### 5. Object URLs are owned
 
 Every preview is a `URL.createObjectURL` and leaks the whole decoded image until
 revoked. The session already revokes its grabs on unmount; a manual attachment is
