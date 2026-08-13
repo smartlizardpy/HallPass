@@ -51,6 +51,9 @@ function languageName(code: string): string {
  */
 type ReportResult = { kind: "done" } | { kind: "error"; message: string };
 
+/** Says nothing about the review — only that the report did not get through. */
+const REPORT_FAILED = "That report didn't send. Try again.";
+
 /**
  * One review: author, verdict badge, body, helpful vote, report control.
  *
@@ -178,19 +181,31 @@ export function ReviewRow({
   const report = async (reason: string) => {
     setBusy(true);
     try {
-      await fetch(`/api/v1/reviews/${review.id}/report`, {
+      const res = await fetch(`/api/v1/reviews/${review.id}/report`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason }),
       });
-      // Always reports success — the endpoint answers ok whether or not this
-      // person had already reported it, so it never leaks that either.
-      setResult({ kind: "done" });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        reason?: string;
+      };
+      if (res.ok && data.ok) {
+        setResult({ kind: "done" });
+        onChanged();
+      } else {
+        // The endpoint's own words when it has any — it is the half that knows
+        // WHY, and the only refusal it spells out is one that leaks nothing
+        // (reporting your own review). Everything else gets the generic line.
+        setResult({ kind: "error", message: data.reason ?? REPORT_FAILED });
+      }
       setReporting(false);
-      onChanged();
     } catch {
-      setResult({ kind: "done" });
+      // The fetch never completed, so nothing was filed. Saying "Reported" here
+      // — which this used to do — is the version of this bug that hides itself
+      // best: the reader believes an adult has been told, and nobody has.
+      setResult({ kind: "error", message: "You appear to be offline." });
       setReporting(false);
     } finally {
       setBusy(false);
