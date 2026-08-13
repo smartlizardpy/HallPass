@@ -172,6 +172,7 @@ export function GameReviews({ slug, title }: { slug: string; title: string }) {
                 <ReviewRow
                   key={review.id}
                   review={review}
+                  slug={slug}
                   onChanged={() => {
                     void load(sort);
                   }}

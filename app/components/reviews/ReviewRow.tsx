@@ -48,8 +48,19 @@ function languageName(code: string): string {
  * report sitting in the moderation queue. On a site for children the report
  * button is the safeguarding path: the one thing it must never do is say an
  * adult has been told when nobody has.
+ *
+ * `signin` is its own case rather than an error string because it is the one
+ * with a WAY OUT. Reporting is signed-in only and deliberately so — an
+ * anonymous report endpoint is a free denial of service on the moderation queue
+ * — but the control is offered to everyone, so a signed-out reader chooses a
+ * reason, gets a 401, and needs a sign-in link rather than an apology. The
+ * composer directly above has always done this ("Sign in to review"); the
+ * report control quietly did not.
  */
-type ReportResult = { kind: "done" } | { kind: "error"; message: string };
+type ReportResult =
+  | { kind: "done" }
+  | { kind: "signin" }
+  | { kind: "error"; message: string };
 
 /** Says nothing about the review — only that the report did not get through. */
 const REPORT_FAILED = "That report didn't send. Try again.";
@@ -91,9 +102,12 @@ const REPORT_FAILED = "That report didn't send. Try again.";
  */
 export function ReviewRow({
   review,
+  slug,
   onChanged,
 }: {
   review: Review;
+  /** The game this review is on — only ever used to come back here after a sign-in. */
+  slug: string;
   onChanged: () => void;
 }) {
   const [helpful, setHelpful] = useState(review.helpfulCount);
@@ -187,6 +201,11 @@ export function ReviewRow({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason }),
       });
+      if (res.status === 401) {
+        setResult({ kind: "signin" });
+        setReporting(false);
+        return;
+      }
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         reason?: string;
@@ -369,12 +388,27 @@ export function ReviewRow({
           notice in `GameReviews` — the reader did nothing wrong, and a red
           block beside a review they just objected to reads as a telling-off. */}
       {result && result.kind !== "done" && (
-        <p
+        <div
           role="status"
-          className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] font-bold text-amber-900"
+          className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] font-bold text-amber-900"
         >
-          {result.message}
-        </p>
+          {result.kind === "signin" ? (
+            <>
+              <p>Sign in to report a review.</p>
+              {/* A plain anchor, not a Link: signing in leaves the app and the
+                  callback brings the reader back to this game's page — the same
+                  shape the composer uses for the same journey. */}
+              <a
+                href={`/play/signin?callbackUrl=${encodeURIComponent(`/game/${slug}`)}`}
+                className="shrink-0 rounded-full border border-amber-300 bg-white px-3 py-1 text-[13px] font-extrabold text-amber-900 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-200"
+              >
+                Sign in
+              </a>
+            </>
+          ) : (
+            <p>{result.message}</p>
+          )}
+        </div>
       )}
     </li>
   );
