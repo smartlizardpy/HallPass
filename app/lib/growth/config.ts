@@ -87,6 +87,51 @@ export function fillWeeks(
 }
 
 /**
+ * The earliest instant we will believe an event carries.
+ *
+ * `max(timestamp)` over an empty range does NOT come back as SQL NULL: ClickHouse
+ * yields the type's default, so "this project has never received an event"
+ * arrives looking like an event from 1 January 1970. Rendered as-is the panel
+ * would report a newest event from before the web existed instead of saying
+ * there are none — and `isReportingHealthy` would call it a stall rather than a
+ * silence. Anything before HallPass existed is that default, not a real event.
+ */
+const EARLIEST_PLAUSIBLE_EVENT = Date.UTC(2020, 0, 1);
+
+/** `2026-08-17 13:45:12.000000`, `2026-08-17T13:45:12Z`, and the variants between. */
+const HOGQL_DATETIME =
+  /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\.\d+)?\s*(Z|[+-]\d{2}:?\d{2})?$/;
+
+/**
+ * Normalise the newest-event timestamp PostHog returns into a UTC ISO string.
+ *
+ * HogQL renders a DateTime as `2026-08-17 13:45:12.000000` — a SPACE rather than
+ * a `T`, and no zone. `new Date()` reads that through its legacy parser as LOCAL
+ * time, so on any server not running in UTC the freshness check silently
+ * measures staleness against a clock hours from the one the event was stamped
+ * on: an hour-old event can read as seven hours stale, or as arriving in the
+ * future. PostHog stores UTC, so it is read as UTC unless an offset says
+ * otherwise.
+ *
+ * `null` means "no event", and it is returned for every value that cannot be a
+ * real one — absent, unparseable, or the epoch default above. That keeps
+ * "PostHog has never heard from us" a distinct state from "PostHog stopped
+ * hearing from us", which is the distinction the whole panel turns on.
+ */
+export function normaliseLastEvent(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const text = raw.trim();
+  if (text === "") return null;
+
+  const parts = HOGQL_DATETIME.exec(text);
+  const iso = parts ? `${parts[1]}T${parts[2]}${parts[3] ?? "Z"}` : text;
+
+  const ms = new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < EARLIEST_PLAUSIBLE_EVENT) return null;
+  return new Date(ms).toISOString();
+}
+
+/**
  * Is analytics still reporting?
  *
  * `null` means nothing has ever been received, which is a third state again —
