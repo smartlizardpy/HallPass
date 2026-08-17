@@ -270,24 +270,43 @@ needs no external API at all.
 - **PostHog query cost.** `stats.ts` already revalidates on a 60s tag; new queries
   join that discipline rather than fetching per render.
 
-## 8. Phasing — the file-by-file plan
+## 8. Phasing — the file-by-file plan, and what shipped
 
-Eleven commits, each leaving the tree working. This is phase 2 of the `AGENTS.md`
-rule: written down before any code.
+Ten commits, each leaving the tree working. **All of it is built**; this table is
+now a record rather than a plan.
 
 | # | Commit | Files |
 |---|---|---|
 | 1 | This plan | `marketing-design.md` |
 | 2 | Canonical on the home grid | `app/page.tsx` |
 | 3 | The `ref` vocabulary | `app/lib/growth/channels.ts` + test |
-| 4 | Capture `ref` (last- and first-touch) | `instrumentation-client.ts`, `app/lib/growth/first-touch.ts` |
-| 5 | Retention marker | `app/lib/streak/{core,store}.ts`, `app/components/GrowthTracker.tsx`, `app/layout.tsx` |
-| 6 | Share-loop reads | `app/lib/growth/share-loop.ts` + test |
+| 4 | Capture `ref` (last- and first-touch) | `instrumentation-client.ts`, `app/lib/growth/first-touch.ts` + test |
+| 5 | Retention marker | `app/lib/streak/store.ts`, `app/components/GrowthTracker.tsx`, `app/layout.tsx` + test |
+| 6 | Share-loop reads | `app/lib/growth/{share-loop,config}.ts` + test |
 | 7 | Acquisition reads | `app/lib/stats.ts` (export `hogql`), `app/lib/growth/acquisition.ts` |
-| 8 | Content-health reads | `app/lib/growth/content-health.ts` + test |
-| 9 | Page shell + nav | `app/dashboard/(app)/growth/page.tsx`, `_ui/DashNav.tsx` |
-| 10 | Panels 2–4 | `app/dashboard/(app)/growth/_ui/*` |
-| 11 | Link builder (panel 1) | `app/dashboard/(app)/growth/_ui/LinkBuilder.tsx` |
+| 8 | Content-health reads | `app/lib/growth/{content-health,content-rules}.ts` + test |
+| 9 | Page building blocks | `app/dashboard/(app)/growth/_ui/{Bars,LinkBuilder}.tsx` |
+| 10 | The page + nav | `app/dashboard/(app)/growth/page.tsx`, `_ui/DashNav.tsx` |
+
+**Two things came out differently from the plan**, both from reading the code
+rather than from changing our minds:
+
+- **`streak/core.ts` was never touched.** The `days` total the retention marker
+  needs was already sitting in `recordPlay`'s hands as `next.days.length`; only
+  the event's detail type had to grow. The pure model is untouched and its
+  existing tests never moved.
+- **The pure/server-only split landed differently.** A module importing
+  `server-only` cannot be loaded by Vitest at all, so the testable parts —
+  `claimsPerLink`, `fillWeeks`, `isReportingHealthy`, and the whole content-health
+  rule set — live in `config.ts` and `content-rules.ts` beside their server-only
+  halves. That is the existing `challenges/config.ts` + `challenges/store.ts`
+  pattern; it was not planned for and should have been.
+
+**Verified after the build, not assumed:** `/` is still prerendered (`○`) despite
+its new metadata export, `/dashboard/growth` is dynamic (`ƒ`) as an admin page
+must be, and `public/sw-manifest.js` still carries **28** `/game/` routes —
+the regression check the game page's own docblock specifies. `npm run lint`
+reports the same 11 pre-existing warnings and no new ones; all 1258 tests pass.
 
 Notes that shaped the ordering:
 
@@ -324,16 +343,36 @@ and unmeasurable before it:
 - **An on-site `/new` drops page.** `WhatsNewLink` currently points at a hosted
   ShipNote changelog — off-site, unindexable, and it sends traffic away.
 
-## 10. Open questions
+## 10. Open questions — answered in §0, still worth confirming
 
-Answers change the build, so they are asked rather than assumed:
+These were asked before the build and answered by us when nobody was available.
+The build assumes those answers; confirming or reversing any of them is cheap,
+and §0 names what each one would change.
 
-1. **Is there a short domain?** QR codes and anything read off a screen want one.
-   Without it, `ref` codes ride on the full URL and the whiteboard case is lost.
-2. **Which channels are actually live today** — TikTok, Discord, YouTube, pure
-   word of mouth? The `ref` vocabulary should name real channels, not guesses.
-3. **Is the ad strip meant to earn?** `ad_clicked` exists. If monetisation is a
-   goal, session depth matters as much as returning devices and panel 2 changes
-   shape. If it is not, we optimise purely for coming back.
-4. **Has anyone read Search Console yet?** The property is verified, so there may
-   be months of query data sitting there that changes what we build first.
+1. **Is there a short domain?** Assumed no. `ref` codes ride the full URL, and
+   the QR generator is deferred with it.
+2. **Which channels are actually live today?** The vocabulary in `channels.ts` is
+   a guess — editing that array is the entire cost of correcting it, and history
+   keeps whatever it was tagged with.
+3. **Is the ad strip meant to earn?** Assumed not. Panel 2 measures returning
+   devices, not session depth.
+4. **Has anyone read Search Console yet?** The property is verified, so months of
+   query data may already be sitting there. **This is the one item on the list
+   that needs no code at all**, and it is the cheapest next thing anyone can do.
+
+## 11. What this does NOT solve
+
+Stated plainly so the page is not mistaken for a growth strategy.
+
+**The catalogue is still 30 games**, and in this niche each title is its own
+query. Everything built here measures and tags demand; none of it creates any.
+`/add-game` already automates onboarding, and the content-health panel now names
+which of the existing 30 pages are too thin to compete — but shipping more games
+remains line item zero, exactly as §1 said before any of this was written.
+
+**Nothing here has data yet.** Every panel reads real sources, and on the day it
+ships every acquisition number is zero because no tagged link has been published
+and no device has yet recorded a `day_played`. The share-loop and content-health
+panels have history to show immediately; the analytics panels need a week and at
+least one shared link before they say anything. That is expected, and the
+not-reporting notice exists so an empty page cannot be misread as a broken one.
