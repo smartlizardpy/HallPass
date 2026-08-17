@@ -1,5 +1,7 @@
 import "server-only";
 
+import { type HogqlResponse, namedRows } from "@/app/lib/hogql-rows";
+
 export type PlayCounts = Record<string, number>;
 
 const API_HOST = process.env.POSTHOG_API_HOST ?? "https://eu.posthog.com";
@@ -24,22 +26,20 @@ function getQueryEndpoint(projectSelector: string) {
 }
 
 /**
- * Run one HogQL query against PostHog.
+ * Run one HogQL query against PostHog and hand back the raw response body.
  *
- * Exported for `app/lib/growth/acquisition.ts` rather than copied into it. The
- * things worth not duplicating are the project-selector fallback (a personal API
- * key that cannot see `POSTHOG_PROJECT_ID` retries against `@current`), the 60s
- * revalidate that keeps a dashboard render from hammering the API, the 8s
- * timeout, and the "no key means an empty array, not a throw" contract every
- * caller is written against. A second copy would drift on all five.
+ * The single place the transport lives, because the things worth not
+ * duplicating are the project-selector fallback (a personal API key that cannot
+ * see `POSTHOG_PROJECT_ID` retries against `@current`), the 60s revalidate that
+ * keeps a dashboard render from hammering the API, the 8s timeout, and the "no
+ * key means empty, not a throw" contract every caller is written against. A
+ * second copy would drift on all four.
  *
- * Returns `[]` — never throws — when there is no API key configured.
+ * `hogql` and `hogqlNamed` are the two ways to read what it returns; see them
+ * for which shape to ask for.
  */
-export async function hogql<T = unknown>(
-  sql: string,
-  tag = "posthog-stats",
-): Promise<T[]> {
-  if (!API_KEY) return [];
+async function runHogql(sql: string, tag: string): Promise<HogqlResponse> {
+  if (!API_KEY) return {};
   let lastError: Error | undefined;
 
   for (const selector of QUERY_ENDPOINT_SELECTORS) {
@@ -57,8 +57,7 @@ export async function hogql<T = unknown>(
     });
 
     if (res.ok) {
-      const data = (await res.json()) as { results?: T[] };
-      return data.results ?? [];
+      return (await res.json()) as HogqlResponse;
     }
 
     const errorText = await res.text();
@@ -76,6 +75,41 @@ export async function hogql<T = unknown>(
   }
 
   throw lastError ?? new Error("PostHog query failed");
+}
+
+/**
+ * Rows as PostHog sends them: POSITIONAL TUPLES, one value per selected column,
+ * in `SELECT` order. `hogql<[string, number]>(…)` then destructures them.
+ *
+ * That shape is not obvious from the call site, and typing it as objects instead
+ * is silent rather than loud — see the header of `hogql-rows.ts` for the growth
+ * page that spent a release reporting zeros because of it. Prefer `hogqlNamed`
+ * for anything with more than a couple of columns.
+ *
+ * Returns `[]` — never throws — when there is no API key configured.
+ */
+export async function hogql<T = unknown>(
+  sql: string,
+  tag = "posthog-stats",
+): Promise<T[]> {
+  const data = await runHogql(sql, tag);
+  return Array.isArray(data.results) ? (data.results as T[]) : [];
+}
+
+/**
+ * The same query, with each row zipped against the response's `columns` so it
+ * can be read by name.
+ *
+ * Costs one object per row and removes an entire class of silent wrongness:
+ * a column that was never selected reads as an absent key rather than as a
+ * plausible number. Values are still whatever JSON PostHog sent, so pair it with
+ * `toCount` / `toText` at the boundary.
+ */
+export async function hogqlNamed<T = Record<string, unknown>>(
+  sql: string,
+  tag = "posthog-stats",
+): Promise<T[]> {
+  return namedRows<T>(await runHogql(sql, tag));
 }
 
 /** Run a secondary panel query that must NEVER blank the whole dashboard. */

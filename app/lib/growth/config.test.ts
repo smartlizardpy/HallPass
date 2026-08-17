@@ -4,6 +4,7 @@ import {
   claimsPerLink,
   fillWeeks,
   isReportingHealthy,
+  normaliseLastEvent,
   type ShareWeek,
 } from "./config";
 
@@ -122,5 +123,57 @@ describe("isReportingHealthy", () => {
   it("refuses an unparseable timestamp instead of reporting healthy", () => {
     expect(isReportingHealthy("not a date", now)).toBe(false);
     expect(isReportingHealthy("", now)).toBe(false);
+  });
+});
+
+describe("normaliseLastEvent", () => {
+  /**
+   * The shape HogQL actually emits for `toString(max(timestamp))`: a space
+   * instead of a `T`, microseconds, and no zone at all. Read by `new Date()` as
+   * written, that is LOCAL time — so on a server an hour off UTC the freshness
+   * check measures staleness against the wrong clock.
+   */
+  it("reads a zoneless HogQL datetime as UTC", () => {
+    expect(normaliseLastEvent("2026-08-17 13:45:12.000000")).toBe(
+      "2026-08-17T13:45:12.000Z",
+    );
+    expect(normaliseLastEvent("2026-08-17 13:45:12")).toBe("2026-08-17T13:45:12.000Z");
+  });
+
+  it("keeps an explicit offset when one is given", () => {
+    expect(normaliseLastEvent("2026-08-17T13:45:12Z")).toBe("2026-08-17T13:45:12.000Z");
+    expect(normaliseLastEvent("2026-08-17 13:45:12+02:00")).toBe(
+      "2026-08-17T11:45:12.000Z",
+    );
+  });
+
+  /**
+   * `max(timestamp)` over an empty range is not NULL — ClickHouse returns the
+   * type default, so a project that has never received an event answers with the
+   * epoch. Passing that through would have the panel name a newest event from
+   * 1970 and call analytics stalled, when the truth is that nothing has ever
+   * arrived.
+   */
+  it("treats the epoch default as no event rather than a very old one", () => {
+    expect(normaliseLastEvent("1970-01-01 00:00:00")).toBeNull();
+    expect(normaliseLastEvent("1970-01-01T00:00:00.000Z")).toBeNull();
+  });
+
+  it("is null for anything that cannot be a timestamp", () => {
+    expect(normaliseLastEvent(null)).toBeNull();
+    expect(normaliseLastEvent(undefined)).toBeNull();
+    expect(normaliseLastEvent("")).toBeNull();
+    expect(normaliseLastEvent("   ")).toBeNull();
+    expect(normaliseLastEvent("not a date")).toBeNull();
+    expect(normaliseLastEvent(42)).toBeNull();
+  });
+
+  it("hands isReportingHealthy something it can measure", () => {
+    const now = new Date("2026-08-17T14:00:00Z");
+    const fresh = normaliseLastEvent("2026-08-17 13:45:12.000000");
+    expect(isReportingHealthy(fresh, now)).toBe(true);
+    expect(isReportingHealthy(normaliseLastEvent("2026-08-16 13:45:12"), now)).toBe(
+      false,
+    );
   });
 });

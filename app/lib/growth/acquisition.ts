@@ -28,10 +28,25 @@ import "server-only";
  * inconsistently depending on how a property was materialised; an integer
  * compares the same way everywhere. `returning` stays on the event because it is
  * the readable form for anyone exploring in the PostHog UI.
+ *
+ * EVERY QUERY HERE READS ITS ROWS BY NAME through `hogqlNamed`, and every value
+ * leaves through `toCount` / `toText`. PostHog answers positionally — `results`
+ * is an array of arrays, the names are in a sibling `columns` array — so rows
+ * typed as objects without that mapping read `undefined` out of every field.
+ * This module shipped exactly that once: the KPIs fell through `undefined ?? 0`
+ * into a confident row of zeros, the bars formatted as `NaN`, and an absent
+ * `lastEventAt` had the page announce that PostHog held no events at all while
+ * it was receiving them normally. None of it failed loudly, which is why the
+ * mapping is a named one now.
  */
 
-import { hogql, isStatsConfigured } from "@/app/lib/stats";
-import { ACQUISITION_WINDOW_DAYS, isReportingHealthy } from "./config";
+import { hogqlNamed, isStatsConfigured } from "@/app/lib/stats";
+import { toCount, toText } from "@/app/lib/hogql-rows";
+import {
+  ACQUISITION_WINDOW_DAYS,
+  isReportingHealthy,
+  normaliseLastEvent,
+} from "./config";
 import { channelLabel } from "./channels";
 
 /** A source with the devices it brought. */
@@ -107,6 +122,25 @@ function toBucket(raw: unknown): string | null {
   return raw;
 }
 
+/**
+ * Row shapes, typed as `unknown` per column on purpose.
+ *
+ * `hogqlNamed` can put a name to a value; it cannot promise a type, and HogQL
+ * hands a large enough integer back as a JSON string. Declaring `number` here
+ * would be a claim we are in no position to make, so each field is coerced at
+ * the point of use instead.
+ */
+type TotalsRow = {
+  devices: unknown;
+  first_devices: unknown;
+  returning_devices: unknown;
+};
+type ChannelRow = { bucket: unknown; devices: unknown };
+type ReferrerQueryRow = { domain: unknown; devices: unknown };
+type EntryPageRow = { path: unknown; devices: unknown };
+type RetentionRow = { date: unknown; first: unknown; returning: unknown };
+type FreshnessRow = { last_event: unknown };
+
 export async function getAcquisition(): Promise<Acquisition> {
   if (!isStatsConfigured()) return { ...EMPTY };
 
@@ -115,7 +149,7 @@ export async function getAcquisition(): Promise<Acquisition> {
   const [totals, channels, referrers, entryPages, retention, freshness] =
     await Promise.all([
       safe(
-        hogql<{ devices: number; first_devices: number; returning_devices: number }>(
+        hogqlNamed<TotalsRow>(
           `
         SELECT
           count(DISTINCT distinct_id) AS devices,
@@ -136,7 +170,7 @@ export async function getAcquisition(): Promise<Acquisition> {
        * enthusiastic player from outranking a channel that brought thirty.
        */
       safe(
-        hogql<{ bucket: string; devices: number }>(
+        hogqlNamed<ChannelRow>(
           `
         SELECT properties.hp_initial_ref_channel AS bucket,
                count(DISTINCT distinct_id) AS devices
@@ -155,7 +189,7 @@ export async function getAcquisition(): Promise<Acquisition> {
        * navigation between our pages, not an acquisition.
        */
       safe(
-        hogql<{ domain: string; devices: number }>(
+        hogqlNamed<ReferrerQueryRow>(
           `
         SELECT properties.$referring_domain AS domain,
                count(DISTINCT distinct_id) AS devices
@@ -180,7 +214,7 @@ export async function getAcquisition(): Promise<Acquisition> {
        * actually dropped somebody onto.
        */
       safe(
-        hogql<{ path: string; devices: number }>(
+        hogqlNamed<EntryPageRow>(
           `
         SELECT entry AS path, count(DISTINCT distinct_id) AS devices
         FROM (
@@ -202,7 +236,7 @@ export async function getAcquisition(): Promise<Acquisition> {
       ),
 
       safe(
-        hogql<{ date: string; first: number; returning: number }>(
+        hogqlNamed<RetentionRow>(
           `
         SELECT toString(toDate(timestamp)) AS date,
                count(DISTINCT if(toInt(properties.days_played) = 1, distinct_id, NULL)) AS first,
@@ -222,27 +256,37 @@ export async function getAcquisition(): Promise<Acquisition> {
        * screen of zeros — and the second one is a bug, not a marketing result.
        */
       safe(
-        hogql<{ last_event: string }>(
+        hogqlNamed<FreshnessRow>(
           `SELECT toString(max(timestamp)) AS last_event FROM events WHERE timestamp >= now() - INTERVAL 30 DAY`,
           TAG,
         ),
       ),
     ]);
 
-  const t = totals[0] ?? { devices: 0, first_devices: 0, returning_devices: 0 };
-  const lastEventAt = freshness[0]?.last_event || null;
+  const t = totals[0];
+  const lastEventAt = normaliseLastEvent(freshness[0]?.last_event);
 
   return {
-    devices: t.devices ?? 0,
-    firstTimeDevices: t.first_devices ?? 0,
-    returningDevices: t.returning_devices ?? 0,
+    devices: toCount(t?.devices),
+    firstTimeDevices: toCount(t?.first_devices),
+    returningDevices: toCount(t?.returning_devices),
     channels: channels.map((row) => {
       const bucket = toBucket(row.bucket);
-      return { bucket, label: channelLabel(bucket), devices: row.devices };
+      return { bucket, label: channelLabel(bucket), devices: toCount(row.devices) };
     }),
-    referrers,
-    entryPages,
-    retention,
+    referrers: referrers.map((row) => ({
+      domain: toText(row.domain),
+      devices: toCount(row.devices),
+    })),
+    entryPages: entryPages.map((row) => ({
+      path: toText(row.path),
+      devices: toCount(row.devices),
+    })),
+    retention: retention.map((row) => ({
+      date: toText(row.date),
+      first: toCount(row.first),
+      returning: toCount(row.returning),
+    })),
     lastEventAt,
     configured: true,
     reporting: isReportingHealthy(lastEventAt, new Date()),

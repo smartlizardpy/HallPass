@@ -1,3 +1,12 @@
+> **Historical record — one env var below is wrong.** The client capture token
+> is `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN`, not `NEXT_PUBLIC_POSTHOG_TOKEN`, and
+> there is no `NEXT_PUBLIC_POSTHOG_HOST` (the host is fixed in
+> `instrumentation-client.ts` and proxied through `/ingest`). Setting the name
+> below captures nothing at all and looks exactly like having no visitors, which
+> is the failure the dashboard banner warns about. `README.md` §Environment
+> variables is the current list; `scripts/check-build-env.mjs` is what the deploy
+> enforces.
+
 <wizard-report>
 # PostHog post-wizard report
 
