@@ -33,7 +33,22 @@ export const STREAK_KEY = "hp:streak";
 /** Window event fired when a play advances the streak into a NEW day. */
 export const STREAK_EVENT = "hp:streak";
 
-export type StreakEventDetail = { current: number; longest: number; milestone: boolean };
+export type StreakEventDetail = {
+  current: number;
+  longest: number;
+  milestone: boolean;
+  /**
+   * TOTAL distinct days this device has ever played, after counting today.
+   *
+   * Carried because `current` alone cannot tell a first-ever play from a return
+   * after a gap — both read `current: 1` — and those are the two facts a
+   * retention measure most needs to separate. `days === 1` is a brand-new
+   * device; `days >= 2` is somebody coming back. Nothing in the UI reads it;
+   * `GrowthTracker` does. Capped like `state.days` itself (`DAYS_CAP`), so on a
+   * very long-lived device it saturates rather than growing forever.
+   */
+  days: number;
+};
 
 /* -------------------------------------------------------------------------- *
  * Pure parse/serialise — exported for unit testing.
@@ -160,6 +175,7 @@ export function recordPlay(): void {
       current,
       longest: next.longest,
       milestone: isMilestone(current),
+      days: next.days.length,
     };
     window.dispatchEvent(new CustomEvent(STREAK_EVENT, { detail }));
   }

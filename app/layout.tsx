@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { Nunito } from "next/font/google";
 import { FeaturePromo } from "./components/FeaturePromo";
+import { GrowthTracker } from "./components/GrowthTracker";
 import { MobileSplash } from "./components/MobileSplash";
 import { MobileTabBar } from "./components/MobileTabBar";
 import { PWA } from "./components/PWA";
@@ -97,6 +98,10 @@ export default function RootLayout({
         <MobileSplash />
         <StealthController />
         <StreakToast />
+        {/* Renders nothing — listens to the same streak event as the toast above
+            and reports the first play of a new day. See its header for why it is
+            not folded into the toast. */}
+        <GrowthTracker />
       </body>
     </html>
   );
