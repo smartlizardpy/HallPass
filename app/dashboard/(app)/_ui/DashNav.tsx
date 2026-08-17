@@ -36,6 +36,11 @@ const ITEMS: NavItem[] = [
   // open to answer "what is being built".
   { href: "/dashboard/tracker", label: "Tracker" },
   { href: "/dashboard/boards", label: "Leaderboards" },
+  // Below the three surfaces with something waiting on them and above the
+  // catalogue admin: Growth is a read-only screen nobody is blocked on, but it
+  // is the one that answers "is any of this working", so it sits with the other
+  // things you open to think rather than with the things you open to edit.
+  { href: "/dashboard/growth", label: "Growth" },
   { href: "/dashboard/games", label: "Games" },
   { href: "/dashboard/curation", label: "Curation" },
   { href: "/dashboard/beta", label: "Beta" },

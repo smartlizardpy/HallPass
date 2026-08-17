@@ -5,13 +5,37 @@ export type PlayCounts = Record<string, number>;
 const API_HOST = process.env.POSTHOG_API_HOST ?? "https://eu.posthog.com";
 const PROJECT_ID = process.env.POSTHOG_PROJECT_ID;
 const API_KEY = process.env.POSTHOG_PERSONAL_API_KEY;
+
+/**
+ * Is server-side PostHog reading configured at all?
+ *
+ * Distinct from "is analytics healthy" — this is about OUR read credentials
+ * (`POSTHOG_PERSONAL_API_KEY`), not about whether the browser is still able to
+ * send events. The growth page has to tell those apart to say anything useful
+ * about a screen full of zeros.
+ */
+export function isStatsConfigured(): boolean {
+  return Boolean(API_KEY);
+}
 const QUERY_ENDPOINT_SELECTORS = PROJECT_ID ? [PROJECT_ID, "@current"] : ["@current"];
 
 function getQueryEndpoint(projectSelector: string) {
   return `${API_HOST}/api/projects/${projectSelector}/query/`;
 }
 
-async function hogql<T = unknown>(
+/**
+ * Run one HogQL query against PostHog.
+ *
+ * Exported for `app/lib/growth/acquisition.ts` rather than copied into it. The
+ * things worth not duplicating are the project-selector fallback (a personal API
+ * key that cannot see `POSTHOG_PROJECT_ID` retries against `@current`), the 60s
+ * revalidate that keeps a dashboard render from hammering the API, the 8s
+ * timeout, and the "no key means an empty array, not a throw" contract every
+ * caller is written against. A second copy would drift on all five.
+ *
+ * Returns `[]` — never throws — when there is no API key configured.
+ */
+export async function hogql<T = unknown>(
   sql: string,
   tag = "posthog-stats",
 ): Promise<T[]> {
