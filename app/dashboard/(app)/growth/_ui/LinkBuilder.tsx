@@ -22,7 +22,12 @@
  */
 
 import { useMemo, useState } from "react";
-import { CHANNELS, DEFAULT_CHANNEL, taggedUrl } from "@/app/lib/growth/channels";
+import {
+  CHANNELS,
+  DEFAULT_CHANNEL,
+  channelsByGroup,
+  taggedUrl,
+} from "@/app/lib/growth/channels";
 
 export type Destination = {
   path: string;
@@ -35,6 +40,13 @@ export type Destination = {
    */
   socialImage: string | null;
 };
+
+/**
+ * The picker's shape, computed once: the vocabulary is a module constant, so
+ * grouping it per render (or per keystroke, via `useMemo`) would be work with no
+ * input to react to.
+ */
+const CHANNEL_PICKER = channelsByGroup();
 
 export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
   const [path, setPath] = useState(destinations[0]?.path ?? "/");
@@ -101,10 +113,14 @@ export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
             onChange={(e) => setChannel(e.target.value)}
             className={selectClass}
           >
-            {CHANNELS.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
+            {CHANNEL_PICKER.map(([group, items]) => (
+              <optgroup key={group} label={group}>
+                {items.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
           {note && <p className="mt-1 text-xs text-muted">{note}</p>}
