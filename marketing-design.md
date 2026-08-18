@@ -23,10 +23,11 @@ Each is reversible, and each names what would change it.
    dependency or a few hundred lines of encoder, and its real use case is a code
    read off a poster or a whiteboard — which is exactly the case decision 1 says
    we cannot serve yet. Deferred as a pair with the short domain, not forgotten.
-3. **The channel vocabulary starts as a guess**, in one editable file:
-   `tiktok`, `youtube`, `discord`, `reddit`, `qr`, `poster`, `friend`, `other`.
-   A `ref` outside the list is reported as `unknown` rather than silently
-   becoming a new channel, so a typo shows up as a typo.
+3. **The channel vocabulary starts as a guess**, in one editable file. A `ref`
+   outside the list is reported as `unknown` rather than silently becoming a new
+   channel, so a typo shows up as a typo. It shipped as `tiktok`, `youtube`,
+   `discord`, `reddit`, `qr`, `poster`, `friend`, `other`, and has since been
+   widened on request — see §4b for what is in it now and why.
 4. **We optimise for returning devices, not ad revenue.** `ad_clicked` stays on
    the existing overview; no session-depth-for-revenue panel is built. If the ad
    strip is ever meant to earn, panel 2 gains a column and this line gets edited.
