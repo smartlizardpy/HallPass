@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   CHANNELS,
+  CHANNEL_GROUPS,
   REF_MAX_LENGTH,
   UNKNOWN_CHANNEL,
   bucketRef,
   channelLabel,
+  channelsByGroup,
   isKnownChannel,
   normalizeRef,
   taggedPath,
@@ -128,5 +130,21 @@ describe("taggedUrl", () => {
     expect(taggedUrl("game/duskfall", "poster")).toBe(
       `${SITE_URL}/game/duskfall?ref=poster`,
     );
+  });
+});
+
+describe("channelsByGroup", () => {
+  it("lists every channel exactly once, in declared order", () => {
+    const flattened = channelsByGroup().flatMap(([, items]) => items);
+    expect(flattened).toEqual([...CHANNELS]);
+  });
+
+  it("keeps the groups in CHANNEL_GROUPS order", () => {
+    const groups = channelsByGroup().map(([group]) => group);
+    expect(groups).toEqual(CHANNEL_GROUPS.filter((g) => groups.includes(g)));
+  });
+
+  it("emits no empty group, so a heading cannot outlive its channels", () => {
+    for (const [, items] of channelsByGroup()) expect(items.length).toBeGreaterThan(0);
   });
 });
