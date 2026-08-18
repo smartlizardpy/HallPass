@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
+import { TRENDING_COUNT } from "../lib/categories";
 import { type Game } from "../lib/games";
 import { useFavorites, useRecentlyPlayed } from "../lib/personalization";
 import { mobileCatalog, playsOn, useDevicePlatform } from "../lib/use-device-platform";
@@ -206,7 +207,7 @@ function ArcadeRows({
     () =>
       [...games]
         .sort((a, b) => playsFor(b, playCounts) - playsFor(a, playCounts))
-        .slice(0, 6),
+        .slice(0, TRENDING_COUNT),
     [games, playCounts],
   );
   const newGames = useMemo(() => games.filter((g) => g.isNew), [games]);
@@ -369,7 +370,7 @@ function ArcadeRows({
         {category === "All" && !query && (
           <Section title="Popular this week">
             <div className={CATALOG_GRID}>
-              {trending.slice(0, 6).map((g) => (
+              {trending.slice(0, TRENDING_COUNT).map((g) => (
                 <GameCard
                   key={g.slug}
                   game={g}

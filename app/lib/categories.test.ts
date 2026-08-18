@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type { Game } from "@/app/lib/games";
 import {
   VIRTUAL_CATEGORIES,
+  TRENDING_COUNT,
   categoryPath,
+  categoryShelf,
   resolveCategoryFromSlug,
   routedCategories,
 } from "@/app/lib/categories";
@@ -47,5 +50,61 @@ describe("categoryPath", () => {
       );
       expect(resolveCategoryFromSlug(segment, LIVE)).toBe(category);
     }
+  });
+});
+
+/** Only the fields `categoryShelf` reads; the rest of `Game` is irrelevant here. */
+const game = (partial: Partial<Game> & { slug: string }): Game =>
+  ({ category: "Action", tags: [], ...partial }) as Game;
+
+describe("categoryShelf", () => {
+  const games = [
+    game({ slug: "a", category: "Action", plays: 10 }),
+    game({ slug: "b", category: "Puzzle", plays: 90, isNew: true }),
+    game({ slug: "c", category: "Action", plays: 50, isNew: true }),
+  ];
+
+  it("keeps only the games in a real category", () => {
+    expect(categoryShelf("Action", games).map((g) => g.slug)).toEqual(["a", "c"]);
+  });
+
+  it("reads New off isNew, like the arcade does", () => {
+    expect(categoryShelf("New", games).map((g) => g.slug)).toEqual(["b", "c"]);
+  });
+
+  it("ranks Trending by live play counts when it has them", () => {
+    const counts = { a: 999, b: 1, c: 2 };
+    expect(categoryShelf("Trending", games, counts).map((g) => g.slug)).toEqual([
+      "a",
+      "c",
+      "b",
+    ]);
+  });
+
+  it("falls back to the seeded plays when no counts are supplied", () => {
+    expect(categoryShelf("Trending", games).map((g) => g.slug)).toEqual([
+      "b",
+      "c",
+      "a",
+    ]);
+  });
+
+  it("caps Trending at TRENDING_COUNT, which is what the page's grid shows", () => {
+    const many = Array.from({ length: TRENDING_COUNT + 3 }, (_, i) =>
+      game({ slug: `g${i}`, plays: i }),
+    );
+    const shelf = categoryShelf("Trending", many);
+    expect(shelf).toHaveLength(TRENDING_COUNT);
+    expect(shelf[0].slug).toBe(`g${many.length - 1}`);
+  });
+
+  it("does not reorder the catalogue it was given", () => {
+    const original = games.map((g) => g.slug);
+    categoryShelf("Trending", games);
+    expect(games.map((g) => g.slug)).toEqual(original);
+  });
+
+  it("returns nothing for a category no game carries", () => {
+    expect(categoryShelf("Nonesuch", games)).toEqual([]);
   });
 });
