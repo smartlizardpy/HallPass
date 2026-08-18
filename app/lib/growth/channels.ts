@@ -92,6 +92,7 @@ export type Channel = {
 export const CHANNELS: readonly Channel[] = [
   { id: "tiktok", label: "TikTok", note: "Bio links and video captions.", group: "Social" },
   { id: "youtube", label: "YouTube", note: "Video descriptions and pinned comments.", group: "Social" },
+  { id: "whatsapp", label: "WhatsApp", note: "Group chats, where the card is most of what gets seen.", group: "Messaging" },
   { id: "discord", label: "Discord", note: "Server posts and pins.", group: "Communities" },
   { id: "reddit", label: "Reddit", note: "Comments and subreddit posts.", group: "Communities" },
   { id: "qr", label: "QR code", note: "Anything scanned off a screen or print.", group: "School & word of mouth" },
