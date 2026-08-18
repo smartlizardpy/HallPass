@@ -194,6 +194,16 @@ describe("the vocabulary itself", () => {
     }
   });
 
+  it("round-trips every channel through the readout", () => {
+    // A mistyped id or a label that belongs to another entry would show up here
+    // and nowhere else until a chart axis read wrong weeks later.
+    for (const c of CHANNELS) {
+      expect(bucketRef(c.id)).toBe(c.id);
+      expect(channelLabel(c.id)).toBe(c.label);
+      expect(channelNote(c.id)).toBe(c.note);
+    }
+  });
+
   it("never publishes the unknown bucket as a channel", () => {
     expect(CHANNELS.some((c) => c.id === UNKNOWN_CHANNEL)).toBe(false);
   });
