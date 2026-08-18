@@ -101,6 +101,15 @@ export const CHANNELS: readonly Channel[] = [
 ] as const;
 
 /**
+ * The channel the builder opens on.
+ *
+ * Named rather than read off `CHANNELS[0]`, because the array's order is a
+ * presentation decision now that the picker groups it — reordering the list to
+ * read better should not quietly change what an untouched link gets tagged with.
+ */
+export const DEFAULT_CHANNEL = "tiktok";
+
+/**
  * The vocabulary as the picker wants it: groups in {@link CHANNEL_GROUPS} order,
  * each with its channels in the order they appear in {@link CHANNELS}.
  *

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CHANNELS,
   CHANNEL_GROUPS,
+  DEFAULT_CHANNEL,
   REF_MAX_LENGTH,
   UNKNOWN_CHANNEL,
   bucketRef,
@@ -146,5 +147,11 @@ describe("channelsByGroup", () => {
 
   it("emits no empty group, so a heading cannot outlive its channels", () => {
     for (const [, items] of channelsByGroup()) expect(items.length).toBeGreaterThan(0);
+  });
+});
+
+describe("DEFAULT_CHANNEL", () => {
+  it("is a channel we actually publish", () => {
+    expect(isKnownChannel(DEFAULT_CHANNEL)).toBe(true);
   });
 });
