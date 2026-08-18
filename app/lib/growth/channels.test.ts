@@ -169,3 +169,32 @@ describe("channelNote", () => {
     expect(channelNote(null)).toBeNull();
   });
 });
+
+describe("the vocabulary itself", () => {
+  it("has no duplicate id, which would split a channel's numbers", () => {
+    const ids = CHANNELS.map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("declares ids that already survive normalisation", () => {
+    // An id that normalises to something else would be published in one form and
+    // bucketed as another — the exact split this vocabulary exists to prevent.
+    for (const c of CHANNELS) expect(normalizeRef(c.id)).toBe(c.id);
+  });
+
+  it("stays typable: within the length cap", () => {
+    for (const c of CHANNELS) expect(c.id.length).toBeLessThanOrEqual(REF_MAX_LENGTH);
+  });
+
+  it("says what every channel is and what it is for", () => {
+    for (const c of CHANNELS) {
+      expect(c.label.trim().length).toBeGreaterThan(0);
+      expect(c.note.trim().length).toBeGreaterThan(0);
+      expect(CHANNEL_GROUPS).toContain(c.group);
+    }
+  });
+
+  it("never publishes the unknown bucket as a channel", () => {
+    expect(CHANNELS.some((c) => c.id === UNKNOWN_CHANNEL)).toBe(false);
+  });
+});
