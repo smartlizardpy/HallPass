@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CHANNELS,
+  channelsByGroup,
   REF_MAX_LENGTH,
   UNKNOWN_CHANNEL,
   bucketRef,
@@ -11,6 +12,59 @@ import {
   taggedUrl,
 } from "./channels";
 import { SITE_URL } from "@/app/lib/site";
+
+/**
+ * The vocabulary's own invariants. These are not style checks: an id that
+ * does not survive `normalizeRef` would have the builder publish a link whose
+ * `ref` the readout then files under `unknown`, and a duplicate id would put
+ * two rows in the picker that mean the same channel.
+ */
+describe("CHANNELS", () => {
+  it("has ids that survive normalisation unchanged", () => {
+    for (const channel of CHANNELS) {
+      expect(normalizeRef(channel.id)).toBe(channel.id);
+    }
+  });
+
+  it("has ids inside the typable length limit", () => {
+    for (const channel of CHANNELS) {
+      expect(channel.id.length).toBeLessThanOrEqual(REF_MAX_LENGTH);
+    }
+  });
+
+  it("has no duplicate ids", () => {
+    const ids = CHANNELS.map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("gives every channel a label and a note to pick it by", () => {
+    for (const channel of CHANNELS) {
+      expect(channel.label.length).toBeGreaterThan(0);
+      expect(channel.note.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("carries the messaging channels the builder was widened for", () => {
+    for (const id of ["whatsapp", "snapchat", "telegram", "messages"]) {
+      expect(isKnownChannel(id)).toBe(true);
+      expect(bucketRef(id)).toBe(id);
+    }
+  });
+});
+
+describe("channelsByGroup", () => {
+  it("covers every channel exactly once", () => {
+    const grouped = channelsByGroup().flatMap(([, items]) => items);
+    expect(grouped).toEqual([...CHANNELS]);
+  });
+
+  it("orders groups by where they first appear, and keeps siblings together", () => {
+    const groups = channelsByGroup().map(([group]) => group);
+    expect(groups).toEqual([...new Set(CHANNELS.map((c) => c.group))]);
+    // A channel added to an existing group must not open a second heading.
+    expect(new Set(groups).size).toBe(groups.length);
+  });
+});
 
 describe("normalizeRef", () => {
   it("lowercases and trims, so one channel does not become three", () => {
