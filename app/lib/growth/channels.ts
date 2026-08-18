@@ -50,6 +50,25 @@ export const REF_MAX_LENGTH = 24;
 /** The bucket every unrecognised `ref` folds into. Never a real channel. */
 export const UNKNOWN_CHANNEL = "unknown";
 
+/**
+ * The headings the builder's picker is divided into, in the order they appear.
+ *
+ * Purely a presentation device: a group is never written into a URL, never
+ * reported, and never read back. It exists because a flat list stops being
+ * scannable somewhere around a dozen entries, and the vocabulary is now past
+ * that. Reporting still buckets by {@link Channel.id} alone, so regrouping a
+ * channel tomorrow changes a dropdown and nothing else.
+ */
+export const CHANNEL_GROUPS = [
+  "Social",
+  "Messaging",
+  "Communities",
+  "School & word of mouth",
+  "Catch-all",
+] as const;
+
+export type ChannelGroup = (typeof CHANNEL_GROUPS)[number];
+
 export type Channel = {
   /** The literal `ref` value, and the URL-safe id used everywhere. */
   id: string;
@@ -57,6 +76,8 @@ export type Channel = {
   label: string;
   /** What a link tagged this way is FOR — shown in the builder, not stored. */
   note: string;
+  /** Which heading it sits under in the builder. Never leaves the picker. */
+  group: ChannelGroup;
 };
 
 /**
@@ -69,14 +90,14 @@ export type Channel = {
  * history, it just moves that channel into `unknown` from then on.
  */
 export const CHANNELS: readonly Channel[] = [
-  { id: "tiktok", label: "TikTok", note: "Bio links and video captions." },
-  { id: "youtube", label: "YouTube", note: "Video descriptions and pinned comments." },
-  { id: "discord", label: "Discord", note: "Server posts and pins." },
-  { id: "reddit", label: "Reddit", note: "Comments and subreddit posts." },
-  { id: "qr", label: "QR code", note: "Anything scanned off a screen or print." },
-  { id: "poster", label: "Poster / print", note: "Typed by hand, so keep it short." },
-  { id: "friend", label: "Word of mouth", note: "For links people are told to type." },
-  { id: "other", label: "Other", note: "Deliberate catch-all — not the same as unknown." },
+  { id: "tiktok", label: "TikTok", note: "Bio links and video captions.", group: "Social" },
+  { id: "youtube", label: "YouTube", note: "Video descriptions and pinned comments.", group: "Social" },
+  { id: "discord", label: "Discord", note: "Server posts and pins.", group: "Communities" },
+  { id: "reddit", label: "Reddit", note: "Comments and subreddit posts.", group: "Communities" },
+  { id: "qr", label: "QR code", note: "Anything scanned off a screen or print.", group: "School & word of mouth" },
+  { id: "poster", label: "Poster / print", note: "Typed by hand, so keep it short.", group: "School & word of mouth" },
+  { id: "friend", label: "Word of mouth", note: "For links people are told to type.", group: "School & word of mouth" },
+  { id: "other", label: "Other", note: "Deliberate catch-all — not the same as unknown.", group: "Catch-all" },
 ] as const;
 
 /**
