@@ -208,6 +208,41 @@ Each commit leaves the tree working; tests and lint run before each.
 | 11 | FAQ on the page, and its markup | `GameStore.tsx`, `app/game/[slug]/page.tsx` |
 | 12 | `/new` | pending §5 |
 
+## 7b. What shipped, and where it differed from the plan
+
+Commits 1–11 are built; 12 is still waiting on §5. Four things came out
+differently, all from reading or running the code rather than from changing our
+minds:
+
+- **A category vocabulary module was not in the plan.** Writing the category card
+  meant resolving a URL segment to a category for the third time — the route and
+  the sitemap each had their own copy, including their own literal list of the
+  virtual shelves. `app/lib/categories.ts` now owns that, tested including the
+  round trip, and the sitemap and route were moved onto it before the card was
+  written.
+- **`Trending`'s LENGTH turned out to be part of its definition.** The category
+  page filters its grid down to exactly the top-N ranking `Arcade` computes, so a
+  card built against "everything, sorted" would have advertised games the page
+  does not list. `TRENDING_COUNT` is now shared, and `Arcade` imports it rather
+  than repeating the 6 twice.
+- **The precache warning in §2 was real, and it fired.** The first build with a
+  home card swept `/opengraph-image` straight into the service-worker precache —
+  a 1200×630 PNG every visitor would have downloaded at install time for the
+  benefit of crawlers only. `scripts/build-sw-manifest.mjs` now excludes any
+  generated card by suffix. The per-category and per-tag cards turn out to be
+  dynamic routes and never reached the manifest at all.
+- **Fifteen of thirty-eight tags clear the floor.** The rest stay unlinked plain
+  text on the store page, exactly as before.
+
+**Verified after the build, not assumed:** `/` is still prerendered (`○`),
+`/tag/[tag]` is SSG with all 15 pages precached, `public/sw-manifest.js` still
+carries **28** `/game/` routes — the regression check the game page's docblock
+specifies — and no generated card appears in it. All four cards were fetched
+from a production server and render (the challenge card unchanged after the
+extraction). A game page emits four `Question` entries for the four questions
+rendered on it. `npm run lint` reports the same 11 pre-existing warnings and no
+new ones; all 1335 tests pass.
+
 ## 8. What this does NOT solve
 
 The same thing `marketing-design.md` §11 did not solve. These are landing
