@@ -10,11 +10,15 @@
  *
  * THE PREVIEW IS THE POINT, more than the URL is. Building `?ref=tiktok` by hand
  * is easy. What nobody does by hand is check what the link RENDERS as in the
- * place it is about to be pasted — and the answer for our most-shared URL is
- * currently "a bare grey rectangle", because the home grid has no
- * `opengraph-image` and neither do the category pages. That is a fact worth
- * meeting before a post goes out rather than after, so the preview states it
- * plainly instead of drawing a plausible-looking card that does not exist.
+ * place it is about to be pasted. This panel was built when the answer for our
+ * most-shared URL was "a bare grey rectangle" — the home grid and the category
+ * pages had no `opengraph-image` — and it drew that state in amber rather than a
+ * plausible-looking card that did not exist.
+ *
+ * Every destination now resolves a real card, and the preview shows the SAME URL
+ * a crawler will fetch rather than a stand-in. The amber branch stays: it is how
+ * the next destination added without one announces itself, instead of previewing
+ * as a silently empty box.
  *
  * THE CHANNEL PICKER IS GROUPED because the vocabulary is now sixteen entries
  * rather than eight, and the groups come from `channels.ts` rather than being
@@ -63,8 +67,10 @@ export type Destination = {
   /** Group heading in the picker. */
   group: string;
   /**
-   * Whether this page resolves a real social-card image. Games have screenshots
-   * or cover art; the home grid and category pages currently have neither.
+   * The social card this page actually resolves — a game's screenshot or cover,
+   * or the `opengraph-image` route the page generates. `null` only for a
+   * destination that genuinely has none, which nothing here is today; see the
+   * amber branch in the preview.
    */
   socialImage: string | null;
 };

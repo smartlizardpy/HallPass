@@ -1,9 +1,19 @@
 /**
- * "What's New" link → the hosted ShipNote changelog for HallPass, opened in a new
- * tab. A pure presentational `<a>` (no client hooks), so the same component drops
- * into BOTH the client arcade header and the server dashboard layout. Two visual
- * variants: `header` (a compact pill that collapses to an icon on mobile) and
- * `sidebar` (a nav-style row for the dashboard).
+ * "What's New" link → `/new`, the on-site drops page. A pure presentational link
+ * (no client hooks), so the same component drops into BOTH the client arcade
+ * header and the server dashboard layout. Two visual variants: `header` (a
+ * compact pill that collapses to an icon on mobile) and `sidebar` (a nav-style
+ * row for the dashboard).
+ *
+ * IT USED TO OPEN THE HOSTED CHANGELOG IN A NEW TAB. That was the site's only
+ * outbound link in its own chrome: every press sent a visitor to somebody else's
+ * origin, and the page they landed on could not be indexed for us, linked into
+ * from us, or measured by us. `/new` frames the same ShipNote page, so nothing
+ * about WHERE the changelog is written changed — only where it is read.
+ *
+ * `next/link` rather than an `<a>`, so the arcade shell stays mounted across the
+ * navigation and the page is prefetched on hover. It still RENDERS an `<a>`,
+ * which the header's child selector below depends on.
  *
  * The two variants sit on different surfaces and must not be unified. The
  * dashboard rail is white, so `sidebar` is a bare row that only fills on hover.
@@ -11,11 +21,12 @@
  * it was `bg-white` + a shadow back when the bar was `--background`, and both of
  * those were doing the job `--surface-2` now does properly.
  *
- * The changelog URL is centralised here so both entry points stay in sync; update
- * it in one place if the ShipNote slug/domain ever changes.
+ * The paths themselves live in `lib/whats-new`, which both entry points and the
+ * page itself now read — a changed ShipNote slug is one edit there.
  */
 
-const WHATS_NEW_URL = "https://useshipnote.vercel.app/c/hallpass";
+import Link from "next/link";
+import { WHATS_NEW_PATH } from "../lib/whats-new";
 
 function Sparkle({ className = "" }: { className?: string }) {
   return (
@@ -32,15 +43,13 @@ export function WhatsNewLink({
 }) {
   if (variant === "sidebar") {
     return (
-      <a
-        href={WHATS_NEW_URL}
-        target="_blank"
-        rel="noopener noreferrer"
+      <Link
+        href={WHATS_NEW_PATH}
         className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold text-foreground transition hover:bg-surface-2"
       >
         <Sparkle className="h-4 w-4 text-brand" />
         What&apos;s New
-      </a>
+      </Link>
     );
   }
   // Header pill: icon + label on >= sm, icon-only on mobile to save space.
@@ -54,16 +63,14 @@ export function WhatsNewLink({
   // label in anything, or add a second `<span>` child, and the header silently
   // stops collapsing — grep for `[&>a>span]` before you reshape this.
   return (
-    <a
-      href={WHATS_NEW_URL}
-      target="_blank"
-      rel="noopener noreferrer"
+    <Link
+      href={WHATS_NEW_PATH}
       title="What's New"
       aria-label="What's New"
       className="flex h-11 items-center gap-1.5 rounded-full bg-surface-2 px-3 text-sm font-bold text-zinc-700 transition hover:text-brand sm:px-4"
     >
       <Sparkle className="h-[18px] w-[18px] text-brand" />
       <span className="hidden sm:inline">What&apos;s New</span>
-    </a>
+    </Link>
   );
 }

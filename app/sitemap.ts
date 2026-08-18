@@ -1,5 +1,8 @@
 import type { MetadataRoute } from "next";
-import { resolveGames, resolveCategories } from "@/app/lib/games-store";
+import { categoryPath, routedCategories } from "@/app/lib/categories";
+import { resolveGames, resolveCategories, resolveTags } from "@/app/lib/games-store";
+import { landingTags, tagPath } from "@/app/lib/tags";
+import { WHATS_NEW_PATH } from "@/app/lib/whats-new";
 import { SITE_URL } from "@/app/lib/site";
 
 const BASE = SITE_URL;
@@ -7,9 +10,10 @@ const BASE = SITE_URL;
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
 
-  const [games, categories] = await Promise.all([
+  const [games, categories, tags] = await Promise.all([
     resolveGames(),
     resolveCategories(),
+    resolveTags(),
   ]);
 
   const staticPages: MetadataRoute.Sitemap = [
@@ -19,17 +23,38 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "daily",
       priority: 1,
     },
+    {
+      // The drops page. Listed despite most of its content living in a frame on
+      // another origin — what it offers a crawler is its own copy and the fact
+      // that this URL is where updates are announced, which is worth a low
+      // priority rather than an absence.
+      url: `${BASE}${WHATS_NEW_PATH}`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.5,
+    },
   ];
 
-  const categoryPages: MetadataRoute.Sitemap = [
-    ...categories,
-    "New",
-    "Trending",
-  ].map((cat) => ({
-    url: `${BASE}/category/${encodeURIComponent(cat.toLowerCase())}`,
+  const categoryPages: MetadataRoute.Sitemap = routedCategories(categories).map(
+    (cat) => ({
+      url: `${BASE}${categoryPath(cat)}`,
+      lastModified: now,
+      changeFrequency: "weekly" as const,
+      priority: 0.8,
+    }),
+  );
+
+  // Tag pages are the catalogue's second axis — a query that is not a title.
+  // `landingTags` applies the floor, so this lists exactly the tags that have a
+  // page: a URL here that 404s is worse than a page Google has to find on its
+  // own, and the route resolves against the same floor.
+  const tagPages: MetadataRoute.Sitemap = landingTags(tags).map(({ tag }) => ({
+    url: `${BASE}${tagPath(tag)}`,
     lastModified: now,
     changeFrequency: "weekly" as const,
-    priority: 0.8,
+    // Below categories, which are the curated axis and carry the nav, and below
+    // the game pages they lead to.
+    priority: 0.6,
   }));
 
   // Game pages are the money pages — the ones built to rank for
@@ -43,5 +68,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
-  return [...staticPages, ...categoryPages, ...gamePages];
+  return [...staticPages, ...categoryPages, ...tagPages, ...gamePages];
 }

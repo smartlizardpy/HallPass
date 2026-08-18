@@ -1,0 +1,315 @@
+# Discovery & landing surfaces — design
+
+Sibling of `marketing-design.md`, and its direct sequel. That document argued
+that the honest first move was instrumentation, built it, and closed with §9 —
+"not in this plan, but next" — plus §11, which said plainly that none of it
+creates demand.
+
+This is the follow-up ask: **"what can we add, for more users?"** The answer
+here is the acquisition half — the surfaces a stranger can actually arrive on,
+and the card the site wears when somebody passes it around. Nothing in it is
+new infrastructure; every piece is a landing surface built from data the
+catalogue already carries.
+
+---
+
+## 0. Scope, and what was deliberately left out
+
+Four candidates were put to the user. Three were chosen:
+
+1. **Social cards for the home grid and category pages** (§2)
+2. **`/tag/<tag>` landing pages** (§3)
+3. **FAQ content + `FAQPage` markup on game pages** (§4)
+4. **An on-site `/new` page** that embeds ShipNote (§5) — chosen, and built last;
+   the other three do not depend on it.
+
+**A daily challenge was offered and NOT chosen.** It stays exactly where
+`marketing-design.md` §9 left it: the `kind` discriminator on `challenges` is
+still the seam it was built to be. Nothing here forecloses it.
+
+Also still true, and still line item zero: **the catalogue is 30 games.** Every
+surface below multiplies the demand a title creates; none of them substitutes
+for another title.
+
+## 1. Why these three, in this order
+
+They are ordered by how much existing work they unlock rather than by size.
+
+**The cards come first because the link builder already ships.**
+`/dashboard/growth` mints tagged links to `/`, to a game, or to a category, with
+a preview of the card that link will render as. For a game that card is real —
+`app/game/[slug]/page.tsx` puts a screenshot in `openGraph.images`. For the home
+grid and every category it is nothing at all: `app/layout.tsx` declares
+`openGraph` with **no `images` key**, and `public/` holds no OG asset, so the
+most-shared URL on the site arrives in a group chat as a grey rectangle. The
+tooling to publish those links is finished; the thing it publishes is not.
+
+**Tag pages come second because the data is already curated.** `resolveTags()`
+returns every distinct tag with its game count, the dashboard has a whole
+tag-curation page with `renameTag()` behind it, and `/category/[category]` is a
+working, ranking template on a neighbouring axis. Thirty-eight tags currently
+render as **plain text on one page each** — `GameStore`'s spec sheet says so in
+a docblock, and says why: *"there is no /tag/[tag] route … Do not turn them into
+links without a route to land on."* This builds the route that comment is
+waiting for. `Shooter` (8 games), `Roguelike` (6), `Multiplayer` (4) and
+`Local Co-op` (3) are queries in their own right, and broader ones than any
+single title.
+
+**The FAQ comes third because it is the cheapest, and because it is honest.**
+"Does this work on a school Chromebook?" is a real query, and this site has a
+genuinely unusual answer to it: the whole arcade is precached by a service
+worker and keeps working with no network. That answer is currently written down
+only in `README.md`.
+
+## 2. Cards for the home grid and category pages
+
+`app/c/[code]/opengraph-image.tsx` is already a fully-worked `ImageResponse`
+card, and its header documents the Satori constraints the hard way — explicit
+`display: flex` on every multi-child element, no Fragments as flex children,
+real font data or no font weights. That knowledge is not re-derived here; the
+palette, the Nunito loader and the cover reader move into `app/lib/og/brand.tsx`
+and both cards import them.
+
+**One renderer serves the home grid, categories and tags.** They are the same
+object — a titled listing of games — and three hand-copied card files would be
+three chances for the brand to drift. The listing card takes a kicker, a
+headline, a subhead and up to four covers, and the three routes differ only in
+what they pass.
+
+Rules carried over from the challenge card, because they were right there:
+
+- **Every ingredient is optional.** A missing cover file, an empty category, an
+  unreadable font: each degrades to a simpler card, never to an error. A chat
+  platform caches a failed preview and keeps showing the grey box long after the
+  link works again.
+- **No photographs of children, ever.** These cards carry game art and type.
+  Nothing about the person sharing them appears — the same argument the
+  challenge card's header makes about avatars.
+- **The palette is inlined and hand-synced** with `globals.css`. An OG route
+  renders outside the app's CSS entirely.
+
+**Precache watch.** `scripts/build-sw-manifest.mjs` sweeps `prerender-manifest.json`
+and precaches every prerendered public route. Generated OG images are statically
+optimised, so they may land there — a 1200×630 PNG per category is real weight
+on every visitor's service-worker install, for an asset only crawlers fetch.
+**Verified against the built manifest, not assumed**; excluded by prefix if it
+shows up.
+
+## 3. `/tag/<tag>` landing pages
+
+### The URL, and the fact that tags are editable
+
+Tags are dashboard-editable and renameable, so a tag is not a stable identifier
+and the URL cannot pretend otherwise. `app/lib/tags.ts` owns one pure mapping in
+both directions — `Local Co-op` ⇄ `local-co-op`, `Bullet Hell` ⇄ `bullet-hell`,
+`3D` ⇄ `3d` — and resolution is **case-insensitive against the live tag list**,
+exactly as `resolveCategory()` already does for categories. Two tags that
+collide on one slug resolve to the first by count; the pure part is unit tested.
+
+**Renaming a tag changes its URL and 404s the old one.** Stated here so it is a
+known cost rather than a surprise: the dashboard's rename is a curation tool
+that now has an SEO consequence. No redirect table is built for it — that is a
+`marketing_links`-shaped problem, and §6 of `marketing-design.md` already argues
+why we do not open that until real usage demands it.
+
+### The page
+
+It renders inside `ArcadeShell` — the same host `app/game/[slug]/page.tsx` uses
+— rather than through `Arcade`. `Arcade` is an 865-line client component whose
+filter state is internal, and threading a tag axis through it would put the
+featured banner, the personalised rows and the category chips on a page that is
+meant to answer one query. A small client listing beside `GameStore`'s "More
+like this" rail is the honest shape.
+
+It must stay **statically prerenderable** for the same reason the game page must:
+no `auth()`, no `cookies()`, no `searchParams`. A dynamic tag page is a tag page
+that is not in the service-worker precache.
+
+Carried through: `generateStaticParams` over the resolved tag list, a canonical,
+`BreadcrumbList` + `CollectionPage`/`ItemList` JSON-LD, sitemap entries beside
+the categories, and the `GameStore` spec-sheet tags becoming links at last.
+
+## 4. FAQ on game pages
+
+**The answers are rendered on the page.** This is not decoration on top of
+markup: Google requires `FAQPage` content to be visible to the user, and
+synthesising markup for text nobody can read is how a domain earns a structured
+data manual action. This is the same argument the game page's own docblock makes
+about `aggregateRating` and about the absent `uploadDate` on `trailer` — the
+precedent is set, and it is followed rather than re-argued.
+
+`app/lib/faq.ts` builds the questions from facts the game row already asserts,
+so every answer is true by construction and none is written by hand per game:
+
+- **Is `<game>` free?** — yes, and no account is needed. True catalogue-wide.
+- **Can I play `<game>` at school?** — the honest answer, which is that the site
+  is built for filtered networks and the arcade is precached to keep working
+  without one. Not a promise about anybody's specific filter.
+- **Does `<game>` work on a phone?** — reads `game.platform`, which is a
+  three-value capability with a **load-bearing absent case**. A game whose
+  platform is unknown gets **no question at all** rather than a guess; that is
+  the whole reason `platform` is not a boolean.
+- **Do I need to download anything?** — no, and it is installable as a PWA.
+
+Pure, and unit tested against the platform cases.
+
+## 5. `/new` — the drops page
+
+`WhatsNewLink` points every visitor and every admin at
+`https://useshipnote.vercel.app/c/hallpass`: off-site, unindexable, and it sends
+traffic away from the site it is advertising. An on-site `/new` keeps that
+traffic and gains a URL that can rank for "hallpass update".
+
+**The decision, taken by the user: embed the ShipNote page.** ShipNote stays the
+source of truth and `/new` frames it. That answers all three open questions at
+once and is by some distance the cheapest correct answer — no API, no key, no
+env var, and no scheduler, which matters because there is no cron in this project
+by explicit design (`notifications-design.md` §7). A changelog entry published in
+ShipNote is live on `/new` the moment it is published, with nothing to
+revalidate.
+
+What it costs, stated so it stays a choice:
+
+**The changelog text is not ours to index.** Frame content belongs to the framed
+origin. So the page carries its OWN h1 and its own copy above the frame, and it
+ranks on that; it is in the sitemap at a priority below the game pages it sits
+under. A page that was nothing but a frame would be a thin page with a title.
+
+**We cannot prove the frame will load.** `useshipnote.vercel.app` was
+**unreachable from the build container** — this environment's network policy
+denies the host, so its `X-Frame-Options` / `frame-ancestors` headers could not
+be read, and a promise that it embeds cleanly would be a guess. The browser
+gives NO reliable cross-origin signal when a frame is refused, either.
+
+That is not a new problem here: `PlayerOverlay` already embeds third-party
+origins for external games and already solved it. `/new` reuses that solution
+rather than inventing a second one — a ~4s timer armed on mount, cancelled by
+the frame's `onLoad`, surfacing an "open it directly" CTA if it expires. And
+unlike a game, the escape hatch is cheap enough to show ALWAYS: a permanent
+"Open the full changelog ↗" link means the page is useful even in the case we
+could not test.
+
+**Offline it is a shell.** `/new` is prerendered, so the service worker precaches
+it like any other page — but the frame's content is on somebody else's origin and
+no service worker of ours can precache that. The page says so in words rather
+than showing a blank rectangle forever.
+
+### The trigger to revisit: a ShipNote API
+
+The embed is the right answer *today* and an interim one on purpose. **When
+ShipNote ships an API, the plan is to read the changelog through it instead** —
+that is the user's stated intent, recorded here so the frame is not mistaken for
+a permanent decision, and equally so that nobody replaces it before there is
+something to replace it with.
+
+Every cost above is a cost of FRAMING specifically, and an API settles all three:
+the entries become our own markup, so they are indexable and readable offline
+from the precache, and nothing depends on another origin's `frame-ancestors`.
+What it would add back is the machinery this deliberately avoids — a cached read
+with a TTL standing in for the cron this project does not have, and a key to keep
+out of the client. `WhatsNewFrame` is the only component that would change:
+`lib/whats-new` already owns the URLs, `/new` already owns the copy, the card and
+the routing, and the site chrome already points inward.
+
+Until then, nothing here is provisional in a way that costs anything. The page,
+its card, its sitemap entry and the internal "What's New" links are all correct
+under either implementation.
+
+## 6. Deliberately absent
+
+- **A daily challenge** — offered, not chosen. §0.
+- **Redirects for renamed tags** — §3, with its cost stated.
+- **Tag pages for one-off tags** — a tag on a single game is that game's page
+  with extra steps. A floor applies, and the tags below it stay unlinked rather
+  than becoming thin duplicates of a store page.
+- **Hand-written FAQ copy per game** — thirty hand-written answer sets is thirty
+  chances to assert something that is not true of that game.
+- **`aggregateRating`, review counts, or any other invented markup** — unchanged
+  from the game page's existing position.
+- **Third-party pixels** — `marketing-design.md` §2, unchanged and permanent.
+
+## 7. Phasing
+
+Each commit leaves the tree working; tests and lint run before each.
+
+| # | Commit | Files |
+|---|--------|-------|
+| 1 | This plan | `discovery-design.md` |
+| 2 | Shared OG brand kit | `app/lib/og/brand.tsx`, `app/c/[code]/opengraph-image.tsx` |
+| 3 | The listing card renderer | `app/lib/og/listing-card.tsx` |
+| 4 | Home grid card | `app/opengraph-image.tsx` |
+| 5 | Category cards | `app/category/[category]/opengraph-image.tsx` |
+| 6 | Tag slugs, both directions | `app/lib/tags.ts` + test |
+| 7 | The tag listing | `app/components/TagListing.tsx` |
+| 8 | The tag page | `app/tag/[tag]/page.tsx`, tag card |
+| 9 | Wire tags in | `app/sitemap.ts`, `app/components/GameStore.tsx` |
+| 10 | The FAQ model | `app/lib/faq.ts` + test |
+| 11 | FAQ on the page, and its markup | `GameStore.tsx`, `app/game/[slug]/page.tsx` |
+| 12 | The changelog's URLs | `app/lib/whats-new.ts` + test |
+| 13 | The frame, with its escape hatch | `app/components/WhatsNewFrame.tsx` |
+| 14 | The page, its card and its sitemap entry | `app/new/{page,opengraph-image}.tsx`, `app/sitemap.ts` |
+| 15 | Point "What's New" at it | `app/components/WhatsNewLink.tsx` |
+| 16 | Teach the link builder what now has a card | `app/dashboard/(app)/growth/page.tsx` |
+
+## 7b. What shipped, and where it differed from the plan
+
+All sixteen commits are built. Six things came out differently, all from reading
+or running the code rather than from changing our minds:
+
+- **A category vocabulary module was not in the plan.** Writing the category card
+  meant resolving a URL segment to a category for the third time — the route and
+  the sitemap each had their own copy, including their own literal list of the
+  virtual shelves. `app/lib/categories.ts` now owns that, tested including the
+  round trip, and the sitemap and route were moved onto it before the card was
+  written.
+- **`Trending`'s LENGTH turned out to be part of its definition.** The category
+  page filters its grid down to exactly the top-N ranking `Arcade` computes, so a
+  card built against "everything, sorted" would have advertised games the page
+  does not list. `TRENDING_COUNT` is now shared, and `Arcade` imports it rather
+  than repeating the 6 twice.
+- **The precache warning in §2 was real, and it fired.** The first build with a
+  home card swept `/opengraph-image` straight into the service-worker precache —
+  a 1200×630 PNG every visitor would have downloaded at install time for the
+  benefit of crawlers only. `scripts/build-sw-manifest.mjs` now excludes any
+  generated card by suffix. The per-category and per-tag cards turn out to be
+  dynamic routes and never reached the manifest at all.
+- **Fifteen of thirty-eight tags clear the floor.** The rest stay unlinked plain
+  text on the store page, exactly as before.
+- **The link builder had gone stale the moment the cards shipped.** It draws an
+  amber "no social image — this link renders as a bare card" state, which was
+  true for the home grid and every category when it was written and is the exact
+  gap §2 closed. Every destination now points at its own generated card, and tag
+  pages and `/new` were added to the picker (tags through the same floor the
+  route resolves against, so it cannot mint a link to a 404). Finishing the cards
+  without this would have left the tool that publishes links reporting them as
+  imageless.
+- **ShipNote could not be reached from the build container at all.** §5 records
+  what that changed: the escape hatch is permanent rather than conditional on a
+  blocked-frame guess we cannot verify.
+
+**Verified for `/new` on a production server:** it is prerendered (`○`) and in
+the precache, its card is static and excluded from it, the page carries its own
+h1, canonical, `preconnect` to the changelog origin and a sitemap entry, the
+frame points at the hosted changelog, and the site chrome's "What's New" is now
+an internal `/new` link rather than an outbound one. Its card renders and reads
+"7 new games". Whether ShipNote permits framing is the one thing still unproven,
+by construction.
+
+**Verified after the build, not assumed:** `/` is still prerendered (`○`),
+`/tag/[tag]` is SSG with all 15 pages precached, `public/sw-manifest.js` still
+carries **28** `/game/` routes — the regression check the game page's docblock
+specifies — and no generated card appears in it. All four cards were fetched
+from a production server and render (the challenge card unchanged after the
+extraction). A game page emits four `Question` entries for the four questions
+rendered on it. `npm run lint` reports the same 11 pre-existing warnings and no
+new ones; all 1335 tests pass.
+
+## 8. What this does NOT solve
+
+The same thing `marketing-design.md` §11 did not solve. These are landing
+surfaces for demand that exists: a tag page ranks only if somebody searches the
+tag, and a social card only converts a share somebody was already going to make.
+**Thirty games is still thirty queries.** The content-health panel names which of
+those thirty pages are too thin to compete, and `/add-game` automates the
+thirty-first. That remains the highest-value thing anyone can do to this
+repository, and none of the work below is a substitute for it.

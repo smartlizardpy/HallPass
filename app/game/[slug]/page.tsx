@@ -23,12 +23,19 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ArcadeShell } from "../../components/ArcadeShell";
 import { GameStore } from "../../components/GameStore";
+import { gameFaq } from "../../lib/faq";
 import { getGameCredit, resolveCredit } from "../../lib/game-credits";
 import { getGameMedia, mediaPublicPath } from "../../lib/game-media";
 import { getGameTesters } from "../../lib/beta";
 import { getGameVideo } from "../../lib/game-videos";
-import { resolveCategories, resolveGame, resolveGames } from "../../lib/games-store";
+import {
+  resolveCategories,
+  resolveGame,
+  resolveGames,
+  resolveTags,
+} from "../../lib/games-store";
 import { SITE_URL as BASE } from "../../lib/site";
+import { landingTags, tagPath, tagSlug } from "../../lib/tags";
 import { getGamePlayCounts } from "../../lib/stats";
 import { youtubeEmbedUrl, youtubeThumbnailUrl, youtubeWatchUrl } from "../../lib/youtube";
 
@@ -116,10 +123,13 @@ export default async function GamePage({
   const game = await resolveGame(slug);
   if (!game) notFound();
 
-  const [allGames, categories, playCounts, media, credit, video, testers] =
+  const [allGames, categories, tags, playCounts, media, credit, video, testers] =
     await Promise.all([
       resolveGames(),
       resolveCategories(),
+      // Which tags have a landing page, so the spec sheet can link the ones that
+      // do. Same cached, session-free read as the rest — see the docblock.
+      resolveTags(),
       getGamePlayCounts(),
       getGameMedia(slug),
       // Fail-soft to null, like every other read here — a missing credit line
@@ -138,6 +148,16 @@ export default async function GamePage({
     ]);
 
   const plays = playCounts[game.slug] ?? game.plays ?? 0;
+
+  // Resolved HERE rather than in `GameStore`, which is a client component and
+  // has no way to ask what the whole catalogue is tagged with. A tag under the
+  // floor has no page, so it gets no href and stays the plain text it always
+  // was — a link to a 404 is worse than no link.
+  const landing = new Set(landingTags(tags).map((t) => tagSlug(t.tag)));
+  const tagLinks = game.tags.map((tag) => ({
+    tag,
+    href: landing.has(tagSlug(tag)) ? tagPath(tag) : null,
+  }));
 
   // Same category first, topped up by play count, self excluded.
   const playsFor = (g: (typeof allGames)[number]) =>
@@ -205,6 +225,19 @@ export default async function GamePage({
           : {}),
       },
       {
+        // The questions rendered on the page, marked up. Both this and
+        // `GameStore` call the same pure `gameFaq` on the same game, so the
+        // markup cannot describe a question the page does not show — which is
+        // the condition FAQPage is allowed under, and the reason this is not
+        // generated from anything richer than the visible copy.
+        "@type": "FAQPage",
+        mainEntity: gameFaq(game).map(({ question, answer }) => ({
+          "@type": "Question",
+          name: question,
+          acceptedAnswer: { "@type": "Answer", text: answer },
+        })),
+      },
+      {
         "@type": "BreadcrumbList",
         itemListElement: [
           { "@type": "ListItem", position: 1, name: "HALLPASS", item: BASE },
@@ -261,6 +294,7 @@ export default async function GamePage({
           key={game.slug}
           game={game}
           media={media}
+          tagLinks={tagLinks}
           related={related}
           plays={plays}
           credit={resolveCredit(game, credit)}
