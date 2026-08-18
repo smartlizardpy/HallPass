@@ -93,6 +93,7 @@ export const CHANNELS: readonly Channel[] = [
   { id: "tiktok", label: "TikTok", note: "Bio links and video captions.", group: "Social" },
   { id: "youtube", label: "YouTube", note: "Video descriptions and pinned comments.", group: "Social" },
   { id: "instagram", label: "Instagram", note: "The bio link, stories and DMs.", group: "Social" },
+  { id: "twitter", label: "X (Twitter)", note: "Posts and replies. Tagged twitter — one letter is not a readable ref.", group: "Social" },
   { id: "whatsapp", label: "WhatsApp", note: "Group chats, where the card is most of what gets seen.", group: "Messaging" },
   { id: "snapchat", label: "Snapchat", note: "Chats and story links — read once, rarely typed.", group: "Messaging" },
   { id: "telegram", label: "Telegram", note: "Group chats and broadcast channels.", group: "Messaging" },
