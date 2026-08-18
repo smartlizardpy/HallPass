@@ -22,7 +22,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { CHANNELS, taggedUrl } from "@/app/lib/growth/channels";
+import { CHANNELS, DEFAULT_CHANNEL, taggedUrl } from "@/app/lib/growth/channels";
 
 export type Destination = {
   path: string;
@@ -38,7 +38,7 @@ export type Destination = {
 
 export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
   const [path, setPath] = useState(destinations[0]?.path ?? "/");
-  const [channel, setChannel] = useState(CHANNELS[0].id);
+  const [channel, setChannel] = useState(DEFAULT_CHANNEL);
   const [copied, setCopied] = useState(false);
 
   const destination = destinations.find((d) => d.path === path) ?? destinations[0];
