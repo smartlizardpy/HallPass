@@ -20,9 +20,8 @@ Four candidates were put to the user. Three were chosen:
 1. **Social cards for the home grid and category pages** (§2)
 2. **`/tag/<tag>` landing pages** (§3)
 3. **FAQ content + `FAQPage` markup on game pages** (§4)
-4. **An on-site `/new` page** fed by ShipNote (§5) — *chosen, and blocked on
-   integration details the user is supplying. Built last; the other three do not
-   depend on it.*
+4. **An on-site `/new` page** that embeds ShipNote (§5) — chosen, and built last;
+   the other three do not depend on it.
 
 **A daily challenge was offered and NOT chosen.** It stays exactly where
 `marketing-design.md` §9 left it: the `kind` discriminator on `challenges` is
@@ -154,27 +153,46 @@ so every answer is true by construction and none is written by hand per game:
 
 Pure, and unit tested against the platform cases.
 
-## 5. `/new` — the drops page (blocked, built last)
+## 5. `/new` — the drops page
 
-`WhatsNewLink` currently points every visitor and every admin at
+`WhatsNewLink` points every visitor and every admin at
 `https://useshipnote.vercel.app/c/hallpass`: off-site, unindexable, and it sends
 traffic away from the site it is advertising. An on-site `/new` keeps that
-traffic, gains a URL that can rank for "hallpass update", and gives the growth
-page's link builder a destination that is neither the home grid nor a game.
+traffic and gains a URL that can rank for "hallpass update".
 
-**What is needed before it can be built** — the user is supplying it:
+**The decision, taken by the user: embed the ShipNote page.** ShipNote stays the
+source of truth and `/new` frames it. That answers all three open questions at
+once and is by some distance the cheapest correct answer — no API, no key, no
+env var, and no scheduler, which matters because there is no cron in this project
+by explicit design (`notifications-design.md` §7). A changelog entry published in
+ShipNote is live on `/new` the moment it is published, with nothing to
+revalidate.
 
-- how the changelog is read (a public JSON endpoint, an RSS/Atom feed, or an API
-  with a key), and the exact response shape;
-- whether a key exists and therefore whether an env var is required;
-- whether ShipNote stays the source of truth (this page renders it) or whether
-  entries move in-repo.
+What it costs, stated so it stays a choice:
 
-Two constraints are already known and will shape it whatever the answer is:
-**there is no cron in this project by explicit design** (`notifications-design.md`
-§7), so freshness comes from a cached read with a TTL, not a scheduler; and the
-page must fail soft — an unreachable ShipNote renders an empty state, never an
-error, because `/new` will be in the service-worker precache.
+**The changelog text is not ours to index.** Frame content belongs to the framed
+origin. So the page carries its OWN h1 and its own copy above the frame, and it
+ranks on that; it is in the sitemap at a priority below the game pages it sits
+under. A page that was nothing but a frame would be a thin page with a title.
+
+**We cannot prove the frame will load.** `useshipnote.vercel.app` was
+**unreachable from the build container** — this environment's network policy
+denies the host, so its `X-Frame-Options` / `frame-ancestors` headers could not
+be read, and a promise that it embeds cleanly would be a guess. The browser
+gives NO reliable cross-origin signal when a frame is refused, either.
+
+That is not a new problem here: `PlayerOverlay` already embeds third-party
+origins for external games and already solved it. `/new` reuses that solution
+rather than inventing a second one — a ~4s timer armed on mount, cancelled by
+the frame's `onLoad`, surfacing an "open it directly" CTA if it expires. And
+unlike a game, the escape hatch is cheap enough to show ALWAYS: a permanent
+"Open the full changelog ↗" link means the page is useful even in the case we
+could not test.
+
+**Offline it is a shell.** `/new` is prerendered, so the service worker precaches
+it like any other page — but the frame's content is on somebody else's origin and
+no service worker of ours can precache that. The page says so in words rather
+than showing a blank rectangle forever.
 
 ## 6. Deliberately absent
 
@@ -206,7 +224,11 @@ Each commit leaves the tree working; tests and lint run before each.
 | 9 | Wire tags in | `app/sitemap.ts`, `app/components/GameStore.tsx` |
 | 10 | The FAQ model | `app/lib/faq.ts` + test |
 | 11 | FAQ on the page, and its markup | `GameStore.tsx`, `app/game/[slug]/page.tsx` |
-| 12 | `/new` | pending §5 |
+| 12 | The changelog's URLs | `app/lib/whats-new.ts` + test |
+| 13 | The frame, with its escape hatch | `app/components/WhatsNewFrame.tsx` |
+| 14 | The page, its card and its sitemap entry | `app/new/{page,opengraph-image}.tsx`, `app/sitemap.ts` |
+| 15 | Point "What's New" at it | `app/components/WhatsNewLink.tsx` |
+| 16 | Teach the link builder what now has a card | `app/dashboard/(app)/growth/page.tsx` |
 
 ## 7b. What shipped, and where it differed from the plan
 
