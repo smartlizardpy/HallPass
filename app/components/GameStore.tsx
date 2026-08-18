@@ -3,6 +3,7 @@
 import Link from "next/link";
 import posthog from "posthog-js";
 import { useState } from "react";
+import { gameFaq } from "../lib/faq";
 import type { Game } from "../lib/games";
 import { type GameMedia, mediaPublicPath } from "../lib/game-media-blob";
 import { useFavorites } from "../lib/personalization";
@@ -404,6 +405,30 @@ export function GameStore({
         <p className="mt-3 whitespace-pre-line text-[15px] font-semibold leading-relaxed text-zinc-700">
           {game.description}
         </p>
+      </section>
+
+      {/* FAQ — VISIBLE COPY, not markup dressing.
+          `app/game/[slug]/page.tsx` emits a FAQPage for exactly these entries,
+          and structured data is only allowed to describe what a visitor can
+          read. Both sides call the same pure `gameFaq(game)` on the same game,
+          so they cannot describe different questions; nothing is collapsed
+          behind a toggle, so nothing is marked up that is not on the page. */}
+      <section className="mt-5 max-w-3xl rounded-3xl bg-white p-5 sm:p-6">
+        <h2 className="text-[11px] font-black uppercase tracking-wider text-muted">
+          Questions
+        </h2>
+        <dl className="mt-3">
+          {gameFaq(game).map(({ question, answer }) => (
+            <div key={question} className="mt-4 first:mt-0">
+              <dt className="text-[15px] font-black tracking-tight text-zinc-900">
+                {question}
+              </dt>
+              <dd className="mt-1 text-[15px] font-semibold leading-relaxed text-zinc-700">
+                {answer}
+              </dd>
+            </div>
+          ))}
+        </dl>
       </section>
 
       {/* Renders nothing at all unless this game has achievements provisioned —

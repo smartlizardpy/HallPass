@@ -23,6 +23,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ArcadeShell } from "../../components/ArcadeShell";
 import { GameStore } from "../../components/GameStore";
+import { gameFaq } from "../../lib/faq";
 import { getGameCredit, resolveCredit } from "../../lib/game-credits";
 import { getGameMedia, mediaPublicPath } from "../../lib/game-media";
 import { getGameTesters } from "../../lib/beta";
@@ -222,6 +223,19 @@ export default async function GamePage({
               },
             }
           : {}),
+      },
+      {
+        // The questions rendered on the page, marked up. Both this and
+        // `GameStore` call the same pure `gameFaq` on the same game, so the
+        // markup cannot describe a question the page does not show — which is
+        // the condition FAQPage is allowed under, and the reason this is not
+        // generated from anything richer than the visible copy.
+        "@type": "FAQPage",
+        mainEntity: gameFaq(game).map(({ question, answer }) => ({
+          "@type": "Question",
+          name: question,
+          acceptedAnswer: { "@type": "Answer", text: answer },
+        })),
       },
       {
         "@type": "BreadcrumbList",
