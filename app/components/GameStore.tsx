@@ -40,6 +40,7 @@ import { ScreenshotGallery } from "./ScreenshotGallery";
 export function GameStore({
   game,
   media,
+  tagLinks = [],
   related,
   plays,
   credit = null,
@@ -48,6 +49,16 @@ export function GameStore({
 }: {
   game: Game;
   media: GameMedia[];
+  /**
+   * The game's tags, each with the path to its landing page or `null` when it
+   * has none.
+   *
+   * Resolved by the PAGE, not here: whether a tag earns a page depends on how
+   * many games in the whole catalogue carry it, and this is a client component
+   * that only ever sees one game. Defaults to `[]`, which falls back to the
+   * plain-text spec-sheet row this had before there was a `/tag/` route at all.
+   */
+  tagLinks?: { tag: string; href: string | null }[];
   related: Game[];
   plays: number;
   /**
@@ -120,6 +131,14 @@ export function GameStore({
     });
     toggleFavorite(slug);
   };
+
+  // The spec sheet's tag row. `tagLinks` is what the page resolved; the fallback
+  // is every tag as plain text, which is exactly what this row was before there
+  // was anywhere to link to — so a caller that omits the prop loses the links,
+  // never the tags.
+  const tags = tagLinks.length
+    ? tagLinks
+    : game.tags.map((tag) => ({ tag, href: null }));
 
   const accentVars = {
     "--g-from": game.gradient[0],
@@ -269,19 +288,30 @@ export function GameStore({
                 {game.category}
               </Link>
             </MetaRow>
-            {game.tags.length > 0 && (
+            {tags.length > 0 && (
               <MetaRow label="Tags">
-                {/* Plain text, not links: there is no /tag/[tag] route, and
-                    /category/<tag> would 404 for any tag that is not also a
-                    category. Kept anyway, unlike the constant row this rail
-                    used to carry: tags are per-game, they are the only place
-                    on the site a player can READ them, and they are not the
-                    dead end the missing route makes them look — the arcade's
-                    search matches `game.tags` (see `Arcade`), so a tag scanned
-                    here is a term that works in the box at the top of the
-                    site. Do not turn them into links without a route to
-                    land on. */}
-                {game.tags.join(", ")}
+                {/* LINKED WHERE THERE IS SOMEWHERE TO LAND. This row was plain
+                    text for as long as `/tag/[tag]` did not exist, and the tags
+                    below the landing-page floor still are: a tag on one game has
+                    no page, and a link to a 404 is worse than no link. Whichever
+                    a tag is, it stays readable and stays a term the arcade's
+                    search matches (see `Arcade`), which is what this row was
+                    worth before any of them were clickable. */}
+                {tags.map(({ tag, href }, i) => (
+                  <span key={tag}>
+                    {i > 0 && ", "}
+                    {href ? (
+                      <Link
+                        href={href}
+                        className="font-bold text-brand hover:text-brand-600"
+                      >
+                        {tag}
+                      </Link>
+                    ) : (
+                      tag
+                    )}
+                  </span>
+                ))}
               </MetaRow>
             )}
             {credit && (
