@@ -104,6 +104,7 @@ export const CHANNELS: readonly Channel[] = [
   { id: "qr", label: "QR code", note: "Anything scanned off a screen or print.", group: "School & word of mouth" },
   { id: "poster", label: "Poster / print", note: "Typed by hand, so keep it short.", group: "School & word of mouth" },
   { id: "friend", label: "Word of mouth", note: "For links people are told to type.", group: "School & word of mouth" },
+  { id: "teacher", label: "Teacher / school", note: "Class links, newsletters and anything on a school portal.", group: "School & word of mouth" },
   { id: "other", label: "Other", note: "Deliberate catch-all — not the same as unknown.", group: "Catch-all" },
 ] as const;
 
