@@ -22,13 +22,33 @@
  * two pickers side by side that sort differently is a worse problem than a long
  * list.
  *
+ * THE SHARE BUTTONS TAG THEMSELVES. Each one opens that app's composer with
+ * the link already tagged for it (`share-targets.ts`), and pressing one also
+ * moves the channel picker to match — so the URL in the box, the preview under
+ * it and the message that just opened all describe the same link. The
+ * alternative, buttons that share whatever the picker happens to say, would
+ * report a WhatsApp share as TikTok traffic every time someone forgot.
+ *
+ * The native share sheet is the exception and is meant to be: it is the only
+ * control here where the PERSON picks the app after pressing, so it can only
+ * honestly use the channel already selected. Whether to offer it at all is read
+ * through `useSyncExternalStore` with a `false` server snapshot, the same
+ * hydration contract the rail's pin preference follows in `Sidebar.tsx`:
+ * `navigator.share` exists on a phone and not on the desktop this page is
+ * usually open on, so branching on it during render would mismatch.
+ *
+ * Nothing here reports to analytics. These presses are an admin composing a
+ * post, not a player sharing a game — counting them would put our own team in
+ * the share-loop numbers that `marketing-design.md` §4c calls exact.
+ *
  * Clipboard failure is not an error state, for the same reason as `CopyBox`: an
  * insecure context or a denied permission just means the field stays selectable
  * and the fallback is select-all.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { CHANNELS, channelsByGroup, taggedUrl } from "@/app/lib/growth/channels";
+import { SHARE_TARGETS, shareHref, shareText } from "@/app/lib/growth/share-targets";
 
 export type Destination = {
   path: string;
@@ -42,14 +62,31 @@ export type Destination = {
   socialImage: string | null;
 };
 
+/**
+ * `navigator.share` is fixed for the life of the page — a browser does not grow
+ * a share sheet mid-session — so the subscription is a no-op and only the
+ * snapshots do any work. Module-level so their identities are stable across
+ * renders, which is what keeps `useSyncExternalStore` from resubscribing.
+ */
+const subscribeToNothing = () => () => {};
+const hasShareSheet = () => typeof navigator.share === "function";
+const noShareSheetOnServer = () => false;
+
 export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
   const [path, setPath] = useState(destinations[0]?.path ?? "/");
   const [channel, setChannel] = useState(CHANNELS[0].id);
   const [copied, setCopied] = useState(false);
 
+  const canShareNatively = useSyncExternalStore(
+    subscribeToNothing,
+    hasShareSheet,
+    noShareSheetOnServer,
+  );
+
   const destination = destinations.find((d) => d.path === path) ?? destinations[0];
   const url = useMemo(() => taggedUrl(path, channel), [path, channel]);
   const note = CHANNELS.find((c) => c.id === channel)?.note;
+  const message = shareText(destination?.label ?? "HALLPASS");
 
   const channelGroups = useMemo(() => channelsByGroup(), []);
 
@@ -70,6 +107,20 @@ export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
       setTimeout(() => setCopied(false), 1500);
     } catch {
       setCopied(false);
+    }
+  };
+
+  /**
+   * The share sheet, tagged with whatever the picker says — the person choosing
+   * the app is the only one who knows where it is going. A dismissed sheet
+   * rejects, and a person changing their mind is not an error to report, so it
+   * is swallowed exactly as `ShareChallenge` does.
+   */
+  const shareNatively = async () => {
+    try {
+      await navigator.share({ title: destination?.label, text: message, url });
+    } catch {
+      /* Dismissed, or the sheet refused. */
     }
   };
 
@@ -138,6 +189,48 @@ export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
         >
           {copied ? "Copied ✓" : "Copy"}
         </button>
+      </div>
+
+      {/* One tap into the app, with that app's own ref already on the link. */}
+      <div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-bold uppercase tracking-wide text-muted">
+            Open in
+          </span>
+          {SHARE_TARGETS.map((target) => {
+            const href = shareHref(target, path, message);
+            // A `mailto:` hands off to the OS and would leave a blank tab
+            // behind; only a web composer wants a tab of its own.
+            const opensTab = href.startsWith("http");
+            return (
+              <a
+                key={target.channel}
+                href={href}
+                target={opensTab ? "_blank" : undefined}
+                rel={opensTab ? "noreferrer noopener" : undefined}
+                onClick={() => setChannel(target.channel)}
+                className="rounded-full border border-border bg-white px-3.5 py-1.5 text-xs font-bold text-zinc-700 transition hover:border-brand hover:text-brand"
+              >
+                {target.label}
+              </a>
+            );
+          })}
+          {canShareNatively && (
+            <button
+              type="button"
+              onClick={() => void shareNatively()}
+              className="rounded-full border border-border bg-white px-3.5 py-1.5 text-xs font-bold text-zinc-700 transition hover:border-brand hover:text-brand"
+            >
+              Share sheet…
+              <span className="sr-only"> — tags the link as {channel}</span>
+            </button>
+          )}
+        </div>
+        <p className="mt-2 text-xs text-muted">
+          Each button tags the link for itself and moves the picker to match.
+          Snapchat, Instagram and Discord publish no share link — pick them above
+          and copy instead.
+        </p>
       </div>
 
       {/* What this actually looks like where it gets pasted. */}
