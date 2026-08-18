@@ -81,13 +81,24 @@ export type Channel = {
 };
 
 /**
- * The starting vocabulary.
+ * The vocabulary.
  *
- * A GUESS, and flagged as one in `marketing-design.md` §0 — it was written while
- * nobody was available to say which channels are actually live. Editing this
- * array is the whole cost of correcting it; no migration, no backfill, and old
- * events keep whatever they were tagged with. Removing an entry does not erase
- * history, it just moves that channel into `unknown` from then on.
+ * Still a GUESS at which channels are live, and flagged as one in
+ * `marketing-design.md` §0 — it was written while nobody was available to say.
+ * Editing this array is the whole cost of correcting it; no migration, no
+ * backfill, and old events keep whatever they were tagged with. Removing an
+ * entry does not erase history, it just moves that channel into `unknown` from
+ * then on.
+ *
+ * Declared in {@link CHANNEL_GROUPS} order, and {@link channelsByGroup} is
+ * tested to agree — so the file reads in the same order as the picker, and an
+ * entry dropped into the wrong block fails the suite instead of appearing under
+ * a heading nobody expected.
+ *
+ * The messaging block is deliberately wide for a site whose audience shares
+ * links in chats rather than in bios: whichever of those apps turns out to be
+ * dead weight is one deleted line, and the cost of having omitted a live one is
+ * a channel that never gets tagged at all.
  */
 export const CHANNELS: readonly Channel[] = [
   { id: "tiktok", label: "TikTok", note: "Bio links and video captions.", group: "Social" },
