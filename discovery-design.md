@@ -232,9 +232,8 @@ Each commit leaves the tree working; tests and lint run before each.
 
 ## 7b. What shipped, and where it differed from the plan
 
-Commits 1–11 are built; 12 is still waiting on §5. Four things came out
-differently, all from reading or running the code rather than from changing our
-minds:
+All sixteen commits are built. Six things came out differently, all from reading
+or running the code rather than from changing our minds:
 
 - **A category vocabulary module was not in the plan.** Writing the category card
   meant resolving a URL segment to a category for the third time — the route and
@@ -255,6 +254,25 @@ minds:
   dynamic routes and never reached the manifest at all.
 - **Fifteen of thirty-eight tags clear the floor.** The rest stay unlinked plain
   text on the store page, exactly as before.
+- **The link builder had gone stale the moment the cards shipped.** It draws an
+  amber "no social image — this link renders as a bare card" state, which was
+  true for the home grid and every category when it was written and is the exact
+  gap §2 closed. Every destination now points at its own generated card, and tag
+  pages and `/new` were added to the picker (tags through the same floor the
+  route resolves against, so it cannot mint a link to a 404). Finishing the cards
+  without this would have left the tool that publishes links reporting them as
+  imageless.
+- **ShipNote could not be reached from the build container at all.** §5 records
+  what that changed: the escape hatch is permanent rather than conditional on a
+  blocked-frame guess we cannot verify.
+
+**Verified for `/new` on a production server:** it is prerendered (`○`) and in
+the precache, its card is static and excluded from it, the page carries its own
+h1, canonical, `preconnect` to the changelog origin and a sitemap entry, the
+frame points at the hosted changelog, and the site chrome's "What's New" is now
+an internal `/new` link rather than an outbound one. Its card renders and reads
+"7 new games". Whether ShipNote permits framing is the one thing still unproven,
+by construction.
 
 **Verified after the build, not assumed:** `/` is still prerendered (`○`),
 `/tag/[tag]` is SSG with all 15 pages precached, `public/sw-manifest.js` still
