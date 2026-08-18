@@ -37,6 +37,12 @@
  * `navigator.share` exists on a phone and not on the desktop this page is
  * usually open on, so branching on it during render would mismatch.
  *
+ * THE QR CODE ENCODES THE LINK IN THE BOX, not a link of its own. It would be
+ * easy to make it always say `?ref=qr` and it would be wrong: two controls on
+ * one card describing two different links is how somebody prints a thousand
+ * flyers carrying a tag they never chose. The caption says to pick the QR or
+ * poster channel before printing instead, which keeps one link on screen.
+ *
  * Nothing here reports to analytics. These presses are an admin composing a
  * post, not a player sharing a game — counting them would put our own team in
  * the share-loop numbers that `marketing-design.md` §4c calls exact.
@@ -49,6 +55,7 @@
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { CHANNELS, channelsByGroup, taggedUrl } from "@/app/lib/growth/channels";
 import { SHARE_TARGETS, shareHref, shareText } from "@/app/lib/growth/share-targets";
+import { qrCode, qrSvgDocument } from "@/app/lib/growth/qr";
 
 export type Destination = {
   path: string;
@@ -87,6 +94,7 @@ export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
   const url = useMemo(() => taggedUrl(path, channel), [path, channel]);
   const note = CHANNELS.find((c) => c.id === channel)?.note;
   const message = shareText(destination?.label ?? "HALLPASS");
+  const qr = useMemo(() => qrCode(url), [url]);
 
   const channelGroups = useMemo(() => channelsByGroup(), []);
 
@@ -122,6 +130,23 @@ export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
     } catch {
       /* Dismissed, or the sheet refused. */
     }
+  };
+
+  /**
+   * SVG rather than PNG, because the size this ends up printed at has not been
+   * decided yet and any resolution chosen here would be the wrong one. Built at
+   * press time rather than held in state: a blob URL for every keystroke of the
+   * pickers would leak one per render, and this costs nothing until asked for.
+   */
+  const downloadQr = () => {
+    const blob = new Blob([qrSvgDocument(qr)], { type: "image/svg+xml" });
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = href;
+    link.download = `hallpass-${fileSlug(path)}-${channel}.svg`;
+    link.click();
+    // Revoking in the same tick can cancel the download that was just started.
+    setTimeout(() => URL.revokeObjectURL(href), 0);
   };
 
   const selectClass =
@@ -233,40 +258,82 @@ export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
         </p>
       </div>
 
-      {/* What this actually looks like where it gets pasted. */}
-      <div className="rounded-xl border border-border bg-surface-2 p-4">
-        <div className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">
-          Shared-link preview
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+        {/* What this actually looks like where it gets pasted. */}
+        <div className="rounded-xl border border-border bg-surface-2 p-4">
+          <div className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">
+            Shared-link preview
+          </div>
+
+          {destination?.socialImage ? (
+            <div className="overflow-hidden rounded-lg border border-border bg-white">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={destination.socialImage}
+                alt=""
+                className="aspect-[1.91/1] w-full bg-surface-2 object-cover"
+              />
+              <div className="p-3">
+                <div className="text-sm font-bold text-zinc-900">{destination.label}</div>
+                <div className="truncate text-xs text-muted">{url}</div>
+              </div>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-lg border border-dashed border-amber-300 bg-amber-50">
+              <div className="flex aspect-[1.91/1] w-full items-center justify-center px-4 text-center text-xs font-semibold text-amber-900">
+                No social image — this link renders as a bare card in chats,
+                Discord and search previews.
+              </div>
+              <div className="border-t border-amber-200 p-3">
+                <div className="text-sm font-bold text-amber-900">
+                  {destination?.label}
+                </div>
+                <div className="truncate text-xs text-amber-800">{url}</div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {destination?.socialImage ? (
-          <div className="overflow-hidden rounded-lg border border-border bg-white">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={destination.socialImage}
-              alt=""
-              className="aspect-[1.91/1] w-full bg-surface-2 object-cover"
-            />
-            <div className="p-3">
-              <div className="text-sm font-bold text-zinc-900">{destination.label}</div>
-              <div className="truncate text-xs text-muted">{url}</div>
-            </div>
+        {/* The same link, for the channels nobody clicks: scanned and printed. */}
+        <div className="rounded-xl border border-border bg-surface-2 p-4 lg:w-64">
+          <div className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">
+            Scan or print
           </div>
-        ) : (
-          <div className="overflow-hidden rounded-lg border border-dashed border-amber-300 bg-amber-50">
-            <div className="flex aspect-[1.91/1] w-full items-center justify-center px-4 text-center text-xs font-semibold text-amber-900">
-              No social image — this link renders as a bare card in chats,
-              Discord and search previews.
-            </div>
-            <div className="border-t border-amber-200 p-3">
-              <div className="text-sm font-bold text-amber-900">
-                {destination?.label}
-              </div>
-              <div className="truncate text-xs text-amber-800">{url}</div>
-            </div>
+          <div className="inline-block rounded-lg border border-border bg-white p-2">
+            <svg
+              viewBox={`0 0 ${qr.size} ${qr.size}`}
+              role="img"
+              aria-label={`QR code for ${url}`}
+              shapeRendering="crispEdges"
+              className="block h-40 w-40"
+            >
+              {/* Explicit white: a code inverted by a dark viewer does not scan. */}
+              <rect width={qr.size} height={qr.size} fill="#ffffff" />
+              <path d={qr.path} fill="#000000" />
+            </svg>
           </div>
-        )}
+          <button
+            type="button"
+            onClick={downloadQr}
+            className="mt-3 block w-full rounded-full border border-border bg-white px-3 py-1.5 text-xs font-bold text-zinc-700 transition hover:border-brand hover:text-brand"
+          >
+            Download SVG
+          </button>
+          <p className="mt-2 text-xs text-muted">
+            This encodes the exact link above. Pick <strong>QR code</strong> or{" "}
+            <strong>Poster / print</strong> before printing, or the scans report as
+            whichever channel is selected.
+          </p>
+        </div>
       </div>
     </div>
   );
+}
+
+/**
+ * A destination path as a filename fragment: `/game/duskfall` → `game-duskfall`,
+ * and the home grid — which is only a slash — as `home` rather than nothing.
+ */
+function fileSlug(path: string): string {
+  return path.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "") || "home";
 }
