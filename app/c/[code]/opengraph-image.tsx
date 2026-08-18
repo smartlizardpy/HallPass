@@ -1,12 +1,22 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { ImageResponse } from "next/og";
 import { getLink } from "@/app/lib/challenges";
 import { normalizeLinkCode } from "@/app/lib/challenges/link";
 import { resolveGame } from "@/app/lib/games-store";
+import {
+  BRAND,
+  DIM,
+  DOT,
+  INK,
+  INK_MID,
+  OG_SIZE,
+  PAPER,
+  Wordmark,
+  coverDataUri,
+  nunito,
+} from "@/app/lib/og/brand";
 
 /**
- * The preview card a challenge link shows in a chat.
+ * A HallPass CHALLENGE card.
  *
  * This is the first thing almost everybody sees of HallPass — before the
  * landing page, before the game. In a Snapchat or WhatsApp thread the card IS
@@ -40,77 +50,17 @@ import { resolveGame } from "@/app/lib/games-store";
  * keep showing a grey box long after the link works again, so a plain card is
  * always the better failure — and the generic one names nobody.
  *
- * ── SATORI, NOT A BROWSER ──────────────────────────────────────────────────
- * `ImageResponse` renders through Satori, which is not a browser engine:
- *   - Every element with more than one child needs an explicit `display: flex`.
- *   - A React Fragment is NOT laid out as a flex child. Its children get
- *     hoisted and inherit the parent's axis, which silently turned an earlier
- *     version of this card into one row running off both edges. Use wrapper
- *     divs, never fragments.
- *   - Font WEIGHT does not vary without real font data. Nunito — the face the
- *     rest of the site uses via `next/font` — is therefore loaded from
- *     `public/fonts/` in two weights. `next/font` caches WOFF2, which Satori
- *     cannot read, so these are separate TTFs rather than a shared asset.
- *     Loading them is FAIL-SOFT: a missing file costs the card its typeface,
- *     never its existence.
+ * ── THE PALETTE, THE FONTS AND THE SATORI RULES LIVE IN `lib/og/brand` ─────
+ * They are shared with the listing cards the home grid, the categories and the
+ * tag pages mint. Read that header before editing anything below: Satori is not
+ * a browser, and its constraints (explicit `display: flex`, no Fragments as
+ * flex children, no `text-transform`, no font weights without real font data)
+ * are documented there rather than repeated here.
  */
 
 export const alt = "A HallPass challenge";
-export const size = { width: 1200, height: 630 };
+export const size = OG_SIZE;
 export const contentType = "image/png";
-
-/**
- * Palette, inlined — this renders outside the app's CSS entirely, so it cannot
- * read the custom properties in `globals.css` and these must be kept in step
- * with them BY HAND.
- */
-const INK = "#0b0616";
-const INK_MID = "#1b1033";
-const BRAND = "#7c2eef"; // --brand
-const DOT = "#ffc700"; // --accent-yellow, the wordmark's full stop
-const PAPER = "#ffffff";
-
-/** Readable on `INK` at small sizes; plain grey goes muddy over a gradient. */
-const DIM = "rgba(255,255,255,0.62)";
-
-/**
- * Nunito in the two weights this card uses, or `[]` to fall back to Satori's
- * built-in face. Read once per render; Next caches the route's output anyway,
- * and a preview is fetched by crawlers rather than in a hot path.
- */
-async function nunito() {
-  try {
-    const [semibold, black] = await Promise.all([
-      readFile(join(process.cwd(), "public", "fonts", "nunito-600.ttf")),
-      readFile(join(process.cwd(), "public", "fonts", "nunito-900.ttf")),
-    ]);
-    return [
-      { name: "Nunito", data: semibold, weight: 600 as const, style: "normal" as const },
-      { name: "Nunito", data: black, weight: 900 as const, style: "normal" as const },
-    ];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * The game's cover as a data URI, or `null`.
- *
- * Inlined rather than passed as a URL because Satori would have to fetch it,
- * and a preview card must not depend on a second network hop that a crawler's
- * timeout can lose. `coverUrl` games (blob-hosted) are skipped for the same
- * reason — the card is good without art.
- */
-async function coverDataUri(slug: string): Promise<string | null> {
-  try {
-    const bytes = await readFile(
-      join(process.cwd(), "public", "games", slug, "cover.png"),
-    );
-    return `data:image/png;base64,${bytes.toString("base64")}`;
-  } catch {
-    return null;
-  }
-}
 
 export default async function Image({
   params,
@@ -182,27 +132,7 @@ export default async function Image({
             width: cover ? 700 : 1200,
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              fontSize: 26,
-              fontWeight: 900,
-              color: PAPER,
-              letterSpacing: 1,
-            }}
-          >
-            hallpass
-            <div
-              style={{
-                width: 10,
-                height: 10,
-                borderRadius: 99,
-                background: DOT,
-                marginLeft: 6,
-              }}
-            />
-          </div>
+          <Wordmark />
 
           {/* The dare. One expression, so there is no JSX text whose leading
               space can be trimmed away — see the note in ChallengeLanding. */}
