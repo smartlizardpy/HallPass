@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { categoryPath, routedCategories } from "@/app/lib/categories";
 import { resolveGames, resolveCategories, resolveTags } from "@/app/lib/games-store";
 import { landingTags, tagPath } from "@/app/lib/tags";
+import { WHATS_NEW_PATH } from "@/app/lib/whats-new";
 import { SITE_URL } from "@/app/lib/site";
 
 const BASE = SITE_URL;
@@ -21,6 +22,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: now,
       changeFrequency: "daily",
       priority: 1,
+    },
+    {
+      // The drops page. Listed despite most of its content living in a frame on
+      // another origin — what it offers a crawler is its own copy and the fact
+      // that this URL is where updates are announced, which is worth a low
+      // priority rather than an absence.
+      url: `${BASE}${WHATS_NEW_PATH}`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.5,
     },
   ];
 
