@@ -50,6 +50,17 @@ export const REF_MAX_LENGTH = 24;
 /** The bucket every unrecognised `ref` folds into. Never a real channel. */
 export const UNKNOWN_CHANNEL = "unknown";
 
+/**
+ * Where a channel sits in the builder's picker.
+ *
+ * PRESENTATION ONLY — it never reaches a URL, never reaches analytics, and two
+ * channels in different groups are no more distinct than two in the same one.
+ * It exists because the vocabulary outgrew a flat list: sixteen options in one
+ * `<select>` is a wall to read, and the destination picker beside it already
+ * groups its options, so the two now behave the same way.
+ */
+export type ChannelGroup = "Social" | "Chat apps" | "Direct" | "Offline" | "Other";
+
 export type Channel = {
   /** The literal `ref` value, and the URL-safe id used everywhere. */
   id: string;
@@ -57,27 +68,149 @@ export type Channel = {
   label: string;
   /** What a link tagged this way is FOR — shown in the builder, not stored. */
   note: string;
+  /** Heading it sits under in the builder's picker. Never stored. */
+  group: ChannelGroup;
 };
 
 /**
- * The starting vocabulary.
+ * The vocabulary.
  *
- * A GUESS, and flagged as one in `marketing-design.md` §0 — it was written while
- * nobody was available to say which channels are actually live. Editing this
- * array is the whole cost of correcting it; no migration, no backfill, and old
- * events keep whatever they were tagged with. Removing an entry does not erase
- * history, it just moves that channel into `unknown` from then on.
+ * Started as a GUESS (`marketing-design.md` §0) and has since been widened to
+ * the places this audience actually passes a link around — the messaging apps
+ * above all, because a link into a group chat is how a game reaches a whole
+ * year group in an afternoon. Editing this array is the whole cost of changing
+ * it; no migration, no backfill, and old events keep whatever they were tagged
+ * with.
+ *
+ * TWO ASYMMETRIC EDITS, worth knowing apart before making either. ADDING an
+ * entry is free: nothing existing moves. REMOVING one is not an undo — codes
+ * are unstored (§4b), so a link already published carrying that code keeps
+ * working and simply reports as `unknown` from then on, and history keeps its
+ * raw tag either way. Prefer leaving a dead channel in the list over deleting
+ * it, unless the point IS to make its ongoing traffic visible as unrecognised.
+ *
+ * ORDER IS THE UI. The first entry is what the builder selects by default, and
+ * groups appear in the order they first occur here — so a channel added to an
+ * existing group belongs beside its siblings, not appended at the end.
+ *
+ * Every id must survive {@link normalizeRef} unchanged and stay inside
+ * {@link REF_MAX_LENGTH}; `channels.test.ts` enforces both, because an id that
+ * normalises to something else would tag links with a code the readout then
+ * files under `unknown`.
  */
 export const CHANNELS: readonly Channel[] = [
-  { id: "tiktok", label: "TikTok", note: "Bio links and video captions." },
-  { id: "youtube", label: "YouTube", note: "Video descriptions and pinned comments." },
-  { id: "discord", label: "Discord", note: "Server posts and pins." },
-  { id: "reddit", label: "Reddit", note: "Comments and subreddit posts." },
-  { id: "qr", label: "QR code", note: "Anything scanned off a screen or print." },
-  { id: "poster", label: "Poster / print", note: "Typed by hand, so keep it short." },
-  { id: "friend", label: "Word of mouth", note: "For links people are told to type." },
-  { id: "other", label: "Other", note: "Deliberate catch-all — not the same as unknown." },
+  // Social — a link published to an audience, mostly read off a screen.
+  { id: "tiktok", label: "TikTok", note: "Bio links and video captions.", group: "Social" },
+  {
+    id: "youtube",
+    label: "YouTube",
+    note: "Video descriptions and pinned comments.",
+    group: "Social",
+  },
+  {
+    id: "instagram",
+    label: "Instagram",
+    note: "Bio link, stories and DMs. No web share intent — copy the link.",
+    group: "Social",
+  },
+  { id: "twitter", label: "X / Twitter", note: "Posts and replies.", group: "Social" },
+  {
+    id: "reddit",
+    label: "Reddit",
+    note: "Comments and subreddit posts.",
+    group: "Social",
+  },
+
+  // Chat apps — a link forwarded between people. The whole point of the widening.
+  {
+    id: "whatsapp",
+    label: "WhatsApp",
+    note: "Group chats, where one paste reaches a year group.",
+    group: "Chat apps",
+  },
+  {
+    id: "snapchat",
+    label: "Snapchat",
+    note: "Snaps, stories and chat. Paste it — Snap has no verified web share.",
+    group: "Chat apps",
+  },
+  {
+    id: "discord",
+    label: "Discord",
+    note: "Server posts and pins.",
+    group: "Chat apps",
+  },
+  {
+    id: "telegram",
+    label: "Telegram",
+    note: "Channels and group chats.",
+    group: "Chat apps",
+  },
+  {
+    id: "messages",
+    label: "Texts / iMessage",
+    note: "Phone to phone, where a link is often retyped.",
+    group: "Chat apps",
+  },
+
+  // Direct — sent to named people rather than posted at an audience.
+  {
+    id: "email",
+    label: "Email",
+    note: "Anything sent as mail, to anyone.",
+    group: "Direct",
+  },
+  {
+    id: "classroom",
+    label: "Google Classroom",
+    note: "Stream posts and comments.",
+    group: "Direct",
+  },
+  {
+    id: "friend",
+    label: "Word of mouth",
+    note: "For links people are told to type.",
+    group: "Direct",
+  },
+
+  // Offline — the codes that have to survive being read off a wall.
+  {
+    id: "qr",
+    label: "QR code",
+    note: "Anything scanned off a screen or print.",
+    group: "Offline",
+  },
+  {
+    id: "poster",
+    label: "Poster / print",
+    note: "Typed by hand, so keep it short.",
+    group: "Offline",
+  },
+
+  {
+    id: "other",
+    label: "Other",
+    note: "Deliberate catch-all — not the same as unknown.",
+    group: "Other",
+  },
 ] as const;
+
+/**
+ * {@link CHANNELS} folded into its groups, in the order they first appear.
+ *
+ * Lives here rather than in the builder so the picker's shape is covered by the
+ * same node-environment test as the vocabulary itself, and so a second consumer
+ * cannot order the groups differently.
+ */
+export function channelsByGroup(): [ChannelGroup, Channel[]][] {
+  const byGroup = new Map<ChannelGroup, Channel[]>();
+  for (const channel of CHANNELS) {
+    const list = byGroup.get(channel.group);
+    if (list) list.push(channel);
+    else byGroup.set(channel.group, [channel]);
+  }
+  return [...byGroup.entries()];
+}
 
 /**
  * Normalise a raw `ref` off a URL.
