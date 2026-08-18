@@ -381,7 +381,12 @@ and §0 names what each one would change.
    the QR generator is deferred with it.
 2. **Which channels are actually live today?** The vocabulary in `channels.ts` is
    a guess — editing that array is the entire cost of correcting it, and history
-   keeps whatever it was tagged with.
+   keeps whatever it was tagged with. It has since been widened to cover the chat
+   apps this audience actually shares links in (§4b), which answers "is WhatsApp
+   taggable" but not this question: nobody has yet said which of the sixteen are
+   in use. The cheap read is the acquisition panel a month after the first tagged
+   links go out — a code with no traffic is either dead or never published, and
+   those two are worth telling apart before anything is deleted.
 3. **Is the ad strip meant to earn?** Assumed not. Panel 2 measures returning
    devices, not session depth.
 4. **Has anyone read Search Console yet?** The property is verified, so months of
