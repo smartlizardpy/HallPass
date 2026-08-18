@@ -101,6 +101,21 @@ export const CHANNELS: readonly Channel[] = [
 ] as const;
 
 /**
+ * The vocabulary as the picker wants it: groups in {@link CHANNEL_GROUPS} order,
+ * each with its channels in the order they appear in {@link CHANNELS}.
+ *
+ * A group with no channels is dropped rather than emitted empty, so deleting the
+ * last entry of a group removes its heading instead of leaving a hollow one — the
+ * cost of a group being one line of data on a channel rather than a second list
+ * to keep in sync.
+ */
+export function channelsByGroup(): [ChannelGroup, Channel[]][] {
+  return CHANNEL_GROUPS.map(
+    (group) => [group, CHANNELS.filter((c) => c.group === group)] as [ChannelGroup, Channel[]],
+  ).filter(([, items]) => items.length > 0);
+}
+
+/**
  * Normalise a raw `ref` off a URL.
  *
  * Lowercases, trims, and keeps only `[a-z0-9-]`, which is what makes
