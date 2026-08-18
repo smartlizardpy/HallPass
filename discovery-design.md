@@ -194,6 +194,27 @@ it like any other page — but the frame's content is on somebody else's origin 
 no service worker of ours can precache that. The page says so in words rather
 than showing a blank rectangle forever.
 
+### The trigger to revisit: a ShipNote API
+
+The embed is the right answer *today* and an interim one on purpose. **When
+ShipNote ships an API, the plan is to read the changelog through it instead** —
+that is the user's stated intent, recorded here so the frame is not mistaken for
+a permanent decision, and equally so that nobody replaces it before there is
+something to replace it with.
+
+Every cost above is a cost of FRAMING specifically, and an API settles all three:
+the entries become our own markup, so they are indexable and readable offline
+from the precache, and nothing depends on another origin's `frame-ancestors`.
+What it would add back is the machinery this deliberately avoids — a cached read
+with a TTL standing in for the cron this project does not have, and a key to keep
+out of the client. `WhatsNewFrame` is the only component that would change:
+`lib/whats-new` already owns the URLs, `/new` already owns the copy, the card and
+the routing, and the site chrome already points inward.
+
+Until then, nothing here is provisional in a way that costs anything. The page,
+its card, its sitemap entry and the internal "What's New" links are all correct
+under either implementation.
+
 ## 6. Deliberately absent
 
 - **A daily challenge** — offered, not chosen. §0.
