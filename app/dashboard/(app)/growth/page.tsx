@@ -29,12 +29,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
-import { resolveCategories, resolveGames } from "@/app/lib/games-store";
+import { categoryPath } from "@/app/lib/categories";
+import { resolveCategories, resolveGames, resolveTags } from "@/app/lib/games-store";
 import { getAllGameMedia, mediaPublicPath } from "@/app/lib/game-media";
 import { getAcquisition } from "@/app/lib/growth/acquisition";
 import { getContentHealth } from "@/app/lib/growth/content-health";
 import { getShareLoop } from "@/app/lib/growth/share-loop";
 import { ACQUISITION_WINDOW_DAYS } from "@/app/lib/growth/config";
+import { landingTags, tagPath } from "@/app/lib/tags";
+import { WHATS_NEW_PATH } from "@/app/lib/whats-new";
 import { DashHeader } from "../_ui/DashHeader";
 import { Section } from "../_ui/Section";
 import { Bars, type Bar } from "./_ui/Bars";
@@ -52,31 +55,52 @@ const fmt = (n: number) => nf.format(n);
 export default async function GrowthPage() {
   await requireRole("admin");
 
-  const [acquisition, shareLoop, health, games, categories, media] = await Promise.all([
-    getAcquisition(),
-    getShareLoop(),
-    getContentHealth(),
-    resolveGames(),
-    resolveCategories(),
-    getAllGameMedia(),
-  ]);
+  const [acquisition, shareLoop, health, games, categories, tags, media] =
+    await Promise.all([
+      getAcquisition(),
+      getShareLoop(),
+      getContentHealth(),
+      resolveGames(),
+      resolveCategories(),
+      resolveTags(),
+      getAllGameMedia(),
+    ]);
 
   const titleBySlug = new Map(games.map((g) => [g.slug, g.title]));
 
   /**
-   * Destinations for the builder, each carrying whether it has a real social
-   * image. A game's card falls back to its cover when it has no screenshot —
-   * that is what `generateMetadata` does — so a game always previews as
-   * something. The home grid and the category pages genuinely have no image,
-   * and the builder says so rather than drawing a card that does not exist.
+   * Destinations for the builder, each carrying the social image it actually
+   * resolves.
+   *
+   * A game's card falls back to its cover when it has no screenshot — that is
+   * what `generateMetadata` does — so a game always previews as something.
+   * EVERYTHING ELSE HERE USED TO PREVIEW AS NOTHING, and the builder said so in
+   * amber: the home grid and the category pages had no `opengraph-image`, so the
+   * links this page exists to mint arrived in chats as bare grey rectangles.
+   * They now generate one, and so do tag pages and `/new`, so each points at its
+   * own generated card — the same URL a crawler will fetch, not a stand-in.
    */
   const destinations: Destination[] = [
-    { path: "/", label: "Home — the arcade", group: "Site", socialImage: null },
+    { path: "/", label: "Home — the arcade", group: "Site", socialImage: "/opengraph-image" },
+    {
+      path: WHATS_NEW_PATH,
+      label: "What's New — the drops page",
+      group: "Site",
+      socialImage: `${WHATS_NEW_PATH}/opengraph-image`,
+    },
     ...categories.map((c) => ({
-      path: `/category/${encodeURIComponent(c.toLowerCase())}`,
+      path: categoryPath(c),
       label: `${c} games`,
       group: "Categories",
-      socialImage: null,
+      socialImage: `${categoryPath(c)}/opengraph-image`,
+    })),
+    // Only the tags that HAVE a page. `landingTags` applies the same floor the
+    // route resolves against, so the builder cannot mint a link to a 404.
+    ...landingTags(tags).map(({ tag }) => ({
+      path: tagPath(tag),
+      label: `${tag} games`,
+      group: "Tags",
+      socialImage: `${tagPath(tag)}/opengraph-image`,
     })),
     ...games.map((g) => {
       const shot = media.get(g.slug)?.[0];
