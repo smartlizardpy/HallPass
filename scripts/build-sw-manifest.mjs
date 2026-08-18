@@ -157,6 +157,13 @@ if (existsSync(prerenderManifestPath)) {
       // card into a cache shared by everybody on the browser profile, and serve
       // it under a URL that belongs to somebody else's code.
       route.startsWith("/c/") ||
+      // NO GENERATED SOCIAL CARD IS EVER PRECACHED. `/opengraph-image` and the
+      // per-category/per-tag ones under it are statically optimised, so they DO
+      // reach the prerender manifest — verified, not assumed: the home card
+      // appeared here the first build after it was added. Each is a 1200x630
+      // PNG that only a crawler ever fetches, and precaching them would spend a
+      // visitor's install budget (and their data) on images no visitor sees.
+      /\/(?:opengraph|twitter)-image(?:-[a-z0-9]+)?$/.test(route) ||
       route === "/favicon.ico"
     ) {
       continue;
