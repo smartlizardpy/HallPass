@@ -16,13 +16,19 @@
  * meeting before a post goes out rather than after, so the preview states it
  * plainly instead of drawing a plausible-looking card that does not exist.
  *
+ * THE CHANNEL PICKER IS GROUPED because the vocabulary is now sixteen entries
+ * rather than eight, and the groups come from `channels.ts` rather than being
+ * assembled here — the destination picker beside it already reads that way, and
+ * two pickers side by side that sort differently is a worse problem than a long
+ * list.
+ *
  * Clipboard failure is not an error state, for the same reason as `CopyBox`: an
  * insecure context or a denied permission just means the field stays selectable
  * and the fallback is select-all.
  */
 
 import { useMemo, useState } from "react";
-import { CHANNELS, taggedUrl } from "@/app/lib/growth/channels";
+import { CHANNELS, channelsByGroup, taggedUrl } from "@/app/lib/growth/channels";
 
 export type Destination = {
   path: string;
@@ -44,6 +50,8 @@ export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
   const destination = destinations.find((d) => d.path === path) ?? destinations[0];
   const url = useMemo(() => taggedUrl(path, channel), [path, channel]);
   const note = CHANNELS.find((c) => c.id === channel)?.note;
+
+  const channelGroups = useMemo(() => channelsByGroup(), []);
 
   const groups = useMemo(() => {
     const byGroup = new Map<string, Destination[]>();
@@ -101,10 +109,14 @@ export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
             onChange={(e) => setChannel(e.target.value)}
             className={selectClass}
           >
-            {CHANNELS.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
+            {channelGroups.map(([group, items]) => (
+              <optgroup key={group} label={group}>
+                {items.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
           {note && <p className="mt-1 text-xs text-muted">{note}</p>}
