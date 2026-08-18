@@ -177,6 +177,19 @@ export function channelLabel(bucket: string | null): string {
 }
 
 /**
+ * The builder's one-line "what a link tagged this way is FOR".
+ *
+ * Returns `null` rather than an empty string for anything outside the
+ * vocabulary, so a caller renders nothing instead of an empty line — the same
+ * absence-is-explicit rule {@link normalizeRef} follows.
+ */
+export function channelNote(id: unknown): string | null {
+  const ref = normalizeRef(id);
+  if (ref === null) return null;
+  return CHANNELS.find((c) => c.id === ref)?.note ?? null;
+}
+
+/**
  * Append `?ref=` to a site-relative path.
  *
  * Preserves an existing query string and any hash, because the destinations we

@@ -23,8 +23,8 @@
 
 import { useMemo, useState } from "react";
 import {
-  CHANNELS,
   DEFAULT_CHANNEL,
+  channelNote,
   channelsByGroup,
   taggedUrl,
 } from "@/app/lib/growth/channels";
@@ -55,7 +55,7 @@ export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
 
   const destination = destinations.find((d) => d.path === path) ?? destinations[0];
   const url = useMemo(() => taggedUrl(path, channel), [path, channel]);
-  const note = CHANNELS.find((c) => c.id === channel)?.note;
+  const note = channelNote(channel);
 
   const groups = useMemo(() => {
     const byGroup = new Map<string, Destination[]>();
