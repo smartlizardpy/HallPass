@@ -96,6 +96,7 @@ export const CHANNELS: readonly Channel[] = [
   { id: "snapchat", label: "Snapchat", note: "Chats and story links — read once, rarely typed.", group: "Messaging" },
   { id: "telegram", label: "Telegram", note: "Group chats and broadcast channels.", group: "Messaging" },
   { id: "sms", label: "Text message", note: "Sent to one person or a class group, often to be typed later.", group: "Messaging" },
+  { id: "email", label: "Email", note: "Newsletters and one-to-one mail.", group: "Messaging" },
   { id: "discord", label: "Discord", note: "Server posts and pins.", group: "Communities" },
   { id: "reddit", label: "Reddit", note: "Comments and subreddit posts.", group: "Communities" },
   { id: "qr", label: "QR code", note: "Anything scanned off a screen or print.", group: "School & word of mouth" },
