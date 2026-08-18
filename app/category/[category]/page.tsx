@@ -1,25 +1,19 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Arcade } from "../../components/Arcade";
+import {
+  categoryPath,
+  resolveCategoryFromSlug,
+  routedCategories,
+} from "../../lib/categories";
 import { resolveCategories, resolveGames } from "../../lib/games-store";
 import { SITE_URL as BASE } from "../../lib/site";
 import { getGamePlayCounts } from "../../lib/stats";
 
-const VIRTUAL = ["New", "Trending"];
-
 export async function generateStaticParams() {
-  const categories = await resolveCategories();
-  return [...VIRTUAL, ...categories].map((c) => ({
+  return routedCategories(await resolveCategories()).map((c) => ({
     category: c.toLowerCase(),
   }));
-}
-
-/** Validate a URL slug against the VIRTUAL + RESOLVED category list. */
-function resolveCategory(slug: string, categories: string[]): string | null {
-  const lower = slug.toLowerCase();
-  const virtual = VIRTUAL.find((c) => c.toLowerCase() === lower);
-  if (virtual) return virtual;
-  return categories.find((c) => c.toLowerCase() === lower) ?? null;
 }
 
 export async function generateMetadata({
@@ -28,12 +22,12 @@ export async function generateMetadata({
   params: Promise<{ category: string }>;
 }): Promise<Metadata> {
   const { category } = await params;
-  const resolved = resolveCategory(category, await resolveCategories());
+  const resolved = resolveCategoryFromSlug(category, await resolveCategories());
   if (!resolved) return { title: "Category not found" };
   const title = `${resolved} Games — Play Unblocked Free`;
   const description = `Play free unblocked ${resolved} games on HALLPASS.`;
-  // Encode to match the sitemap/nav category URLs (app/sitemap.ts).
-  const path = `/category/${encodeURIComponent(resolved.toLowerCase())}`;
+  // One encoding, shared with the sitemap, the nav and the breadcrumb below.
+  const path = categoryPath(resolved);
   return {
     title,
     description,
@@ -63,7 +57,7 @@ export default async function CategoryPage({
     resolveCategories(),
     getGamePlayCounts(),
   ]);
-  const resolved = resolveCategory(category, categories);
+  const resolved = resolveCategoryFromSlug(category, categories);
   if (!resolved) notFound();
 
   const jsonLd = {
@@ -75,7 +69,7 @@ export default async function CategoryPage({
         "@type": "ListItem",
         position: 2,
         name: `${resolved} Games`,
-        item: `${BASE}/category/${encodeURIComponent(resolved.toLowerCase())}`,
+        item: `${BASE}${categoryPath(resolved)}`,
       },
     ],
   };

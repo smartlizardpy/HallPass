@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { categoryPath, routedCategories } from "@/app/lib/categories";
 import { resolveGames, resolveCategories } from "@/app/lib/games-store";
 import { SITE_URL } from "@/app/lib/site";
 
@@ -21,16 +22,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ];
 
-  const categoryPages: MetadataRoute.Sitemap = [
-    ...categories,
-    "New",
-    "Trending",
-  ].map((cat) => ({
-    url: `${BASE}/category/${encodeURIComponent(cat.toLowerCase())}`,
-    lastModified: now,
-    changeFrequency: "weekly" as const,
-    priority: 0.8,
-  }));
+  const categoryPages: MetadataRoute.Sitemap = routedCategories(categories).map(
+    (cat) => ({
+      url: `${BASE}${categoryPath(cat)}`,
+      lastModified: now,
+      changeFrequency: "weekly" as const,
+      priority: 0.8,
+    }),
+  );
 
   // Game pages are the money pages — the ones built to rank for
   // "play <game> unblocked" — so they get the strongest signal after the home
