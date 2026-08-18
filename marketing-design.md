@@ -23,10 +23,15 @@ Each is reversible, and each names what would change it.
    dependency or a few hundred lines of encoder, and its real use case is a code
    read off a poster or a whiteboard — which is exactly the case decision 1 says
    we cannot serve yet. Deferred as a pair with the short domain, not forgotten.
+   **Since built — see §8b.** The dependency turned out to cost ~100 KB on disk
+   and nothing else, and a code that has to be made anyway was being made on
+   somebody else's website in the meantime.
 3. **The channel vocabulary starts as a guess**, in one editable file:
    `tiktok`, `youtube`, `discord`, `reddit`, `qr`, `poster`, `friend`, `other`.
    A `ref` outside the list is reported as `unknown` rather than silently
-   becoming a new channel, so a typo shows up as a typo.
+   becoming a new channel, so a typo shows up as a typo. **Since widened to
+   sixteen — see §8b.** The guess missed messaging entirely, which is where this
+   audience actually passes a link around.
 4. **We optimise for returning devices, not ad revenue.** `ad_clicked` stays on
    the existing overview; no session-depth-for-revenue panel is built. If the ad
    strip is ever meant to earn, panel 2 gains a column and this line gets edited.
@@ -221,7 +226,8 @@ all. A dashboard that requires visiting a second dashboard is not a tool.
 channel from the controlled `ref` vocabulary, get back the tagged URL, a QR code,
 and **the OG card exactly as it will render**. The preview is the point: it is how
 someone finds out the homepage has no social image before they paste it into a
-group chat, not after.
+group chat, not after. It also offers **one tap into the app you are sharing to**
+— see §8b for what those buttons are and are not.
 
 **Panel 2 — Acquisition.** First-touch source, entry pages, new vs returning
 devices, week over week. Reuses `hogql()` and the `Delta`/sparkline primitives in
@@ -239,6 +245,10 @@ needs no external API at all.
 ## 6. Deliberately absent
 
 - **Third-party ad/conversion pixels** — §2.
+- **Share SDKs.** The share buttons in §8b are plain `https://` URLs that open
+  someone else's composer. A share *SDK* — Snap Kit, a Facebook script tag —
+  would put third-party JavaScript on an admin page to save nothing, and the
+  pixel argument in §2 applies to it unchanged.
 - **Email capture / newsletter** — consent for under-13s is a legal problem we
   have deliberately avoided by making sign-in Google-only and storing no email
   for players. A capture box would reintroduce it for a channel this audience
@@ -326,6 +336,69 @@ Notes that shaped the ordering:
   `requireRole("admin")` in its own body, per the concurrency argument in
   `dashboard/(app)/page.tsx`.
 
+## 8b. The link-builder widening — a later change, recorded here
+
+The ask afterwards was "more options for the link builder, like WhatsApp". Eight
+commits, on top of the ten above.
+
+| # | Commit | Files |
+|---|---|---|
+| 1 | Widen and group the `ref` vocabulary | `app/lib/growth/channels.ts` |
+| 2 | Cover the vocabulary's invariants | `channels.test.ts` |
+| 3 | Web share intents | `app/lib/growth/share-targets.ts` |
+| 4 | Their tests | `share-targets.test.ts` |
+| 5 | QR geometry + the `uqr` dependency | `app/lib/growth/qr.ts` + test, `package.json` |
+| 6 | Group the channel picker | `_ui/LinkBuilder.tsx` |
+| 7 | The share buttons | `_ui/LinkBuilder.tsx` |
+| 8 | The QR panel | `_ui/LinkBuilder.tsx` |
+
+**Eight channels became sixteen.** The additions are `whatsapp`, `snapchat`,
+`instagram`, `twitter`, `telegram`, `messages`, `email` and `classroom` — the
+guess in §0 covered places you *publish* a link and missed every place you
+*forward* one, which for this audience is the group chat. Each entry gained a
+group, which is presentation only and never reaches a URL; sixteen options in one
+flat `<select>` is a wall to read.
+
+**The buttons tag themselves.** `share-targets.ts` builds five composer URLs
+(WhatsApp, Telegram, X, Reddit, mail), each of which tags the link with its OWN
+channel and moves the picker to match. The failure this prevents is quiet and
+certain: a person who copies a link with `tiktok` selected and pastes it into
+WhatsApp files that entire channel's traffic under the wrong heading, and nothing
+on the page looks wrong afterwards.
+
+**Four channels have buttons and the rest do not**, which is a fact worth
+recording rather than a gap to close later:
+
+- **Snapchat** — two incompatible share formats are in circulation and Snap's
+  developer documentation was not reachable from the build network to settle it.
+  A button that opens the wrong page is worse than no button.
+- **Instagram, Discord** — neither publishes a web composer URL at all.
+- **Texts / iMessage** — `sms:?body=` is real (RFC 5724) and does nothing in a
+  desktop browser, which is where this admin page is used. The native share
+  sheet covers it on a phone.
+
+The share sheet is the one control tagged from the picker rather than from
+itself, because the person chooses the app *after* pressing it. It is offered
+through `useSyncExternalStore` with a `false` server snapshot — the hydration
+contract `Sidebar.tsx` already documents — rather than an effect.
+
+**The QR code is no longer deferred.** §0 decision 2 traded it against a
+dependency; `uqr` settles that trade at ~100 KB on disk and zero dependencies of
+its own, against several hundred lines of Reed-Solomon whose failure mode is a
+code that scans on the machine it was written on. `qr.ts` returns geometry — a
+size and an SVG path — so the on-screen code and the downloadable file come from
+one description, and the component renders elements rather than injecting markup.
+
+It encodes **the link in the box**, not a private `?ref=qr` of its own. Two
+controls on one card describing two different links is how a thousand flyers end
+up carrying a tag nobody chose; the caption asks for the channel to be picked
+instead.
+
+None of this touches capture, the database or the readout. `bucketRef` folds any
+unrecognised `ref` into `unknown` exactly as before, and every channel added here
+was `unknown` until it was added — a link published with the old builder keeps
+reporting whatever it was tagged with.
+
 ## 9. Not in this plan, but next
 
 Recorded so the order is deliberate. Each of these is cheap **after** §5 exists,
@@ -349,11 +422,13 @@ These were asked before the build and answered by us when nobody was available.
 The build assumes those answers; confirming or reversing any of them is cheap,
 and §0 names what each one would change.
 
-1. **Is there a short domain?** Assumed no. `ref` codes ride the full URL, and
-   the QR generator is deferred with it.
-2. **Which channels are actually live today?** The vocabulary in `channels.ts` is
-   a guess — editing that array is the entire cost of correcting it, and history
-   keeps whatever it was tagged with.
+1. **Is there a short domain?** Assumed no. `ref` codes ride the full URL. The
+   QR generator was deferred with it and has since shipped anyway (§8b), which
+   makes a short domain a nicety rather than a blocker.
+2. **Which channels are actually live today?** Still unconfirmed. The vocabulary
+   is now sixteen entries (§8b) and still a guess — a better-informed one, but
+   editing that array remains the entire cost of correcting it, and history keeps
+   whatever it was tagged with.
 3. **Is the ad strip meant to earn?** Assumed not. Panel 2 measures returning
    devices, not session depth.
 4. **Has anyone read Search Console yet?** The property is verified, so months of
