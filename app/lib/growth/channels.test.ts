@@ -7,6 +7,7 @@ import {
   UNKNOWN_CHANNEL,
   bucketRef,
   channelLabel,
+  channelNote,
   channelsByGroup,
   isKnownChannel,
   normalizeRef,
@@ -153,5 +154,18 @@ describe("channelsByGroup", () => {
 describe("DEFAULT_CHANNEL", () => {
   it("is a channel we actually publish", () => {
     expect(isKnownChannel(DEFAULT_CHANNEL)).toBe(true);
+  });
+});
+
+describe("channelNote", () => {
+  it("returns the published note, normalising the id first", () => {
+    expect(channelNote("tiktok")).toBe("Bio links and video captions.");
+    expect(channelNote("TikTok")).toBe("Bio links and video captions.");
+  });
+
+  it("returns null outside the vocabulary, so nothing renders", () => {
+    expect(channelNote("tik-tok")).toBeNull();
+    expect(channelNote("")).toBeNull();
+    expect(channelNote(null)).toBeNull();
   });
 });
