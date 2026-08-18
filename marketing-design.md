@@ -169,6 +169,33 @@ short, human-typable codes — `?ref=tiktok`, `?ref=poster` — and treat them a
 **controlled vocabulary owned by the growth page**, not free text sprayed by
 whoever makes a link.
 
+**What is in the vocabulary**, grouped the way the builder's picker shows it:
+
+| Group | Codes |
+|---|---|
+| Social | `tiktok` · `youtube` · `instagram` · `twitter` |
+| Messaging | `whatsapp` · `snapchat` · `telegram` · `sms` · `email` |
+| Communities | `discord` · `reddit` |
+| School & word of mouth | `qr` · `poster` · `friend` · `teacher` |
+| Catch-all | `other` |
+
+The messaging block is the wide one on purpose. §2 says the audience is children
+on shared school devices, and a link reaches the next child in a group chat far
+more often than through a bio — so the chat apps are where the split between
+channels is worth having, and lumping them into `friend` would throw away the
+only distinction that matters there. `teacher` is in for the same reason from the
+other direction: a link handed out in class behaves nothing like one posted to
+TikTok, and a single bucket would average the two into a number describing
+neither.
+
+X is tagged `twitter`, not `x`. A single character is not a readable code on a
+screen, a whiteboard or in a message, and it is one keystroke away from a typo
+that lands in `unknown` — the label follows the brand, the `ref` follows §4b's
+own rule that codes must survive being read and retyped.
+
+The group is a **presentation device only**: it is never written into a URL and
+never reported, so regrouping a channel changes a dropdown and nothing else.
+
 **Phase 1 stores no codes and adds no migration.** A `ref` is a string echoed
 into the analytics event and nothing else. The trade-off, stated so it is a
 choice rather than an oversight: unstored codes cannot be revoked or renamed, and
