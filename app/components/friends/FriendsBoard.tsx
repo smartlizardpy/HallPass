@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { FriendStanding } from "../../lib/scoreboard/store";
 import Link from "next/link";
 import {
+  canChallengeFrom,
   groupFriendStandings,
   promptFor,
   shouldNameBoards,
@@ -11,6 +12,7 @@ import {
   type FriendBoardRow,
 } from "../../lib/scoreboard/friend-board";
 import { Avatar } from "./Avatar";
+import { ChallengeButton } from "../challenges/ChallengeButton";
 
 /**
  * "You and your friends" — the store page's friends leaderboard.
@@ -109,6 +111,20 @@ export function FriendsBoard({ slug }: { slug: string }) {
               <StandingRow key={row.player.id} row={row} />
             ))}
           </ol>
+
+          {/* The loop this panel exists to close: you can see who is ahead of
+              you, so you can dare them without going back into the game. The
+              picker sends YOUR best on this board — never a number you have not
+              scored — which is why it only appears on a board you are on. */}
+          {canChallengeFrom(group) && (
+            <div className="mt-2 flex justify-end">
+              <ChallengeButton
+                boardId={group.boardId}
+                gameSlug={slug}
+                title={group.title}
+              />
+            </div>
+          )}
         </div>
       ))}
 

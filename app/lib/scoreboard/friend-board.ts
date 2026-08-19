@@ -126,3 +126,17 @@ export function promptFor(
   if (rows.some((row) => !row.isYou)) return "none";
   return friendCount > 0 ? "nudge-friends" : "add-friends";
 }
+
+/**
+ * Whether the viewer may send a challenge from this board.
+ *
+ * `POST /api/v1/me/challenges` derives the score to beat as the challenger's own
+ * best on the board and refuses with `no-score` when there is none. That refusal
+ * is a correct answer to a request that should never have been sendable, so the
+ * button is not rendered unless the viewer is actually on the board — the same
+ * "unreachable by construction" argument `ChallengeButton` makes about the
+ * standings list on `/play/you`.
+ */
+export function canChallengeFrom(group: FriendBoardGroup): boolean {
+  return group.rows.some((row) => row.isYou);
+}
