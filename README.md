@@ -337,6 +337,19 @@ had never been read through together.
   `auth()` on `/game/[slug]` would make the route dynamic and drop every game
   page from the service-worker precache. It renders nothing when it has nothing
   to say (signed out, no friends, no scores, no board, offline).
+- **Ties share a position** (`=1`, competition numbering) rather than being
+  ordered by a coin flip, and the panel's grouping/numbering/prompt rules live in
+  the pure `lib/scoreboard/friend-board.ts` — the island is a fetch and markup,
+  so everything worth being wrong about is under test.
+- **A player alone on their own board** gets one line: "add a friend" when they
+  have none, "challenge one of them" when their friends simply have not played
+  this. Telling those apart costs a friend count, so the endpoint reads one
+  **only** when no friend row came back.
+- **Challenge from the board.** `ChallengeButton` (moved to
+  `components/challenges/`, now shared with `/play/you`) appears per board the
+  viewer has scored on, so the route's `no-score` refusal is unreachable from it.
+- **One event**, `friends_board_shown`, with `state` / `boards` /
+  `friends_on_board`.
 - **Not** a `?scope=friends` on `/api/v1/leaderboard/<board>`: that route is
   wildcard-CORS and credential-less because games call it cross-origin, and a
   per-viewer scope there would mean credentialed CORS for arbitrary game origins.

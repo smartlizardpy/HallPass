@@ -154,6 +154,38 @@ spliced — the load-bearing SQL rule of every store in this repo.
 5. The island.
 6. The mount + README.
 
+## 5b. What shipped, and where it differed from the plan
+
+The six steps in §5 all landed. Four things are in the build that §0–§4 did not
+describe, each because building it made the case:
+
+1. **Ties are honest.** Two friends can hold the same best, and numbering them
+   1 and 2 renders a coin flip as a fact. Equal bests now share a position and
+   print `=1` — competition numbering, the same shape as the server's rank.
+2. **The panel's logic is a pure module** (`lib/scoreboard/friend-board.ts`),
+   not the island. `vitest.config.ts` collects only `*.test.ts` and this repo has
+   no component-test harness, so logic left in the `.tsx` is logic that cannot be
+   tested at all — the same split, for the same reason, as `lib/streak/core.ts`.
+   Sixteen tests cover grouping, numbering, ties, board naming, the prompt and
+   the challenge guard.
+3. **A player alone on their own board gets one sentence.** §2b said the viewer
+   is always included; it did not ask what to show when the viewer is the *only*
+   row. Rendering nothing wastes the one moment this site can ask for a friend
+   with a straight face — they have just proved they play this game. Which
+   sentence needs a friend count to pick ("nobody added yet" vs "none of your
+   friends have scored here"), so the endpoint pays for a second query **only**
+   when no friend row came back, and never on the common path.
+4. **The board can send the dare it invites.** `ChallengeButton` moved out of
+   `app/play/you/_ui/` into `components/challenges/` and now has two callers.
+   Seeing a friend ahead of you and having to re-enter the game to challenge them
+   was the obvious missing half. It renders only on a board the viewer has scored
+   on, so the route's `no-score` refusal stays unreachable by construction.
+
+One event, `friends_board_shown`, carries `state` (race / add-friends /
+nudge-friends), `boards` and `friends_on_board` — enough to answer whether this
+panel is ever a race or always an audience of one, per the instrumentation-first
+doctrine in `marketing-design.md`.
+
 ## 6. What this does NOT solve
 
 The catalogue is still 30 games, which every design doc in this repo has now said
