@@ -93,3 +93,36 @@ function numberRows(rows: FriendStanding[]): FriendBoardRow[] {
 export function shouldNameBoards(groups: FriendBoardGroup[]): boolean {
   return groups.length > 1;
 }
+
+/**
+ * What, if anything, the panel should say to a player standing alone on it.
+ *
+ *   `none`          there is a race on — at least one row is somebody else's —
+ *                   or there is nothing at all, in which case the panel does not
+ *                   render and has nowhere to put a prompt anyway.
+ *   `add-friends`   the player has a score here and has added nobody. The one
+ *                   moment this site can ask for that with a straight face:
+ *                   they have just proved they play this game.
+ *   `nudge-friends` they have friends, and none of those friends has a score on
+ *                   this game. "Add friends" would be wrong advice; the thing to
+ *                   do is dare the friends they already have.
+ *
+ * The distinction cannot be drawn from the standings alone — both empty cases
+ * arrive as "no row but mine" — which is why the endpoint pays for a friend
+ * count in exactly that case and no other.
+ *
+ * Deliberately NOT shown to a player with no score of their own. A prompt on a
+ * page they have not played yet is an ask before a reason, and `FeaturePromo`
+ * already documents what this codebase thinks of spending an ask that way.
+ */
+export type FriendBoardPrompt = "none" | "add-friends" | "nudge-friends";
+
+export function promptFor(
+  groups: FriendBoardGroup[],
+  friendCount: number,
+): FriendBoardPrompt {
+  const rows = groups.flatMap((group) => group.rows);
+  if (rows.length === 0) return "none";
+  if (rows.some((row) => !row.isYou)) return "none";
+  return friendCount > 0 ? "nudge-friends" : "add-friends";
+}

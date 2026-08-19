@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { groupFriendStandings, shouldNameBoards } from "./friend-board";
+import { groupFriendStandings, promptFor, shouldNameBoards } from "./friend-board";
 import type { FriendStanding } from "./store";
 
 /** A standing with everything defaulted but the fields a test cares about. */
@@ -115,5 +115,33 @@ describe("shouldNameBoards", () => {
       standing({ boardId: "nv-time-attack", boardTitle: "Time Attack", best: 12 }),
     ]);
     expect(shouldNameBoards(groups)).toBe(true);
+  });
+});
+
+describe("promptFor", () => {
+  const alone = groupFriendStandings([standing({ best: 900, isYou: true })]);
+
+  it("says nothing when somebody else is on the board — that is a race already", () => {
+    const race = groupFriendStandings([
+      standing({ best: 900, isYou: true }),
+      standing({ best: 500 }),
+    ]);
+    expect(promptFor(race, 0)).toBe("none");
+    expect(promptFor(race, 12)).toBe("none");
+  });
+
+  it("asks a lone scorer with no friends to add some", () => {
+    expect(promptFor(alone, 0)).toBe("add-friends");
+  });
+
+  it("nudges a lone scorer who already has friends, rather than misadvising them", () => {
+    expect(promptFor(alone, 3)).toBe("nudge-friends");
+  });
+
+  it("says nothing at all when the player has no score of their own", () => {
+    // No rows means no panel; there is nowhere to put a prompt, and asking
+    // before they have played is an ask without a reason.
+    expect(promptFor([], 0)).toBe("none");
+    expect(promptFor([], 9)).toBe("none");
   });
 });
