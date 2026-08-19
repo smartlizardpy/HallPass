@@ -16,6 +16,7 @@ import { GameReviews } from "./reviews/GameReviews";
 import { GameTrailer } from "./GameTrailer";
 import { ChallengedHere } from "./ChallengedHere";
 import { FriendsWhoPlay } from "./friends/FriendsWhoPlay";
+import { FriendsBoard } from "./friends/FriendsBoard";
 import { ScreenshotGallery } from "./ScreenshotGallery";
 
 /**
@@ -430,6 +431,12 @@ export function GameStore({
           ))}
         </dl>
       </section>
+
+      {/* The personalised islands, in the order a player cares about them: how
+          they are doing against people they know, then against the game, then
+          what everyone thinks of it. All three decide for themselves whether to
+          render, so an empty one leaves no gap. */}
+      <FriendsBoard slug={game.slug} />
 
       {/* Renders nothing at all unless this game has achievements provisioned —
           the island decides that itself after fetching, because only the fetch
