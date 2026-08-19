@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import posthog from "posthog-js";
 import type { FriendStanding } from "../../lib/scoreboard/store";
 import Link from "next/link";
 import {
@@ -54,6 +55,8 @@ import { ChallengeButton } from "../challenges/ChallengeButton";
 export function FriendsBoard({ slug }: { slug: string }) {
   const [standings, setStandings] = useState<FriendStanding[] | null>(null);
   const [friends, setFriends] = useState(0);
+  /** The slug this mount has already reported, so a re-render cannot double-count. */
+  const seen = useRef<string | null>(null);
 
   useEffect(() => {
     // `ignore` rather than an AbortController, matching `GameAchievements`: the
@@ -83,6 +86,44 @@ export function FriendsBoard({ slug }: { slug: string }) {
       ignore = true;
     };
   }, [slug]);
+
+  /**
+   * ONE event, once the panel knows what it is. Instrumentation-first is this
+   * repo's doctrine (`marketing-design.md`): a surface nobody can measure is a
+   * surface nobody can argue about later, and the question this one has to
+   * answer is whether a friends board is ever a race or always an audience of
+   * one.
+   *
+   * ONE EVENT, NOT THREE, for the reason `GrowthTracker` gives about `days`:
+   * `state` carries which of the three panels this was — a race, a lone scorer
+   * with nobody added, or a lone scorer whose friends have not played here — so
+   * the dashboard can split it without a query unioning three event names back
+   * together.
+   *
+   * Fired once per game per mount. `seen` guards against a parent re-render
+   * counting the same panel twice; `slug` is in the dependency list so
+   * navigating to another game genuinely is another panel. The whole body is
+   * inside the effect because nothing else needs it, and a function hoisted out
+   * would have to be memoised to stay out of the dependency list.
+   */
+  useEffect(() => {
+    if (!standings || standings.length === 0) return;
+    if (seen.current === slug) return;
+    seen.current = slug;
+
+    const groups = groupFriendStandings(standings);
+    try {
+      posthog.capture("friends_board_shown", {
+        game: slug,
+        state: promptFor(groups, friends),
+        boards: groups.length,
+        // Rows that are somebody else's — the size of the race, not of the panel.
+        friends_on_board: standings.filter((row) => !row.isYou).length,
+      });
+    } catch {
+      /* Analytics must never break a store page. */
+    }
+  }, [slug, standings, friends]);
 
   if (!standings || standings.length === 0) return null;
 
