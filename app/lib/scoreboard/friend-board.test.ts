@@ -5,7 +5,12 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { groupFriendStandings, promptFor, shouldNameBoards } from "./friend-board";
+import {
+  canChallengeFrom,
+  groupFriendStandings,
+  promptFor,
+  shouldNameBoards,
+} from "./friend-board";
 import type { FriendStanding } from "./store";
 
 /** A standing with everything defaulted but the fields a test cares about. */
@@ -143,5 +148,31 @@ describe("promptFor", () => {
     // before they have played is an ask without a reason.
     expect(promptFor([], 0)).toBe("none");
     expect(promptFor([], 9)).toBe("none");
+  });
+});
+
+describe("canChallengeFrom", () => {
+  it("allows a challenge from a board the viewer is on", () => {
+    const [group] = groupFriendStandings([
+      standing({ best: 900 }),
+      standing({ best: 500, isYou: true }),
+    ]);
+    expect(canChallengeFrom(group)).toBe(true);
+  });
+
+  it("refuses one from a board the viewer has never scored on", () => {
+    // The route would answer `no-score`, correctly. A button that can only be
+    // refused should not be on screen — the same argument `ChallengeButton`
+    // makes about the standings list it was written for.
+    const [group] = groupFriendStandings([standing({ best: 900 })]);
+    expect(canChallengeFrom(group)).toBe(false);
+  });
+
+  it("is decided per board, not per panel", () => {
+    const groups = groupFriendStandings([
+      standing({ best: 900, isYou: true }),
+      standing({ boardId: "nv-time-attack", boardTitle: "Time Attack", best: 12 }),
+    ]);
+    expect(groups.map(canChallengeFrom)).toEqual([true, false]);
   });
 });
