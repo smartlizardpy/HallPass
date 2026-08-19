@@ -31,6 +31,26 @@ export const DEFAULT_LIMIT = 10;
 /** Upper bound on `?limit` so a single request cannot scan an entire board. */
 export const MAX_LIMIT = 100;
 
+/**
+ * Rows the friends panel on a game page shows PER BOARD.
+ *
+ * Not `MAX_LIMIT`, and not `MAX_FRIENDS` (500): this is a panel on a store page,
+ * read at a glance, next to the Play button. Ten rows is a class group. The cap
+ * is applied in SQL with a window function rather than in JS, so a player with
+ * hundreds of friends cannot make the query itself expensive — see
+ * `getFriendStandingsForGame`.
+ */
+export const FRIEND_BOARD_ROWS = 10;
+
+/**
+ * Boards from one game the friends panel will render.
+ *
+ * `boards.game_slug` is a link, not a key, so a game may carry several. Every
+ * game in the catalogue today has one; the cap exists so that a game which later
+ * provisions a dozen cannot turn a store page into a wall of tables.
+ */
+export const FRIEND_BOARD_MAX_BOARDS = 3;
+
 /** Shape of a sliding-window rate limit, shared by the store's `appendScore`. */
 export interface RateLimit {
   maxPerWindow: number;

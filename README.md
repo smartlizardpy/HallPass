@@ -308,6 +308,52 @@ pulled on a visit rather than pushed. Backed by `app/lib/push/` and migration
   This is also why **admin alerts for traffic spikes are deliberately not built**
   — detecting one needs a scheduler. See `notifications-design.md` §7.
 
+## Friends on the leaderboard
+
+`/game/<slug>` shows a signed-in player **where they and their friends stand on
+that game's board** — the friend set only, the viewer included, ordered by who is
+winning and annotated with each score's rank on the whole board. See
+`friends-leaderboard-design.md` for the argument and what is deliberately
+excluded.
+
+**No migration.** It reads `friendships`, `boards`, `scores` and `players`, all of
+which have existed since `001`/`007`; the feature is the `JOIN` those four tables
+had never been read through together.
+
+- **One query.** `store.getFriendStandingsForGame()` builds the friend set
+  (including the viewer), collapses each member to their personal best per board,
+  and caps rows-per-board and boards-per-game **in SQL** with window functions —
+  so a player with hundreds of friends cannot make the query expensive, and a
+  busy first board cannot starve the second. The asc/desc branch lives in `CASE`
+  expressions over the stored `boards.sort`; no fragment is ever spliced.
+- **The rank is the global one**, computed as `1 + strictly-better rows` — the
+  same semantics as `rankForScore` and `getPlayerStandings`, imprecision
+  included, so this panel and `/play/you` can never print different ranks for the
+  same person on the same board. Changing it means changing both.
+- **Anonymous scores cannot appear**, by construction: the join keys on
+  `scores.player_id`, which is NULL for a guest submission.
+- **A client island** (`components/friends/FriendsBoard.tsx`) fed by
+  `GET /api/v1/me/friends/scores?slug=<game>` — never a server read, because one
+  `auth()` on `/game/[slug]` would make the route dynamic and drop every game
+  page from the service-worker precache. It renders nothing when it has nothing
+  to say (signed out, no friends, no scores, no board, offline).
+- **Ties share a position** (`=1`, competition numbering) rather than being
+  ordered by a coin flip, and the panel's grouping/numbering/prompt rules live in
+  the pure `lib/scoreboard/friend-board.ts` — the island is a fetch and markup,
+  so everything worth being wrong about is under test.
+- **A player alone on their own board** gets one line: "add a friend" when they
+  have none, "challenge one of them" when their friends simply have not played
+  this. Telling those apart costs a friend count, so the endpoint reads one
+  **only** when no friend row came back.
+- **Challenge from the board.** `ChallengeButton` (moved to
+  `components/challenges/`, now shared with `/play/you`) appears per board the
+  viewer has scored on, so the route's `no-score` refusal is unreachable from it.
+- **One event**, `friends_board_shown`, with `state` / `boards` /
+  `friends_on_board`.
+- **Not** a `?scope=friends` on `/api/v1/leaderboard/<board>`: that route is
+  wildcard-CORS and credential-less because games call it cross-origin, and a
+  per-viewer scope there would mean credentialed CORS for arbitrary game origins.
+
 ## Offline / PWA architecture
 
 On the first visit the SW (`public/sw.js`) opens `hp-static-<BUILD_ID>` and precaches every URL in `self.__SW_PRECACHE` (generated at build time): the site shell, every prerendered route, every hashed `_next/static/{chunks,css,media}` asset, every `/game-html/<slug>/` game document (slash form — it must byte-match the iframe URL), and every file under `public/games/<slug>/` (the static twins of the Blob files, covers included). On a typical build this is ~150 URLs.

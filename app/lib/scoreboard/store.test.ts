@@ -10,6 +10,7 @@
 import { describe, it, expect } from "vitest";
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { createStore } from "./store";
+import { FRIEND_BOARD_MAX_BOARDS, FRIEND_BOARD_ROWS } from "./config";
 
 interface RecordedCall {
   text: string;
@@ -465,5 +466,101 @@ describe("getPlayerStandings", () => {
     expect(calls[0].text).toContain("WITH mine AS");
     expect(calls[0].text).toContain("JOIN boards");
     expect(calls[0].values).toEqual(["google-sub-1"]);
+  });
+});
+
+describe("getFriendStandingsForGame", () => {
+  const row = (over: Record<string, unknown> = {}) => ({
+    board_id: "neon-snake",
+    title: "Neon Snake",
+    sort: "desc",
+    score_label: "Voltage",
+    best: "9000",
+    rank: "4",
+    friend_pos: 1,
+    board_pos: 1,
+    public_id: "11111111-1111-4111-8111-111111111111",
+    username: "ates",
+    handle: "Ateş",
+    image: "https://lh3.example/a.png",
+    is_you: false,
+    ...over,
+  });
+
+  it("binds the viewer, the game and both caps, and coerces bigint egress", async () => {
+    const { sql, calls } = makeFakeSql(() => [row({ is_you: true })]);
+    const store = createStore(sql);
+    const standings = await store.getFriendStandingsForGame("google-sub-1", "neon-snake");
+
+    expect(standings).toEqual([
+      {
+        boardId: "neon-snake",
+        boardTitle: "Neon Snake",
+        scoreLabel: "Voltage",
+        sort: "desc",
+        isYou: true,
+        player: {
+          id: "11111111-1111-4111-8111-111111111111",
+          username: "ates",
+          displayName: "Ateş",
+          image: "https://lh3.example/a.png",
+        },
+        best: 9000,
+        rank: 4,
+      },
+    ]);
+    // The viewer is bound four times (pool seed, both pool branches, is_you),
+    // then the game slug, then the two caps.
+    expect(calls[0].values).toEqual([
+      "google-sub-1",
+      "google-sub-1",
+      "google-sub-1",
+      "google-sub-1",
+      "neon-snake",
+      "google-sub-1",
+      FRIEND_BOARD_ROWS,
+      FRIEND_BOARD_MAX_BOARDS,
+    ]);
+  });
+
+  it("keeps the sort branch inside CASE expressions rather than splicing a fragment", async () => {
+    const { sql, calls } = makeFakeSql(() => []);
+    const store = createStore(sql);
+    await store.getFriendStandingsForGame("google-sub-1", "neon-snake");
+
+    const text = calls[0].text;
+    // BOTH directions are present in the ONE template — which is the proof that
+    // neither was chosen by splicing a string into the SQL.
+    expect(text).toContain("CASE WHEN b.sort = 'asc' THEN min(s.score) ELSE max(s.score) END");
+    expect(text).toContain("WITH pool AS");
+    expect(text).toContain("f.status = 'accepted'");
+    // Both caps are applied in SQL, not in JS.
+    expect(text).toContain("r.friend_pos <=");
+    expect(text).toContain("r.board_pos <=");
+  });
+
+  it("falls back through handle, @username and Player for the display name", async () => {
+    const { sql } = makeFakeSql(() => [
+      row({ handle: "   ", username: "ates" }),
+      row({
+        handle: null,
+        username: null,
+        image: null,
+        public_id: "22222222-2222-4222-8222-222222222222",
+      }),
+    ]);
+    const store = createStore(sql);
+    const standings = await store.getFriendStandingsForGame("google-sub-1", "neon-snake");
+
+    expect(standings.map((s) => s.player.displayName)).toEqual(["@ates", "Player"]);
+    expect(standings[1].player.image).toBeNull();
+  });
+
+  it("honours an explicitly narrowed pair of caps", async () => {
+    const { sql, calls } = makeFakeSql(() => []);
+    const store = createStore(sql);
+    await store.getFriendStandingsForGame("google-sub-1", "neon-snake", 3, 1);
+
+    expect(calls[0].values.slice(-2)).toEqual([3, 1]);
   });
 });
