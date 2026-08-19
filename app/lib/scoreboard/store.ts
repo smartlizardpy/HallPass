@@ -29,7 +29,12 @@ import type {
   ScoreEntry,
   SortDir,
 } from "@/sdk/src/contract";
-import { DEFAULT_RATE_LIMIT, type RateLimit } from "./config";
+import {
+  DEFAULT_RATE_LIMIT,
+  FRIEND_BOARD_MAX_BOARDS,
+  FRIEND_BOARD_ROWS,
+  type RateLimit,
+} from "./config";
 
 /** The subset of the Neon query function the store needs: callable as a tag. */
 type Sql = NeonQueryFunction<false, false>;
@@ -91,6 +96,34 @@ export interface PlayerStanding {
   gameSlug: string | null;
   sort: SortDir;
   best: number;
+  rank: number;
+}
+
+/**
+ * One row of the friends panel on a game page: a member of the viewer's friend
+ * set (or the viewer) with their personal best on one of that game's boards.
+ *
+ * `player` deliberately MIRRORS `social/store.ts`'s `PublicProfile` — same four
+ * fields, same `handle || @username || "Player"` fallback — rather than importing
+ * it. This module is the scoreboard's data layer and owes nothing to the social
+ * one; the shape is repeated so `Avatar` and the rest of the friends UI can
+ * consume this row unchanged. If that fallback ever changes, it changes in both.
+ */
+export interface FriendStanding {
+  boardId: string;
+  boardTitle: string;
+  scoreLabel: string;
+  sort: SortDir;
+  /** True for the viewer's own row, which is always included. */
+  isYou: boolean;
+  player: {
+    id: string;
+    username: string | null;
+    displayName: string;
+    image: string | null;
+  };
+  best: number;
+  /** Rank on the WHOLE board — see `friends-leaderboard-design.md` §2a. */
   rank: number;
 }
 
@@ -564,6 +597,109 @@ export function createStore(sql: Sql) {
     }));
   }
 
+  /**
+   * The viewer and their friends on every board belonging to `gameSlug`, in ONE
+   * query. The whole of `friends-leaderboard-design.md` is this function.
+   *
+   * `pool` is the friend set INCLUDING the viewer (§2b: a ranking that omits you
+   * is not a race). No block filter is needed and its absence is not an
+   * oversight — blocking DELETEs the friendship row, so an accepted friendship
+   * and a block cannot coexist (`007_social_graph.sql`, restated in
+   * `social/store.ts`).
+   *
+   * `bests` collapses each pool member to their personal best per board, min for
+   * an asc board and max for a desc one. Joining on `s.player_id` is what makes
+   * ANONYMOUS scores unreachable here by construction: a guest row carries
+   * `player_id IS NULL` and belongs to nobody (§2d).
+   *
+   * `ranked` numbers the rows PER BOARD and the boards among themselves, so both
+   * caps are applied in SQL. Capping in JS instead would let one player with 500
+   * friends make the query itself expensive, and would let a busy first board
+   * consume the whole row budget before the second board was ever reached.
+   *
+   * The outer `rank` counts strictly-better PRE-EXISTING ROWS, exactly as
+   * `rankForScore` and `getPlayerStandings` do — including the inherited
+   * imprecision that a board where one player holds several better scores ranks
+   * everyone below them higher than the rendered leaderboard does. That is a
+   * deliberate choice to agree with `/play/you` rather than to be independently
+   * right; the argument is written out in §2a of the design.
+   *
+   * SQL SAFETY: the asc/desc branch lives entirely inside `CASE` expressions over
+   * the STORED `boards.sort` column. No fragment is spliced — only `playerId`,
+   * `gameSlug` and the two caps are bound. `best` and `rank` are BIGINT/count
+   * egress and funnel through `Number(...)`.
+   */
+  async function getFriendStandingsForGame(
+    playerId: string,
+    gameSlug: string,
+    rowsPerBoard: number = FRIEND_BOARD_ROWS,
+    maxBoards: number = FRIEND_BOARD_MAX_BOARDS,
+  ): Promise<FriendStanding[]> {
+    const rows = await sql`
+      WITH pool AS (
+        SELECT ${playerId}::text AS player_id
+        UNION
+        SELECT CASE WHEN f.player_a = ${playerId} THEN f.player_b ELSE f.player_a END
+        FROM friendships f
+        WHERE f.status = 'accepted'
+          AND (f.player_a = ${playerId} OR f.player_b = ${playerId})
+      ),
+      bests AS (
+        SELECT s.board_id, s.player_id,
+          CASE WHEN b.sort = 'asc' THEN min(s.score) ELSE max(s.score) END AS best
+        FROM scores s
+        JOIN boards b ON b.id = s.board_id
+        JOIN pool ON pool.player_id = s.player_id
+        WHERE b.game_slug = ${gameSlug}
+        GROUP BY s.board_id, s.player_id, b.sort
+      ),
+      ranked AS (
+        SELECT x.board_id, x.player_id, x.best,
+          row_number() OVER (
+            PARTITION BY x.board_id
+            ORDER BY
+              CASE WHEN b.sort = 'asc' THEN x.best END ASC NULLS LAST,
+              CASE WHEN b.sort = 'desc' THEN x.best END DESC NULLS LAST,
+              x.player_id ASC
+          ) AS friend_pos,
+          dense_rank() OVER (ORDER BY b.created_at ASC, b.id ASC) AS board_pos
+        FROM bests x JOIN boards b ON b.id = x.board_id
+      )
+      SELECT r.board_id, r.best, r.friend_pos, r.board_pos,
+        b.title, b.sort, b.score_label,
+        p.public_id, p.username, p.handle, p.image,
+        (r.player_id = ${playerId}) AS is_you,
+        1 + (SELECT count(*) FROM scores o
+              WHERE o.board_id = r.board_id
+                AND (CASE WHEN b.sort = 'asc' THEN o.score < r.best ELSE o.score > r.best END)
+            ) AS rank
+      FROM ranked r
+      JOIN boards b ON b.id = r.board_id
+      JOIN players p ON p.id = r.player_id
+      WHERE r.friend_pos <= ${rowsPerBoard} AND r.board_pos <= ${maxBoards}
+      ORDER BY r.board_pos ASC, r.friend_pos ASC
+    `;
+    return rows.map((row) => {
+      const handle = row.handle == null ? null : String(row.handle).trim();
+      const username = row.username == null ? null : String(row.username);
+      return {
+        boardId: String(row.board_id),
+        boardTitle: String(row.title),
+        scoreLabel: String(row.score_label),
+        sort: row.sort === "asc" ? ("asc" as SortDir) : ("desc" as SortDir),
+        isYou: Boolean(row.is_you),
+        player: {
+          id: String(row.public_id),
+          username,
+          displayName: handle || (username ? `@${username}` : "Player"),
+          image: row.image == null ? null : String(row.image),
+        },
+        best: Number(row.best),
+        rank: Number(row.rank),
+      };
+    });
+  }
+
   return {
     createBoard,
     getBoard,
@@ -581,6 +717,7 @@ export function createStore(sql: Sql) {
     listBoardsForGame,
     setBoardGame,
     getPlayerStandings,
+    getFriendStandingsForGame,
   };
 }
 
