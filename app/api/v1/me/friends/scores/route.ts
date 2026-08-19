@@ -24,11 +24,20 @@
  * panel rather than a 500, because the surface it feeds renders nothing when it
  * has nothing to say — the failure mode and the ordinary empty case are the same
  * shape on purpose.
+ *
+ * ── `friends` IS COUNTED ONLY WHEN IT CAN CHANGE THE ANSWER ────────────────
+ * "Nobody you know has scored here" and "you have not added anybody yet" are
+ * different sentences and want different buttons, and the standings alone cannot
+ * tell them apart: both come back as a response holding at most the caller's own
+ * row. So a second query resolves it — but ONLY in that case. Once a single
+ * friend row exists the panel is a race and no prompt is rendered, which makes
+ * the count unreadable, and the common path stays at one round trip.
  */
 
 import { isMissingColumnError, isUnconfiguredDbError } from "@/app/lib/db";
 import { store } from "@/app/lib/scoreboard";
 import type { FriendStanding } from "@/app/lib/scoreboard/store";
+import { social } from "@/app/lib/social";
 import {
   NO_STORE,
   credentialedOptions,
@@ -41,17 +50,27 @@ const SLUG = /^[a-z0-9][a-z0-9-]*$/;
 export async function GET(req: Request): Promise<Response> {
   const playerId = await currentPlayerId();
   if (!playerId) {
-    return Response.json({ signedIn: false, standings: [] }, { headers: NO_STORE });
+    return Response.json(
+      { signedIn: false, standings: [], friends: 0 },
+      { headers: NO_STORE },
+    );
   }
 
   const slug = (new URL(req.url).searchParams.get("slug") ?? "").trim();
   if (!SLUG.test(slug)) {
-    return Response.json({ signedIn: true, standings: [] }, { headers: NO_STORE });
+    return Response.json(
+      { signedIn: true, standings: [], friends: 0 },
+      { headers: NO_STORE },
+    );
   }
 
   let standings: FriendStanding[] = [];
+  let friends = 0;
   try {
     standings = await store.getFriendStandingsForGame(playerId, slug);
+    if (!standings.some((row) => !row.isYou)) {
+      friends = (await social.counts(playerId)).friends;
+    }
   } catch (error) {
     // A database that is not configured, or a column a pending migration has not
     // added yet, is not worth a log line on every request — the same triage
@@ -61,7 +80,7 @@ export async function GET(req: Request): Promise<Response> {
     }
   }
 
-  return Response.json({ signedIn: true, standings }, { headers: NO_STORE });
+  return Response.json({ signedIn: true, standings, friends }, { headers: NO_STORE });
 }
 
 export async function OPTIONS(): Promise<Response> {
