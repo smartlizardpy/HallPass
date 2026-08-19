@@ -28,7 +28,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BadgeShelf } from "@/app/components/BadgeShelf";
-import { ChallengeButton } from "./_ui/ChallengeButton";
+import { ChallengeButton } from "@/app/components/challenges/ChallengeButton";
 import { ChallengeLinks } from "./_ui/ChallengeLinks";
 import { ShareChallenge } from "@/app/components/challenges/ShareChallenge";
 import { earnedBadges, lockedBadges } from "@/app/lib/badges";

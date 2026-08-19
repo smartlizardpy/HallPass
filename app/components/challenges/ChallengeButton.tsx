@@ -1,13 +1,18 @@
 "use client";
 
 /**
- * HallPass — "Challenge" on a row of your own leaderboards.
+ * HallPass — "Challenge", on any surface that already knows a board.
  *
  * Until now the ONLY way to send a challenge was from inside a game, through
  * `HallPass.challenge()` and the picker at `/embed/challenge`. That meant a
  * score you set last week was inert: to dare anybody to beat it you had to go
- * and play the game again. This is the same picker, reached from the standings
- * list on `/play/you`, where the score already is.
+ * and play the game again. This is the same picker, reached from wherever the
+ * score already is.
+ *
+ * It lives in `components/challenges/` rather than under one page's `_ui/`
+ * because it now has TWO callers with nothing else in common: the standings list
+ * on `/play/you`, and the friends panel on `/game/<slug>`. Both know a board, a
+ * game and a title, which is the whole of its input.
  *
  * ── IT PASSES A BOARD, AND THAT IS WHY IT NEEDS NOTHING ELSE ───────────────
  * `POST /api/v1/me/challenges` derives the number to beat in SQL as the
@@ -46,7 +51,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChallengePicker } from "@/app/components/challenges/ChallengePicker";
+import { ChallengePicker } from "./ChallengePicker";
 import { acquireOverlayLock } from "@/app/lib/overlay-lock";
 import { CHALLENGE_REFUSAL_TEXT } from "@/app/lib/challenges/copy";
 import type { PublicProfile } from "@/app/lib/social/store";
