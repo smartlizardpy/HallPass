@@ -136,16 +136,34 @@ export function FriendsBoard({ slug }: { slug: string }) {
 
   return (
     <section className="mt-5 max-w-3xl rounded-3xl bg-white p-5 sm:p-6">
-      <h2 className="text-lg font-black tracking-tight text-zinc-900">
-        You and your friends
-      </h2>
+      {/* THE SCORE LABEL IS A COLUMN HEADING, NOT A ROW FIELD. It is the same
+          word on every row of a board — "Voltage", "Seconds" — and repeating it
+          per row bought nothing except four crowded elements on a 320px phone,
+          where the name then truncated to make room for a word the reader had
+          already read. With one board it belongs beside the section heading;
+          with several it belongs beside each board's own. */}
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-lg font-black tracking-tight text-zinc-900">
+          You and your friends
+        </h2>
+        {!named && (
+          <span className="shrink-0 text-[10px] font-black uppercase tracking-wide text-muted">
+            {groups[0].rows[0].scoreLabel}
+          </span>
+        )}
+      </div>
 
       {groups.map((group) => (
         <div key={group.boardId} className="mt-4 first:mt-3">
           {named && (
-            <h3 className="mb-2 text-[11px] font-black uppercase tracking-wider text-muted">
-              {group.title}
-            </h3>
+            <div className="mb-2 flex items-baseline justify-between gap-3">
+              <h3 className="min-w-0 truncate text-[11px] font-black uppercase tracking-wider text-muted">
+                {group.title}
+              </h3>
+              <span className="shrink-0 text-[10px] font-black uppercase tracking-wide text-muted">
+                {group.rows[0].scoreLabel}
+              </span>
+            </div>
           )}
           <ol className="space-y-2">
             {group.rows.map((row) => (
@@ -225,16 +243,14 @@ function StandingRow({ row }: { row: FriendBoardRow }) {
           </span>
         )}
       </span>
-      <span className="shrink-0 text-right">
-        <span className="block text-[13px] font-black tabular-nums text-zinc-900">
-          {row.best.toLocaleString()}
-        </span>
-        {/* The board's own word for what the number is — "Voltage", "Seconds" —
-            not a generic "score", because the game chose it and the leaderboard
-            inside the game already uses it. */}
-        <span className="block text-[10px] font-black uppercase tracking-wide text-muted">
-          {row.scoreLabel}
-        </span>
+      {/* `aria-label` carries the unit the column heading shows visually, so a
+          screen reader hears "9,000 Voltage" on the row rather than a bare
+          number whose heading is three elements away. */}
+      <span
+        aria-label={`${row.best.toLocaleString()} ${row.scoreLabel}`}
+        className="shrink-0 text-[13px] font-black tabular-nums text-zinc-900"
+      >
+        {row.best.toLocaleString()}
       </span>
       <span
         className="shrink-0 rounded-full bg-white px-2 py-1 text-[11px] font-black tabular-nums text-zinc-700"
