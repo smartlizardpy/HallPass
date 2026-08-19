@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from "react";
 import type { FriendStanding } from "../../lib/scoreboard/store";
+import {
+  groupFriendStandings,
+  shouldNameBoards,
+  type FriendBoardRow,
+} from "../../lib/scoreboard/friend-board";
 import { Avatar } from "./Avatar";
 
 /**
@@ -63,20 +68,11 @@ export function FriendsBoard({ slug }: { slug: string }) {
 
   if (!standings || standings.length === 0) return null;
 
-  // Group in render order. The endpoint already returns boards in their stable
-  // `created_at ASC, id ASC` order with each board's rows together, so a Map
-  // keyed by board preserves exactly that without a second sort.
-  const boards = new Map<string, FriendStanding[]>();
-  for (const row of standings) {
-    const rows = boards.get(row.boardId);
-    if (rows) rows.push(row);
-    else boards.set(row.boardId, [row]);
-  }
-
-  // A single board's title is nearly always the game's own name, so printing it
-  // under a heading that already names the game says the same word twice. It
-  // earns its place only when there is more than one board to tell apart.
-  const named = boards.size > 1;
+  // Grouping, competition numbering and tie detection all live in the pure
+  // model — see `lib/scoreboard/friend-board.ts`. Nothing about them is decided
+  // here, so all of it is under test.
+  const groups = groupFriendStandings(standings);
+  const named = shouldNameBoards(groups);
 
   return (
     <section className="mt-5 max-w-3xl rounded-3xl bg-white p-5 sm:p-6">
@@ -84,16 +80,16 @@ export function FriendsBoard({ slug }: { slug: string }) {
         You and your friends
       </h2>
 
-      {[...boards.entries()].map(([boardId, rows]) => (
-        <div key={boardId} className="mt-4 first:mt-3">
+      {groups.map((group) => (
+        <div key={group.boardId} className="mt-4 first:mt-3">
           {named && (
             <h3 className="mb-2 text-[11px] font-black uppercase tracking-wider text-muted">
-              {rows[0].boardTitle}
+              {group.title}
             </h3>
           )}
           <ol className="space-y-2">
-            {rows.map((row, index) => (
-              <StandingRow key={row.player.id} row={row} position={index + 1} />
+            {group.rows.map((row) => (
+              <StandingRow key={row.player.id} row={row} />
             ))}
           </ol>
         </div>
@@ -103,15 +99,18 @@ export function FriendsBoard({ slug }: { slug: string }) {
 }
 
 /** One player's row: their place among friends, who they are, and their best. */
-function StandingRow({ row, position }: { row: FriendStanding; position: number }) {
+function StandingRow({ row }: { row: FriendBoardRow }) {
   return (
     <li
       className={`flex items-center gap-3 rounded-2xl px-3 py-2 ${
         row.isYou ? "bg-brand-50" : "bg-surface-2"
       }`}
     >
-      <span className="w-5 shrink-0 text-center text-[13px] font-black text-muted">
-        {position}
+      {/* "=1" on a tie. Two friends holding the same best have no order between
+          them, and numbering them 1 and 2 would render a coin flip as a fact. */}
+      <span className="w-6 shrink-0 text-center text-[13px] font-black tabular-nums text-muted">
+        {row.tied ? "=" : ""}
+        {row.position}
       </span>
       <Avatar person={row.player} size={28} />
       <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-zinc-700">
