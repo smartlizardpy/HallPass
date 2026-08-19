@@ -2,9 +2,12 @@
 
 import { useEffect, useState } from "react";
 import type { FriendStanding } from "../../lib/scoreboard/store";
+import Link from "next/link";
 import {
   groupFriendStandings,
+  promptFor,
   shouldNameBoards,
+  type FriendBoardPrompt,
   type FriendBoardRow,
 } from "../../lib/scoreboard/friend-board";
 import { Avatar } from "./Avatar";
@@ -20,10 +23,16 @@ import { Avatar } from "./Avatar";
  *
  * IT DECIDES FOR ITSELF WHETHER TO EXIST, like the achievements shelf and the
  * friends chip beside it. There is no heading until there are rows, because the
- * cases where it has nothing to say are the COMMON ones — signed out, no friends
- * added, nobody in the friend set has scored on this game, the game has no board
- * at all — and a "You and your friends" heading over an empty box on a page
- * whose job is to get somebody playing is worse than silence.
+ * cases where it has nothing to say are the COMMON ones — signed out, nobody in
+ * the friend set has scored on this game, the game has no board at all — and a
+ * "You and your friends" heading over an empty box on a page whose job is to get
+ * somebody playing is worse than silence.
+ *
+ * The ONE empty case that does render is a player alone on their own board: they
+ * have a score, so the panel exists, and {@link Prompt} spends that moment on the
+ * only ask this site can make honestly there. Which sentence — and why a player
+ * with no score of their own never sees either — is decided in
+ * `lib/scoreboard/friend-board.ts`, not here.
  *
  * NO SPINNER, NO OFFLINE BANNER, for the reason the sibling islands give: the
  * service worker never intercepts `/api/`, so offline this fetch simply rejects,
@@ -42,6 +51,7 @@ import { Avatar } from "./Avatar";
  */
 export function FriendsBoard({ slug }: { slug: string }) {
   const [standings, setStandings] = useState<FriendStanding[] | null>(null);
+  const [friends, setFriends] = useState(0);
 
   useEffect(() => {
     // `ignore` rather than an AbortController, matching `GameAchievements`: the
@@ -55,8 +65,14 @@ export function FriendsBoard({ slug }: { slug: string }) {
           { credentials: "include" },
         );
         if (!res.ok || ignore) return;
-        const body = (await res.json()) as { standings?: FriendStanding[] };
-        if (!ignore) setStandings(body.standings ?? []);
+        const body = (await res.json()) as {
+          standings?: FriendStanding[];
+          friends?: number;
+        };
+        if (!ignore) {
+          setStandings(body.standings ?? []);
+          setFriends(body.friends ?? 0);
+        }
       } catch {
         // Offline, or the API is down. Stay null — see the module docblock.
       }
@@ -73,6 +89,7 @@ export function FriendsBoard({ slug }: { slug: string }) {
   // here, so all of it is under test.
   const groups = groupFriendStandings(standings);
   const named = shouldNameBoards(groups);
+  const prompt = promptFor(groups, friends);
 
   return (
     <section className="mt-5 max-w-3xl rounded-3xl bg-white p-5 sm:p-6">
@@ -94,7 +111,37 @@ export function FriendsBoard({ slug }: { slug: string }) {
           </ol>
         </div>
       ))}
+
+      <Prompt prompt={prompt} />
     </section>
+  );
+}
+
+/**
+ * The one line under a board nobody else is on yet.
+ *
+ * It is a LINK, not a button with a dialog: both destinations already exist and
+ * do the job properly, and a second friend-adding surface would be a second
+ * place for the friend-code rules to be implemented. Renders nothing for
+ * `none`, which is the case on every board that has a race on it.
+ */
+function Prompt({ prompt }: { prompt: FriendBoardPrompt }) {
+  if (prompt === "none") return null;
+
+  return (
+    <Link
+      href="/play/you/friends"
+      className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-surface-2 px-4 py-3 text-[13px] font-bold text-zinc-700 transition hover:bg-brand-50"
+    >
+      <span className="min-w-0">
+        {prompt === "add-friends"
+          ? "Nobody to race yet — add a friend and this becomes a leaderboard."
+          : "None of your friends have scored here. Challenge one of them."}
+      </span>
+      <span aria-hidden className="shrink-0 font-black text-brand">
+        →
+      </span>
+    </Link>
   );
 }
 
