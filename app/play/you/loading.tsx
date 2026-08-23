@@ -12,8 +12,13 @@
  * with loading.js".)
  *
  * So this does nothing for a cold arrival at `/play/you` — that wait belongs to
- * the layout. What it covers is the case that actually happens repeatedly:
- * moving BETWEEN the three tabs. Layouts do not re-render on navigation, so the
+ * the layout, WHICH NOW ANSWERS IT ITSELF: the layout streams its own skeleton
+ * from behind a Suspense boundary, so tapping the You tab from the arcade shows
+ * bones rather than a lit-up tab and a blank pause. See `layout.tsx` and
+ * `_ui/YouSkeleton.tsx`.
+ *
+ * What THIS covers is the other case, the one that happens repeatedly: moving
+ * BETWEEN the three tabs. Layouts do not re-render on navigation, so the
  * identity header and the tab strip stay on screen and interactive while only
  * the tab body is re-fetched — and the standings, badge and role queries behind
  * a tab body are exactly the sort of wait that otherwise leaves a tap looking
@@ -22,42 +27,25 @@
  * It therefore renders ONLY the body shell. No wordmark, no heading, no avatar:
  * those are the layout's, they are already on screen, and drawing skeleton
  * versions of them here would flash a placeholder over content that never went
- * away. The shapes mirror the tab bodies so the swap is a fill-in, not a jump.
+ * away. The shapes mirror the tab bodies so the swap is a fill-in, not a jump —
+ * and they are the SAME shapes the layout's own fallback uses, because two
+ * hand-maintained skeletons of one page drift.
  */
+import { YouBodySkeleton } from "./_ui/YouSkeleton";
+
 export default function Loading() {
   return (
     <>
-      {/* The shapes below are `aria-hidden` — they are decoration, and reading
-          out a row of empty boxes helps nobody. But hiding them and nothing else
-          made a tab switch announce NOTHING at all: the layout does not
-          re-render, so to a screen-reader user the tap simply produced silence
-          until the new body arrived. This live region is the announcement. */}
+      {/* The shapes themselves are `aria-hidden` — they are decoration, and
+          reading out a row of empty boxes helps nobody. But hiding them and
+          nothing else made a tab switch announce NOTHING at all: the layout does
+          not re-render, so to a screen-reader user the tap simply produced
+          silence until the new body arrived. This live region is the
+          announcement. */}
       <p role="status" className="sr-only">
         Loading…
       </p>
-      <div className="space-y-5 motion-safe:animate-pulse" aria-hidden>
-        <div className="rounded-xl border border-border bg-surface p-6">
-          <div className="h-4 w-40 rounded bg-surface-2" />
-          <div className="mt-3 h-3 w-56 rounded bg-surface-2" />
-        </div>
-
-        <div className="rounded-xl border border-border bg-surface p-6">
-          <div className="h-4 w-32 rounded bg-surface-2" />
-          <div className="mt-4 flex flex-wrap gap-2">
-            <div className="h-7 w-24 rounded-full bg-surface-2" />
-            <div className="h-7 w-28 rounded-full bg-surface-2" />
-            <div className="h-7 w-20 rounded-full bg-surface-2" />
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-border bg-surface p-6">
-          <div className="h-4 w-36 rounded bg-surface-2" />
-          <div className="mt-4 space-y-2">
-            <div className="h-14 w-full rounded-lg bg-surface-2" />
-            <div className="h-14 w-full rounded-lg bg-surface-2" />
-          </div>
-        </div>
-      </div>
+      <YouBodySkeleton />
     </>
   );
 }
