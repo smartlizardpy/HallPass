@@ -36,8 +36,14 @@
  * navigations into `hp-runtime`, which is shared by everyone using the browser
  * profile and survives deploys — so a cached page whose HTML contains one
  * person's email is that person's email shown to the next pupil on a shared
- * school machine. `/play/account` was in the never-intercept list for exactly
+ * school machine. `/play/account` was in the never-cached list for exactly
  * this reason and `/play/you` must be too.
+ *
+ * The SW does now ANSWER a failed navigation here, with the precached
+ * `/offline/you` card — a static document that knows nothing about anybody. That
+ * is the opposite of caching this page and does not weaken the rule: nothing
+ * from this response is ever written to, or read back from, a cache. See
+ * `privatePageFallback` in `public/sw.js`.
  *
  * NOTE FOR THE FRIENDS TAB. `/play/friends` used to argue, correctly, that it
  * could be precached BECAUSE its server shell read no session and its HTML
@@ -56,6 +62,7 @@
  * Google serves them.
  */
 
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { BackButton } from "@/app/components/BackButton";
 import { Wordmark } from "@/app/components/Wordmark";
@@ -63,6 +70,7 @@ import { earnedBadges } from "@/app/lib/badges";
 import { effectiveHandle } from "@/app/lib/players";
 import { readBadgeStats, readOwnSocial, readPlayer } from "./_data";
 import { NotSignedInCard } from "./_ui/NotSignedInCard";
+import { YouPageSkeleton } from "./_ui/YouSkeleton";
 import { YouTabs } from "./_ui/YouTabs";
 
 /**
@@ -109,11 +117,82 @@ function plural(count: number, word: string): string {
   return `${count} ${word}${count === 1 ? "" : "s"}`;
 }
 
-export default async function YouLayout({
+/**
+ * The chrome that is on screen whether or not the queries below have answered:
+ * the way out, the wordmark, the heading. Shared by the real layout and by the
+ * skeleton it streams in front of it, so the two cannot disagree about the frame
+ * and make the swap a jump.
+ */
+function YouFrame({ children }: { children: React.ReactNode }) {
+  return (
+    <main className="min-h-screen bg-background px-6 py-10">
+      <div className="mx-auto max-w-2xl space-y-5">
+        {/* No header and no sidebar on these pages, so without this there is no
+            way out except the browser's own back button — which on an installed
+            PWA is not always on screen. */}
+        <BackButton />
+
+        <div className="text-center">
+          <Wordmark size="text-3xl" dotClass="h-2 w-2" />
+          <h1 className="mt-3 text-2xl font-black tracking-tight">Your profile</h1>
+        </div>
+
+        {children}
+      </div>
+    </main>
+  );
+}
+
+/**
+ * THE LAYOUT IS A SUSPENSE BOUNDARY, and the gate below it is unchanged.
+ *
+ * WHY. This layout awaits `auth()` and two Neon queries before it can render a
+ * single pixel, and `loading.tsx` cannot cover that: it is nested INSIDE this
+ * layout, so without Cache Components a navigation here simply BLOCKS until all
+ * of it has finished (`03-file-conventions/loading.md`, "Good to know"). On a
+ * school wifi that is seconds in which tapping the You tab produces a lit-up tab
+ * and nothing else — the tab bar looks broken, and the one thing the player can
+ * tell is that their tap did nothing. Moving the awaits into a child of a
+ * `<Suspense>` lets the server flush this frame and a skeleton immediately and
+ * stream the real thing in behind it.
+ *
+ * WHY `children` STAYS INSIDE `YouShell`. The owner gate is the reason this
+ * layout exists as a single check rather than three that can drift, and it works
+ * because a page under it is never RENDERED for a signed-out visitor — React
+ * does not render an element its parent leaves out of the output. Hoisting
+ * `children` up here to render it beside the boundary would hand every tab page
+ * to a signed-out visitor and make the gate three checks again. It is passed
+ * down instead, so the shape of the gate is exactly what it was.
+ *
+ * The offline case is NOT this boundary's problem: with no network there is no
+ * response to stream at all, and `public/sw.js` answers that navigation with the
+ * precached `/offline/you` card instead. Slow and absent are different failures
+ * and get different answers.
+ */
+export default function YouLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  return (
+    <Suspense
+      fallback={
+        <YouFrame>
+          {/* The shapes are `aria-hidden`; this is what a screen reader hears
+              while they are up. Same pairing as `loading.tsx`. */}
+          <p role="status" className="sr-only">
+            Loading your profile…
+          </p>
+          <YouPageSkeleton />
+        </YouFrame>
+      }
+    >
+      <YouShell>{children}</YouShell>
+    </Suspense>
+  );
+}
+
+async function YouShell({ children }: { children: React.ReactNode }) {
   // Both of the ways identity can be missing — no session, or a session whose
   // player row has vanished — land on the same card. See `NotSignedInCard`.
   const player = await readPlayer();
@@ -139,72 +218,60 @@ export default async function YouLayout({
   if (memberSince) facts.push(`Member since ${memberSince}`);
 
   return (
-    <main className="min-h-screen bg-background px-6 py-10">
-      <div className="mx-auto max-w-2xl space-y-5">
-        {/* No header and no sidebar on these pages, so without this there is no
-            way out except the browser's own back button — which on an installed
-            PWA is not always on screen. */}
-        <BackButton />
-
-        <div className="text-center">
-          <Wordmark size="text-3xl" dotClass="h-2 w-2" />
-          <h1 className="mt-3 text-2xl font-black tracking-tight">Your profile</h1>
-        </div>
-
-        {/* IDENTITY — persistent across all three tabs. */}
-        <section className="rounded-xl border border-border bg-surface p-6">
-          <div className="flex items-center gap-4">
-            {player.image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={player.image}
-                alt=""
-                width={64}
-                height={64}
-                referrerPolicy="no-referrer"
-                className="h-16 w-16 shrink-0 rounded-full border border-border object-cover"
-              />
-            ) : (
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 text-2xl font-black text-muted">
-                {display.slice(0, 1).toUpperCase()}
-              </div>
-            )}
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="truncate text-xl font-black text-foreground">
-                  {display}
-                </span>
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand">
-                  Verified player
-                </span>
-              </div>
-              {/* The @username sits beside the display name on every surface,
-                  because display handles are not unique — without it, copying a
-                  friend's handle is a two-second impersonation. */}
-              {own?.username && (
-                <p className="truncate text-sm font-bold text-muted">
-                  @{own.username}
-                </p>
-              )}
-              {facts.length > 0 && (
-                <p className="mt-1.5 text-xs text-muted">{facts.join(" · ")}</p>
-              )}
-              {/* THE EMAIL IS NOT HERE. It used to be, and that was a quiet
-                  widening: this header is persistent, so putting it here put the
-                  address on screen for the whole time somebody browsed their
-                  badges or answered a friend request — on the shared school
-                  machine this codebase reasons about everywhere else. It lives on
-                  the Settings tab now, where account identity is the subject and
-                  a player is deliberately looking at it. Owner-gating was never
-                  the problem; dwell time was. */}
+    <YouFrame>
+      {/* IDENTITY — persistent across all three tabs. */}
+      <section className="rounded-xl border border-border bg-surface p-6">
+        <div className="flex items-center gap-4">
+          {player.image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={player.image}
+              alt=""
+              width={64}
+              height={64}
+              referrerPolicy="no-referrer"
+              className="h-16 w-16 shrink-0 rounded-full border border-border object-cover"
+            />
+          ) : (
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 text-2xl font-black text-muted">
+              {display.slice(0, 1).toUpperCase()}
             </div>
+          )}
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="truncate text-xl font-black text-foreground">
+                {display}
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand">
+                Verified player
+              </span>
+            </div>
+            {/* The @username sits beside the display name on every surface,
+                because display handles are not unique — without it, copying a
+                friend's handle is a two-second impersonation. */}
+            {own?.username && (
+              <p className="truncate text-sm font-bold text-muted">
+                @{own.username}
+              </p>
+            )}
+            {facts.length > 0 && (
+              <p className="mt-1.5 text-xs text-muted">{facts.join(" · ")}</p>
+            )}
+            {/* THE EMAIL IS NOT HERE. It used to be, and that was a quiet
+                widening: this header is persistent, so putting it here put the
+                address on screen for the whole time somebody browsed their
+                badges or answered a friend request — on the shared school
+                machine this codebase reasons about everywhere else. It lives on
+                the Settings tab now, where account identity is the subject and
+                a player is deliberately looking at it. Owner-gating was never
+                the problem; dwell time was. */}
           </div>
-        </section>
+        </div>
+      </section>
 
-        <YouTabs />
+      <YouTabs />
 
-        {children}
-      </div>
-    </main>
+      {children}
+    </YouFrame>
   );
 }
