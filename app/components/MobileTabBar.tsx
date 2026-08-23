@@ -48,6 +48,28 @@
  *      the order are the table's, and an entry with no override wears the table's
  *      label and glyph.
  *
+ * THE WAIT BETWEEN THE TAP AND THE PAGE — the bar's one piece of behaviour that
+ * is not navigation. You and Friends point into `/play/you`, which is dynamic
+ * AND uncacheable (`public/sw.js` refuses to store it: `hp-runtime` is shared by
+ * everyone on the browser profile), so a tap on either cannot be answered from
+ * anything already on the device — it has to go to the server, and until the
+ * first byte arrives the only thing that changes on screen is the tab turning
+ * purple. On a school wifi that is several seconds of an app that looks like it
+ * ignored you.
+ *
+ * Neither of the server-side answers can cover that window, because both live on
+ * the far side of it: the `<Suspense>` bones in `app/play/you/layout.tsx` arrive
+ * at the speed of the first byte, and the `/offline/you` card needs a navigation
+ * to fail first AND a service worker recent enough to know about it — an
+ * installed PWA keeps whichever one it last installed until it is relaunched
+ * with a connection, so on a phone that card can be a deploy behind the browser
+ * tab where it works. This bar is the only surface that can answer instantly, so
+ * it does: a skeleton at 150ms, the same offline card at once when the device
+ * knows it has no network, and a "still loading" notice when the wait passes
+ * five seconds. `app/lib/tab-gate.ts` holds the rule and `offline/TabWaitOverlay`
+ * draws it; which tabs are covered is DERIVED from the href (`needsNetwork`), so
+ * it cannot drift from what the service worker will and will not cache.
+ *
  * ADMIN. There is deliberately no admin tab. The dashboard is reachable from
  * inside the You tab (the `/play/you` section carries a role-gated Dashboard
  * link), so the bar never changes shape based on who is signed in.
@@ -63,11 +85,19 @@
  * covers it.
  */
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { useDevicePlatform } from "../lib/use-device-platform";
+import { useOnline } from "../lib/use-online";
 import { clearBottomChrome, publishBottomChrome } from "../lib/bottom-chrome";
+import {
+  SKELETON_DELAY_MS,
+  SLOW_NOTICE_MS,
+  needsNetwork,
+  tabGateView,
+} from "../lib/tab-gate";
+import { TabWaitOverlay } from "./offline/TabWaitOverlay";
 import { PRIMARY_NAV, normalizePath } from "./primary-nav";
 
 /** Routes that are their own full-screen world — no player tab bar over them. */
@@ -107,6 +137,43 @@ const PHONE_FACE: Record<string, { label?: string; icon?: React.ReactNode }> = {
   },
 };
 
+/**
+ * What the offline card calls a destination, keyed by href.
+ *
+ * The card says "connect to wifi to open ___", which wants a noun phrase rather
+ * than a tab label: "your You page" reads, "You" does not. Only the gated tabs
+ * need an entry — anything missing falls back to the tab's own label, which is
+ * the correct answer for a tab that never shows the card anyway.
+ */
+const OFFLINE_DESTINATION: Record<string, string> = {
+  "/play/you": "your You page",
+  "/play/you/friends": "your friends list",
+};
+
+function destinationName(href: string, label: string): string {
+  return OFFLINE_DESTINATION[href] ?? `the ${label} tab`;
+}
+
+/**
+ * One tap on a gated tab: where it was going, what to call that, and — the field
+ * everything hangs off — the page it was made FROM.
+ *
+ * `from` is what makes the overlay self-clearing. While the router is still on
+ * that page nothing has happened yet; the instant `usePathname()` reports
+ * anything else, the navigation has committed (or been abandoned for another
+ * one) and the journey is over. No timer, no completion callback, no state to
+ * unwind — and no way to leave a skeleton on top of a page that has arrived.
+ */
+type Journey = {
+  href: string;
+  from: string;
+  destination: string;
+  /** Does this destination need the network — i.e. is the overlay involved? */
+  gated: boolean;
+};
+
+const journeyId = (journey: Journey) => `${journey.from}>${journey.href}`;
+
 export function MobileTabBar() {
   const device = useDevicePlatform();
   const isMobile = device === "mobile";
@@ -120,6 +187,82 @@ export function MobileTabBar() {
 
   const hidden =
     !isMobile || HIDDEN_PREFIXES.some((p) => pathname.startsWith(p));
+
+  // ── THE WAIT BETWEEN THE TAP AND THE PAGE ─────────────────────────────────
+  //
+  // Two taps to remember, one clock. `app/lib/tab-gate.ts` holds the rule and
+  // `TabWaitOverlay` draws it; this is only the bookkeeping.
+  //
+  // BOTH RECORD THE PAGE THEY WERE MADE ON, and everything else is DERIVED from
+  // comparing that with the live `pathname`. That is what makes "the navigation
+  // finished" and "the overlay goes away" the same event rather than two that
+  // can disagree: the moment the route commits — to the destination, or to Home
+  // because the player gave up and tapped it — `from` stops matching and the
+  // overlay is gone on that render. No effect, no cascading setState, and no way
+  // for bones to outlive the page they were standing in for.
+  const online = useOnline();
+  const [navigation, setNavigation] = useState<Journey | null>(null);
+  const [refusal, setRefusal] = useState<Journey | null>(null);
+  const [stage, setStage] = useState<{ id: string; ms: number } | null>(null);
+
+  const pending = navigation !== null && navigation.from === pathname;
+  const waiting = pending && navigation.gated;
+  const refusedFor = refusal?.from === pathname ? refusal.destination : null;
+  const waitedMs =
+    waiting && stage?.id === journeyId(navigation) ? stage.ms : 0;
+
+  // The two thresholds, as two timeouts keyed to this particular journey. A
+  // `setTimeout` firing is not a synchronous setState during an effect, which is
+  // the pattern the lint rule (correctly) forbids; and the `id` check above
+  // means a stale timer from a previous tap cannot age the current one.
+  useEffect(() => {
+    if (!waiting || !navigation) return;
+    const id = journeyId(navigation);
+    const toSkeleton = setTimeout(
+      () => setStage({ id, ms: SKELETON_DELAY_MS }),
+      SKELETON_DELAY_MS,
+    );
+    const toNotice = setTimeout(
+      () => setStage({ id, ms: SLOW_NOTICE_MS }),
+      SLOW_NOTICE_MS,
+    );
+    return () => {
+      clearTimeout(toSkeleton);
+      clearTimeout(toNotice);
+    };
+  }, [waiting, navigation]);
+
+  // The card goes away by itself the moment the thing it asked for happens —
+  // "connect to wifi" still on screen after you have is just a second wrong
+  // answer. Done through the event rather than by watching `online` in an
+  // effect, so the state is CLEARED rather than merely hidden: a card that was
+  // only hidden would come back on the next disconnection, with nobody having
+  // asked for it.
+  useEffect(() => {
+    const clear = () => setRefusal(null);
+    window.addEventListener("online", clear);
+    return () => window.removeEventListener("online", clear);
+  }, []);
+
+  const dismissRefusal = useCallback(() => setRefusal(null), []);
+
+  const startJourney = useCallback((journey: Journey) => {
+    // A new tap supersedes whatever the last one was told.
+    setRefusal(null);
+    setNavigation(journey);
+  }, []);
+
+  const refuseJourney = useCallback((journey: Journey) => {
+    setNavigation(null);
+    setRefusal(journey);
+  }, []);
+
+  const view = tabGateView({
+    refused: refusedFor !== null,
+    online,
+    pending: waiting,
+    waitedMs,
+  });
 
   // The bar covers the bottom edge of the viewport, so it owes two things to the
   // rest of the app: padding at the end of the page, so it never sits over the
@@ -166,38 +309,73 @@ export function MobileTabBar() {
   if (hidden) return null;
 
   return (
-    <nav
-      ref={barRef}
-      aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border bg-white/95 backdrop-blur-xl lg:hidden"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-    >
-      {/* One tab per `PRIMARY_NAV` entry, in the table's order — never a
-          hand-typed copy of the hrefs or the matching rules. `entry.match` is why:
-          Friends lives UNDER the You section, so both tabs would light up on
-          `/play/you/friends` if You matched the whole subtree, and that carve-out
-          (Friends wins its own route, You covers the rest of the section — profile,
-          settings) is stated once, in the table, for all three nav surfaces. The
-          copy that used to sit here is exactly the kind that gets "corrected" into
-          a two-tabs-lit bug.
+    <>
+      {/* The overlay is a SIBLING of the bar, not a child: it covers the page,
+          and the bar stays above it (`z-40` over `z-30`) so Home is always one
+          tap away. The destination named is the refused one if there is one, and
+          otherwise whatever is currently being fetched. */}
+      {view !== "none" && (
+        <TabWaitOverlay
+          view={view}
+          destination={refusedFor ?? navigation?.destination ?? "this page"}
+          onDismiss={dismissRefusal}
+        />
+      )}
 
-          `PHONE_FACE` supplies the label and glyph where the phone's differ; the
-          fragment lands in `TabInner`'s own 24x24 `<svg>`, which shares the table's
-          24-unit grid but not `NavIcon`'s 20px size. */}
-      {PRIMARY_NAV.map((entry) => {
-        const face = PHONE_FACE[entry.href];
-        return (
-          <TabLink
-            key={entry.href}
-            href={entry.href}
-            label={face?.label ?? entry.label}
-            active={entry.match(pathname)}
-          >
-            {face?.icon ?? entry.icon}
-          </TabLink>
-        );
-      })}
-    </nav>
+      <nav
+        ref={barRef}
+        aria-label="Primary"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border bg-white/95 backdrop-blur-xl lg:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        {/* One tab per `PRIMARY_NAV` entry, in the table's order — never a
+            hand-typed copy of the hrefs or the matching rules. `entry.match` is why:
+            Friends lives UNDER the You section, so both tabs would light up on
+            `/play/you/friends` if You matched the whole subtree, and that carve-out
+            (Friends wins its own route, You covers the rest of the section — profile,
+            settings) is stated once, in the table, for all three nav surfaces. The
+            copy that used to sit here is exactly the kind that gets "corrected" into
+            a two-tabs-lit bug.
+
+            `PHONE_FACE` supplies the label and glyph where the phone's differ; the
+            fragment lands in `TabInner`'s own 24x24 `<svg>`, which shares the table's
+            24-unit grid but not `NavIcon`'s 20px size. */}
+        {PRIMARY_NAV.map((entry) => {
+          const face = PHONE_FACE[entry.href];
+          const label = face?.label ?? entry.label;
+          return (
+            <TabLink
+              key={entry.href}
+              href={entry.href}
+              label={label}
+              // ONE TAB IS LIT AT A TIME, ALWAYS. `entry.match(pathname)` is the
+              // right answer at rest, but during a navigation the router is
+              // still on the old route while the tapped tab lights up from its
+              // own `useLinkStatus` — so for as long as the trip lasted, TWO
+              // tabs were purple: the page you were leaving and the one you
+              // asked for. On the tabs this bar is built around that is seconds,
+              // and it reads as the bar having lost track of where you are.
+              // While a journey is in flight the destination IS the answer, and
+              // the moment it commits `pathname` takes over again.
+              active={pending ? entry.href === navigation.href : entry.match(pathname)}
+              // Which tabs are watched is DERIVED from the href, not listed:
+              // `needsNetwork` asks the same question `public/sw.js` asks about
+              // what it may cache, so a fourth tab pointing into that subtree is
+              // covered the day it is added, and Home — precached, and instant
+              // offline — is left completely alone.
+              gated={needsNetwork(entry.href)}
+              from={pathname}
+              destination={destinationName(entry.href, label)}
+              online={online}
+              onStart={startJourney}
+              onRefuse={refuseJourney}
+            >
+              {face?.icon ?? entry.icon}
+            </TabLink>
+          );
+        })}
+      </nav>
+    </>
   );
 }
 
@@ -241,6 +419,12 @@ function TabInner({
  * so the bar feels responsive even when the destination (e.g. the dynamic You
  * page) takes a moment to arrive. The Next docs recommend exactly this pairing:
  * prefetch for speed, `useLinkStatus` for immediate feedback while it completes.
+ *
+ * THE OVERLAY DOES NOT READ THIS. It could — `pending` is the same fact — but it
+ * would have to be reported upward from inside the `Link`, which means a
+ * setState in an effect on every tap and a second render pass behind it. The bar
+ * derives the same thing from `pathname` instead (see `Journey`), and this stays
+ * what it always was: the glyph lighting up under a thumb.
  */
 function TabLinkContent({
   label,
@@ -263,11 +447,26 @@ function TabLink({
   href,
   label,
   active,
+  gated,
+  from,
+  destination,
+  online,
+  onStart,
+  onRefuse,
   children,
 }: {
   href: string;
   label: string;
   active: boolean;
+  /** Does this destination need the network to render at all? */
+  gated: boolean;
+  /** The path this tap is being made from — see `Journey`. */
+  from: string;
+  /** How the overlay names the destination. */
+  destination: string;
+  online: boolean;
+  onStart: (journey: Journey) => void;
+  onRefuse: (journey: Journey) => void;
   children: React.ReactNode;
 }) {
   return (
@@ -280,6 +479,41 @@ function TabLink({
       aria-current={active ? "page" : undefined}
       style={{ touchAction: "manipulation" }}
       className="flex-1 transition active:opacity-50"
+      // WHERE THE TAP IS ANSWERED. `onNavigate` runs for SPA navigations only,
+      // which is exactly the right scope: a ⌘-click or "open in new tab" is a new
+      // document the browser owns, and hijacking one would break a legitimate way
+      // to open a page.
+      //
+      // OFFLINE, THE NAVIGATION IS CANCELLED RATHER THAN STARTED. A gated
+      // destination has nowhere to come from with no network: the router's RSC
+      // fetch rejects, Next falls back to a full browser navigation
+      // (`fetch-server-response.js`, "Falling back to browser navigation"), and
+      // whether THAT lands on the `/offline/you` card or on the browser's own
+      // error page depends on which service worker the device happens to be
+      // running — an installed app keeps the one it last installed until it is
+      // relaunched with a connection. That is a coin toss which costs a page load
+      // to lose. The card says the same thing immediately, on every device, and
+      // leaves the player on the page they were already on.
+      //
+      // ONLINE, the journey is recorded and the navigation proceeds untouched.
+      // Nothing here delays or intercepts it — the overlay is drawn over the page
+      // it left behind, and disappears when the route commits.
+      onNavigate={(event) => {
+        // Already here: Next may not navigate at all, so there would be no route
+        // change to end the journey — the lighting would freeze and, on a gated
+        // tab, the bones would sit there for good.
+        if (normalizePath(href) === from) return;
+        if (gated && !online) {
+          event.preventDefault();
+          onRefuse({ href, from, destination, gated });
+          return;
+        }
+        // EVERY tab records its journey, gated or not, because the one-lit-tab
+        // rule above is about navigation in general — tapping Home from a slow
+        // page lit two tabs just as tapping You did. Only a GATED journey brings
+        // up the overlay; Home is precached and needs nothing but the lighting.
+        onStart({ href, from, destination, gated });
+      }}
     >
       <TabLinkContent label={label} active={active}>
         {children}
