@@ -15,10 +15,40 @@ export function PWA() {
     if (process.env.NODE_ENV !== "production") return;
     if (!("serviceWorker" in navigator)) return;
 
+    // WHY AN EXPLICIT `update()` AND NOT JUST `register()` ABOVE.
+    //
+    // `register()` checks for a new service worker when it runs — and in a
+    // browser tab it runs often, because every fresh navigation loads this
+    // component again. An INSTALLED app does not work like that: it is resumed
+    // far more often than it is launched, so the same document can stay alive
+    // for days and that check never happens again. The effect is a phone that
+    // keeps serving from a service worker several deploys old — including one
+    // that predates `/offline/you` and therefore cannot show the offline card at
+    // all, while the same site in the browser can. That is not a hypothetical;
+    // it is what "it works in Safari but not in the app" looks like from here.
+    //
+    // Resuming to the foreground with a connection is exactly the moment to ask.
+    // Sharing `poll`'s 30s throttle keeps a fast app-switch from asking twice,
+    // and the browser applies its own rate limit on top. Nothing is awaited: a
+    // newer worker follows the ordinary `updatefound` → SKIP_WAITING →
+    // `controllerchange` path already wired above.
+    const checkForNewWorker = async () => {
+      try {
+        const reg = await navigator.serviceWorker.getRegistration();
+        await reg?.update();
+      } catch {
+        // Offline, or the browser declined. The next resume asks again.
+      }
+    };
+
     const poll = async () => {
       const now = Date.now();
       if (now - lastPolledAt.current < 30_000) return;
       lastPolledAt.current = now;
+      // Same trigger, same throttle: whenever we are awake, online and asking
+      // whether the GAMES have changed, also ask whether the service worker has.
+      // See the note on `checkForNewWorker`.
+      void checkForNewWorker();
       try {
         const res = await fetch("/games-version", { cache: "no-store" });
         if (!res.ok) return;
