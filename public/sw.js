@@ -17,8 +17,16 @@ const GAMES_VERSION_KEY = "https://hallpass.local/__sw__/games-version";
 // `hp-runtime` is deliberately not keyed by BUILD_ID and is shared by everyone
 // using the browser profile, so a cached `/play/you` is one user's email and
 // standings waiting to be served to the next. Used in two places: the fetch
-// handler skips these entirely, and `activate` purges anything an EARLIER
-// version of this service worker already stored.
+// handler never reads or writes the cache for these, and `activate` purges
+// anything an EARLIER version of this service worker already stored.
+//
+// "NEVER CACHED" IS NOT "NEVER INTERCEPTED", and the difference is this comment's
+// whole job. The handler used to `return` for these paths, which left the browser
+// to answer an offline navigation with its own network error page — a dead end
+// reached by tapping a tab. Navigations into the player's own subtree are now
+// answered with a PRECACHED, PII-free document ({@link privateOfflineDoc}) that
+// says the page needs a connection. Nothing about the private response itself is
+// stored, read back, or reused: see {@link privatePageFallback}.
 function isPrivatePath(pathname) {
   return (
     // The ENTIRE `/play/you` subtree, matched as a prefix rather than tab by
@@ -52,6 +60,37 @@ function isPrivatePath(pathname) {
     pathname.startsWith("/embed/")
   );
 }
+
+/* @pure-start privateOfflineDoc */
+/**
+ * Which precached document answers a failed NAVIGATION to a never-cached page,
+ * or `null` to leave the navigation alone.
+ *
+ * ONLY THE PLAYER'S OWN SUBTREE gets one, and that is a scope decision rather
+ * than an oversight. `/play/you` (plus the two legacy URLs that 307 into it) is
+ * reached by tapping a tab that is always on screen, so its dead end is one
+ * thumb away and lands on a page that can NEVER be cached — the fallback is the
+ * only answer that will ever exist. The other private paths are different
+ * journeys with different right answers: `/u/<name>` is somebody else's profile,
+ * arrived at from a shared link, and `/embed/` is a panel inside a game where a
+ * full-page offline document would be nonsense. Both keep today's behaviour
+ * until someone designs for them deliberately.
+ *
+ * Matched as "the path itself or something under it", NOT the bare `startsWith`
+ * that `isPrivatePath` uses. That looseness is harmless where it lives (a wider
+ * never-cache net costs nothing), but here it decides what a URL is SHOWN, and
+ * `/play/younger` must not be told it is the player's own page.
+ */
+function privateOfflineDoc(pathname) {
+  const own = ["/play/you", "/play/account", "/play/friends"];
+  for (const base of own) {
+    if (pathname === base || pathname.startsWith(`${base}/`)) {
+      return "/offline/you";
+    }
+  }
+  return null;
+}
+/* @pure-end */
 
 // A response is safe to cache.put only if it's a non-redirected,
 // same-origin (basic/default) success. Avoids redirect-poisoning the cache —
@@ -183,9 +222,19 @@ self.addEventListener("fetch", (event) => {
     url.pathname.startsWith("/admin") ||
     url.pathname.startsWith("/dashboard") ||
     url.pathname.startsWith("/api/") ||
-    isPrivatePath(url.pathname) ||
     url.pathname === "/games-version"
   ) {
+    return;
+  }
+
+  // Per-viewer pages: still never cached — but a NAVIGATION into the player's
+  // own subtree gets a real answer instead of the browser's error page. See
+  // `privateOfflineDoc` for which paths qualify and why the rest are left alone.
+  if (isPrivatePath(url.pathname)) {
+    if (req.mode === "navigate") {
+      const doc = privateOfflineDoc(url.pathname);
+      if (doc) event.respondWith(privatePageFallback(req, doc));
+    }
     return;
   }
 
@@ -215,6 +264,43 @@ self.addEventListener("fetch", (event) => {
 });
 
 // ---------- strategies ----------
+
+/**
+ * A never-cached page: straight to the network, and a precached apology if the
+ * network is not there.
+ *
+ * THE ONE RULE. There is no `cache.put` in this function and there must never be
+ * one. Every other strategy in this file warms `hp-runtime` on the way past;
+ * that cache is shared by everyone using the browser profile and survives
+ * deploys, so warming it with one of these responses is exactly the leak
+ * `isPrivatePath` exists to prevent. The only thing this reads back is
+ * `offlineDoc`, which is a static document precached at install and identical
+ * for every visitor.
+ *
+ * The request object is passed through UNTOUCHED (not rebuilt from its URL), so
+ * a navigation keeps its credentials and its `redirect: "manual"` mode — which
+ * is what lets `/play/account`'s 307 into `/play/you` still be followed by the
+ * browser rather than swallowed here.
+ */
+async function privatePageFallback(req, offlineDoc) {
+  try {
+    return await fetch(req);
+  } catch {
+    const doc = await caches.match(offlineDoc);
+    if (doc) return doc;
+    // The document should always be precached — `build-sw-manifest.mjs` lists it
+    // unconditionally — but a page that only ever renders during a failure needs
+    // its own failure answer, not a blank tab.
+    return new Response(
+      '<!doctype html><meta charset="utf-8"><title>Offline</title><body style="font-family:system-ui;padding:2rem"><h1>You\'re offline</h1><p>Your profile needs a connection. Reconnect and open it again.</p>',
+      {
+        status: 503,
+        headers: { "content-type": "text/html; charset=utf-8" },
+      },
+    );
+  }
+}
+
 async function cacheFirst(req) {
   const cached = await caches.match(req);
   if (cached) return cached;

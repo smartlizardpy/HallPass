@@ -111,6 +111,18 @@ const pageRoutes = new Set([
   // prerender manifest below; listing it here means a prerender-manifest hiccup
   // can never drop it.
   "/offline",
+  // The offline answer for the player's OWN pages, and the one image on it.
+  //
+  // Both are precached for the same reason `/offline` is, only more sharply:
+  // `sw.js` serves this document when a navigation into `/play/you` fails, and
+  // that subtree is one the SW is FORBIDDEN to cache, so this is the only thing
+  // it can ever put on screen there. The PNG is listed alongside it because a
+  // cache-first image request cannot reach the network on the one occasion this
+  // page is shown — an offline card with a broken image on it is worse than no
+  // card. It is also why the page uses a plain `<img>`: `next/image` would route
+  // through `/_next/image`, which is not precached and never could be.
+  "/offline/you",
+  "/offline-wifi.png",
   "/manifest.webmanifest",
   "/icon-192.png",
   "/icon-512.png",
