@@ -110,13 +110,17 @@ export const SPIKE_MIN_VISITORS = 25;
 /**
  * Error spike: captured exceptions in the window.
  *
- * TWO WAYS TO FIRE, because errors are unlike traffic — a big enough absolute
- * number is bad news whatever last week looked like:
- *   * {@link ERROR_RATIO} times the same hour's median, with at least
- *     {@link ERROR_MIN} of them, so a jump from 2 to 8 is not an incident; or
- *   * {@link ERROR_ALWAYS} in one hour, which fires with no baseline at all —
- *     the case that matters on the deploy that broke everything, when there is
- *     no "usual" because the site has never done this before.
+ * THREE CASES, because "is this a lot of errors" is a different question
+ * depending on what there is to compare against. `rules.ts` implements them:
+ *   * A USABLE BASELINE — {@link ERROR_RATIO} times the same hour's median, with
+ *     at least {@link ERROR_MIN} of them, so a jump from 2 to 8 is not an
+ *     incident and a hundred is not one on a site that always throws two
+ *     hundred.
+ *   * A BASELINE THAT IS ZERO — nothing to divide by, but "unlike every other
+ *     hour this week" is signal enough, so {@link ERROR_MIN} alone fires.
+ *   * NO BASELINE AT ALL — only {@link ERROR_ALWAYS}, a figure that is bad news
+ *     on its own terms. This is the deploy-broke-everything case, where the week
+ *     of history is exactly what is missing.
  */
 export const ERROR_RATIO = 3;
 export const ERROR_MIN = 20;
