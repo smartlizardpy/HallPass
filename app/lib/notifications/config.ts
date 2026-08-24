@@ -97,6 +97,11 @@ export const NOTIFICATION_GROUPS = [
     label: "Moderation",
     blurb: "What players post and report, for admins.",
   },
+  {
+    id: "ops",
+    label: "Site health",
+    blurb: "Traffic, errors and gaps the site notices on its own, for admins.",
+  },
 ] as const;
 
 export type NotificationGroup = (typeof NOTIFICATION_GROUPS)[number]["id"];
@@ -286,6 +291,51 @@ export const NOTIFICATION_KINDS = {
     description: "A beta tester files a bug report.",
     defaultChannel: "bell",
     discreet: "A new bug report was filed.",
+  },
+
+  // ── Site health ──────────────────────────────────────────────────────────
+  // Emitted by nobody's click: the alerts cron measures the site every half
+  // hour and posts what it found (see `app/lib/alerts/`). They are the first
+  // kinds here whose PRODUCER IS A SCHEDULE, which is why each carries its own
+  // cooldown rather than relying on a human to stop repeating themselves.
+  traffic_spike: {
+    audience: "admin",
+    scope: "personal",
+    group: "ops",
+    label: "Traffic spikes",
+    icon: "📈",
+    description: "Far more players than usual for this hour of the day.",
+    // The one kind here that is good news, and the reason the feature exists:
+    // a spike is only worth knowing about WHILE IT IS HAPPENING — an arcade
+    // that just got posted somewhere can be met with a working site or missed
+    // entirely. Six hours of cooldown is what keeps that from being noise.
+    defaultChannel: "push",
+    discreet: "Something is happening on the site.",
+  },
+  error_spike: {
+    audience: "admin",
+    scope: "personal",
+    group: "ops",
+    label: "Error spikes",
+    icon: "💥",
+    description: "The site is throwing far more errors than usual.",
+    // Same test as `review_reported`: rare, and about something going wrong
+    // right now. A deploy that broke a game is worth a buzz.
+    defaultChannel: "push",
+    discreet: "The site needs a look.",
+  },
+  content_gap: {
+    audience: "admin",
+    scope: "personal",
+    group: "ops",
+    label: "Missing games",
+    icon: "🔍",
+    // Deliberately the quiet one. "Nine people searched for a game you do not
+    // have" is a to-do with no deadline attached, and pushing it would teach an
+    // admin to mute the group that also carries the outages.
+    description: "Players keep searching for a game the arcade does not have.",
+    defaultChannel: "bell",
+    discreet: "There is something to look at on the dashboard.",
   },
 } as const satisfies Record<string, NotificationKindDef>;
 

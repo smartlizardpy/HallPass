@@ -23,12 +23,15 @@ import {
   bugReportCopy,
   challengeBeatenCopy,
   challengeCopy,
+  contentGapCopy,
+  errorSpikeCopy,
   friendAcceptedCopy,
   friendRequestCopy,
   gameDropCopy,
   reviewPostedCopy,
   reviewReportedCopy,
   shortName,
+  trafficSpikeCopy,
   type NotificationCopy,
 } from "./copy";
 
@@ -55,6 +58,9 @@ const EVERY_KIND: Record<string, NotificationCopy> = {
   review_posted: reviewPostedCopy({ gameTitle: "Duskfall", slug: "duskfall" }),
   review_reported: reviewReportedCopy({ gameTitle: "Duskfall" }),
   bug_report_filed: bugReportCopy({ gameTitle: "Duskfall" }),
+  traffic_spike: trafficSpikeCopy({ visitors: 312, ratio: 4.2 }),
+  error_spike: errorSpikeCopy({ errors: 84, ratio: 6 }),
+  content_gap: contentGapCopy({ term: "geometry dash", people: 9 }),
 };
 
 describe("challengeBeatenCopy", () => {
@@ -187,6 +193,61 @@ describe("gameDropCopy", () => {
     expect(gameDropCopy({ title: "Duskfall", slug: "duskfall" }).url).toBe(
       "/game/duskfall",
     );
+  });
+});
+
+describe("the site-health copy", () => {
+  it("carries the figure, because the figure is the whole message", () => {
+    // The deliberate exception to "no counts" — see the section header in
+    // `copy.ts`. An alert that cannot say how big the thing is cannot be acted
+    // on without opening the dashboard, which is what it exists to save.
+    expect(trafficSpikeCopy({ visitors: 312, ratio: 4.2 }).body).toContain("312");
+    expect(errorSpikeCopy({ errors: 84, ratio: 6 }).body).toContain("84");
+    expect(contentGapCopy({ term: "geometry dash", people: 9 }).body).toContain("9");
+  });
+
+  it("groups thousands and rounds the multiplier the way a person would say it", () => {
+    const copy = trafficSpikeCopy({ visitors: 12_400, ratio: 3.46 });
+    expect(copy.body).toContain("12,400");
+    expect(copy.body).toContain("3.5×");
+    // No false precision above ten: a median of seven days does not support it.
+    expect(trafficSpikeCopy({ visitors: 10, ratio: 12.4 }).body).toContain("12×");
+  });
+
+  it("says the site is usually quiet rather than dividing by no baseline", () => {
+    // A first-ever error spike has nothing to compare against, and "NaN× the
+    // usual" is the classic way that reads on a phone.
+    const copy = errorSpikeCopy({ errors: 60, ratio: null });
+    expect(copy.body).not.toContain("NaN");
+    expect(copy.body).toContain("usually quiet");
+  });
+
+  it("quotes the search term, which is the only actionable part", () => {
+    // Unlike a review excerpt: a term is a game's name typed by players, and
+    // naming it is the entire point of the alert.
+    expect(contentGapCopy({ term: "geometry dash", people: 9 }).body).toContain(
+      "geometry dash",
+    );
+  });
+
+  it("bounds a search term like any other player-supplied text", () => {
+    const copy = contentGapCopy({ term: "q".repeat(400), people: 3 });
+    expect(copy.body.length).toBeLessThanOrEqual(NOTIFICATION_BODY_MAX);
+    expect(copy.body).toContain("…");
+  });
+
+  it("falls back rather than quoting an empty term", () => {
+    expect(contentGapCopy({ term: "   ", people: 3 }).body).toContain("something");
+  });
+
+  it("lands where the panels that explain the number already live", () => {
+    for (const copy of [
+      trafficSpikeCopy({ visitors: 1, ratio: 3 }),
+      errorSpikeCopy({ errors: 1, ratio: 3 }),
+      contentGapCopy({ term: "x", people: 1 }),
+    ]) {
+      expect(copy.url).toBe("/dashboard/growth");
+    }
   });
 });
 

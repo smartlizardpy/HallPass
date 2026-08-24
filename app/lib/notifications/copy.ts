@@ -251,3 +251,119 @@ export function bugReportCopy(input: { gameTitle: string }): NotificationCopy {
     url: "/dashboard/beta",
   });
 }
+
+// ---------------------------------------------------------------------------
+// Site health (admin)
+// ---------------------------------------------------------------------------
+
+/**
+ * THE NUMBER IS THE MESSAGE HERE, AND THAT IS A DELIBERATE EXCEPTION.
+ *
+ * Everything above omits counts on the grounds that the number belongs on the
+ * page, where it arrives with a Play button. These three have no Play button
+ * behind them: they are measurements, sent because a measurement crossed a line,
+ * and "traffic is spiking" without a figure cannot be acted on or even sanity
+ * checked — an admin would have to open the dashboard to learn whether it meant
+ * forty players or four hundred. Stripping the number would leave a notification
+ * whose only content is that a notification was sent.
+ *
+ * The bystander argument that motivates the rule does not carry over either. A
+ * lock screen reading "312 players in the last hour" names no person, no game
+ * and no score; it is a fact about the site, published to the person who runs
+ * it. The discreet counterparts in `config.ts` stay figure-free regardless, so a
+ * device in quiet mode shows none of it.
+ *
+ * All three land on `/dashboard/growth`, which is where the panels that explain
+ * the number already live.
+ */
+const OPS_URL = "/dashboard/growth";
+
+/** Whole numbers, grouped, matching {@link challengeBeatenCopy}'s formatting. */
+function count(n: number): string {
+  return Math.round(n).toLocaleString("en-US");
+}
+
+/**
+ * A multiplier as an admin would say it out loud: "4×", "2.5×".
+ *
+ * One decimal place only below ten, and none above it — "12.4× the usual" is
+ * false precision on a median of seven days, and the difference between 12× and
+ * 13× changes nothing about what anybody does next.
+ */
+function times(ratio: number): string {
+  return ratio >= 10 ? `${Math.round(ratio)}×` : `${Math.round(ratio * 10) / 10}×`;
+}
+
+/**
+ * "Traffic is spiking."
+ *
+ * The one piece of GOOD news the site sends itself, and the reason the alerts
+ * exist at all: a spike is only worth knowing about while it is still happening.
+ */
+export function trafficSpikeCopy(input: {
+  /** Distinct players in the measured window. */
+  visitors: number;
+  /** How many times the usual figure for this hour of the day. */
+  ratio: number;
+}): NotificationCopy {
+  return bound({
+    title: "Traffic is spiking",
+    body:
+      `${count(input.visitors)} players in the last hour — about ` +
+      `${times(input.ratio)} the usual for this time of day.`,
+    url: OPS_URL,
+  });
+}
+
+/**
+ * "Errors are spiking."
+ *
+ * Names the count and nothing about the errors themselves. The message that
+ * comes with a JavaScript exception is written by a game nobody here wrote, and
+ * a lock screen is the one place it could not be taken back from — the same
+ * argument `reviewPostedCopy` makes about unmoderated text.
+ */
+export function errorSpikeCopy(input: {
+  /** Exceptions captured in the measured window. */
+  errors: number;
+  /** How many times the usual figure, or `null` when there is no baseline. */
+  ratio: number | null;
+}): NotificationCopy {
+  const scale =
+    input.ratio === null
+      ? "The site is usually quiet."
+      : `About ${times(input.ratio)} the usual for this time of day.`;
+  return bound({
+    title: "Errors are spiking",
+    body: `${count(input.errors)} errors in the last hour. ${scale}`,
+    url: OPS_URL,
+  });
+}
+
+/**
+ * "Players are searching for a game you do not have."
+ *
+ * The search term IS quoted, unlike a review excerpt, and the difference is who
+ * wrote it: a review is one person's prose about somebody else, while a search
+ * term is a game's name typed by however many players this alert counted. It is
+ * also the entire actionable content — the alert exists to name the next game to
+ * add, and "several players searched for something" names nothing.
+ *
+ * It is still player-typed text, so it goes through {@link shortName} like any
+ * other interpolated value.
+ */
+export function contentGapCopy(input: {
+  /** The most-searched term that matched no game. */
+  term: string;
+  /** How many distinct players searched it. */
+  people: number;
+}): NotificationCopy {
+  const term = shortName(input.term, "something");
+  return bound({
+    title: "A game people want is missing",
+    body:
+      `${count(input.people)} players searched for “${term}” today ` +
+      "and found nothing.",
+    url: OPS_URL,
+  });
+}
