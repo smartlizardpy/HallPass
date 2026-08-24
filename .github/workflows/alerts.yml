@@ -1,0 +1,90 @@
+name: Site alerts
+
+# Asks the live site how it is doing every half hour, and lets it notify the
+# admins if something is worth notifying about. All the judgement lives in
+# `app/lib/alerts/` and runs ON THE DEPLOYMENT, not here — see
+# `scripts/check-alerts.mjs`, which is deliberately thin.
+#
+# WHY A CRON AND NOT A VERCEL FUNCTION: Vercel runs code when somebody asks. A
+# spike at 14:20 on a Tuesday is precisely the moment nobody is asking, so
+# something outside the deployment has to knock. This is the cheapest thing that
+# knocks reliably.
+#
+# TIMING IS BEST-EFFORT. GitHub's scheduler queues cron runs and drops them under
+# load, and a run can be minutes late. That is fine at this cadence: the measured
+# window is a full hour, so a late run measures very nearly the same thing, and
+# the six-hour cooldown means a doubled run is not a doubled notification.
+
+on:
+  schedule:
+    # Every 30 minutes. The window measured is 60 minutes, so consecutive runs
+    # overlap on purpose — a spike starting at :29 is reported within a minute
+    # rather than at the top of the next hour.
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Measure and print, but notify nobody"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-alerts
+  # NOT cancel-in-progress: a run that has already decided to notify should be
+  # allowed to finish doing it. Two overlapping runs are harmless — the cooldown
+  # key means the second files nothing.
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check the site
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Job-level env so the step guard can read whether the secret is set — the
+    # `secrets` context is available to job env but not to a step `if`. Same
+    # trick, for the same reason, as the Blob step in deploy.yml.
+    env:
+      HAS_ALERTS_SECRET: ${{ secrets.ALERTS_SECRET != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # No `npm ci`. The runner uses nothing but `node:fs` and `fetch`, so a
+      # dependency install would be ninety seconds of nothing, every half hour,
+      # for ever.
+
+      # OPT-IN: until ALERTS_SECRET exists as a repository secret this says what
+      # to set and passes. A workflow that failed red every half hour on a repo
+      # that has not been provisioned yet is how people learn to ignore red.
+      - name: Explain what is missing
+        if: env.HAS_ALERTS_SECRET != 'true'
+        run: |
+          echo "::warning::ALERTS_SECRET is not set, so the site is not being checked."
+          {
+            echo "### HallPass alerts — not configured"
+            echo ""
+            echo "Add \`ALERTS_SECRET\` under Settings → Secrets and variables → Actions,"
+            echo "matching \`ALERTS_SECRET\` on the Vercel deployment. Until then this"
+            echo "workflow does nothing."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Once the secret exists, every failure here is LOUD: no secret, wrong
+      # secret, site unreachable, or PostHog unreadable all exit non-zero and
+      # turn the run red. An alerting pipeline that fails quietly is worse than
+      # none, because it looks exactly like a healthy site.
+      - name: Check for alerts
+        if: env.HAS_ALERTS_SECRET == 'true'
+        env:
+          ALERTS_SECRET: ${{ secrets.ALERTS_SECRET }}
+          # Optional; defaults to the production origin in the script. Set it to
+          # point a manual run at a preview deployment.
+          HALLPASS_SITE_URL: ${{ vars.HALLPASS_SITE_URL }}
+        run: |
+          node scripts/check-alerts.mjs ${{ inputs.dry_run && '--dry-run' || '' }}
