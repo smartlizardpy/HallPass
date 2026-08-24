@@ -22,6 +22,9 @@
  *   2. THE DECISION TO SPEAK IS EXPLICIT. The runner posts back the alerts it
  *      received; nothing fires as a side effect of somebody looking.
  *
+ * The gate and the wire shapes both live in `app/lib/alerts/http.ts`, shared
+ * with the notify half so the two cannot drift on who is let in.
+ *
  * ── THE SNAPSHOT IS RETURNED, NOT JUST THE VERDICT ─────────────────────────
  * A quiet answer is the one you end up mistrusting — "no alerts" reads the same
  * whether the site is calm or the query is measuring the wrong thing. Returning
@@ -30,38 +33,16 @@
  * from a reconstruction six hours later.
  */
 
+import {
+  alertsAuthGate,
+  alertsError,
+  type AlertProbeResponse,
+} from "@/app/lib/alerts/http";
 import { getAlertSnapshot } from "@/app/lib/alerts/metrics";
-import { verifyAlertsSecret } from "@/app/lib/alerts/guard";
-import { evaluateAlerts, type AlertSnapshot, type FiredAlert } from "@/app/lib/alerts/rules";
-import type { ApiError } from "@/sdk/src/contract";
-
-/** What a probe answers when it could measure. */
-export type AlertProbeResponse = {
-  ok: true;
-  snapshot: AlertSnapshot;
-  alerts: FiredAlert[];
-};
-
-/** Map the three auth outcomes to an early Response, or null to continue. */
-function authGate(headers: Headers): Response | null {
-  const result = verifyAlertsSecret(headers);
-  if (result === "unconfigured") {
-    return Response.json(
-      {
-        error:
-          "Site alerts are not configured. Set ALERTS_SECRET (or SCOREBOARD_ADMIN_SECRET) on the deployment.",
-      } satisfies ApiError,
-      { status: 503 },
-    );
-  }
-  if (result === "unauthorized") {
-    return Response.json({ error: "Unauthorized" } satisfies ApiError, { status: 401 });
-  }
-  return null;
-}
+import { evaluateAlerts } from "@/app/lib/alerts/rules";
 
 export async function GET(req: Request): Promise<Response> {
-  const denied = authGate(req.headers);
+  const denied = alertsAuthGate(req.headers);
   if (denied) return denied;
 
   const measured = await getAlertSnapshot();
@@ -69,7 +50,7 @@ export async function GET(req: Request): Promise<Response> {
     // 503 rather than 500: the site is fine, its ability to read its own
     // analytics is not. The runner turns this into a red CI run — see
     // `metrics.ts` for why this path must never degrade to "no alerts".
-    return Response.json({ error: measured.reason } satisfies ApiError, { status: 503 });
+    return alertsError(measured.reason, 503);
   }
 
   const response: AlertProbeResponse = {
