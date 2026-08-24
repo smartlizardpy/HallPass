@@ -1,20 +1,15 @@
-import { createHash, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
+import { sha256Hex, timingSafeSecretEqual } from "@/app/lib/admin-secret";
 
 const COOKIE_NAME = "hp_admin_html";
 
-function sha256(input: string): string {
-  return createHash("sha256").update(input).digest("hex");
-}
-
+/**
+ * The cookie value: a digest of the password under a namespace of this
+ * surface's own, so the cookie is not the password and cannot be replayed
+ * against anything else that hashes it.
+ */
 function sessionTokenFromPassword(password: string): string {
-  return sha256(`${password}::hallpass-html-admin`);
-}
-
-function safeEqual(a: string, b: string): boolean {
-  const aBuf = Buffer.from(sha256(a), "utf8");
-  const bBuf = Buffer.from(sha256(b), "utf8");
-  return timingSafeEqual(aBuf, bBuf);
+  return sha256Hex(`${password}::hallpass-html-admin`);
 }
 
 export function isAdminPasswordConfigured(): boolean {
@@ -32,7 +27,7 @@ export async function isHtmlAdminAuthenticated(): Promise<boolean> {
 export async function loginHtmlAdmin(passwordAttempt: string): Promise<boolean> {
   const password = process.env.ADMIN_HTML_PASSWORD?.trim();
   if (!password) return false;
-  if (!safeEqual(passwordAttempt.trim(), password)) return false;
+  if (!timingSafeSecretEqual(passwordAttempt.trim(), password)) return false;
 
   const store = await cookies();
   store.set({

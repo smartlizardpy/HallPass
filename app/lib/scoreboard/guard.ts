@@ -9,16 +9,23 @@
  *  - All `process.env` reads happen INSIDE the functions, never at module load,
  *    so tests can flip `SCOREBOARD_ADMIN_SECRET` per-case and routes pick up
  *    runtime config on Vercel.
- *  - Admin-secret comparison mirrors `app/lib/admin-html-auth.ts`: hash both
- *    sides to a fixed-length sha256 hex digest first, then `timingSafeEqual`,
- *    so a length mismatch can never throw and timing cannot leak the secret.
+ *  - Admin-secret comparison lives in `app/lib/admin-secret.ts`, shared with the
+ *    site admin login and the alerts gate: hash both sides to a fixed-length
+ *    sha256 hex digest first, then `timingSafeEqual`, so a length mismatch can
+ *    never throw and timing cannot leak the secret. This module keeps only the
+ *    part that is scoreboard-specific — WHICH env vars are accepted, and the
+ *    header they may be presented in.
  *  - IPs are never stored in the clear: `hashIp` salts with a dedicated salt
  *    (falling back to the admin secret/password) before hashing, so the
  *    `scores.ip_hash` column is a one-way pseudonym used only for rate-limit
  *    bucketing.
  */
 
-import { createHash, timingSafeEqual } from "node:crypto";
+import {
+  sha256Hex,
+  verifySecret,
+  type AdminAuthResult,
+} from "@/app/lib/admin-secret";
 import { GLOBAL_MAX_SCORE } from "./config";
 
 const HANDLE_ALLOWED = /[^A-Za-z0-9 _#-]/g;
@@ -40,23 +47,18 @@ function guestHandle(): string {
  */
 const IP_HASH_FALLBACK_PEPPER = "hallpass-scoreboard-ip-pepper-v1";
 
-/** Outcome of an admin-secret check, distinguishing "no secret set" from "wrong secret". */
-export type AdminAuthResult = "ok" | "unauthorized" | "unconfigured";
-
-function sha256Hex(input: string): string {
-  return createHash("sha256").update(input).digest("hex");
-}
+/** Re-exported so the scoreboard's callers keep importing it from here. */
+export type { AdminAuthResult };
 
 /**
- * Constant-time string equality. Both inputs are reduced to their 64-char
- * sha256 hex digests first, guaranteeing equal-length buffers for
- * `timingSafeEqual` regardless of the raw input lengths.
+ * The scoreboard's own secret header, alongside `Authorization: Bearer`.
+ *
+ * Named per surface rather than shared: a credential presented in
+ * `x-scoreboard-secret` was issued for board provisioning, and one in
+ * `x-hallpass-alerts-secret` for the alerts cron. If either leaks, the header it
+ * arrives in says which one it was.
  */
-function safeEqual(a: string, b: string): boolean {
-  const aBuf = Buffer.from(sha256Hex(a), "utf8");
-  const bBuf = Buffer.from(sha256Hex(b), "utf8");
-  return timingSafeEqual(aBuf, bBuf);
-}
+const SCOREBOARD_SECRET_HEADER = "x-scoreboard-secret";
 
 /**
  * Reduce arbitrary user input to a safe display handle: keep only
@@ -119,24 +121,6 @@ export function hashIp(ip: string): string {
 }
 
 /**
- * Pull the presented admin secret from either `Authorization: Bearer <secret>`
- * or `X-Scoreboard-Secret: <secret>`. Returns `null` when neither is present.
- */
-function presentedSecret(headers: Headers): string | null {
-  const authorization = headers.get("authorization");
-  if (authorization) {
-    const bearer = /^Bearer\s+(.+)$/i.exec(authorization.trim());
-    if (bearer) {
-      const token = bearer[1].trim();
-      if (token) return token;
-    }
-  }
-  const direct = headers.get("x-scoreboard-secret")?.trim();
-  if (direct) return direct;
-  return null;
-}
-
-/**
  * Gate the admin board endpoints. The accepted secret is `SCOREBOARD_ADMIN_SECRET`
  * if set, otherwise the site admin password `ADMIN_HTML_PASSWORD` — so an operator
  * can provision boards with the same password they already use for this site's
@@ -148,11 +132,9 @@ function presentedSecret(headers: Headers): string | null {
  *  - `"ok"` — presented secret matches in constant time.
  */
 export function verifyAdminSecret(headers: Headers): AdminAuthResult {
-  const expected = (
-    process.env.SCOREBOARD_ADMIN_SECRET || process.env.ADMIN_HTML_PASSWORD
-  )?.trim();
-  if (!expected) return "unconfigured";
-  const presented = presentedSecret(headers);
-  if (!presented) return "unauthorized";
-  return safeEqual(presented, expected) ? "ok" : "unauthorized";
+  return verifySecret(
+    process.env.SCOREBOARD_ADMIN_SECRET || process.env.ADMIN_HTML_PASSWORD,
+    headers,
+    SCOREBOARD_SECRET_HEADER,
+  );
 }
