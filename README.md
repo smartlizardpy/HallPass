@@ -31,6 +31,7 @@ app/
     games-version-blob.ts  blob path: games/version.txt
     admin-html-auth.ts  cookie session for /admin/html
     stats.ts            PostHog play-count fetcher (server-side)
+    alerts/             site alerts: thresholds, rules, PostHog snapshot (see below)
     tracker/            admin project tracker: config, store, schema (see below)
   manifest.ts           PWA manifest route (/manifest.webmanifest)
   layout.tsx            root layout, fonts, metadata, mounts <PWA />
@@ -42,6 +43,7 @@ public/
 scripts/
   build-sw-manifest.mjs runs as `postbuild`; emits public/sw-manifest.js
   sync-games.mjs        mirrors every games/** blob back into public/games/ (multi-file aware)
+  check-alerts.mjs      the alerts cron's runner: probe the live site, notify if anything fired
 AGENTS.md               AI-agent warning about Next 16 breaking changes
 ```
 
@@ -382,6 +384,70 @@ One tab is lit at a time: during a navigation the bar treats the destination as 
 
 SW upgrade flow on a new deploy: the new `sw.js` (with a new `BUILD_ID` baked into its imported manifest) installs → `updatefound` fires on the page → client posts `SKIP_WAITING` → `controllerchange` fires → the page reloads exactly once (guarded by a module-scope `reloaded` flag).
 
+## Site alerts
+
+The site checks itself every half hour and tells the admins when something is
+worth knowing. Three alerts ship: a **traffic spike** (far more players than
+usual for this hour of the day), an **error spike** (captured `$exception`
+events well above the usual), and a **content gap** (players searching for a
+game the arcade does not have). They arrive through the ordinary notification
+system — bell and Web Push, per-admin, with the same on/off switches as every
+other kind under Settings → Notifications → Site health.
+
+How a round trips:
+
+1. `.github/workflows/alerts.yml` runs `scripts/check-alerts.mjs` on a
+   `*/30 * * * *` cron, holding `ALERTS_SECRET`.
+2. The script calls **`GET /api/v1/admin/alerts`**, which measures the last hour
+   against the same hour on each of the previous seven days and runs the rules.
+   It notifies nobody — it is safe to call by hand.
+3. If anything fired, the script posts it back to
+   **`POST /api/v1/admin/alerts/notify`**, which files a notification for every
+   current admin.
+
+Load-bearing details, each with the full argument in the file named:
+
+- **The baseline is the same hour on previous days** (`app/lib/alerts/config.ts`).
+  This site is played from school, so comparing an hour against "the last 24
+  hours" would fire every weekday morning and stay silent through a real surge on
+  a quiet evening. The comparison is against a **median** of those days, so one
+  viral afternoon does not raise the bar for the following week.
+- **Every ratio has a floor under it.** Twelve players against a median of one is
+  a twelvefold spike and is four friends at a bus stop.
+- **The rules are pure and tested** (`app/lib/alerts/rules.ts`). The HogQL
+  queries return counts and nothing else; every median, ratio and threshold is
+  arithmetic in a file with unit tests, because a rule expressed in SQL is a rule
+  nobody here can write a failing test for.
+- **The cooldown is a dedupe key, not a table** (`alertDedupeKey`). Six hours per
+  alert, bucketed into the existing unique index on `notifications.dedupe_key` —
+  no migration, correct across concurrent runs. The cost is that fixed windows
+  can tell you twice if an alert straddles a boundary.
+- **The wording is built server-side.** The notify endpoint takes ids and
+  numbers, never text, so the CI credential cannot put chosen words on an admin's
+  lock screen.
+- **A broken alerter is loud.** No secret, wrong secret, unreachable site or
+  unreadable PostHog all exit non-zero and turn the Actions run red. The one
+  failure mode this must not have is silence that looks like a healthy site.
+
+Setting it up:
+
+1. Generate a secret (`openssl rand -hex 32`).
+2. Add it as `ALERTS_SECRET` in Vercel → Settings → Environment Variables.
+3. Add the same value as a repository secret: Settings → Secrets and variables →
+   Actions → `ALERTS_SECRET`. Until it exists the workflow says so and passes
+   rather than failing red every half hour.
+4. Optionally set the `HALLPASS_SITE_URL` repository *variable* to point runs at
+   a different deployment.
+5. Check it by hand from the Actions tab: **Site alerts → Run workflow**, with
+   *dry run* ticked to measure without notifying anybody.
+
+Server-side reads need `POSTHOG_PERSONAL_API_KEY` — without it the probe answers
+503 and the run goes red, which is the intended way to find out.
+
+An admin only receives these if they have signed into the arcade itself (the
+dashboard and the arcade are separate sign-ins) — notifications are owned by a
+player row. See `app/lib/notifications/admins.ts`.
+
 ## Environment variables
 
 Derived from `process.env.*` references in the codebase. Configure these in Vercel project settings (and `.env.local` for development). See `.env.example` for a copy-paste starting point.
@@ -393,9 +459,11 @@ Derived from `process.env.*` references in the codebase. Configure these in Verc
 | `ADMIN_HTML_PASSWORD` | `app/lib/admin-html-auth.ts` | Plain string; gates `/admin/html`. Required for uploads. |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | `app/lib/push/config.ts` | Optional. Web Push signing pair for notifications; generate with `npx web-push generate-vapid-keys`. Unset means the push path reports itself unavailable and stays silent — the bell still works, and notifications are pulled rather than pushed. Deliberately NOT `NEXT_PUBLIC_`: the public key is served at request time from `GET /api/v1/me/push`, so adding it takes effect on the next request rather than the next build. |
 | `VAPID_SUBJECT` | `app/lib/push/config.ts` | A `mailto:` the push service can contact about a misbehaving sender. Required by the VAPID spec. |
+| `ALERTS_SECRET` | `app/lib/alerts/guard.ts` | Gates `GET /api/v1/admin/alerts` and `POST /api/v1/admin/alerts/notify`, and is what the alerts cron holds as a repository secret. Falls back to `SCOREBOARD_ADMIN_SECRET`, then `ADMIN_HTML_PASSWORD`, so the feature works with what you already have — but setting it **replaces** those, so rotating it actually revokes the old credential. Unset everywhere means both endpoints answer 503. |
+| `SCOREBOARD_ADMIN_SECRET` | `app/lib/scoreboard/guard.ts` | Gates `POST\|GET /api/v1/admin/boards` (board provisioning), and salts `scores.ip_hash` when `SCOREBOARD_IP_SALT` is unset. Falls back to `ADMIN_HTML_PASSWORD`. |
 | `POSTHOG_API_HOST` | `app/lib/stats.ts` | Defaults to `https://eu.posthog.com`. |
 | `POSTHOG_PROJECT_ID` | `app/lib/stats.ts` | PostHog project numeric id. |
-| `POSTHOG_PERSONAL_API_KEY` | `app/lib/stats.ts` | Personal API key with read access for play-count queries (server-side read; separate from the client capture token above). |
+| `POSTHOG_PERSONAL_API_KEY` | `app/lib/stats.ts` | Personal API key with read access for play-count queries (server-side read; separate from the client capture token above). Also what the site alerts read themselves through — without it the alerts probe answers 503. |
 
 ## Scripts
 
@@ -405,12 +473,16 @@ Derived from `process.env.*` references in the codebase. Configure these in Verc
 - `npm start` — serve the production build.
 - `npm run lint` — ESLint with `eslint-config-next`.
 - `npm run sync-games` — runs `scripts/sync-games.mjs`; mirrors every `games/**` blob into `public/games/` (needs `BLOB_READ_WRITE_TOKEN`).
+- `node scripts/check-alerts.mjs` — probes the live site for alerts and notifies the admins if any fired (needs `ALERTS_SECRET`; `--dry-run` measures without notifying). Run every 30 minutes by `.github/workflows/alerts.yml`.
 
 ## Deploying
 
 Vercel auto-deploys from the `main` branch. After a merge: Vercel runs `next build`, the `postbuild` hook regenerates `public/sw-manifest.js` with the new `BUILD_ID`, and once the deploy is live every existing PWA client picks up the new SW on next visit, posts `SKIP_WAITING`, and reloads once.
 
 The `Deploy to Vercel` GitHub Action (`.github/workflows/deploy.yml`) pulls the production env, then runs `scripts/check-build-env.mjs` **before** building. This fails the deploy if `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` is missing — because that var is inlined at build time, a missing token would otherwise ship a build that silently captures zero analytics. Missing server-side PostHog vars only warn. Set `POSTHOG_ENV_CHECK=warn` to make the client-token check non-blocking too. Super admins can also confirm the same at runtime on `/dashboard/logs`.
+
+The `Site alerts` Action (`.github/workflows/alerts.yml`) runs on its own
+half-hourly schedule and is independent of deploys — see "Site alerts" above.
 
 ## Known caveats
 
