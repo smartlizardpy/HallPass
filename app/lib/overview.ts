@@ -89,6 +89,19 @@ export type CommunityStats = {
   topBoards: ActiveBoard[];
   /** Boards that have never received a single score. */
   emptyBoards: number;
+  /** Comments posted in the last 30 days, against the 30 before them. */
+  commentsDelta: Delta;
+  /**
+   * Visible comments whose author recommended the game. The rest are the
+   * not-recommended ones — `recommended` is NOT NULL, so the two always sum to
+   * `comments`.
+   */
+  recommended: number;
+  /**
+   * Visible comments a player has reported at least once. A moderation queue
+   * depth, not a verdict: the moderation screen is where they get judged.
+   */
+  flaggedComments: number;
   /** Games with the most visible comments, most first. */
   topCommented: CommentedGame[];
   recentPlayers: RecentPlayer[];
@@ -113,6 +126,9 @@ const EMPTY: CommunityStats = {
   daily: [],
   topBoards: [],
   emptyBoards: 0,
+  commentsDelta: NO_DELTA,
+  recommended: 0,
+  flaggedComments: 0,
   topCommented: [],
   recentPlayers: [],
   available: false,
@@ -134,13 +150,33 @@ const EMPTY: CommunityStats = {
  */
 async function getCommentStats(): Promise<{
   comments: number;
+  commentsDelta: Delta;
+  recommended: number;
+  flaggedComments: number;
   topCommented: CommentedGame[];
   daily: DayCount[];
 }> {
   try {
     const [totals, top, daily] = await Promise.all([
+      /**
+       * `FILTER` rather than four separate counts: one pass over the same
+       * `status = 'visible'` set, so the total and its splits can never
+       * disagree with each other the way independently-scoped queries can.
+       *
+       * `recommended` is a NOT NULL boolean, so "not recommended" is exactly
+       * `comments - recommended` and does not need its own column.
+       */
       sql`
-        SELECT count(*)::int AS comments
+        SELECT count(*)::int AS comments,
+               count(*) FILTER (WHERE recommended)::int AS recommended,
+               count(*) FILTER (WHERE report_count > 0)::int AS flagged,
+               count(*) FILTER (
+                 WHERE created_at >= now() - INTERVAL '30 days'
+               )::int AS comments_now,
+               count(*) FILTER (
+                 WHERE created_at >= now() - INTERVAL '60 days'
+                   AND created_at <  now() - INTERVAL '30 days'
+               )::int AS comments_prev
         FROM game_reviews
         WHERE status = 'visible'
       `,
@@ -162,8 +198,13 @@ async function getCommentStats(): Promise<{
       `,
     ]);
 
+    const row = totals[0] ?? {};
+    const int = (value: unknown) => Number(value ?? 0) || 0;
     return {
-      comments: Number(totals[0]?.comments ?? 0),
+      comments: int(row.comments),
+      commentsDelta: delta(int(row.comments_now), int(row.comments_prev)),
+      recommended: int(row.recommended),
+      flaggedComments: int(row.flagged),
       topCommented: top.map((r) => ({
         slug: String(r.slug),
         count: Number(r.n ?? 0),
@@ -172,7 +213,14 @@ async function getCommentStats(): Promise<{
     };
   } catch (error) {
     if (isMissingColumnError(error)) {
-      return { comments: 0, topCommented: [], daily: [] };
+      return {
+        comments: 0,
+        commentsDelta: NO_DELTA,
+        recommended: 0,
+        flaggedComments: 0,
+        topCommented: [],
+        daily: [],
+      };
     }
     throw error;
   }
@@ -328,6 +376,9 @@ export async function getCommunityStats(): Promise<CommunityStats> {
         players: int(r.players),
       })),
       emptyBoards: int(row.empty_boards),
+      commentsDelta: commentStats.commentsDelta,
+      recommended: commentStats.recommended,
+      flaggedComments: commentStats.flaggedComments,
       topCommented: commentStats.topCommented,
       recentPlayers: recent.map((r) => ({
         name: (r.name == null ? "" : String(r.name)).trim() || "Player",
