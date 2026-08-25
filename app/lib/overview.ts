@@ -33,6 +33,16 @@ export type CommentedGame = {
   count: number;
 };
 
+/** A leaderboard ranked by how much play has actually landed on it. */
+export type ActiveBoard = {
+  id: string;
+  title: string;
+  /** Scores submitted to the board, all time. */
+  scores: number;
+  /** Distinct verified players on it; anonymous scores are not counted here. */
+  players: number;
+};
+
 /** One day of first-party community activity. `date` is a UTC `YYYY-MM-DD`. */
 export type CommunityDay = {
   date: string;
@@ -75,6 +85,10 @@ export type CommunityStats = {
    * ZERO-FILLED — a quiet day is a zero on the chart, never a missing point.
    */
   daily: CommunityDay[];
+  /** The busiest leaderboards, most scores first. */
+  topBoards: ActiveBoard[];
+  /** Boards that have never received a single score. */
+  emptyBoards: number;
   /** Games with the most visible comments, most first. */
   topCommented: CommentedGame[];
   recentPlayers: RecentPlayer[];
@@ -97,6 +111,8 @@ const EMPTY: CommunityStats = {
   scoringPlayers: 0,
   identifiedScores: 0,
   daily: [],
+  topBoards: [],
+  emptyBoards: 0,
   topCommented: [],
   recentPlayers: [],
   available: false,
@@ -199,7 +215,7 @@ const DAILY_KEYS = ["players", "scores", "comments"] as const;
  */
 export async function getCommunityStats(): Promise<CommunityStats> {
   try {
-    const [totals, recent, commentStats, dailyActivity] = await Promise.all([
+    const [totals, recent, commentStats, dailyActivity, boardRows] = await Promise.all([
       sql`
         SELECT
           (SELECT count(*) FROM players)::int AS players,
@@ -224,7 +240,11 @@ export async function getCommunityStats(): Promise<CommunityStats> {
           (SELECT count(DISTINCT player_id) FROM scores
              WHERE player_id IS NOT NULL)::int AS scoring_players,
           (SELECT count(*) FROM scores
-             WHERE player_id IS NOT NULL)::int AS identified_scores
+             WHERE player_id IS NOT NULL)::int AS identified_scores,
+          (SELECT count(*) FROM boards b
+             WHERE NOT EXISTS (
+               SELECT 1 FROM scores s WHERE s.board_id = b.id
+             ))::int AS empty_boards
       `,
       sql`
         SELECT name, image, created_at
@@ -256,6 +276,26 @@ export async function getCommunityStats(): Promise<CommunityStats> {
         WHERE created_at >= now() - INTERVAL '30 days'
         GROUP BY day
       `,
+      /**
+       * Boards ranked by the play that landed on them.
+       *
+       * A LEFT JOIN, so a board with no scores still ranks — at zero, which is
+       * the row worth seeing: an empty board is one somebody provisioned and no
+       * game ever wrote to, and an INNER JOIN would hide exactly that case.
+       * `count(s.id)` rather than `count(*)` for the same reason: `count(*)`
+       * counts the synthesised NULL row of an unmatched board as 1.
+       */
+      sql`
+        SELECT b.id,
+               b.title,
+               count(s.id)::int AS scores,
+               count(DISTINCT s.player_id)::int AS players
+        FROM boards b
+        LEFT JOIN scores s ON s.board_id = b.id
+        GROUP BY b.id, b.title
+        ORDER BY scores DESC, b.title ASC
+        LIMIT 6
+      `,
     ]);
 
     const row = totals[0] ?? {};
@@ -281,6 +321,13 @@ export async function getCommunityStats(): Promise<CommunityStats> {
         WINDOW_DAYS,
         new Date(),
       ),
+      topBoards: boardRows.map((r) => ({
+        id: String(r.id),
+        title: String(r.title ?? "").trim() || String(r.id),
+        scores: int(r.scores),
+        players: int(r.players),
+      })),
+      emptyBoards: int(row.empty_boards),
       topCommented: commentStats.topCommented,
       recentPlayers: recent.map((r) => ({
         name: (r.name == null ? "" : String(r.name)).trim() || "Player",
