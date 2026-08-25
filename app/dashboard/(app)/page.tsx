@@ -16,9 +16,11 @@ import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
 import { resolveGames } from "@/app/lib/games-store";
 import { getDashboardStats, type Delta } from "@/app/lib/stats";
-import { getCommunityStats } from "@/app/lib/overview";
+import { getCommunityStats, WINDOW_DAYS } from "@/app/lib/overview";
+import { agoLabel, share } from "@/app/lib/insights";
 import { DashHeader } from "./_ui/DashHeader";
 import { Section } from "./_ui/Section";
+import { CommunityTrend } from "./_charts/CommunityTrend";
 import { PlaysVisitorsArea } from "./_charts/PlaysVisitorsArea";
 import { TopGamesBar } from "./_charts/TopGamesBar";
 import { CategoryDonut } from "./_charts/CategoryDonut";
@@ -57,6 +59,10 @@ export default async function DashboardPage() {
     getCommunityStats(),
     resolveGames(),
   ]);
+
+  // One clock for the whole render, so two chips a millisecond apart cannot
+  // disagree about what "today" is.
+  const now = new Date();
 
   const playsPeak = Math.max(1, ...stats.daily.map((d) => d.plays));
   const playsSeries = stats.daily.map((d) => d.plays);
@@ -175,6 +181,70 @@ export default async function DashboardPage() {
 
         <Section title="Top games" subtitle="by plays">
           {topGames.length === 0 ? <Empty /> : <TopGamesBar data={topGames} />}
+        </Section>
+      </div>
+
+      {/*
+        The first-party half of the trend. PostHog above counts anonymous plays;
+        this counts the things that only exist in our own database — accounts,
+        scores, comments — so the two questions "is the arcade busy?" and "is the
+        community growing?" sit next to each other instead of being conflated.
+      */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Section
+          title="Community growth"
+          subtitle={`sign-ups, scores & comments · ${WINDOW_DAYS} days`}
+          className="lg:col-span-2"
+        >
+          {!community.available ? (
+            <Empty hint="Database not configured." />
+          ) : community.daily.length === 0 ? (
+            <Empty />
+          ) : (
+            <>
+              <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs font-semibold text-muted">
+                <LegendDot color={C.plays} label="New players" />
+                <LegendDot color={C.cyan} label="Scores" />
+                <LegendDot color={C.visitors} label="Comments" />
+              </div>
+              <CommunityTrend data={community.daily} />
+              <div className="mt-2 flex justify-between text-xs text-muted">
+                <span>{community.daily[0]?.date}</span>
+                <span>{community.daily[community.daily.length - 1]?.date}</span>
+              </div>
+            </>
+          )}
+        </Section>
+
+        <Section title="Player engagement" subtitle="of everyone signed up">
+          {!community.available ? (
+            <Empty hint="Database not configured." />
+          ) : community.players === 0 ? (
+            <Empty hint="No players have signed in yet." />
+          ) : (
+            <div className="grid grid-cols-2 gap-5">
+              <Insight
+                value={fmt(community.activePlayers7)}
+                label="Active"
+                note="signed in this week"
+              />
+              <Insight
+                value={fmt(community.returningPlayers)}
+                label="Came back"
+                note={pctNote(community.returningPlayers, community.players, "of players")}
+              />
+              <Insight
+                value={fmt(community.scoringPlayers)}
+                label="Have scored"
+                note={pctNote(community.scoringPlayers, community.players, "of players")}
+              />
+              <Insight
+                value={fmt(community.identifiedScores)}
+                label="Named scores"
+                note={pctNote(community.identifiedScores, community.scores, "of all scores")}
+              />
+            </div>
+          )}
         </Section>
       </div>
 
@@ -300,10 +370,22 @@ export default async function DashboardPage() {
           ) : (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[auto_1fr]">
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:gap-8">
-                <MiniStat label="Players" value={compact(community.players)} />
+                <MiniStat
+                  label="Players"
+                  value={compact(community.players)}
+                  delta={community.playersDelta}
+                />
                 <MiniStat label="Boards" value={compact(community.boards)} />
-                <MiniStat label="Scores" value={compact(community.scores)} />
-                <MiniStat label="Comments" value={compact(community.comments)} />
+                <MiniStat
+                  label="Scores"
+                  value={compact(community.scores)}
+                  delta={community.scoresDelta}
+                />
+                <MiniStat
+                  label="Comments"
+                  value={compact(community.comments)}
+                  delta={community.commentsDelta}
+                />
               </div>
               <div className="lg:border-l lg:border-border lg:pl-6">
                 <div className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">
@@ -336,6 +418,16 @@ export default async function DashboardPage() {
                         <span className="max-w-[10rem] truncate text-sm font-semibold">
                           {p.name}
                         </span>
+                        {/*
+                          When they joined, not just that they are recent: eight
+                          names with no dates read the same whether the last one
+                          arrived yesterday or in March.
+                        */}
+                        {agoLabel(p.joinedAt, now) && (
+                          <span className="shrink-0 text-xs font-medium tabular-nums text-muted">
+                            {agoLabel(p.joinedAt, now)}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -419,10 +511,22 @@ function DeltaBadge({ delta }: { delta: Delta }) {
  * never comes to that at any width the dashboard actually renders at, and the
  * four-across split now waits for `sm` instead of starting at 380px.
  */
-function MiniStat({ label, value }: { label: string; value: string }) {
+function MiniStat({
+  label,
+  value,
+  delta,
+}: {
+  label: string;
+  value: string;
+  /** Last 30 days vs. the 30 before. Omitted where the count has no window. */
+  delta?: Delta;
+}) {
   return (
     <div className="min-w-0">
-      <div className="text-3xl font-black tabular-nums">{value}</div>
+      <div className="flex items-end gap-1.5">
+        <div className="text-3xl font-black tabular-nums">{value}</div>
+        {delta && <DeltaBadge delta={delta} />}
+      </div>
       <div
         title={label}
         className="mt-0.5 truncate text-xs font-semibold uppercase tracking-wide text-muted"
@@ -431,6 +535,43 @@ function MiniStat({ label, value }: { label: string; value: string }) {
       </div>
     </div>
   );
+}
+
+/**
+ * A number with a label and a line of context under it.
+ *
+ * The context line is the point: "48 came back" is a number, "48 — 61% of
+ * players" is an answer. {@link pctNote} writes it, and says "no baseline yet"
+ * rather than "0%" when there is nothing to divide by, because a fresh database
+ * reporting 0% engagement would be a lie about the players rather than a fact
+ * about the data.
+ */
+function Insight({
+  value,
+  label,
+  note,
+}: {
+  value: string;
+  label: string;
+  note?: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="text-2xl font-black tabular-nums">{value}</div>
+      <div
+        title={label}
+        className="mt-0.5 truncate text-xs font-semibold uppercase tracking-wide text-muted"
+      >
+        {label}
+      </div>
+      {note && <div className="mt-1 text-xs text-muted">{note}</div>}
+    </div>
+  );
+}
+
+function pctNote(part: number, whole: number, suffix: string): string {
+  const pct = share(part, whole);
+  return pct === null ? "no baseline yet" : `${pct}% ${suffix}`;
 }
 
 function LegendDot({ color, label }: { color: string; label: string }) {
