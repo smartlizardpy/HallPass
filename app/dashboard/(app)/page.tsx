@@ -9,6 +9,23 @@
  * the shared `DashHeader` + `Section` primitives so it reads like the rest of
  * the shell. All visualizations are Recharts (interactive, themed to the brand
  * tokens); KPI cards keep their delta badges and gain trailing sparklines.
+ *
+ * THE PAGE READS TOP TO BOTTOM AS FOUR QUESTIONS, and panels are ordered to
+ * answer them in that order rather than grouped by where their data comes from:
+ *
+ *   1. Is the arcade busy?      KPI row, plays & visitors, top games.
+ *   2. Is the community growing? Community growth, player engagement — the
+ *      first-party series, sitting next to the traffic ones deliberately, since
+ *      "lots of plays" and "more players" are different claims and the page used
+ *      to invite reading one as the other.
+ *   3. When and what do they play? Daily rhythm, weekday split, comments,
+ *      category/device/country mix.
+ *   4. What should we do about it? Searches that found nothing, boards nobody
+ *      uses, reported comments — the rows that name an action.
+ *
+ * Every first-party panel degrades on its own: `getCommunityStats` fails soft to
+ * zeros with `available: false`, so an unconfigured database renders notices in
+ * those panels while the PostHog half of the page keeps working, and vice versa.
  */
 
 import type { Metadata } from "next";
@@ -16,11 +33,16 @@ import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
 import { resolveGames } from "@/app/lib/games-store";
 import { getDashboardStats, type Delta } from "@/app/lib/stats";
-import { getCommunityStats, WINDOW_DAYS } from "@/app/lib/overview";
-import { agoLabel, share } from "@/app/lib/insights";
+import {
+  getCommunityStats,
+  WINDOW_DAYS,
+  type ActiveBoard,
+} from "@/app/lib/overview";
+import { agoLabel, hourLabel, peak, share } from "@/app/lib/insights";
 import { DashHeader } from "./_ui/DashHeader";
 import { Section } from "./_ui/Section";
 import { CommunityTrend } from "./_charts/CommunityTrend";
+import { HourlyBars } from "./_charts/HourlyBars";
 import { PlaysVisitorsArea } from "./_charts/PlaysVisitorsArea";
 import { TopGamesBar } from "./_charts/TopGamesBar";
 import { CategoryDonut } from "./_charts/CategoryDonut";
@@ -76,6 +98,17 @@ export default async function DashboardPage() {
     label: titleBySlug.get(g.slug) ?? g.slug,
     value: g.plays,
   }));
+
+  // The rhythm panel's headline. `hourly` is dense (24 buckets, mostly zeros on
+  // a quiet project), so an empty picture has to be detected from the TOTAL —
+  // `hourly.length` is 24 either way and would render an all-zero chart.
+  const playsByHourTotal = stats.hourly.reduce((sum, h) => sum + h.value, 0);
+  const busiestHour = peak(stats.hourly, (h) => h.value);
+
+  // Recommend rate over the visible comments. `recommended` is NOT NULL, so the
+  // remainder is exactly the not-recommended half.
+  const recommendRate = share(community.recommended, community.comments);
+  const notRecommended = community.comments - community.recommended;
 
   // Most-commented games — first-party (reviews live in our Neon DB, not PostHog).
   // Resolve slugs → curated titles here so the chart stays presentational.
@@ -248,6 +281,40 @@ export default async function DashboardPage() {
         </Section>
       </div>
 
+      {/*
+        WHEN the arcade is busy. The audience is at school, so its traffic has a
+        timetable — and a chart of it answers a scheduling question no total can:
+        when a new game should land, and when a deploy is least rude.
+      */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Section
+          title="Daily rhythm"
+          subtitle="plays by hour · project time"
+          className="lg:col-span-2"
+        >
+          {playsByHourTotal === 0 ? (
+            <Empty hint="No plays in range." />
+          ) : (
+            <>
+              {busiestHour && (
+                <div className="mb-3 text-xs font-semibold text-muted">
+                  Busiest at {hourLabel(busiestHour.hour)} —{" "}
+                  <span className="tabular-nums">{fmt(busiestHour.value)}</span> plays
+                </div>
+              )}
+              <HourlyBars data={stats.hourly} />
+            </>
+          )}
+        </Section>
+        <Section title="By weekday" subtitle="plays, last 30 days">
+          {playsByHourTotal === 0 ? (
+            <Empty hint="No plays in range." />
+          ) : (
+            <SplitBars data={stats.weekdays} color={C.plays} />
+          )}
+        </Section>
+      </div>
+
       {/* Most commented games — first-party review counts, mirrors "Top games". */}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Section
@@ -267,15 +334,62 @@ export default async function DashboardPage() {
             />
           )}
         </Section>
-        <Section title="Comments" subtitle="total, all games">
-          <div className="flex h-64 flex-col items-center justify-center">
-            <div className="text-6xl font-black tabular-nums">
-              {community.available ? fmt(community.comments) : "—"}
+        {/*
+          Was a single 6xl total. The count was already the first MiniStat in the
+          Community panel, so the panel's whole job was repetition; what nothing
+          on the page said was whether those comments are POSITIVE, whether any
+          of them have been reported, and whether people are still writing them.
+        */}
+        <Section title="Comments" subtitle="what players said">
+          {!community.available ? (
+            <Empty hint="Database not configured." />
+          ) : community.comments === 0 ? (
+            <Empty hint="No comments yet." />
+          ) : (
+            <div className="flex h-64 flex-col justify-center gap-5">
+              <div>
+                <div className="flex items-end gap-2">
+                  <div className="text-5xl font-black tabular-nums">
+                    {recommendRate === null ? "—" : `${Math.round(recommendRate)}%`}
+                  </div>
+                  <DeltaBadge delta={community.commentsDelta} />
+                </div>
+                <div className="mt-1 text-sm font-medium text-muted">
+                  recommend the game they played
+                </div>
+              </div>
+
+              {/* The split as one bar — the ratio is the point, not the pixels. */}
+              <div>
+                <div
+                  className="flex h-2.5 overflow-hidden rounded-full bg-surface-2"
+                  role="img"
+                  aria-label={`${fmt(community.recommended)} recommended, ${fmt(notRecommended)} not`}
+                >
+                  <div
+                    className="bg-emerald-500"
+                    style={{ width: `${recommendRate ?? 0}%` }}
+                  />
+                  <div className="flex-1 bg-rose-400" />
+                </div>
+                <div className="mt-2 flex justify-between text-xs font-semibold text-muted">
+                  <span>{fmt(community.recommended)} recommended</span>
+                  <span>{fmt(notRecommended)} not</span>
+                </div>
+              </div>
+
+              {community.flaggedComments > 0 ? (
+                <Link
+                  href="/dashboard/moderation"
+                  className="text-sm font-semibold text-amber-700 hover:text-amber-800"
+                >
+                  {fmt(community.flaggedComments)} reported — review →
+                </Link>
+              ) : (
+                <div className="text-sm text-muted">Nothing reported.</div>
+              )}
             </div>
-            <div className="mt-2 text-sm font-medium text-muted">
-              player comments posted
-            </div>
-          </div>
+          )}
         </Section>
       </div>
 
@@ -360,11 +474,53 @@ export default async function DashboardPage() {
           )}
         </Section>
 
-        <Section
-          title="Community"
-          subtitle="leaderboards & verified players"
-          className="lg:col-span-2"
-        >
+        {/*
+          The other half of the leaderboard question. "15 boards" says how many
+          exist; this says which ones anybody uses — and names the ones that have
+          never received a score, which is the actionable end of the list.
+        */}
+        <Section title="Busiest boards" subtitle="by scores submitted">
+          {!community.available ? (
+            <Empty hint="Database not configured." />
+          ) : community.topBoards.length === 0 ? (
+            <Empty hint="No boards yet." />
+          ) : (
+            <>
+              <ul className="space-y-2.5">
+                {community.topBoards.map((board) => (
+                  <li
+                    key={board.id}
+                    className="flex items-start justify-between gap-3 text-sm"
+                  >
+                    <div className="min-w-0">
+                      <Link
+                        href={`/dashboard/boards/${board.id}`}
+                        className="block truncate font-semibold hover:text-brand"
+                      >
+                        {board.title}
+                      </Link>
+                      <div className="text-xs text-muted">{boardNote(board)}</div>
+                    </div>
+                    <span className="shrink-0 font-mono tabular-nums text-muted">
+                      {fmt(board.scores)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {community.emptyBoards > 0 && (
+                <p className="mt-4 text-xs text-muted">
+                  {fmt(community.emptyBoards)} of {fmt(community.boards)} boards
+                  have never received a score.
+                </p>
+              )}
+            </>
+          )}
+        </Section>
+      </div>
+
+      {/* Community — the roll-up, full width under the panels that break it down. */}
+      <div className="mt-6">
+        <Section title="Community" subtitle="leaderboards & verified players">
           {!community.available ? (
             <Empty hint="Database not configured." />
           ) : (
@@ -567,6 +723,18 @@ function Insight({
       {note && <div className="mt-1 text-xs text-muted">{note}</div>}
     </div>
   );
+}
+
+/**
+ * The line under a board's title. Three different states, because a count of
+ * scores alone cannot tell them apart: a board nobody has ever written to, one
+ * carrying only anonymous handles (working, but the sign-in prompt is not
+ * landing on it), and one with verified players on it.
+ */
+function boardNote(board: ActiveBoard): string {
+  if (board.scores === 0) return "never used";
+  if (board.players === 0) return "anonymous scores only";
+  return `${fmt(board.players)} verified ${board.players === 1 ? "player" : "players"}`;
 }
 
 function pctNote(part: number, whole: number, suffix: string): string {
