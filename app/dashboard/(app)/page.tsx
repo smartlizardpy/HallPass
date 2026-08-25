@@ -299,9 +299,9 @@ export default async function DashboardPage() {
             <Empty hint="Database not configured." />
           ) : (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[auto_1fr]">
-              <div className="grid grid-cols-2 min-[380px]:grid-cols-4 gap-4 lg:gap-8">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:gap-8">
                 <MiniStat label="Players" value={compact(community.players)} />
-                <MiniStat label="Leaderboards" value={compact(community.boards)} />
+                <MiniStat label="Boards" value={compact(community.boards)} />
                 <MiniStat label="Scores" value={compact(community.scores)} />
                 <MiniStat label="Comments" value={compact(community.comments)} />
               </div>
@@ -406,11 +406,27 @@ function DeltaBadge({ delta }: { delta: Delta }) {
   );
 }
 
+/**
+ * A number over a label, four to a row in the community panel.
+ *
+ * `min-w-0` + `truncate` are load-bearing, not decoration. Tailwind's
+ * `grid-cols-4` is `repeat(4, minmax(0, 1fr))`, so a track is free to be
+ * narrower than its content — and an uppercase single word like "LEADERBOARDS"
+ * has no wrap opportunity, so it overflowed its cell and printed straight
+ * THROUGH the neighbouring stat on a narrow viewport. Clipping is the honest
+ * failure mode for a label that will not fit; overlapping two labels is not.
+ * The labels themselves are kept short (`Boards`, not `Leaderboards`) so it
+ * never comes to that at any width the dashboard actually renders at, and the
+ * four-across split now waits for `sm` instead of starting at 380px.
+ */
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <div className="text-3xl font-black tabular-nums">{value}</div>
-      <div className="mt-0.5 text-xs font-semibold uppercase tracking-wide text-muted">
+      <div
+        title={label}
+        className="mt-0.5 truncate text-xs font-semibold uppercase tracking-wide text-muted"
+      >
         {label}
       </div>
     </div>
