@@ -11,6 +11,15 @@ import "server-only";
  */
 
 import { sql, isMissingColumnError } from "@/app/lib/db";
+import { type Delta, delta } from "@/app/lib/insights";
+
+/**
+ * The comparison window every `*Delta` on this module is measured over: the last
+ * 30 days against the 30 before them, matching the PostHog side of the overview
+ * so the two halves of the page are never quietly talking about different
+ * periods.
+ */
+export const WINDOW_DAYS = 30;
 
 export type RecentPlayer = {
   name: string;
@@ -33,6 +42,23 @@ export type CommunityStats = {
    * game). Zero when the reviews schema is not yet applied; see `getCommentStats`.
    */
   comments: number;
+  /** New players in the last 30 days, against the 30 before them. */
+  playersDelta: Delta;
+  /** Scores submitted in the last 30 days, against the 30 before them. */
+  scoresDelta: Delta;
+  /** Players who signed in within the last 7 days. */
+  activePlayers7: number;
+  /** Players who signed in within the last 30 days. */
+  activePlayers30: number;
+  /**
+   * Players who have come back at least a day after signing up — the honest
+   * version of "does anybody stick?", see `getCommunityStats`.
+   */
+  returningPlayers: number;
+  /** Players who have ever put a score on a board. */
+  scoringPlayers: number;
+  /** Scores carrying a verified player id (the rest are anonymous handles). */
+  identifiedScores: number;
   /** Games with the most visible comments, most first. */
   topCommented: CommentedGame[];
   recentPlayers: RecentPlayer[];
@@ -40,11 +66,20 @@ export type CommunityStats = {
   available: boolean;
 };
 
+const NO_DELTA: Delta = { value: 0, prev: 0, pct: null };
+
 const EMPTY: CommunityStats = {
   players: 0,
   boards: 0,
   scores: 0,
   comments: 0,
+  playersDelta: NO_DELTA,
+  scoresDelta: NO_DELTA,
+  activePlayers7: 0,
+  activePlayers30: 0,
+  returningPlayers: 0,
+  scoringPlayers: 0,
+  identifiedScores: 0,
   topCommented: [],
   recentPlayers: [],
   available: false,
@@ -100,6 +135,31 @@ async function getCommentStats(): Promise<{
   }
 }
 
+/**
+ * The whole first-party community picture for the dashboard overview.
+ *
+ * The headline counts come back in ONE round trip as scalar subqueries rather
+ * than a query per number: they are all independent counts over small tables,
+ * the Neon HTTP driver bills a network round trip per statement, and they always
+ * want to be read as one consistent snapshot anyway.
+ *
+ * Definitions worth pinning down, because each could plausibly mean something
+ * else and the panel labels are short:
+ *
+ *   ACTIVE is `last_login`, which `upsertPlayerOnLogin` stamps on every sign-in.
+ *   It means "came back to the site", not "played" — plays are anonymous and
+ *   live in PostHog, and the two must not be blurred.
+ *
+ *   RETURNING is a login at least a day after the account was made, deliberately
+ *   not "more than one login". A player who signs in, plays for an hour and
+ *   leaves is one session no matter how many times the session cookie refreshed;
+ *   coming back on a LATER day is the thing worth counting.
+ *
+ *   IDENTIFIED SCORES are rows with a `player_id`. Anonymous handle-only scores
+ *   still count on the board — this is the share of the leaderboard that is
+ *   attached to a verified person, i.e. how much of the score traffic the sign-in
+ *   flow is actually reaching.
+ */
 export async function getCommunityStats(): Promise<CommunityStats> {
   try {
     const [totals, recent, commentStats] = await Promise.all([
@@ -107,7 +167,27 @@ export async function getCommunityStats(): Promise<CommunityStats> {
         SELECT
           (SELECT count(*) FROM players)::int AS players,
           (SELECT count(*) FROM boards)::int  AS boards,
-          (SELECT count(*) FROM scores)::int  AS scores
+          (SELECT count(*) FROM scores)::int  AS scores,
+          (SELECT count(*) FROM players
+             WHERE created_at >= now() - INTERVAL '30 days')::int AS players_now,
+          (SELECT count(*) FROM players
+             WHERE created_at >= now() - INTERVAL '60 days'
+               AND created_at <  now() - INTERVAL '30 days')::int AS players_prev,
+          (SELECT count(*) FROM scores
+             WHERE created_at >= now() - INTERVAL '30 days')::int AS scores_now,
+          (SELECT count(*) FROM scores
+             WHERE created_at >= now() - INTERVAL '60 days'
+               AND created_at <  now() - INTERVAL '30 days')::int AS scores_prev,
+          (SELECT count(*) FROM players
+             WHERE last_login >= now() - INTERVAL '7 days')::int AS active_7,
+          (SELECT count(*) FROM players
+             WHERE last_login >= now() - INTERVAL '30 days')::int AS active_30,
+          (SELECT count(*) FROM players
+             WHERE last_login > created_at + INTERVAL '1 day')::int AS returning_players,
+          (SELECT count(DISTINCT player_id) FROM scores
+             WHERE player_id IS NOT NULL)::int AS scoring_players,
+          (SELECT count(*) FROM scores
+             WHERE player_id IS NOT NULL)::int AS identified_scores
       `,
       sql`
         SELECT name, image, created_at
@@ -119,11 +199,19 @@ export async function getCommunityStats(): Promise<CommunityStats> {
     ]);
 
     const row = totals[0] ?? {};
+    const int = (value: unknown) => Number(value ?? 0) || 0;
     return {
-      players: Number(row.players ?? 0),
-      boards: Number(row.boards ?? 0),
-      scores: Number(row.scores ?? 0),
+      players: int(row.players),
+      boards: int(row.boards),
+      scores: int(row.scores),
       comments: commentStats.comments,
+      playersDelta: delta(int(row.players_now), int(row.players_prev)),
+      scoresDelta: delta(int(row.scores_now), int(row.scores_prev)),
+      activePlayers7: int(row.active_7),
+      activePlayers30: int(row.active_30),
+      returningPlayers: int(row.returning_players),
+      scoringPlayers: int(row.scoring_players),
+      identifiedScores: int(row.identified_scores),
       topCommented: commentStats.topCommented,
       recentPlayers: recent.map((r) => ({
         name: (r.name == null ? "" : String(r.name)).trim() || "Player",
