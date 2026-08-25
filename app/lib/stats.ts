@@ -1,7 +1,13 @@
 import "server-only";
 
 import { type HogqlResponse, namedRows } from "@/app/lib/hogql-rows";
-import { type Delta, delta } from "@/app/lib/insights";
+import {
+  type Delta,
+  type HourBucket,
+  delta,
+  fillHours,
+  weekdayLabel,
+} from "@/app/lib/insights";
 
 /**
  * Re-exported so the dashboard keeps importing its KPI types from the module
@@ -152,6 +158,13 @@ export type DashboardStats = {
   zeroResultTerms: LabeledCount[];
   countries: LabeledCount[];
   devices: LabeledCount[];
+  /**
+   * Plays by hour of day over the window — all 24 buckets, midnight first.
+   * See `hourlySql` for which clock those hours are on.
+   */
+  hourly: HourBucket[];
+  /** Plays by day of week, Monday first — always seven rows. */
+  weekdays: LabeledCount[];
   configured: boolean;
   unavailable: boolean;
   unavailableReason?: string;
@@ -172,6 +185,8 @@ const EMPTY_STATS: DashboardStats = {
   zeroResultTerms: [],
   countries: [],
   devices: [],
+  hourly: [],
+  weekdays: [],
   configured: false,
   unavailable: false,
 };
@@ -302,6 +317,37 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     GROUP BY country ORDER BY visitors DESC LIMIT 6
   `;
 
+  /**
+   * WHEN people play, over the whole window.
+   *
+   * The one question this dashboard could not answer and the arcade genuinely
+   * turns on: a site whose players are at school has a shape — a lunchtime
+   * spike, an after-school hump, a dead first period — and that shape decides
+   * when a new game should land and when a deploy is least rude.
+   *
+   * HOURS ARE ON THE POSTHOG PROJECT'S CLOCK, not the browser's and not UTC:
+   * HogQL evaluates `toHour` in the project timezone. That is the right default
+   * for one school in one place, and the reason the panel says "project time"
+   * rather than implying each player's local hour.
+   */
+  const hourlySql = `
+    SELECT toHour(timestamp) AS hour, count() AS plays
+    FROM events
+    WHERE event IN ${PLAY_EVENTS}
+      AND timestamp >= now() - INTERVAL 30 DAY
+    GROUP BY hour ORDER BY hour ASC
+  `;
+
+  // `toDayOfWeek` is ISO — 1 = Monday … 7 = Sunday — which is what
+  // `weekdayLabel` maps against. NOT JavaScript's 0 = Sunday.
+  const weekdaySql = `
+    SELECT toDayOfWeek(timestamp) AS dow, count() AS plays
+    FROM events
+    WHERE event IN ${PLAY_EVENTS}
+      AND timestamp >= now() - INTERVAL 30 DAY
+    GROUP BY dow ORDER BY dow ASC
+  `;
+
   const deviceSql = `
     SELECT properties.$device_type AS device, count() AS plays
     FROM events
@@ -314,7 +360,18 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     // The KPI query is critical (its failure marks the dashboard unavailable);
     // every secondary panel degrades to empty on its own without taking the
     // others down.
-    const [kpi, daily, top, cats, searches, zeroResults, countries, devices] = await Promise.all([
+    const [
+      kpi,
+      daily,
+      top,
+      cats,
+      searches,
+      zeroResults,
+      countries,
+      devices,
+      hours,
+      weekdays,
+    ] = await Promise.all([
       hogql<[number, number, number, number, number, number, number]>(kpiSql),
       safe(hogql<[string, number, number, number]>(dailySql)),
       safe(hogql<[string, number]>(topSql)),
@@ -323,6 +380,8 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       safe(hogql<[string, number]>(zeroResultSql)),
       safe(hogql<[string, number]>(countrySql)),
       safe(hogql<[string, number]>(deviceSql)),
+      safe(hogql<[number, number]>(hourlySql)),
+      safe(hogql<[number, number]>(weekdaySql)),
     ]);
 
     const [
@@ -357,6 +416,14 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       zeroResultTerms: zeroResults.map(([label, value]) => ({ label, value: num(value) })),
       countries: countries.map(([label, value]) => ({ label, value: num(value) })),
       devices: devices.map(([label, value]) => ({ label, value: num(value) })),
+      hourly: fillHours(hours.map(([hour, plays]) => ({ hour: num(hour), value: num(plays) }))),
+      // Dense on purpose: a weekend with no plays is a fact about the arcade,
+      // and a six-bar week would quietly hide it.
+      weekdays: Array.from({ length: 7 }, (_, i) => {
+        const index = i + 1;
+        const row = weekdays.find(([dow]) => num(dow) === index);
+        return { label: weekdayLabel(index), value: row ? num(row[1]) : 0 };
+      }),
       configured: true,
       unavailable: false,
     };
