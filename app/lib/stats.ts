@@ -1,6 +1,15 @@
 import "server-only";
 
 import { type HogqlResponse, namedRows } from "@/app/lib/hogql-rows";
+import { type Delta, delta } from "@/app/lib/insights";
+
+/**
+ * Re-exported so the dashboard keeps importing its KPI types from the module
+ * that produces them. The definition itself lives in `insights.ts` with the
+ * arithmetic, because the community panel computes the same shape against the
+ * database and two definitions of "percent change" would drift.
+ */
+export type { Delta };
 
 export type PlayCounts = Record<string, number>;
 
@@ -122,20 +131,6 @@ function safe<T>(p: Promise<T[]>): Promise<T[]> {
 // ALSO fires `featured_game_played`, so counting both double-counted every
 // featured play; that event is kept purely as a supplementary engagement signal.
 const PLAY_EVENTS = "('game_started')";
-
-export type Delta = {
-  /** Current-period value. */
-  value: number;
-  /** Previous equal-length period value. */
-  prev: number;
-  /** Percent change vs. the previous period; `null` when there is no baseline. */
-  pct: number | null;
-};
-
-function delta(value: number, prev: number): Delta {
-  const pct = prev > 0 ? ((value - prev) / prev) * 100 : null;
-  return { value, prev, pct };
-}
 
 export type DailyPlays = { date: string; plays: number; visitors: number; searches: number };
 export type LabeledCount = { label: string; value: number };
