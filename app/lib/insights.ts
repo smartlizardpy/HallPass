@@ -86,6 +86,52 @@ export function fillDays<T extends { date: string }>(
   return dayKeys(days, end).map((date) => byDate.get(date) ?? blank(date));
 }
 
+/** A dense day in a multi-series chart: one date, one number per series key. */
+export type DailyPoint<K extends string> = { date: string } & Record<K, number>;
+
+/**
+ * Fold several independently-queried `GROUP BY day` result sets into ONE dense
+ * series with a column per key.
+ *
+ * Charts want `[{ date, players, scores, comments }]`, but each of those numbers
+ * arrives from its own aggregate carrying only the days it actually has rows
+ * for — and one of them may legitimately have returned nothing at all. Merging
+ * on the date key, then zero-filling the window, is what keeps every series on
+ * the same x-axis and what stops a line being drawn straight across the days
+ * nothing happened.
+ *
+ * Rows under an unknown key are ignored rather than widening the shape: a chart
+ * renders the columns it was told about, and a typo in a `SELECT 'playrs'`
+ * literal should show up as an empty series, not as an invisible extra one.
+ * Repeated (key, date) pairs add, so a UNION that splits a day across branches
+ * still totals correctly.
+ */
+export function mergeDays<K extends string>(
+  keys: readonly K[],
+  rows: { key: string; date: string; value: number }[],
+  days: number,
+  end: Date,
+): DailyPoint<K>[] {
+  const blank = (date: string): DailyPoint<K> => {
+    const point: Record<string, string | number> = { date };
+    for (const key of keys) point[key] = 0;
+    return point as DailyPoint<K>;
+  };
+
+  const known = new Set<string>(keys);
+  const byDate = new Map<string, DailyPoint<K>>();
+  for (const row of rows) {
+    if (!row.date || !known.has(row.key)) continue;
+    const point = byDate.get(row.date) ?? blank(row.date);
+    // The key is known-good above; the cast is only to index a generic record.
+    const numbers = point as unknown as Record<string, number>;
+    numbers[row.key] = (numbers[row.key] ?? 0) + row.value;
+    byDate.set(row.date, point);
+  }
+
+  return fillDays([...byDate.values()], days, end, blank);
+}
+
 /** One hour of the day, `hour` in 0–23. */
 export type HourBucket = { hour: number; value: number };
 

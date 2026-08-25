@@ -11,7 +11,7 @@ import "server-only";
  */
 
 import { sql, isMissingColumnError } from "@/app/lib/db";
-import { type Delta, delta } from "@/app/lib/insights";
+import { type Delta, delta, mergeDays } from "@/app/lib/insights";
 
 /**
  * The comparison window every `*Delta` on this module is measured over: the last
@@ -31,6 +31,17 @@ export type RecentPlayer = {
 export type CommentedGame = {
   slug: string;
   count: number;
+};
+
+/** One day of first-party community activity. `date` is a UTC `YYYY-MM-DD`. */
+export type CommunityDay = {
+  date: string;
+  /** Accounts created that day. */
+  players: number;
+  /** Scores submitted that day, signed-in and anonymous alike. */
+  scores: number;
+  /** Visible comments posted that day; always 0 without the reviews schema. */
+  comments: number;
 };
 
 export type CommunityStats = {
@@ -59,6 +70,11 @@ export type CommunityStats = {
   scoringPlayers: number;
   /** Scores carrying a verified player id (the rest are anonymous handles). */
   identifiedScores: number;
+  /**
+   * Sign-ups, scores and comments per day over the window, oldest first and
+   * ZERO-FILLED — a quiet day is a zero on the chart, never a missing point.
+   */
+  daily: CommunityDay[];
   /** Games with the most visible comments, most first. */
   topCommented: CommentedGame[];
   recentPlayers: RecentPlayer[];
@@ -80,6 +96,7 @@ const EMPTY: CommunityStats = {
   returningPlayers: 0,
   scoringPlayers: 0,
   identifiedScores: 0,
+  daily: [],
   topCommented: [],
   recentPlayers: [],
   available: false,
@@ -102,9 +119,10 @@ const EMPTY: CommunityStats = {
 async function getCommentStats(): Promise<{
   comments: number;
   topCommented: CommentedGame[];
+  daily: DayCount[];
 }> {
   try {
-    const [totals, top] = await Promise.all([
+    const [totals, top, daily] = await Promise.all([
       sql`
         SELECT count(*)::int AS comments
         FROM game_reviews
@@ -118,6 +136,14 @@ async function getCommentStats(): Promise<{
         ORDER BY n DESC, slug ASC
         LIMIT 8
       `,
+      sql`
+        SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+               count(*)::int AS n
+        FROM game_reviews
+        WHERE status = 'visible'
+          AND created_at >= now() - INTERVAL '30 days'
+        GROUP BY day
+      `,
     ]);
 
     return {
@@ -126,14 +152,25 @@ async function getCommentStats(): Promise<{
         slug: String(r.slug),
         count: Number(r.n ?? 0),
       })),
+      daily: daily.map(toDayCount),
     };
   } catch (error) {
     if (isMissingColumnError(error)) {
-      return { comments: 0, topCommented: [] };
+      return { comments: 0, topCommented: [], daily: [] };
     }
     throw error;
   }
 }
+
+/** A `GROUP BY day` row, in the shape `mergeDays` folds together. */
+type DayCount = { date: string; value: number };
+
+function toDayCount(row: Record<string, unknown>): DayCount {
+  return { date: String(row.day ?? ""), value: Number(row.n ?? 0) || 0 };
+}
+
+/** The series `daily` carries, in the order the chart stacks them. */
+const DAILY_KEYS = ["players", "scores", "comments"] as const;
 
 /**
  * The whole first-party community picture for the dashboard overview.
@@ -162,7 +199,7 @@ async function getCommentStats(): Promise<{
  */
 export async function getCommunityStats(): Promise<CommunityStats> {
   try {
-    const [totals, recent, commentStats] = await Promise.all([
+    const [totals, recent, commentStats, dailyActivity] = await Promise.all([
       sql`
         SELECT
           (SELECT count(*) FROM players)::int AS players,
@@ -196,6 +233,29 @@ export async function getCommunityStats(): Promise<CommunityStats> {
         LIMIT 8
       `,
       getCommentStats(),
+      /**
+       * Sign-ups and scores per day, UNION'd into one statement — same reason as
+       * the totals above, one round trip instead of two. Bucketed with an
+       * explicit `AT TIME ZONE 'UTC'` rather than the session's timezone so the
+       * keys always match the UTC skeleton `fillDays` builds; without the pin,
+       * a database session in another zone would shift every bucket by its
+       * offset and the two would stop lining up.
+       */
+      sql`
+        SELECT 'players' AS kind,
+               to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+               count(*)::int AS n
+        FROM players
+        WHERE created_at >= now() - INTERVAL '30 days'
+        GROUP BY day
+        UNION ALL
+        SELECT 'scores' AS kind,
+               to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+               count(*)::int AS n
+        FROM scores
+        WHERE created_at >= now() - INTERVAL '30 days'
+        GROUP BY day
+      `,
     ]);
 
     const row = totals[0] ?? {};
@@ -212,6 +272,15 @@ export async function getCommunityStats(): Promise<CommunityStats> {
       returningPlayers: int(row.returning_players),
       scoringPlayers: int(row.scoring_players),
       identifiedScores: int(row.identified_scores),
+      daily: mergeDays(
+        DAILY_KEYS,
+        [
+          ...dailyActivity.map((r) => ({ key: String(r.kind ?? ""), ...toDayCount(r) })),
+          ...commentStats.daily.map((r) => ({ key: "comments", ...r })),
+        ],
+        WINDOW_DAYS,
+        new Date(),
+      ),
       topCommented: commentStats.topCommented,
       recentPlayers: recent.map((r) => ({
         name: (r.name == null ? "" : String(r.name)).trim() || "Player",

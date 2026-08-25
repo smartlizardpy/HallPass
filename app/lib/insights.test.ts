@@ -7,6 +7,7 @@ import {
   fillDays,
   fillHours,
   hourLabel,
+  mergeDays,
   peak,
   share,
   weekdayLabel,
@@ -78,6 +79,55 @@ describe("fillDays", () => {
     const filled = fillDays(rows, 2, AT("2026-03-02T10:00:00Z"), blank);
     expect(filled).toHaveLength(2);
     expect(filled.map((d) => d.date)).toEqual(["2026-03-01", "2026-03-02"]);
+  });
+});
+
+describe("mergeDays", () => {
+  const KEYS = ["players", "scores", "comments"] as const;
+  const END = AT("2026-03-03T08:00:00Z");
+
+  it("folds separately-queried series onto one dense axis", () => {
+    expect(
+      mergeDays(
+        KEYS,
+        [
+          { key: "players", date: "2026-03-02", value: 2 },
+          { key: "scores", date: "2026-03-03", value: 7 },
+          { key: "comments", date: "2026-03-03", value: 1 },
+        ],
+        3,
+        END,
+      ),
+    ).toEqual([
+      { date: "2026-03-01", players: 0, scores: 0, comments: 0 },
+      { date: "2026-03-02", players: 2, scores: 0, comments: 0 },
+      { date: "2026-03-03", players: 0, scores: 7, comments: 1 },
+    ]);
+  });
+
+  it("keeps every key present even when a whole series is missing", () => {
+    // The reviews schema may not be applied, so the comments query returns
+    // nothing at all — the column still has to exist, at zero.
+    const days = mergeDays(KEYS, [{ key: "players", date: "2026-03-03", value: 1 }], 1, END);
+    expect(days).toEqual([{ date: "2026-03-03", players: 1, scores: 0, comments: 0 }]);
+  });
+
+  it("adds repeated key/date pairs instead of overwriting", () => {
+    const days = mergeDays(
+      KEYS,
+      [
+        { key: "scores", date: "2026-03-03", value: 4 },
+        { key: "scores", date: "2026-03-03", value: 6 },
+      ],
+      1,
+      END,
+    );
+    expect(days[0].scores).toBe(10);
+  });
+
+  it("ignores a row under a key the chart was not told about", () => {
+    const days = mergeDays(KEYS, [{ key: "playrs", date: "2026-03-03", value: 9 }], 1, END);
+    expect(days).toEqual([{ date: "2026-03-03", players: 0, scores: 0, comments: 0 }]);
   });
 });
 
