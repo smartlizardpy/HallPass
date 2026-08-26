@@ -11,6 +11,15 @@
  * A bundle upload deletes blobs missing from the new zip; a single-file upload
  * is a one-file bundle and deletes leftover assets; reset deletes everything.
  *
+ * KILL SWITCH: publishing is a `put` per file, the last recurring advanced-Blob
+ * spender left in the app, so the three PUBLISHING actions check the
+ * `game_source` switch immediately before writing and refuse with the
+ * registry's banner when a super admin has turned it off (see
+ * `app/lib/blob-ops.ts`). `clearHtmlAction` deliberately does NOT check it: a
+ * reset is `del` + a database write, both free of the advanced allowance, and
+ * being unable to un-publish a broken game because the allowance is spent would
+ * be the worst possible time for that.
+ *
  * INDEX INVARIANT: these are three of the four writers of `games/**` blobs, so
  * each one RECORDS what it put and FORGETS what it deleted in `game_blobs` —
  * the Neon mirror the serving route reads instead of paying for a Blob
@@ -40,6 +49,7 @@ import { unzipSync } from "fflate";
 import { redirect } from "next/navigation";
 import { updateTag } from "next/cache";
 import { requireRole } from "@/app/lib/auth";
+import { blobOpDisabledMessage, isBlobOpEnabled } from "@/app/lib/blob-ops";
 import { CREDITS_CACHE_TAG, recordFirstUpload } from "@/app/lib/game-credits";
 import { GAMES_BLOB_CACHE_TAG } from "@/app/lib/game-serving-blobs";
 import {
@@ -299,6 +309,13 @@ export async function uploadHtmlAction(formData: FormData): Promise<void> {
   if (html.length > MAX_HTML_CHARS) {
     redirect(gameTarget(slug, "error", "File too large (max 2MB)."));
   }
+  // Checked HERE, after the file has been read and validated and immediately
+  // before the write: a switch thrown while a slow upload was still streaming
+  // must still be honoured, and an admin whose file was rejected anyway should
+  // hear about the file, not about the switch.
+  if (!(await isBlobOpEnabled("game_source"))) {
+    redirect(gameTarget(slug, "error", blobOpDisabledMessage("game_source")));
+  }
 
   let saved = false;
   try {
@@ -340,6 +357,9 @@ export async function pasteHtmlAction(formData: FormData): Promise<void> {
   if (!html.trim()) redirect(gameTarget(slug, "error", "HTML is empty."));
   if (html.length > MAX_HTML_CHARS) {
     redirect(gameTarget(slug, "error", "HTML too large (max 2MB)."));
+  }
+  if (!(await isBlobOpEnabled("game_source"))) {
+    redirect(gameTarget(slug, "error", blobOpDisabledMessage("game_source")));
   }
 
   let saved = false;
@@ -395,6 +415,12 @@ export async function uploadBundleAction(formData: FormData): Promise<void> {
 
   const bundle = extractBundle(zipBytes);
   if (typeof bundle === "string") redirect(gameTarget(slug, "error", bundle));
+
+  // The most expensive action in the app when the switch matters: one advanced
+  // operation PER FILE, so a 300-file zip is 300 of a 2,000/month allowance.
+  if (!(await isBlobOpEnabled("game_source"))) {
+    redirect(gameTarget(slug, "error", blobOpDisabledMessage("game_source")));
+  }
 
   let saved = false;
   try {

@@ -44,6 +44,7 @@ import { del, put } from "@vercel/blob";
 import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
+import { blobOpDisabledMessage, isBlobOpEnabled } from "@/app/lib/blob-ops";
 import {
   GAMES_BLOB_CACHE_TAG,
   forgetGameBlobsForSlug,
@@ -159,8 +160,16 @@ const IMAGE_EXT: Record<string, string> = {
  * action until the serverless function is killed — no row inserted, a platform
  * 5xx to the admin — the OPPOSITE of the fail-soft guarantee this module
  * documents. The 8s bound makes a stall REJECT into the catch (=> null) instead.
+ *
+ * KILL SWITCH: the `put` is an advanced Blob operation, so a super admin can
+ * turn cover caching off (`app/lib/blob-ops.ts`). Off reads exactly like a
+ * failed pull — `null`, the caller's fallback, the game still created — which is
+ * why the check belongs here rather than in each of the three call sites: this
+ * function's contract already IS "returns null and nothing breaks", and the
+ * cheapest place to skip the download too is before it starts.
  */
 async function cacheCoverToBlob(slug: string, imageUrl: string): Promise<string | null> {
+  if (!(await isBlobOpEnabled("external_covers"))) return null;
   try {
     const res = await fetch(imageUrl, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
@@ -509,6 +518,12 @@ export async function recacheExternalCoverAction(formData: FormData): Promise<vo
   const game = await getExternalGame(slug);
   if (!game) {
     redirect(`/dashboard/games?error=${encodeURIComponent(`No external game "${slug}".`)}`);
+  }
+
+  // Re-caching is the one caller that reports rather than shrugs, so it names
+  // the switch instead of letting a deliberate "off" look like a broken fetch.
+  if (!(await isBlobOpEnabled("external_covers"))) {
+    redirect(controlTarget(slug, "error", blobOpDisabledMessage("external_covers")));
   }
 
   // Prefer re-hosting the existing cover source; fall back to a fresh screenshot.
