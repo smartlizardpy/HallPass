@@ -1,0 +1,224 @@
+/**
+ * HallPass — the advanced-Vercel-Blob-operation registry and its kill switches.
+ *
+ * ── WHAT AN "ADVANCED OPERATION" IS ─────────────────────────────────────────
+ * Vercel meters Blob usage in two classes with very different allowances. On
+ * Hobby: 10,000 SIMPLE operations a month (`head`, `del`) and only 2,000
+ * ADVANCED ones (`put`, `copy`, `list`). Advanced is the scarce one, and it is
+ * the one that takes the whole publishing surface down with it — when the
+ * allowance is spent, `put()` fails, so no game can be uploaded, no screenshot
+ * accepted and no cover cached until the month rolls over.
+ *
+ * `app/lib/game-blob-index.ts` removed the recurring spend: the `list()` over
+ * `games/**` was 98% of it and is now a Neon table. What is left is a `put` or a
+ * `copy` per file a human deliberately publishes — small, but not zero, and not
+ * something a deploy should be needed to stop.
+ *
+ * ── WHAT THIS MODULE IS ─────────────────────────────────────────────────────
+ * A registry of every feature that still spends an advanced operation, plus a
+ * per-feature switch a super admin flips from `/dashboard/blob`. Turning one off
+ * makes its action refuse cleanly, BEFORE it touches Blob, with a banner saying
+ * what was turned off and where to turn it back on — instead of letting an admin
+ * hit a raw "operation limit exceeded" from the store mid-upload.
+ *
+ * ADDING A FEATURE THAT SPENDS AN ADVANCED OPERATION MEANS ADDING IT HERE. The
+ * registry is what the settings page renders and what the "disable everything"
+ * button iterates, so an unlisted feature is one nobody can turn off in the
+ * month they need to.
+ *
+ * ── THE FAIL-SOFT DIRECTION, AND WHY IT IS THIS ONE ─────────────────────────
+ * A switch that cannot be read reads as ENABLED. Neon being unreachable must not
+ * silently freeze the entire admin surface behind a message claiming somebody
+ * turned it off; the operator would be hunting a setting nobody set. The cost of
+ * that choice is honest and small: during a database outage a disabled feature
+ * may spend an operation it was told not to, and the admin sees Blob's own error
+ * rather than ours — which is exactly what they would have seen before this
+ * module existed.
+ */
+
+import "server-only";
+import {
+  APP_SETTINGS_CACHE_TAG,
+  readAppSettings,
+  writeAppSetting,
+  writeAppSettings,
+} from "@/app/lib/app-settings";
+
+/** Every feature that spends an advanced Blob operation. */
+export type BlobOpId =
+  | "game_source"
+  | "game_media"
+  | "external_covers"
+  | "beta_shots"
+  | "beta_clips"
+  | "shot_promotion"
+  | "blob_reindex";
+
+export type AdvancedBlobOp = {
+  id: BlobOpId;
+  /** What the settings page calls it. */
+  label: string;
+  /** The Vercel primitive it spends, named so the page can group by cost. */
+  operation: "put" | "copy" | "list";
+  /** What it does, and therefore what stops when it is off. */
+  effect: string;
+  /** How the spend scales — the number that decides what to turn off first. */
+  cost: string;
+  /** The banner the gated action shows when it refuses. */
+  disabledMessage: string;
+};
+
+/**
+ * The registry, ordered by how much an operator is likely to want it OFF first:
+ * the bulk spenders at the top, the recovery tool last.
+ *
+ * `blob_reindex` is in here even though it is the tool that FIXES a drifted
+ * index, because "disable everything" has to mean everything when the allowance
+ * reads zero — a `list()` that is going to fail is not worth attempting. It is
+ * also the one entry an operator should turn back on first.
+ */
+export const ADVANCED_BLOB_OPS: readonly AdvancedBlobOp[] = [
+  {
+    id: "game_source",
+    label: "Game source publishing",
+    operation: "put",
+    effect:
+      "Uploading, pasting or bundling a game's HTML from the game control center.",
+    cost: "One operation per file. A multi-file bundle spends one per file — a 300-file zip is 300.",
+    disabledMessage:
+      "Game source publishing is switched off to conserve Blob operations. A super admin can re-enable it in Dashboard → Blob ops.",
+  },
+  {
+    id: "game_media",
+    label: "Game media uploads",
+    operation: "put",
+    effect: "Adding a screenshot or hero image to a game's store gallery.",
+    cost: "One operation per image, up to 8 per game.",
+    disabledMessage:
+      "Media uploads are switched off to conserve Blob operations. A super admin can re-enable them in Dashboard → Blob ops.",
+  },
+  {
+    id: "beta_clips",
+    label: "Beta replay clips",
+    operation: "put",
+    effect:
+      "Attaching a recorded replay to a beta report. Testers can still file reports without one.",
+    cost: "One operation per clip, uploaded straight from the browser.",
+    disabledMessage:
+      "Replay clips are switched off right now. Your report will still be filed — just without the recording.",
+  },
+  {
+    id: "beta_shots",
+    label: "Beta screenshot evidence",
+    operation: "put",
+    effect:
+      "Attaching a screenshot to a beta report, and submitting a standalone shot.",
+    cost: "One operation per image.",
+    disabledMessage:
+      "Screenshot uploads are switched off right now. Your report will still be filed — just without the image.",
+  },
+  {
+    id: "external_covers",
+    label: "External game cover caching",
+    operation: "put",
+    effect:
+      "Re-hosting a registered external game's cover image on our own blob store.",
+    cost: "One operation per external game created or re-cached.",
+    disabledMessage:
+      "Cover caching is switched off to conserve Blob operations. The game keeps its placeholder cover; re-cache it later from Dashboard → Blob ops.",
+  },
+  {
+    id: "shot_promotion",
+    label: "Promote beta shots to the gallery",
+    operation: "copy",
+    effect:
+      "Copying an accepted beta screenshot into a game's public gallery. Accepting a shot still pays its XP.",
+    cost: "One operation per promoted shot.",
+    disabledMessage:
+      "Promoting shots to the gallery is switched off to conserve Blob operations. The shot stays accepted and can be promoted once it is re-enabled.",
+  },
+  {
+    id: "blob_reindex",
+    label: "Rebuild the blob index",
+    operation: "list",
+    effect:
+      "Resynchronising the Neon mirror of games/** from the object store. The only list() left in the app.",
+    cost: "One operation per page of results — a few per sweep. Manual, never on a request path.",
+    disabledMessage:
+      "The reindex sweep is switched off. Re-enable it below before rebuilding the index.",
+  },
+] as const;
+
+/** The registry keyed by id, for O(1) lookup from a gated action. */
+const BY_ID = new Map(ADVANCED_BLOB_OPS.map((op) => [op.id, op]));
+
+/** The `app_settings` key holding one switch. */
+function settingKey(id: BlobOpId): string {
+  return `blob_op:${id}`;
+}
+
+/**
+ * Every switch, defaulting to enabled for any key that has never been written.
+ * Fail-soft to all-enabled via `readAppSettings()` — see the module docblock for
+ * why that is the right direction.
+ */
+export async function readBlobOpSwitches(): Promise<Record<BlobOpId, boolean>> {
+  const settings = await readAppSettings();
+  const state = {} as Record<BlobOpId, boolean>;
+  for (const op of ADVANCED_BLOB_OPS) {
+    // Anything other than an explicit "0" is on: an unwritten key, and a value
+    // some future writer got wrong, both mean "nobody turned this off".
+    state[op.id] = settings.get(settingKey(op.id)) !== "0";
+  }
+  return state;
+}
+
+/**
+ * Whether one feature may spend its advanced operation.
+ *
+ * Call this IMMEDIATELY BEFORE the Blob call and nowhere else — checking it at
+ * the top of an action would let a long-running upload sail past a switch thrown
+ * while it was reading the file, and checking it in the UI only would leave the
+ * action itself ungated.
+ */
+export async function isBlobOpEnabled(id: BlobOpId): Promise<boolean> {
+  return (await readBlobOpSwitches())[id] ?? true;
+}
+
+/** The refusal banner for a switched-off feature. */
+export function blobOpDisabledMessage(id: BlobOpId): string {
+  return (
+    BY_ID.get(id)?.disabledMessage ??
+    "That feature is switched off to conserve Blob operations."
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Mutations — uncached. Callers `updateTag(APP_SETTINGS_CACHE_TAG)`.
+// ---------------------------------------------------------------------------
+
+/** Re-exported so the settings actions have one import site for everything. */
+export { APP_SETTINGS_CACHE_TAG };
+
+/** Turn one feature on or off. THROWS so a failed save is never reported as done. */
+export async function setBlobOpEnabled(
+  id: BlobOpId,
+  enabled: boolean,
+  actor: string | null,
+): Promise<void> {
+  await writeAppSetting(settingKey(id), enabled ? "1" : "0", actor);
+}
+
+/**
+ * Turn EVERY feature on or off in one statement — the panic button for the day
+ * the allowance reads 100%, and the single click that undoes it afterwards.
+ */
+export async function setAllBlobOps(
+  enabled: boolean,
+  actor: string | null,
+): Promise<void> {
+  await writeAppSettings(
+    ADVANCED_BLOB_OPS.map((op) => [settingKey(op.id), enabled ? "1" : "0"] as const),
+    actor,
+  );
+}
