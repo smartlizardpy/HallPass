@@ -167,6 +167,27 @@ export async function listGameFiles(slug: string): Promise<GameBlobFile[]> {
 }
 
 /**
+ * The same list, read UNCACHED, for the source mutators' stale-asset sweep.
+ *
+ * The cached read is right for the serving route and the dashboard, where a
+ * slightly old answer costs a slightly old chip. It is wrong here: the sweep
+ * decides which blobs to DELETE, and a cache entry that predates the previous
+ * publish would either miss assets that should go (they survive until the next
+ * publish — merely untidy) or name assets that are already gone (a `del()` of a
+ * missing key, harmless, plus a no-op row delete). One extra Neon round trip on
+ * an action a human is waiting on is cheaper than reasoning about either.
+ *
+ * THROWS on failure; the mutators run it inside the `try` that already treats
+ * cleanup as best-effort, never inside the one guarding the `put`.
+ */
+export async function listGameFilesLive(slug: string): Promise<GameBlobFile[]> {
+  const rows = await sql`
+    SELECT pathname, size FROM game_blobs WHERE slug = ${slug} ORDER BY pathname ASC
+  `;
+  return rows.map((row) => ({ pathname: String(row.pathname), size: toInt(row.size) }));
+}
+
+/**
  * The current `index.html` for a game, as a string — or `null` only when neither
  * a published blob nor a baked-in static copy can be read.
  *

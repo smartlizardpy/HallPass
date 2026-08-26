@@ -44,6 +44,11 @@ import { del, put } from "@vercel/blob";
 import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
+import {
+  GAMES_BLOB_CACHE_TAG,
+  forgetGameBlobsForSlug,
+  recordGameBlobs,
+} from "@/app/lib/game-blob-index";
 import { CREDITS_CACHE_TAG, recordFirstUpload } from "@/app/lib/game-credits";
 import { games, toGamePlatform } from "@/app/lib/games";
 import {
@@ -168,12 +173,19 @@ async function cacheCoverToBlob(slug: string, imageUrl: string): Promise<string 
     if (bytes.length === 0) return null;
 
     const ext = IMAGE_EXT[contentType] ?? "img";
-    const blob = await put(`games/${slug}/cover.${ext}`, Buffer.from(bytes), {
+    const pathname = `games/${slug}/cover.${ext}`;
+    const blob = await put(pathname, Buffer.from(bytes), {
       access: "public",
       contentType,
       addRandomSuffix: false,
       allowOverwrite: true,
     });
+    // The fourth writer of `games/**`, so it keeps the Neon mirror in step like
+    // the three source mutators do — see `app/lib/game-blob-index.ts`. Nothing
+    // reads a cover through the index today (the row stores the URL directly),
+    // but an unindexed blob under this prefix is one the reset sweep will not
+    // delete and the reindex would keep resurrecting.
+    await recordGameBlobs([{ pathname, url: blob.url, size: bytes.length }]);
     return blob.url;
   } catch {
     // Best-effort: a missing cover is cosmetic, never a reason to fail creation.
@@ -562,6 +574,17 @@ export async function deleteExternalGameAction(formData: FormData): Promise<void
     if (blobPaths.length > 0) updateTag(MEDIA_CACHE_TAG);
   } catch {
     // Best-effort cleanup; the game row is already gone, which is what users see.
+  }
+
+  // The cover blob itself is still deliberately left in place (one small file,
+  // cheaper to skip than to chase), but its INDEX row is not: a row pointing at
+  // a deleted game would keep the slug in the serving map and, if the slug were
+  // ever reused, hand the new game the old game's cover.
+  try {
+    await forgetGameBlobsForSlug(slug);
+    updateTag(GAMES_BLOB_CACHE_TAG);
+  } catch {
+    // Best-effort: a stale row degrades to a cover nobody renders.
   }
 
   revalidateExternal(slug);

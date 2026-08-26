@@ -11,6 +11,14 @@
  * A bundle upload deletes blobs missing from the new zip; a single-file upload
  * is a one-file bundle and deletes leftover assets; reset deletes everything.
  *
+ * INDEX INVARIANT: these are three of the four writers of `games/**` blobs, so
+ * each one RECORDS what it put and FORGETS what it deleted in `game_blobs` —
+ * the Neon mirror the serving route reads instead of paying for a Blob
+ * `list()`. See `app/lib/game-blob-index.ts`. Indexing is best-effort in the
+ * same sense the stale sweep is: the blob write is what must not be lost, and a
+ * missed row degrades to serving the baked-in static twin rather than breaking
+ * anything.
+ *
  * Authorization model: the legacy page authenticated with a bespoke password
  * cookie (`app/lib/admin-html-auth.ts`). Here we instead gate on the dashboard's
  * own role model — `requireRole("admin")` at the top of EVERY action. That guard
@@ -34,7 +42,13 @@ import { updateTag } from "next/cache";
 import { requireRole } from "@/app/lib/auth";
 import { CREDITS_CACHE_TAG, recordFirstUpload } from "@/app/lib/game-credits";
 import { GAMES_BLOB_CACHE_TAG } from "@/app/lib/game-serving-blobs";
-import { listGameFiles } from "@/app/lib/game-blob-index";
+import {
+  forgetGameBlobs,
+  forgetGameBlobsForSlug,
+  listGameFilesLive,
+  recordGameBlobs,
+  type GameBlobRecord,
+} from "@/app/lib/game-blob-index";
 import {
   blobPathForAsset,
   blobPathForSlug,
@@ -125,7 +139,8 @@ async function bumpGamesVersion(): Promise<void> {
  * so callers can wrap a single `try` and treat a throw as "save failed".
  */
 async function writeGameHtml(slug: string, html: string): Promise<void> {
-  await put(blobPathForSlug(slug), html, {
+  const indexPath = blobPathForSlug(slug);
+  const uploaded = await put(indexPath, html, {
     access: "public",
     contentType: "text/html; charset=utf-8",
     addRandomSuffix: false,
@@ -133,10 +148,20 @@ async function writeGameHtml(slug: string, html: string): Promise<void> {
     cacheControlMaxAge: 60,
   });
   try {
-    const stale = (await listGameFiles(slug))
+    // The index record comes FIRST: if the sweep below throws, the file we just
+    // published is already visible to the serving route, which is the outcome
+    // the admin asked for. A leftover asset is untidy; an invisible upload is a
+    // bug report.
+    await recordGameBlobs([
+      { pathname: indexPath, url: uploaded.url, size: Buffer.byteLength(html) },
+    ]);
+    const stale = (await listGameFilesLive(slug))
       .map((f) => f.pathname)
-      .filter((pathname) => pathname !== blobPathForSlug(slug));
-    if (stale.length > 0) await del(stale);
+      .filter((pathname) => pathname !== indexPath);
+    if (stale.length > 0) {
+      await del(stale);
+      await forgetGameBlobs(stale);
+    }
   } catch {
     // Best-effort: a leftover asset is unreferenced, not fatal; the next
     // publish (or reset) converges it.
@@ -375,23 +400,33 @@ export async function uploadBundleAction(formData: FormData): Promise<void> {
   let saved = false;
   try {
     // Snapshot BEFORE writing so we know which old blobs become stale.
-    const existing = await listGameFiles(slug);
+    const existing = await listGameFilesLive(slug);
 
+    const published: GameBlobRecord[] = [];
     for (const [relPath, data] of bundle) {
-      await put(blobPathForAsset(slug, relPath), Buffer.from(data), {
+      const pathname = blobPathForAsset(slug, relPath);
+      const uploaded = await put(pathname, Buffer.from(data), {
         access: "public",
         contentType: contentTypeForPath(relPath),
         addRandomSuffix: false,
         allowOverwrite: true,
         cacheControlMaxAge: 60,
       });
+      published.push({ pathname, url: uploaded.url, size: data.length });
     }
+    // ONE statement for the whole bundle, after every `put` has resolved: a
+    // 300-file zip would otherwise pay 300 sequential Neon round trips on top
+    // of its 300 blob writes.
+    await recordGameBlobs(published);
 
     const prefix = blobPrefixForSlug(slug);
     const stale = existing
       .map((f) => f.pathname)
       .filter((pathname) => !bundle.has(pathname.slice(prefix.length)));
-    if (stale.length > 0) await del(stale);
+    if (stale.length > 0) {
+      await del(stale);
+      await forgetGameBlobs(stale);
+    }
 
     await bumpGamesVersion();
     saved = true;
@@ -428,8 +463,12 @@ export async function clearHtmlAction(formData: FormData): Promise<void> {
   if (!isKnownSlug(slug)) redirect(listErrorTarget("Unknown game."));
 
   try {
-    const files = await listGameFiles(slug);
+    const files = await listGameFilesLive(slug);
     if (files.length > 0) await del(files.map((f) => f.pathname));
+    // By slug, not by the paths we just read: reset means "this game has no
+    // override", so any row the listing missed must go too rather than linger
+    // as a pointer to a blob that is no longer there.
+    await forgetGameBlobsForSlug(slug);
   } catch {
     // already gone — the override is absent, which is exactly what we wanted.
   }
