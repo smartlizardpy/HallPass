@@ -49,7 +49,11 @@ function isSafeSegment(segment) {
 }
 
 const BLOB_PREFIX = "games/";
-// PWA update sentinel sharing the games/ prefix — never write it to disk.
+// RETIRED PWA update sentinel that shared the games/ prefix — never write it to
+// disk. The counter now lives in app_settings (see app/lib/games-version.ts), so
+// nothing writes this key any more, but the skip stays: the object itself is
+// still in the store until somebody deletes it, and mirroring it would drop a
+// stray version.txt into public/games/ and thence into the repo.
 const VERSION_SENTINEL = "games/version.txt";
 // Matches the segment cap in app/game-html/[slug]/[[...path]]/route.ts.
 const MAX_PATH_SEGMENTS = 10;

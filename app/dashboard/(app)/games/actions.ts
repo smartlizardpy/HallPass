@@ -57,9 +57,9 @@ import {
   isSafeSegment,
 } from "@/app/lib/game-html-blob";
 import {
-  GAMES_VERSION_BLOB_PATH,
   GAMES_VERSION_CACHE_TAG,
-} from "@/app/lib/games-version-blob";
+  writeGamesVersion,
+} from "@/app/lib/games-version";
 import { games } from "@/app/lib/games";
 
 /** Largest HTML payload we will accept, in characters (~2 MB of text). */
@@ -96,35 +96,30 @@ function listErrorTarget(message: string): string {
 }
 
 /**
- * Best-effort version bump. The marker is a plain-text timestamp at a stable
- * blob path; clients poll it to discover that a game's source changed. We never
- * cache it (`cacheControlMaxAge: 0`) so a refresh is seen promptly, and we
- * swallow failures: a missed bump only delays the next poll, it must not undo a
- * successful HTML write.
+ * Best-effort version bump. The counter is a monotonic timestamp in
+ * `app_settings`; clients poll it to discover that a game's source changed. It
+ * used to be a `games/version.txt` blob, which cost one advanced Blob operation
+ * per publish and a simple one per poll window — see `app/lib/games-version.ts`.
+ * Failures are swallowed: a missed bump only delays the next poll, it must not
+ * undo a successful HTML write.
  */
-async function bumpGamesVersion(): Promise<void> {
+async function bumpGamesVersion(actor: string | null): Promise<void> {
   try {
-    await put(GAMES_VERSION_BLOB_PATH, String(Date.now()), {
-      access: "public",
-      contentType: "text/plain; charset=utf-8",
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      cacheControlMaxAge: 0,
-    });
+    await writeGamesVersion(actor);
   } catch {
     // best-effort; offline-refresh polling will lag until the next bump.
   }
   // The three source mutators (single/paste, bundle, reset) ALL funnel through
-  // here and are the only writers of `games/**` blobs, so this is the one place
-  // that must drop the serving route's cached `list()` — otherwise a just-
-  // uploaded game would keep serving the pre-edit copy (or the static twin) until
-  // the soft TTL rolled over. `{ expire: 0 }` for read-your-writes; not in the
-  // try above because a failed sentinel write must not skip the invalidation.
+  // here and are the only writers of `games/**` source blobs, so this is the one
+  // place that must drop the serving route's cached index — otherwise a just-
+  // uploaded game would keep serving the pre-edit copy (or the static twin)
+  // until the soft TTL rolled over. Not inside the try above, because a failed
+  // counter write must not skip the invalidation.
   updateTag(GAMES_BLOB_CACHE_TAG);
-  // Same argument for the sentinel's own cached `head()`. `/games-version` holds
-  // its lookup for an hour to keep Blob spend off the polling path, so WITHOUT
-  // this the bump we just wrote would stay invisible to clients for up to that
-  // hour and the service worker would keep serving pre-upload game assets.
+  // Same argument for the counter's own cached read. `/games-version` holds the
+  // settings table for an hour, so WITHOUT this the bump we just wrote would
+  // stay invisible to clients for up to that hour and the service worker would
+  // keep serving pre-upload game assets.
   updateTag(GAMES_VERSION_CACHE_TAG);
 }
 
@@ -138,7 +133,11 @@ async function bumpGamesVersion(): Promise<void> {
  * Throws only if the primary `put` fails — cleanup and bump are best-effort —
  * so callers can wrap a single `try` and treat a throw as "save failed".
  */
-async function writeGameHtml(slug: string, html: string): Promise<void> {
+async function writeGameHtml(
+  slug: string,
+  html: string,
+  actor: string | null,
+): Promise<void> {
   const indexPath = blobPathForSlug(slug);
   const uploaded = await put(indexPath, html, {
     access: "public",
@@ -166,7 +165,7 @@ async function writeGameHtml(slug: string, html: string): Promise<void> {
     // Best-effort: a leftover asset is unreferenced, not fatal; the next
     // publish (or reset) converges it.
   }
-  await bumpGamesVersion();
+  await bumpGamesVersion(actor);
 }
 
 /**
@@ -303,7 +302,7 @@ export async function uploadHtmlAction(formData: FormData): Promise<void> {
 
   let saved = false;
   try {
-    await writeGameHtml(slug, html);
+    await writeGameHtml(slug, html, actorEmail);
     saved = true;
   } catch {
     saved = false;
@@ -345,7 +344,7 @@ export async function pasteHtmlAction(formData: FormData): Promise<void> {
 
   let saved = false;
   try {
-    await writeGameHtml(slug, html);
+    await writeGameHtml(slug, html, actorEmail);
     saved = true;
   } catch {
     saved = false;
@@ -428,7 +427,7 @@ export async function uploadBundleAction(formData: FormData): Promise<void> {
       await forgetGameBlobs(stale);
     }
 
-    await bumpGamesVersion();
+    await bumpGamesVersion(actorEmail);
     saved = true;
   } catch {
     saved = false;
@@ -456,7 +455,7 @@ export async function uploadBundleAction(formData: FormData): Promise<void> {
  * bump the version marker so clients drop the stale override promptly.
  */
 export async function clearHtmlAction(formData: FormData): Promise<void> {
-  await requireRole("admin");
+  const { email: actorEmail } = await requireRole("admin");
 
   const slug = String(formData.get("slug") ?? "").trim();
   if (!slug) redirect(listErrorTarget("Choose a game first."));
@@ -472,7 +471,7 @@ export async function clearHtmlAction(formData: FormData): Promise<void> {
   } catch {
     // already gone — the override is absent, which is exactly what we wanted.
   }
-  await bumpGamesVersion();
+  await bumpGamesVersion(actorEmail);
 
   redirect(gameTarget(slug, "ok", "Reset source to default"));
 }
