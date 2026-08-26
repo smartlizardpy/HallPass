@@ -34,13 +34,13 @@ import { updateTag } from "next/cache";
 import { requireRole } from "@/app/lib/auth";
 import { CREDITS_CACHE_TAG, recordFirstUpload } from "@/app/lib/game-credits";
 import { GAMES_BLOB_CACHE_TAG } from "@/app/lib/game-serving-blobs";
+import { listGameFiles } from "@/app/lib/game-blob-index";
 import {
   blobPathForAsset,
   blobPathForSlug,
   blobPrefixForSlug,
   contentTypeForPath,
   isSafeSegment,
-  listGameFiles,
 } from "@/app/lib/game-html-blob";
 import {
   GAMES_VERSION_BLOB_PATH,

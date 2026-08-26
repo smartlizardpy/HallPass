@@ -33,7 +33,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { isUnconfiguredDbError } from "@/app/lib/db";
-import { listGameFiles, readPublishedIndexHtml } from "@/app/lib/game-html-blob";
+import { listGameFiles, readPublishedIndexHtml } from "@/app/lib/game-blob-index";
 import { buildEmbedSnippet, buildExampleCalls } from "@/app/lib/integration-prompt";
 import { SITE_URL } from "@/app/lib/site";
 import type { Game } from "@/app/lib/games";
@@ -172,12 +172,17 @@ function asString(value: string | string[] | undefined): string | null {
   return Array.isArray(value) ? value[0] : value;
 }
 
-/** Count of custom `games/<slug>/*` blobs published (0 = build default). Fails soft. */
+/**
+ * Count of custom `games/<slug>/*` blobs published (0 = build default). Fails
+ * soft. Reads the Neon index rather than the blob store, so opening a game's
+ * control center no longer spends a billed advanced operation; `listGameFiles`
+ * already degrades to `[]`, and the `try` stays as belt-and-braces.
+ */
 async function countCustomFiles(slug: string): Promise<number> {
   try {
     return (await listGameFiles(slug)).length;
   } catch {
-    // Not found / no blob access → treat as "using the build default".
+    // Index unreadable → treat as "using the build default".
     return 0;
   }
 }
