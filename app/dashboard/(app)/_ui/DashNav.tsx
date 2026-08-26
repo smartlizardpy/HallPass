@@ -47,9 +47,17 @@ const ITEMS: NavItem[] = [
 ];
 
 // Super-admin-only links, appended when the caller holds that role.
+//
+// "Blob ops" sits LAST, below Logs, and that is the right place for it rather
+// than an oversight: it is the screen you open when something has already gone
+// wrong (the advanced-operation allowance is spent and publishing is failing),
+// not one you pass through on an ordinary day. Ranking it above Users or Logs
+// would cost the surfaces people actually use a shorter reach in exchange for a
+// link that should ideally never be clicked.
 const SUPER_ADMIN_ITEMS: NavItem[] = [
   { href: "/dashboard/users", label: "Users" },
   { href: "/dashboard/logs", label: "Logs" },
+  { href: "/dashboard/blob", label: "Blob ops" },
 ];
 
 export function DashNav({ isSuperAdmin }: { isSuperAdmin: boolean }) {
