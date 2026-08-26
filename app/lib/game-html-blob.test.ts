@@ -2,7 +2,7 @@
  * Unit tests for the pure helpers in `game-html-blob.ts` — the path/segment
  * validation and content-type resolution that the game-serving route, the
  * dashboard bundle upload, and the blob→repo sync script all funnel through.
- * `listGameFiles` needs a live blob store and is intentionally NOT covered.
+ * The module has no dependencies at all now, so everything in it is covered.
  */
 
 import { describe, expect, it } from "vitest";
@@ -14,6 +14,7 @@ import {
   chooseGameSource,
   contentTypeForPath,
   isSafeSegment,
+  slugFromBlobPath,
 } from "./game-html-blob";
 
 describe("blob path helpers", () => {
@@ -25,6 +26,33 @@ describe("blob path helpers", () => {
     expect(blobPathForAsset("neon-snake", "index.html")).toBe(
       blobPathForSlug("neon-snake"),
     );
+  });
+});
+
+describe("slugFromBlobPath", () => {
+  it("reads the slug back out of a key the path helpers built", () => {
+    expect(slugFromBlobPath(blobPathForSlug("neon-snake"))).toBe("neon-snake");
+    expect(slugFromBlobPath(blobPathForAsset("neon-snake", "js/main.js"))).toBe(
+      "neon-snake",
+    );
+    expect(slugFromBlobPath("games/tower-2/assets/a/b.png")).toBe("tower-2");
+  });
+
+  it("rejects keys that name no game, so they are never indexed", () => {
+    // The retired sentinel, and anything else sitting directly under the prefix:
+    // no file after the slug means there is no slug.
+    expect(slugFromBlobPath("games/version.txt")).toBeNull();
+    expect(slugFromBlobPath("games/neon-snake/")).toBeNull();
+    expect(slugFromBlobPath("games/")).toBeNull();
+    // Other prefixes carry their own URL columns and must not land in the index.
+    expect(slugFromBlobPath("game-media/neon-snake/a.png")).toBeNull();
+    expect(slugFromBlobPath("beta-shots/neon-snake/a.png")).toBeNull();
+  });
+
+  it("rejects slugs the game_blobs CHECK would reject anyway", () => {
+    expect(slugFromBlobPath("games/Neon-Snake/index.html")).toBeNull();
+    expect(slugFromBlobPath("games/-leading/index.html")).toBeNull();
+    expect(slugFromBlobPath("games/under_score/index.html")).toBeNull();
   });
 });
 
