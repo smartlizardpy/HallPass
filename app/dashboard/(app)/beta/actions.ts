@@ -30,6 +30,7 @@ import { revalidatePath, updateTag } from "next/cache";
 import { copy, del } from "@vercel/blob";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
+import { blobOpDisabledMessage, isBlobOpEnabled } from "@/app/lib/blob-ops";
 import { beta } from "@/app/lib/beta";
 import {
   acceptanceReason,
@@ -514,6 +515,15 @@ export async function reviewShotAction(formData: FormData): Promise<void> {
   let mediaId: string | null = null;
   let slug: string | null = null;
   if (status === "accepted") {
+    // The publish is a `copy`, an advanced Blob operation, so it can be switched
+    // off — and because publish comes BEFORE accept, refusing here leaves the
+    // shot pending rather than accepted-and-invisible. The tester is not paid
+    // for a decision that was not made; the queue simply keeps the image until
+    // the switch is back on. REJECTING is untouched: it writes no blob, so
+    // triage can still clear the queue of the ones that were never going in.
+    if (!(await isBlobOpEnabled("shot_promotion"))) {
+      back("error", blobOpDisabledMessage("shot_promotion"));
+    }
     let shot;
     try {
       shot = await beta.shotById(id);
@@ -566,6 +576,10 @@ export async function reviewShotAction(formData: FormData): Promise<void> {
  */
 export async function publishAcceptedShotsAction(): Promise<void> {
   await requireRole("admin");
+
+  if (!(await isBlobOpEnabled("shot_promotion"))) {
+    back("error", blobOpDisabledMessage("shot_promotion"));
+  }
 
   let pending;
   try {

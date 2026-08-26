@@ -20,6 +20,16 @@
  * pathname prefix so a token cannot be repurposed to overwrite something else,
  * and restricts the accepted content types.
  *
+ * ── THE TOKEN IS ALSO THE KILL SWITCH ───────────────────────────────────────
+ * A client upload is still a `put`, and Vercel bills it as an ADVANCED
+ * operation against the small allowance even though the bytes never cross a
+ * function. Refusing to MINT the token is therefore the only place the switch
+ * can be enforced: once a token exists the browser writes directly to the
+ * store and nothing of ours is in the path. A refusal reaches the tester as the
+ * "Clip didn't upload — sending the report anyway" toast the client already
+ * shows for a timed-out upload, which is exactly the right outcome: the words
+ * are the point and the video is supporting material.
+ *
  * NOTHING IS WRITTEN TO THE DATABASE HERE. `onUploadCompleted` cannot be
  * reached by Vercel on localhost, so making the row depend on it would mean the
  * feature silently never works in development. The client reports the finished
@@ -29,6 +39,7 @@
 
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { auth } from "@/app/lib/auth";
+import { isBlobOpEnabled } from "@/app/lib/blob-ops";
 import { beta } from "@/app/lib/beta";
 import { isResolvedSlug } from "@/app/lib/games-store";
 
@@ -58,6 +69,10 @@ export async function POST(request: Request): Promise<Response> {
         const allowed =
           Boolean(session?.user?.role) || (await beta.isActiveTester(playerId));
         if (!allowed) throw new Error("Not a beta tester");
+
+        if (!(await isBlobOpEnabled("beta_clips"))) {
+          throw new Error("Replay clips are switched off");
+        }
 
         // The slug is the second path segment: beta-clips/<slug>/<id>.webm.
         // Validating it stops a token being minted for a path that no game owns.
