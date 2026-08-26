@@ -8,7 +8,7 @@
  * be published, no screenshot accepted and no cover cached until the month
  * rolls over — and the only way to see it coming was Vercel's own usage page.
  *
- * This page answers two questions an operator has in that moment:
+ * This page answers the three questions an operator has in that moment:
  *
  *   1. WHAT IS STILL SPENDING? The table lists every feature that costs an
  *      advanced operation, what it does, and how its spend scales — one per
@@ -19,6 +19,13 @@
  *
  *   2. HOW DO I STOP IT, NOW, WITHOUT A DEPLOY? Each row toggles, and one
  *      button turns everything off (or back on) in a single write.
+ *
+ *   3. IS THE MIRROR STILL RIGHT? The index card shows how many blobs Neon
+ *      thinks exist and offers the one deliberate `list()` sweep that rebuilds
+ *      it from the store. That is the recovery path for anything written
+ *      out-of-band, and the count is the cheapest sanity check available: a
+ *      corpus of forty games showing zero indexed blobs means migration 026 was
+ *      applied and never backfilled.
  *
  * WHAT IS DELIBERATELY NOT HERE. The recurring cost is gone rather than
  * switchable: serving a game, polling for a version, and rendering the
@@ -36,8 +43,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
 import { ADVANCED_BLOB_OPS, readBlobOpSwitches } from "@/app/lib/blob-ops";
+import { readGameBlobIndex } from "@/app/lib/game-blob-index";
 import { DashHeader } from "../_ui/DashHeader";
-import { setAllBlobOpsAction, toggleBlobOpAction } from "./actions";
+import {
+  reindexBlobsAction,
+  setAllBlobOpsAction,
+  toggleBlobOpAction,
+} from "./actions";
 
 export const metadata: Metadata = {
   title: "Blob ops",
@@ -74,12 +86,23 @@ export default async function BlobOpsPage({
   const ok = asString(params.ok);
   const error = asString(params.error);
 
-  // Fails soft to all-enabled — see `blob-ops.ts` for why that direction. An
-  // operator reading "ON" during a Neon outage is reading the truth: nothing is
-  // gating those actions right now either.
-  const switches = await readBlobOpSwitches();
+  // Both fail soft — the switches to all-enabled (see `blob-ops.ts` for why
+  // that direction), the index to an empty array — so this page renders during
+  // a Neon outage rather than 500ing on the one screen somebody opens when
+  // things are already going wrong. An operator reading "ON" during an outage is
+  // reading the truth: nothing is gating those actions right now either.
+  const [switches, indexed] = await Promise.all([
+    readBlobOpSwitches(),
+    readGameBlobIndex(),
+  ]);
   const offCount = ADVANCED_BLOB_OPS.filter((op) => !switches[op.id]).length;
   const allOff = offCount === ADVANCED_BLOB_OPS.length;
+
+  const indexedSlugs = new Set(indexed.map((row) => row.slug));
+  const newestIndexed = indexed.reduce(
+    (newest, row) => Math.max(newest, row.uploadedAt),
+    0,
+  );
 
   return (
     <>
@@ -171,6 +194,50 @@ export default async function BlobOpsPage({
               }
             >
               {allOff ? "Enable everything" : "Disable everything"}
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <section className="mb-8 rounded-xl border border-border bg-surface p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="text-lg font-black tracking-tight">Blob index</h2>
+            <p className="mt-1 text-sm text-muted">
+              What Neon believes is published under{" "}
+              <code className="font-mono text-foreground">games/</code>. Rebuild
+              it after publishing from a script, editing a blob in the Vercel
+              dashboard, or applying migration 026 for the first time — an
+              unindexed blob is not broken, it just serves the copy baked into
+              the last deploy.
+            </p>
+            <p className="mt-3 text-sm tabular-nums text-foreground">
+              <strong>{indexed.length}</strong> blob
+              {indexed.length === 1 ? "" : "s"} across{" "}
+              <strong>{indexedSlugs.size}</strong> game
+              {indexedSlugs.size === 1 ? "" : "s"}
+              {newestIndexed > 0 && (
+                <span className="text-muted">
+                  {" "}
+                  · newest{" "}
+                  {new Intl.DateTimeFormat("en-US", {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  }).format(new Date(newestIndexed))}
+                </span>
+              )}
+            </p>
+          </div>
+          <form action={reindexBlobsAction} className="shrink-0">
+            <button
+              type="submit"
+              disabled={!switches.blob_reindex}
+              className="rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Rebuild index
             </button>
           </form>
         </div>

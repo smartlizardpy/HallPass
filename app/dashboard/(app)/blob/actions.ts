@@ -30,10 +30,16 @@ import { requireRole } from "@/app/lib/auth";
 import {
   ADVANCED_BLOB_OPS,
   APP_SETTINGS_CACHE_TAG,
+  blobOpDisabledMessage,
+  isBlobOpEnabled,
   setAllBlobOps,
   setBlobOpEnabled,
   type BlobOpId,
 } from "@/app/lib/blob-ops";
+import {
+  GAMES_BLOB_CACHE_TAG,
+  reindexGameBlobs,
+} from "@/app/lib/game-blob-index";
 
 /** Where every action lands; centralised so the path never drifts. */
 const BLOB_PATH = "/dashboard/blob";
@@ -122,5 +128,52 @@ export async function setAllBlobOpsAction(formData: FormData): Promise<void> {
         ? "Every advanced-blob feature is back ON."
         : "Every advanced-blob feature is OFF. Nothing in the app will spend an advanced operation."
       : "Could not save those switches. Nothing changed.",
+  );
+}
+
+/**
+ * Rebuild `game_blobs` from ONE paginated `list()` of the `games/` prefix.
+ *
+ * THE ONLY `list()` LEFT IN THE APP, and the reason the mirror is allowed to be
+ * lossy rather than transactional: anything written out-of-band —
+ * `publish-game.mjs` against a database it could not reach, a blob edited in the
+ * Vercel dashboard, every override that predates migration 026 — is recoverable
+ * by pressing this instead of by hand-writing rows.
+ *
+ * It is metered like everything else on this page, and it is the one entry an
+ * operator should switch back ON first: an index that cannot be rebuilt is an
+ * index that silently keeps serving the static twin.
+ *
+ * The banner reports what the sweep actually did. Somebody who has just spent a
+ * scarce operation deserves to be told what it bought, and "indexed 41, removed
+ * 3" is also the fastest way to notice that the mirror had drifted at all.
+ */
+export async function reindexBlobsAction(): Promise<void> {
+  await requireRole("super_admin");
+
+  if (!(await isBlobOpEnabled("blob_reindex"))) {
+    back("error", blobOpDisabledMessage("blob_reindex"));
+  }
+
+  let result: { indexed: number; removed: number } | null = null;
+  try {
+    result = await reindexGameBlobs();
+  } catch (err) {
+    console.error("blob reindex failed:", err);
+    result = null;
+  }
+  // Outside the try, because the sweep may have written rows before failing and
+  // the page must not keep showing the pre-sweep count either way.
+  updateTag(GAMES_BLOB_CACHE_TAG);
+
+  if (!result) {
+    back(
+      "error",
+      "The reindex sweep failed. If the advanced-operation allowance is spent, the list() itself is what failed — nothing was lost, try again after it resets.",
+    );
+  }
+  back(
+    "ok",
+    `Rebuilt the index: ${result.indexed} blob${result.indexed === 1 ? "" : "s"} recorded, ${result.removed} stale row${result.removed === 1 ? "" : "s"} removed.`,
   );
 }
