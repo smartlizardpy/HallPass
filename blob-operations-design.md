@@ -106,6 +106,38 @@ statement.
 | Promote beta shots to gallery | `copy` | 1 per promoted shot | The shot stays **pending**, not accepted-and-invisible, so nobody is paid for a decision that was not made. Rejecting still works. |
 | Rebuild the blob index | `list` | a few per sweep | The reindex button is disabled. Turn this back on **first**. |
 
+### The env lock, for when the database is not an option
+
+The switches live in `app_settings`, which needs migration 026 applied — and the
+moment you most want to stop spending is a moment when running a migration may
+not be possible. Setting **`BLOB_READ_ONLY=1`** in the environment and
+redeploying forces every switch off **without reading the database at all**.
+
+- It short-circuits *before* the settings read, not after — a lock that had to
+  query first would be a lock you could not trust in the only case it is for.
+- It is a **lock, not a default**: it beats an explicit `ON` row, the dashboard's
+  buttons are greyed while it holds, and the write actions refuse. A switch that
+  reports a state it does not have is worse than one that will not move.
+- Accepted values are an explicit allow-list — `1`, `true`, `yes`, `on`
+  (trimmed, case-insensitive). Anything else, including `0` and `false` (both
+  truthy strings in JavaScript), fails **open** and leaves the table in charge,
+  so a typo cannot silently freeze publishing.
+- Vercel materialises env vars at deploy time, so a change takes effect on the
+  next deployment, not the next request.
+
+Remove the variable and redeploy to hand control back to the table.
+
+### Running without migration 026
+
+Every read fails soft, so an unmigrated deployment degrades rather than breaks:
+
+| Surface | Behaviour |
+|---|---|
+| Serving a game | `game_blobs` is unreadable → empty index → every asset serves the `public/games/` twin. The deploy workflow runs `sync-games` before the build, so that twin is current as of the last deploy. |
+| `/games-version` | Returns `"0"`; the service worker reads an unchanged version as "nothing to do". |
+| Blob-op switches | All read **ON** — the fail-soft direction. Use `BLOB_READ_ONLY` instead. |
+| Publishing | The blob write still succeeds; only the bookkeeping fails, and it is best-effort. The published file will not be visible to the serving route until the migration runs and the index is rebuilt. |
+
 ### Design decisions worth not re-litigating
 
 - **A switch that cannot be read reads as ENABLED.** A Neon outage must not

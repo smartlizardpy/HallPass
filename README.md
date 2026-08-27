@@ -114,7 +114,9 @@ a version and rendering the dashboard all read the `game_blobs` table in Neon
 rather than asking the store, so **traffic spends nothing** — the `list()` that
 used to do that job was 98% of everything the site spent. What remains is one
 write per file a person deliberately publishes, and a super admin can switch each
-of those off from **Dashboard → Blob ops** when the allowance runs out. Full
+of those off from **Dashboard → Blob ops** when the allowance runs out — or, if
+migration 026 has not been applied yet, by setting `BLOB_READ_ONLY=1` and
+redeploying, which forces everything off with no database involved. Full
 reasoning, the per-feature table and the reindex recovery path are in
 [`blob-operations-design.md`](blob-operations-design.md).
 
@@ -473,6 +475,7 @@ Derived from `process.env.*` references in the codebase. Configure these in Verc
 |---|---|---|
 | `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` | `instrumentation-client.ts` | **Required for any analytics data.** Client-side PostHog capture token (browser → PostHog). `NEXT_PUBLIC_` vars are inlined at **build time**, so it must be set in Vercel *before* the build runs; if it is missing, `posthog.init` no-ops and **zero events** are captured (not even autocapture / pageviews). Find it in PostHog → Project settings. |
 | `BLOB_READ_WRITE_TOKEN` | `@vercel/blob` (`put`, `copy`, `head`, `del`) | Auto-provisioned by Vercel when a Blob store is linked. |
+| `BLOB_READ_ONLY` | `app/lib/blob-ops.ts` | Optional emergency lock. Set to `1` (or `true`/`yes`/`on`) to force **every** advanced-blob feature off — publishing, media, beta evidence, cover caching, shot promotion, reindex — **without needing the database**, for when the allowance is spent and migration 026 has not been applied. Beats the `app_settings` switches and greys out the dashboard toggles. Anything unrecognised (including `0` and `false`) fails open and leaves the switches in charge. Takes effect on the next deploy. |
 | `ADMIN_HTML_PASSWORD` | `app/lib/admin-html-auth.ts` | Plain string; gates `/admin/html`. Required for uploads. |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | `app/lib/push/config.ts` | Optional. Web Push signing pair for notifications; generate with `npx web-push generate-vapid-keys`. Unset means the push path reports itself unavailable and stays silent — the bell still works, and notifications are pulled rather than pushed. Deliberately NOT `NEXT_PUBLIC_`: the public key is served at request time from `GET /api/v1/me/push`, so adding it takes effect on the next request rather than the next build. |
 | `VAPID_SUBJECT` | `app/lib/push/config.ts` | A `mailto:` the push service can contact about a misbehaving sender. Required by the VAPID spec. |

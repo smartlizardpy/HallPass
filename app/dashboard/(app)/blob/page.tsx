@@ -42,7 +42,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
-import { ADVANCED_BLOB_OPS, readBlobOpSwitches } from "@/app/lib/blob-ops";
+import {
+  ADVANCED_BLOB_OPS,
+  BLOB_READ_ONLY_NOTICE,
+  isBlobReadOnly,
+  readBlobOpSwitches,
+} from "@/app/lib/blob-ops";
 import { readGameBlobIndex } from "@/app/lib/game-blob-index";
 import { DashHeader } from "../_ui/DashHeader";
 import {
@@ -98,6 +103,12 @@ export default async function BlobOpsPage({
   const offCount = ADVANCED_BLOB_OPS.filter((op) => !switches[op.id]).length;
   const allOff = offCount === ADVANCED_BLOB_OPS.length;
 
+  // When the env lock is set every switch already reads OFF; this is what tells
+  // the operator WHY, and why the buttons will not move. Without it the page
+  // would look like somebody had turned everything off from here and could turn
+  // it back on from here, which is exactly wrong.
+  const locked = isBlobReadOnly();
+
   const indexedSlugs = new Set(indexed.map((row) => row.slug));
   const newestIndexed = indexed.reduce(
     (newest, row) => Math.max(newest, row.uploadedAt),
@@ -128,6 +139,13 @@ export default async function BlobOpsPage({
       {error && (
         <div className="mb-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
           {error}
+        </div>
+      )}
+
+      {locked && (
+        <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <strong className="font-bold">Locked by the environment.</strong>{" "}
+          {BLOB_READ_ONLY_NOTICE}
         </div>
       )}
 
@@ -178,19 +196,22 @@ export default async function BlobOpsPage({
                   : `${offCount} of ${ADVANCED_BLOB_OPS.length} switched off`}
             </h2>
             <p className="mt-1 text-sm text-muted">
-              {allOff
-                ? "Nothing in the app will spend an advanced operation. Publishing, media, beta evidence and the reindex sweep are all refusing."
-                : "Turn everything off in one write when the allowance is spent, and back on when it resets."}
+              {locked
+                ? "Forced by BLOB_READ_ONLY, not by these switches — no database needed, and nothing here can override it."
+                : allOff
+                  ? "Nothing in the app will spend an advanced operation. Publishing, media, beta evidence and the reindex sweep are all refusing."
+                  : "Turn everything off in one write when the allowance is spent, and back on when it resets."}
             </p>
           </div>
           <form action={setAllBlobOpsAction} className="shrink-0">
             <input type="hidden" name="enabled" value={allOff ? "1" : "0"} />
             <button
               type="submit"
+              disabled={locked}
               className={
                 allOff
-                  ? "rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
-                  : "rounded-full bg-red-600 px-5 py-2 text-sm font-extrabold text-white hover:bg-red-700"
+                  ? "rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  : "rounded-full bg-red-600 px-5 py-2 text-sm font-extrabold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               }
             >
               {allOff ? "Enable everything" : "Disable everything"}
@@ -234,7 +255,7 @@ export default async function BlobOpsPage({
           <form action={reindexBlobsAction} className="shrink-0">
             <button
               type="submit"
-              disabled={!switches.blob_reindex}
+              disabled={locked || !switches.blob_reindex}
               className="rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Rebuild index
@@ -276,11 +297,12 @@ export default async function BlobOpsPage({
                   />
                   <button
                     type="submit"
+                    disabled={locked}
                     aria-label={`${enabled ? "Disable" : "Enable"} ${op.label}`}
                     className={
                       enabled
-                        ? "rounded-full border border-border bg-white px-4 py-1.5 text-sm font-bold text-zinc-700 hover:bg-surface-2"
-                        : "rounded-full bg-brand px-4 py-1.5 text-sm font-extrabold text-white hover:bg-brand-600"
+                        ? "rounded-full border border-border bg-white px-4 py-1.5 text-sm font-bold text-zinc-700 hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        : "rounded-full bg-brand px-4 py-1.5 text-sm font-extrabold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
                     }
                   >
                     {enabled ? "Disable" : "Enable"}

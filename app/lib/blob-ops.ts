@@ -26,6 +26,17 @@
  * button iterates, so an unlisted feature is one nobody can turn off in the
  * month they need to.
  *
+ * ── THE ENV LOCK, FOR WHEN THE DATABASE IS NOT AN OPTION ────────────────────
+ * The switches live in `app_settings`, which means they need migration 026 to
+ * have been applied — and the moment you most want to stop spending is a moment
+ * when running a migration may not be possible. `BLOB_READ_ONLY=1` in the
+ * environment forces EVERY switch off without reading the database at all, so a
+ * deploy is the only thing between an operator and a hard stop.
+ *
+ * It is a LOCK, not a default: it beats whatever the table says, and while it is
+ * set the dashboard's toggles are inert and say so rather than pretending to
+ * write. Unset it (and redeploy) to hand control back to the table.
+ *
  * ── THE FAIL-SOFT DIRECTION, AND WHY IT IS THIS ONE ─────────────────────────
  * A switch that cannot be read reads as ENABLED. Neon being unreachable must not
  * silently freeze the entire admin surface behind a message claiming somebody
@@ -158,13 +169,55 @@ function settingKey(id: BlobOpId): string {
 }
 
 /**
+ * Values of `BLOB_READ_ONLY` that mean "on".
+ *
+ * An explicit allow-list rather than JS truthiness, because the string "0" and
+ * the string "false" are both truthy in JavaScript and both obviously mean off
+ * to the person typing them into Vercel's env editor. Anything unrecognised —
+ * including empty and unset — is off, so a typo fails OPEN and leaves the
+ * database in charge rather than silently freezing publishing.
+ */
+const READ_ONLY_VALUES = new Set(["1", "true", "yes", "on"]);
+
+/**
+ * Whether the environment forces read-only mode.
+ *
+ * Synchronous and database-free ON PURPOSE: that is the whole point of it — it
+ * has to work on a deployment whose migrations have not run, or whose Neon is
+ * unreachable. Read per call rather than captured at module scope so a value
+ * injected per cold start is picked up without reasoning about import order.
+ *
+ * Vercel materialises env vars at deploy time, so changing this takes effect on
+ * the next deployment, not the next request.
+ */
+export function isBlobReadOnly(): boolean {
+  return READ_ONLY_VALUES.has(
+    (process.env.BLOB_READ_ONLY ?? "").trim().toLowerCase(),
+  );
+}
+
+/** What the dashboard tells a super admin whose toggles are locked out. */
+export const BLOB_READ_ONLY_NOTICE =
+  "BLOB_READ_ONLY is set in the environment, so every advanced-blob feature is forced off and these switches cannot be changed. Remove the variable and redeploy to hand control back to the settings table.";
+
+/**
  * Every switch, defaulting to enabled for any key that has never been written.
  * Fail-soft to all-enabled via `readAppSettings()` — see the module docblock for
  * why that is the right direction.
  */
 export async function readBlobOpSwitches(): Promise<Record<BlobOpId, boolean>> {
-  const settings = await readAppSettings();
   const state = {} as Record<BlobOpId, boolean>;
+
+  // The env lock short-circuits BEFORE the database read, not after it. That is
+  // not an optimisation: the situation it exists for is one where `app_settings`
+  // may not exist yet, so a lock that had to query first would be a lock that
+  // could not be trusted in the only case it is for.
+  if (isBlobReadOnly()) {
+    for (const op of ADVANCED_BLOB_OPS) state[op.id] = false;
+    return state;
+  }
+
+  const settings = await readAppSettings();
   for (const op of ADVANCED_BLOB_OPS) {
     // Anything other than an explicit "0" is on: an unwritten key, and a value
     // some future writer got wrong, both mean "nobody turned this off".
