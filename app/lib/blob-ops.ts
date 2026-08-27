@@ -372,6 +372,31 @@ export async function setBlobOpEnabled(
 }
 
 /**
+ * Write every switch a save moved, in ONE statement.
+ *
+ * This is the whole point of the batch form: an operator stopping five features
+ * used to make five writes, five redirects and five banners, any of which could
+ * fail on its own and leave the panel half applied — with no way to tell which
+ * two were still spending. One `writeAppSettings()` is one round trip that
+ * either lands or does not.
+ *
+ * THROWS, like every other writer here, so a failed save is never reported as
+ * done. An empty change set is a no-op rather than an error; the caller has
+ * already decided whether that deserves a message.
+ */
+export async function setBlobOps(
+  changes: readonly BlobOpChange[],
+  actor: string | null,
+): Promise<void> {
+  await writeAppSettings(
+    changes.map(
+      ({ op, enabled }) => [settingKey(op.id), enabled ? "1" : "0"] as const,
+    ),
+    actor,
+  );
+}
+
+/**
  * Turn EVERY feature on or off in one statement — the panic button for the day
  * the allowance reads 100%, and the single click that undoes it afterwards.
  */
