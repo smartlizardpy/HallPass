@@ -21,6 +21,13 @@
  * what was turned off and where to turn it back on — instead of letting an admin
  * hit a raw "operation limit exceeded" from the store mid-upload.
  *
+ * THE SWITCHES ARE SAVED IN BATCHES, NOT ONE AT A TIME. The dashboard stages
+ * clicks in the browser and posts the whole panel once;
+ * `switchesFromEnabledIds()` decodes it, `diffBlobOpSwitches()` reduces it to the
+ * rows that actually moved, and `setBlobOps()` writes those in one statement.
+ * Diffing rather than re-asserting all seven is what stops two operators with the
+ * page open from clobbering each other's changes.
+ *
  * ADDING A FEATURE THAT SPENDS AN ADVANCED OPERATION MEANS ADDING IT HERE. The
  * registry is what the settings page renders and what the "disable everything"
  * button iterates, so an unlisted feature is one nobody can turn off in the
@@ -51,7 +58,6 @@ import "server-only";
 import {
   APP_SETTINGS_CACHE_TAG,
   readAppSettings,
-  writeAppSetting,
   writeAppSettings,
 } from "@/app/lib/app-settings";
 
@@ -201,12 +207,50 @@ export const BLOB_READ_ONLY_NOTICE =
   "BLOB_READ_ONLY is set in the environment, so every advanced-blob feature is forced off and these switches cannot be changed. Remove the variable and redeploy to hand control back to the settings table.";
 
 /**
+ * The state of every switch at once — what the dashboard renders, what its form
+ * posts back, and what a save is diffed against.
+ *
+ * Total over the registry on purpose: a partial record would make "absent" mean
+ * both "unchanged" and "off" depending on who was reading it, which is exactly
+ * the confusion the checkbox form below would otherwise introduce.
+ */
+export type BlobOpSwitches = Record<BlobOpId, boolean>;
+
+/** Every switch set the same way — what the "disable everything" submit asks for. */
+export function allBlobOpSwitches(enabled: boolean): BlobOpSwitches {
+  const state = {} as BlobOpSwitches;
+  for (const op of ADVANCED_BLOB_OPS) state[op.id] = enabled;
+  return state;
+}
+
+/**
+ * Decode what the dashboard's checkbox form posted: PRESENT MEANS ON, ABSENT
+ * MEANS OFF.
+ *
+ * That is the browser's own rule — an unchecked checkbox submits nothing — and
+ * it is only safe to read it that way because the registry is a closed set the
+ * server already knows. Every id gets an answer here, so a switch the operator
+ * turned off is genuinely "off" rather than "not mentioned", and there is no
+ * hidden-input twin per row to keep in sync with its checkbox.
+ *
+ * Unknown ids are dropped rather than trusted, for the same reason the old
+ * single-switch action narrowed its `id`: a hand-crafted POST must not be able
+ * to write arbitrary `blob_op:<anything>` keys into `app_settings`.
+ */
+export function switchesFromEnabledIds(ids: Iterable<string>): BlobOpSwitches {
+  const on = new Set(ids);
+  const state = {} as BlobOpSwitches;
+  for (const op of ADVANCED_BLOB_OPS) state[op.id] = on.has(op.id);
+  return state;
+}
+
+/**
  * Every switch, defaulting to enabled for any key that has never been written.
  * Fail-soft to all-enabled via `readAppSettings()` — see the module docblock for
  * why that is the right direction.
  */
-export async function readBlobOpSwitches(): Promise<Record<BlobOpId, boolean>> {
-  const state = {} as Record<BlobOpId, boolean>;
+export async function readBlobOpSwitches(): Promise<BlobOpSwitches> {
+  const state = {} as BlobOpSwitches;
 
   // The env lock short-circuits BEFORE the database read, not after it. That is
   // not an optimisation: the situation it exists for is one where `app_settings`
@@ -238,6 +282,77 @@ export async function isBlobOpEnabled(id: BlobOpId): Promise<boolean> {
   return (await readBlobOpSwitches())[id] ?? true;
 }
 
+/** One switch that moves in a save, carrying the registry entry that names it. */
+export type BlobOpChange = {
+  op: AdvancedBlobOp;
+  /** The state being written — `true` for on. */
+  enabled: boolean;
+};
+
+/**
+ * Which switches a save actually moves, in registry order.
+ *
+ * THE POINT OF DIFFING RATHER THAN WRITING THE WHOLE PANEL. A batch form knows
+ * the state of all seven switches, so the lazy implementation writes all seven
+ * every time — and then two super admins with the page open at once clobber each
+ * other: the second save re-asserts a baseline it loaded before the first one
+ * happened, silently undoing it. Writing only the rows that moved means two
+ * operators touching different features do not fight, and the banner can name
+ * exactly what changed instead of claiming credit for five untouched rows.
+ *
+ * Ordering follows `ADVANCED_BLOB_OPS` so the banner reads in the same order as
+ * the page, rather than in whatever order a form serialised its fields.
+ */
+export function diffBlobOpSwitches(
+  current: BlobOpSwitches,
+  desired: BlobOpSwitches,
+): BlobOpChange[] {
+  const changes: BlobOpChange[] = [];
+  for (const op of ADVANCED_BLOB_OPS) {
+    // `current` comes from a read that fails soft to all-enabled, so a switch
+    // missing from it reads as ON — the same direction every other reader takes.
+    if ((current[op.id] ?? true) !== desired[op.id]) {
+      changes.push({ op, enabled: desired[op.id] });
+    }
+  }
+  return changes;
+}
+
+/** Join labels the way a sentence does: "A", "A and B", "A, B and C". */
+function joinLabels(labels: readonly string[]): string {
+  if (labels.length <= 1) return labels[0] ?? "";
+  return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+}
+
+/**
+ * The banner a batch save shows, naming every switch it moved.
+ *
+ * A save that reported only "Saved." would be the one regression a batch form
+ * could introduce: the per-switch buttons at least told the operator which
+ * feature they had just turned off. Somebody who has clicked seven checkboxes
+ * and one button deserves the same confirmation, spelled out — this is the
+ * screen people open when publishing has already stopped working, and "did that
+ * take?" is not a question to leave them holding.
+ *
+ * Empty is never rendered; the action short-circuits a no-op save with its own
+ * message before reaching here.
+ */
+export function describeBlobOpChanges(
+  changes: readonly BlobOpChange[],
+): string {
+  const off = changes.filter((c) => !c.enabled).map((c) => c.op.label);
+  const on = changes.filter((c) => c.enabled).map((c) => c.op.label);
+
+  const clauses: string[] = [];
+  if (off.length > 0) {
+    clauses.push(`${joinLabels(off)} ${off.length === 1 ? "is" : "are"} now OFF`);
+  }
+  if (on.length > 0) {
+    clauses.push(`${joinLabels(on)} ${on.length === 1 ? "is" : "are"} now ON`);
+  }
+  return `Saved. ${clauses.join("; ")}.`;
+}
+
 /** The refusal banner for a switched-off feature. */
 export function blobOpDisabledMessage(id: BlobOpId): string {
   return (
@@ -253,25 +368,28 @@ export function blobOpDisabledMessage(id: BlobOpId): string {
 /** Re-exported so the settings actions have one import site for everything. */
 export { APP_SETTINGS_CACHE_TAG };
 
-/** Turn one feature on or off. THROWS so a failed save is never reported as done. */
-export async function setBlobOpEnabled(
-  id: BlobOpId,
-  enabled: boolean,
-  actor: string | null,
-): Promise<void> {
-  await writeAppSetting(settingKey(id), enabled ? "1" : "0", actor);
-}
-
 /**
- * Turn EVERY feature on or off in one statement — the panic button for the day
- * the allowance reads 100%, and the single click that undoes it afterwards.
+ * Write every switch a save moved, in ONE statement.
+ *
+ * This is the whole point of the batch form: an operator stopping five features
+ * used to make five writes, five redirects and five banners, any of which could
+ * fail on its own and leave the panel half applied — with no way to tell which
+ * two were still spending. One `writeAppSettings()` is one round trip that
+ * either lands or does not.
+ *
+ * THROWS, like every other writer here, so a failed save is never reported as
+ * done. An empty change set is a no-op rather than an error; the caller has
+ * already decided whether that deserves a message.
  */
-export async function setAllBlobOps(
-  enabled: boolean,
+export async function setBlobOps(
+  changes: readonly BlobOpChange[],
   actor: string | null,
 ): Promise<void> {
   await writeAppSettings(
-    ADVANCED_BLOB_OPS.map((op) => [settingKey(op.id), enabled ? "1" : "0"] as const),
+    changes.map(
+      ({ op, enabled }) => [settingKey(op.id), enabled ? "1" : "0"] as const,
+    ),
     actor,
   );
 }
+

@@ -17,8 +17,13 @@
  *      this page and cannot be turned off; that is the reason the registry's
  *      docblock says adding one is part of adding the feature.
  *
- *   2. HOW DO I STOP IT, NOW, WITHOUT A DEPLOY? Each row toggles, and one
- *      button turns everything off (or back on) in a single write.
+ *   2. HOW DO I STOP IT, NOW, WITHOUT A DEPLOY? Flip whatever needs to stop and
+ *      press Save. The panel STAGES clicks in the browser and writes every
+ *      switch that moved in one statement — turning off four features is four
+ *      clicks and one write, not four writes, four redirects and four banners on
+ *      the screen somebody opened because publishing had already broken. One
+ *      button still turns everything off (or back on) in the same single write,
+ *      because the panic button has to keep costing one click.
  *
  *   3. IS THE MIRROR STILL RIGHT? The index card shows how many blobs Neon
  *      thinks exist and offers the one deliberate `list()` sweep that rebuilds
@@ -50,11 +55,8 @@ import {
 } from "@/app/lib/blob-ops";
 import { readGameBlobIndex } from "@/app/lib/game-blob-index";
 import { DashHeader } from "../_ui/DashHeader";
-import {
-  reindexBlobsAction,
-  setAllBlobOpsAction,
-  toggleBlobOpAction,
-} from "./actions";
+import { reindexBlobsAction } from "./actions";
+import { BlobOpSwitchList } from "./BlobOpSwitchList";
 
 export const metadata: Metadata = {
   title: "Blob ops",
@@ -69,15 +71,6 @@ type SearchParams = Promise<{ ok?: string | string[]; error?: string | string[] 
 function asString(value: string | string[] | undefined): string | null {
   if (!value) return null;
   return Array.isArray(value) ? value[0] : value;
-}
-
-/** The Vercel primitive a feature spends, as a small monospace chip. */
-function OpChip({ operation }: { operation: string }) {
-  return (
-    <span className="inline-block rounded-full bg-surface-2 px-2 py-0.5 font-mono text-xs font-bold text-muted">
-      {operation}()
-    </span>
-  );
 }
 
 export default async function BlobOpsPage({
@@ -100,8 +93,6 @@ export default async function BlobOpsPage({
     readBlobOpSwitches(),
     readGameBlobIndex(),
   ]);
-  const offCount = ADVANCED_BLOB_OPS.filter((op) => !switches[op.id]).length;
-  const allOff = offCount === ADVANCED_BLOB_OPS.length;
 
   // When the env lock is set every switch already reads OFF; this is what tells
   // the operator WHY, and why the buttons will not move. Without it the page
@@ -185,40 +176,17 @@ export default async function BlobOpsPage({
         </div>
       </section>
 
-      <section className="mb-8 rounded-xl border border-border bg-surface p-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0">
-            <h2 className="text-lg font-black tracking-tight">
-              {allOff
-                ? "Everything is switched off"
-                : offCount === 0
-                  ? "Everything is switched on"
-                  : `${offCount} of ${ADVANCED_BLOB_OPS.length} switched off`}
-            </h2>
-            <p className="mt-1 text-sm text-muted">
-              {locked
-                ? "Forced by BLOB_READ_ONLY, not by these switches — no database needed, and nothing here can override it."
-                : allOff
-                  ? "Nothing in the app will spend an advanced operation. Publishing, media, beta evidence and the reindex sweep are all refusing."
-                  : "Turn everything off in one write when the allowance is spent, and back on when it resets."}
-            </p>
-          </div>
-          <form action={setAllBlobOpsAction} className="shrink-0">
-            <input type="hidden" name="enabled" value={allOff ? "1" : "0"} />
-            <button
-              type="submit"
-              disabled={locked}
-              className={
-                allOff
-                  ? "rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
-                  : "rounded-full bg-red-600 px-5 py-2 text-sm font-extrabold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-              }
-            >
-              {allOff ? "Enable everything" : "Disable everything"}
-            </button>
-          </form>
-        </div>
-      </section>
+      {/*
+        The switch panel — summary, rows and save bar — is one client-side form:
+        clicking a row stages it, and one Save writes every change in a single
+        statement. See `BlobOpSwitchList` for why that is worth a client
+        component, and `saveBlobOpsAction` for the gate that does not trust it.
+      */}
+      <BlobOpSwitchList
+        ops={ADVANCED_BLOB_OPS}
+        saved={switches}
+        locked={locked}
+      />
 
       <section className="mb-8 rounded-xl border border-border bg-surface p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -263,56 +231,6 @@ export default async function BlobOpsPage({
           </form>
         </div>
       </section>
-
-      <div className="overflow-hidden rounded-xl border border-border bg-surface">
-        <ul>
-          {ADVANCED_BLOB_OPS.map((op) => {
-            const enabled = switches[op.id];
-            return (
-              <li
-                key={op.id}
-                className="flex flex-wrap items-start justify-between gap-4 border-b border-border p-5 last:border-0"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-bold text-foreground">
-                      {op.label}
-                    </h3>
-                    <OpChip operation={op.operation} />
-                    {!enabled && (
-                      <span className="inline-block rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800">
-                        off
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-1 text-sm text-muted">{op.effect}</p>
-                  <p className="mt-1 text-xs text-muted">{op.cost}</p>
-                </div>
-                <form action={toggleBlobOpAction} className="shrink-0">
-                  <input type="hidden" name="id" value={op.id} />
-                  <input
-                    type="hidden"
-                    name="enabled"
-                    value={enabled ? "1" : "0"}
-                  />
-                  <button
-                    type="submit"
-                    disabled={locked}
-                    aria-label={`${enabled ? "Disable" : "Enable"} ${op.label}`}
-                    className={
-                      enabled
-                        ? "rounded-full border border-border bg-white px-4 py-1.5 text-sm font-bold text-zinc-700 hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
-                        : "rounded-full bg-brand px-4 py-1.5 text-sm font-extrabold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
-                    }
-                  >
-                    {enabled ? "Disable" : "Enable"}
-                  </button>
-                </form>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
     </>
   );
 }

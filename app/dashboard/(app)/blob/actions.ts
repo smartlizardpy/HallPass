@@ -28,15 +28,17 @@ import { updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import {
-  ADVANCED_BLOB_OPS,
   APP_SETTINGS_CACHE_TAG,
   BLOB_READ_ONLY_NOTICE,
+  allBlobOpSwitches,
   blobOpDisabledMessage,
+  describeBlobOpChanges,
+  diffBlobOpSwitches,
   isBlobOpEnabled,
   isBlobReadOnly,
-  setAllBlobOps,
-  setBlobOpEnabled,
-  type BlobOpId,
+  readBlobOpSwitches,
+  setBlobOps,
+  switchesFromEnabledIds,
 } from "@/app/lib/blob-ops";
 import {
   GAMES_BLOB_CACHE_TAG,
@@ -66,42 +68,53 @@ function refuseWhileLocked(): void {
 }
 
 /**
- * Narrow a form value to a known switch id.
+ * Save the whole switch panel — the one write path behind `/dashboard/blob`.
  *
- * The registry is the allow-list, so a hand-crafted POST cannot write an
- * arbitrary `blob_op:<anything>` key into `app_settings` — it would be inert,
- * but a settings table full of junk keys is exactly the kind of thing nobody
- * notices until they are debugging something else.
- */
-function toBlobOpId(value: FormDataEntryValue | null): BlobOpId | null {
-  const id = String(value ?? "");
-  return ADVANCED_BLOB_OPS.some((op) => op.id === id) ? (id as BlobOpId) : null;
-}
-
-/**
- * Flip one feature's switch. The form submits the CURRENT state and this writes
- * the opposite, so the button is a toggle rather than two near-identical forms.
+ * WHY ONE ACTION AND NOT SEVEN CLICKS. Turning a switch used to submit
+ * immediately, so an operator stopping five features made five writes, five
+ * redirects and five banners on the screen they opened because publishing had
+ * already broken. The panel now stages every click in the browser and posts once.
  *
- * `updateTag` is what makes the page show the new state immediately: every gated
- * action and the page itself read `app_settings` through one cached entry with an
- * hour-long backstop, so without this the operator would flip a switch and watch
- * nothing change.
+ * WHAT IT READS. The form's checkboxes name the switches that should be ON;
+ * `switchesFromEnabledIds()` reads absence as OFF, which is the browser's own
+ * rule and is only decodable because the registry is a closed set. The bulk
+ * button submits `all=0`/`all=1` instead, and that WINS over the checkboxes:
+ * "disable everything" has to stay one click on the day it is needed, so it
+ * overrides whatever was staged rather than merging with it.
+ *
+ * WHAT IT WRITES. Only the switches that actually moved, in one statement. The
+ * diff is what stops two super admins with the page open from clobbering each
+ * other — a save that re-asserted all seven would silently undo the other's
+ * change — and it is also what lets the banner name exactly what happened.
+ *
+ * A save that moves nothing is reported as such rather than written: the
+ * operator either double-submitted or someone else got there first, and both
+ * are worth saying instead of a "Saved." that saved nothing.
  */
-export async function toggleBlobOpAction(formData: FormData): Promise<void> {
+export async function saveBlobOpsAction(formData: FormData): Promise<void> {
   const { email: actor } = await requireRole("super_admin");
   refuseWhileLocked();
 
-  const id = toBlobOpId(formData.get("id"));
-  if (!id) back("error", "Unknown operation.");
+  const all = String(formData.get("all") ?? "");
+  const desired =
+    all === "0" || all === "1"
+      ? allBlobOpSwitches(all === "1")
+      : switchesFromEnabledIds(formData.getAll("on").map(String));
 
-  // The checkbox-less form posts what the page rendered; "1" means it is on now
-  // and the click means turn it off.
-  const enable = String(formData.get("enabled") ?? "") !== "1";
+  // The same read the page rendered from, so the diff is against what the
+  // operator was actually looking at. It fails soft to all-enabled, which keeps
+  // the bulk OFF button working during a Neon blip — the direction that matters.
+  const changes = diffBlobOpSwitches(await readBlobOpSwitches(), desired);
+  if (changes.length === 0) {
+    back(
+      "ok",
+      "Nothing to save — every switch is already in the state you asked for.",
+    );
+  }
 
-  const op = ADVANCED_BLOB_OPS.find((candidate) => candidate.id === id)!;
   let saved = false;
   try {
-    await setBlobOpEnabled(id, enable, actor);
+    await setBlobOps(changes, actor);
     saved = true;
   } catch {
     saved = false;
@@ -111,41 +124,8 @@ export async function toggleBlobOpAction(formData: FormData): Promise<void> {
   back(
     saved ? "ok" : "error",
     saved
-      ? `${op.label} is now ${enable ? "ON" : "OFF"}.`
-      : `Could not save that switch. ${op.label} is unchanged.`,
-  );
-}
-
-/**
- * Turn EVERY feature off, or every feature back on — the panic button for the
- * day the allowance reads 100%, and the single click that undoes it afterwards.
- *
- * One statement rather than a loop, so the switches can never end up half
- * applied: an operator who pressed "disable everything" and got five of seven
- * would have no way to tell which two were still spending.
- */
-export async function setAllBlobOpsAction(formData: FormData): Promise<void> {
-  const { email: actor } = await requireRole("super_admin");
-  refuseWhileLocked();
-
-  const enable = String(formData.get("enabled") ?? "") === "1";
-
-  let saved = false;
-  try {
-    await setAllBlobOps(enable, actor);
-    saved = true;
-  } catch {
-    saved = false;
-  }
-  if (saved) updateTag(APP_SETTINGS_CACHE_TAG);
-
-  back(
-    saved ? "ok" : "error",
-    saved
-      ? enable
-        ? "Every advanced-blob feature is back ON."
-        : "Every advanced-blob feature is OFF. Nothing in the app will spend an advanced operation."
-      : "Could not save those switches. Nothing changed.",
+      ? describeBlobOpChanges(changes)
+      : `Could not save. ${changes.length === 1 ? "That change was" : `All ${changes.length} changes were`} dropped and nothing moved.`,
   );
 }
 
