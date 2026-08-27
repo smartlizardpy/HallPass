@@ -1,5 +1,19 @@
-import { list, head } from "@vercel/blob";
-import { SITE_URL } from "@/app/lib/site";
+/**
+ * HallPass — pure path, type and policy helpers for a game's SOURCE blobs.
+ *
+ * Deliberately imports NOTHING: no `@vercel/blob`, no `server-only`, no database.
+ * The route that streams the bytes, the dashboard actions that publish them, the
+ * Neon index that remembers them and `scripts/sync-games.mjs` all funnel through
+ * these helpers, and keeping them dependency-free is what lets every one of those
+ * callers share them without dragging a blob client or a Neon connection along.
+ *
+ * The reads that used to live here (`listGameFiles`, `readPublishedIndexHtml`)
+ * moved to `app/lib/game-blob-index.ts` when they stopped calling Blob and
+ * started reading the Neon mirror — see that module for why.
+ */
+
+/** The one prefix every game-source blob lives under. */
+export const GAMES_PREFIX = "games/";
 
 export function blobPathForSlug(slug: string): string {
   return `games/${slug}/index.html`;
@@ -7,6 +21,25 @@ export function blobPathForSlug(slug: string): string {
 
 export function blobPrefixForSlug(slug: string): string {
   return `games/${slug}/`;
+}
+
+/**
+ * The game a `games/<slug>/<rest>` blob key belongs to, or `null` when the key
+ * names no game — anything outside the prefix, and anything sitting DIRECTLY
+ * under it with no file after the slug (`games/version.txt`, the retired
+ * sentinel, is exactly that shape).
+ *
+ * The slug is validated against the same lowercase format the `game_blobs`
+ * table CHECKs and `game_overrides` uses, so an unexpected key is skipped by the
+ * indexer rather than rejected by Postgres mid-upload.
+ */
+export function slugFromBlobPath(pathname: string): string | null {
+  if (!pathname.startsWith(GAMES_PREFIX)) return null;
+  const rest = pathname.slice(GAMES_PREFIX.length);
+  const slash = rest.indexOf("/");
+  if (slash <= 0 || slash === rest.length - 1) return null;
+  const slug = rest.slice(0, slash);
+  return /^[a-z0-9][a-z0-9-]*$/.test(slug) ? slug : null;
 }
 
 export function blobPathForAsset(slug: string, relPath: string): string {
@@ -100,64 +133,5 @@ export function chooseGameSource(args: {
   return { kind: "static" };
 }
 
+/** One published file of a game, as the dashboard's source panel needs it. */
 export type GameBlobFile = { pathname: string; size: number };
-
-// `list()` results carry no contentType (only `head()` does) — callers must
-// key decisions on pathname alone.
-export async function listGameFiles(slug: string): Promise<GameBlobFile[]> {
-  const files: GameBlobFile[] = [];
-  let cursor: string | undefined;
-  do {
-    const page = await list({ prefix: blobPrefixForSlug(slug), cursor });
-    for (const blob of page.blobs) {
-      files.push({ pathname: blob.pathname, size: blob.size });
-    }
-    cursor = page.hasMore ? page.cursor : undefined;
-  } while (cursor);
-  return files;
-}
-
-
-/**
- * The current `index.html` for a game, as a string — or `null` only when neither
- * a published blob nor a baked-in static copy can be read.
- *
- * This is the READ side of the source-code panel. The integration loop is: copy
- * the live code out, add the scoreboard and achievement calls, publish it back.
- *
- * TWO SOURCES, latest-first:
- *  1. The published blob (`games/<slug>/index.html`). When present it is the
- *     freshest copy — an upload lands here before anything else — so it is read
- *     directly and `no-store`, so an admin who just published copies exactly what
- *     they uploaded rather than a cached prior version.
- *  2. FALLBACK: the source baked into the deploy at `public/games/<slug>/`. This
- *     is what a build-default game (never published, or reset to default) is
- *     actually running, so it must be copyable too — otherwise that game's panel
- *     has nothing to copy and the integration loop can't start. Read over HTTP,
- *     not the filesystem: `public/` is served by the CDN and is not reliably
- *     present in the serverless function's working directory on Vercel. Since the
- *     static twin is a mirror of the blob at sync time, the blob (when present)
- *     is always at least as new, so blob-first is also latest-first.
- *
- * Fails soft to `null` at every step: a missing file or a hiccup means "nothing
- * to copy", never a broken dashboard.
- */
-export async function readPublishedIndexHtml(slug: string): Promise<string | null> {
-  try {
-    const meta = await head(blobPathForAsset(slug, "index.html"));
-    const res = await fetch(meta.url, { cache: "no-store" });
-    if (res.ok) return await res.text();
-  } catch {
-    // No blob (build default / reset), or a transient blob error — fall back to
-    // the static twin below rather than reporting "nothing to copy".
-  }
-  try {
-    const res = await fetch(`${SITE_URL}/games/${slug}/index.html`, {
-      cache: "no-store",
-    });
-    if (res.ok) return await res.text();
-  } catch {
-    // Network hiccup reaching the static twin.
-  }
-  return null;
-}

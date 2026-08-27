@@ -33,6 +33,7 @@ import { del, put } from "@vercel/blob";
 import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
+import { blobOpDisabledMessage, isBlobOpEnabled } from "@/app/lib/blob-ops";
 import { isResolvedSlug } from "@/app/lib/games-store";
 import {
   MEDIA_CACHE_TAG,
@@ -114,6 +115,13 @@ export async function uploadMediaAction(formData: FormData): Promise<void> {
   if (files.length === 0) redirect(err(slug, "Choose at least one image"));
   if (files.length > MAX_MEDIA_PER_UPLOAD) {
     redirect(err(slug, `Upload at most ${MAX_MEDIA_PER_UPLOAD} images at a time`));
+  }
+  // One advanced Blob operation per image. Checked after the batch is validated
+  // and before any of it is written, so a switched-off upload spends nothing and
+  // says why — rather than dying on a raw store error half way through a batch.
+  // Reorder, alt-text and delete are untouched: none of them writes a blob.
+  if (!(await isBlobOpEnabled("game_media"))) {
+    redirect(err(slug, blobOpDisabledMessage("game_media")));
   }
 
   let failure: string | null = null;

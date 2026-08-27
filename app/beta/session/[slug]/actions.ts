@@ -26,6 +26,7 @@ import {
   requireBetaTester,
   BETA_CREDITS_CACHE_TAG,
 } from "@/app/lib/beta";
+import { blobOpDisabledMessage, isBlobOpEnabled } from "@/app/lib/blob-ops";
 import { reviews } from "@/app/lib/reviews";
 import {
   REPORT_BODY_MAX,
@@ -322,6 +323,12 @@ async function uploadShot(
   | { ok: true; blobPath: string; blobUrl: string; meta: { type: ImageType; width: number; height: number }; bytes: number }
   | { ok: false; error: string }
 > {
+  // Before the file is even read into memory: a `put` is an advanced Blob
+  // operation, and both callers already know how to turn a reason into UI copy,
+  // so a switched-off upload costs nothing and explains itself.
+  if (!(await isBlobOpEnabled("beta_shots"))) {
+    return { ok: false, error: blobOpDisabledMessage("beta_shots") };
+  }
   const bytes = new Uint8Array(await file.arrayBuffer());
   const check = validateMediaUpload(bytes);
   if (!check.ok) return { ok: false, error: SHOT_REJECTION_COPY[check.reason] };
@@ -344,6 +351,9 @@ async function uploadEvidence(
   slug: string,
   file: File,
 ): Promise<{ ok: true; blobPath: string; blobUrl: string } | { ok: false; error: string }> {
+  if (!(await isBlobOpEnabled("beta_shots"))) {
+    return { ok: false, error: blobOpDisabledMessage("beta_shots") };
+  }
   const bytes = new Uint8Array(await file.arrayBuffer());
   const check = validateEvidenceUpload(bytes);
   if (!check.ok) return { ok: false, error: EVIDENCE_REJECTION_COPY[check.reason] };

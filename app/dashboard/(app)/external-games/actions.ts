@@ -44,6 +44,12 @@ import { del, put } from "@vercel/blob";
 import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
+import { blobOpDisabledMessage, isBlobOpEnabled } from "@/app/lib/blob-ops";
+import {
+  GAMES_BLOB_CACHE_TAG,
+  forgetGameBlobsForSlug,
+  recordGameBlobs,
+} from "@/app/lib/game-blob-index";
 import { CREDITS_CACHE_TAG, recordFirstUpload } from "@/app/lib/game-credits";
 import { games, toGamePlatform } from "@/app/lib/games";
 import {
@@ -154,8 +160,16 @@ const IMAGE_EXT: Record<string, string> = {
  * action until the serverless function is killed — no row inserted, a platform
  * 5xx to the admin — the OPPOSITE of the fail-soft guarantee this module
  * documents. The 8s bound makes a stall REJECT into the catch (=> null) instead.
+ *
+ * KILL SWITCH: the `put` is an advanced Blob operation, so a super admin can
+ * turn cover caching off (`app/lib/blob-ops.ts`). Off reads exactly like a
+ * failed pull — `null`, the caller's fallback, the game still created — which is
+ * why the check belongs here rather than in each of the three call sites: this
+ * function's contract already IS "returns null and nothing breaks", and the
+ * cheapest place to skip the download too is before it starts.
  */
 async function cacheCoverToBlob(slug: string, imageUrl: string): Promise<string | null> {
+  if (!(await isBlobOpEnabled("external_covers"))) return null;
   try {
     const res = await fetch(imageUrl, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
@@ -168,12 +182,19 @@ async function cacheCoverToBlob(slug: string, imageUrl: string): Promise<string 
     if (bytes.length === 0) return null;
 
     const ext = IMAGE_EXT[contentType] ?? "img";
-    const blob = await put(`games/${slug}/cover.${ext}`, Buffer.from(bytes), {
+    const pathname = `games/${slug}/cover.${ext}`;
+    const blob = await put(pathname, Buffer.from(bytes), {
       access: "public",
       contentType,
       addRandomSuffix: false,
       allowOverwrite: true,
     });
+    // The fourth writer of `games/**`, so it keeps the Neon mirror in step like
+    // the three source mutators do — see `app/lib/game-blob-index.ts`. Nothing
+    // reads a cover through the index today (the row stores the URL directly),
+    // but an unindexed blob under this prefix is one the reset sweep will not
+    // delete and the reindex would keep resurrecting.
+    await recordGameBlobs([{ pathname, url: blob.url, size: bytes.length }]);
     return blob.url;
   } catch {
     // Best-effort: a missing cover is cosmetic, never a reason to fail creation.
@@ -499,6 +520,12 @@ export async function recacheExternalCoverAction(formData: FormData): Promise<vo
     redirect(`/dashboard/games?error=${encodeURIComponent(`No external game "${slug}".`)}`);
   }
 
+  // Re-caching is the one caller that reports rather than shrugs, so it names
+  // the switch instead of letting a deliberate "off" look like a broken fetch.
+  if (!(await isBlobOpEnabled("external_covers"))) {
+    redirect(controlTarget(slug, "error", blobOpDisabledMessage("external_covers")));
+  }
+
   // Prefer re-hosting the existing cover source; fall back to a fresh screenshot.
   let cached: string | null = null;
   if (game.coverUrl && isHttpUrl(game.coverUrl)) {
@@ -562,6 +589,17 @@ export async function deleteExternalGameAction(formData: FormData): Promise<void
     if (blobPaths.length > 0) updateTag(MEDIA_CACHE_TAG);
   } catch {
     // Best-effort cleanup; the game row is already gone, which is what users see.
+  }
+
+  // The cover blob itself is still deliberately left in place (one small file,
+  // cheaper to skip than to chase), but its INDEX row is not: a row pointing at
+  // a deleted game would keep the slug in the serving map and, if the slug were
+  // ever reused, hand the new game the old game's cover.
+  try {
+    await forgetGameBlobsForSlug(slug);
+    updateTag(GAMES_BLOB_CACHE_TAG);
+  } catch {
+    // Best-effort: a stale row degrades to a cover nobody renders.
   }
 
   revalidateExternal(slug);

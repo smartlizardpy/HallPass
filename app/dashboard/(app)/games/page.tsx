@@ -14,11 +14,11 @@
  *   - `store.listBoards()` — grouped by `gameSlug` into a per-game board count;
  *     `.catch(() => [])` so an unconfigured/unreachable database simply shows
  *     "0 boards" rather than throwing.
- *   - `getServingBlobMap()` — the SHARED cached `games/**` listing, mined for the
+ *   - `getServingBlobMap()` — the SHARED cached `games/**` index, mined for the
  *     set of slugs with a custom `games/<slug>/index.html` override. It already
- *     fails soft to an empty map, so a blob failure just hides the "Custom HTML"
- *     chip. Deliberately not its own `list()`: that is a billed advanced
- *     operation and this page needs data the serving route already caches.
+ *     fails soft to an empty map, so a failure just hides the "Custom HTML"
+ *     chip. Deliberately not its own lookup: this page needs exactly the data
+ *     the serving route already caches.
  *
  * Gated with `requireRole("admin")`, the same guard the per-game actions enforce.
  */
@@ -53,13 +53,14 @@ const GAME_BLOB_RE = /^games\/([^/]+)\/index\.html$/;
 /**
  * The set of slugs that have a custom `games/<slug>/index.html` blob override.
  *
- * Reads the SHARED cached listing rather than issuing its own `list()`. This
- * page wants exactly the data `getServingBlobMap()` already holds, and `list()`
- * is a billed Vercel Blob "advanced operation" against a Hobby allowance of only
- * 2,000/month — spending one per dashboard page view for a decorative chip is
- * not a good trade. It also fixes a latent bug: the old direct call took only
- * the FIRST page of results, so past ~1,000 blobs some games would silently lose
- * their "Custom HTML" chip.
+ * Reads the SHARED cached index rather than issuing its own lookup. This page
+ * wants exactly the data `getServingBlobMap()` already holds; when that lookup
+ * was still a Blob `list()` — a billed "advanced operation" against a Hobby
+ * allowance of only 2,000/month — spending one per dashboard page view for a
+ * decorative chip was not a good trade, and now that it is a Neon read there is
+ * still no reason to ask twice. It also fixes a latent bug: the old direct call
+ * took only the FIRST page of results, so past ~1,000 blobs some games would
+ * silently lose their "Custom HTML" chip.
  *
  * FAIL-SOFT: `getServingBlobMap()` already degrades to an empty map on any blob
  * error, so the grid just omits the chip rather than erroring.

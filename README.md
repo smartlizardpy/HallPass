@@ -20,15 +20,18 @@ app/
   page.tsx              catalog (renders <Arcade>)
   game/[slug]/          game detail page (iframe host)
   game-html/[slug]/[[...path]]/  server route: serves ANY game file blob-first, 307s to static fallback
-  games-version/        version endpoint the SW polls (head().uploadedAt.getTime())
+  games-version/        version endpoint the SW polls (app_settings.games_version)
   admin/html/           legacy URL — redirects to /dashboard/games (source editing lives there now)
   components/
     Arcade.tsx          catalog UI
     PWA.tsx             SW registration + offline pill + version polling
   lib/
     games.ts            canonical games[] list (slug, title, category, art, ...)
-    game-html-blob.ts   blob namespace games/<slug>/**, path allowlist, content types
-    games-version-blob.ts  blob path: games/version.txt
+    game-html-blob.ts   blob namespace games/<slug>/**, path allowlist, content types (pure helpers)
+    game-blob-index.ts  Neon mirror of games/** — what the serving route reads instead of list()
+    games-version.ts    the games-version counter, in app_settings
+    app-settings.ts     operator key/value settings (version counter, blob-op kill switches)
+    blob-ops.ts         registry of every feature that spends an ADVANCED blob operation
     admin-html-auth.ts  cookie session for /admin/html
     stats.ts            PostHog play-count fetcher (server-side)
     alerts/             site alerts: thresholds, rules, PostHog snapshot (see below)
@@ -88,18 +91,32 @@ There are two supported ways to change a game:
    for a multi-file bundle, because it also deletes the files a new upload
    orphans.
 2. **`npm run publish-game -- <slug>`** — publishes the repo's own
-   `public/games/<slug>/index.html` to Blob and bumps the version sentinel, so a
-   repo-authored edit can actually reach players. Dry-run by default; pass
-   `--yes` to write. Single-file games only; it refuses a bundle rather than
-   risk orphaning assets. Needs `BLOB_READ_WRITE_TOKEN` (or `.env.local`).
+   `public/games/<slug>/index.html` to Blob, records it in `game_blobs`, and
+   bumps the version counter, so a repo-authored edit can actually reach
+   players. Dry-run by default; pass `--yes` to write. Single-file games only;
+   it refuses a bundle rather than risk orphaning assets. Needs
+   `BLOB_READ_WRITE_TOKEN` **and `DATABASE_URL`** (or `.env.local`) — a blob
+   published without its index row is one the serving route cannot see.
 
-   One caveat: the dashboard revalidates the serving-blob cache tag right after
+   One caveat: the dashboard revalidates the blob-index cache tag right after
    writing, and a script cannot reach Next's data cache — so a publish this way
-   can take up to the listing TTL (1h) to appear. Redeploy to clear it sooner.
+   can take up to the index TTL (1h) to appear. Redeploy to clear it sooner.
 
 Which copy actually serves is decided by `chooseGameSource`: a blob uploaded
 since `MIRROR_SYNCED_AT` is proxied (so a fresh publish is live immediately),
 otherwise the free static twin is 307'd to.
+
+### Blob operations
+
+Vercel bills `put`/`copy`/`list` as **advanced** operations (2,000/month on
+Hobby) and `head`/`del` as **simple** ones (10,000). Serving a game, polling for
+a version and rendering the dashboard all read the `game_blobs` table in Neon
+rather than asking the store, so **traffic spends nothing** — the `list()` that
+used to do that job was 98% of everything the site spent. What remains is one
+write per file a person deliberately publishes, and a super admin can switch each
+of those off from **Dashboard → Blob ops** when the allowance runs out. Full
+reasoning, the per-feature table and the reindex recovery path are in
+[`blob-operations-design.md`](blob-operations-design.md).
 
 ## Player features: stealth mode & daily streak
 
@@ -372,7 +389,7 @@ Fetch strategies (same-origin only — PostHog, ads, etc. pass through):
 - HTML navigations — network-first. Offline it serves **the fresher of the two cached copies**, comparing the `Date` header of the `hp-static-<BUILD_ID>` entry against the `hp-runtime` one, then a loose (query-ignoring) match, then `/offline`, then a synthesized page. The comparison matters in both directions: `hp-runtime` is never swept so it can hold a PREVIOUS deploy's HTML, while the precache is written once at install and never refreshed, so it goes stale against anything that changes WITHIN a deploy (an ISR revalidation, a dashboard edit). Because the precache is rebuilt per deploy and fetched with `cache: "reload"`, "the runtime entry is newer" is exactly "it was written during this deploy". A missing or unparseable date falls back to the precache.
 - Hashed assets — cache-first, populating `hp-runtime` on miss.
 
-Update flow for game sources: dashboard publish → `bumpGamesVersion()` writes `games/version.txt` in Blob → `/games-version` returns `head().uploadedAt.getTime()` → client polls (debounced, also fires on `visibilitychange`) → posts `CHECK_GAMES_VERSION` to the SW → SW compares against the value stored in `hp-meta` and runs `refreshAllGameHtml()` on mismatch. That refresh covers every precached game document PLUS every `/game-html/` entry the runtime cache accumulated during play (i.e. bundle assets), and evicts entries whose Blob copy was deleted — so offline clients converge instead of keeping a torn new-index/old-assets mix.
+Update flow for game sources: dashboard publish → `bumpGamesVersion()` writes `app_settings.games_version` in Neon → `/games-version` returns that value → client polls (debounced, also fires on `visibilitychange`) → posts `CHECK_GAMES_VERSION` to the SW → SW compares against the value stored in `hp-meta` and runs `refreshAllGameHtml()` on mismatch. That refresh covers every precached game document PLUS every `/game-html/` entry the runtime cache accumulated during play (i.e. bundle assets), and evicts entries whose Blob copy was deleted — so offline clients converge instead of keeping a torn new-index/old-assets mix.
 
 **What a player sees when the network is bad**, in the order the answers arrive. All three exist because none of them can cover the others' window:
 
@@ -455,7 +472,7 @@ Derived from `process.env.*` references in the codebase. Configure these in Verc
 | Var | Where used | Notes |
 |---|---|---|
 | `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` | `instrumentation-client.ts` | **Required for any analytics data.** Client-side PostHog capture token (browser → PostHog). `NEXT_PUBLIC_` vars are inlined at **build time**, so it must be set in Vercel *before* the build runs; if it is missing, `posthog.init` no-ops and **zero events** are captured (not even autocapture / pageviews). Find it in PostHog → Project settings. |
-| `BLOB_READ_WRITE_TOKEN` | `@vercel/blob` (`put`, `head`, `del`) | Auto-provisioned by Vercel when a Blob store is linked. |
+| `BLOB_READ_WRITE_TOKEN` | `@vercel/blob` (`put`, `copy`, `head`, `del`) | Auto-provisioned by Vercel when a Blob store is linked. |
 | `ADMIN_HTML_PASSWORD` | `app/lib/admin-html-auth.ts` | Plain string; gates `/admin/html`. Required for uploads. |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | `app/lib/push/config.ts` | Optional. Web Push signing pair for notifications; generate with `npx web-push generate-vapid-keys`. Unset means the push path reports itself unavailable and stays silent — the bell still works, and notifications are pulled rather than pushed. Deliberately NOT `NEXT_PUBLIC_`: the public key is served at request time from `GET /api/v1/me/push`, so adding it takes effect on the next request rather than the next build. |
 | `VAPID_SUBJECT` | `app/lib/push/config.ts` | A `mailto:` the push service can contact about a misbehaving sender. Required by the VAPID spec. |
@@ -473,6 +490,7 @@ Derived from `process.env.*` references in the codebase. Configure these in Verc
 - `npm start` — serve the production build.
 - `npm run lint` — ESLint with `eslint-config-next`.
 - `npm run sync-games` — runs `scripts/sync-games.mjs`; mirrors every `games/**` blob into `public/games/` (needs `BLOB_READ_WRITE_TOKEN`).
+- `npm run publish-game -- <slug>` — publishes `public/games/<slug>/index.html` to Blob and records it in `game_blobs` (needs `BLOB_READ_WRITE_TOKEN` and `DATABASE_URL`; dry-run without `--yes`).
 - `node scripts/check-alerts.mjs` — probes the live site for alerts and notifies the admins if any fired (needs `ALERTS_SECRET`; `--dry-run` measures without notifying). Run every 30 minutes by `.github/workflows/alerts.yml`.
 
 ## Deploying

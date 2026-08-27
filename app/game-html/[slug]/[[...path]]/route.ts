@@ -16,9 +16,10 @@ const MAX_PATH_SEGMENTS = 10;
  * Serves any game file, preferring the FREE static twin over Vercel Blob.
  *
  * The site is blob-limited on OPERATIONS, and the old design spent one `head()`
- * per asset per request. This route now reads a single cached `list()` of the
- * whole `games/` prefix ({@link getServingBlobMap}) — shared across every request
- * and asset — and never calls `head()`. {@link chooseGameSource} then decides,
+ * per asset per request. This route now reads a single cached view of the whole
+ * `games/` prefix ({@link getServingBlobMap}) — shared across every request and
+ * asset — which is a Neon table rather than a Blob `list()`, so serving a game
+ * costs NO billed Blob operation at all. {@link chooseGameSource} then decides,
  * per asset, between the CDN twin and a Blob proxy:
  *
  * - A blob uploaded SINCE the last sync (`uploadedAt > MIRROR_SYNCED_AT`) is
