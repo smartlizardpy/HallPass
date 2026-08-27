@@ -276,6 +276,42 @@ export async function isBlobOpEnabled(id: BlobOpId): Promise<boolean> {
   return (await readBlobOpSwitches())[id] ?? true;
 }
 
+/** One switch that moves in a save, carrying the registry entry that names it. */
+export type BlobOpChange = {
+  op: AdvancedBlobOp;
+  /** The state being written — `true` for on. */
+  enabled: boolean;
+};
+
+/**
+ * Which switches a save actually moves, in registry order.
+ *
+ * THE POINT OF DIFFING RATHER THAN WRITING THE WHOLE PANEL. A batch form knows
+ * the state of all seven switches, so the lazy implementation writes all seven
+ * every time — and then two super admins with the page open at once clobber each
+ * other: the second save re-asserts a baseline it loaded before the first one
+ * happened, silently undoing it. Writing only the rows that moved means two
+ * operators touching different features do not fight, and the banner can name
+ * exactly what changed instead of claiming credit for five untouched rows.
+ *
+ * Ordering follows `ADVANCED_BLOB_OPS` so the banner reads in the same order as
+ * the page, rather than in whatever order a form serialised its fields.
+ */
+export function diffBlobOpSwitches(
+  current: BlobOpSwitches,
+  desired: BlobOpSwitches,
+): BlobOpChange[] {
+  const changes: BlobOpChange[] = [];
+  for (const op of ADVANCED_BLOB_OPS) {
+    // `current` comes from a read that fails soft to all-enabled, so a switch
+    // missing from it reads as ON — the same direction every other reader takes.
+    if ((current[op.id] ?? true) !== desired[op.id]) {
+      changes.push({ op, enabled: desired[op.id] });
+    }
+  }
+  return changes;
+}
+
 /** The refusal banner for a switched-off feature. */
 export function blobOpDisabledMessage(id: BlobOpId): string {
   return (
