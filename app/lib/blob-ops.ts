@@ -201,12 +201,50 @@ export const BLOB_READ_ONLY_NOTICE =
   "BLOB_READ_ONLY is set in the environment, so every advanced-blob feature is forced off and these switches cannot be changed. Remove the variable and redeploy to hand control back to the settings table.";
 
 /**
+ * The state of every switch at once — what the dashboard renders, what its form
+ * posts back, and what a save is diffed against.
+ *
+ * Total over the registry on purpose: a partial record would make "absent" mean
+ * both "unchanged" and "off" depending on who was reading it, which is exactly
+ * the confusion the checkbox form below would otherwise introduce.
+ */
+export type BlobOpSwitches = Record<BlobOpId, boolean>;
+
+/** Every switch set the same way — what the "disable everything" submit asks for. */
+export function allBlobOpSwitches(enabled: boolean): BlobOpSwitches {
+  const state = {} as BlobOpSwitches;
+  for (const op of ADVANCED_BLOB_OPS) state[op.id] = enabled;
+  return state;
+}
+
+/**
+ * Decode what the dashboard's checkbox form posted: PRESENT MEANS ON, ABSENT
+ * MEANS OFF.
+ *
+ * That is the browser's own rule — an unchecked checkbox submits nothing — and
+ * it is only safe to read it that way because the registry is a closed set the
+ * server already knows. Every id gets an answer here, so a switch the operator
+ * turned off is genuinely "off" rather than "not mentioned", and there is no
+ * hidden-input twin per row to keep in sync with its checkbox.
+ *
+ * Unknown ids are dropped rather than trusted, for the same reason the old
+ * single-switch action narrowed its `id`: a hand-crafted POST must not be able
+ * to write arbitrary `blob_op:<anything>` keys into `app_settings`.
+ */
+export function switchesFromEnabledIds(ids: Iterable<string>): BlobOpSwitches {
+  const on = new Set(ids);
+  const state = {} as BlobOpSwitches;
+  for (const op of ADVANCED_BLOB_OPS) state[op.id] = on.has(op.id);
+  return state;
+}
+
+/**
  * Every switch, defaulting to enabled for any key that has never been written.
  * Fail-soft to all-enabled via `readAppSettings()` — see the module docblock for
  * why that is the right direction.
  */
-export async function readBlobOpSwitches(): Promise<Record<BlobOpId, boolean>> {
-  const state = {} as Record<BlobOpId, boolean>;
+export async function readBlobOpSwitches(): Promise<BlobOpSwitches> {
+  const state = {} as BlobOpSwitches;
 
   // The env lock short-circuits BEFORE the database read, not after it. That is
   // not an optimisation: the situation it exists for is one where `app_settings`
