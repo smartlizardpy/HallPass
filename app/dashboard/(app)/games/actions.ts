@@ -395,6 +395,12 @@ export async function pasteHtmlAction(formData: FormData): Promise<void> {
  * blob storage: every extracted file is written under the game's prefix, then
  * any previously published blob whose path is NOT in the new bundle is deleted,
  * so the published set converges on exactly the bundle's contents.
+ *
+ * SUCCESS IS DECIDED BY THE `put` LOOP ALONE. The indexing and the stale sweep
+ * are bookkeeping on top of a publish that already happened, so they sit in
+ * their own `try` — reporting "Blob write failed. Try again." over files that
+ * are in the store would invite a retry costing another N advanced operations
+ * to fix nothing.
  */
 export async function uploadBundleAction(formData: FormData): Promise<void> {
   const { email: actorEmail } = await requireRole("admin");
@@ -424,9 +430,6 @@ export async function uploadBundleAction(formData: FormData): Promise<void> {
 
   let saved = false;
   try {
-    // Snapshot BEFORE writing so we know which old blobs become stale.
-    const existing = await listGameFilesLive(slug);
-
     const published: GameBlobRecord[] = [];
     for (const [relPath, data] of bundle) {
       const pathname = blobPathForAsset(slug, relPath);
@@ -439,22 +442,39 @@ export async function uploadBundleAction(formData: FormData): Promise<void> {
       });
       published.push({ pathname, url: uploaded.url, size: data.length });
     }
-    // ONE statement for the whole bundle, after every `put` has resolved: a
-    // 300-file zip would otherwise pay 300 sequential Neon round trips on top
-    // of its 300 blob writes.
-    await recordGameBlobs(published);
+    saved = true;
 
-    const prefix = blobPrefixForSlug(slug);
-    const stale = existing
-      .map((f) => f.pathname)
-      .filter((pathname) => !bundle.has(pathname.slice(prefix.length)));
-    if (stale.length > 0) {
-      await del(stale);
-      await forgetGameBlobs(stale);
+    // ── EVERYTHING BELOW IS BEST-EFFORT, AND THE `saved = true` ABOVE IS WHY.
+    // Only the `put` loop decides whether this action succeeded. Indexing and
+    // the stale sweep are bookkeeping ON TOP of a publish that has already
+    // happened, so a failure in either must not report "Blob write failed. Try
+    // again." over files that are sitting in the store right now — an admin who
+    // retried that would spend another N advanced operations to fix nothing.
+    // The concrete case: a deployment where migration 026 has not been applied,
+    // where every one of these throws `relation "game_blobs" does not exist`.
+    try {
+      // ONE statement for the whole bundle, after every `put` has resolved: a
+      // 300-file zip would otherwise pay 300 sequential Neon round trips on top
+      // of its 300 blob writes.
+      await recordGameBlobs(published);
+
+      // Read AFTER the writes rather than before: the snapshot is only used to
+      // find blobs the new bundle does not contain, and the paths it does
+      // contain are filtered out by name either way.
+      const prefix = blobPrefixForSlug(slug);
+      const stale = (await listGameFilesLive(slug))
+        .map((f) => f.pathname)
+        .filter((pathname) => !bundle.has(pathname.slice(prefix.length)));
+      if (stale.length > 0) {
+        await del(stale);
+        await forgetGameBlobs(stale);
+      }
+    } catch {
+      // A leftover asset is unreferenced, not fatal; the next publish (or
+      // reset) converges it. Same contract as `writeGameHtml`.
     }
 
     await bumpGamesVersion(actorEmail);
-    saved = true;
   } catch {
     saved = false;
   }
