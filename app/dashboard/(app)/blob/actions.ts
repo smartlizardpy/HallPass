@@ -31,11 +31,17 @@ import {
   ADVANCED_BLOB_OPS,
   APP_SETTINGS_CACHE_TAG,
   BLOB_READ_ONLY_NOTICE,
+  allBlobOpSwitches,
   blobOpDisabledMessage,
+  describeBlobOpChanges,
+  diffBlobOpSwitches,
   isBlobOpEnabled,
   isBlobReadOnly,
+  readBlobOpSwitches,
   setAllBlobOps,
   setBlobOpEnabled,
+  setBlobOps,
+  switchesFromEnabledIds,
   type BlobOpId,
 } from "@/app/lib/blob-ops";
 import {
@@ -76,6 +82,68 @@ function refuseWhileLocked(): void {
 function toBlobOpId(value: FormDataEntryValue | null): BlobOpId | null {
   const id = String(value ?? "");
   return ADVANCED_BLOB_OPS.some((op) => op.id === id) ? (id as BlobOpId) : null;
+}
+
+/**
+ * Save the whole switch panel — the one write path behind `/dashboard/blob`.
+ *
+ * WHY ONE ACTION AND NOT SEVEN CLICKS. Turning a switch used to submit
+ * immediately, so an operator stopping five features made five writes, five
+ * redirects and five banners on the screen they opened because publishing had
+ * already broken. The panel now stages every click in the browser and posts once.
+ *
+ * WHAT IT READS. The form's checkboxes name the switches that should be ON;
+ * `switchesFromEnabledIds()` reads absence as OFF, which is the browser's own
+ * rule and is only decodable because the registry is a closed set. The bulk
+ * button submits `all=0`/`all=1` instead, and that WINS over the checkboxes:
+ * "disable everything" has to stay one click on the day it is needed, so it
+ * overrides whatever was staged rather than merging with it.
+ *
+ * WHAT IT WRITES. Only the switches that actually moved, in one statement. The
+ * diff is what stops two super admins with the page open from clobbering each
+ * other — a save that re-asserted all seven would silently undo the other's
+ * change — and it is also what lets the banner name exactly what happened.
+ *
+ * A save that moves nothing is reported as such rather than written: the
+ * operator either double-submitted or someone else got there first, and both
+ * are worth saying instead of a "Saved." that saved nothing.
+ */
+export async function saveBlobOpsAction(formData: FormData): Promise<void> {
+  const { email: actor } = await requireRole("super_admin");
+  refuseWhileLocked();
+
+  const all = String(formData.get("all") ?? "");
+  const desired =
+    all === "0" || all === "1"
+      ? allBlobOpSwitches(all === "1")
+      : switchesFromEnabledIds(formData.getAll("on").map(String));
+
+  // The same read the page rendered from, so the diff is against what the
+  // operator was actually looking at. It fails soft to all-enabled, which keeps
+  // the bulk OFF button working during a Neon blip — the direction that matters.
+  const changes = diffBlobOpSwitches(await readBlobOpSwitches(), desired);
+  if (changes.length === 0) {
+    back(
+      "ok",
+      "Nothing to save — every switch is already in the state you asked for.",
+    );
+  }
+
+  let saved = false;
+  try {
+    await setBlobOps(changes, actor);
+    saved = true;
+  } catch {
+    saved = false;
+  }
+  if (saved) updateTag(APP_SETTINGS_CACHE_TAG);
+
+  back(
+    saved ? "ok" : "error",
+    saved
+      ? describeBlobOpChanges(changes)
+      : `Could not save. ${changes.length === 1 ? "That change was" : `All ${changes.length} changes were`} dropped and nothing moved.`,
+  );
 }
 
 /**
