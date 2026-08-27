@@ -17,8 +17,13 @@
  *      this page and cannot be turned off; that is the reason the registry's
  *      docblock says adding one is part of adding the feature.
  *
- *   2. HOW DO I STOP IT, NOW, WITHOUT A DEPLOY? Each row toggles, and one
- *      button turns everything off (or back on) in a single write.
+ *   2. HOW DO I STOP IT, NOW, WITHOUT A DEPLOY? Flip whatever needs to stop and
+ *      press Save. The panel STAGES clicks in the browser and writes every
+ *      switch that moved in one statement — turning off four features is four
+ *      clicks and one write, not four writes, four redirects and four banners on
+ *      the screen somebody opened because publishing had already broken. One
+ *      button still turns everything off (or back on) in the same single write,
+ *      because the panic button has to keep costing one click.
  *
  *   3. IS THE MIRROR STILL RIGHT? The index card shows how many blobs Neon
  *      thinks exist and offers the one deliberate `list()` sweep that rebuilds

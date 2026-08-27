@@ -21,6 +21,13 @@
  * what was turned off and where to turn it back on — instead of letting an admin
  * hit a raw "operation limit exceeded" from the store mid-upload.
  *
+ * THE SWITCHES ARE SAVED IN BATCHES, NOT ONE AT A TIME. The dashboard stages
+ * clicks in the browser and posts the whole panel once;
+ * `switchesFromEnabledIds()` decodes it, `diffBlobOpSwitches()` reduces it to the
+ * rows that actually moved, and `setBlobOps()` writes those in one statement.
+ * Diffing rather than re-asserting all seven is what stops two operators with the
+ * page open from clobbering each other's changes.
+ *
  * ADDING A FEATURE THAT SPENDS AN ADVANCED OPERATION MEANS ADDING IT HERE. The
  * registry is what the settings page renders and what the "disable everything"
  * button iterates, so an unlisted feature is one nobody can turn off in the

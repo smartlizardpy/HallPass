@@ -96,6 +96,44 @@ operation, rendered straight from `ADVANCED_BLOB_OPS` in `app/lib/blob-ops.ts`,
 with a switch each and a "disable everything" button that writes them all in one
 statement.
 
+### One save, not one click per switch
+
+The switches used to submit on click, so stopping four features was four writes,
+four redirects and four banners — on the screen somebody opens precisely because
+publishing has already broken, with a chance to be interrupted holding a
+half-applied panel after each one. The panel now stages clicks in the browser
+and saves once:
+
+| Piece | Job |
+|---|---|
+| `BlobOpSwitchList` | Plain checkboxes in one form. Marks changed rows "unsaved", counts and names what is pending, and offers Revert. |
+| `switchesFromEnabledIds()` | Decodes the post. **Present means on, absent means off** — the browser's own rule, decodable only because the registry is a closed set, which is why no row needs a hidden input beside its checkbox. |
+| `diffBlobOpSwitches()` | Reduces the posted panel to the rows that differ from what is stored. |
+| `setBlobOps()` | Writes those rows, in one `app_settings` statement. |
+| `describeBlobOpChanges()` | The banner, naming every switch that moved in registry order. |
+
+**The diff is not an optimisation.** A save that re-asserted all seven switches
+would let two super admins with the page open clobber each other: the second
+save would re-apply a baseline loaded before the first one landed, silently
+undoing it. Writing only what moved means operators touching different features
+never fight, and it is also what lets the banner say what actually happened
+rather than "Saved."
+
+**"Disable everything" is a submit on the same form**, posting `all=0`, which
+wins over the checkboxes server-side. It stays one click on the day it is
+needed, and it applies regardless of what was staged rather than merging with
+it.
+
+**The panel still works unhydrated.** The checkboxes are plain checkboxes in a
+plain form posting to a server action, so an unhydrated page toggles and saves
+normally; only the counters and Revert go quiet. Save is therefore greyed out by
+"hydrated *and* nothing changed" rather than by "nothing changed" — only a
+browser that can actually track the staged state is allowed to disable it.
+
+Staging changes nothing about where the decision is made. `saveBlobOpsAction`
+re-checks the role and the env lock, re-reads the stored state and re-diffs it,
+so what the browser sends is a request, never a verdict.
+
 | Switch | Op | Cost | What OFF means |
 |---|---|---|---|
 | Game source publishing | `put` | 1 per file (a 300-file zip is 300) | Upload/paste/bundle refuse with a banner. **Reset still works** — it writes no blob. |
@@ -152,6 +190,9 @@ Every read fails soft, so an unmigrated deployment degrades rather than breaks:
   not on the page and cannot be turned off, so listing it is part of adding it.
 - **The reindex is switchable too**, so "disable everything" means everything: a
   `list()` that is going to fail is not worth attempting.
+- **A save writes only the switches that moved**, never the whole panel — see
+  "One save, not one click per switch" above for why re-asserting all seven
+  would let two operators undo each other.
 - **Nothing destructive is gated.** `del` is a simple operation; being unable to
   un-publish a broken game because the advanced allowance is spent would be the
   worst possible time for that.
