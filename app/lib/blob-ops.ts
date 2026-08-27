@@ -312,6 +312,41 @@ export function diffBlobOpSwitches(
   return changes;
 }
 
+/** Join labels the way a sentence does: "A", "A and B", "A, B and C". */
+function joinLabels(labels: readonly string[]): string {
+  if (labels.length <= 1) return labels[0] ?? "";
+  return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+}
+
+/**
+ * The banner a batch save shows, naming every switch it moved.
+ *
+ * A save that reported only "Saved." would be the one regression a batch form
+ * could introduce: the per-switch buttons at least told the operator which
+ * feature they had just turned off. Somebody who has clicked seven checkboxes
+ * and one button deserves the same confirmation, spelled out — this is the
+ * screen people open when publishing has already stopped working, and "did that
+ * take?" is not a question to leave them holding.
+ *
+ * Empty is never rendered; the action short-circuits a no-op save with its own
+ * message before reaching here.
+ */
+export function describeBlobOpChanges(
+  changes: readonly BlobOpChange[],
+): string {
+  const off = changes.filter((c) => !c.enabled).map((c) => c.op.label);
+  const on = changes.filter((c) => c.enabled).map((c) => c.op.label);
+
+  const clauses: string[] = [];
+  if (off.length > 0) {
+    clauses.push(`${joinLabels(off)} ${off.length === 1 ? "is" : "are"} now OFF`);
+  }
+  if (on.length > 0) {
+    clauses.push(`${joinLabels(on)} ${on.length === 1 ? "is" : "are"} now ON`);
+  }
+  return `Saved. ${clauses.join("; ")}.`;
+}
+
 /** The refusal banner for a switched-off feature. */
 export function blobOpDisabledMessage(id: BlobOpId): string {
   return (
