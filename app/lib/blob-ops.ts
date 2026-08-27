@@ -51,7 +51,6 @@ import "server-only";
 import {
   APP_SETTINGS_CACHE_TAG,
   readAppSettings,
-  writeAppSetting,
   writeAppSettings,
 } from "@/app/lib/app-settings";
 
@@ -362,15 +361,6 @@ export function blobOpDisabledMessage(id: BlobOpId): string {
 /** Re-exported so the settings actions have one import site for everything. */
 export { APP_SETTINGS_CACHE_TAG };
 
-/** Turn one feature on or off. THROWS so a failed save is never reported as done. */
-export async function setBlobOpEnabled(
-  id: BlobOpId,
-  enabled: boolean,
-  actor: string | null,
-): Promise<void> {
-  await writeAppSetting(settingKey(id), enabled ? "1" : "0", actor);
-}
-
 /**
  * Write every switch a save moved, in ONE statement.
  *
@@ -396,16 +386,3 @@ export async function setBlobOps(
   );
 }
 
-/**
- * Turn EVERY feature on or off in one statement — the panic button for the day
- * the allowance reads 100%, and the single click that undoes it afterwards.
- */
-export async function setAllBlobOps(
-  enabled: boolean,
-  actor: string | null,
-): Promise<void> {
-  await writeAppSettings(
-    ADVANCED_BLOB_OPS.map((op) => [settingKey(op.id), enabled ? "1" : "0"] as const),
-    actor,
-  );
-}
