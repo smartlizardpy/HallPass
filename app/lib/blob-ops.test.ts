@@ -31,11 +31,13 @@ const {
   ADVANCED_BLOB_OPS,
   blobOpDisabledMessage,
   isBlobOpEnabled,
+  isBlobReadOnly,
   readBlobOpSwitches,
 } = await import("./blob-ops");
 
 beforeEach(() => {
   settings.clear();
+  delete process.env.BLOB_READ_ONLY;
 });
 
 describe("the registry", () => {
@@ -111,5 +113,57 @@ describe("blobOpDisabledMessage", () => {
     expect(
       blobOpDisabledMessage("nope" as (typeof ADVANCED_BLOB_OPS)[number]["id"]),
     ).toContain("switched off");
+  });
+});
+
+/**
+ * The env lock is the escape hatch for the case the switches cannot cover:
+ * `app_settings` needs migration 026, and the moment you most want to stop
+ * spending is a moment when running a migration may not be possible. So these
+ * assert the two properties that matter — it wins over the table, and it never
+ * needs the table.
+ */
+describe("BLOB_READ_ONLY", () => {
+  it("is off when unset", async () => {
+    expect(isBlobReadOnly()).toBe(false);
+    expect(await isBlobOpEnabled("game_source")).toBe(true);
+  });
+
+  it("forces every switch off", async () => {
+    process.env.BLOB_READ_ONLY = "1";
+    const state = await readBlobOpSwitches();
+    for (const op of ADVANCED_BLOB_OPS) expect(state[op.id]).toBe(false);
+  });
+
+  it("beats an explicit ON in the settings table", async () => {
+    // The lock is a lock, not a default. An operator who set the env var must
+    // not be quietly overridden by a row somebody wrote last month.
+    settings.set("blob_op:game_source", "1");
+    process.env.BLOB_READ_ONLY = "1";
+    expect(await isBlobOpEnabled("game_source")).toBe(false);
+  });
+
+  it("does not read the settings store at all", async () => {
+    // The whole point: it has to work on a deployment whose migrations have not
+    // run. A read that threw would otherwise take the lock down with it.
+    process.env.BLOB_READ_ONLY = "1";
+    settings.set("__poisoned", "x");
+    await expect(readBlobOpSwitches()).resolves.toBeTruthy();
+  });
+
+  it("accepts the values somebody would actually type", async () => {
+    for (const value of ["1", "true", "TRUE", "yes", "on", " on "]) {
+      process.env.BLOB_READ_ONLY = value;
+      expect(isBlobReadOnly()).toBe(true);
+    }
+  });
+
+  it("fails OPEN on anything else, so a typo cannot freeze publishing", async () => {
+    // "0" and "false" are truthy strings in JS and obviously mean off to the
+    // person typing them, so the allow-list is explicit rather than coerced.
+    for (const value of ["0", "false", "no", "off", "", "maybe"]) {
+      process.env.BLOB_READ_ONLY = value;
+      expect(isBlobReadOnly()).toBe(false);
+    }
   });
 });

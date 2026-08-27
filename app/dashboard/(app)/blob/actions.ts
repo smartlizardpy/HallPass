@@ -30,8 +30,10 @@ import { requireRole } from "@/app/lib/auth";
 import {
   ADVANCED_BLOB_OPS,
   APP_SETTINGS_CACHE_TAG,
+  BLOB_READ_ONLY_NOTICE,
   blobOpDisabledMessage,
   isBlobOpEnabled,
+  isBlobReadOnly,
   setAllBlobOps,
   setBlobOpEnabled,
   type BlobOpId,
@@ -47,6 +49,20 @@ const BLOB_PATH = "/dashboard/blob";
 /** Redirect back to the blob page carrying a banner message. */
 function back(kind: "ok" | "error", message: string): never {
   redirect(`${BLOB_PATH}?${kind}=${encodeURIComponent(message)}`);
+}
+
+/**
+ * Refuse a write while `BLOB_READ_ONLY` holds the switches shut.
+ *
+ * The page already disables the buttons, but that is UX and this is the actual
+ * gate — and the failure it prevents is a specific, nasty one. Without it a
+ * super admin could save `blob_op:game_source = "1"` into the table, be told
+ * "Game source publishing is now ON", and watch it keep refusing, because the
+ * env lock wins on every read. A switch that reports a state it does not have is
+ * worse than a switch that will not move.
+ */
+function refuseWhileLocked(): void {
+  if (isBlobReadOnly()) back("error", BLOB_READ_ONLY_NOTICE);
 }
 
 /**
@@ -73,6 +89,7 @@ function toBlobOpId(value: FormDataEntryValue | null): BlobOpId | null {
  */
 export async function toggleBlobOpAction(formData: FormData): Promise<void> {
   const { email: actor } = await requireRole("super_admin");
+  refuseWhileLocked();
 
   const id = toBlobOpId(formData.get("id"));
   if (!id) back("error", "Unknown operation.");
@@ -109,6 +126,7 @@ export async function toggleBlobOpAction(formData: FormData): Promise<void> {
  */
 export async function setAllBlobOpsAction(formData: FormData): Promise<void> {
   const { email: actor } = await requireRole("super_admin");
+  refuseWhileLocked();
 
   const enable = String(formData.get("enabled") ?? "") === "1";
 
@@ -150,6 +168,9 @@ export async function setAllBlobOpsAction(formData: FormData): Promise<void> {
  */
 export async function reindexBlobsAction(): Promise<void> {
   await requireRole("super_admin");
+  // Before the registry check, so the banner names the ENV LOCK rather than
+  // telling an operator to "re-enable it below" on switches they cannot move.
+  refuseWhileLocked();
 
   if (!(await isBlobOpEnabled("blob_reindex"))) {
     back("error", blobOpDisabledMessage("blob_reindex"));
