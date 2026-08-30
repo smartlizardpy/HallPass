@@ -2,52 +2,98 @@
 
 ## What this is
 
-HALLPASS is a Next.js 16 site hosting 26 unblocked browser games. A game is either a single self-contained `index.html` or a **multi-file bundle** (its own JS, images, audio in subfolders). Each game runs inside an iframe pointed at `/game-html/<slug>/` — the trailing slash is load-bearing: it makes the game's relative asset URLs resolve inside its own directory. That URL hits `app/game-html/[slug]/[[...path]]/route.ts`, which serves **every game file blob-first**: it streams `games/<slug>/<file>` from Vercel Blob when present and 307s to the baked-in copy under `public/games/<slug>/` otherwise. Once a visitor loads the site, a hand-rolled service worker precaches the shell, every hashed JS/CSS chunk, every game route, and every game file — so the entire arcade keeps working with no network.
+HALLPASS is a Next.js 16 site hosting 28 self-hosted unblocked browser games — the hand-authored catalogue in `app/lib/games.ts`, which the dashboard can extend at runtime with **external games** (a row in `external_games` whose play surface is a third-party URL) and patch with **overrides** (`game_overrides`, descriptive fields only). A self-hosted game is either a single self-contained `index.html` or a **multi-file bundle** (its own JS, images, audio in subfolders). Each game runs inside an iframe pointed at `/game-html/<slug>/` — the trailing slash is load-bearing: it makes the game's relative asset URLs resolve inside its own directory. That URL hits `app/game-html/[slug]/[[...path]]/route.ts`, which serves **every game file blob-first**: it streams `games/<slug>/<file>` from Vercel Blob when present and 307s to the baked-in copy under `public/games/<slug>/` otherwise. Once a visitor loads the site, a hand-rolled service worker precaches the shell, every hashed JS/CSS chunk, every game route, and every game file — so the entire arcade keeps working with no network.
 
 ## Stack
 
-- Next.js 16 App Router with Turbopack
+- Next.js 16 App Router. Turbopack is the default bundler for both `next dev`
+  and `next build` in 16, so neither script passes `--turbopack`.
 - React 19
 - Tailwind CSS v4 (`@tailwindcss/postcss`)
-- Vercel Blob (`@vercel/blob`) for game HTML storage
-- PostHog (`posthog-js` on the client; PostHog REST API on the server for play-count stats)
+- Neon Postgres over the serverless HTTP driver (`@neondatabase/serverless`) —
+  scores, players, the social graph, challenges, notifications and every
+  dashboard surface. One shared client in `app/lib/db.ts`; schema changes go
+  through `app/lib/scoreboard/migrations/` and `npm run migrate`.
+- Auth.js v5 (`next-auth`) with Google as the only provider, JWT sessions, no
+  database adapter. Sign-in is open — dashboard *authorization* is the
+  `dashboard_users` allow-list plus `SUPER_ADMIN_EMAILS`.
+- Vercel Blob (`@vercel/blob`) for game bundles and uploaded media
+- `web-push` for Web Push, `recharts` for the dashboard charts, `fflate` for
+  reading uploaded `.zip` bundles, `uqr` for QR codes
+- The Scoreboard SDK in `sdk/` — the script games embed — built with `tsup`
+- PostHog (`posthog-js` on the client; PostHog REST API on the server for
+  play-count stats and the site alerts)
+- Vitest (`npm test`) for the pure logic; jsdom for the client islands
 - Deployed on Vercel
 
 ## Repo layout
 
+Only the load-bearing paths; every directory below has more in it.
+
 ```
 app/
   page.tsx              catalog (renders <Arcade>)
-  game/[slug]/          game detail page (iframe host)
+  game/[slug]/          game detail page (iframe host, leaderboard, friends panel)
+  category/[category]/  tag/[tag]/  new/   catalog listings
   game-html/[slug]/[[...path]]/  server route: serves ANY game file blob-first, 307s to static fallback
+  game-media/[slug]/    uploaded media (covers, screenshots, clips) served from Blob
   games-version/        version endpoint the SW polls (app_settings.games_version)
+  play/                 the player's own surfaces — /play/you (profile, friends,
+                        notifications, settings), /play/friends, sign-in/out
+  u/[username]/         public player profile (crawlable, noindex)
+  c/[code]/             challenge link landing — plays with no account
+  embed/challenge/      the challenge picker the SDK frames over a game
+  beta/                 the playtest programme
+  offline/              precached offline cards (plus /offline/you for private routes)
+  dashboard/(app)/      admin surfaces: games, boards, curation, moderation,
+                        external-games, tags, growth, beta, tracker, users, blob, logs
   admin/html/           legacy URL — redirects to /dashboard/games (source editing lives there now)
-  components/
-    Arcade.tsx          catalog UI
-    PWA.tsx             SW registration + offline pill + version polling
+  api/
+    auth/[...nextauth]/ Auth.js route handler
+    v1/                 the public API the SDK and the client islands call —
+                        leaderboard, games, reviews, challenges, me/*, admin/*
+  components/           Arcade, PWA, header/sidebar, plus challenges/, friends/,
+                        notifications/, offline/, profile/, reviews/, stealth/, streak/
   lib/
     games.ts            canonical games[] list (slug, title, category, art, ...)
+    games-store.ts      game_overrides layer over that list; external-games-store.ts appends off-site games
     game-html-blob.ts   blob namespace games/<slug>/**, path allowlist, content types (pure helpers)
     game-blob-index.ts  Neon mirror of games/** — what the serving route reads instead of list()
+    static-games-manifest.ts  AUTO-GENERATED at prebuild — the static twins this deploy ships
     games-version.ts    the games-version counter, in app_settings
     app-settings.ts     operator key/value settings (version counter, blob-op kill switches)
     blob-ops.ts         registry of every feature that spends an ADVANCED blob operation
+    db.ts               the one shared Neon client; auth.ts / dashboard-users.ts are the auth layer
     admin-html-auth.ts  cookie session for /admin/html
     stats.ts            PostHog play-count fetcher (server-side)
+    scoreboard/         boards, scores, ranks, claim tokens, guards — and migrations/
+    social/             friendships, requests, friend codes
+    challenges/         friend challenges and challenge links (see below)
+    notifications/      bell inbox, kinds and copy; push/ is the Web Push layer
     alerts/             site alerts: thresholds, rules, PostHog snapshot (see below)
     tracker/            admin project tracker: config, store, schema (see below)
+    achievements/  beta/  reviews/  growth/  capture/  stealth/  streak/
   manifest.ts           PWA manifest route (/manifest.webmanifest)
   layout.tsx            root layout, fonts, metadata, mounts <PWA />
+sdk/                    the Scoreboard SDK games embed; tsup builds it to public/sdk/v1/
 public/
   games/<slug>/         static fallback per game: index.html + cover.png (+ any bundle files/subfolders)
   sw.js                 service worker (hand-rolled, not Workbox)
   sw-manifest.js        AUTO-GENERATED at postbuild — do not edit
+  sdk/v1/               AUTO-GENERATED by `npm run build:sdk` — the SDK bundle games load
   icon-{192,512,maskable-512}.png
 scripts/
+  build-games-manifest.mjs runs as `prebuild`/`predev`; emits app/lib/static-games-manifest.ts
   build-sw-manifest.mjs runs as `postbuild`; emits public/sw-manifest.js
+  migrate.mjs           the migration runner (`npm run migrate`, `-- --status`)
   sync-games.mjs        mirrors every games/** blob back into public/games/ (multi-file aware)
+  publish-game.mjs      publishes a repo-authored single-file game to Blob
+  provision-boards.mjs  creates leaderboard boards; backfill-media-urls.mjs is a one-off repair
   check-alerts.mjs      the alerts cron's runner: probe the live site, notify if anything fired
-AGENTS.md               AI-agent warning about Next 16 breaking changes
+  check-build-env.mjs   fails the deploy when a build-time-inlined env var is missing
+.github/workflows/      deploy.yml (build env check + deploy), alerts.yml (half-hourly cron)
+AGENTS.md               how to work in this repo; also the Next 16 breaking-changes warning
+CLAUDE.md               points at AGENTS.md
 ```
 
 ## Local development
@@ -55,6 +101,42 @@ AGENTS.md               AI-agent warning about Next 16 breaking changes
 ```bash
 npm install
 npm run dev
+```
+
+`predev` runs first: it builds the SDK into `public/sdk/v1/` and regenerates
+`app/lib/static-games-manifest.ts`, so both are always current for the tree you
+have checked out.
+
+**It runs with no environment set.** The catalogue, the games themselves and
+the offline shell are static, and every Neon read in the codebase is fail-soft
+(try/catch → `[]`), so an unset `DATABASE_URL` means empty leaderboards,
+friends and dashboards rather than a crash — see the docblocks in
+`app/lib/db.ts` and `app/lib/games-store.ts`. Fill in `.env.local` for the
+signed-in half:
+
+- `DATABASE_URL` — a Neon connection string. Use a branch of your own; the
+  migration runner will happily write to whatever host you point it at.
+- `AUTH_SECRET`, plus `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` for the Google
+  provider (Auth.js resolves a provider's credentials from `AUTH_<PROVIDER>_*`
+  by convention, which is why no code references them). `AUTH_URL=http://localhost:3000`
+  pins the callback URL locally.
+- `SUPER_ADMIN_EMAILS` — your own address, to reach `/dashboard` without a
+  `dashboard_users` row. Comma- or whitespace-separated, matched case-insensitively.
+
+Migrations are not automatic. Against a fresh database:
+
+```bash
+npm run migrate -- --status   # applied vs pending, and which host you are pointed at
+npm run migrate               # apply everything pending, in filename order
+```
+
+Tests are Vitest, and cover the pure logic (rules, ranks, copy, guards) plus the
+client islands under jsdom:
+
+```bash
+npm test          # one run
+npm run test:watch
+npm run lint
 ```
 
 The service worker is intentionally **not** registered under `next dev` (see the `NODE_ENV !== "production"` guard in `app/components/PWA.tsx`). To exercise offline behavior locally:
@@ -469,11 +551,20 @@ player row. See `app/lib/notifications/admins.ts`.
 
 ## Environment variables
 
-Derived from `process.env.*` references in the codebase. Configure these in Vercel project settings (and `.env.local` for development). See `.env.example` for a copy-paste starting point.
+Derived from `process.env.*` references in the codebase, plus the few Auth.js
+resolves by convention (noted as such). Configure these in Vercel project
+settings, and `.env.local` for development. `.env.example` is a copy-paste
+starting point for the analytics, blob, admin and push blocks — the database
+and auth vars below are not in it.
 
 | Var | Where used | Notes |
 |---|---|---|
 | `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` | `instrumentation-client.ts` | **Required for any analytics data.** Client-side PostHog capture token (browser → PostHog). `NEXT_PUBLIC_` vars are inlined at **build time**, so it must be set in Vercel *before* the build runs; if it is missing, `posthog.init` no-ops and **zero events** are captured (not even autocapture / pageviews). Find it in PostHog → Project settings. |
+| `DATABASE_URL` | `app/lib/db.ts`, every script that touches Neon | **The database.** A Neon connection string. Unset or malformed reads as *unconfigured* rather than broken: `neon()` throws synchronously, `db.ts` catches it and substitutes a throw-on-use stand-in, and every cached read is fail-soft — so the public site renders with empty leaderboards, friends and dashboards instead of 500ing. `isDbConfigured` is how a route answers 503 deliberately. |
+| `AUTH_SECRET` | Auth.js (`app/lib/auth.ts`), `app/lib/scoreboard/claim.ts` | Signs the session JWT, and is second in the claim-token secret chain. No sign-in without it. |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | Auth.js, by convention | The Google OAuth client. Resolved from `AUTH_<PROVIDER>_ID`/`_SECRET` inside `@auth/core`, which is why no file in this repo references them. |
+| `AUTH_URL` | Auth.js, by convention | Pins the callback origin. Needed for local development (`http://localhost:3000`); on Vercel the host header is the authority and `trustHost: true` covers it. |
+| `SUPER_ADMIN_EMAILS` | `app/lib/dashboard-users.ts`, `app/lib/notifications/admins.ts` | Comma- or whitespace-separated allow-list, matched case-insensitively. A listed address is `super_admin` unconditionally — even with no `dashboard_users` row — which is how the first admin gets in. |
 | `BLOB_READ_WRITE_TOKEN` | `@vercel/blob` (`put`, `copy`, `head`, `del`) | Auto-provisioned by Vercel when a Blob store is linked. |
 | `BLOB_READ_ONLY` | `app/lib/blob-ops.ts` | Optional emergency lock. Set to `1` (or `true`/`yes`/`on`) to force **every** advanced-blob feature off — publishing, media, beta evidence, cover caching, shot promotion, reindex — **without needing the database**, for when the allowance is spent and migration 026 has not been applied. Beats the `app_settings` switches and greys out the dashboard toggles. Anything unrecognised (including `0` and `false`) fails open and leaves the switches in charge. Takes effect on the next deploy. |
 | `ADMIN_HTML_PASSWORD` | `app/lib/admin-html-auth.ts` | Plain string; gates `/admin/html`. Required for uploads. |
@@ -481,20 +572,30 @@ Derived from `process.env.*` references in the codebase. Configure these in Verc
 | `VAPID_SUBJECT` | `app/lib/push/config.ts` | A `mailto:` the push service can contact about a misbehaving sender. Required by the VAPID spec. |
 | `ALERTS_SECRET` | `app/lib/alerts/guard.ts` | Gates `GET /api/v1/admin/alerts` and `POST /api/v1/admin/alerts/notify`, and is what the alerts cron holds as a repository secret. Falls back to `SCOREBOARD_ADMIN_SECRET`, then `ADMIN_HTML_PASSWORD`, so the feature works with what you already have — but setting it **replaces** those, so rotating it actually revokes the old credential. Unset everywhere means both endpoints answer 503. |
 | `SCOREBOARD_ADMIN_SECRET` | `app/lib/scoreboard/guard.ts` | Gates `POST\|GET /api/v1/admin/boards` (board provisioning), and salts `scores.ip_hash` when `SCOREBOARD_IP_SALT` is unset. Falls back to `ADMIN_HTML_PASSWORD`. |
+| `SCOREBOARD_CLAIM_SECRET` | `app/lib/scoreboard/claim.ts` | Signs the short-lived tokens that let a player claim scores they set before signing in. Falls back to `AUTH_SECRET`, then `SCOREBOARD_ADMIN_SECRET`, then `ADMIN_HTML_PASSWORD`. With none of them set, minting returns `null` and claiming is silently disabled — an anonymous score can never be kept. |
+| `SCOREBOARD_IP_SALT` | `app/lib/scoreboard/guard.ts`, `app/lib/reviews/` | Salts the one-way `scores.ip_hash` used for rate limiting. Falls back to `SCOREBOARD_ADMIN_SECRET`, then `ADMIN_HTML_PASSWORD`, then a constant in-app pepper — so the digest is never a bare `sha256(ip)`, but set this to make it unguessable. |
 | `POSTHOG_API_HOST` | `app/lib/stats.ts` | Defaults to `https://eu.posthog.com`. |
 | `POSTHOG_PROJECT_ID` | `app/lib/stats.ts` | PostHog project numeric id. |
 | `POSTHOG_PERSONAL_API_KEY` | `app/lib/stats.ts` | Personal API key with read access for play-count queries (server-side read; separate from the client capture token above). Also what the site alerts read themselves through — without it the alerts probe answers 503. |
+| `POSTHOG_ENV_CHECK` | `scripts/check-build-env.mjs` | Set to `warn` to stop a missing `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` failing the deploy. |
+| `HALLPASS_SITE_URL` | `scripts/check-alerts.mjs` | Repository *variable*, not a secret. Points a workflow run at a deployment other than production. |
 
 ## Scripts
 
-- `npm run dev` — Next dev server (no SW).
-- `npm run build` — production build with Turbopack.
+- `npm run dev` — Next dev server (no SW). `predev` builds the SDK and the static games manifest first.
+- `npm run build` — production build (Turbopack is the default in Next 16). `prebuild` runs the same two generators.
 - `npm run postbuild` — runs `node scripts/build-sw-manifest.mjs`; reads `.next/BUILD_ID`, the build/app-build/prerender manifests, and sweeps `.next/static/{chunks,css,media}`; writes `public/sw-manifest.js` with `__SW_BUILD_ID` and `__SW_PRECACHE`.
 - `npm start` — serve the production build.
 - `npm run lint` — ESLint with `eslint-config-next`.
+- `npm test` / `npm run test:watch` — Vitest (`vitest run` / watch mode).
+- `npm run build:sdk` / `npm run dev:sdk` — build (or watch) `sdk/` into `public/sdk/v1/` with tsup.
+- `npm run migrate` — applies every pending file in `app/lib/scoreboard/migrations/` to `DATABASE_URL`, in filename order, each in a real transaction. `-- --status` reports applied vs pending and names the host; `-- --dry-run` lists without writing. Neon branching means every branch the app runs against needs its own run.
 - `npm run sync-games` — runs `scripts/sync-games.mjs`; mirrors every `games/**` blob into `public/games/` (needs `BLOB_READ_WRITE_TOKEN`).
 - `npm run publish-game -- <slug>` — publishes `public/games/<slug>/index.html` to Blob and records it in `game_blobs` (needs `BLOB_READ_WRITE_TOKEN` and `DATABASE_URL`; dry-run without `--yes`).
-- `node scripts/check-alerts.mjs` — probes the live site for alerts and notifies the admins if any fired (needs `ALERTS_SECRET`; `--dry-run` measures without notifying). Run every 30 minutes by `.github/workflows/alerts.yml`.
+- `npm run backfill-media-urls` — fills `game_media.blob_url` for rows written before migration 015. An optimisation, not a requirement (the media route self-heals a NULL row with one `head()`); safe to re-run.
+- `node scripts/provision-boards.mjs` — creates the leaderboard `boards` rows for games wired to the SDK, idempotently. Without a board, score posts answer 409 and are dropped silently.
+- `node scripts/check-alerts.mjs` — probes the live site for alerts and notifies the admins if any fired (needs `ALERTS_SECRET`; `--dry-run` measures without notifying; `HALLPASS_SITE_URL` points it at another deployment). Run every 30 minutes by `.github/workflows/alerts.yml`.
+- `node scripts/check-build-env.mjs` — fails a deploy whose build-time-inlined env vars are missing; run by `.github/workflows/deploy.yml` before the build.
 
 ## Deploying
 
