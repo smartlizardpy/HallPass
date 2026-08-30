@@ -103,6 +103,42 @@ npm install
 npm run dev
 ```
 
+`predev` runs first: it builds the SDK into `public/sdk/v1/` and regenerates
+`app/lib/static-games-manifest.ts`, so both are always current for the tree you
+have checked out.
+
+**It runs with no environment set.** The catalogue, the games themselves and
+the offline shell are static, and every Neon read in the codebase is fail-soft
+(try/catch → `[]`), so an unset `DATABASE_URL` means empty leaderboards,
+friends and dashboards rather than a crash — see the docblocks in
+`app/lib/db.ts` and `app/lib/games-store.ts`. Fill in `.env.local` for the
+signed-in half:
+
+- `DATABASE_URL` — a Neon connection string. Use a branch of your own; the
+  migration runner will happily write to whatever host you point it at.
+- `AUTH_SECRET`, plus `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` for the Google
+  provider (Auth.js resolves a provider's credentials from `AUTH_<PROVIDER>_*`
+  by convention, which is why no code references them). `AUTH_URL=http://localhost:3000`
+  pins the callback URL locally.
+- `SUPER_ADMIN_EMAILS` — your own address, to reach `/dashboard` without a
+  `dashboard_users` row. Comma- or whitespace-separated, matched case-insensitively.
+
+Migrations are not automatic. Against a fresh database:
+
+```bash
+npm run migrate -- --status   # applied vs pending, and which host you are pointed at
+npm run migrate               # apply everything pending, in filename order
+```
+
+Tests are Vitest, and cover the pure logic (rules, ranks, copy, guards) plus the
+client islands under jsdom:
+
+```bash
+npm test          # one run
+npm run test:watch
+npm run lint
+```
+
 The service worker is intentionally **not** registered under `next dev` (see the `NODE_ENV !== "production"` guard in `app/components/PWA.tsx`). To exercise offline behavior locally:
 
 ```bash
