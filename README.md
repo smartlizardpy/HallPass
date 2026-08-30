@@ -551,11 +551,20 @@ player row. See `app/lib/notifications/admins.ts`.
 
 ## Environment variables
 
-Derived from `process.env.*` references in the codebase. Configure these in Vercel project settings (and `.env.local` for development). See `.env.example` for a copy-paste starting point.
+Derived from `process.env.*` references in the codebase, plus the few Auth.js
+resolves by convention (noted as such). Configure these in Vercel project
+settings, and `.env.local` for development. `.env.example` is a copy-paste
+starting point for the analytics, blob, admin and push blocks — the database
+and auth vars below are not in it.
 
 | Var | Where used | Notes |
 |---|---|---|
 | `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` | `instrumentation-client.ts` | **Required for any analytics data.** Client-side PostHog capture token (browser → PostHog). `NEXT_PUBLIC_` vars are inlined at **build time**, so it must be set in Vercel *before* the build runs; if it is missing, `posthog.init` no-ops and **zero events** are captured (not even autocapture / pageviews). Find it in PostHog → Project settings. |
+| `DATABASE_URL` | `app/lib/db.ts`, every script that touches Neon | **The database.** A Neon connection string. Unset or malformed reads as *unconfigured* rather than broken: `neon()` throws synchronously, `db.ts` catches it and substitutes a throw-on-use stand-in, and every cached read is fail-soft — so the public site renders with empty leaderboards, friends and dashboards instead of 500ing. `isDbConfigured` is how a route answers 503 deliberately. |
+| `AUTH_SECRET` | Auth.js (`app/lib/auth.ts`), `app/lib/scoreboard/claim.ts` | Signs the session JWT, and is second in the claim-token secret chain. No sign-in without it. |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | Auth.js, by convention | The Google OAuth client. Resolved from `AUTH_<PROVIDER>_ID`/`_SECRET` inside `@auth/core`, which is why no file in this repo references them. |
+| `AUTH_URL` | Auth.js, by convention | Pins the callback origin. Needed for local development (`http://localhost:3000`); on Vercel the host header is the authority and `trustHost: true` covers it. |
+| `SUPER_ADMIN_EMAILS` | `app/lib/dashboard-users.ts`, `app/lib/notifications/admins.ts` | Comma- or whitespace-separated allow-list, matched case-insensitively. A listed address is `super_admin` unconditionally — even with no `dashboard_users` row — which is how the first admin gets in. |
 | `BLOB_READ_WRITE_TOKEN` | `@vercel/blob` (`put`, `copy`, `head`, `del`) | Auto-provisioned by Vercel when a Blob store is linked. |
 | `BLOB_READ_ONLY` | `app/lib/blob-ops.ts` | Optional emergency lock. Set to `1` (or `true`/`yes`/`on`) to force **every** advanced-blob feature off — publishing, media, beta evidence, cover caching, shot promotion, reindex — **without needing the database**, for when the allowance is spent and migration 026 has not been applied. Beats the `app_settings` switches and greys out the dashboard toggles. Anything unrecognised (including `0` and `false`) fails open and leaves the switches in charge. Takes effect on the next deploy. |
 | `ADMIN_HTML_PASSWORD` | `app/lib/admin-html-auth.ts` | Plain string; gates `/admin/html`. Required for uploads. |
@@ -563,20 +572,30 @@ Derived from `process.env.*` references in the codebase. Configure these in Verc
 | `VAPID_SUBJECT` | `app/lib/push/config.ts` | A `mailto:` the push service can contact about a misbehaving sender. Required by the VAPID spec. |
 | `ALERTS_SECRET` | `app/lib/alerts/guard.ts` | Gates `GET /api/v1/admin/alerts` and `POST /api/v1/admin/alerts/notify`, and is what the alerts cron holds as a repository secret. Falls back to `SCOREBOARD_ADMIN_SECRET`, then `ADMIN_HTML_PASSWORD`, so the feature works with what you already have — but setting it **replaces** those, so rotating it actually revokes the old credential. Unset everywhere means both endpoints answer 503. |
 | `SCOREBOARD_ADMIN_SECRET` | `app/lib/scoreboard/guard.ts` | Gates `POST\|GET /api/v1/admin/boards` (board provisioning), and salts `scores.ip_hash` when `SCOREBOARD_IP_SALT` is unset. Falls back to `ADMIN_HTML_PASSWORD`. |
+| `SCOREBOARD_CLAIM_SECRET` | `app/lib/scoreboard/claim.ts` | Signs the short-lived tokens that let a player claim scores they set before signing in. Falls back to `AUTH_SECRET`, then `SCOREBOARD_ADMIN_SECRET`, then `ADMIN_HTML_PASSWORD`. With none of them set, minting returns `null` and claiming is silently disabled — an anonymous score can never be kept. |
+| `SCOREBOARD_IP_SALT` | `app/lib/scoreboard/guard.ts`, `app/lib/reviews/` | Salts the one-way `scores.ip_hash` used for rate limiting. Falls back to `SCOREBOARD_ADMIN_SECRET`, then `ADMIN_HTML_PASSWORD`, then a constant in-app pepper — so the digest is never a bare `sha256(ip)`, but set this to make it unguessable. |
 | `POSTHOG_API_HOST` | `app/lib/stats.ts` | Defaults to `https://eu.posthog.com`. |
 | `POSTHOG_PROJECT_ID` | `app/lib/stats.ts` | PostHog project numeric id. |
 | `POSTHOG_PERSONAL_API_KEY` | `app/lib/stats.ts` | Personal API key with read access for play-count queries (server-side read; separate from the client capture token above). Also what the site alerts read themselves through — without it the alerts probe answers 503. |
+| `POSTHOG_ENV_CHECK` | `scripts/check-build-env.mjs` | Set to `warn` to stop a missing `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` failing the deploy. |
+| `HALLPASS_SITE_URL` | `scripts/check-alerts.mjs` | Repository *variable*, not a secret. Points a workflow run at a deployment other than production. |
 
 ## Scripts
 
-- `npm run dev` — Next dev server (no SW).
-- `npm run build` — production build with Turbopack.
+- `npm run dev` — Next dev server (no SW). `predev` builds the SDK and the static games manifest first.
+- `npm run build` — production build (Turbopack is the default in Next 16). `prebuild` runs the same two generators.
 - `npm run postbuild` — runs `node scripts/build-sw-manifest.mjs`; reads `.next/BUILD_ID`, the build/app-build/prerender manifests, and sweeps `.next/static/{chunks,css,media}`; writes `public/sw-manifest.js` with `__SW_BUILD_ID` and `__SW_PRECACHE`.
 - `npm start` — serve the production build.
 - `npm run lint` — ESLint with `eslint-config-next`.
+- `npm test` / `npm run test:watch` — Vitest (`vitest run` / watch mode).
+- `npm run build:sdk` / `npm run dev:sdk` — build (or watch) `sdk/` into `public/sdk/v1/` with tsup.
+- `npm run migrate` — applies every pending file in `app/lib/scoreboard/migrations/` to `DATABASE_URL`, in filename order, each in a real transaction. `-- --status` reports applied vs pending and names the host; `-- --dry-run` lists without writing. Neon branching means every branch the app runs against needs its own run.
 - `npm run sync-games` — runs `scripts/sync-games.mjs`; mirrors every `games/**` blob into `public/games/` (needs `BLOB_READ_WRITE_TOKEN`).
 - `npm run publish-game -- <slug>` — publishes `public/games/<slug>/index.html` to Blob and records it in `game_blobs` (needs `BLOB_READ_WRITE_TOKEN` and `DATABASE_URL`; dry-run without `--yes`).
-- `node scripts/check-alerts.mjs` — probes the live site for alerts and notifies the admins if any fired (needs `ALERTS_SECRET`; `--dry-run` measures without notifying). Run every 30 minutes by `.github/workflows/alerts.yml`.
+- `npm run backfill-media-urls` — fills `game_media.blob_url` for rows written before migration 015. An optimisation, not a requirement (the media route self-heals a NULL row with one `head()`); safe to re-run.
+- `node scripts/provision-boards.mjs` — creates the leaderboard `boards` rows for games wired to the SDK, idempotently. Without a board, score posts answer 409 and are dropped silently.
+- `node scripts/check-alerts.mjs` — probes the live site for alerts and notifies the admins if any fired (needs `ALERTS_SECRET`; `--dry-run` measures without notifying; `HALLPASS_SITE_URL` points it at another deployment). Run every 30 minutes by `.github/workflows/alerts.yml`.
+- `node scripts/check-build-env.mjs` — fails a deploy whose build-time-inlined env vars are missing; run by `.github/workflows/deploy.yml` before the build.
 
 ## Deploying
 
