@@ -6,11 +6,24 @@ HALLPASS is a Next.js 16 site hosting 28 self-hosted unblocked browser games —
 
 ## Stack
 
-- Next.js 16 App Router with Turbopack
+- Next.js 16 App Router. Turbopack is the default bundler for both `next dev`
+  and `next build` in 16, so neither script passes `--turbopack`.
 - React 19
 - Tailwind CSS v4 (`@tailwindcss/postcss`)
-- Vercel Blob (`@vercel/blob`) for game HTML storage
-- PostHog (`posthog-js` on the client; PostHog REST API on the server for play-count stats)
+- Neon Postgres over the serverless HTTP driver (`@neondatabase/serverless`) —
+  scores, players, the social graph, challenges, notifications and every
+  dashboard surface. One shared client in `app/lib/db.ts`; schema changes go
+  through `app/lib/scoreboard/migrations/` and `npm run migrate`.
+- Auth.js v5 (`next-auth`) with Google as the only provider, JWT sessions, no
+  database adapter. Sign-in is open — dashboard *authorization* is the
+  `dashboard_users` allow-list plus `SUPER_ADMIN_EMAILS`.
+- Vercel Blob (`@vercel/blob`) for game bundles and uploaded media
+- `web-push` for Web Push, `recharts` for the dashboard charts, `fflate` for
+  reading uploaded `.zip` bundles, `uqr` for QR codes
+- The Scoreboard SDK in `sdk/` — the script games embed — built with `tsup`
+- PostHog (`posthog-js` on the client; PostHog REST API on the server for
+  play-count stats and the site alerts)
+- Vitest (`npm test`) for the pure logic; jsdom for the client islands
 - Deployed on Vercel
 
 ## Repo layout
