@@ -51,6 +51,7 @@ import { blobOpDisabledMessage, isBlobOpEnabled } from "@/app/lib/blob-ops";
 import { beta } from "@/app/lib/beta";
 import {
   acceptanceReason,
+  INVITE_NOTE_MAX,
   toBugSeverity,
   toReportStatus,
   toShotStatus,
@@ -153,6 +154,155 @@ export async function inviteTesterAction(formData: FormData): Promise<void> {
   }
   revalidatePath(BETA_PATH);
   back("ok", `${username} is now a beta tester`);
+}
+
+/**
+ * ASK for a player to be invited, for a role that may not invite one.
+ *
+ * By username for the same reason {@link inviteTesterAction} takes one: a tester
+ * is a player who already exists, and their username is the identifier an admin
+ * actually sees. The optional note is what the approver reads to answer yes or
+ * no; without it the queue is a list of names with no case attached to any of
+ * them.
+ *
+ * ALREADY-ACTIVE TESTERS ARE REFUSED HERE, not left for the approver to notice.
+ * A request to invite somebody who is already in the programme would be approved
+ * (it is not wrong, exactly), write a no-op membership upsert, and teach both
+ * people that the queue contains work that is not work.
+ */
+export async function requestTesterAction(formData: FormData): Promise<void> {
+  const { email: actor } = await requireRole(BETA_MIN_ROLE);
+
+  const username = readString(formData, "username").toLowerCase();
+  if (!username) back("error", "Enter a username");
+  const note = readString(formData, "note").slice(0, INVITE_NOTE_MAX);
+
+  let playerId: string | null = null;
+  try {
+    playerId = await social.internalIdFromUsername(username);
+  } catch {
+    back("error", "Could not look up that player (database error)");
+  }
+  if (!playerId) back("error", `No player with the username "${username}"`);
+
+  let filed = false;
+  try {
+    if (await beta.isActiveTester(playerId)) {
+      back("error", `${username} is already a beta tester`);
+    }
+    filed = await beta.requestInvite({
+      playerId,
+      requestedBy: actor,
+      note,
+    });
+  } catch {
+    back("error", "Could not file that request (database error)");
+  }
+
+  revalidatePath(BETA_PATH);
+  // `filed === false` means the partial unique index matched: somebody has
+  // already asked for this player and nobody has decided yet. Saying "requested"
+  // again would imply a second request exists to be answered.
+  if (!filed) back("ok", `${username} is already waiting for a decision`);
+  back("ok", `Asked an admin to invite ${username}`);
+}
+
+/**
+ * Approve a requested invite: grant membership, then record the decision.
+ *
+ * ── THAT ORDER IS DELIBERATE ────────────────────────────────────────────────
+ * There is no transaction across two statements here (see `store.ts`), so the
+ * order is chosen by which half-finished state is recoverable. Membership
+ * granted with the request still pending simply shows up in the queue again, and
+ * approving it a second time converges — `beta.invite` upserts. The other order
+ * leaves a request marked approved with nobody actually invited, which looks
+ * finished and is not.
+ *
+ * ── THE INVITER OF RECORD IS THE REQUESTER ──────────────────────────────────
+ * `beta_testers.invited_by` credits whoever asked, because that is who brought
+ * the tester in. Who ALLOWED it is `decided_by` on the request row, which is why
+ * that row is kept rather than deleted.
+ */
+export async function approveInviteRequestAction(
+  formData: FormData,
+): Promise<void> {
+  const { email: actor, role } = await requireRole(SITE_WRITE_ROLE);
+
+  const id = Number(readString(formData, "id"));
+  if (!Number.isInteger(id) || id <= 0) back("error", "Missing request");
+
+  let request;
+  try {
+    request = await beta.inviteRequestById(id);
+  } catch {
+    back("error", "Could not load that request");
+  }
+  if (!request) back("error", "That request no longer exists");
+  if (request.status !== "pending") back("error", "That request was already decided");
+  // Four eyes again, on emails this time: `requested_by` and the acting admin
+  // are both `dashboard_users` addresses. Approving your own ask is the same
+  // one-person loop the request exists to break, so it is refused for everyone
+  // the rule binds — a full admin included.
+  if (!canConfirmOwnWork(role) && request.requestedBy === actor) {
+    back("error", "You raised this request — another admin has to approve it");
+  }
+
+  let applied = false;
+  try {
+    await beta.invite(request.playerId, request.requestedBy);
+    applied = await beta.decideInviteRequest({
+      id,
+      status: "approved",
+      decidedBy: actor,
+    });
+  } catch {
+    back("error", "Could not approve that request (database error)");
+  }
+
+  revalidatePath(BETA_PATH);
+  revalidatePath("/beta");
+  if (!applied) back("error", "Someone else decided that first");
+  back("ok", "Invited");
+}
+
+/** Turn a requested invite down. Keeps the row as the record of the answer. */
+export async function denyInviteRequestAction(
+  formData: FormData,
+): Promise<void> {
+  const { email: actor, role } = await requireRole(SITE_WRITE_ROLE);
+
+  const id = Number(readString(formData, "id"));
+  if (!Number.isInteger(id) || id <= 0) back("error", "Missing request");
+
+  let request;
+  try {
+    request = await beta.inviteRequestById(id);
+  } catch {
+    back("error", "Could not load that request");
+  }
+  if (!request) back("error", "That request no longer exists");
+  if (request.status !== "pending") back("error", "That request was already decided");
+  // Denying your own ask grants nothing, but it does let one person quietly
+  // clear their own trail out of the queue. The record of who asked and who
+  // answered is the point of the row, so the same rule applies.
+  if (!canConfirmOwnWork(role) && request.requestedBy === actor) {
+    back("error", "You raised this request — another admin has to answer it");
+  }
+
+  let applied = false;
+  try {
+    applied = await beta.decideInviteRequest({
+      id,
+      status: "denied",
+      decidedBy: actor,
+    });
+  } catch {
+    back("error", "Could not deny that request (database error)");
+  }
+
+  revalidatePath(BETA_PATH);
+  if (!applied) back("error", "Someone else decided that first");
+  back("ok", "Request denied");
 }
 
 /** Withdraw membership. The row and its XP ledger survive for the audit trail. */
