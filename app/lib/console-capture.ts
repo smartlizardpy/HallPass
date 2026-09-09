@@ -42,6 +42,20 @@ type ConsoleStore = {
 };
 
 const MAX_ENTRIES = 300;
+
+/**
+ * Hard ceiling on the rendered text of ONE entry.
+ *
+ * Without it `formatArg` will happily `JSON.stringify` a whole object graph, and
+ * the buffer's real size is unbounded even though its LENGTH is capped: 300
+ * entries of a stringified fetch payload is megabytes. That is not merely
+ * wasteful, it is the freeze — `persist` re-serialises the entire buffer on the
+ * way past, so one fat entry taxes every console call made afterwards, and a big
+ * enough buffer exceeds the localStorage quota outright. A truncated line still
+ * says what happened; the untruncated one costs the main thread.
+ */
+export const MAX_TEXT = 2_000;
+
 const STORAGE_KEY = "hp:console-logs";
 const LEVELS: ConsoleLevel[] = ["log", "info", "warn", "error", "debug"];
 
@@ -138,6 +152,12 @@ function hydrate(store: ConsoleStore): void {
   }
 }
 
+/** Clamp `text` to {@link MAX_TEXT}, saying how much was dropped. */
+function truncate(text: string): string {
+  if (text.length <= MAX_TEXT) return text;
+  return `${text.slice(0, MAX_TEXT)}… [+${text.length - MAX_TEXT} chars]`;
+}
+
 function record(level: ConsoleLevel, args: unknown[]): void {
   const store = getStore();
   if (!store) return;
@@ -145,7 +165,9 @@ function record(level: ConsoleLevel, args: unknown[]): void {
     id: ++store.seq,
     ts: Date.now(),
     level,
-    text: args.map(formatArg).join(" "),
+    // Clamp per ARGUMENT as well as on the join, so a single huge object cannot
+    // push a multi-argument line far past the cap.
+    text: truncate(args.map((a) => truncate(formatArg(a))).join(" ")),
   };
   store.entries.push(entry);
   if (store.entries.length > MAX_ENTRIES) {
