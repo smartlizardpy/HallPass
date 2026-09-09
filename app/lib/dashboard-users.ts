@@ -3,10 +3,13 @@
  *
  * The dashboard's authorization model is OURS, not the identity provider's:
  * Google (Auth.js v5) only proves *who* a person is; this module is the
- * allow-list that decides *whether* they may enter and at *what* level. Two
- * roles exist — 'super_admin' (everything, incl. managing these very rows) and
- * 'admin' (boards, games, scores, analytics). See `app/lib/auth.sql` for the
- * `dashboard_users` table this layer reads and writes.
+ * allow-list that decides *whether* they may enter and at *what* level. Three
+ * roles exist, lowest first — 'beta_admin' (the beta programme only, read-only
+ * elsewhere), 'admin' (boards, games, scores, analytics) and 'super_admin'
+ * (everything, incl. managing these very rows). See `app/lib/auth.sql` for the
+ * `dashboard_users` table this layer reads and writes, and
+ * `app/lib/permissions.ts` for what each rung may actually do — this module
+ * stores the role, it does not interpret it.
  *
  * Unlike the scoreboard store, there is no `createStore(sql)` factory here: this
  * module talks to the shared, server-only `sql` from `@/app/lib/db` directly.
@@ -29,8 +32,16 @@
 
 import { sql } from "@/app/lib/db";
 
-/** The two dashboard authorization levels. */
-export type Role = "super_admin" | "admin";
+/**
+ * The three dashboard authorization levels.
+ *
+ * Deliberately LINEAR: everything a `beta_admin` may do an `admin` may do, and
+ * everything an `admin` may do a `super_admin` may do. `permissions.ts` ranks
+ * them on exactly that assumption, so a fourth value that is a SIDEWAYS grant
+ * (rather than a rung) does not belong here — it would need a capability set,
+ * not a rank.
+ */
+export type Role = "super_admin" | "admin" | "beta_admin";
 
 /** A dashboard user as exposed to the rest of the app (JSON-safe strings). */
 export interface DashboardUser {
@@ -57,9 +68,20 @@ function toIso(value: unknown): string {
   return Number.isNaN(date.getTime()) ? String(value) : date.toISOString();
 }
 
-/** Narrow a free-form driver value to a `Role`, defaulting to the lower role. */
+/**
+ * Narrow a free-form driver value to a `Role`, defaulting to the LEAST
+ * privileged one.
+ *
+ * The default is the safety property, not a formality: an unrecognised column
+ * value means this deployment does not understand the row, and the only reading
+ * of it that cannot accidentally grant something is the bottom rung. It used to
+ * default to 'admin', which was harmless while 'admin' WAS the bottom rung and
+ * stopped being so the moment 'beta_admin' existed below it.
+ */
 function toRole(value: unknown): Role {
-  return value === "super_admin" ? "super_admin" : "admin";
+  if (value === "super_admin") return "super_admin";
+  if (value === "admin") return "admin";
+  return "beta_admin";
 }
 
 function mapUser(row: Row): DashboardUser {
@@ -106,7 +128,14 @@ export async function getUserRole(email: string): Promise<Role | null> {
   `;
   if (rows.length === 0) return null;
   const role = rows[0].role;
-  return role === "super_admin" || role === "admin" ? role : null;
+  // Narrowed EXPLICITLY rather than through `toRole`, because the two answer
+  // different questions. `toRole` maps a row for display and must always produce
+  // a role; this decides whether somebody may enter at all, so an unrecognised
+  // value has to mean "denied" — mapping it to the bottom rung would let a typo
+  // in the column grant beta-programme access.
+  return role === "super_admin" || role === "admin" || role === "beta_admin"
+    ? role
+    : null;
 }
 
 /**
@@ -208,17 +237,28 @@ export async function listUsers(): Promise<DashboardUser[]> {
 }
 
 /**
- * Invite (or re-assert) an `admin`. `invitedBy` records who extended the
- * invite; on a pre-existing row we force the role back to `'admin'` and refresh
- * the inviter, which doubles as the "re-add a removed-then-returning" path.
+ * Invite (or re-assert) a user AT A ROLE. `invitedBy` records who extended the
+ * invite; on a pre-existing row we force the role back to the invited one and
+ * refresh the inviter, which doubles as the "re-add a removed-then-returning"
+ * path.
+ *
+ * `role` is a BOUND value, not a spliced fragment, so the module's SQL-safety
+ * rule holds without branching into three query templates. It is still narrowed
+ * by the caller before it gets here (`users/actions.ts`), because an unchecked
+ * form value would otherwise reach the CHECK constraint and turn a typo into a
+ * raw 500.
  */
-export async function addAdmin(email: string, invitedBy: string): Promise<void> {
+export async function addUser(
+  email: string,
+  role: Role,
+  invitedBy: string,
+): Promise<void> {
   const target = normalizeEmail(email);
   await sql`
     INSERT INTO dashboard_users (email, role, invited_by)
-    VALUES (${target}, 'admin', ${invitedBy})
+    VALUES (${target}, ${role}, ${invitedBy})
     ON CONFLICT (email) DO UPDATE SET
-      role = 'admin',
+      role = EXCLUDED.role,
       invited_by = EXCLUDED.invited_by
   `;
 }

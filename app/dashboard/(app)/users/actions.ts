@@ -32,7 +32,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import {
-  addAdmin,
+  addUser,
   setRole,
   removeUser,
   isSuperAdminEmail,
@@ -116,7 +116,7 @@ export async function addAdminAction(formData: FormData): Promise<void> {
   // try so a raw 500 becomes a banner. The success back() (a redirect) must stay
   // OUTSIDE — redirect() throws a control signal that this catch would swallow.
   try {
-    await addAdmin(email, actor);
+    await addUser(email, "admin", actor);
   } catch {
     back("error", "Add admin failed (database error)");
   }
