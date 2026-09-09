@@ -218,10 +218,24 @@ self.addEventListener("fetch", (event) => {
   // `purgePrivateEntries` would never recognise. Same for `/play/account`. The
   // offline value lost is a heading over an empty box, since the island it used
   // to host renders nothing without the network anyway.
+  //
+  // `/ingest/*` IS ANALYTICS, not one of our own routes. `next.config.ts`
+  // rewrites it to PostHog, so it is same-origin and reaches this handler like
+  // anything else — and because it is neither a navigation nor HTML, it fell
+  // through to `cacheFirst`. That is the wrong strategy twice over. PostHog's
+  // bundles (`/ingest/static/*.js`, fetched when it lazily loads its recorder
+  // and exception-capture extensions) would be pinned in `hp-runtime` at
+  // whatever version was seen first and served from there forever, since that
+  // cache is deliberately never swept and survives deploys — the same trap
+  // `/sdk/` is given `networkFirstNoHttpCache` to avoid. Nothing here belongs in
+  // a shared cache anyway: it is a third party's client, its GET responses can
+  // be viewer-specific, and an analytics request that fails should simply fail
+  // rather than be answered from a cache a deploy ago.
   if (
     url.pathname.startsWith("/admin") ||
     url.pathname.startsWith("/dashboard") ||
     url.pathname.startsWith("/api/") ||
+    url.pathname.startsWith("/ingest/") ||
     url.pathname === "/games-version"
   ) {
     return;
