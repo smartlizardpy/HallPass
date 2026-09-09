@@ -72,6 +72,17 @@ const MAX_ENTRIES = 300;
  */
 export const MAX_TEXT = 2_000;
 
+/**
+ * Ceiling on the PERSISTED payload we are willing to read back.
+ *
+ * `MAX_ENTRIES * MAX_TEXT` is the most this module will ever write, with room to
+ * spare for the JSON scaffolding. Anything larger was written by a build from
+ * before those caps existed, and parsing it is itself a main-thread stall on
+ * every single page load — which is what makes the freeze outlive the fix and
+ * stick to the device. Such a payload is dropped rather than restored.
+ */
+export const MAX_STORED_CHARS = MAX_ENTRIES * MAX_TEXT * 2;
+
 const STORAGE_KEY = "hp:console-logs";
 const LEVELS: ConsoleLevel[] = ["log", "info", "warn", "error", "debug"];
 
@@ -191,6 +202,12 @@ function hydrate(store: ConsoleStore): void {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
+    // Oversized payloads predate the caps above — drop, don't parse. See
+    // {@link MAX_STORED_CHARS}.
+    if (raw.length > MAX_STORED_CHARS) {
+      window.localStorage.removeItem(STORAGE_KEY);
+      return;
+    }
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return;
     const entries = parsed.filter(
@@ -202,7 +219,11 @@ function hydrate(store: ConsoleStore): void {
         typeof (e as ConsoleEntry).text === "string" &&
         LEVELS.includes((e as ConsoleEntry).level),
     );
-    store.entries = entries.slice(-MAX_ENTRIES);
+    // Re-clamp on the way in: entries written before `MAX_TEXT` existed are
+    // exactly the ones that would otherwise be re-serialised on every flush.
+    store.entries = entries
+      .slice(-MAX_ENTRIES)
+      .map((e) => (e.text.length > MAX_TEXT ? { ...e, text: truncate(e.text) } : e));
     store.snapshotStale = true;
     store.seq = entries.reduce((max, e) => Math.max(max, e.id), 0);
   } catch {
