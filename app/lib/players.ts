@@ -181,6 +181,30 @@ export async function getPlayerById(id: string): Promise<Player | null> {
 }
 
 /**
+ * A single player by their claimed `@username`, or `null` if nobody holds it.
+ *
+ * Carries the email like {@link getPlayerById} does, and is subject to the same
+ * privacy invariant: SERVER-SIDE ONLY. Its one caller is the super-admin invite
+ * action, which needs the address because `dashboard_users` is keyed by it —
+ * nothing here may cross to a client surface. Use {@link getPublicIdentity} for
+ * anything that does.
+ *
+ * `username` is UNIQUE in `players`, so this is at most one row. The caller is
+ * expected to have canonicalised the input already (see `parseAdminIdentifier`);
+ * the value is bound, never spliced.
+ */
+export async function getPlayerByUsername(
+  username: string,
+): Promise<Player | null> {
+  const rows = await sql`
+    SELECT id, email, name, image, handle, created_at, last_login
+    FROM players
+    WHERE username = ${username}
+  `;
+  return rows.length > 0 ? mapPlayer(rows[0]) : null;
+}
+
+/**
  * The PUBLIC, email-free identity for a player by id, with the effective display
  * resolved. Returns `null` for an unknown id. Use this anywhere an identity
  * crosses to a client/API surface — `getPlayerById` carries the email and must

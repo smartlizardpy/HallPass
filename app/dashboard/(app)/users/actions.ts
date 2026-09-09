@@ -15,10 +15,14 @@
  *     every login and a row delete would simply be re-created, so we reject both
  *     `setRole` and `removeUser` against them with a clear message instead of
  *     pretending to act.
- *   - Invited emails are normalised to `.trim().toLowerCase()` and shape-checked
- *     before they reach the store, so the PRIMARY KEY stays canonical and an
- *     obviously bogus address bounces back to the form rather than creating a
- *     junk row that can never sign in.
+ *   - Invite input is canonicalised and shape-checked before it reaches the
+ *     store, so the PRIMARY KEY stays canonical and an obviously bogus value
+ *     bounces back to the form rather than creating a junk row that can never
+ *     sign in. The box takes an ADDRESS or an `@username`; a username is resolved
+ *     to that player's address here (see `admin-identifier.ts` for why it is
+ *     resolved rather than stored), and every check below — the env-super-admin
+ *     rejection included — then runs on the RESOLVED address, so widening the
+ *     input cannot widen who may be granted a role.
  *
  * Result reporting uses the querystring: `?ok=<message>` / `?error=<message>`
  * are full human-readable sentences (the page renders them verbatim in a banner).
@@ -34,18 +38,57 @@ import {
   isSuperAdminEmail,
   type Role,
 } from "@/app/lib/dashboard-users";
+import { parseAdminIdentifier } from "@/app/lib/admin-identifier";
+import { getPlayerByUsername, type Player } from "@/app/lib/players";
 
 /** Where every action lands; centralised so the path never drifts. */
 const USERS_PATH = "/dashboard/users";
-
-/** A deliberately permissive "looks like an email" shape check. */
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Pull the `email` field, normalised to the store's canonical form. */
 function readEmail(formData: FormData): string {
   return String(formData.get("email") ?? "")
     .trim()
     .toLowerCase();
+}
+
+/**
+ * Resolve what the invite box was given to the address the allow-list is keyed
+ * by, or bounce back with a banner explaining why it could not be.
+ *
+ * An `@username` is resolved HERE, once, rather than stored: see
+ * `admin-identifier.ts` for why a renameable name is the wrong key. Only players
+ * who have signed in and claimed a username can be invited that way — anyone
+ * else is invited by address exactly as before, which is also the only way to
+ * invite somebody who has never signed in.
+ *
+ * The store read is wrapped so a down database degrades to a banner rather than
+ * a raw 500, matching the write paths below. `back()` redirects (it throws a
+ * control signal), so it stays outside the try.
+ */
+async function resolveInviteEmail(formData: FormData): Promise<string> {
+  const target = parseAdminIdentifier(String(formData.get("email") ?? ""));
+  if (!target) {
+    back("error", "Enter an email address or an @username");
+  }
+  if (target.kind === "email") return target.email;
+
+  let player: Player | null;
+  try {
+    player = await getPlayerByUsername(target.username);
+  } catch {
+    back("error", "Username lookup failed (database error)");
+  }
+  if (!player) {
+    back("error", `No player is using @${target.username}`);
+  }
+  // Re-normalise rather than trusting the column. `dashboard_users.email` is a
+  // LOWERCASE PRIMARY KEY and `getUserRole` lowercases before comparing, so a
+  // mixed-case `players.email` — nothing in the schema forbids one, and rows
+  // predate the normalising upsert — would otherwise write an admin row that
+  // could never match at sign-in: access silently granted to nobody. The typed
+  // address is already canonical via `parseAdminIdentifier`; this is the same
+  // guarantee for the resolved one.
+  return player.email.trim().toLowerCase();
 }
 
 /** Redirect back to the users page carrying a banner message. */
@@ -61,10 +104,7 @@ function back(kind: "ok" | "error", message: string): never {
 export async function addAdminAction(formData: FormData): Promise<void> {
   const { email: actor } = await requireRole("super_admin");
 
-  const email = readEmail(formData);
-  if (!email || !EMAIL_SHAPE.test(email)) {
-    back("error", "Invalid email");
-  }
+  const email = await resolveInviteEmail(formData);
   // Env super admins are governed by SUPER_ADMIN_EMAILS, not this table; inviting
   // one as an 'admin' would only write a misleading row (their effective role is
   // still super_admin via the allow-list). Reject it for clarity.
