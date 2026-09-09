@@ -66,13 +66,25 @@ describe("usernames", () => {
 
   it("still parses names that claiming policy would refuse today", () => {
     // A lookup must not re-litigate claiming: a player may already hold one of
-    // these, and tightening the reserved rules must not strand them.
-    for (const held of ["@admin", "@_edge_", "@12345", "@a__b"]) {
+    // these — the `players_username_check` constraint permits all three — and
+    // tightening the reserved-word rules must not strand them.
+    for (const held of ["@admin", "@12345", "@a__b"]) {
       expect(parseAdminIdentifier(held)).toEqual({
         kind: "username",
         username: held.slice(1),
       });
     }
+  });
+
+  it("is permissive rather than exact about what the column allows", () => {
+    // `_edge_` cannot be stored (players_username_check requires alphanumeric
+    // ends), but the shape check deliberately does not encode that: it would be
+    // a second copy of the constraint, free to drift. It simply finds no row and
+    // the caller reports "no player is using @…", which is the truth either way.
+    expect(parseAdminIdentifier("@_edge_")).toEqual({
+      kind: "username",
+      username: "_edge_",
+    });
   });
 });
 

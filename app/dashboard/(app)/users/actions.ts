@@ -81,7 +81,14 @@ async function resolveInviteEmail(formData: FormData): Promise<string> {
   if (!player) {
     back("error", `No player is using @${target.username}`);
   }
-  return player.email;
+  // Re-normalise rather than trusting the column. `dashboard_users.email` is a
+  // LOWERCASE PRIMARY KEY and `getUserRole` lowercases before comparing, so a
+  // mixed-case `players.email` — nothing in the schema forbids one, and rows
+  // predate the normalising upsert — would otherwise write an admin row that
+  // could never match at sign-in: access silently granted to nobody. The typed
+  // address is already canonical via `parseAdminIdentifier`; this is the same
+  // guarantee for the resolved one.
+  return player.email.trim().toLowerCase();
 }
 
 /** Redirect back to the users page carrying a banner message. */
