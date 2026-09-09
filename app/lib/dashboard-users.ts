@@ -110,6 +110,49 @@ export async function getUserRole(email: string): Promise<Role | null> {
 }
 
 /**
+ * Effective role for a SESSION, or `null` when it cannot be established.
+ * NEVER THROWS — and that is the whole reason this exists beside
+ * {@link getUserRole}.
+ *
+ * `getUserRole` is a plain store read and rejects when Neon is unreachable. That
+ * rejection used to travel out of the Auth.js `jwt` callback, which Auth.js
+ * catches as a `JWTSessionError` and answers by resolving the session to `null`.
+ * The blast radius was therefore the entire SESSION rather than the role: one
+ * database blip signed EVERY player out of the arcade — their leaderboard
+ * identity, friends and challenges — even though `playerId` is pinned on the
+ * token at login and needs no database at all to be read back.
+ *
+ * So the two halves are separated here. Authorization fails CLOSED: no role,
+ * `requireRole` bounces to sign-in, and access returns by itself on the first
+ * request that reaches the database again. Identity is left alone.
+ *
+ * Deliberately NOT the third option — keeping the role the token already had.
+ * That would hand anyone who can make the database fail a way to hold a revoked
+ * role indefinitely, and per-request re-resolution (see the `jwt` callback in
+ * `auth.ts`) exists precisely so that revoking a user lands on their next
+ * request. A failed lookup is not evidence of authorization.
+ *
+ * Note the env allow-list still wins without touching Neon, so a
+ * `SUPER_ADMIN_EMAILS` address keeps dashboard access straight through an
+ * outage — which is when somebody needs to get in and look.
+ *
+ * The address is kept OUT of the log line: a role lookup failing is systemic
+ * (the database is down), not something about one person, and this runs on every
+ * request of every signed-in visitor.
+ */
+export async function getSessionRole(email: string): Promise<Role | null> {
+  try {
+    return await getUserRole(email);
+  } catch (error) {
+    console.error(
+      "[auth] dashboard role lookup failed; continuing without a role:",
+      error,
+    );
+    return null;
+  }
+}
+
+/**
  * Provision/refresh a user's row on sign-in.
  *
  * The invariant is "a login may refresh your profile and stamp your last login,
