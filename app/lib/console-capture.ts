@@ -32,10 +32,14 @@ type Listener = () => void;
 
 type ConsoleStore = {
   entries: ConsoleEntry[];
-  // Cached immutable copy of `entries`, replaced only when the buffer changes.
-  // `useSyncExternalStore` requires getSnapshot to return a stable reference
-  // between changes, so callers read this rather than a fresh `.slice()`.
+  // Cached immutable copy of `entries`, rebuilt LAZILY on the next read after a
+  // change. `useSyncExternalStore` requires getSnapshot to return a stable
+  // reference between changes, so callers read this rather than a fresh
+  // `.slice()` — but building it eagerly in `commit` put a full array copy on
+  // the hot path of every console call, and nothing reads it unless the Logs
+  // page is actually mounted. `snapshotStale` is what defers that work.
   snapshot: ConsoleEntry[];
+  snapshotStale: boolean;
   listeners: Set<Listener>;
   patched: boolean;
   seq: number;
@@ -87,6 +91,7 @@ function getStore(): ConsoleStore | null {
     window.__hpConsoleStore = {
       entries: [],
       snapshot: EMPTY,
+      snapshotStale: false,
       listeners: new Set(),
       patched: false,
       seq: 0,
@@ -97,9 +102,9 @@ function getStore(): ConsoleStore | null {
   return window.__hpConsoleStore;
 }
 
-/** Refresh the cached snapshot and notify subscribers. */
+/** Mark the snapshot stale and notify subscribers. */
 function commit(store: ConsoleStore): void {
-  store.snapshot = store.entries.slice();
+  store.snapshotStale = true;
   store.listeners.forEach((fn) => {
     try {
       fn();
@@ -198,7 +203,7 @@ function hydrate(store: ConsoleStore): void {
         LEVELS.includes((e as ConsoleEntry).level),
     );
     store.entries = entries.slice(-MAX_ENTRIES);
-    store.snapshot = store.entries.slice();
+    store.snapshotStale = true;
     store.seq = entries.reduce((max, e) => Math.max(max, e.id), 0);
   } catch {
     /* corrupt payload — start clean */
@@ -294,7 +299,13 @@ export function initConsoleCapture(): void {
  * back `useSyncExternalStore` directly.
  */
 export function getConsoleLogEntries(): ConsoleEntry[] {
-  return getStore()?.snapshot ?? EMPTY;
+  const store = getStore();
+  if (!store) return EMPTY;
+  if (store.snapshotStale) {
+    store.snapshot = store.entries.slice();
+    store.snapshotStale = false;
+  }
+  return store.snapshot;
 }
 
 /**
