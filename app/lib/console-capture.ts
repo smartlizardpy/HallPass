@@ -262,9 +262,10 @@ function recordEntry(
     id: ++store.seq,
     ts: Date.now(),
     level,
-    // Clamp per ARGUMENT as well as on the join, so a single huge object cannot
-    // push a multi-argument line far past the cap.
-    text: truncate(args.map((a) => truncate(formatArg(a))).join(" ")),
+    // Clamped ONCE, on the joined line. Clamping each argument first and then the
+    // join again made the second pass measure the first pass's own marker, so a
+    // 50,000-character argument reported "+16 chars" dropped instead of +48,000.
+    text: truncate(args.map(formatArg).join(" ")),
   };
   store.entries.push(entry);
   if (store.entries.length > MAX_ENTRIES) {
