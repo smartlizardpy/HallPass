@@ -39,6 +39,16 @@ type ConsoleStore = {
   listeners: Set<Listener>;
   patched: boolean;
   seq: number;
+  /**
+   * Set while `record` is running, so capture cannot re-enter itself.
+   *
+   * `commit` calls subscriber callbacks, and in production `console` is patched
+   * by more than us — posthog-js wraps it too, and its exception capture turns a
+   * `console.error` into a network call that can itself `console.error` on
+   * failure. Without this latch that is a loop with a synchronous storage write
+   * in it, which is a locked main thread rather than a slow one.
+   */
+  recording: boolean;
 };
 
 const MAX_ENTRIES = 300;
@@ -78,6 +88,7 @@ function getStore(): ConsoleStore | null {
       listeners: new Set(),
       patched: false,
       seq: 0,
+      recording: false,
     };
   }
   return window.__hpConsoleStore;
@@ -160,7 +171,25 @@ function truncate(text: string): string {
 
 function record(level: ConsoleLevel, args: unknown[]): void {
   const store = getStore();
-  if (!store) return;
+  // A nested console call (from a subscriber, or from another library's console
+  // patch) is dropped rather than queued: the outer call is already recording
+  // the same incident, and recursing is what turns a log storm into a freeze.
+  if (!store || store.recording) return;
+  store.recording = true;
+  try {
+    recordEntry(store, level, args);
+  } catch {
+    /* capture must never break the app */
+  } finally {
+    store.recording = false;
+  }
+}
+
+function recordEntry(
+  store: ConsoleStore,
+  level: ConsoleLevel,
+  args: unknown[],
+): void {
   const entry: ConsoleEntry = {
     id: ++store.seq,
     ts: Date.now(),
