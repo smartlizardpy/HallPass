@@ -14,7 +14,9 @@
  * re-resolved from the store on EVERY request (see the `jwt` callback), so a
  * revoked or demoted user loses access on their next request rather than at
  * token expiry. The immutable player identity (`playerId`) is pinned once at
- * login and rides the token thereafter.
+ * login and rides the token thereafter — and survives a database outage, which
+ * only clears the role. A failed role read is never allowed to take the whole
+ * session down with it.
  *
  * Email normalisation: identity providers may return mixed-case addresses, but
  * the allow-list PRIMARY KEY is lowercase. Every email crossing this boundary is
@@ -33,6 +35,7 @@ import Google from "next-auth/providers/google";
 import type { JWT } from "next-auth/jwt";
 import { redirect } from "next/navigation";
 import {
+  getSessionRole,
   getUserRole,
   upsertUserOnLogin,
   isSuperAdminEmail,
@@ -94,6 +97,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // fallbacks so a provider that omits the account never hard-fails sign-in.
       const subjectId = account?.providerAccountId ?? profile?.sub ?? user.id;
       if (!email || !subjectId) return false;
+      // DELIBERATELY the throwing read, unlike the `jwt` callback below. A
+      // sign-in cannot complete without the database anyway — `upsertPlayerOnLogin`
+      // has to persist the player row a few lines down — so there is no session to
+      // protect here, and failing the sign-in outright is honest. Softening this
+      // one would only sign somebody in as a role-less player and strand them.
       const role = await getUserRole(email);
       if (role) {
         await upsertUserOnLogin({
@@ -120,12 +128,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
      * (Auth.js v5's default is 30 days). On the login pass `user.email` seeds the
      * token; thereafter we fall back to `token.email`. The per-request DB read is
      * a deliberate, cheap price for correct revocation on an admin surface.
+     *
+     * THAT READ MUST NOT BE ABLE TO THROW, which is why it goes through
+     * `getSessionRole` rather than `getUserRole`. Anything that rejects here is
+     * caught by Auth.js as a `JWTSessionError` and answered by resolving the
+     * session to `null` — so a Neon blip did not merely cost an admin their
+     * role, it signed EVERY player out of the arcade, `playerId` included,
+     * despite that value riding the token and needing no database at all. The
+     * role now fails closed on its own and the rest of the token survives; see
+     * `getSessionRole` for why the previous role is not reused instead.
      */
     async jwt({ token, user, account, profile }) {
       const email = (user?.email ?? token.email)?.toLowerCase();
       if (email) {
         token.email = email;
-        token.role = await getUserRole(email);
+        token.role = await getSessionRole(email);
       }
       // Pin the player identity ONCE, on the login pass, to the provider's STABLE
       // subject id (`account.providerAccountId`, i.e. the Google `sub`) — never
