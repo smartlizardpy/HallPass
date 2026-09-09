@@ -1,14 +1,17 @@
 "use server";
 
 /**
- * HallPass dashboard — beta programme write actions (admin only).
+ * HallPass dashboard — beta programme write actions.
  *
  * The WRITE half of `/dashboard/beta`; the read-only server component that
  * renders the roster and queues lives alongside in `page.tsx`.
  *
  * Every action follows the invariant sequence set by `users/actions.ts`:
- *   1. `requireRole("admin")` FIRST, before a single form field is read, so an
+ *   1. `requireRole(...)` FIRST, before a single form field is read, so an
  *      unauthorised caller is redirected before anything is parsed or written.
+ *      Most of this surface asks for `BETA_MIN_ROLE`, because running the beta
+ *      programme is what the lowest rung exists for; the two that change
+ *      MEMBERSHIP ask for more (see `canManageTesters`).
  *   2. Validate and narrow from `unknown` — FormData values are user input, and
  *      an unchecked cast would let a malformed value reach a CHECK constraint
  *      and turn a typo into a raw 500 instead of a banner.
@@ -18,6 +21,14 @@
  * `redirect()` must stay OUTSIDE every try, because it signals by throwing and
  * a catch-all would swallow it — turning a successful action into a silent
  * no-op. This is the single most repeated mistake in this file's shape.
+ *
+ * ── FOUR EYES ───────────────────────────────────────────────────────────────
+ * Nobody but a super admin may judge a report or an image THEY filed. Admins can
+ * file reports like anyone else — they pass the tester guard without a
+ * membership row — and every judging action here PAYS XP, so without this an
+ * admin's own find is a self-service payout. {@link assertNotOwnWork} is the one
+ * place that asks, and it runs after the row is loaded (the author is on the
+ * row) and before anything is written.
  *
  * XP IS COMPUTED HERE, NOT IN SQL. The rate card lives in `beta/config.ts` so
  * the tester's page and the payout cannot drift, which means the amount has to
@@ -30,6 +41,12 @@ import { revalidatePath, updateTag } from "next/cache";
 import { copy, del } from "@vercel/blob";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
+import type { Role } from "@/app/lib/dashboard-users";
+import {
+  BETA_MIN_ROLE,
+  canConfirmOwnWork,
+  SITE_WRITE_ROLE,
+} from "@/app/lib/permissions";
 import { blobOpDisabledMessage, isBlobOpEnabled } from "@/app/lib/blob-ops";
 import { beta } from "@/app/lib/beta";
 import {
@@ -63,6 +80,47 @@ function readString(formData: FormData, key: string): string {
 }
 
 /**
+ * Refuse a decision the caller is not allowed to make about their OWN
+ * submission. Returns normally when the decision may proceed; otherwise it
+ * redirects with a banner (via `back()`, which throws).
+ *
+ * ── WHY IT TAKES THE ACTOR'S PLAYER ID AND NOT THEIR EMAIL ──────────────────
+ * `dashboard_users` is keyed by email and `beta_reports.player_id` is a Google
+ * subject id. They identify the same human through completely separate columns,
+ * and only the player id is comparable to what is stored on the row.
+ *
+ * ── A SESSION WITH NO PLAYER ID IS REFUSED, NOT WAVED THROUGH ───────────────
+ * `playerId` is pinned at login, so a token minted before that carries none. The
+ * question this function answers is "can I prove this is not yours?", and a
+ * missing id means NO. Refusing costs that admin one sign-out and sign-in, which
+ * the banner says; waving them through would make "hold an old token" the way
+ * around the rule.
+ */
+function assertNotOwnWork(input: {
+  role: Role;
+  actorPlayerId: string | undefined;
+  ownerPlayerId: string | null;
+  what: "report" | "image";
+}): void {
+  if (canConfirmOwnWork(input.role)) return;
+  // Nobody owns it any more (the author's player row was deleted), so there is
+  // no self-dealing to prevent.
+  if (input.ownerPlayerId == null) return;
+  if (!input.actorPlayerId) {
+    back(
+      "error",
+      "Sign out and back in before judging this — your session predates the check that says whose it is",
+    );
+  }
+  if (input.ownerPlayerId === input.actorPlayerId) {
+    back(
+      "error",
+      `You submitted this ${input.what} — another admin has to judge it`,
+    );
+  }
+}
+
+/**
  * Invite a player to the programme by username.
  *
  * BY USERNAME, NOT EMAIL, deliberately. `dashboard_users` is keyed on email
@@ -72,7 +130,7 @@ function readString(formData: FormData, key: string): string {
  * child's address into a form that has no need for it.
  */
 export async function inviteTesterAction(formData: FormData): Promise<void> {
-  const { email: actor } = await requireRole("admin");
+  const { email: actor } = await requireRole(SITE_WRITE_ROLE);
 
   const username = readString(formData, "username").toLowerCase();
   if (!username) back("error", "Enter a username");
@@ -99,7 +157,7 @@ export async function inviteTesterAction(formData: FormData): Promise<void> {
 
 /** Withdraw membership. The row and its XP ledger survive for the audit trail. */
 export async function revokeTesterAction(formData: FormData): Promise<void> {
-  await requireRole("admin");
+  await requireRole(SITE_WRITE_ROLE);
 
   const playerId = readString(formData, "playerId");
   if (!playerId) back("error", "Missing player");
@@ -123,7 +181,7 @@ export async function revokeTesterAction(formData: FormData): Promise<void> {
  * assignment pointing at a game that does not exist.
  */
 export async function assignGameAction(formData: FormData): Promise<void> {
-  const { email: actor } = await requireRole("admin");
+  const { email: actor } = await requireRole(BETA_MIN_ROLE);
 
   const playerId = readString(formData, "playerId");
   const slug = readString(formData, "slug");
@@ -165,7 +223,7 @@ export async function assignGameAction(formData: FormData): Promise<void> {
 
 /** Withdraw an assignment entirely. */
 export async function unassignAction(formData: FormData): Promise<void> {
-  await requireRole("admin");
+  await requireRole(BETA_MIN_ROLE);
 
   const id = Number(readString(formData, "id"));
   if (!Number.isInteger(id) || id <= 0) back("error", "Missing assignment");
@@ -190,7 +248,7 @@ export async function unassignAction(formData: FormData): Promise<void> {
  * would turn an admin's stray form value into a 500.
  */
 export async function triageReportAction(formData: FormData): Promise<void> {
-  const { email: actor } = await requireRole("admin");
+  const { email: actor, role, playerId } = await requireRole(BETA_MIN_ROLE);
 
   const id = Number(readString(formData, "id"));
   if (!Number.isInteger(id) || id <= 0) back("error", "Missing report");
@@ -213,6 +271,12 @@ export async function triageReportAction(formData: FormData): Promise<void> {
   }
   if (!report) back("error", "That report no longer exists");
   if (report.status !== "open") back("error", "That report was already triaged");
+  assertNotOwnWork({
+    role,
+    actorPlayerId: playerId,
+    ownerPlayerId: report.playerId,
+    what: "report",
+  });
 
   // A feature must carry no severity, and a bug keeps its own unless the admin
   // overrode it on the form.
@@ -293,7 +357,7 @@ export async function triageReportAction(formData: FormData): Promise<void> {
  * to mean anything: the fix contradicts the triage, and one of the two is wrong.
  */
 export async function fixReportAction(formData: FormData): Promise<void> {
-  const { email: actor } = await requireRole("admin");
+  const { email: actor, role, playerId } = await requireRole(BETA_MIN_ROLE);
 
   const id = Number(readString(formData, "id"));
   if (!Number.isInteger(id) || id <= 0) back("error", "Missing report");
@@ -308,6 +372,14 @@ export async function fixReportAction(formData: FormData): Promise<void> {
   if (report.status === "rejected") {
     back("error", "That report was rejected — reopen it before marking it fixed");
   }
+  // Fixed pays MORE than accept (the severity award plus the bonus), so it is
+  // the outcome self-dealing would reach for first.
+  assertNotOwnWork({
+    role,
+    actorPlayerId: playerId,
+    ownerPlayerId: report.playerId,
+    what: "report",
+  });
 
   // Same rule as triage: the admin's severity wins over the tester's guess, and
   // a feature carries none. Only consulted when the report is still open — an
@@ -381,7 +453,7 @@ export async function fixReportAction(formData: FormData): Promise<void> {
  * clawback or a double payment.
  */
 export async function duplicateReportAction(formData: FormData): Promise<void> {
-  const { email: actor } = await requireRole("admin");
+  const { email: actor, role, playerId } = await requireRole(BETA_MIN_ROLE);
 
   const id = Number(readString(formData, "id"));
   if (!Number.isInteger(id) || id <= 0) back("error", "Missing report");
@@ -396,6 +468,14 @@ export async function duplicateReportAction(formData: FormData): Promise<void> {
   if (report.status !== "open") {
     back("error", "That report was already triaged");
   }
+  // Pays only the consolation, but it also DELETES the report — so on your own
+  // report it is the outcome that quietly removes the evidence.
+  assertNotOwnWork({
+    role,
+    actorPlayerId: playerId,
+    ownerPlayerId: report.playerId,
+    what: "report",
+  });
 
   let applied = false;
   let clipBlobPath: string | null = null;
@@ -496,7 +576,7 @@ function revalidateGallery(slug: string): void {
 }
 
 export async function reviewShotAction(formData: FormData): Promise<void> {
-  const { email: actor } = await requireRole("admin");
+  const { email: actor, role, playerId } = await requireRole(BETA_MIN_ROLE);
 
   const id = readString(formData, "id");
   if (!id) back("error", "Missing image");
@@ -505,6 +585,23 @@ export async function reviewShotAction(formData: FormData): Promise<void> {
   if (!status || status === "pending") back("error", "Pick accept or reject");
 
   const xp = status === "accepted" ? xpForShot({ promotedToCover: false }) : 0;
+
+  // Loaded BEFORE the branch below, and for both outcomes: the author is on the
+  // row, and rejecting your own image is judging your own work exactly as
+  // accepting it is. The accept path reuses this read rather than repeating it.
+  let shot;
+  try {
+    shot = await beta.shotById(id);
+  } catch {
+    back("error", "Could not load that image");
+  }
+  if (!shot) back("error", "That image no longer exists");
+  assertNotOwnWork({
+    role,
+    actorPlayerId: playerId,
+    ownerPlayerId: shot.playerId,
+    what: "image",
+  });
 
   // ── PUBLISH FIRST, THEN MARK ACCEPTED ─────────────────────────────────────
   // Without a transaction one half can land alone, so the order is chosen by
@@ -524,13 +621,6 @@ export async function reviewShotAction(formData: FormData): Promise<void> {
     if (!(await isBlobOpEnabled("shot_promotion"))) {
       back("error", blobOpDisabledMessage("shot_promotion"));
     }
-    let shot;
-    try {
-      shot = await beta.shotById(id);
-    } catch {
-      back("error", "Could not load that image");
-    }
-    if (!shot) back("error", "That image no longer exists");
     slug = shot.slug;
     try {
       mediaId = await publishShotToGallery(shot);
@@ -575,7 +665,7 @@ export async function reviewShotAction(formData: FormData): Promise<void> {
  * finishes a job that was left half-done, it does not make a new decision.
  */
 export async function publishAcceptedShotsAction(): Promise<void> {
-  await requireRole("admin");
+  await requireRole(BETA_MIN_ROLE);
 
   if (!(await isBlobOpEnabled("shot_promotion"))) {
     back("error", blobOpDisabledMessage("shot_promotion"));
