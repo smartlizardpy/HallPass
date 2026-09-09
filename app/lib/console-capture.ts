@@ -49,6 +49,8 @@ type ConsoleStore = {
    * in it, which is a locked main thread rather than a slow one.
    */
   recording: boolean;
+  /** Pending debounced flush to localStorage, or null when none is scheduled. */
+  persistTimer: ReturnType<typeof setTimeout> | null;
 };
 
 const MAX_ENTRIES = 300;
@@ -89,6 +91,7 @@ function getStore(): ConsoleStore | null {
       patched: false,
       seq: 0,
       recording: false,
+      persistTimer: null,
     };
   }
   return window.__hpConsoleStore;
@@ -129,15 +132,54 @@ function formatArg(arg: unknown): string {
   return String(arg);
 }
 
+/**
+ * How long writes to localStorage are coalesced for.
+ *
+ * `persist` costs O(buffer) — a `JSON.stringify` of every entry plus a
+ * SYNCHRONOUS, disk-backed `setItem` — and it used to run on every single
+ * console call. That is the freeze this module was reported for: with a full
+ * buffer each `console.log` blocked the main thread for ~16ms, so a burst of a
+ * few hundred lines locks the tab long enough for the browser to offer to kill
+ * the page. The buffer only has to survive a reload, not each individual line,
+ * so one write per burst buys back all of that at no cost to what it is for.
+ */
+export const PERSIST_DEBOUNCE_MS = 500;
+
 function persist(store: ConsoleStore): void {
   try {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(store.entries.slice(-MAX_ENTRIES)),
-    );
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(store.entries));
   } catch {
-    /* storage full / disabled (Safari private mode) — in-memory still works */
+    // Quota exceeded, or storage disabled (Safari private mode). Shed most of
+    // the buffer and try once more: retrying the SAME oversized payload on every
+    // later flush is how a single burst leaves storage permanently broken.
+    try {
+      store.entries = store.entries.slice(-Math.ceil(MAX_ENTRIES / 4));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(store.entries));
+    } catch {
+      /* still no good — the in-memory buffer keeps working regardless */
+    }
   }
+}
+
+/** Queue a flush, unless one is already pending. */
+function schedulePersist(store: ConsoleStore): void {
+  if (store.persistTimer !== null) return;
+  store.persistTimer = setTimeout(() => {
+    store.persistTimer = null;
+    persist(store);
+  }, PERSIST_DEBOUNCE_MS);
+}
+
+/**
+ * Write immediately, cancelling any pending flush. Used when the page is going
+ * away, which is precisely when a debounced write would otherwise be lost.
+ */
+function flushPersist(store: ConsoleStore): void {
+  if (store.persistTimer !== null) {
+    clearTimeout(store.persistTimer);
+    store.persistTimer = null;
+  }
+  persist(store);
 }
 
 function hydrate(store: ConsoleStore): void {
@@ -202,7 +244,7 @@ function recordEntry(
   if (store.entries.length > MAX_ENTRIES) {
     store.entries.splice(0, store.entries.length - MAX_ENTRIES);
   }
-  persist(store);
+  schedulePersist(store);
   commit(store);
 }
 
@@ -238,6 +280,12 @@ export function initConsoleCapture(): void {
   window.addEventListener("unhandledrejection", (event) => {
     record("error", ["Unhandled promise rejection:", event.reason]);
   });
+
+  // The debounce above means the last lines of a burst may still be pending when
+  // the page goes away. `pagehide` is the event that actually fires for a bfcache
+  // restore and for an installed PWA being suspended, which `unload` does not
+  // reliably do on mobile.
+  window.addEventListener("pagehide", () => flushPersist(store));
 }
 
 /**
@@ -268,6 +316,6 @@ export function clearConsoleLog(): void {
   const store = getStore();
   if (!store) return;
   store.entries = [];
-  persist(store);
+  flushPersist(store);
   commit(store);
 }
