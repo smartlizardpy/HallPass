@@ -146,6 +146,29 @@ export function canConfirmOwnWork(role: Role): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Narrow-from-unknown
+// ---------------------------------------------------------------------------
+
+/**
+ * Narrow a form field to a `Role`, or `null`.
+ *
+ * Takes `unknown` for the reason `beta/config.ts` gives: the value arrives from
+ * FormData, which is user input at the boundary. Casting instead would let a
+ * malformed role reach the `dashboard_users_role_check` CHECK and turn somebody
+ * mistyping into a raw 500 — and, worse on this particular surface, would make
+ * the set of grantable roles a property of whatever HTML happens to be posted.
+ */
+export function toRole(value: unknown): Role | null {
+  // `typeof value === "string"` FIRST, exactly as `beta/config.ts`'s `memberOf`
+  // does it. Narrowing on `String(value)` instead accepts anything that merely
+  // stringifies to a role name and then hands the original object on as a
+  // `Role` — a value that is not a string at all, typed as though it were.
+  return typeof value === "string" && (ROLES as readonly string[]).includes(value)
+    ? (value as Role)
+    : null;
+}
+
+// ---------------------------------------------------------------------------
 // Presentation
 // ---------------------------------------------------------------------------
 

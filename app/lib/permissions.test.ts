@@ -33,6 +33,7 @@ import {
   ROLE_LABEL,
   ROLE_RANK,
   SITE_WRITE_ROLE,
+  toRole,
 } from "./permissions";
 
 describe("the ladder", () => {
@@ -114,6 +115,18 @@ describe("four eyes", () => {
     // of its purpose: an admin would be able to pay themselves.
     const asLadder = ROLES.filter((role) => atLeast(role, "admin"));
     expect(asLadder).not.toEqual(ROLES.filter(canConfirmOwnWork));
+  });
+});
+
+describe("toRole", () => {
+  it("accepts every role and nothing else", () => {
+    for (const role of ROLES) expect(toRole(role)).toBe(role);
+    expect(toRole("owner")).toBeNull();
+    expect(toRole("")).toBeNull();
+    expect(toRole(undefined)).toBeNull();
+    // `String(value)` is what does the comparing, so a value that stringifies
+    // to a role name must still be refused — it is not one.
+    expect(toRole({ toString: () => "admin" })).toBeNull();
   });
 });
 

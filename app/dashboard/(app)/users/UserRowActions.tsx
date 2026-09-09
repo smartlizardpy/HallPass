@@ -23,6 +23,7 @@
 import { useEffect, useRef, useState } from "react";
 import { setRoleAction, removeUserAction } from "./actions";
 import type { Role } from "@/app/lib/dashboard-users";
+import { ROLES, ROLE_HINT, ROLE_LABEL } from "@/app/lib/permissions";
 
 export function UserRowActions({ email, role }: { email: string; role: Role }) {
   const [open, setOpen] = useState(false);
@@ -103,15 +104,32 @@ export function UserRowActions({ email, role }: { email: string; role: Role }) {
               <input type="hidden" name="email" value={email} />
               <label className="block text-sm font-semibold text-foreground">
                 Role
+                {/* Options come from the ladder itself, not from two literals
+                    written here. Those literals are why a third role could be
+                    stored, displayed and enforced everywhere while remaining
+                    ungrantable from the one screen that grants roles. */}
                 <select
                   name="role"
                   defaultValue={role}
                   className="mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30"
                 >
-                  <option value="admin">Admin</option>
-                  <option value="super_admin">Super admin</option>
+                  {ROLES.map((value) => (
+                    <option key={value} value={value}>
+                      {ROLE_LABEL[value]}
+                    </option>
+                  ))}
                 </select>
               </label>
+              <ul className="mt-2 space-y-1 text-xs text-muted">
+                {ROLES.map((value) => (
+                  <li key={value}>
+                    <span className="font-bold text-foreground">
+                      {ROLE_LABEL[value]}
+                    </span>{" "}
+                    — {ROLE_HINT[value]}
+                  </li>
+                ))}
+              </ul>
               <button
                 type="submit"
                 className="mt-3 w-full rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white transition hover:bg-brand-600"

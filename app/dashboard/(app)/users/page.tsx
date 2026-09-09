@@ -27,6 +27,7 @@ import {
   isSuperAdminEmail,
   type DashboardUser,
 } from "@/app/lib/dashboard-users";
+import { ROLES, ROLE_HINT, ROLE_LABEL } from "@/app/lib/permissions";
 import { addAdminAction } from "./actions";
 import { DashHeader } from "../_ui/DashHeader";
 import { UserRowActions } from "./UserRowActions";
@@ -77,11 +78,6 @@ function formatDateTime(iso: string): string {
   }).format(date);
 }
 
-const ROLE_LABEL: Record<string, string> = {
-  super_admin: "Super admin",
-  admin: "Admin",
-};
-
 export default async function UsersPage({
   searchParams,
 }: {
@@ -129,7 +125,7 @@ export default async function UsersPage({
       )}
 
       <section className="mb-8 rounded-xl border border-border bg-surface p-5">
-        <h2 className="text-lg font-black tracking-tight">Invite admin</h2>
+        <h2 className="text-lg font-black tracking-tight">Invite a user</h2>
         <p className="mt-1 text-sm text-muted">
           Invited users sign in with Google. Only listed (or env allow-listed)
           emails may access the dashboard — everyone else is rejected at sign-in.
@@ -140,6 +136,7 @@ export default async function UsersPage({
           action={addAdminAction}
           className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end"
         >
+
           <label className="block flex-1 text-sm font-semibold text-foreground">
             Email or @username
             {/* Deliberately `type="text"`: `type="email"` makes the browser
@@ -156,13 +153,39 @@ export default async function UsersPage({
               className="mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30"
             />
           </label>
+          {/* The role is chosen AT INVITE rather than granted first and
+              corrected afterwards. Inviting somebody as a full admin and then
+              demoting them leaves a window — usually a day, sometimes longer —
+              in which they hold access nobody meant to give them. */}
+          <label className="block text-sm font-semibold text-foreground sm:w-56">
+            Role
+            <select
+              name="role"
+              defaultValue="admin"
+              className="mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30"
+            >
+              {ROLES.map((role) => (
+                <option key={role} value={role}>
+                  {ROLE_LABEL[role]}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             type="submit"
             className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
           >
-            Add admin
+            Add user
           </button>
         </form>
+        <ul className="mt-4 space-y-1 text-xs text-muted">
+          {ROLES.map((role) => (
+            <li key={role}>
+              <span className="font-bold text-foreground">{ROLE_LABEL[role]}</span>{" "}
+              — {ROLE_HINT[role]}
+            </li>
+          ))}
+        </ul>
       </section>
 
       {dbError ? (
@@ -174,7 +197,7 @@ export default async function UsersPage({
         <div className="rounded-xl border border-border bg-surface p-10 text-center">
           <p className="text-sm font-semibold text-foreground">No users yet.</p>
           <p className="mt-1 text-sm text-muted">
-            Invite an admin above, or sign in with an env allow-listed address.
+            Invite a user above, or sign in with an env allow-listed address.
           </p>
         </div>
       ) : (
@@ -209,7 +232,7 @@ export default async function UsersPage({
                           </span>
                         ) : (
                           <span className="text-foreground">
-                            {ROLE_LABEL[user.role] ?? user.role}
+                            {ROLE_LABEL[user.role]}
                           </span>
                         )}
                       </td>

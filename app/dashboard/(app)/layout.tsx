@@ -20,6 +20,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/app/lib/auth";
+import { ROLE_LABEL } from "@/app/lib/permissions";
 import { WhatsNewLink } from "@/app/components/WhatsNewLink";
 import { DashNav } from "./_ui/DashNav";
 import { DashShell } from "./_ui/DashShell";
@@ -27,11 +28,6 @@ import { DashShell } from "./_ui/DashShell";
 export const metadata: Metadata = {
   title: "Dashboard",
   robots: { index: false, follow: false },
-};
-
-const ROLE_LABEL: Record<string, string> = {
-  super_admin: "Super admin",
-  admin: "Admin",
 };
 
 export default async function DashboardAppLayout({
@@ -49,7 +45,7 @@ export default async function DashboardAppLayout({
   }
 
   const email = session.user?.email ?? "";
-  const roleLabel = ROLE_LABEL[role] ?? role;
+  const roleLabel = ROLE_LABEL[role];
 
   // The sign-out server action must stay in this server component. We render its
   // <form> here and hand the element to DashShell as a slot — RSC lets a

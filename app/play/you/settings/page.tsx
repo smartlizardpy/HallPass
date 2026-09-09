@@ -33,6 +33,7 @@ import Link from "next/link";
 import { signOut } from "@/app/lib/auth";
 import { isBetaTester } from "@/app/lib/beta";
 import { getUserRole } from "@/app/lib/dashboard-users";
+import { ROLE_HINT, ROLE_LABEL } from "@/app/lib/permissions";
 import { UsernameCard } from "@/app/components/friends/UsernameCard";
 import {
   setHandleAction,
@@ -220,10 +221,10 @@ export default async function YouSettingsPage({
           >
             <div className="min-w-0">
               <div className="text-sm font-black uppercase tracking-wide text-brand">
-                {adminRole === "super_admin" ? "Super admin" : "Admin"} · Dashboard
+                {ROLE_LABEL[adminRole]} · Dashboard
               </div>
               <p className="mt-1 text-xs font-semibold text-muted">
-                Overview, games, moderation and analytics.
+                {ROLE_HINT[adminRole]}.
               </p>
             </div>
             <span aria-hidden className="shrink-0 text-xl font-black text-brand">
