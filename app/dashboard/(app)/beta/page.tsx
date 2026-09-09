@@ -7,9 +7,16 @@
  *   3. Assign a game — the routine action.
  *   4. Roster — reference, plus invite/revoke.
  *
- * Gated with `requireRole("admin")`, the same guard every action in
+ * Gated with `requireRole(BETA_MIN_ROLE)`, the same guard every action in
  * `actions.ts` enforces independently. Hiding a page is UX; the guard is the
  * security boundary, and it lives in both places on purpose.
+ *
+ * TWO CONTROLS ARE NARROWER THAN THE PAGE, and both refuse server-side as well:
+ *   * Inviting and revoking testers need `canManageTesters` — membership is the
+ *     one beta decision that hands somebody a surface which pays out.
+ *   * A decision on YOUR OWN report or image is not offered to you at all
+ *     (`canConfirmOwnWork`). The row stays visible with a line saying why, so
+ *     the queue does not silently appear to be missing its buttons.
  *
  * Every read is fail-soft (see `beta/index.ts`), and they are resolved together
  * rather than sequentially so one slow query does not serialise the others.
@@ -23,15 +30,27 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
+import {
+  BETA_MIN_ROLE,
+  canConfirmOwnWork,
+  canManageTesters,
+  mustRequestTesters,
+} from "@/app/lib/permissions";
 import { resolveGames } from "@/app/lib/games-store";
 import {
   getAllAssignments,
+  getInviteRequests,
   getReportQueue,
   getRoster,
   getShotQueue,
 } from "@/app/lib/beta";
 import type { BetaShot } from "@/app/lib/beta/store";
-import { BUG_SEVERITIES, DUPLICATE_XP, FIX_BONUS_XP } from "@/app/lib/beta/config";
+import {
+  BUG_SEVERITIES,
+  DUPLICATE_XP,
+  FIX_BONUS_XP,
+  INVITE_NOTE_MAX,
+} from "@/app/lib/beta/config";
 import { rankFor } from "@/app/lib/beta/xp";
 import {
   AssignmentStatusChip,
@@ -43,11 +62,14 @@ import {
 import { DashHeader } from "../_ui/DashHeader";
 import { Section } from "../_ui/Section";
 import {
+  approveInviteRequestAction,
   assignGameAction,
+  denyInviteRequestAction,
   duplicateReportAction,
   fixReportAction,
   inviteTesterAction,
   publishAcceptedShotsAction,
+  requestTesterAction,
   revokeTesterAction,
   reviewShotAction,
   triageReportAction,
@@ -157,9 +179,13 @@ function testerLabel(entry: {
 function ShotTile({
   shot,
   gameTitle,
+  blockedNote,
 }: {
   shot: BetaShot;
   gameTitle: string;
+  /** Set when the viewer may not decide this one; rendered in place of the
+      buttons, so a missing control always comes with its reason. */
+  blockedNote?: string;
 }) {
   return (
     <li className="overflow-hidden rounded-lg border border-border bg-surface-2">
@@ -178,7 +204,10 @@ function ShotTile({
           <span className="truncate text-xs font-bold text-zinc-900">{gameTitle}</span>
           <ShotStatusChip status={shot.status} />
         </div>
-        {shot.status === "pending" && (
+        {shot.status === "pending" && blockedNote && (
+          <p className="mt-2 text-[11px] font-semibold text-muted">{blockedNote}</p>
+        )}
+        {shot.status === "pending" && !blockedNote && (
           <form action={reviewShotAction} className="mt-2 flex gap-1.5">
             <input type="hidden" name="id" value={shot.id} />
             <button
@@ -216,15 +245,33 @@ export default async function DashboardBetaPage({
 }: {
   searchParams: Promise<{ ok?: string; error?: string }>;
 }) {
-  await requireRole("admin");
+  const { role, playerId } = await requireRole(BETA_MIN_ROLE);
+  const mayManageTesters = canManageTesters(role);
+  const mustRequest = mustRequestTesters(role);
+  // Resolved ONCE, here, rather than asked per row: it is the same question for
+  // every row on the page, and a session with no `playerId` must be treated as
+  // "cannot prove anything is not mine" — the actions refuse on exactly that
+  // reading, so the page has to agree or it would offer buttons that bounce.
+  const mayJudgeOwn = canConfirmOwnWork(role);
+  const isOwn = (owner: string | null): boolean =>
+    !mayJudgeOwn && owner != null && (playerId == null || owner === playerId);
+  // Why the controls are gone, in the words that match what happened. The
+  // second case is not hypothetical tidiness: `playerId` is pinned at login, so
+  // a token minted before that carries none, and the honest thing to tell that
+  // admin is how to fix it rather than "this is yours".
+  const blockedNote =
+    playerId == null
+      ? "Sign out and back in to judge submissions — this session predates the check that says whose they are."
+      : "You submitted this — another admin has to judge it.";
 
-  const [{ ok, error }, roster, reports, shots, assignments, games] =
+  const [{ ok, error }, roster, reports, shots, assignments, requests, games] =
     await Promise.all([
       searchParams,
       getRoster(),
       getReportQueue(),
       getShotQueue(),
       getAllAssignments(),
+      getInviteRequests(),
       resolveGames(),
     ]);
 
@@ -232,6 +279,8 @@ export default async function DashboardBetaPage({
   const nameFor = new Map(roster.map((r) => [r.playerId, testerLabel(r)]));
   const active = roster.filter((r) => r.revokedAt == null);
   const openReports = reports.filter((r) => r.status === "open");
+  const pendingRequests = requests.filter((r) => r.status === "pending");
+  const decidedRequests = requests.filter((r) => r.status !== "pending");
   const pendingShots = shots.filter((s) => s.status === "pending");
   const unpublishedShots = shots.filter(
     (s) => s.status === "accepted" && s.promotedMediaId == null,
@@ -357,7 +406,11 @@ export default async function DashboardBetaPage({
                     </p>
                   )}
 
-                  {report.status === "open" ? (
+                  {isOwn(report.playerId) ? (
+                    <p className="mt-3 rounded-lg border border-dashed border-border px-3 py-2 text-xs font-semibold text-muted">
+                      {blockedNote}
+                    </p>
+                  ) : report.status === "open" ? (
                     <form
                       action={triageReportAction}
                       className="mt-3 flex flex-wrap items-center gap-2"
@@ -492,6 +545,7 @@ export default async function DashboardBetaPage({
                   key={shot.id}
                   shot={shot}
                   gameTitle={titleFor.get(shot.slug) ?? shot.slug}
+                  blockedNote={isOwn(shot.playerId) ? blockedNote : undefined}
                 />
               ))}
             </ul>
@@ -595,8 +649,102 @@ export default async function DashboardBetaPage({
           )}
         </Section>
 
+        {/* INVITE REQUESTS -------------------------------------------------- */}
+        {/* Rendered whenever there is anything to show, to EITHER audience: an
+            admin sees decisions waiting on them, and the beta admin who asked
+            sees that their ask exists and has not vanished. A queue only one
+            side can see is how "I sent that days ago" happens. */}
+        {(pendingRequests.length > 0 || decidedRequests.length > 0) && (
+          <Section
+            title="Invite requests"
+            subtitle={`${pendingRequests.length} waiting`}
+          >
+            {pendingRequests.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-center text-sm text-muted">
+                Nothing waiting.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {pendingRequests.map((request) => (
+                  <li
+                    key={request.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface-2 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-bold text-zinc-900">
+                        {testerLabel(request)}
+                      </div>
+                      <div className="mt-0.5 text-xs font-semibold text-muted">
+                        asked by {request.requestedBy} · {formatDay(request.createdAt)}
+                      </div>
+                      {request.note && (
+                        // Written by another admin, rendered as a plain string
+                        // child so React escapes it.
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-700">
+                          {request.note}
+                        </p>
+                      )}
+                    </div>
+                    {mayManageTesters ? (
+                      <span className="flex shrink-0 items-center gap-2">
+                        <form action={approveInviteRequestAction}>
+                          <input type="hidden" name="id" value={request.id} />
+                          <button
+                            type="submit"
+                            className="rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-extrabold text-white transition hover:bg-emerald-700"
+                          >
+                            Approve &amp; invite
+                          </button>
+                        </form>
+                        <form action={denyInviteRequestAction}>
+                          <input type="hidden" name="id" value={request.id} />
+                          <button type="submit" className={BTN_QUIET}>
+                            Deny
+                          </button>
+                        </form>
+                      </span>
+                    ) : (
+                      <span className="shrink-0 text-xs font-bold uppercase tracking-wide text-muted">
+                        Waiting for an admin
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* Closed business, kept reachable — the same shape the settled
+                images use. It is also the only record of who allowed a tester
+                in, so it must not become unreachable. */}
+            {decidedRequests.length > 0 && (
+              <details className="mt-3 rounded-lg border border-border bg-white px-3 py-2">
+                <summary className="cursor-pointer text-xs font-black uppercase tracking-wide text-muted">
+                  {decidedRequests.length} already decided
+                </summary>
+                <ul className="mt-3 space-y-1.5">
+                  {decidedRequests.map((request) => (
+                    <li
+                      key={request.id}
+                      className="flex flex-wrap items-center justify-between gap-2 text-xs"
+                    >
+                      <span className="font-bold text-zinc-900">
+                        {testerLabel(request)}
+                      </span>
+                      <span className="font-semibold text-muted">
+                        {request.status} by {request.decidedBy ?? "—"} · asked by{" "}
+                        {request.requestedBy}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </Section>
+        )}
+
         {/* ROSTER ---------------------------------------------------------- */}
         <Section title="Roster" subtitle={`${active.length} active`}>
+          {mayManageTesters && (
           <form
             action={inviteTesterAction}
             className="flex flex-wrap items-end gap-2"
@@ -615,9 +763,45 @@ export default async function DashboardBetaPage({
               Invite
             </button>
           </form>
+          )}
+          {/* The same job, one rung down: a role that may not invite asks for
+              one instead. Deliberately the same shape and the same place on the
+              page — the difference is what pressing it does, and the button says
+              so. */}
+          {mustRequest && (
+            <form action={requestTesterAction} className="space-y-2">
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="min-w-0 flex-1 text-xs font-black uppercase tracking-wide text-muted">
+                  Request a tester by username
+                  <input
+                    name="username"
+                    type="text"
+                    placeholder="adatester"
+                    autoComplete="off"
+                    className={`mt-1 ${INPUT}`}
+                  />
+                </label>
+                <button type="submit" className={BTN_PRIMARY}>
+                  Request invite
+                </button>
+              </div>
+              <label className="block text-xs font-black uppercase tracking-wide text-muted">
+                Why{" "}
+                <span className="font-semibold normal-case">(optional)</span>
+                <input
+                  name="note"
+                  type="text"
+                  maxLength={INVITE_NOTE_MAX}
+                  placeholder="e.g. filed three good bugs as a player"
+                  className={`mt-1 ${INPUT}`}
+                />
+              </label>
+            </form>
+          )}
           <p className="mt-2 text-xs text-muted">
             Players are invited by username, not email — a tester is someone who
             already has an account.
+            {mustRequest && " An admin approves the request before they join."}
           </p>
 
           {roster.length === 0 ? (
@@ -652,7 +836,7 @@ export default async function DashboardBetaPage({
                         {entry.openAssignments} open
                       </div>
                     </div>
-                    {!entry.revokedAt && (
+                    {mayManageTesters && !entry.revokedAt && (
                       <form action={revokeTesterAction} className="shrink-0">
                         <input
                           type="hidden"

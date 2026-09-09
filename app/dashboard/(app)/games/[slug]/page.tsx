@@ -32,6 +32,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
+import { canEditSite, DASHBOARD_MIN_ROLE } from "@/app/lib/permissions";
 import { isUnconfiguredDbError } from "@/app/lib/db";
 import { listGameFiles, readPublishedIndexHtml } from "@/app/lib/game-blob-index";
 import { buildEmbedSnippet, buildExampleCalls } from "@/app/lib/integration-prompt";
@@ -48,6 +49,7 @@ import {
 import { CoverImage } from "@/app/components/CoverImage";
 import type { BoardConfig } from "@/sdk/src/contract";
 import { DashHeader } from "../../_ui/DashHeader";
+import { ReadOnlyNotice } from "../../_ui/ReadOnlyNotice";
 import { Section } from "../../_ui/Section";
 import { TagEditor } from "../../_ui/TagEditor";
 import { createBoardAction, linkBoardAction, unlinkBoardAction } from "../../boards/actions";
@@ -187,6 +189,125 @@ async function countCustomFiles(slug: string): Promise<number> {
   }
 }
 
+/**
+ * What a game IS, for a role that may look but not change it.
+ *
+ * Deliberately not "the editor with the buttons removed". A form full of
+ * disabled inputs reads as a broken page; a summary reads as a summary. It also
+ * keeps this branch cheap — no blob listing, no media, no achievements, no
+ * boards — because none of that is what the reader came for.
+ */
+function GameReadOnlyView({ game, slug }: { game: Game; slug: string }) {
+  return (
+    <div className="space-y-6">
+      <Link
+        href="/dashboard/games"
+        className="inline-block text-sm font-semibold text-brand hover:text-brand-600"
+      >
+        ← All games
+      </Link>
+      <DashHeader title={game.title} subtitle={game.tagline} />
+
+      <ReadOnlyNotice what="this game" />
+
+      <Section>
+        <div className="flex flex-wrap items-center gap-5">
+          <div className="relative aspect-video w-44 shrink-0 overflow-hidden rounded-lg bg-surface-2">
+            <CoverImage game={game} initialClass="text-3xl" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {game.externalUrl && (
+                <span className="inline-block rounded-full bg-sky-50 px-2 py-0.5 text-xs font-bold text-sky-700">
+                  External ↗
+                </span>
+              )}
+              {game.isNew && (
+                <span className="inline-block rounded-full bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand">
+                  New
+                </span>
+              )}
+              {game.isFeatured && (
+                <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">
+                  Featured
+                </span>
+              )}
+            </div>
+            <h2 className="mt-1 text-xl font-black tracking-tight">
+              {game.title}
+            </h2>
+            <p className="mt-1 text-sm text-muted">{game.category}</p>
+            {game.author && (
+              <p className="mt-1 text-sm text-muted">By {game.author}</p>
+            )}
+            <p className="mt-1 text-sm text-muted">
+              Plays on:{" "}
+              {PLATFORM_CHOICES.find(
+                (choice) => choice.value === (game.platform ?? ""),
+              )?.label ?? "Unknown"}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link
+                href={`/game/${slug}`}
+                target="_blank"
+                className="inline-block rounded-full border border-border bg-white px-4 py-1.5 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+              >
+                Open in arcade ↗
+              </Link>
+              {game.externalUrl && (
+                <a
+                  href={game.externalUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block rounded-full border border-border bg-white px-4 py-1.5 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                >
+                  Open source site ↗
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Description">
+        <p className="whitespace-pre-wrap text-sm text-zinc-700">
+          {game.description || "No description."}
+        </p>
+      </Section>
+
+      <Section title="Tags" subtitle="Drives search & discovery">
+        {game.tags.length === 0 ? (
+          <p className="text-sm text-muted">No tags.</p>
+        ) : (
+          <ul className="flex flex-wrap gap-2">
+            {game.tags.map((tag) => (
+              <li
+                key={tag}
+                className="rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-bold text-zinc-700"
+              >
+                {tag}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <Section title="Send this for testing">
+        <p className="text-sm text-muted">
+          Assign this game to a beta tester from the{" "}
+          <Link
+            href="/dashboard/beta"
+            className="font-bold text-brand hover:text-brand-600"
+          >
+            beta programme
+          </Link>
+          .
+        </p>
+      </Section>
+    </div>
+  );
+}
+
 export default async function GameControlPage({
   params,
   searchParams,
@@ -194,11 +315,23 @@ export default async function GameControlPage({
   params: Params;
   searchParams: SearchParams;
 }) {
-  await requireRole("admin");
+  const { role } = await requireRole(DASHBOARD_MIN_ROLE);
 
   const { slug } = await params;
   const game = await resolveGame(slug);
   if (!game) notFound();
+
+  // ── A ROLE THAT CANNOT EDIT GETS A DIFFERENT PAGE, NOT A DISABLED ONE ─────
+  // Everything below this line is an editor: two long branches, some two dozen
+  // forms, and half a dozen extra reads (blob file counts, media, achievements,
+  // boards) that exist only to prefill them. Gating each form individually would
+  // be two dozen chances to miss one, and would still run every one of those
+  // reads to render controls nobody may press. A beta admin opens this page to
+  // answer one question — "what is this game, before I send someone to test
+  // it?" — so they get exactly that, and the editor is not built at all.
+  if (!canEditSite(role)) {
+    return <GameReadOnlyView game={game} slug={slug} />;
+  }
 
   const sp = await searchParams;
   const ok = asString(sp.ok);

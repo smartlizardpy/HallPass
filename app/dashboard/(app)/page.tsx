@@ -1,7 +1,9 @@
 /**
  * Dashboard overview — the admin landing screen.
  *
- * A server component: it gates on `requireRole("admin")`, fetches the PostHog
+ * A server component: it gates on `requireRole(DASHBOARD_MIN_ROLE)` — every
+ * dashboard role may READ the overview, and there is nothing here to write —
+ * fetches the PostHog
  * traffic picture (`getDashboardStats`) and the first-party Neon community
  * picture (`getCommunityStats`) in parallel, then hands plain serializable data
  * to the client chart components in `./_charts`. The page itself stays free of
@@ -31,6 +33,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
+import { DASHBOARD_MIN_ROLE } from "@/app/lib/permissions";
 import { resolveGames } from "@/app/lib/games-store";
 import { getDashboardStats, type Delta } from "@/app/lib/stats";
 import {
@@ -74,7 +77,7 @@ const C = {
 export default async function DashboardPage() {
   // Layout gates this subtree, but a layout and page render concurrently — guard
   // here too so no data is fetched for an unauthorized request. Re-checks live role.
-  await requireRole("admin");
+  await requireRole(DASHBOARD_MIN_ROLE);
 
   const [stats, community, games] = await Promise.all([
     getDashboardStats(),

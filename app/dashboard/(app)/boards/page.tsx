@@ -14,6 +14,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
+import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { isUnconfiguredDbError } from "@/app/lib/db";
 import { findGame } from "@/app/lib/games";
 import { store } from "@/app/lib/scoreboard";
@@ -31,7 +32,7 @@ export default async function BoardsPage({
 }: {
   searchParams: Promise<{ ok?: string | string[] }>;
 }) {
-  await requireRole("admin");
+  await requireRole(SITE_WRITE_ROLE);
 
   const okParam = (await searchParams).ok;
   const ok = Array.isArray(okParam) ? okParam[0] : okParam;

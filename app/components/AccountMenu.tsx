@@ -54,6 +54,7 @@ import { useEffect, useRef, useState } from "react";
 import { startSignIn, startSignOut } from "../lib/auth-actions";
 import { openStealthSettings } from "../lib/stealth/store";
 import type { MeResponse } from "@/sdk/src/contract";
+import { ROLE_LABEL } from "@/app/lib/permissions";
 
 /**
  * The slice of `/api/v1/me/friends/count` this menu reads. The route also
@@ -121,8 +122,15 @@ export function AccountMenu() {
   const player = me?.player ?? null;
   const isAdmin = Boolean(me?.isAdmin);
   const isBetaTester = Boolean(me?.isBetaTester);
-  const roleLabel =
-    me?.role === "super_admin" ? "Super admin" : isAdmin ? "Admin" : null;
+  // The role's own label where the API gave one, falling back to the generic
+  // "Admin" only when it did not — an older cached response carries `isAdmin`
+  // without a `role`, and calling a beta admin an admin is the exact confusion
+  // the shared label map exists to prevent.
+  const roleLabel = me?.role
+    ? (ROLE_LABEL[me.role] ?? "Admin")
+    : isAdmin
+      ? "Admin"
+      : null;
 
   // A plain closure, not a `useCallback`: nothing below is memoised, so a stable
   // identity would buy exactly nothing and only imply a guarantee that is not

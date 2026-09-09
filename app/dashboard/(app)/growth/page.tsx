@@ -21,7 +21,8 @@
  *
  * Inherits the admin gate, the `noindex` and the service worker's
  * never-intercept prefix by living under `/dashboard`, and re-checks
- * `requireRole("admin")` in its own body for the same reason the overview does:
+ * `requireRole(DASHBOARD_MIN_ROLE)` in its own body for the same reason the
+ * overview does:
  * a layout and a page render concurrently, so the layout's gate is not a
  * guarantee that this body did not fetch.
  */
@@ -29,6 +30,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
+import { DASHBOARD_MIN_ROLE } from "@/app/lib/permissions";
 import { categoryPath } from "@/app/lib/categories";
 import { resolveCategories, resolveGames, resolveTags } from "@/app/lib/games-store";
 import { getAllGameMedia, mediaPublicPath } from "@/app/lib/game-media";
@@ -53,7 +55,7 @@ const nf = new Intl.NumberFormat("en-US");
 const fmt = (n: number) => nf.format(n);
 
 export default async function GrowthPage() {
-  await requireRole("admin");
+  await requireRole(DASHBOARD_MIN_ROLE);
 
   const [acquisition, shareLoop, health, games, categories, tags, media] =
     await Promise.all([

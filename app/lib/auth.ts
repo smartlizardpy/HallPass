@@ -41,6 +41,7 @@ import {
   isSuperAdminEmail,
   type Role,
 } from "@/app/lib/dashboard-users";
+import { atLeast, DASHBOARD_HOME } from "@/app/lib/permissions";
 import { upsertPlayerOnLogin } from "@/app/lib/players";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -174,20 +175,41 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 /**
  * Server guard for dashboard routes. Resolves the current session and asserts a
  * minimum role, redirecting instead of returning on failure:
- *   - no session/role            → `/dashboard/signin`
- *   - `min === "super_admin"` and the caller is a plain `admin` → `/dashboard`
- * On success returns the authenticated `{ email, role }`. Call at the top of a
- * server component or server action to fail closed before doing any work.
+ *   - no session/role                → `/dashboard/signin`
+ *   - a role below `min` on the ladder → that role's own `DASHBOARD_HOME`
+ * On success returns the authenticated `{ email, role, playerId }`. Call at the
+ * top of a server component or server action to fail closed before doing any
+ * work.
+ *
+ * ── THIS USED TO ONLY HALF-ENFORCE ──────────────────────────────────────────
+ * The check was `min === "super_admin" && role !== "super_admin"`, which means
+ * `requireRole("admin")` — the guard on ~60 actions and pages — passed for ANY
+ * role that existed. With two roles and `admin` as the floor that was correct by
+ * accident. The moment a role sat BELOW `admin` it became a hole that made a
+ * beta admin a full admin everywhere, so the comparison is now a real rank
+ * (`permissions.ts`) and every rung is enforced.
+ *
+ * The failure destination is the caller's OWN home rather than a fixed
+ * `/dashboard`, because "the page you can't open" and "the page you land on"
+ * must not be the same page — a beta admin bounced from an admin-only route to
+ * an admin-only overview is a redirect loop. `permissions.test.ts` pins that
+ * every home is within its own role's reach.
+ *
+ * `playerId` rides along because it is the only way to ask "did this admin file
+ * the thing they are about to judge?" — see `canConfirmOwnWork`. It is optional
+ * on the session (a token minted before it was pinned carries none), so callers
+ * must treat a missing id as "cannot prove it is theirs" and, where the answer
+ * matters, refuse rather than assume.
  */
 export async function requireRole(
   min: Role,
-): Promise<{ email: string; role: Role }> {
+): Promise<{ email: string; role: Role; playerId: string | undefined }> {
   const session = await auth();
   const role = session?.user?.role;
   const email = session?.user?.email;
   if (!role || !email) redirect("/dashboard/signin");
-  if (min === "super_admin" && role !== "super_admin") redirect("/dashboard");
-  return { email, role };
+  if (!atLeast(role, min)) redirect(DASHBOARD_HOME[role]);
+  return { email, role, playerId: session.user?.playerId };
 }
 
 /**

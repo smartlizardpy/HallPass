@@ -5,19 +5,36 @@
  *
  * Split out as a client component because the highlight depends on the live
  * pathname (`usePathname`), which the server layout cannot read per-render. The
- * link set is otherwise static; the only authorization input is `isSuperAdmin`,
- * which gates the super-admin-only Users link. The active test is intentionally
- * asymmetric: the Overview link (`/dashboard`) matches EXACTLY so it does not
- * stay lit on `/dashboard/boards`, while section links match by PREFIX so their
- * own detail/child routes (`/dashboard/boards/new`, `/dashboard/boards/<id>`)
- * keep the parent highlighted.
+ * active test is intentionally asymmetric: the Overview link (`/dashboard`)
+ * matches EXACTLY so it does not stay lit on `/dashboard/boards`, while section
+ * links match by PREFIX so their own detail/child routes
+ * (`/dashboard/boards/new`, `/dashboard/boards/<id>`) keep the parent
+ * highlighted.
+ *
+ * ── THE LINK SET IS PER-ROLE, AND ONE PART OF IT IS NOT COSMETIC ────────────
+ * Every other "hide the control" in this codebase is UX with a real guard
+ * behind it. This one has a second job. `OpenReportBadge` rides on the
+ * Moderation link, and it POLLS `openReportCountAction` — a Server Function
+ * guarded at `SITE_WRITE_ROLE`, which now REDIRECTS a role below that rung
+ * rather than waving it through. Rendering that link for a beta admin would
+ * therefore drag them off whatever dashboard page they were reading, every 60
+ * seconds, from a background timer. So the nav shows a role only the sections it
+ * can actually open, and the Moderation entry in particular must not render
+ * below `SITE_WRITE_ROLE`.
  */
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { Role } from "@/app/lib/dashboard-users";
+import { canEditSite } from "@/app/lib/permissions";
 import { OpenReportBadge } from "../moderation/_ui/OpenReportBadge";
 
-type NavItem = { href: string; label: string; exact?: boolean };
+/**
+ * `edit: true` marks a section that only a role with site-write rights may open
+ * at all — the page's own guard bounces everyone else, so linking to it from a
+ * nav that cannot follow the link is an invitation to a redirect.
+ */
+type NavItem = { href: string; label: string; exact?: boolean; edit?: boolean };
 
 /**
  * Moderation sits SECOND, directly under Overview, because it is the only link
@@ -28,14 +45,14 @@ type NavItem = { href: string; label: string; exact?: boolean };
  */
 const ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Overview", exact: true },
-  { href: "/dashboard/moderation", label: "Moderation" },
+  { href: "/dashboard/moderation", label: "Moderation", edit: true },
   // THIRD, directly under Moderation, and deliberately not second: Moderation's
   // placement is earned by being the only link with a child waiting on the other
   // end of it, and a work board does not outrank that. Third is still the
   // shortest reach that is going spare, which is right for the surface people
   // open to answer "what is being built".
-  { href: "/dashboard/tracker", label: "Tracker" },
-  { href: "/dashboard/boards", label: "Leaderboards" },
+  { href: "/dashboard/tracker", label: "Tracker", edit: true },
+  { href: "/dashboard/boards", label: "Leaderboards", edit: true },
   // Below the three surfaces with something waiting on them and above the
   // catalogue admin: Growth is a read-only screen nobody is blocked on, but it
   // is the one that answers "is any of this working", so it sits with the other
@@ -60,9 +77,12 @@ const SUPER_ADMIN_ITEMS: NavItem[] = [
   { href: "/dashboard/blob", label: "Blob ops" },
 ];
 
-export function DashNav({ isSuperAdmin }: { isSuperAdmin: boolean }) {
+export function DashNav({ role }: { role: Role }) {
   const pathname = usePathname();
-  const items = isSuperAdmin ? [...ITEMS, ...SUPER_ADMIN_ITEMS] : ITEMS;
+  const mayEdit = canEditSite(role);
+  const visible = mayEdit ? ITEMS : ITEMS.filter((item) => !item.edit);
+  const items =
+    role === "super_admin" ? [...visible, ...SUPER_ADMIN_ITEMS] : visible;
 
   return (
     <nav className="flex flex-col gap-1">

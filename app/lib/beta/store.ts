@@ -35,12 +35,14 @@ import type { NeonQueryFunction } from "@neondatabase/serverless";
 import {
   toAssignmentStatus,
   toBugSeverity,
+  toInviteRequestStatus,
   toReportKind,
   toReportStatus,
   toShotKind,
   toShotStatus,
   type AssignmentStatus,
   type BugSeverity,
+  type InviteRequestStatus,
   type ReportKind,
   type ReportStatus,
   type ShotKind,
@@ -102,6 +104,35 @@ export type RosterEntry = BetaTester & {
   openAssignments: number;
   reportsFiled: number;
   reportsAccepted: number;
+};
+
+/**
+ * One beta admin's ask for a player to be let into the programme.
+ *
+ * `requestedBy` is a dashboard email (who asked) while `playerId` is a Google
+ * subject id (who they asked for) — the two identify people through different
+ * keys, exactly as `beta_assignments` does.
+ */
+export type BetaInviteRequest = {
+  id: number;
+  playerId: string;
+  requestedBy: string;
+  note: string;
+  status: InviteRequestStatus;
+  createdAt: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+};
+
+/**
+ * A request joined to the player's PUBLIC display fields, for the approval
+ * queue. Never `players.email` — same rule as {@link RosterEntry}: a query that
+ * cannot select an address cannot leak one into a page's serialised props.
+ */
+export type BetaInviteRequestWithPlayer = BetaInviteRequest & {
+  username: string | null;
+  handle: string | null;
+  name: string | null;
 };
 
 export type BetaAssignment = {
@@ -278,6 +309,28 @@ function mapShot(row: Row): BetaShot {
   };
 }
 
+function mapInviteRequest(row: Row): BetaInviteRequest {
+  return {
+    id: toInt(row.id),
+    playerId: String(row.player_id),
+    requestedBy: toStr(row.requested_by),
+    note: toStr(row.note),
+    status: toInviteRequestStatus(row.status) ?? "pending",
+    createdAt: toIso(row.created_at),
+    decidedBy: toStrOrNull(row.decided_by),
+    decidedAt: toIsoOrNull(row.decided_at),
+  };
+}
+
+function mapInviteRequestWithPlayer(row: Row): BetaInviteRequestWithPlayer {
+  return {
+    ...mapInviteRequest(row),
+    username: toStrOrNull(row.username),
+    handle: toStrOrNull(row.handle),
+    name: toStrOrNull(row.name),
+  };
+}
+
 function mapAward(row: Row): XpAward {
   return {
     id: toInt(row.id),
@@ -393,6 +446,98 @@ export function createBetaStore(sql: Sql) {
         ON CONFLICT (player_id)
         DO UPDATE SET revoked_at = NULL, invited_by = ${invitedBy}
       `;
+    },
+
+    // -----------------------------------------------------------------------
+    // Invite requests
+    // -----------------------------------------------------------------------
+
+    /**
+     * Raise a request for `playerId` to be invited. Returns false when one is
+     * already open for that player.
+     *
+     * `ON CONFLICT (player_id) WHERE status = 'pending'` infers the PARTIAL
+     * unique index, which is the only thing making a double-submitted form (or
+     * an impatient second ask) a no-op rather than four identical rows in the
+     * approval queue. The predicate is not decoration: without it Postgres
+     * cannot match the partial index and the statement errors.
+     *
+     * `RETURNING id` is how the caller tells an insert from a conflict — the
+     * conflicting statement returns no rows — so the banner can say "already
+     * waiting" instead of claiming a second request was filed.
+     */
+    async requestInvite(input: {
+      playerId: string;
+      requestedBy: string;
+      note: string;
+    }): Promise<boolean> {
+      const rows = await sql`
+        INSERT INTO beta_invite_requests (player_id, requested_by, note)
+        VALUES (${input.playerId}, ${input.requestedBy}, ${input.note})
+        ON CONFLICT (player_id) WHERE status = 'pending'
+        DO NOTHING
+        RETURNING id
+      `;
+      return rows.length > 0;
+    },
+
+    /** The approval queue: pending first, newest first within a status. */
+    async inviteRequests(): Promise<BetaInviteRequestWithPlayer[]> {
+      const rows = await sql`
+        SELECT r.id, r.player_id, r.requested_by, r.note, r.status,
+               r.created_at, r.decided_by, r.decided_at,
+               p.username, p.handle, p.name
+        FROM beta_invite_requests r
+        JOIN players p ON p.id = r.player_id
+        ORDER BY (r.status = 'pending') DESC, r.created_at DESC
+      `;
+      return rows.map(mapInviteRequestWithPlayer);
+    },
+
+    /** One request, for an action that has to check it before deciding. */
+    async inviteRequestById(id: number): Promise<BetaInviteRequest | null> {
+      const rows = await sql`
+        SELECT id, player_id, requested_by, note, status,
+               created_at, decided_by, decided_at
+        FROM beta_invite_requests
+        WHERE id = ${id}
+      `;
+      return rows.length > 0 ? mapInviteRequest(rows[0]) : null;
+    },
+
+    /**
+     * Record a decision. Returns false when the request was not pending any
+     * more, i.e. somebody decided it between the caller's read and this write.
+     *
+     * Guarded on `status = 'pending'` for the same reason triage is guarded on
+     * `status = 'open'`: two admins working the same queue must not both get a
+     * success, and the second one must be TOLD rather than shown a decision
+     * that did nothing. Branches in JS into two written-out templates rather
+     * than interpolating the status, per this module's SQL-safety rule.
+     */
+    async decideInviteRequest(input: {
+      id: number;
+      status: "approved" | "denied";
+      decidedBy: string;
+    }): Promise<boolean> {
+      if (input.status === "approved") {
+        const rows = await sql`
+          UPDATE beta_invite_requests
+          SET status = 'approved', decided_by = ${input.decidedBy},
+              decided_at = now()
+          WHERE id = ${input.id} AND status = 'pending'
+          RETURNING id
+        `;
+        return rows.length > 0;
+      }
+      const rows = await sql`
+        UPDATE beta_invite_requests
+        SET status = 'denied', decided_by = ${input.decidedBy},
+            decided_at = now()
+        WHERE id = ${input.id} AND status = 'pending'
+        RETURNING id
+      `;
+      return rows.length > 0;
     },
 
     /** Withdraw membership, keeping the row (and its XP ledger) intact. */

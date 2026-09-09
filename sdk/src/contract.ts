@@ -105,15 +105,21 @@ export interface PlayerIdentity {
 export interface MeResponse {
   player: PlayerIdentity | null;
   /**
-   * Whether the signed-in user holds a dashboard role (admin/super_admin), so a
-   * header/menu can show a Dashboard link. Never leaks email. Added in v1.
+   * Whether the signed-in user holds ANY dashboard role, so a header/menu can
+   * show a Dashboard link. Never leaks email. Added in v1.
+   *
+   * Deliberately unchanged by the arrival of `beta_admin`: a beta admin does
+   * hold a dashboard role and does have a dashboard to open (read-only outside
+   * the beta programme). What the role IS belongs to {@link MeResponse.role}.
    */
   isAdmin?: boolean;
   /**
-   * The user's own dashboard role ("super_admin" | "admin"), or null for a plain
-   * player — lets a header show the precise role label. Added in v1.
+   * The user's own dashboard role, or null for a plain player — lets a header
+   * show the precise role label. Added in v1; `"beta_admin"` added alongside the
+   * role itself, so a consumer that only knows the first two values must treat
+   * an unrecognised string as "some dashboard role" rather than as no role.
    */
-  role?: "super_admin" | "admin" | null;
+  role?: "super_admin" | "admin" | "beta_admin" | null;
   /**
    * Whether the signed-in player is a current member of the beta programme, so
    * the account menu can show a "Beta testing" entry and the welcome banner

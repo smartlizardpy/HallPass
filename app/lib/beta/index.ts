@@ -30,6 +30,7 @@ import { publicDisplayName } from "@/app/lib/players";
 import { createBetaStore } from "./store";
 import type {
   BetaAssignment,
+  BetaInviteRequestWithPlayer,
   BetaReport,
   BetaReportWithAuthor,
   BetaShot,
@@ -43,6 +44,8 @@ export const beta = createBetaStore(sql);
 
 export type {
   BetaAssignment,
+  BetaInviteRequest,
+  BetaInviteRequestWithPlayer,
   BetaReport,
   BetaReportWithAuthor,
   BetaShot,
@@ -203,6 +206,19 @@ export async function getRoster(): Promise<RosterEntry[]> {
     return await beta.roster();
   } catch (error) {
     return degrade("roster", error, []);
+  }
+}
+
+/**
+ * Invite requests raised by beta admins, for the approval panel. Fail-soft to
+ * `[]` — a request that cannot be listed is a decision that waits, which is a
+ * far smaller harm than a beta page that 500s for everyone.
+ */
+export async function getInviteRequests(): Promise<BetaInviteRequestWithPlayer[]> {
+  try {
+    return await beta.inviteRequests();
+  } catch (error) {
+    return degrade("inviteRequests", error, []);
   }
 }
 

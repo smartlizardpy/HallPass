@@ -21,6 +21,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
+import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import {
   BRIEF_MAX,
   MAX_TAGS_PER_ITEM,
@@ -40,7 +41,7 @@ export default async function NewTrackerItemPage({
 }: {
   searchParams: Promise<{ ok?: string; error?: string }>;
 }) {
-  await requireRole("admin");
+  await requireRole(SITE_WRITE_ROLE);
   const { ok, error } = await searchParams;
 
   return (
