@@ -11,10 +11,13 @@
  * The guard fails closed. We resolve the Auth.js session once on the server and
  * redirect to sign-in unless BOTH a session and a role are present — the role is
  * the authorization signal (Google only proves identity; see `app/lib/auth.ts`).
- * Authorization is then reflected in the navigation: the super-admin-only links
- * (Users, Logs, Blob ops) are rendered only for `role === "super_admin"`. The
- * downstream pages still enforce their own role checks; hiding the links is UX,
- * not security.
+ * Authorization is then reflected in the navigation: the whole role is handed to
+ * `DashNav`, which shows each section only to a role that can open it — the
+ * super-admin-only links (Users, Logs, Blob ops) and, below the site-write rung,
+ * the editor sections. The downstream pages still enforce their own role checks;
+ * hiding a link is UX, with the one exception `DashNav`'s docblock records (the
+ * moderation badge polls a guarded action, so its link must not render for a
+ * role that action refuses).
  */
 
 import type { Metadata } from "next";
@@ -69,7 +72,7 @@ export default async function DashboardAppLayout({
 
   return (
     <DashShell
-      nav={<DashNav isSuperAdmin={role === "super_admin"} />}
+      nav={<DashNav role={role} />}
       whatsNew={<WhatsNewLink variant="sidebar" />}
       user={
         <div className="min-w-0">

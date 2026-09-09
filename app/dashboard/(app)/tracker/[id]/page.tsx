@@ -43,6 +43,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
+import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { getEvents, getItem, getUpdates } from "@/app/lib/tracker";
 import {
   BRIEF_MAX,
@@ -120,7 +121,7 @@ export default async function TrackerItemPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ ok?: string; error?: string }>;
 }) {
-  const { role } = await requireRole("admin");
+  const { role } = await requireRole(SITE_WRITE_ROLE);
   const mayMove = canMoveStatus(role);
   const mayDelete = canDeleteItem(role);
 

@@ -20,18 +20,24 @@
  *     chip. Deliberately not its own lookup: this page needs exactly the data
  *     the serving route already caches.
  *
- * Gated with `requireRole("admin")`, the same guard the per-game actions enforce.
+ * Gated with `requireRole(DASHBOARD_MIN_ROLE)`: the catalogue is READABLE by
+ * every dashboard role, because a beta admin choosing which game to send for
+ * testing needs to see it. Changing anything is a separate question, asked once
+ * via `canEditSite` — the per-game actions still enforce `SITE_WRITE_ROLE`
+ * themselves, so hiding the entry point here is UX, not the boundary.
  */
 
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
+import { canEditSite, DASHBOARD_MIN_ROLE } from "@/app/lib/permissions";
 import { getServingBlobMap } from "@/app/lib/game-serving-blobs";
 import { resolveGames } from "@/app/lib/games-store";
 import { store } from "@/app/lib/scoreboard";
 import { CoverImage } from "@/app/components/CoverImage";
 import type { BoardConfig } from "@/sdk/src/contract";
 import { DashHeader } from "../_ui/DashHeader";
+import { ReadOnlyNotice } from "../_ui/ReadOnlyNotice";
 
 type SearchParams = Promise<{ ok?: string | string[]; error?: string | string[] }>;
 
@@ -96,7 +102,8 @@ export default async function GamesPage({
 }: {
   searchParams: SearchParams;
 }) {
-  await requireRole("admin");
+  const { role } = await requireRole(DASHBOARD_MIN_ROLE);
+  const mayEdit = canEditSite(role);
 
   const sp = await searchParams;
   const ok = asString(sp.ok);
@@ -122,16 +129,24 @@ export default async function GamesPage({
     <>
       <DashHeader
         title="Games"
-        subtitle="Every game — native and external. Pick one to edit its details, source, and leaderboards."
+        subtitle={
+          mayEdit
+            ? "Every game — native and external. Pick one to edit its details, source, and leaderboards."
+            : "Every game — native and external. Pick one to see its details."
+        }
         action={
-          <Link
-            href="/dashboard/external-games/new"
-            className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
-          >
-            Add external game
-          </Link>
+          mayEdit ? (
+            <Link
+              href="/dashboard/external-games/new"
+              className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+            >
+              Add external game
+            </Link>
+          ) : undefined
         }
       />
+
+      {!mayEdit && <ReadOnlyNotice what="the catalogue" />}
 
       {ok && (
         <div className="mb-6 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">

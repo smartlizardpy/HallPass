@@ -13,6 +13,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
+import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { resolveCategories, resolveTags } from "@/app/lib/games-store";
 import { DashHeader } from "../../_ui/DashHeader";
 import { Section } from "../../_ui/Section";
@@ -39,7 +40,7 @@ export default async function NewExternalGamePage({
 }: {
   searchParams: SearchParams;
 }) {
-  await requireRole("admin");
+  await requireRole(SITE_WRITE_ROLE);
   const error = asString((await searchParams).error);
 
   // Both reads already fail soft to the static catalogue on a Neon outage.

@@ -28,6 +28,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
+import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { findGame, games } from "@/app/lib/games";
 import { store } from "@/app/lib/scoreboard";
 import { buildIntegrationPrompt } from "@/app/lib/integration-prompt";
@@ -76,7 +77,7 @@ export default async function BoardDetailPage({
   params: Params;
   searchParams: SearchParams;
 }) {
-  await requireRole("admin");
+  await requireRole(SITE_WRITE_ROLE);
 
   const { id } = await params;
   const sp = await searchParams;

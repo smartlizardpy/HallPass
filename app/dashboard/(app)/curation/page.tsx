@@ -16,13 +16,18 @@
  *   - TAGS: bulk rename/merge/delete of a tag across every game (search levers).
  *   - GENRES: bulk rename/merge of a genre across every game (homepage rows).
  *
- * Gated with `requireRole("admin")`. Every read fails soft to the static
+ * Gated with `requireRole(DASHBOARD_MIN_ROLE)`: the shape of the catalogue —
+ * what is featured, what is new, which tags and genres exist — is READABLE by
+ * every dashboard role, and each control that changes it is rendered only for a
+ * role that `canEditSite`. The actions enforce that rung themselves.
+ * Every read fails soft to the static
  * catalogue on a Neon outage, so the page renders regardless. `?ok`/`?error`
  * banners are read from the async `searchParams`.
  */
 
 import type { Metadata } from "next";
 import { requireRole } from "@/app/lib/auth";
+import { canEditSite, DASHBOARD_MIN_ROLE } from "@/app/lib/permissions";
 import { resolveGames, resolveGenres, resolveTags } from "@/app/lib/games-store";
 import { CoverImage } from "@/app/components/CoverImage";
 import { DashHeader } from "../_ui/DashHeader";
@@ -30,6 +35,7 @@ import { Section } from "../_ui/Section";
 import { toggleNewAction } from "./actions";
 import { deleteTagAction, renameGenreAction, renameTagAction } from "../tags/actions";
 import { FeaturedPicker } from "./_ui/FeaturedPicker";
+import { ReadOnlyNotice } from "../_ui/ReadOnlyNotice";
 
 export const metadata: Metadata = {
   title: "Curation",
@@ -59,7 +65,8 @@ export default async function CurationPage({
 }: {
   searchParams: SearchParams;
 }) {
-  await requireRole("admin");
+  const { role } = await requireRole(DASHBOARD_MIN_ROLE);
+  const mayEdit = canEditSite(role);
 
   const [games, tags, genres] = await Promise.all([
     resolveGames(),
@@ -90,6 +97,8 @@ export default async function CurationPage({
         </div>
       )}
 
+      {!mayEdit && <ReadOnlyNotice what="curation" />}
+
       {/* FEATURED GAME */}
       <Section
         title="Featured game"
@@ -111,21 +120,39 @@ export default async function CurationPage({
             </div>
           </div>
         )}
-        <p className="mb-4 text-sm text-muted">
-          Exactly one game is the homepage hero. Filter, pick a new one, and press{" "}
-          <span className="font-semibold text-foreground">Set featured</span> —
-          choosing a new one replaces the old.
-        </p>
-        <FeaturedPicker games={games} />
+        {mayEdit ? (
+          <>
+            <p className="mb-4 text-sm text-muted">
+              Exactly one game is the homepage hero. Filter, pick a new one, and
+              press{" "}
+              <span className="font-semibold text-foreground">Set featured</span>{" "}
+              — choosing a new one replaces the old.
+            </p>
+            <FeaturedPicker games={games} />
+          </>
+        ) : (
+          <p className="text-sm text-muted">
+            Exactly one game is the homepage hero.
+          </p>
+        )}
       </Section>
 
       {/* NEW GAMES */}
       <Section title="New games" subtitle="Drives the homepage row + card badge">
         <p className="mb-4 text-sm text-muted">
-          Marking a game{" "}
-          <span className="font-semibold text-foreground">New</span> surfaces it
-          in the homepage &ldquo;New games&rdquo; row and shows the badge on its
-          card. Any number of games can be new.
+          {mayEdit ? (
+            <>
+              Marking a game{" "}
+              <span className="font-semibold text-foreground">New</span> surfaces
+              it in the homepage &ldquo;New games&rdquo; row and shows the badge
+              on its card. Any number of games can be new.
+            </>
+          ) : (
+            <>
+              Games marked new surface in the homepage &ldquo;New games&rdquo;
+              row and show the badge on their card.
+            </>
+          )}
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           {games.map((game) => {
@@ -143,21 +170,31 @@ export default async function CurationPage({
                     {game.category}
                   </div>
                 </div>
-                <form action={toggleNewAction} className="shrink-0">
-                  <input type="hidden" name="slug" value={game.slug} />
-                  <input type="hidden" name="value" value={String(!isNew)} />
-                  <button
-                    type="submit"
-                    aria-pressed={isNew}
-                    className={
-                      isNew
-                        ? "rounded-full bg-brand-50 px-4 py-1.5 text-sm font-bold text-brand hover:bg-brand-50/70"
-                        : "rounded-full border border-border bg-white px-4 py-1.5 text-sm font-bold text-zinc-700 hover:bg-surface-2"
-                    }
-                  >
-                    {isNew ? "New ✓" : "Mark new"}
-                  </button>
-                </form>
+                {mayEdit ? (
+                  <form action={toggleNewAction} className="shrink-0">
+                    <input type="hidden" name="slug" value={game.slug} />
+                    <input type="hidden" name="value" value={String(!isNew)} />
+                    <button
+                      type="submit"
+                      aria-pressed={isNew}
+                      className={
+                        isNew
+                          ? "rounded-full bg-brand-50 px-4 py-1.5 text-sm font-bold text-brand hover:bg-brand-50/70"
+                          : "rounded-full border border-border bg-white px-4 py-1.5 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                      }
+                    >
+                      {isNew ? "New ✓" : "Mark new"}
+                    </button>
+                  </form>
+                ) : (
+                  isNew && (
+                    // The FACT stays visible without the control: a read-only
+                    // view that drops it would say a game is not new.
+                    <span className="shrink-0 rounded-full bg-brand-50 px-4 py-1.5 text-sm font-bold text-brand">
+                      New
+                    </span>
+                  )
+                )}
               </div>
             );
           })}
@@ -170,6 +207,12 @@ export default async function CurationPage({
         title="Tags"
         subtitle={`${tags.length} ${tags.length === 1 ? "tag" : "tags"} · catalogue-wide`}
       >
+        {!mayEdit ? (
+          <p className="mb-4 text-sm text-muted">
+            Tags power arcade search. Per-game tags live on each game&rsquo;s
+            page.
+          </p>
+        ) : (
         <p className="mb-4 text-sm text-muted">
           Tags power arcade search. Edit a tag and press{" "}
           <span className="font-semibold text-foreground">Rename / merge</span> to
@@ -179,6 +222,7 @@ export default async function CurationPage({
           <span className="font-semibold text-foreground">Delete</span> strips the
           tag from all games. Edit a single game&rsquo;s tags on its own page.
         </p>
+        )}
 
         {tags.length === 0 ? (
           <p className="rounded-lg border border-border px-4 py-6 text-center text-sm text-muted">
@@ -198,6 +242,7 @@ export default async function CurationPage({
                   <CountPill count={count} />
                 </div>
                 <div className="flex items-center gap-2">
+                  {mayEdit && (
                   <form
                     action={renameTagAction}
                     className="flex items-center gap-2"
@@ -220,15 +265,18 @@ export default async function CurationPage({
                       Rename / merge
                     </button>
                   </form>
-                  <form action={deleteTagAction}>
-                    <input type="hidden" name="from" value={tag} />
-                    <button
-                      type="submit"
-                      className="rounded-full border border-red-300 bg-white px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
-                  </form>
+                  )}
+                  {mayEdit && (
+                    <form action={deleteTagAction}>
+                      <input type="hidden" name="from" value={tag} />
+                      <button
+                        type="submit"
+                        className="rounded-full border border-red-300 bg-white px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-50"
+                      >
+                        Delete
+                      </button>
+                    </form>
+                  )}
                 </div>
               </li>
             ))}
@@ -242,6 +290,11 @@ export default async function CurationPage({
         title="Genres"
         subtitle={`${genres.length} ${genres.length === 1 ? "genre" : "genres"} · catalogue-wide`}
       >
+        {!mayEdit ? (
+          <p className="mb-4 text-sm text-muted">
+            Genres are the homepage category rows.
+          </p>
+        ) : (
         <p className="mb-4 text-sm text-muted">
           Genres are the homepage category rows. Renaming onto an{" "}
           <span className="font-semibold text-foreground">existing</span> genre{" "}
@@ -249,6 +302,7 @@ export default async function CurationPage({
           in. A genre can&rsquo;t be empty, so there&rsquo;s no delete — every game
           belongs to exactly one.
         </p>
+        )}
 
         {genres.length === 0 ? (
           <p className="rounded-lg border border-border px-4 py-6 text-center text-sm text-muted">
@@ -267,6 +321,7 @@ export default async function CurationPage({
                   </span>
                   <CountPill count={count} />
                 </div>
+                {mayEdit && (
                 <form action={renameGenreAction} className="flex items-center gap-2">
                   <input type="hidden" name="from" value={name} />
                   <label className="sr-only" htmlFor={`genre-${name}`}>
@@ -286,6 +341,7 @@ export default async function CurationPage({
                     Rename / merge
                   </button>
                 </form>
+                )}
               </li>
             ))}
           </ul>

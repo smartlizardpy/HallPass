@@ -65,6 +65,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
+import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { isMissingColumnError, isUnconfiguredDbError, sql } from "@/app/lib/db";
 import { resolveGames } from "@/app/lib/games-store";
 import {
@@ -218,7 +219,7 @@ export default async function ModerationPage({
 }: {
   searchParams: SearchParams;
 }) {
-  await requireRole("admin");
+  await requireRole(SITE_WRITE_ROLE);
 
   const params = await searchParams;
   const ok = asString(params.ok);

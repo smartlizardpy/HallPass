@@ -14,6 +14,7 @@ import Link from "next/link";
 import { games } from "@/app/lib/games";
 import { createBoardAction } from "../actions";
 import { requireRole } from "@/app/lib/auth";
+import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { DashHeader } from "../../_ui/DashHeader";
 
 export const metadata: Metadata = {
@@ -33,7 +34,7 @@ export default async function NewBoardPage({
 }: {
   searchParams: SearchParams;
 }) {
-  await requireRole("admin");
+  await requireRole(SITE_WRITE_ROLE);
   const error = asString((await searchParams).error);
 
   return (
