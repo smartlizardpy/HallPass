@@ -134,6 +134,35 @@ CREATE TABLE IF NOT EXISTS beta_shots (
 CREATE INDEX IF NOT EXISTS beta_shots_status_idx
   ON beta_shots (status, created_at DESC);
 
+-- A beta admin's ASK for somebody to join the programme.
+--
+-- For an EXISTING database, run `scoreboard/migrations/028_beta_invite_requests.sql`
+-- instead; read that migration's header for the design argument. In brief: a
+-- beta admin may send playtests and triage what comes back, but inviting puts a
+-- player inside a surface that pays XP, and the inviter is also the triager —
+-- so membership takes a second person. An `admin` and above never writes here.
+CREATE TABLE IF NOT EXISTS beta_invite_requests (
+  id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  player_id    TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  requested_by TEXT NOT NULL,
+  note         TEXT NOT NULL DEFAULT '' CHECK (length(note) <= 300),
+  status       TEXT NOT NULL DEFAULT 'pending'
+                 CHECK (status IN ('pending','approved','denied')),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  decided_by   TEXT,
+  decided_at   TIMESTAMPTZ
+);
+
+-- At most one OPEN request per player, so a re-submitted form is a no-op rather
+-- than the same name four times in the queue. Partial on 'pending': a player who
+-- was denied and is asked for again is a new decision, and both are worth
+-- keeping.
+CREATE UNIQUE INDEX IF NOT EXISTS beta_invite_requests_open_uniq
+  ON beta_invite_requests (player_id) WHERE status = 'pending';
+
+CREATE INDEX IF NOT EXISTS beta_invite_requests_status_idx
+  ON beta_invite_requests (status, created_at DESC);
+
 -- The append-only XP ledger. `reason` is a short machine string ('bug:major',
 -- 'shot:cover', …) so the tester's page can explain each line without joining
 -- back to a row that may since have been re-triaged.

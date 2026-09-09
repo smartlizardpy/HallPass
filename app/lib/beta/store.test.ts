@@ -59,6 +59,83 @@ function flat(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+describe("invite requests", () => {
+  it("infers the PARTIAL unique index, so a second ask is a no-op", async () => {
+    const { sql, calls } = makeFakeSql();
+    await createBetaStore(sql).requestInvite({
+      playerId: "p1",
+      requestedBy: "beta@example.com",
+      note: "found three bugs as a player",
+    });
+    const text = flat(calls[0].text);
+    // Without the WHERE predicate Postgres cannot match the partial index and
+    // the statement errors outright; with a plain `ON CONFLICT (player_id)` it
+    // would match no index at all.
+    expect(text).toContain("ON CONFLICT (player_id) WHERE status = 'pending'");
+    expect(text).toContain("DO NOTHING");
+    // The caller distinguishes "filed" from "already waiting" by the row count,
+    // so the RETURNING is load-bearing rather than decorative.
+    expect(text).toContain("RETURNING id");
+    expect(calls[0].values).toContain("p1");
+  });
+
+  it("reports whether the request was actually filed", async () => {
+    const filed = makeFakeSql(() => [{ id: 1 }]);
+    await expect(
+      createBetaStore(filed.sql).requestInvite({
+        playerId: "p1",
+        requestedBy: "beta@example.com",
+        note: "",
+      }),
+    ).resolves.toBe(true);
+
+    const conflicted = makeFakeSql(() => []);
+    await expect(
+      createBetaStore(conflicted.sql).requestInvite({
+        playerId: "p1",
+        requestedBy: "beta@example.com",
+        note: "",
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it("only decides a request that is still pending", async () => {
+    for (const status of ["approved", "denied"] as const) {
+      const { sql, calls } = makeFakeSql(() => [{ id: 7 }]);
+      const applied = await createBetaStore(sql).decideInviteRequest({
+        id: 7,
+        status,
+        decidedBy: "admin@example.com",
+      });
+      // Same guard as triage's `status = 'open'`: two admins working the queue
+      // must not both be told they decided it.
+      expect(flat(calls[0].text)).toContain("AND status = 'pending'");
+      expect(flat(calls[0].text)).toContain(`SET status = '${status}'`);
+      expect(applied).toBe(true);
+    }
+  });
+
+  it("says so when someone else decided first", async () => {
+    const { sql } = makeFakeSql(() => []);
+    await expect(
+      createBetaStore(sql).decideInviteRequest({
+        id: 7,
+        status: "approved",
+        decidedBy: "admin@example.com",
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it("never selects a player email into the approval queue", async () => {
+    const { sql, calls } = makeFakeSql();
+    await createBetaStore(sql).inviteRequests();
+    // Same rule as the roster: a query that cannot return an address cannot leak
+    // one into a page's serialised props.
+    expect(flat(calls[0].text)).not.toContain("email");
+    expect(flat(calls[0].text)).toContain("ORDER BY (r.status = 'pending') DESC");
+  });
+});
+
 describe("membership", () => {
   it("reinstates on re-invite instead of no-opping", async () => {
     const { sql, calls } = makeFakeSql();

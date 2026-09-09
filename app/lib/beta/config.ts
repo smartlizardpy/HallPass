@@ -45,6 +45,17 @@ export const ASSIGNMENT_STATUSES = [
 ] as const;
 export type AssignmentStatus = (typeof ASSIGNMENT_STATUSES)[number];
 
+/**
+ * Where a beta admin's request to invite a tester sits.
+ *
+ * `pending` is the only non-terminal state, matching {@link REPORT_STATUSES}'s
+ * shape. A denied request is KEPT rather than deleted: unlike a duplicate
+ * report it is not redundant — it is the only record that somebody asked and
+ * was told no.
+ */
+export const INVITE_REQUEST_STATUSES = ["pending", "approved", "denied"] as const;
+export type InviteRequestStatus = (typeof INVITE_REQUEST_STATUSES)[number];
+
 /** What a submitted image is FOR. Cover candidates are judged more harshly. */
 export const SHOT_KINDS = ["cover", "screenshot"] as const;
 export type ShotKind = (typeof SHOT_KINDS)[number];
@@ -252,6 +263,15 @@ export const REPORT_BODY_MAX = 2000;
 export const ASSIGNMENT_BRIEF_MAX = 500;
 
 /**
+ * Optional "why this person" on an invite request, shown to the approver.
+ *
+ * Short on purpose. The approver needs one line of context to answer a yes/no —
+ * a box that invites an essay produces requests nobody reads to the end of,
+ * which is the same as no context at all.
+ */
+export const INVITE_NOTE_MAX = 300;
+
+/**
  * How many cover candidates one session keeps in memory before the tester picks.
  *
  * Bounded because candidates are held as decoded bitmaps in a long-lived tab; an
@@ -297,4 +317,8 @@ export function toShotKind(value: unknown): ShotKind | null {
 
 export function toShotStatus(value: unknown): ShotStatus | null {
   return memberOf(SHOT_STATUSES, value) ? value : null;
+}
+
+export function toInviteRequestStatus(value: unknown): InviteRequestStatus | null {
+  return memberOf(INVITE_REQUEST_STATUSES, value) ? value : null;
 }
