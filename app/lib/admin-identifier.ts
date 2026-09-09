@@ -16,7 +16,8 @@
  * DISCRIMINATION IS BY "@", and a LEADING "@" always wins. `@alice` is a
  * username, `alice@example.com` is an address, and a bare `alice` is a username —
  * so the two namespaces cannot collide no matter what is pasted in, and nobody
- * has to pick a mode from a dropdown first.
+ * has to pick a mode from a dropdown first. The input is NFKC-folded first so an
+ * IME's fullwidth "＠" is the same character that test looks for.
  *
  * Only the SHAPE of a username is checked here, never the policy in
  * `validateUsernameFormat`. That function governs CLAIMING a name — reserved
@@ -55,7 +56,11 @@ const USERNAME_CHARSET = /^[a-z0-9_]+$/;
  * intent from a string that matched neither.
  */
 export function parseAdminIdentifier(raw: string): AdminIdentifier | null {
-  const trimmed = raw.trim();
+  // NFKC BEFORE the "@" tests, not just inside `normalizeUsername`. An IME emits
+  // the fullwidth "＠" (U+FF20), which is not the ASCII "@" the discrimination
+  // below looks for — without folding first, `＠alice` misses both branches and
+  // is then rejected for a charset it only violates because of that same "＠".
+  const trimmed = raw.normalize("NFKC").trim();
   if (!trimmed) return null;
 
   // Leading "@" is an explicit "this is a username", so it is honoured before the
