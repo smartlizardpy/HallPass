@@ -32,16 +32,57 @@ type Listener = () => void;
 
 type ConsoleStore = {
   entries: ConsoleEntry[];
-  // Cached immutable copy of `entries`, replaced only when the buffer changes.
-  // `useSyncExternalStore` requires getSnapshot to return a stable reference
-  // between changes, so callers read this rather than a fresh `.slice()`.
+  // Cached immutable copy of `entries`, rebuilt LAZILY on the next read after a
+  // change. `useSyncExternalStore` requires getSnapshot to return a stable
+  // reference between changes, so callers read this rather than a fresh
+  // `.slice()` — but building it eagerly in `commit` put a full array copy on
+  // the hot path of every console call, and nothing reads it unless the Logs
+  // page is actually mounted. `snapshotStale` is what defers that work.
   snapshot: ConsoleEntry[];
+  snapshotStale: boolean;
   listeners: Set<Listener>;
   patched: boolean;
   seq: number;
+  /**
+   * Set while `record` is running, so capture cannot re-enter itself.
+   *
+   * `commit` calls subscriber callbacks, and in production `console` is patched
+   * by more than us — posthog-js wraps it too, and its exception capture turns a
+   * `console.error` into a network call that can itself `console.error` on
+   * failure. Without this latch that is a loop with a synchronous storage write
+   * in it, which is a locked main thread rather than a slow one.
+   */
+  recording: boolean;
+  /** Pending debounced flush to localStorage, or null when none is scheduled. */
+  persistTimer: ReturnType<typeof setTimeout> | null;
 };
 
 const MAX_ENTRIES = 300;
+
+/**
+ * Hard ceiling on the rendered text of ONE entry.
+ *
+ * Without it `formatArg` will happily `JSON.stringify` a whole object graph, and
+ * the buffer's real size is unbounded even though its LENGTH is capped: 300
+ * entries of a stringified fetch payload is megabytes. That is not merely
+ * wasteful, it is the freeze — `persist` re-serialises the entire buffer on the
+ * way past, so one fat entry taxes every console call made afterwards, and a big
+ * enough buffer exceeds the localStorage quota outright. A truncated line still
+ * says what happened; the untruncated one costs the main thread.
+ */
+export const MAX_TEXT = 2_000;
+
+/**
+ * Ceiling on the PERSISTED payload we are willing to read back.
+ *
+ * `MAX_ENTRIES * MAX_TEXT` is the most this module will ever write, with room to
+ * spare for the JSON scaffolding. Anything larger was written by a build from
+ * before those caps existed, and parsing it is itself a main-thread stall on
+ * every single page load — which is what makes the freeze outlive the fix and
+ * stick to the device. Such a payload is dropped rather than restored.
+ */
+export const MAX_STORED_CHARS = MAX_ENTRIES * MAX_TEXT * 2;
+
 const STORAGE_KEY = "hp:console-logs";
 const LEVELS: ConsoleLevel[] = ["log", "info", "warn", "error", "debug"];
 
@@ -61,17 +102,20 @@ function getStore(): ConsoleStore | null {
     window.__hpConsoleStore = {
       entries: [],
       snapshot: EMPTY,
+      snapshotStale: false,
       listeners: new Set(),
       patched: false,
       seq: 0,
+      recording: false,
+      persistTimer: null,
     };
   }
   return window.__hpConsoleStore;
 }
 
-/** Refresh the cached snapshot and notify subscribers. */
+/** Mark the snapshot stale and notify subscribers. */
 function commit(store: ConsoleStore): void {
-  store.snapshot = store.entries.slice();
+  store.snapshotStale = true;
   store.listeners.forEach((fn) => {
     try {
       fn();
@@ -104,21 +148,66 @@ function formatArg(arg: unknown): string {
   return String(arg);
 }
 
+/**
+ * How long writes to localStorage are coalesced for.
+ *
+ * `persist` costs O(buffer) — a `JSON.stringify` of every entry plus a
+ * SYNCHRONOUS, disk-backed `setItem` — and it used to run on every single
+ * console call. That is the freeze this module was reported for: with a full
+ * buffer each `console.log` blocked the main thread for ~16ms, so a burst of a
+ * few hundred lines locks the tab long enough for the browser to offer to kill
+ * the page. The buffer only has to survive a reload, not each individual line,
+ * so one write per burst buys back all of that at no cost to what it is for.
+ */
+export const PERSIST_DEBOUNCE_MS = 500;
+
 function persist(store: ConsoleStore): void {
   try {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(store.entries.slice(-MAX_ENTRIES)),
-    );
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(store.entries));
   } catch {
-    /* storage full / disabled (Safari private mode) — in-memory still works */
+    // Quota exceeded, or storage disabled (Safari private mode). Shed most of
+    // the buffer and try once more: retrying the SAME oversized payload on every
+    // later flush is how a single burst leaves storage permanently broken.
+    try {
+      store.entries = store.entries.slice(-Math.ceil(MAX_ENTRIES / 4));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(store.entries));
+    } catch {
+      /* still no good — the in-memory buffer keeps working regardless */
+    }
   }
+}
+
+/** Queue a flush, unless one is already pending. */
+function schedulePersist(store: ConsoleStore): void {
+  if (store.persistTimer !== null) return;
+  store.persistTimer = setTimeout(() => {
+    store.persistTimer = null;
+    persist(store);
+  }, PERSIST_DEBOUNCE_MS);
+}
+
+/**
+ * Write immediately, cancelling any pending flush. Used when the page is going
+ * away, which is precisely when a debounced write would otherwise be lost.
+ */
+function flushPersist(store: ConsoleStore): void {
+  if (store.persistTimer !== null) {
+    clearTimeout(store.persistTimer);
+    store.persistTimer = null;
+  }
+  persist(store);
 }
 
 function hydrate(store: ConsoleStore): void {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
+    // Oversized payloads predate the caps above — drop, don't parse. See
+    // {@link MAX_STORED_CHARS}.
+    if (raw.length > MAX_STORED_CHARS) {
+      window.localStorage.removeItem(STORAGE_KEY);
+      return;
+    }
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return;
     const entries = parsed.filter(
@@ -130,28 +219,59 @@ function hydrate(store: ConsoleStore): void {
         typeof (e as ConsoleEntry).text === "string" &&
         LEVELS.includes((e as ConsoleEntry).level),
     );
-    store.entries = entries.slice(-MAX_ENTRIES);
-    store.snapshot = store.entries.slice();
+    // Re-clamp on the way in: entries written before `MAX_TEXT` existed are
+    // exactly the ones that would otherwise be re-serialised on every flush.
+    store.entries = entries
+      .slice(-MAX_ENTRIES)
+      .map((e) => (e.text.length > MAX_TEXT ? { ...e, text: truncate(e.text) } : e));
+    store.snapshotStale = true;
     store.seq = entries.reduce((max, e) => Math.max(max, e.id), 0);
   } catch {
     /* corrupt payload — start clean */
   }
 }
 
+/** Clamp `text` to {@link MAX_TEXT}, saying how much was dropped. */
+function truncate(text: string): string {
+  if (text.length <= MAX_TEXT) return text;
+  return `${text.slice(0, MAX_TEXT)}… [+${text.length - MAX_TEXT} chars]`;
+}
+
 function record(level: ConsoleLevel, args: unknown[]): void {
   const store = getStore();
-  if (!store) return;
+  // A nested console call (from a subscriber, or from another library's console
+  // patch) is dropped rather than queued: the outer call is already recording
+  // the same incident, and recursing is what turns a log storm into a freeze.
+  if (!store || store.recording) return;
+  store.recording = true;
+  try {
+    recordEntry(store, level, args);
+  } catch {
+    /* capture must never break the app */
+  } finally {
+    store.recording = false;
+  }
+}
+
+function recordEntry(
+  store: ConsoleStore,
+  level: ConsoleLevel,
+  args: unknown[],
+): void {
   const entry: ConsoleEntry = {
     id: ++store.seq,
     ts: Date.now(),
     level,
-    text: args.map(formatArg).join(" "),
+    // Clamped ONCE, on the joined line. Clamping each argument first and then the
+    // join again made the second pass measure the first pass's own marker, so a
+    // 50,000-character argument reported "+16 chars" dropped instead of +48,000.
+    text: truncate(args.map(formatArg).join(" ")),
   };
   store.entries.push(entry);
   if (store.entries.length > MAX_ENTRIES) {
     store.entries.splice(0, store.entries.length - MAX_ENTRIES);
   }
-  persist(store);
+  schedulePersist(store);
   commit(store);
 }
 
@@ -187,6 +307,12 @@ export function initConsoleCapture(): void {
   window.addEventListener("unhandledrejection", (event) => {
     record("error", ["Unhandled promise rejection:", event.reason]);
   });
+
+  // The debounce above means the last lines of a burst may still be pending when
+  // the page goes away. `pagehide` is the event that actually fires for a bfcache
+  // restore and for an installed PWA being suspended, which `unload` does not
+  // reliably do on mobile.
+  window.addEventListener("pagehide", () => flushPersist(store));
 }
 
 /**
@@ -195,7 +321,13 @@ export function initConsoleCapture(): void {
  * back `useSyncExternalStore` directly.
  */
 export function getConsoleLogEntries(): ConsoleEntry[] {
-  return getStore()?.snapshot ?? EMPTY;
+  const store = getStore();
+  if (!store) return EMPTY;
+  if (store.snapshotStale) {
+    store.snapshot = store.entries.slice();
+    store.snapshotStale = false;
+  }
+  return store.snapshot;
 }
 
 /**
@@ -217,6 +349,6 @@ export function clearConsoleLog(): void {
   const store = getStore();
   if (!store) return;
   store.entries = [];
-  persist(store);
+  flushPersist(store);
   commit(store);
 }
