@@ -215,11 +215,55 @@ Two device-local, no-backend player features live under `app/lib/{stealth,streak
 - `core.ts` is the pure, clock-free model (local `YYYY-MM-DD` keys, DST-safe day math); `store.ts` persists `hp:streak` and stamps the day from `recordPlay()`, called in `PlayerOverlay` right where recently-played is recorded (idempotent per calendar day).
 - `StreakChip` (header) shows the live streak with a 7-day popover + all-time best; `StreakToast` celebrates an advance and milestones.
 
+## Dashboard roles
+
+Google proves *identity*; `dashboard_users` decides *authorization*. Three roles,
+lowest first, enforced by `requireRole(min)` against the rank map in
+`app/lib/permissions.ts`:
+
+| Role | Can |
+|---|---|
+| `beta_admin` | The beta programme: send playtests, triage reports and images. Reads the overview, growth, the games list, a game's page and curation, and can change none of them. Cannot open moderation, leaderboards or the tracker. |
+| `admin` | Everything above, plus games, the catalogue, curation, leaderboards, moderation and the tracker. |
+| `super_admin` | Everything, including managing dashboard users, logs and blob ops. |
+
+**`requireRole` used to only half-enforce.** Its check was
+`min === "super_admin" && role !== "super_admin"`, so `requireRole("admin")` —
+the guard on some sixty actions and pages — passed for *any* role. That was
+correct by accident while `admin` was the floor; a role below it made every
+guard a hole. It now compares ranks, and a refused caller lands on their own
+role's `DASHBOARD_HOME` rather than a fixed `/dashboard`, because the page you
+cannot open and the page you land on must not be the same page.
+
+**Every "may this role" question lives in `app/lib/permissions.ts`** and is
+imported by both halves of the permission — the guard the action enforces and
+the condition the page renders the control under. Written out separately they
+drift, and the drift is silent in the dangerous direction. One rule there is
+*not* a rung: `canConfirmOwnWork` says nobody but a super admin may judge a beta
+report or image they submitted themselves. Admins can file reports like anyone
+else (they pass the tester guard without a membership row) and judging pays XP,
+so it binds a full `admin` exactly as it binds a `beta_admin`; the super-admin
+exemption exists so a one-person site cannot deadlock.
+
+**Membership takes a second person.** A beta admin may send playtests but may not
+invite testers — inviting puts a player inside a surface that pays XP, and the
+inviter would also be the triager. They raise a request
+(`beta_invite_requests`, migration 028) and an admin approves it, which grants
+membership crediting the requester in `invited_by` while `decided_by` records who
+allowed it. Approving your own request is refused by the same four-eyes rule.
+
+One consequence worth knowing: admin **notifications** are still audience-wide,
+so a beta admin receives the admin kinds — including `review_reported`, which
+links to a moderation page they cannot open. The copy carries no review content
+(only a game title), so this is noise rather than exposure.
+
 ## Admin project tracker
 
 `/dashboard/tracker` is the internal work board: admins paste in what they want
-built, tag it, and read the status back. It is **admin-only** (`requireRole("admin")`),
-never public, and nothing about it is exposed through `/api/v1/*`.
+built, tag it, and read the status back. It is **admin-only**
+(`requireRole(SITE_WRITE_ROLE)` — a beta admin is turned away rather than shown a
+board whose every row leads to an editor), never public, and nothing about it is
+exposed through `/api/v1/*`.
 
 One entity — the item — because the pasted brief *is* the tracked thing. Tags do
 the grouping; there is no priority, effort, due date or assignee. Six lanes,
@@ -564,7 +608,7 @@ and auth vars below are not in it.
 | `AUTH_SECRET` | Auth.js (`app/lib/auth.ts`), `app/lib/scoreboard/claim.ts` | Signs the session JWT, and is second in the claim-token secret chain. No sign-in without it. |
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | Auth.js, by convention | The Google OAuth client. Resolved from `AUTH_<PROVIDER>_ID`/`_SECRET` inside `@auth/core`, which is why no file in this repo references them. |
 | `AUTH_URL` | Auth.js, by convention | Pins the callback origin. Needed for local development (`http://localhost:3000`); on Vercel the host header is the authority and `trustHost: true` covers it. |
-| `SUPER_ADMIN_EMAILS` | `app/lib/dashboard-users.ts`, `app/lib/notifications/admins.ts` | Comma- or whitespace-separated allow-list, matched case-insensitively. A listed address is `super_admin` unconditionally — even with no `dashboard_users` row — which is how the first admin gets in. |
+| `SUPER_ADMIN_EMAILS` | `app/lib/dashboard-users.ts`, `app/lib/notifications/admins.ts` | Comma- or whitespace-separated allow-list, matched case-insensitively. A listed address is `super_admin` unconditionally — even with no `dashboard_users` row — which is how the first admin gets in, and the one role exempt from the four-eyes rule (see [Dashboard roles](#dashboard-roles)). |
 | `BLOB_READ_WRITE_TOKEN` | `@vercel/blob` (`put`, `copy`, `head`, `del`) | Auto-provisioned by Vercel when a Blob store is linked. |
 | `BLOB_READ_ONLY` | `app/lib/blob-ops.ts` | Optional emergency lock. Set to `1` (or `true`/`yes`/`on`) to force **every** advanced-blob feature off — publishing, media, beta evidence, cover caching, shot promotion, reindex — **without needing the database**, for when the allowance is spent and migration 026 has not been applied. Beats the `app_settings` switches and greys out the dashboard toggles. Anything unrecognised (including `0` and `false`) fails open and leaves the switches in charge. Takes effect on the next deploy. |
 | `ADMIN_HTML_PASSWORD` | `app/lib/admin-html-auth.ts` | Plain string; gates `/admin/html`. Required for uploads. |
