@@ -185,11 +185,21 @@ export async function requestTesterAction(formData: FormData): Promise<void> {
   }
   if (!playerId) back("error", `No player with the username "${username}"`);
 
+  // Two separate try blocks, and NOT one covering both reads. `back()` signals
+  // by throwing, so a `back()` inside a try is swallowed by that try's catch —
+  // the "already a tester" refusal would have been reported as a database
+  // error. This file's header calls that out as its most repeated mistake, and
+  // it is repeated by writing the guard and the write under one try.
+  let alreadyTester = false;
+  try {
+    alreadyTester = await beta.isActiveTester(playerId);
+  } catch {
+    back("error", "Could not check that player's membership (database error)");
+  }
+  if (alreadyTester) back("error", `${username} is already a beta tester`);
+
   let filed = false;
   try {
-    if (await beta.isActiveTester(playerId)) {
-      back("error", `${username} is already a beta tester`);
-    }
     filed = await beta.requestInvite({
       playerId,
       requestedBy: actor,

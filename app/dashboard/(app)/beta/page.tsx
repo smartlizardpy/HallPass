@@ -34,6 +34,7 @@ import {
   BETA_MIN_ROLE,
   canConfirmOwnWork,
   canManageTesters,
+  mustRequestTesters,
 } from "@/app/lib/permissions";
 import { resolveGames } from "@/app/lib/games-store";
 import {
@@ -246,6 +247,7 @@ export default async function DashboardBetaPage({
 }) {
   const { role, playerId } = await requireRole(BETA_MIN_ROLE);
   const mayManageTesters = canManageTesters(role);
+  const mustRequest = mustRequestTesters(role);
   // Resolved ONCE, here, rather than asked per row: it is the same question for
   // every row on the page, and a session with no `playerId` must be treated as
   // "cannot prove anything is not mine" — the actions refuse on exactly that
@@ -766,7 +768,7 @@ export default async function DashboardBetaPage({
               one instead. Deliberately the same shape and the same place on the
               page — the difference is what pressing it does, and the button says
               so. */}
-          {!mayManageTesters && (
+          {mustRequest && (
             <form action={requestTesterAction} className="space-y-2">
               <div className="flex flex-wrap items-end gap-2">
                 <label className="min-w-0 flex-1 text-xs font-black uppercase tracking-wide text-muted">
@@ -799,8 +801,7 @@ export default async function DashboardBetaPage({
           <p className="mt-2 text-xs text-muted">
             Players are invited by username, not email — a tester is someone who
             already has an account.
-            {!mayManageTesters &&
-              " An admin approves the request before they join."}
+            {mustRequest && " An admin approves the request before they join."}
           </p>
 
           {roster.length === 0 ? (
