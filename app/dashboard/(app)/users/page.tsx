@@ -133,19 +133,26 @@ export default async function UsersPage({
         <p className="mt-1 text-sm text-muted">
           Invited users sign in with Google. Only listed (or env allow-listed)
           emails may access the dashboard — everyone else is rejected at sign-in.
+          You can invite by email, or by <code className="font-mono">@username</code>{" "}
+          if they already play here.
         </p>
         <form
           action={addAdminAction}
           className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end"
         >
           <label className="block flex-1 text-sm font-semibold text-foreground">
-            Email
+            Email or @username
+            {/* Deliberately `type="text"`: `type="email"` makes the browser
+                refuse to submit `@alice` at all, so the server would never get
+                the chance to resolve it. Validation lives in
+                `parseAdminIdentifier`, which has to run server-side anyway. */}
             <input
               name="email"
-              type="email"
+              type="text"
               required
               autoComplete="off"
-              placeholder="teammate@example.com"
+              spellCheck={false}
+              placeholder="teammate@example.com or @alice"
               className="mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30"
             />
           </label>
