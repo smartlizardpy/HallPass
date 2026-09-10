@@ -103,7 +103,17 @@ no SQL and no XP arithmetic. Specifically it reuses:
 | What acceptance pays | `xpForReport()` |
 | What a fix pays | `xpForFix()` |
 | The ledger reason string | `acceptanceReason()`, `REASON_FIXED`, `REASON_DUPLICATE` |
-| Reading one report / the queue | `beta.reportById()`, `beta.reportQueue()` |
+| Reading one report / the queue | `beta.reportById()`, `beta.reportQueue()`, `beta.reportByIdWithAuthor()` |
+
+**One read WAS added to the store, and the claim above is about writes.** Stated
+plainly because the first draft of this document said "adds no SQL" without
+qualification, and that turned out to be true of the write path and false of the
+reads. `reportByIdWithAuthor` is a single-row version of the queue's join: the
+detail tool wants one report and its author, and the alternative was reading five
+hundred rows — every body and every error log — to recover one handle. It lives
+in `store.ts` because that is where SQL lives here, and it is held to the same
+asserted invariants as the queue it mirrors (public player columns only, LEFT
+joined so an orphaned report survives).
 
 And it repeats the same guards the actions apply before calling them, because
 those guards live in the action bodies rather than in the store:
@@ -232,9 +242,10 @@ The three writers carry `annotations` marking them destructive and
 non-idempotent, which is the MCP-native way to tell a client "confirm this one".
 `list` and `get` are marked read-only.
 
-## 8. Phasing — the file-by-file plan
+## 8. Phasing — the file-by-file plan, and what shipped
 
-Ten commits, each leaving the tree working.
+Twelve commits, each leaving the tree working. **All of it is built**; this table
+is now a record rather than a plan.
 
 | # | Commit | Files |
 |---|---|---|
@@ -248,6 +259,29 @@ Ten commits, each leaving the tree working.
 | 8 | Tool registration | `app/lib/mcp/server.ts` |
 | 9 | The endpoint | `app/api/mcp/route.ts` |
 | 10 | How to point a client at it | `.env.example`, `README.md` |
+| 11 | One report and its author, in one query | `app/lib/beta/store.ts` + test |
+| 12 | Spend that query | `app/lib/mcp/bugs.ts` |
+
+**Commits 11 and 12 were not in the plan.** They came out of reading the finished
+diff rather than from changing our minds: `getBugReport` was fetching the whole
+queue to recover an author the single-row read does not carry, which is the
+summary/detail argument in §5 being violated on the server's side of the wire.
+The fix is the store method recorded in §3.
+
+**Verified after the build, not assumed.** `npm test` passes (1607 tests, 98
+files); `npm run lint` reports the same 11 pre-existing warnings and no new ones;
+`npm run build` succeeds with `/` still prerendered (`○`), `/api/mcp` dynamic
+(`ƒ`) as an authenticated endpoint must be, and `public/sw-manifest.js` still
+carrying **28** `/game/` routes — the regression check the game page's docblock
+specifies — with `/api/mcp` correctly absent from it.
+
+The protocol itself was exercised against a running dev server rather than
+reasoned about: an unauthenticated `POST` and a wrong secret both answer 401, a
+correct one completes `initialize` and negotiates `2025-06-18`, `tools/list`
+returns all five tools with the intended annotations, an invalid `severity` and a
+negative `id` are refused by the schema before reaching a query, `GET` answers
+405, and a tool call against an unconfigured database reports that fact rather
+than an empty list.
 
 The pure/server split follows the one `marketing-design.md` §8 landed on and the
 one `beta/config.ts` + `beta/store.ts` already use: anything importing
