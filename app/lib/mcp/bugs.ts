@@ -122,20 +122,15 @@ export async function listBugReports(filters: ListFilters): Promise<ListResult> 
 /**
  * One report in full, or `null` when it does not exist.
  *
- * `reportById` returns the row without its author, so the author is recovered
- * from the queue read. A report too old to appear in that scan still returns —
- * with a null author rather than not at all, on the same reasoning as an
- * orphaned report: the bug is the point, and the handle is decoration.
+ * A single primary-key lookup. The obvious implementation — `reportById` for the
+ * row, then the queue read to recover the author it does not carry — costs five
+ * hundred bodies and error logs to find one handle, which is the same waste this
+ * module's summary/detail split exists to avoid, just on the server's side of
+ * the wire. `reportByIdWithAuthor` is that join done once.
  */
 export async function getBugReport(id: number): Promise<ReportDetail | null> {
-  const report = await beta.reportById(id);
-  if (!report) return null;
-
-  const queue = await beta.reportQueue(QUEUE_SCAN_DEPTH);
-  const joined = queue.find((row) => row.id === id);
-  return toReportDetail(
-    joined ?? { ...report, authorUsername: null, authorHandle: null, authorName: null },
-  );
+  const report = await beta.reportByIdWithAuthor(id);
+  return report ? toReportDetail(report) : null;
 }
 
 /**
