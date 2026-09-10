@@ -52,6 +52,7 @@ app/
     auth/[...nextauth]/ Auth.js route handler
     v1/                 the public API the SDK and the client islands call —
                         leaderboard, games, reviews, challenges, me/*, admin/*
+    mcp/                the bug MCP a coding agent connects to (see below)
   components/           Arcade, PWA, header/sidebar, plus challenges/, friends/,
                         notifications/, offline/, profile/, reviews/, stealth/, streak/
   lib/
@@ -72,6 +73,7 @@ app/
     notifications/      bell inbox, kinds and copy; push/ is the Web Push layer
     alerts/             site alerts: thresholds, rules, PostHog snapshot (see below)
     tracker/            admin project tracker: config, store, schema (see below)
+    mcp/                the bug MCP: guard, tools, and the beta_reports operations
     achievements/  beta/  reviews/  growth/  capture/  stealth/  streak/
   manifest.ts           PWA manifest route (/manifest.webmanifest)
   layout.tsx            root layout, fonts, metadata, mounts <PWA />
@@ -593,6 +595,64 @@ An admin only receives these if they have signed into the arcade itself (the
 dashboard and the arcade are separate sign-ins) — notifications are owned by a
 player row. See `app/lib/notifications/admins.ts`.
 
+## Bug MCP
+
+`POST /api/mcp` is an [MCP](https://modelcontextprotocol.io) server exposing the
+playtest bug queue (`beta_reports`) to a coding agent, so the round trip from "a
+tester filed a bug" to "the bug is fixed and the tester is paid" does not need
+anybody to read the dashboard and retype it. `bug-mcp-design.md` is the full
+argument; this is how to use it.
+
+**It is off until you turn it on.** Unlike `ALERTS_SECRET`, `MCP_SECRET` has no
+fallback chain: with nothing set the endpoint answers **503** and refuses
+everybody. Three of its five tools are irreversible, so it does not switch itself
+on because some older admin password happens to be set.
+
+```bash
+# Generate a key and set it on the deployment (and in .env.local for dev)
+openssl rand -hex 32
+```
+
+Point a client at it with a bearer token — for Claude Code:
+
+```bash
+claude mcp add --transport http hallpass-bugs https://<your-site>/api/mcp \
+  --header "Authorization: Bearer $MCP_SECRET"
+```
+
+### The tools
+
+| Tool | Writes? | What it does |
+|---|---|---|
+| `list_bug_reports` | no | The queue, open first. Filters: `status`, `kind`, `severity`, `slug`, `limit`. Summaries only. |
+| `get_bug_report` | no | One report in full — body, device, the game's own JavaScript errors, screenshot and replay URLs. |
+| `triage_bug_report` | yes | `accepted` (pays the severity award) or `rejected` (pays nothing). Keeps the row. Open reports only. |
+| `mark_bug_report_fixed` | **deletes** | Pays the severity award (if still open) plus the fix bonus, then removes the report. |
+| `close_bug_report_duplicate` | **deletes** | Pays the consolation award, then removes the report. Open reports only. |
+
+The two removing outcomes are how the queue is meant to end — see
+[Beta programme XP](#dashboard-roles) and `app/lib/beta/config.ts` for the rate
+card. They are marked `destructiveHint` so a client asks before running them.
+
+### Things worth knowing
+
+- **Closing a report deletes it.** That is the existing behaviour of the
+  dashboard's own Fixed and Duplicate buttons, not something the MCP invented:
+  the XP ledger outlives the report by design, and the roster reconstructs a
+  tester's record from it (`beta/store.ts`'s `roster()` explains why).
+- **The MCP is not an admin.** Decisions it makes are recorded against
+  `MCP_ACTOR` (default `mcp@hallpass.invalid`), so the XP ledger can always tell
+  a machine's judgement from a person's.
+- **It writes to production.** There is one database. A tool call is not a
+  rehearsal.
+- **An unreachable database is reported, never silently empty.** Reads throw
+  rather than degrading to `[]` here — the fail-soft wrappers in
+  `app/lib/beta/index.ts` exist so a *page* renders without a credit line, and an
+  agent told "no bugs" when the database is down would go and do something else.
+- **No CORS, no cookies, no OAuth.** A server-to-server surface, like the alerts
+  endpoints. `GET` and `DELETE` answer 405: the endpoint is stateless, so there
+  is no event stream to open and no session to end.
+
 ## Environment variables
 
 Derived from `process.env.*` references in the codebase, plus the few Auth.js
@@ -615,6 +675,8 @@ and auth vars below are not in it.
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | `app/lib/push/config.ts` | Optional. Web Push signing pair for notifications; generate with `npx web-push generate-vapid-keys`. Unset means the push path reports itself unavailable and stays silent — the bell still works, and notifications are pulled rather than pushed. Deliberately NOT `NEXT_PUBLIC_`: the public key is served at request time from `GET /api/v1/me/push`, so adding it takes effect on the next request rather than the next build. |
 | `VAPID_SUBJECT` | `app/lib/push/config.ts` | A `mailto:` the push service can contact about a misbehaving sender. Required by the VAPID spec. |
 | `ALERTS_SECRET` | `app/lib/alerts/guard.ts` | Gates `GET /api/v1/admin/alerts` and `POST /api/v1/admin/alerts/notify`, and is what the alerts cron holds as a repository secret. Falls back to `SCOREBOARD_ADMIN_SECRET`, then `ADMIN_HTML_PASSWORD`, so the feature works with what you already have — but setting it **replaces** those, so rotating it actually revokes the old credential. Unset everywhere means both endpoints answer 503. |
+| `MCP_SECRET` | `app/lib/mcp/guard.ts` | Gates `POST /api/mcp`, the bug MCP. **Deliberately has no fallback** — unlike `ALERTS_SECRET`, it is not satisfied by `SCOREBOARD_ADMIN_SECRET` or `ADMIN_HTML_PASSWORD`, because this surface deletes reports and pays XP and must not switch itself on by inheritance. Unset means the endpoint answers 503 and refuses everybody. Independently rotatable: nothing else authenticates with it. |
+| `MCP_ACTOR` | `app/lib/mcp/config.ts` | Optional. What the bug MCP records in `beta_reports.resolved_by` and `beta_xp_awards.awarded_by`. Defaults to `mcp@hallpass.invalid` — an RFC 2606 reserved domain, so a machine's decision in the XP ledger can never be read as an admin's. |
 | `SCOREBOARD_ADMIN_SECRET` | `app/lib/scoreboard/guard.ts` | Gates `POST\|GET /api/v1/admin/boards` (board provisioning), and salts `scores.ip_hash` when `SCOREBOARD_IP_SALT` is unset. Falls back to `ADMIN_HTML_PASSWORD`. |
 | `SCOREBOARD_CLAIM_SECRET` | `app/lib/scoreboard/claim.ts` | Signs the short-lived tokens that let a player claim scores they set before signing in. Falls back to `AUTH_SECRET`, then `SCOREBOARD_ADMIN_SECRET`, then `ADMIN_HTML_PASSWORD`. With none of them set, minting returns `null` and claiming is silently disabled — an anonymous score can never be kept. |
 | `SCOREBOARD_IP_SALT` | `app/lib/scoreboard/guard.ts`, `app/lib/reviews/` | Salts the one-way `scores.ip_hash` used for rate limiting. Falls back to `SCOREBOARD_ADMIN_SECRET`, then `ADMIN_HTML_PASSWORD`, then a constant in-app pepper — so the digest is never a bare `sha256(ip)`, but set this to make it unguessable. |
