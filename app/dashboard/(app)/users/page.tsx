@@ -307,12 +307,12 @@ export default async function UsersPage({
               in which they hold access nobody meant to give them. */}
           <label className="block text-sm font-semibold text-foreground sm:w-56">
             Role
+            {/* `?? undefined` for the every-role-full case: an explicit `null`
+                would make this a controlled select with no value, and React
+                would warn about a value prop without an onChange. The form is
+                disabled in that state anyway, so there is nothing to control. */}
             <select
               name="role"
-              // `?? undefined` for the every-role-full case: an explicit `null`
-              // would make this a controlled select with no value, and React
-              // would warn about a value prop without an onChange. The form is
-              // disabled in that state anyway.
               defaultValue={defaultRole ?? undefined}
               disabled={defaultRole === null}
               className="mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:bg-surface-2"
