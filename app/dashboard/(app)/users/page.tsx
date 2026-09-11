@@ -14,20 +14,49 @@
  * and a delete would be undone on their next sign-in (see `actions.ts`). The
  * matching write actions reject any attempt to mutate them server-side too.
  *
+ * SEATS. Each role is capped (`ROLE_SEATS` — one super admin, one admin, three
+ * beta admins), so this screen has to show the count as well as the roles: a
+ * select that silently refuses on submit is worse than one that says which
+ * option is unavailable and why. The disabling here is UX only — `addUser` and
+ * `setRole` refuse inside the statement that writes, so a hand-rolled POST gains
+ * nothing from the option being absent.
+ *
+ * Over capacity gets its own notice rather than being folded into "full",
+ * because the only ways in are outside this screen's control — an env
+ * allow-listed address signing in for the first time, or several of them listed
+ * — and somebody looking at two super admins under a cap of one deserves to be
+ * told why rather than left to wonder whether the cap works.
+ *
  * The user store throws when `DATABASE_URL` is unset (the Neon connection is
  * lazy), so the read is wrapped: an unconfigured database renders a friendly
- * notice instead of a 500.
+ * notice instead of a 500. The seat count rides in that same try — a screen that
+ * claimed every seat was free because the count failed would invite grants the
+ * store then refuses.
  */
 
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
 import {
+  countRoleSeats,
   listUsers,
   isSuperAdminEmail,
   type DashboardUser,
 } from "@/app/lib/dashboard-users";
-import { ROLES, ROLE_HINT, ROLE_LABEL } from "@/app/lib/permissions";
+import {
+  ROLES,
+  ROLE_HINT,
+  ROLE_LABEL,
+  defaultSeats,
+  firstFreeRole,
+  isOverSeats,
+  isRoleFull,
+  seatsLeft,
+  seatSummary,
+  totalSeats,
+  type Seats,
+} from "@/app/lib/permissions";
+import { readSeatLimits } from "@/app/lib/role-seats";
 import { addAdminAction } from "./actions";
 import { DashHeader } from "../_ui/DashHeader";
 import { UserRowActions } from "./UserRowActions";
@@ -89,13 +118,34 @@ export default async function UsersPage({
   const ok = asString(params.ok);
   const error = asString(params.error);
 
+  // The limits never throw (an unreadable setting falls back to its default —
+  // see `role-seats.ts`), so they are read outside the try that guards the
+  // table. The page can always state what the caps ARE, even when it cannot say
+  // who is holding them.
+  const limits = await readSeatLimits();
+
   let users: DashboardUser[] | null = null;
+  let seats: Seats = { ...defaultSeats(), limits };
   let dbError = false;
   try {
-    users = await listUsers();
+    // Both reads, one try. The count is what the form below disables against, so
+    // a screen rendered with users but without it would offer every role as free
+    // and hand the refusal to the store instead.
+    const [listed, taken] = await Promise.all([listUsers(), countRoleSeats()]);
+    users = listed;
+    seats = { limits, taken };
   } catch {
     dbError = true;
   }
+
+  // The role the invite select opens on. `admin` is the historical default and
+  // stays the default while it has a seat; when it does not, fall back to the
+  // WEAKEST role that does rather than the next one up the ladder — a fallback
+  // that climbs would answer "admin is full" by preselecting super admin.
+  const defaultRole = isRoleFull(seats, "admin")
+    ? firstFreeRole(seats)
+    : "admin";
+  const overCapacity = ROLES.filter((role) => isOverSeats(seats, role));
 
   return (
     <>
@@ -103,12 +153,20 @@ export default async function UsersPage({
         title="Users"
         subtitle="Manage who can sign in to the dashboard and at what level."
         action={
-          <Link
-            href="/dashboard"
-            className="text-sm font-semibold text-brand hover:text-brand-600"
-          >
-            ← Back to overview
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/dashboard/users/settings"
+              className="text-sm font-semibold text-brand hover:text-brand-600"
+            >
+              Settings
+            </Link>
+            <Link
+              href="/dashboard"
+              className="text-sm font-semibold text-brand hover:text-brand-600"
+            >
+              ← Back to overview
+            </Link>
+          </div>
         }
       />
 
@@ -121,6 +179,96 @@ export default async function UsersPage({
       {error && (
         <div className="mb-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
           {error}
+        </div>
+      )}
+
+      {/* THE LIMITS, STATED. A cap is only a cap if the people it binds can see
+          it: refusing a grant with a banner that is the first mention of a seat
+          limit reads as a bug, and the person's next move is to try again. One
+          card per role, each carrying its own number, so "why can I not add
+          another admin" is answered before it is asked rather than after. */}
+      <section className="mb-8 rounded-xl border border-border bg-surface p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-lg font-black tracking-tight">Seat limits</h2>
+          <Link
+            href="/dashboard/users/settings"
+            className="text-sm font-semibold text-brand hover:text-brand-600"
+          >
+            Edit limits →
+          </Link>
+        </div>
+        <p className="mt-1 text-sm text-muted">
+          At most {totalSeats(seats.limits)} people may hold a dashboard role at
+          once. A grant that would pass a role&rsquo;s cap is refused — remove or
+          re-role somebody first, or raise the limit.
+        </p>
+        <dl className="mt-4 grid gap-3 sm:grid-cols-3">
+          {ROLES.map((role) => {
+            const full = isRoleFull(seats, role);
+            const over = isOverSeats(seats, role);
+            return (
+              <div
+                key={role}
+                className={`rounded-lg border px-4 py-3 ${
+                  over
+                    ? "border-amber-300 bg-amber-50"
+                    : full
+                      ? "border-border bg-surface-2"
+                      : "border-border bg-surface"
+                }`}
+              >
+                <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  {ROLE_LABEL[role]}
+                </dt>
+                <dd className="mt-1 text-2xl font-black tabular-nums text-foreground">
+                  {/* Usage over the cap, not a bare count: the number that
+                      matters to the reader is the gap between them. */}
+                  {seats.taken[role]}
+                  <span className="text-muted">/{seats.limits[role]}</span>
+                </dd>
+                <dd className="mt-0.5 text-xs text-muted">
+                  {over
+                    ? "over the limit"
+                    : full
+                      ? "full"
+                      : `${seatsLeft(seats, role)} free`}
+                </dd>
+              </div>
+            );
+          })}
+        </dl>
+        {dbError && (
+          <p className="mt-3 text-xs text-muted">
+            Usage is unavailable while the database is unreachable; the limits
+            above are the ones in force.
+          </p>
+        )}
+      </section>
+
+      {overCapacity.length > 0 && (
+        <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-bold">More holders than seats.</p>
+          <ul className="mt-1 space-y-0.5">
+            {overCapacity.map((role) => (
+              <li key={role}>
+                {ROLE_LABEL[role]}: {seatSummary(seats, role)}.
+              </li>
+            ))}
+          </ul>
+          {/* Naming the cause matters more than naming the numbers. Somebody
+              looking at two super admins under a cap of one needs to know where
+              it came from and what happens next, not merely that something is
+              off. Both causes are named because both are ordinary: a limit was
+              lowered under the people holding it, or the env allow-list granted
+              a role without ever asking about a seat. */}
+          <p className="mt-2">
+            This happens when a limit is lowered below the people already holding
+            the role, or when an address in{" "}
+            <code className="font-mono">SUPER_ADMIN_EMAILS</code> signs in —
+            those hold their role whatever the cap says. Nothing is broken and
+            nobody has lost access; the role simply cannot be granted again until
+            it is back within its seats.
+          </p>
         </div>
       )}
 
@@ -159,33 +307,68 @@ export default async function UsersPage({
               in which they hold access nobody meant to give them. */}
           <label className="block text-sm font-semibold text-foreground sm:w-56">
             Role
+            {/* `?? undefined` for the every-role-full case: an explicit `null`
+                would make this a controlled select with no value, and React
+                would warn about a value prop without an onChange. The form is
+                disabled in that state anyway, so there is nothing to control. */}
             <select
               name="role"
-              defaultValue="admin"
-              className="mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30"
+              defaultValue={defaultRole ?? undefined}
+              disabled={defaultRole === null}
+              className="mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:bg-surface-2"
             >
               {ROLES.map((role) => (
-                <option key={role} value={role}>
+                <option
+                  key={role}
+                  value={role}
+                  disabled={isRoleFull(seats, role)}
+                >
                   {ROLE_LABEL[role]}
+                  {isRoleFull(seats, role) ? " (full)" : ""}
                 </option>
               ))}
             </select>
           </label>
           <button
             type="submit"
-            className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+            disabled={defaultRole === null}
+            className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:bg-muted disabled:hover:bg-muted"
           >
             Add user
           </button>
         </form>
+        {/* The seat count sits ON the hint rather than in a summary of its own.
+            The two answer one question between them — what this role grants and
+            whether it can be granted — and a reader choosing a role should not
+            have to assemble that from two places. */}
         <ul className="mt-4 space-y-1 text-xs text-muted">
           {ROLES.map((role) => (
             <li key={role}>
               <span className="font-bold text-foreground">{ROLE_LABEL[role]}</span>{" "}
-              — {ROLE_HINT[role]}
+              — {ROLE_HINT[role]}.{" "}
+              <span
+                className={
+                  isRoleFull(seats, role)
+                    ? "font-semibold text-amber-700"
+                    : undefined
+                }
+              >
+                {seatSummary(seats, role)}
+                {isRoleFull(seats, role) ? " — full" : ""}
+              </span>
             </li>
           ))}
         </ul>
+        {defaultRole === null && (
+          <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            Every seat is taken ({totalSeats(seats.limits)} in total). Remove
+            somebody below before inviting anyone else, or raise a limit in{" "}
+            <Link href="/dashboard/users/settings" className="underline">
+              settings
+            </Link>
+            .
+          </p>
+        )}
       </section>
 
       {dbError ? (
@@ -257,7 +440,11 @@ export default async function UsersPage({
                             Locked
                           </span>
                         ) : (
-                          <UserRowActions email={user.email} role={user.role} />
+                          <UserRowActions
+                            email={user.email}
+                            role={user.role}
+                            seats={seats}
+                          />
                         )}
                       </td>
                     </tr>

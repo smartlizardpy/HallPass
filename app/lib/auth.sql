@@ -12,6 +12,14 @@
 -- SUPER_ADMIN_EMAILS are bootstrapped/auto-upserted on sign-in and cannot be
 -- demoted from the UI.
 --
+-- HOW MANY may hold each role is capped as well, but NOT here: the limits are
+-- editable (`role_seats:<role>` rows in `app_settings`, defaults in
+-- `app/lib/permissions.ts`) and the env allow-list is exempt from the check, so
+-- no CHECK or trigger on this table could express the rule without either
+-- freezing the numbers or capping the sign-in path. `addUser`/`setRole` enforce
+-- it inside the statement that writes — see `app/lib/dashboard-users.ts` and
+-- `role-seats-design.md`.
+--
 -- The three are deliberately LINEAR — everything a beta admin may do an admin
 -- may do, and so on up — because that is what lets one rank comparison in
 -- `app/lib/permissions.ts` answer every guard. `requireRole` enforces that rank;

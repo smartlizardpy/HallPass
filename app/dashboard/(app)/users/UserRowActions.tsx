@@ -18,14 +18,42 @@
  *
  * Locked env super admins never render this control (the server page shows a
  * "Locked" label instead), and the actions reject them server-side regardless.
+ *
+ * SEATS. Each role is capped (`ROLE_SEATS`), so a full role is disabled in the
+ * select here exactly as it is in the invite form — with one deliberate
+ * exception: THIS ROW'S CURRENT ROLE stays selectable even when its seats are
+ * full, because the person occupies one of those seats. Disabling it would empty
+ * the select of the value it is showing, so the control would open on a role the
+ * user does not hold and "Save role" would quietly move them.
+ *
+ * The seat counts arrive as a prop rather than being read here: this is a client
+ * island, the server component has already counted for the page, and a count
+ * fetched separately could disagree with the one rendered a few pixels above.
+ * They are a snapshot — seats can fill while the modal is open — so this is UX,
+ * and `setRole` refuses inside the statement that writes.
  */
 
 import { useEffect, useRef, useState } from "react";
 import { setRoleAction, removeUserAction } from "./actions";
 import type { Role } from "@/app/lib/dashboard-users";
-import { ROLES, ROLE_HINT, ROLE_LABEL } from "@/app/lib/permissions";
+import {
+  ROLES,
+  ROLE_HINT,
+  ROLE_LABEL,
+  isRoleFull,
+  seatSummary,
+  type Seats,
+} from "@/app/lib/permissions";
 
-export function UserRowActions({ email, role }: { email: string; role: Role }) {
+export function UserRowActions({
+  email,
+  role,
+  seats,
+}: {
+  email: string;
+  role: Role;
+  seats: Seats;
+}) {
   const [open, setOpen] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -43,6 +71,15 @@ export function UserRowActions({ email, role }: { email: string; role: Role }) {
       document.body.style.overflow = prevOverflow;
     };
   }, [open]);
+
+  /**
+   * Can this row be moved TO `value`?
+   *
+   * The role they already hold is always offered — they are sitting in one of
+   * that role's seats, so counting it against them would remove the select's own
+   * current value from the list.
+   */
+  const selectable = (value: Role) => value === role || !isRoleFull(seats, value);
 
   return (
     <div className="flex justify-end">
@@ -114,8 +151,13 @@ export function UserRowActions({ email, role }: { email: string; role: Role }) {
                   className="mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30"
                 >
                   {ROLES.map((value) => (
-                    <option key={value} value={value}>
+                    <option
+                      key={value}
+                      value={value}
+                      disabled={!selectable(value)}
+                    >
                       {ROLE_LABEL[value]}
+                      {selectable(value) ? "" : " (full)"}
                     </option>
                   ))}
                 </select>
@@ -126,7 +168,16 @@ export function UserRowActions({ email, role }: { email: string; role: Role }) {
                     <span className="font-bold text-foreground">
                       {ROLE_LABEL[value]}
                     </span>{" "}
-                    — {ROLE_HINT[value]}
+                    — {ROLE_HINT[value]}.{" "}
+                    <span
+                      className={
+                        isRoleFull(seats, value)
+                          ? "font-semibold text-amber-700"
+                          : undefined
+                      }
+                    >
+                      {seatSummary(seats, value)}
+                    </span>
                   </li>
                 ))}
               </ul>
