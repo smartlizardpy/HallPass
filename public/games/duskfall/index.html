@@ -1362,6 +1362,7 @@ class Zombie {
     this.dying = true;
     this.deathT = 0;
     this.hitPending = false;
+    zombies.dirty = true;                               // rebuild rayTargets without the corpse
     Game.addKill(this.type.score, head);
     AudioMan.playAt(choice(['zombie1', 'zombie2', 'zombie3']), this.pos, 0.7);
     // burst into blocky chunks + blood
