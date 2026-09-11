@@ -715,6 +715,40 @@ class FloorPatch {
 
 let bullets = [], enemies = [], bosses = [], particles = [], bgParticles = [], items = [], walls = [], hazards = [], barrels = [], pets = [], shopNPC = null;
 
+// Enemies move through moveEntity rather than raw x/y writes. It is the same swept circle-as-box
+// wall test Player.update uses, with four additions:
+// - unstickEntity first pushes an entity that already overlaps a wall out by its shallowest side.
+//   The swept test only clamps one that was fully outside the wall last frame, so an enemy that
+//   spawned, was knocked or grew into a wall walked straight through it.
+// - 0.001px of slack: after a clamp to w.x - radius, x + radius can miss w.x by one ulp, and the
+//   next step would pass through that face.
+// - 20px sub-steps can never hop a wall: the thinnest wall plus the smallest enemy diameter (a
+//   shrunk minion) is 56px. A chase step is a single sub-step; a knockback takes several.
+// - It ends with the arena clamp Player.update has always had.
+function moveEntity(e, dx, dy) {
+    unstickEntity(e);
+    const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 20));
+    for (let s = 0; s < steps; s++) {
+        let newX = e.x + dx / steps; let newY = e.y + dy / steps;
+        walls.forEach(w => {
+            if (newX + e.radius > w.x && newX - e.radius < w.x + w.w && newY + e.radius > w.y && newY - e.radius < w.y + w.h) {
+                if (e.x + e.radius <= w.x + 0.001) newX = w.x - e.radius; else if (e.x - e.radius >= w.x + w.w - 0.001) newX = w.x + w.w + e.radius;
+                if (e.y + e.radius <= w.y + 0.001) newY = w.y - e.radius; else if (e.y - e.radius >= w.y + w.h - 0.001) newY = w.y + w.h + e.radius;
+            }
+        });
+        e.x = newX; e.y = newY;
+    }
+    unstickEntity(e);
+}
+function unstickEntity(e) {
+    for (let pass = 0; pass < 2; pass++) walls.forEach(w => {
+        const l = e.x + e.radius - w.x, r = w.x + w.w - (e.x - e.radius), t = e.y + e.radius - w.y, b = w.y + w.h - (e.y - e.radius);
+        if (l > 0 && r > 0 && t > 0 && b > 0) { const m = Math.min(l, r, t, b); if (m === l) e.x -= l; else if (m === r) e.x += r; else if (m === t) e.y -= t; else e.y += b; }
+    });
+    const roomSize = 2400;
+    e.x = Math.max(-roomSize/2 + e.radius, Math.min(roomSize/2 - e.radius, e.x)); e.y = Math.max(-roomSize/2 + e.radius, Math.min(roomSize/2 - e.radius, e.y));
+}
+
 class Entity {
     constructor(x, y, size, speed, hp) {
         this.x = x; this.y = y; this.size = size; this.displaySize = size; this.radius = size / 2;
@@ -1106,15 +1140,15 @@ class Enemy extends Entity {
         super.update(dt, timestamp);
         if (this.freezeTimer > 0) { return; }
         
-        if (this.bubbleTimer > 0) { this.y -= 50 * dt; return; }
-        if (this.glitchTimer > 0 && Math.random() < 0.1) { this.x += (Math.random() - 0.5) * 100; this.y += (Math.random() - 0.5) * 100; }
-        if (this.danceTimer > 0) { this.targetAngle += dt * 10; this.x += Math.cos(this.targetAngle) * this.speed * 0.5 * dt; this.y += Math.sin(this.targetAngle) * this.speed * 0.5 * dt; return; }
+        if (this.bubbleTimer > 0) { moveEntity(this, 0, -50 * dt); return; }
+        if (this.glitchTimer > 0 && Math.random() < 0.1) moveEntity(this, (Math.random() - 0.5) * 100, (Math.random() - 0.5) * 100);
+        if (this.danceTimer > 0) { this.targetAngle += dt * 10; moveEntity(this, Math.cos(this.targetAngle) * this.speed * 0.5 * dt, Math.sin(this.targetAngle) * this.speed * 0.5 * dt); return; }
 
         // Hazard damage
         hazards.forEach(h => {
             if (this.x > h.x && this.x < h.x+h.w && this.y > h.y && this.y < h.y+h.h) {
                 if (h.type === 'lava') { this.takeDamage(1); if(Math.random()<0.1) particles.push(new SmokeParticle(this.x, this.y, 0, -20, 0.5, '#ef4444', 6)); }
-                if (h.type === 'void') { const cx = h.x + h.w/2; const cy = h.y + h.h/2; const ang = Math.atan2(cy - this.y, cx - this.x); this.x += Math.cos(ang) * 100 * dt; this.y += Math.sin(ang) * 100 * dt; }
+                if (h.type === 'void') { const cx = h.x + h.w/2; const cy = h.y + h.h/2; const ang = Math.atan2(cy - this.y, cx - this.x); moveEntity(this, Math.cos(ang) * 100 * dt, Math.sin(ang) * 100 * dt); }
             }
         });
 
@@ -1130,11 +1164,11 @@ class Enemy extends Entity {
             enemies.forEach(other => { if (!other.charmed && other !== this) { let d = distance(this.x, this.y, other.x, other.y); if (d < minDist) { minDist = d; nearest = other; } } });
             if (nearest) {
                 let ang = Math.atan2(nearest.y - this.y, nearest.x - this.x);
-                if (minDist > 200) { this.x += Math.cos(ang) * this.speed * dt; this.y += Math.sin(ang) * this.speed * dt; } 
+                if (minDist > 200) { moveEntity(this, Math.cos(ang) * this.speed * dt, Math.sin(ang) * this.speed * dt); } 
                 else if (timestamp - this.lastShot > this.fireRate) { this.targetAngle = ang; this.shoot(true); this.lastShot = timestamp; }
             } else {
                 let ang = Math.atan2(player.y - this.y, player.x - this.x);
-                if (distance(this.x, this.y, player.x, player.y) > 150) { this.x += Math.cos(ang) * this.speed * dt; this.y += Math.sin(ang) * this.speed * dt; }
+                if (distance(this.x, this.y, player.x, player.y) > 150) { moveEntity(this, Math.cos(ang) * this.speed * dt, Math.sin(ang) * this.speed * dt); }
             }
             return;
         }
@@ -1181,14 +1215,7 @@ class Enemy extends Entity {
             
             let dx = 0, dy = 0; if (len > 0) { dx = (targetVx / len) * activeSpeed; dy = (targetVy / len) * activeSpeed; }
             
-            let newX = this.x + dx * dt; let newY = this.y + dy * dt;
-            walls.forEach(w => {
-                if (newX + this.radius > w.x && newX - this.radius < w.x + w.w && newY + this.radius > w.y && newY - this.radius < w.y + w.h) {
-                    if (this.x + this.radius <= w.x) newX = w.x - this.radius; else if (this.x - this.radius >= w.x + w.w) newX = w.x + w.w + this.radius;
-                    if (this.y + this.radius <= w.y) newY = w.y - this.radius; else if (this.y - this.radius >= w.y + w.h) newY = w.y + w.h + this.radius;
-                }
-            });
-            this.x = newX; this.y = newY;
+            moveEntity(this, dx * dt, dy * dt);
         }
     }
 
@@ -1425,8 +1452,7 @@ class Bullet {
                 const d = distance(this.x, this.y, e.x, e.y);
                 if (d < 400 && !(e instanceof Boss)) { 
                     const angle = Math.atan2(this.y - e.y, this.x - e.x);
-                    e.x += Math.cos(angle) * (400-d) * dt * 0.5; e.y += Math.sin(angle) * (400-d) * dt * 0.5;
-                    const roomSize = 2400; if (e.x > roomSize/2 - e.radius) e.x = roomSize/2 - e.radius; if (e.x < -roomSize/2 + e.radius) e.x = -roomSize/2 + e.radius; if (e.y > roomSize/2 - e.radius) e.y = roomSize/2 - e.radius; if (e.y < -roomSize/2 + e.radius) e.y = -roomSize/2 + e.radius;
+                    moveEntity(e, Math.cos(angle) * (400-d) * dt * 0.5, Math.sin(angle) * (400-d) * dt * 0.5);
                 }
             });
         }
@@ -1699,7 +1725,8 @@ function generateHazards() {
     const maxWalls = Math.min(8, Math.floor(2 + floor/4));
     for(let i=0; i<maxWalls; i++) {
         const w = Math.random() > 0.5 ? 200 : 50; const h = w === 200 ? 50 : 200; let wx, wy; let safe = false;
-        while(!safe) { wx = (Math.random()-0.5) * 1600; wy = (Math.random()-0.5) * 1600; if(distance(wx, wy, 0, 0) > 300) safe = true; }
+        // 50px clear of earlier walls (wider than the 40px tank): overlapping or near-touching walls leave a wedged enemy no open side to be pushed out to.
+        while(!safe) { wx = (Math.random()-0.5) * 1600; wy = (Math.random()-0.5) * 1600; if(distance(wx, wy, 0, 0) > 300 && !walls.some(o => wx < o.x + o.w + 50 && o.x < wx + w + 50 && wy < o.y + o.h + 50 && o.y < wy + h + 50)) safe = true; }
         walls.push(new Wall(wx, wy, w, h));
     }
     
@@ -1857,12 +1884,12 @@ function checkCollisions() {
                 if (b.bubbleTrap && !(e instanceof Boss)) e.bubbleTimer = 5.0;
                 if (b.glitchStatus && !(e instanceof Boss)) e.glitchTimer = 4.0;
                 if (b.webbed && !(e instanceof Boss)) e.webTimer = 3.0;
-                if (b.tether && !(e instanceof Boss)) { const ang = Math.atan2(player.y - e.y, player.x - e.x); e.x += Math.cos(ang) * 150; e.y += Math.sin(ang) * 150; }
+                if (b.tether && !(e instanceof Boss)) { const ang = Math.atan2(player.y - e.y, player.x - e.x); moveEntity(e, Math.cos(ang) * 150, Math.sin(ang) * 150); }
                 if (b.shatter && e.freezeTimer > 0 && !(e instanceof Boss)) { e.takeDamage(9999, true); particles.push(new DamageText(e.x, e.y-40, "SHATTERED!", '#7dd3fc', 2.0)); }
 
                 if (b.freeze) e.freezeTimer = 2.0; if (b.burn) e.burnTimer = 3.0; if (b.poison) e.poisonTimer = 4.0; if (b.stun) e.stunTimer = 3.0; 
                 if (b.shrink && !(e instanceof Boss)) e.shrinkTimer = 5.0; if (b.slowEnemy && !(e instanceof Boss)) e.slowTimer = 3.0;
-                if (b.knockback && !(e instanceof Boss)) { const angle = Math.atan2(e.y - b.y, e.x - b.x); e.x += Math.cos(angle) * 50; e.y += Math.sin(angle) * 50; }
+                if (b.knockback && !(e instanceof Boss)) { const angle = Math.atan2(e.y - b.y, e.x - b.x); moveEntity(e, Math.cos(angle) * 50, Math.sin(angle) * 50); }
                 if (b.lifesteal && Math.random() < 0.05) { if(player.hp < player.maxHp) { player.hp++; updateUI(); particles.push(new DamageText(player.x, player.y-20, "+1 HP", '#ef4444')); } }
                 if (b.magnet) { items.forEach(item => { if (distance(player.x, player.y, item.x, item.y) < 600) { const angle = Math.atan2(player.y - item.y, player.x - item.x); item.x += Math.cos(angle) * 40; item.y += Math.sin(angle) * 40; } }); }
                 if (b.clearBullets) { bullets.forEach(enemyB => { if (!enemyB.isPlayerMade && distance(b.x, b.y, enemyB.x, enemyB.y) < 150) enemyB.destroy(); }); }
@@ -1901,6 +1928,9 @@ function update(dt, timestamp) {
     if (shopNPC) shopNPC.update(dt);
 
     checkCollisions();
+    // Spawns, summoned minions, Reality Bender landings and a shrink wearing off put an enemy inside a
+    // wall without moving it (and sheep have no border of their own): resolve that before drawing.
+    enemies.forEach(unstickEntity);
 
     bullets = bullets.filter(b => !b.markedForDeletion); enemies = enemies.filter(e => !e.markedForDeletion); bosses = bosses.filter(b => !b.markedForDeletion); barrels = barrels.filter(b => !b.markedForDeletion);
     particles = particles.filter(p => !p.markedForDeletion); items = items.filter(i => !i.markedForDeletion); pets = pets.filter(p => !p.markedForDeletion);
