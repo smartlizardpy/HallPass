@@ -31,7 +31,7 @@
 import "server-only";
 import { beta } from "@/app/lib/beta";
 import type { ActivityLine } from "./activity";
-import { ACTIVITY_RETENTION_DAYS, mcpActor } from "./config";
+import { ACTIVITY_IDLE_MINUTES, ACTIVITY_RETENTION_DAYS, mcpActor } from "./config";
 
 /** Append one line to the feed. Never throws. */
 export async function recordActivity(line: ActivityLine): Promise<void> {
@@ -44,6 +44,7 @@ export async function recordActivity(line: ActivityLine): Promise<void> {
       slug: line.slug,
       summary: line.summary,
       retainDays: ACTIVITY_RETENTION_DAYS,
+      idleMinutes: ACTIVITY_IDLE_MINUTES,
     });
   } catch (error) {
     console.error(`mcp activity log failed for ${line.tool}:`, error);

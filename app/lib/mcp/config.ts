@@ -84,12 +84,15 @@ export function clampLimit(limit: number | undefined): number {
 }
 
 /**
- * How long a line of the agent activity feed is kept.
+ * The longest any line of the agent activity feed is kept.
  *
- * Long enough to answer "what happened overnight" on a Monday morning, short
- * enough that the table never becomes something an operator has to think about.
- * The sweep rides on the insert (`store.ts`'s `logAgentActivity`), so this is
- * also how often the table is pruned: every tool call.
+ * Only a cap now. A run's lines are deleted when it ends — by
+ * `finish_agent_activity`, or by the first line after
+ * {@link ACTIVITY_IDLE_MINUTES} of silence (`agent-activity-design.md` §11) —
+ * so this bounds the one run that never ends: an agent that works for a
+ * fortnight without ever going quiet. The sweep rides on the insert
+ * (`store.ts`'s `logAgentActivity`), so this is also how often the table is
+ * pruned: every tool call.
  *
  * A constant rather than an env var deliberately. Every tunable is one more
  * thing to set on a deployment and get wrong, and nothing about this number is

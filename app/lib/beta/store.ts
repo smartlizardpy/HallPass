@@ -1278,8 +1278,21 @@ export function createBetaStore(sql: Sql) {
      * share this write's transaction and would be a second billed round trip on
      * every single tool call an agent makes.
      *
-     * The DELETE cannot touch the row just inserted — same statement, same
-     * snapshot, and the predicate is an age the new row does not have.
+     * The DELETE cannot touch the row just inserted: a data-modifying CTE's
+     * statements share one snapshot, so the new row is invisible to it
+     * whichever half of the predicate matches.
+     *
+     * ── A QUIET RUN IS RESET BY THE NEXT LINE ─────────────────────────────
+     * The sweep deletes two things: lines past the retention window, and —
+     * when nothing at all was written within the idle window — every line.
+     * The second is how a run that ended without `finish_agent_activity` is
+     * reset: the first line of the next run clears it (`agent-activity-
+     * design.md` §11). Nothing has to wake up at the idle mark itself,
+     * because the read already hides a quiet run from that moment on.
+     *
+     * The NOT EXISTS runs on that same snapshot, so it cannot see the line
+     * being written either: it asks whether the PREVIOUS run went quiet,
+     * which is exactly the question.
      *
      * ── THE CAPS ARE APPLIED HERE, NOT TRUSTED FROM THE CALLER ────────────
      * `summary` has a CHECK on it (1..300) and this is a logging path: a summary
@@ -1296,6 +1309,8 @@ export function createBetaStore(sql: Sql) {
       summary: string;
       /** How long a line is kept. See migration 029. */
       retainDays: number;
+      /** How long a quiet run survives before the next line resets it. */
+      idleMinutes: number;
     }): Promise<void> {
       const summary = input.summary.trim().slice(0, 300);
       if (!summary) return;
@@ -1303,6 +1318,10 @@ export function createBetaStore(sql: Sql) {
         input.reportId != null && Number.isInteger(input.reportId) && input.reportId > 0
           ? input.reportId
           : null;
+      // Whole minutes, because `make_interval(mins => …)` takes an integer and a
+      // fraction would fail the cast. At least one, because a zero window would
+      // reset the feed on every line and it would only ever hold one.
+      const idleMinutes = Math.max(1, Math.floor(input.idleMinutes));
       await sql`
         WITH logged AS (
           INSERT INTO beta_agent_activity
@@ -1313,6 +1332,10 @@ export function createBetaStore(sql: Sql) {
         )
         DELETE FROM beta_agent_activity
         WHERE created_at < now() - make_interval(days => ${Math.max(1, input.retainDays)})
+           OR NOT EXISTS (
+                SELECT 1 FROM beta_agent_activity
+                WHERE created_at > now() - make_interval(mins => ${idleMinutes})
+              )
       `;
     },
 
