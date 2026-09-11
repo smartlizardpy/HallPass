@@ -509,6 +509,14 @@ window.addEventListener('mousemove', e => { state.mouse.x = e.clientX; state.mou
 window.addEventListener('mousedown', () => state.mouse.down = true);
 window.addEventListener('mouseup', () => state.mouse.down = false);
 
+/* Chrome reserves Ctrl+W (close tab): no page can cancel it, and W is this
+   game's move-up key, so a Ctrl-to-sprint/crouch habit from other games closes
+   the tab mid-run. What a page CAN do is ask first: while a run is live,
+   beforeunload makes Chrome show "Leave site?" instead of closing silently.
+   Keys are cleared because the W/Ctrl keyups land on that dialog, not here, so
+   a Cancel would otherwise leave the player drifting on a key nobody holds. */
+function leaveGuard(e) { state.keys = {}; e.preventDefault(); e.returnValue = true; }
+
 function addShake(amount) { state.screenShake.intensity = Math.min(amount, 100); }
 function addHitstop(ms) { state.hitstop = ms / 1000; }
 function addChromatic(amount) { state.chromatic = amount; document.getElementById('damage-overlay').style.opacity = '1'; setTimeout(()=>document.getElementById('damage-overlay').style.opacity = '0', 100); }
@@ -1287,6 +1295,8 @@ function draw() {
 /** UI MANAGEMENT & LOOP */
 function setUI(newUI) {
     state.ui = newUI;
+    // Armed only while a run is live -- beforeunload belongs only where there is something to lose.
+    window[(newUI === 'PLAYING' || newUI === 'UPGRADE') ? 'addEventListener' : 'removeEventListener']('beforeunload', leaveGuard);
     ['menu-screen', 'upgrade-screen', 'gameover-screen', 'hud'].forEach(id => {
         const el = document.getElementById(id);
         if(el) { el.classList.add('hidden'); el.style.opacity = '0'; }
