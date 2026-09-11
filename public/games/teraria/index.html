@@ -821,6 +821,7 @@
                     if(player.invulnerable===0 && player.x < boss.x+boss.width && player.x+player.width > boss.x && player.y < boss.y+boss.height && player.y+player.height > boss.y) {
                         player.hp -= 30; player.invulnerable = 60; player.vx = Math.sign(dx)*10; player.vy = -5;
                         playSound('hit'); updateHealthUI(); shake = 10;
+                        if(player.hp <= 0) respawn();
                     }
                 }
                 if(boss) {
