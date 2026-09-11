@@ -2531,7 +2531,7 @@ const game = {
 
 /** ---------------- INPUT ---------------- **/
 const input = { keys: {}, joystick: {x:0, y:0}, atk: false, dash: false, mouse: {x:0, y:0, aim:false} };
-window.onkeydown = e => { input.keys[e.key] = true; if(e.key===' ') input.mouse.aim = false; };
+window.onkeydown = e => { input.keys[e.key] = true; if(e.key===' ' && !e.repeat) input.mouse.aim = false; };
 window.onkeyup = e => { input.keys[e.key] = false; if(e.key===' ') input.atk=false; };
 
 if(('ontouchstart' in window) || navigator.maxTouchPoints > 0) {
