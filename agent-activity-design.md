@@ -403,3 +403,33 @@ thing this panel must never say by accident.
 against a local dev server on `dashboard-dev` (which needs migrations 027–029
 first): a line, a backdated quiet run reset by the next line, and a finish that
 empties the table. After the deploy, a finish against production.
+
+### What shipped, and what the checks showed
+
+Built as planned, in the nine commits above, with two additions: commit 8 also
+touches `page.tsx`, because the idle window reaches the panel as a prop rather
+than an import, and commit 9 also corrects the README's count of irreversible
+tools (four of seven).
+
+- `npm run lint`: 0 errors. The 11 warnings are all in files this branch does
+  not touch.
+- `npm test`: 1655 pass, 5 of them new. 17 fail, in `console-capture.test.ts`
+  and `streak-event.test.ts`, which this branch does not touch; the same 17
+  failed on `main` in the previous session.
+- `npm run build` succeeds: `/api/mcp` and `/dashboard/beta` stay dynamic, and
+  `public/sw-manifest.js` still carries 28 `/game/` routes.
+- The protocol, against a local dev server on `dashboard-dev` (brought to 029
+  with `npm run migrate` first), passed 14 of 14 checks. `tools/list`
+  advertises seven tools, with `finish_agent_activity` destructive, idempotent
+  and argument-free. A line backdated 31 minutes is in the table, but the
+  panel's read returns nothing. The next line deletes it and is the only row
+  left, and a second call keeps the first. Finish answers "Cleared 2 lines",
+  leaves the table empty and records nothing of its own. A second finish clears
+  0, and the call after it starts a fresh one-line run.
+
+**Not exercised: the dashboard page itself.** The panel needs a signed-in
+session, so hiding on an empty read was checked through the read (the store's
+SQL, run on the dev database) and by types, not in a browser. Production still
+holds the first session's 53 lines until this deploys. From then the panel hides
+them at once, since they are hours old, and the next agent's first line deletes
+them.
