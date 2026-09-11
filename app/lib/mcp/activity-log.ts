@@ -50,3 +50,16 @@ export async function recordActivity(line: ActivityLine): Promise<void> {
     console.error(`mcp activity log failed for ${line.tool}:`, error);
   }
 }
+
+/**
+ * Delete the whole feed, because the agent has finished. Answers how many lines
+ * went.
+ *
+ * THROWS, unlike {@link recordActivity}. Clearing is the entire job of the tool
+ * that calls this, so a failure has to reach the agent as an error — and the
+ * feed as a `failed` line, which the wrapper in `server.ts` writes — rather than
+ * being swallowed into a "finished" that left every line on the panel.
+ */
+export async function clearActivity(): Promise<number> {
+  return beta.clearAgentActivity();
+}
