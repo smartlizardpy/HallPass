@@ -29,6 +29,7 @@ import { auth } from "@/app/lib/auth";
 import { publicDisplayName } from "@/app/lib/players";
 import { createBetaStore } from "./store";
 import type {
+  AgentActivity,
   BetaAssignment,
   BetaInviteRequestWithPlayer,
   BetaReport,
@@ -43,6 +44,7 @@ import { rankFor, type RankProgress } from "./xp";
 export const beta = createBetaStore(sql);
 
 export type {
+  AgentActivity,
   BetaAssignment,
   BetaInviteRequest,
   BetaInviteRequestWithPlayer,
@@ -228,6 +230,22 @@ export async function getReportQueue(): Promise<BetaReportWithAuthor[]> {
     return await beta.reportQueue();
   } catch (error) {
     return degrade("reportQueue", error, []);
+  }
+}
+
+/**
+ * What the bug-MCP agent has been doing, for the dashboard panel.
+ *
+ * Fail-soft to `[]` like every other read here, and this one has a second reason
+ * beyond the usual schema-gap window: the panel renders NOTHING when the list is
+ * empty, so degrading is indistinguishable from "no agent has run yet" — which
+ * is the honest thing to show when the trail cannot be read.
+ */
+export async function getAgentActivity(limit?: number): Promise<AgentActivity[]> {
+  try {
+    return await beta.recentAgentActivity(limit);
+  } catch (error) {
+    return degrade("recentAgentActivity", error, []);
   }
 }
 

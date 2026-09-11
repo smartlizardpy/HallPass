@@ -14,7 +14,11 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  ACTIVE_ASSIGNMENT_STATUSES,
+  ASSIGNMENT_STATUSES,
   BUG_SEVERITIES,
+  FINISHED_ASSIGNMENT_STATUSES,
+  isActiveAssignment,
   REASON_DUPLICATE,
   REASON_FIXED,
   REMOVAL_REASONS,
@@ -63,5 +67,42 @@ describe("removal reasons", () => {
   it("cover both outcomes that delete a report", () => {
     expect(REMOVAL_REASONS).toContain(REASON_FIXED);
     expect(REMOVAL_REASONS).toContain(REASON_DUPLICATE);
+  });
+});
+
+/**
+ * The assignment split, which two pages now render FROM rather than re-deriving.
+ *
+ * The property worth pinning is that the two halves PARTITION the vocabulary:
+ * every status is on exactly one side. A fifth status added to
+ * `ASSIGNMENT_STATUSES` lands in the active half automatically, and these tests
+ * are what say that was a decision rather than an oversight — if it should be
+ * finished instead, the failing assertion is the reminder to say so.
+ */
+describe("assignment status split", () => {
+  it("partitions every status into exactly one half", () => {
+    for (const status of ASSIGNMENT_STATUSES) {
+      const active = (ACTIVE_ASSIGNMENT_STATUSES as readonly string[]).includes(status);
+      const finished = (FINISHED_ASSIGNMENT_STATUSES as readonly string[]).includes(status);
+      expect(active).not.toBe(finished);
+    }
+  });
+
+  it("counts a fresh and an in-flight playtest as active", () => {
+    expect(isActiveAssignment("assigned")).toBe(true);
+    expect(isActiveAssignment("in_progress")).toBe(true);
+  });
+
+  it("counts a submitted or closed playtest as finished", () => {
+    expect(isActiveAssignment("submitted")).toBe(false);
+    expect(isActiveAssignment("closed")).toBe(false);
+  });
+
+  it("agrees with the predicate for every status", () => {
+    for (const status of ASSIGNMENT_STATUSES) {
+      expect(isActiveAssignment(status)).toBe(
+        (ACTIVE_ASSIGNMENT_STATUSES as readonly string[]).includes(status),
+      );
+    }
   });
 });

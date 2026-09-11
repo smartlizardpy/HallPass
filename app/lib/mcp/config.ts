@@ -84,6 +84,20 @@ export function clampLimit(limit: number | undefined): number {
 }
 
 /**
+ * How long a line of the agent activity feed is kept.
+ *
+ * Long enough to answer "what happened overnight" on a Monday morning, short
+ * enough that the table never becomes something an operator has to think about.
+ * The sweep rides on the insert (`store.ts`'s `logAgentActivity`), so this is
+ * also how often the table is pruned: every tool call.
+ *
+ * A constant rather than an env var deliberately. Every tunable is one more
+ * thing to set on a deployment and get wrong, and nothing about this number is
+ * deployment-specific.
+ */
+export const ACTIVITY_RETENTION_DAYS = 14;
+
+/**
  * Paths whose caches a write invalidates, mirroring what the beta server
  * actions revalidate.
  *

@@ -201,3 +201,29 @@ CREATE UNIQUE INDEX IF NOT EXISTS beta_xp_awards_report_reason_uniq
 CREATE UNIQUE INDEX IF NOT EXISTS beta_xp_awards_shot_reason_uniq
   ON beta_xp_awards (shot_id, reason) WHERE shot_id IS NOT NULL;
 
+-- What the bug-MCP agent has been doing, for the dashboard's activity panel.
+-- The one-time migration is `scoreboard/migrations/029_beta_agent_activity.sql`;
+-- read its header for the argument. In brief: the MCP's closing tools delete the
+-- report they act on, so without this the queue simply gets shorter with no
+-- account of why.
+--
+-- `report_id` is NOT a foreign key here, unlike everywhere else in this schema.
+-- ON DELETE SET NULL would blank the subject of "marked report 42 fixed" in the
+-- same write that produced it, because that write is the one deleting report 42.
+--
+-- Retention is by age, written by the insert itself (see store.ts).
+CREATE TABLE IF NOT EXISTS beta_agent_activity (
+  id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  actor      TEXT NOT NULL,
+  tool       TEXT NOT NULL,
+  outcome    TEXT NOT NULL DEFAULT 'ok'
+               CHECK (outcome IN ('ok','refused','failed')),
+  report_id  BIGINT CHECK (report_id > 0),
+  slug       TEXT CHECK (slug ~ '^[a-z0-9][a-z0-9-]*$'),
+  summary    TEXT NOT NULL CHECK (length(summary) BETWEEN 1 AND 300),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- The only read this table serves: the newest N lines.
+CREATE INDEX IF NOT EXISTS beta_agent_activity_recent_idx
+  ON beta_agent_activity (created_at DESC);

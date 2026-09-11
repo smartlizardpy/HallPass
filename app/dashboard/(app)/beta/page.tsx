@@ -38,18 +38,21 @@ import {
 } from "@/app/lib/permissions";
 import { resolveGames } from "@/app/lib/games-store";
 import {
+  getAgentActivity,
   getAllAssignments,
   getInviteRequests,
   getReportQueue,
   getRoster,
   getShotQueue,
 } from "@/app/lib/beta";
-import type { BetaShot } from "@/app/lib/beta/store";
+import { AGENT_FEED_LIMIT } from "@/app/lib/mcp/activity";
+import type { BetaReportWithAuthor, BetaShot } from "@/app/lib/beta/store";
 import {
   BUG_SEVERITIES,
   DUPLICATE_XP,
   FIX_BONUS_XP,
   INVITE_NOTE_MAX,
+  isActiveAssignment,
 } from "@/app/lib/beta/config";
 import { rankFor } from "@/app/lib/beta/xp";
 import {
@@ -59,6 +62,7 @@ import {
   SeverityChip,
   ShotStatusChip,
 } from "@/app/beta/_ui/Chips";
+import { AgentActivityFeed } from "./_ui/AgentActivityFeed";
 import { DashHeader } from "../_ui/DashHeader";
 import { Section } from "../_ui/Section";
 import {
@@ -233,6 +237,202 @@ function ShotTile({
   );
 }
 
+/**
+ * One report in the triage queue.
+ *
+ * Extracted so the settled list can render the SAME card rather than a second,
+ * drifting summary of the same row — the mistake `ShotTile` above already exists
+ * to avoid. `readOnly` is the only difference between the two lists: a rejected
+ * report has no decision left to make, and a card with no buttons is the honest
+ * way to say so.
+ */
+function ReportCard({
+  report,
+  gameTitle,
+  blockedNote,
+  readOnly = false,
+}: {
+  report: BetaReportWithAuthor;
+  gameTitle: string;
+  /** Set when the viewer may not judge this one; rendered in place of the
+      controls, so a missing button always comes with its reason. */
+  blockedNote?: string;
+  /** Closed business: render the evidence, offer nothing. */
+  readOnly?: boolean;
+}) {
+  return (
+    <li
+      className="rounded-lg border border-border bg-surface-2 p-4"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <p className="min-w-0 flex-1 font-bold text-zinc-900">
+          {report.title}
+        </p>
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+          <KindChip kind={report.kind} />
+          {report.severity && (
+            <SeverityChip severity={report.severity} />
+          )}
+          <ReportStatusChip status={report.status} />
+        </div>
+      </div>
+
+      <p className="mt-1 text-xs font-semibold text-muted">
+        {gameTitle} ·{" "}
+        {report.authorUsername
+          ? `@${report.authorUsername}`
+          : (report.authorHandle ??
+            report.authorName ??
+            "deleted player")}{" "}
+        · {formatDay(report.createdAt)}
+      </p>
+
+      {/* Tester-authored text. Rendered as a plain string child, so
+          React escapes it — never dangerouslySetInnerHTML here. */}
+      <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-700">
+        {report.body}
+      </p>
+
+      {report.shotUrl && (
+        // The URL is stored on the row, so rendering evidence costs
+        // no Blob head() — see migration 017.
+        <a
+          href={report.shotUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 block w-fit overflow-hidden rounded-lg border border-border transition hover:border-brand"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={report.shotUrl}
+            alt={`Screenshot attached to "${report.title}"`}
+            className="h-32 w-auto"
+          />
+        </a>
+      )}
+
+      {report.clipBlobPath && (
+        <video
+          // Served through our own authenticated route, never the
+          // raw Blob URL: a replay is a recording of a child's
+          // screen and must not be readable by anyone holding a
+          // guessable link.
+          src={`/api/v1/beta/clips/${report.id}`}
+          controls
+          preload="metadata"
+          className="mt-2 h-48 w-auto rounded-lg border border-border bg-black"
+        />
+      )}
+
+      {report.errorCount > 0 && (
+        <ErrorList raw={report.errorLog} count={report.errorCount} />
+      )}
+
+      {report.device && (
+        <p className="mt-2 truncate text-[11px] font-semibold text-muted">
+          {report.device}
+        </p>
+      )}
+
+      {/* `readOnly` suppresses the CONTROLS, never the record: the settled list
+          still says who rejected the report and when, which is the only thing
+          anybody opens that list to find out. */}
+      {blockedNote && !readOnly ? (
+        <p className="mt-3 rounded-lg border border-dashed border-border px-3 py-2 text-xs font-semibold text-muted">
+          {blockedNote}
+        </p>
+      ) : report.status === "open" && !readOnly ? (
+        <form
+          action={triageReportAction}
+          className="mt-3 flex flex-wrap items-center gap-2"
+        >
+          <input type="hidden" name="id" value={report.id} />
+          {report.kind === "bug" && (
+            <select
+              name="severity"
+              defaultValue={report.severity ?? "minor"}
+              aria-label="Severity"
+              className="rounded-lg border border-border bg-white px-2 py-1.5 text-xs font-bold text-zinc-700"
+            >
+              {BUG_SEVERITIES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          )}
+          {/* Submit buttons sharing one form: the clicked button's
+              name/value is what the browser sends, so the decision
+              travels without any client JS. */}
+          <button
+            type="submit"
+            name="status"
+            value="accepted"
+            className="rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-extrabold text-white transition hover:bg-emerald-700"
+          >
+            Accept
+          </button>
+          {/* `formAction` retargets THIS button at a different
+              server action while keeping the form's severity select,
+              so fixing on sight pays the right band without a second
+              duplicated dropdown. It sends no `status`, which is
+              correct — a fixed report is deleted, not re-stated. */}
+          <button
+            type="submit"
+            formAction={fixReportAction}
+            title={`Pays the severity award plus ${FIX_BONUS_XP} XP, then removes the report`}
+            className="rounded-full bg-brand px-4 py-1.5 text-xs font-extrabold text-white transition hover:bg-brand-600"
+          >
+            Fixed +{FIX_BONUS_XP}
+          </button>
+          {/* Retargeted like Fixed, and for the same reason: this
+              outcome REMOVES the report rather than restating it,
+              so it sends no `status` at all. */}
+          <button
+            type="submit"
+            formAction={duplicateReportAction}
+            title={`Pays ${DUPLICATE_XP} XP and removes the report`}
+            className={BTN_QUIET}
+          >
+            Duplicate
+          </button>
+          <button
+            type="submit"
+            name="status"
+            value="rejected"
+            className={BTN_QUIET}
+          >
+            Reject
+          </button>
+        </form>
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <p className="text-xs font-semibold text-muted">
+            {report.status} by {report.resolvedBy ?? "—"}
+          </p>
+          {/* An already-judged report can still be fixed later, which
+              is the ordinary case: you agree on Monday and ship on
+              Friday. Pays the bonus only — the severity award is
+              already in the ledger. Absent for `rejected`, the one
+              status where "fixed" contradicts the decision. */}
+          {!readOnly && report.status !== "rejected" && (
+            <form action={fixReportAction}>
+              <input type="hidden" name="id" value={report.id} />
+              <button
+                type="submit"
+                title={`Pays ${FIX_BONUS_XP} XP and removes the report`}
+                className="rounded-full bg-brand px-4 py-1.5 text-xs font-extrabold text-white transition hover:bg-brand-600"
+              >
+                Fixed +{FIX_BONUS_XP}
+              </button>
+            </form>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
 const INPUT =
   "w-full rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30";
 const BTN_PRIMARY =
@@ -264,7 +464,7 @@ export default async function DashboardBetaPage({
       ? "Sign out and back in to judge submissions — this session predates the check that says whose they are."
       : "You submitted this — another admin has to judge it.";
 
-  const [{ ok, error }, roster, reports, shots, assignments, requests, games] =
+  const [{ ok, error }, roster, reports, shots, assignments, requests, games, activity] =
     await Promise.all([
       searchParams,
       getRoster(),
@@ -273,14 +473,64 @@ export default async function DashboardBetaPage({
       getAllAssignments(),
       getInviteRequests(),
       resolveGames(),
+      // Seeds the feed panel so it is right before any JavaScript runs. The
+      // island polls from there; this read is what makes it correct without JS.
+      getAgentActivity(AGENT_FEED_LIMIT),
     ]);
 
   const titleFor = new Map(games.map((g) => [g.slug, g.title]));
+  // The same lookup as a plain object, because the activity panel is a client
+  // component and a Map does not survive the serialisation boundary.
+  const gameTitles = Object.fromEntries(titleFor);
   const nameFor = new Map(roster.map((r) => [r.playerId, testerLabel(r)]));
   const active = roster.filter((r) => r.revokedAt == null);
   const openReports = reports.filter((r) => r.status === "open");
+  // A rejected report has no decision left in it — no XP to pay, no fix to
+  // make, no button on its card — so it stops competing for attention with the
+  // reports that do. An ACCEPTED one stays in the live list: it still carries
+  // Fixed, which pays the bonus, so it is not finished business.
+  const rejectedReports = reports.filter((r) => r.status === "rejected");
+  const liveReports = reports.filter((r) => r.status !== "rejected");
   const pendingRequests = requests.filter((r) => r.status === "pending");
   const decidedRequests = requests.filter((r) => r.status !== "pending");
+  // ── THE ASSIGN PANEL IS GROUPED, AND SHOWS ACTIVE PLAYTESTS ONLY ──────────
+  // It was the fastest-growing thing on this page: nothing ever left it, so a
+  // tester who had finished six playtests contributed six rows that looked
+  // exactly like the one they are working on now.
+  //
+  // NOTHING IS LOST BY DROPPING THE FINISHED ONES, which is what makes this
+  // safe: `/beta` already renders a tester's finished playtests under its own
+  // "Finished" heading, and that is the audience who wants them. The subtitle
+  // still counts them so the number does not silently vanish.
+  //
+  // Grouped in ROSTER order (active members first, newest invite first) rather
+  // than by assignment date, because the question this panel answers is "what
+  // is $TESTER on" — and a tester with nothing active is not rendered at all,
+  // an empty group per idle tester being the same clutter in a new shape.
+  const activeAssignments = assignments.filter((a) => isActiveAssignment(a.status));
+  const finishedAssignments = assignments.length - activeAssignments.length;
+  const assignedTo = new Map<string, typeof activeAssignments>();
+  for (const assignment of activeAssignments) {
+    const rows = assignedTo.get(assignment.playerId);
+    if (rows) rows.push(assignment);
+    else assignedTo.set(assignment.playerId, [assignment]);
+  }
+  const assignmentGroups = [
+    // Roster order first…
+    ...roster.map((entry) => entry.playerId).filter((id) => assignedTo.has(id)),
+    // …then anyone holding a playtest who is not on it. Membership rows are
+    // kept on revoke rather than deleted, so this is close to unreachable — and
+    // an assignment that quietly stopped being rendered would be worse than a
+    // row with an unfamiliar name on it.
+    ...[...assignedTo.keys()].filter(
+      (id) => !roster.some((entry) => entry.playerId === id),
+    ),
+  ].map((playerId) => ({
+    playerId,
+    label: nameFor.get(playerId) ?? "Not on the roster",
+    rows: assignedTo.get(playerId) ?? [],
+  }));
+
   const pendingShots = shots.filter((s) => s.status === "pending");
   const unpublishedShots = shots.filter(
     (s) => s.status === "accepted" && s.promotedMediaId == null,
@@ -320,187 +570,63 @@ export default async function DashboardBetaPage({
       )}
 
       <div className="space-y-5">
+        {/* AGENT ----------------------------------------------------------- */}
+        {/* Above the queue, because it explains what has been happening TO the
+            queue, and an explanation below the thing it explains is read
+            second. Renders nothing at all until an agent has done something —
+            the island owns its own section for exactly that reason. */}
+        <AgentActivityFeed initial={activity} titles={gameTitles} />
+
         {/* TRIAGE ---------------------------------------------------------- */}
         <Section
           title="Triage queue"
-          subtitle={`${openReports.length} open of ${reports.length}`}
+          subtitle={`${openReports.length} open of ${liveReports.length}`}
         >
           {reports.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-8 text-center text-sm text-muted">
               Nothing filed yet.
             </p>
+          ) : liveReports.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-8 text-center text-sm text-muted">
+              Nothing waiting — every report has been dealt with.
+            </p>
           ) : (
             <ul className="space-y-3">
-              {reports.map((report) => (
-                <li
+              {liveReports.map((report) => (
+                <ReportCard
                   key={report.id}
-                  className="rounded-lg border border-border bg-surface-2 p-4"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <p className="min-w-0 flex-1 font-bold text-zinc-900">
-                      {report.title}
-                    </p>
-                    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                      <KindChip kind={report.kind} />
-                      {report.severity && (
-                        <SeverityChip severity={report.severity} />
-                      )}
-                      <ReportStatusChip status={report.status} />
-                    </div>
-                  </div>
-
-                  <p className="mt-1 text-xs font-semibold text-muted">
-                    {titleFor.get(report.slug) ?? report.slug} ·{" "}
-                    {report.authorUsername
-                      ? `@${report.authorUsername}`
-                      : (report.authorHandle ??
-                        report.authorName ??
-                        "deleted player")}{" "}
-                    · {formatDay(report.createdAt)}
-                  </p>
-
-                  {/* Tester-authored text. Rendered as a plain string child, so
-                      React escapes it — never dangerouslySetInnerHTML here. */}
-                  <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-700">
-                    {report.body}
-                  </p>
-
-                  {report.shotUrl && (
-                    // The URL is stored on the row, so rendering evidence costs
-                    // no Blob head() — see migration 017.
-                    <a
-                      href={report.shotUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-2 block w-fit overflow-hidden rounded-lg border border-border transition hover:border-brand"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={report.shotUrl}
-                        alt={`Screenshot attached to "${report.title}"`}
-                        className="h-32 w-auto"
-                      />
-                    </a>
-                  )}
-
-                  {report.clipBlobPath && (
-                    <video
-                      // Served through our own authenticated route, never the
-                      // raw Blob URL: a replay is a recording of a child's
-                      // screen and must not be readable by anyone holding a
-                      // guessable link.
-                      src={`/api/v1/beta/clips/${report.id}`}
-                      controls
-                      preload="metadata"
-                      className="mt-2 h-48 w-auto rounded-lg border border-border bg-black"
-                    />
-                  )}
-
-                  {report.errorCount > 0 && (
-                    <ErrorList raw={report.errorLog} count={report.errorCount} />
-                  )}
-
-                  {report.device && (
-                    <p className="mt-2 truncate text-[11px] font-semibold text-muted">
-                      {report.device}
-                    </p>
-                  )}
-
-                  {isOwn(report.playerId) ? (
-                    <p className="mt-3 rounded-lg border border-dashed border-border px-3 py-2 text-xs font-semibold text-muted">
-                      {blockedNote}
-                    </p>
-                  ) : report.status === "open" ? (
-                    <form
-                      action={triageReportAction}
-                      className="mt-3 flex flex-wrap items-center gap-2"
-                    >
-                      <input type="hidden" name="id" value={report.id} />
-                      {report.kind === "bug" && (
-                        <select
-                          name="severity"
-                          defaultValue={report.severity ?? "minor"}
-                          aria-label="Severity"
-                          className="rounded-lg border border-border bg-white px-2 py-1.5 text-xs font-bold text-zinc-700"
-                        >
-                          {BUG_SEVERITIES.map((s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                      {/* Submit buttons sharing one form: the clicked button's
-                          name/value is what the browser sends, so the decision
-                          travels without any client JS. */}
-                      <button
-                        type="submit"
-                        name="status"
-                        value="accepted"
-                        className="rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-extrabold text-white transition hover:bg-emerald-700"
-                      >
-                        Accept
-                      </button>
-                      {/* `formAction` retargets THIS button at a different
-                          server action while keeping the form's severity select,
-                          so fixing on sight pays the right band without a second
-                          duplicated dropdown. It sends no `status`, which is
-                          correct — a fixed report is deleted, not re-stated. */}
-                      <button
-                        type="submit"
-                        formAction={fixReportAction}
-                        title={`Pays the severity award plus ${FIX_BONUS_XP} XP, then removes the report`}
-                        className="rounded-full bg-brand px-4 py-1.5 text-xs font-extrabold text-white transition hover:bg-brand-600"
-                      >
-                        Fixed +{FIX_BONUS_XP}
-                      </button>
-                      {/* Retargeted like Fixed, and for the same reason: this
-                          outcome REMOVES the report rather than restating it,
-                          so it sends no `status` at all. */}
-                      <button
-                        type="submit"
-                        formAction={duplicateReportAction}
-                        title={`Pays ${DUPLICATE_XP} XP and removes the report`}
-                        className={BTN_QUIET}
-                      >
-                        Duplicate
-                      </button>
-                      <button
-                        type="submit"
-                        name="status"
-                        value="rejected"
-                        className={BTN_QUIET}
-                      >
-                        Reject
-                      </button>
-                    </form>
-                  ) : (
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <p className="text-xs font-semibold text-muted">
-                        {report.status} by {report.resolvedBy ?? "—"}
-                      </p>
-                      {/* An already-judged report can still be fixed later, which
-                          is the ordinary case: you agree on Monday and ship on
-                          Friday. Pays the bonus only — the severity award is
-                          already in the ledger. Absent for `rejected`, the one
-                          status where "fixed" contradicts the decision. */}
-                      {report.status !== "rejected" && (
-                        <form action={fixReportAction}>
-                          <input type="hidden" name="id" value={report.id} />
-                          <button
-                            type="submit"
-                            title={`Pays ${FIX_BONUS_XP} XP and removes the report`}
-                            className="rounded-full bg-brand px-4 py-1.5 text-xs font-extrabold text-white transition hover:bg-brand-600"
-                          >
-                            Fixed +{FIX_BONUS_XP}
-                          </button>
-                        </form>
-                      )}
-                    </div>
-                  )}
-                </li>
+                  report={report}
+                  gameTitle={titleFor.get(report.slug) ?? report.slug}
+                  blockedNote={isOwn(report.playerId) ? blockedNote : undefined}
+                />
               ))}
             </ul>
+          )}
+
+          {/* Collapsed by default, exactly as the image panel's settled shots
+              are: an admin who has learned where finished business goes on this
+              page finds it in the same place in the next panel down.
+
+              HIDDEN, NOT DELETED. A rejection pays nothing, so unlike a fixed or
+              duplicate report — whose XP is in the ledger and whose row is
+              therefore redundant — this row is the ONLY record of what was
+              decided, and the tester reads it on /beta. */}
+          {rejectedReports.length > 0 && (
+            <details className="mt-3 rounded-lg border border-border bg-white px-3 py-2">
+              <summary className="cursor-pointer text-xs font-black uppercase tracking-wide text-muted">
+                {rejectedReports.length} rejected
+              </summary>
+              <ul className="mt-3 space-y-3">
+                {rejectedReports.map((report) => (
+                  <ReportCard
+                    key={report.id}
+                    report={report}
+                    gameTitle={titleFor.get(report.slug) ?? report.slug}
+                    readOnly
+                  />
+                ))}
+              </ul>
+            </details>
           )}
         </Section>
 
@@ -571,7 +697,14 @@ export default async function DashboardBetaPage({
         </Section>
 
         {/* ASSIGN ---------------------------------------------------------- */}
-        <Section title="Assign a game" subtitle="Lands in the tester's queue">
+        <Section
+          title="Assign a game"
+          subtitle={`${activeAssignments.length} in flight${
+            finishedAssignments > 0
+              ? ` · ${finishedAssignments} finished, on the testers' own pages`
+              : ""
+          }`}
+        >
           {active.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-8 text-center text-sm text-muted">
               Invite a tester first.
@@ -619,33 +752,54 @@ export default async function DashboardBetaPage({
             </form>
           )}
 
-          {assignments.length > 0 && (
-            <ul className="mt-4 space-y-1.5">
-              {assignments.map((a) => (
-                <li
-                  key={a.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
-                >
-                  <span className="min-w-0 truncate text-sm">
-                    <span className="font-bold text-zinc-900">
-                      {titleFor.get(a.slug) ?? a.slug}
-                    </span>{" "}
-                    <span className="font-semibold text-muted">
-                      → {nameFor.get(a.playerId) ?? "unknown"}
+          {assignmentGroups.length > 0 ? (
+            <ul className="mt-4 space-y-4">
+              {assignmentGroups.map((group) => (
+                <li key={group.playerId}>
+                  <p className="text-[11px] font-black uppercase tracking-wide text-muted">
+                    {group.label}
+                    <span className="ml-1.5 font-bold normal-case">
+                      · {group.rows.length} in flight
                     </span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-2">
-                    <AssignmentStatusChip status={a.status} />
-                    <form action={unassignAction}>
-                      <input type="hidden" name="id" value={a.id} />
-                      <button type="submit" className={BTN_QUIET}>
-                        Remove
-                      </button>
-                    </form>
-                  </span>
+                  </p>
+                  <ul className="mt-1.5 space-y-1.5">
+                    {group.rows.map((a) => (
+                      <li
+                        key={a.id}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
+                      >
+                        {/* The tester's name is the group heading now, so the
+                            row carries the game alone rather than repeating it
+                            on every line. */}
+                        <span className="min-w-0 truncate text-sm font-bold text-zinc-900">
+                          {titleFor.get(a.slug) ?? a.slug}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <AssignmentStatusChip status={a.status} />
+                          <form action={unassignAction}>
+                            <input type="hidden" name="id" value={a.id} />
+                            <button type="submit" className={BTN_QUIET}>
+                              Remove
+                            </button>
+                          </form>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </li>
               ))}
             </ul>
+          ) : (
+            assignments.length > 0 && (
+              // Not an empty state: there ARE assignments, they are all
+              // finished. Saying where they went is the difference between a
+              // tidy panel and a panel that looks like it lost something.
+              <p className="mt-4 rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-center text-sm text-muted">
+                Nothing in flight — {finishedAssignments} finished playtest
+                {finishedAssignments === 1 ? "" : "s"} are on the testers&rsquo;
+                own pages.
+              </p>
+            )
           )}
         </Section>
 

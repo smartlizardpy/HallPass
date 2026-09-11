@@ -213,6 +213,11 @@ new server and transport are constructed per request for the same reason.
 - **GitHub issues.** The `gh_repo` / `gh_issue_number` seam on `tracker_items` is
   still nullable and unused. Claude Code already has GitHub tools; an MCP that
   proxied them would be a second, worse way to do something that already works.
+- **A record of what the agent did.** This turned out to be the one absence
+  worth revisiting: the closing tools delete the report they act on, so a queue
+  worked by an agent gets shorter with no account of why. Built in
+  `agent-activity-design.md`, as a feed on the dashboard rather than as
+  anything on the wire.
 - **Prompts and resources.** The SDK supports both. Tools are what an agent needs
   to work a queue, and a resource list of every open bug would duplicate
   `list_bug_reports` with different caching.
@@ -227,8 +232,10 @@ new server and transport are constructed per request for the same reason.
 
 ## 7. The tools
 
-Five, named so an agent can guess them, and shaped so the destructive ones read
-as destructive.
+Five at first — a sixth, `log_agent_activity`, was added later so an agent can
+say what it is doing; see `agent-activity-design.md`, which also explains why
+every call below is now recorded to the beta dashboard. Named so an agent can
+guess them, and shaped so the destructive ones read as destructive.
 
 | Tool | Writes? | What it does |
 |---|---|---|
@@ -241,6 +248,8 @@ as destructive.
 The three writers carry `annotations` marking them destructive and
 non-idempotent, which is the MCP-native way to tell a client "confirm this one".
 `list` and `get` are marked read-only.
+
+| `log_agent_activity` | yes | *(added later)* Appends one line to the operator's activity feed. Touches no report and pays nobody. |
 
 ## 8. Phasing — the file-by-file plan, and what shipped
 

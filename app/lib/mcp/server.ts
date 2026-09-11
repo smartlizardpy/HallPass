@@ -30,12 +30,22 @@
  * transport is stateless and this runs on Vercel, where nothing survives between
  * invocations; a module-level server shared across concurrent requests in the
  * same warm instance would be a single object with several transports attached.
+ *
+ * ── EVERY TOOL IS LOGGED, BY THE WRAPPER AND NOT BY THE TOOL ───────────────
+ * {@link logged} records what each call did to the activity feed the beta
+ * dashboard renders (`agent-activity-design.md`). It lives HERE, wrapped around
+ * the handlers, rather than inside `bugs.ts`: that module's stated virtue is
+ * that it adds no SQL and no arithmetic of its own, and a cross-cutting concern
+ * threaded through its five functions would also be a concern the sixth one
+ * added later quietly forgets.
  */
 
 import "server-only";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { BUG_SEVERITIES, REPORT_KINDS, REPORT_STATUSES } from "@/app/lib/beta/config";
+import { SUMMARY_MAX, describeToolCall, describeToolFailure } from "./activity";
+import { recordActivity } from "./activity-log";
 import {
   closeBugReportDuplicate,
   getBugReport,
@@ -87,6 +97,42 @@ function json(value: unknown) {
 }
 
 /**
+ * Run a tool body, record what it did, and answer with it.
+ *
+ * `args` is passed EXPLICITLY rather than recovered from the handler, so each
+ * call site stays inside the SDK's own type inference — the arguments a tool
+ * declares are destructured by its handler as before, and this sees the same
+ * values by name. The alternative (a generic wrapper around the whole callback)
+ * costs the typed destructuring on every tool to save five short object
+ * literals.
+ *
+ * A THROWN body is recorded and then RETHROWN. The SDK turns the throw into a
+ * tool error for the agent, which is what an agent needs; the feed gets the line
+ * regardless, because a crash the operator cannot see is the worst outcome for a
+ * surface built for visibility.
+ *
+ * `render` is for the one tool whose wire answer differs from the value worth
+ * describing: `get_bug_report` describes a missing report as "no longer exists"
+ * while answering the agent with an explanation it can act on.
+ */
+async function logged<T>(
+  tool: string,
+  args: Record<string, unknown>,
+  run: () => Promise<T>,
+  render: (value: T) => unknown = (value) => value,
+) {
+  let result: T;
+  try {
+    result = await run();
+  } catch (error) {
+    await recordActivity(describeToolFailure({ tool, args, error }));
+    throw error;
+  }
+  await recordActivity(describeToolCall({ tool, args, result }));
+  return json(render(result));
+}
+
+/**
  * Build a server with the five bug tools registered.
  *
  * @see `bug-mcp-design.md` §7 for the table this mirrors.
@@ -102,7 +148,10 @@ export function createBugMcpServer(): McpServer {
         "JavaScript errors before attempting a fix. Reports are per-game: the " +
         "`slug` field names the game, whose code lives in public/games/<slug>/. " +
         "Closing a report as fixed or duplicate DELETES it and pays the tester " +
-        "XP, so do it only after the fix is actually made.",
+        "XP, so do it only after the fix is actually made. Call " +
+        "log_agent_activity whenever you start or finish a piece of work: the " +
+        "site operator watches a live feed of it on their dashboard, and every " +
+        "other tool here only tells them WHAT you did, never why.",
     },
   );
 
@@ -135,7 +184,9 @@ export function createBugMcpServer(): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ status, kind, severity, slug, limit }) =>
-      json(await listBugReports({ status, kind, severity, slug, limit })),
+      logged("list_bug_reports", { status, kind, severity, slug, limit }, () =>
+        listBugReports({ status, kind, severity, slug, limit }),
+      ),
   );
 
   server.registerTool(
@@ -150,12 +201,14 @@ export function createBugMcpServer(): McpServer {
       inputSchema: { id: reportId },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ id }) => {
-      const report = await getBugReport(id);
-      return report
-        ? json(report)
-        : json({ error: `Report ${id} does not exist. It may already have been closed.` });
-    },
+    async ({ id }) =>
+      logged(
+        "get_bug_report",
+        { id },
+        () => getBugReport(id),
+        (report) =>
+          report ?? { error: `Report ${id} does not exist. It may already have been closed.` },
+      ),
   );
 
   server.registerTool(
@@ -179,7 +232,10 @@ export function createBugMcpServer(): McpServer {
       // absorbed, because the report is no longer open.
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async ({ id, status, severity }) => json(await triageBugReport({ id, status, severity })),
+    async ({ id, status, severity }) =>
+      logged("triage_bug_report", { id, status, severity }, () =>
+        triageBugReport({ id, status, severity }),
+      ),
   );
 
   server.registerTool(
@@ -195,7 +251,10 @@ export function createBugMcpServer(): McpServer {
       inputSchema: { id: reportId, severity: severityOverride },
       annotations: { destructiveHint: true, idempotentHint: false, openWorldHint: false },
     },
-    async ({ id, severity }) => json(await markBugReportFixed({ id, severity })),
+    async ({ id, severity }) =>
+      logged("mark_bug_report_fixed", { id, severity }, () =>
+        markBugReportFixed({ id, severity }),
+      ),
   );
 
   server.registerTool(
@@ -209,7 +268,57 @@ export function createBugMcpServer(): McpServer {
       inputSchema: { id: reportId },
       annotations: { destructiveHint: true, idempotentHint: false, openWorldHint: false },
     },
-    async ({ id }) => json(await closeBugReportDuplicate({ id })),
+    async ({ id }) =>
+      logged("close_bug_report_duplicate", { id }, () => closeBugReportDuplicate({ id })),
+  );
+
+  server.registerTool(
+    "log_agent_activity",
+    {
+      title: "Say what you are working on",
+      description:
+        "Tell the site operator what you are doing, in your own words. It " +
+        "appears on their beta dashboard next to the bug queue, live. Call this " +
+        "when you start investigating something, when you find the cause, and " +
+        "when you are about to make a change — one short sentence each time. " +
+        "Every other tool records only its own mechanics, so this is the only " +
+        "way anything you REASONED about reaches the person running the site. " +
+        "Writes nothing to any report and pays nobody.",
+      inputSchema: {
+        summary: z
+          .string()
+          .min(1)
+          .max(SUMMARY_MAX)
+          .describe(
+            "One sentence, present tense, about the work — e.g. \"reproducing " +
+              "the wall-clipping bug in neon-snake; the error log points at the " +
+              "sprite pool\". Not a tool name and not a status word.",
+          ),
+        reportId: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("The report this is about, if it is about one."),
+        slug: z
+          .string()
+          .optional()
+          .describe("The game this is about, if it is about one."),
+      },
+      // Appends one line to an operator's feed. Nothing is overwritten and no
+      // report is touched, so it is not destructive; not idempotent because two
+      // identical notes are two real moments in an afternoon, not a double
+      // submit to be absorbed.
+      annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ summary, reportId, slug }) =>
+      logged("log_agent_activity", { summary, reportId, slug }, async () => ({
+        // Echoed back rather than answered with a bare "ok": the agent sees
+        // exactly what was recorded, including any truncation, and the feed
+        // takes its line from the same string.
+        ok: true as const,
+        message: summary,
+      })),
   );
 
   return server;

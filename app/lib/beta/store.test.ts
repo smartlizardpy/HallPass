@@ -582,3 +582,95 @@ describe("reportByIdWithAuthor", () => {
     await expect(createBetaStore(sql).reportByIdWithAuthor(99)).resolves.toBeNull();
   });
 });
+
+/**
+ * The agent activity trail.
+ *
+ * Two invariants live entirely in the SQL text, so both are tested structurally:
+ *
+ *   * The sweep is part of the INSERT's statement. Splitting it into a second
+ *     call would double the round trips on every tool call an agent makes, and
+ *     the `neon()` driver would not run the pair in one transaction anyway.
+ *   * `ORDER BY created_at DESC` is what the recent index serves. A read that
+ *     ordered any other way would silently seq-scan a table that grows with
+ *     every tool call.
+ *
+ * The caps are tested behaviourally: this is a LOGGING path, and a summary one
+ * character over the CHECK must not turn into a failed tool call for the agent
+ * that wrote it.
+ */
+describe("agent activity", () => {
+  it("inserts and sweeps in ONE statement", async () => {
+    const { sql, calls } = makeFakeSql();
+    await createBetaStore(sql).logAgentActivity({
+      actor: "mcp@hallpass.invalid",
+      tool: "mark_bug_report_fixed",
+      outcome: "ok",
+      reportId: 42,
+      slug: "neon-snake",
+      summary: "Report 42 marked fixed",
+      retainDays: 14,
+    });
+    expect(calls).toHaveLength(1);
+    const text = flat(calls[0].text);
+    expect(text).toContain("WITH logged AS ( INSERT INTO beta_agent_activity");
+    expect(text).toContain("DELETE FROM beta_agent_activity WHERE created_at <");
+  });
+
+  it("truncates an over-long summary rather than failing the CHECK", async () => {
+    const { sql, calls } = makeFakeSql();
+    await createBetaStore(sql).logAgentActivity({
+      actor: "a",
+      tool: "log_agent_activity",
+      outcome: "ok",
+      summary: "x".repeat(500),
+      retainDays: 14,
+    });
+    expect(calls[0].values).toContain("x".repeat(300));
+  });
+
+  it("writes nothing at all for a blank summary", async () => {
+    const { sql, calls } = makeFakeSql();
+    await createBetaStore(sql).logAgentActivity({
+      actor: "a",
+      tool: "log_agent_activity",
+      outcome: "ok",
+      summary: "   ",
+      retainDays: 14,
+    });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("nulls a report id that is not a positive integer", async () => {
+    const { sql, calls } = makeFakeSql();
+    await createBetaStore(sql).logAgentActivity({
+      actor: "a",
+      tool: "get_bug_report",
+      outcome: "ok",
+      reportId: -3,
+      summary: "read something",
+      retainDays: 14,
+    });
+    // Position 3 is `report_id` in the VALUES list. A negative id would fail the
+    // CHECK, and failing a LOG write is not worth failing a tool call over.
+    expect(calls[0].values[3]).toBeNull();
+  });
+
+  it("reads newest first, which is what the recent index serves", async () => {
+    const { sql, calls } = makeFakeSql(() => [
+      {
+        id: "7",
+        actor: "mcp@hallpass.invalid",
+        tool: "list_bug_reports",
+        outcome: "ok",
+        report_id: null,
+        slug: null,
+        summary: "Listed the open queue",
+        created_at: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+    const rows = await createBetaStore(sql).recentAgentActivity(5);
+    expect(flat(calls[0].text)).toContain("ORDER BY created_at DESC, id DESC");
+    expect(rows[0]).toMatchObject({ id: 7, tool: "list_bug_reports", reportId: null });
+  });
+});
