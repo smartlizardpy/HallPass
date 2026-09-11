@@ -415,11 +415,12 @@
             // Draw Player Shape based on rig
             ctx.save();
             ctx.translate(this.x, this.y);
+            if (currentRig === 'GHOST') ctx.rotate(Math.max(-0.6, Math.min(0.6, Math.atan2(this.dy, baseSpeed * gameSpeed)))); // Nose follows travel; clamped so time warp can't tip it vertical
             if(this.dashing) ctx.scale(1.2, 0.8);
             
             ctx.beginPath();
             if (currentRig === 'TITAN') ctx.rect(-12, -12, 24, 24); // Square
-            else if (currentRig === 'GHOST') { ctx.moveTo(0,-15); ctx.lineTo(12,10); ctx.lineTo(-12,10); } // Triangle
+            else if (currentRig === 'GHOST') { ctx.moveTo(15,0); ctx.lineTo(-10,12); ctx.lineTo(-10,-12); } // Triangle, nose along travel (+x)
             else ctx.arc(0, 0, 12, 0, Math.PI*2); // Circle
             
             ctx.fill();
