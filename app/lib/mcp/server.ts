@@ -30,12 +30,22 @@
  * transport is stateless and this runs on Vercel, where nothing survives between
  * invocations; a module-level server shared across concurrent requests in the
  * same warm instance would be a single object with several transports attached.
+ *
+ * ── EVERY TOOL IS LOGGED, BY THE WRAPPER AND NOT BY THE TOOL ───────────────
+ * {@link logged} records what each call did to the activity feed the beta
+ * dashboard renders (`agent-activity-design.md`). It lives HERE, wrapped around
+ * the handlers, rather than inside `bugs.ts`: that module's stated virtue is
+ * that it adds no SQL and no arithmetic of its own, and a cross-cutting concern
+ * threaded through its five functions would also be a concern the sixth one
+ * added later quietly forgets.
  */
 
 import "server-only";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { BUG_SEVERITIES, REPORT_KINDS, REPORT_STATUSES } from "@/app/lib/beta/config";
+import { describeToolCall, describeToolFailure } from "./activity";
+import { recordActivity } from "./activity-log";
 import {
   closeBugReportDuplicate,
   getBugReport,
@@ -87,6 +97,42 @@ function json(value: unknown) {
 }
 
 /**
+ * Run a tool body, record what it did, and answer with it.
+ *
+ * `args` is passed EXPLICITLY rather than recovered from the handler, so each
+ * call site stays inside the SDK's own type inference — the arguments a tool
+ * declares are destructured by its handler as before, and this sees the same
+ * values by name. The alternative (a generic wrapper around the whole callback)
+ * costs the typed destructuring on every tool to save five short object
+ * literals.
+ *
+ * A THROWN body is recorded and then RETHROWN. The SDK turns the throw into a
+ * tool error for the agent, which is what an agent needs; the feed gets the line
+ * regardless, because a crash the operator cannot see is the worst outcome for a
+ * surface built for visibility.
+ *
+ * `render` is for the one tool whose wire answer differs from the value worth
+ * describing: `get_bug_report` describes a missing report as "no longer exists"
+ * while answering the agent with an explanation it can act on.
+ */
+async function logged<T>(
+  tool: string,
+  args: Record<string, unknown>,
+  run: () => Promise<T>,
+  render: (value: T) => unknown = (value) => value,
+) {
+  let result: T;
+  try {
+    result = await run();
+  } catch (error) {
+    await recordActivity(describeToolFailure({ tool, args, error }));
+    throw error;
+  }
+  await recordActivity(describeToolCall({ tool, args, result }));
+  return json(render(result));
+}
+
+/**
  * Build a server with the five bug tools registered.
  *
  * @see `bug-mcp-design.md` §7 for the table this mirrors.
@@ -135,7 +181,9 @@ export function createBugMcpServer(): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ status, kind, severity, slug, limit }) =>
-      json(await listBugReports({ status, kind, severity, slug, limit })),
+      logged("list_bug_reports", { status, kind, severity, slug, limit }, () =>
+        listBugReports({ status, kind, severity, slug, limit }),
+      ),
   );
 
   server.registerTool(
@@ -150,12 +198,14 @@ export function createBugMcpServer(): McpServer {
       inputSchema: { id: reportId },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ id }) => {
-      const report = await getBugReport(id);
-      return report
-        ? json(report)
-        : json({ error: `Report ${id} does not exist. It may already have been closed.` });
-    },
+    async ({ id }) =>
+      logged(
+        "get_bug_report",
+        { id },
+        () => getBugReport(id),
+        (report) =>
+          report ?? { error: `Report ${id} does not exist. It may already have been closed.` },
+      ),
   );
 
   server.registerTool(
@@ -179,7 +229,10 @@ export function createBugMcpServer(): McpServer {
       // absorbed, because the report is no longer open.
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async ({ id, status, severity }) => json(await triageBugReport({ id, status, severity })),
+    async ({ id, status, severity }) =>
+      logged("triage_bug_report", { id, status, severity }, () =>
+        triageBugReport({ id, status, severity }),
+      ),
   );
 
   server.registerTool(
@@ -195,7 +248,10 @@ export function createBugMcpServer(): McpServer {
       inputSchema: { id: reportId, severity: severityOverride },
       annotations: { destructiveHint: true, idempotentHint: false, openWorldHint: false },
     },
-    async ({ id, severity }) => json(await markBugReportFixed({ id, severity })),
+    async ({ id, severity }) =>
+      logged("mark_bug_report_fixed", { id, severity }, () =>
+        markBugReportFixed({ id, severity }),
+      ),
   );
 
   server.registerTool(
@@ -209,7 +265,8 @@ export function createBugMcpServer(): McpServer {
       inputSchema: { id: reportId },
       annotations: { destructiveHint: true, idempotentHint: false, openWorldHint: false },
     },
-    async ({ id }) => json(await closeBugReportDuplicate({ id })),
+    async ({ id }) =>
+      logged("close_bug_report_duplicate", { id }, () => closeBugReportDuplicate({ id })),
   );
 
   return server;
