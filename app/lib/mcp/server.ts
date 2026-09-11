@@ -44,7 +44,7 @@ import "server-only";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { BUG_SEVERITIES, REPORT_KINDS, REPORT_STATUSES } from "@/app/lib/beta/config";
-import { describeToolCall, describeToolFailure } from "./activity";
+import { SUMMARY_MAX, describeToolCall, describeToolFailure } from "./activity";
 import { recordActivity } from "./activity-log";
 import {
   closeBugReportDuplicate,
@@ -148,7 +148,10 @@ export function createBugMcpServer(): McpServer {
         "JavaScript errors before attempting a fix. Reports are per-game: the " +
         "`slug` field names the game, whose code lives in public/games/<slug>/. " +
         "Closing a report as fixed or duplicate DELETES it and pays the tester " +
-        "XP, so do it only after the fix is actually made.",
+        "XP, so do it only after the fix is actually made. Call " +
+        "log_agent_activity whenever you start or finish a piece of work: the " +
+        "site operator watches a live feed of it on their dashboard, and every " +
+        "other tool here only tells them WHAT you did, never why.",
     },
   );
 
@@ -267,6 +270,55 @@ export function createBugMcpServer(): McpServer {
     },
     async ({ id }) =>
       logged("close_bug_report_duplicate", { id }, () => closeBugReportDuplicate({ id })),
+  );
+
+  server.registerTool(
+    "log_agent_activity",
+    {
+      title: "Say what you are working on",
+      description:
+        "Tell the site operator what you are doing, in your own words. It " +
+        "appears on their beta dashboard next to the bug queue, live. Call this " +
+        "when you start investigating something, when you find the cause, and " +
+        "when you are about to make a change — one short sentence each time. " +
+        "Every other tool records only its own mechanics, so this is the only " +
+        "way anything you REASONED about reaches the person running the site. " +
+        "Writes nothing to any report and pays nobody.",
+      inputSchema: {
+        summary: z
+          .string()
+          .min(1)
+          .max(SUMMARY_MAX)
+          .describe(
+            "One sentence, present tense, about the work — e.g. \"reproducing " +
+              "the wall-clipping bug in neon-snake; the error log points at the " +
+              "sprite pool\". Not a tool name and not a status word.",
+          ),
+        reportId: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("The report this is about, if it is about one."),
+        slug: z
+          .string()
+          .optional()
+          .describe("The game this is about, if it is about one."),
+      },
+      // Appends one line to an operator's feed. Nothing is overwritten and no
+      // report is touched, so it is not destructive; not idempotent because two
+      // identical notes are two real moments in an afternoon, not a double
+      // submit to be absorbed.
+      annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ summary, reportId, slug }) =>
+      logged("log_agent_activity", { summary, reportId, slug }, async () => ({
+        // Echoed back rather than answered with a bare "ok": the agent sees
+        // exactly what was recorded, including any truncation, and the feed
+        // takes its line from the same string.
+        ok: true as const,
+        message: summary,
+      })),
   );
 
   return server;
