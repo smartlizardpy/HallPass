@@ -46,6 +46,30 @@ export const ASSIGNMENT_STATUSES = [
 export type AssignmentStatus = (typeof ASSIGNMENT_STATUSES)[number];
 
 /**
+ * The statuses that mean a playtest is still somebody's work.
+ *
+ * Derived from {@link ASSIGNMENT_STATUSES} by EXCLUSION rather than written out
+ * again, so a fifth status added above is active until somebody decides it is
+ * finished — the safe direction to fail. Listing the active ones positively
+ * would make a new status silently invisible on both pages that read this.
+ *
+ * Two pages ask this question and used to answer it separately with the same
+ * hardcoded pair: the tester's own queue (`/beta`, which shows active above
+ * "Finished") and the admin's assign panel (`/dashboard/beta`, which shows the
+ * active ones only). One vocabulary so they cannot drift apart.
+ */
+export const FINISHED_ASSIGNMENT_STATUSES = ["submitted", "closed"] as const;
+export const ACTIVE_ASSIGNMENT_STATUSES = ASSIGNMENT_STATUSES.filter(
+  (status): status is Exclude<AssignmentStatus, "submitted" | "closed"> =>
+    !(FINISHED_ASSIGNMENT_STATUSES as readonly string[]).includes(status),
+);
+
+/** True while a playtest is still assigned or being played. */
+export function isActiveAssignment(status: AssignmentStatus): boolean {
+  return (ACTIVE_ASSIGNMENT_STATUSES as readonly string[]).includes(status);
+}
+
+/**
  * Where a beta admin's request to invite a tester sits.
  *
  * `pending` is the only non-terminal state, matching {@link REPORT_STATUSES}'s
