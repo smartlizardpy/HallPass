@@ -191,8 +191,9 @@ is the entire point of polling.
   already on the row (`resolved_by`) and in the ledger (`awarded_by`).
 - **Anything on the tester's page.** A child does not need to know a machine is
   reading their bug report, and the feed carries an internal actor string.
-- **Editing or deleting feed rows from the UI.** It is an append-only trail with
-  a retention window. A trail somebody can tidy is not a trail.
+- **Editing or deleting feed rows from the UI.** A trail somebody can tidy is not
+  a trail. (Since §11 a run's lines are deleted when it ends — by the agent, or
+  by the idle window — but still never by an operator's hand.)
 
 ## 7. Rejected reports leave the dashboard
 
