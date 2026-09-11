@@ -247,9 +247,10 @@ is added. `ACTIVE_ASSIGNMENT_STATUSES` and `isActiveAssignment()` move to
 `beta/config.ts`, where the rest of the beta vocabulary already lives, and both
 pages read them.
 
-## 9. Phasing — the file-by-file plan
+## 9. Phasing — the file-by-file plan, and what shipped
 
-Twelve commits, each leaving the tree working.
+Twelve commits, each leaving the tree working. **All of it is built**; this table
+is now a record rather than a plan.
 
 | # | Commit | Files |
 |---|---|---|
@@ -265,6 +266,34 @@ Twelve commits, each leaving the tree working.
 | 10 | Rejected reports collapse | `dashboard/beta/page.tsx` |
 | 11 | Assignments grouped and pruned | `dashboard/beta/page.tsx`, `beta/page.tsx` |
 | 12 | Say so | `README.md`, `bug-mcp-design.md`, this file |
+
+**Two constants landed a commit away from where the table puts them.**
+`ACTIVITY_RETENTION_DAYS` is in `mcp/config.ts` from commit 7, because the
+recorder needs it; `AGENT_FEED_LIMIT` is in `mcp/activity.ts` rather than beside
+the panel, because how big the feed is is the MCP's business and the dashboard is
+one reader of it.
+
+**Verified after the build, not assumed.** `npm test` passes (1667 tests, 100
+files — 56 of them new here); `npm run lint` reports the same 11 pre-existing
+warnings and no new ones; `npm run build` succeeds with `/api/mcp` still dynamic
+(`ƒ`), `/dashboard/beta` dynamic, and `public/sw-manifest.js` still carrying
+**28** `/game/` routes — the regression check the game page's docblock specifies.
+
+The protocol was exercised against a running dev server rather than reasoned
+about. `tools/list` returns **six** tools with the intended annotations
+(`log_agent_activity` non-destructive, the two closers destructive); an empty
+`summary` is refused by the schema before it reaches anything; and — the case
+this feature's own docblocks promise — a `log_agent_activity` call against an
+**unconfigured database succeeds anyway**, returning the recorded line to the
+agent while the failed feed write is logged and swallowed. A read against the
+same unconfigured database still reports the real error rather than an empty
+list, which is the property `bug-mcp-design.md` §5 asks for.
+
+**Not exercised: the panel against real rows.** There is no database reachable
+from this environment, so `beta_agent_activity` has never been written to or read
+from for real, and the dashboard was verified by build and types only. Migration
+029 has not been applied anywhere — `npm run migrate` is the remaining step, and
+until it runs the panel stays empty while every tool goes on working.
 
 ## 10. Open questions
 
