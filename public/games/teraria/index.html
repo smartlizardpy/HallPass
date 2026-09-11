@@ -693,9 +693,9 @@
         }
         function checkCollisionRect(x, y, w, h) {
             const startX = Math.floor(x / TILE_SIZE);
-            const endX = Math.floor((x + w) / TILE_SIZE);
+            const endX = Math.ceil((x + w) / TILE_SIZE) - 1; // Far edges exclusive: resting flush on a tile isn't hitting it
             const startY = Math.floor(y / TILE_SIZE);
-            const endY = Math.floor((y + h) / TILE_SIZE);
+            const endY = Math.ceil((y + h) / TILE_SIZE) - 1;
             for (let ty = startY; ty <= endY; ty++) {
                 for (let tx = startX; tx <= endX; tx++) {
                     const t = getTile(tx, ty);
