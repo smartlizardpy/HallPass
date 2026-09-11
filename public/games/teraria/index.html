@@ -833,16 +833,16 @@
             for (let i = enemies.length - 1; i >= 0; i--) {
                 const e = enemies[i];
                 if (!e) { enemies.splice(i, 1); continue; } // FIX: Remove bad entity safely
-                e.vy += GRAVITY; e.x += e.vx; e.y += e.vy;
+                e.vy += GRAVITY;
                 if(e.grounded && Math.random()<0.02) { e.vy = -7; e.grounded = false; }
                 if(e.type==='zombie' && e.grounded) { e.vx = Math.sign(player.x - e.x)*1.5; }
                 else if (e.type==='slime' && e.grounded) { e.vx = 0; if(Math.random()<0.05) { e.vx = Math.sign(player.x-e.x)*2; e.vy=-6; e.grounded=false; } }
 
-                 if (checkCollisionRect(e.x, e.y, e.width, e.height)) {
-                    if (e.vy > 0) { e.y = Math.floor(e.y/32)*32 - e.height; e.vy=0; e.grounded=true; }
-                    else if (e.vy < 0) { e.y = Math.floor(e.y/32)*32+32; e.vy=0; }
-                    if (checkCollisionRect(e.x, e.y, e.width, e.height)) e.x -= e.vx;
-                }
+                // Move like the player, one axis at a time and stopping short of solid tiles, so nothing is snapped out of the ground.
+                // A blocked enemy keeps its vx: the AI only sets it while grounded, so a hop at a step still carries it over.
+                if (!checkCollisionRect(e.x + e.vx, e.y, e.width, e.height)) e.x += e.vx;
+                if (!checkCollisionRect(e.x, e.y + e.vy, e.width, e.height)) { e.y += e.vy; e.grounded = false; }
+                else { if (e.vy > 0) e.grounded = true; e.vy = 0; }
 
                 if (player.invulnerable === 0 && player.x < e.x + e.width && player.x + player.width > e.x && player.y < e.y + e.height && player.y + player.height > e.y) {
                     player.hp -= 15; player.invulnerable = 60; player.vx = (player.x - e.x > 0 ? 1 : -1) * 8; player.vy = -5;
