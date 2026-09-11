@@ -98,6 +98,25 @@ export function clampLimit(limit: number | undefined): number {
 export const ACTIVITY_RETENTION_DAYS = 14;
 
 /**
+ * How long the feed may go quiet before the run it shows counts as over.
+ *
+ * The transport is stateless (`app/api/mcp/route.ts`), so the server is never
+ * told that an agent has gone. It can be told the agent FINISHED, by
+ * `finish_agent_activity`, or notice that nothing has been written for this
+ * long — the fallback for an agent that crashed, was killed or forgot. Past it
+ * the panel shows nothing, and the next line written deletes the quiet run
+ * before starting a new one (`agent-activity-design.md` §11).
+ *
+ * Errs long on purpose. The longest gap between two lines while agents were
+ * working, in the first real session, was five and a half minutes; a window
+ * that closed on an agent still thinking would tell the operator it had
+ * stopped, which is the one thing the panel must never say by accident. Thirty
+ * was the operator's choice, and it is a constant for the same reason
+ * {@link ACTIVITY_RETENTION_DAYS} is.
+ */
+export const ACTIVITY_IDLE_MINUTES = 30;
+
+/**
  * Paths whose caches a write invalidates, mirroring what the beta server
  * actions revalidate.
  *
