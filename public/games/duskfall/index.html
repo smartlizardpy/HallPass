@@ -1105,11 +1105,10 @@ class WeaponSystem {
   }
 
   _fireRay(spread, def) {
-    // Ray from screen center with random cone spread.
-    _v1.set(0, 0, -1).applyQuaternion(camera.quaternion);
-    _v1.x += rand(-spread, spread) * 14;
-    _v1.y += rand(-spread, spread) * 14;
-    _v1.normalize();
+    // Ray from screen center with random cone spread. The offset is taken in
+    // camera space (screen right/up) so the cone is the same whichever way the
+    // player faces; `spread` is the half-angle in radians, straight from WEAPON_DEFS.
+    _v1.set(rand(-spread, spread), rand(-spread, spread), -1).applyQuaternion(camera.quaternion).normalize();
     this.raycaster.set(camera.position, _v1);
 
     const hits = this.raycaster.intersectObjects(Game.rayTargets, true);
