@@ -579,7 +579,11 @@ export default async function DashboardBetaPage({
             queue, and an explanation below the thing it explains is read
             second. Renders nothing at all until an agent has done something —
             the island owns its own section for exactly that reason. */}
-        <AgentActivityFeed initial={activity} titles={gameTitles} />
+        <AgentActivityFeed
+          initial={activity}
+          titles={gameTitles}
+          idleMinutes={ACTIVITY_IDLE_MINUTES}
+        />
 
         {/* TRIAGE ---------------------------------------------------------- */}
         <Section
