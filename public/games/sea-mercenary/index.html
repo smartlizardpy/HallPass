@@ -1912,11 +1912,14 @@ class Player extends Ship {
             this.vx -= Math.cos(this.angle) * (currentAccel * 0.5); 
             this.vy -= Math.sin(this.angle) * (currentAccel * 0.5); 
         }
+        // Full rate once under way, half rate from a standstill: scaling by speed
+        // alone made it exactly 0 at rest, so the ship could not turn until moving.
+        const steer = this.turnSpeed * Math.max(0.5, Math.min(Math.abs(this.vx) + Math.abs(this.vy), 1));
         if (window.game.keys['ArrowLeft'] || window.game.keys['a']) { 
-            this.angle -= this.turnSpeed * (Math.min(Math.abs(this.vx) + Math.abs(this.vy), 1)); 
+            this.angle -= steer; 
         }
         if (window.game.keys['ArrowRight'] || window.game.keys['d']) { 
-            this.angle += this.turnSpeed * (Math.min(Math.abs(this.vx) + Math.abs(this.vy), 1)); 
+            this.angle += steer; 
         }
         
         for(let i=0; i<8; i++) {
@@ -2387,11 +2390,15 @@ class Game {
         this.resize();
         window.addEventListener('keydown', (e) => {
             if(e.key.toLowerCase() === 'b') this.toggleShop();
-            this.keys[e.key] = true;
+            // Letters are stored lower-case: with SHIFT (boost) or Caps Lock down
+            // e.key is 'W', and Player.update only reads 'w'.
+            const k = (e.key || '').length === 1 ? e.key.toLowerCase() : e.key;
+            this.keys[k] = true;
             this.keys[e.code] = true; 
         });
         window.addEventListener('keyup', (e) => {
-            this.keys[e.key] = false;
+            const k = (e.key || '').length === 1 ? e.key.toLowerCase() : e.key;
+            this.keys[k] = false;
             this.keys[e.code] = false;
         });
 

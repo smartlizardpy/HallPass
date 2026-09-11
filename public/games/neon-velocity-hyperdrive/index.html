@@ -263,6 +263,7 @@
     let canvas, ctx, W, H;
     let gameState = 'MENU';
     let frames = 0;
+    let spawnTimer = 0;
     let gameSpeed = 1;
     let baseSpeed = 8;
     let score = 0;
@@ -415,11 +416,12 @@
             // Draw Player Shape based on rig
             ctx.save();
             ctx.translate(this.x, this.y);
+            if (currentRig === 'GHOST') ctx.rotate(Math.max(-0.6, Math.min(0.6, Math.atan2(this.dy, baseSpeed * gameSpeed)))); // Nose follows travel; clamped so time warp can't tip it vertical
             if(this.dashing) ctx.scale(1.2, 0.8);
             
             ctx.beginPath();
             if (currentRig === 'TITAN') ctx.rect(-12, -12, 24, 24); // Square
-            else if (currentRig === 'GHOST') { ctx.moveTo(0,-15); ctx.lineTo(12,10); ctx.lineTo(-12,10); } // Triangle
+            else if (currentRig === 'GHOST') { ctx.moveTo(15,0); ctx.lineTo(-10,12); ctx.lineTo(-10,-12); } // Triangle, nose along travel (+x)
             else ctx.arc(0, 0, 12, 0, Math.PI*2); // Circle
             
             ctx.fill();
@@ -447,7 +449,7 @@
             this.markedForDeletion = false;
             this.type = Math.random() > 0.8 ? 'MINE' : 'WALL';
             
-            this.isOnCeiling = Math.random() > 0.5;
+            this.isOnCeiling = Math.random() < (player.flipped ? 0.7 : 0.3); // Favour the surface the player is on/heading to
             this.y = this.isOnCeiling ? 50 : H - 50 - this.h;
 
             if (this.type === 'MINE') {
@@ -526,6 +528,7 @@
         particles = [];
         score = 0;
         frames = 0;
+        spawnTimer = 60; // First obstacle 1s in, after the rig has landed
         baseSpeed = 8;
         bgLayers = [
             new CityLayer(0.2, '#110011'),
@@ -567,14 +570,15 @@
             // BG
             bgLayers.forEach(l => { l.update(actualSpeed); l.draw(ctx, H); });
 
-            // Spawning
-            if (frames % Math.floor(60/gameSpeed) === 0 && Math.random() > 0.5) {
-                // Ensure min distance
-                if (obstacles.length === 0 || W - obstacles[obstacles.length-1].x > 200) {
-                    obstacles.push(new Obstacle());
-                }
+            // Spawning - gap shrinks from 90 to 66 frames over the first 40s (never under the old 60-frame spacing)
+            spawnTimer -= gameSpeed;
+            if (spawnTimer <= 0) {
+                obstacles.push(new Obstacle());
+                let gap = Math.max(66, 90 - frames / 100);
+                spawnTimer = gap * (0.92 + Math.random() * 0.16);
             }
-            if (frames % 500 === 0) baseSpeed += 0.5;
+            // Speed - quick ramp to 14 in the first minute, then gentle, capped at 22
+            if (frames % (baseSpeed < 14 ? 300 : 900) === 0 && baseSpeed < 22) baseSpeed += 0.5;
 
             // Player
             player.update();

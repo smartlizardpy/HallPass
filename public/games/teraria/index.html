@@ -661,9 +661,7 @@
             }
 
             for(let i=0; i<100; i++) stars.push({x: Math.random()*width, y: Math.random()*height/2, size: Math.random()*2, blink: Math.random()});
-            player.x = (WORLD_WIDTH / 2) * TILE_SIZE;
-            let spawnY = 0; while(world[Math.floor(WORLD_WIDTH/2)][spawnY] === TILE.AIR) spawnY++;
-            player.y = (spawnY - 3) * TILE_SIZE;
+            placeAtSpawn();
             loadingScreen.style.opacity = 0; setTimeout(() => loadingScreen.style.display = 'none', 500);
             initUI();
         }
@@ -693,9 +691,9 @@
         }
         function checkCollisionRect(x, y, w, h) {
             const startX = Math.floor(x / TILE_SIZE);
-            const endX = Math.floor((x + w) / TILE_SIZE);
+            const endX = Math.ceil((x + w) / TILE_SIZE) - 1; // Far edges exclusive: resting flush on a tile isn't hitting it
             const startY = Math.floor(y / TILE_SIZE);
-            const endY = Math.floor((y + h) / TILE_SIZE);
+            const endY = Math.ceil((y + h) / TILE_SIZE) - 1;
             for (let ty = startY; ty <= endY; ty++) {
                 for (let tx = startX; tx <= endX; tx++) {
                     const t = getTile(tx, ty);
@@ -735,8 +733,18 @@
         }
         
         function respawn() {
-            player.x = (WORLD_WIDTH / 2) * TILE_SIZE; player.y = 100; player.hp = player.maxHp; player.vx = 0; player.vy = 0;
+            placeAtSpawn(); player.hp = player.maxHp; player.vx = 0; player.vy = 0;
             enemies = []; boss = null; bossBar.style.display = 'none'; updateHealthUI();
+        }
+        function snapCamera() { // loop() only eases 10% a frame, so without this a spawn pans across the whole world
+            camera.x = Math.max(0, Math.min(player.x - width/2, WORLD_WIDTH * TILE_SIZE - width));
+            camera.y = Math.max(0, Math.min(player.y - height/2, WORLD_HEIGHT * TILE_SIZE - height));
+        }
+        function placeAtSpawn() {
+            player.x = (WORLD_WIDTH / 2) * TILE_SIZE;
+            let spawnY = 0; while(world[Math.floor(WORLD_WIDTH/2)][spawnY] === TILE.AIR) spawnY++;
+            player.y = (spawnY - 3) * TILE_SIZE;
+            snapCamera();
         }
 
         function spawnParticle(x, y, color) { particles.push({x: x, y: y, vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4, life: 1.0, color: color}); }
