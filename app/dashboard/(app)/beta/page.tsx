@@ -46,6 +46,7 @@ import {
   getShotQueue,
 } from "@/app/lib/beta";
 import { AGENT_FEED_LIMIT } from "@/app/lib/mcp/activity";
+import { ACTIVITY_IDLE_MINUTES } from "@/app/lib/mcp/config";
 import type { BetaReportWithAuthor, BetaShot } from "@/app/lib/beta/store";
 import {
   BUG_SEVERITIES,
@@ -475,7 +476,10 @@ export default async function DashboardBetaPage({
       resolveGames(),
       // Seeds the feed panel so it is right before any JavaScript runs. The
       // island polls from there; this read is what makes it correct without JS.
-      getAgentActivity(AGENT_FEED_LIMIT),
+      getAgentActivity({
+        limit: AGENT_FEED_LIMIT,
+        idleMinutes: ACTIVITY_IDLE_MINUTES,
+      }),
     ]);
 
   const titleFor = new Map(games.map((g) => [g.slug, g.title]));
@@ -575,7 +579,11 @@ export default async function DashboardBetaPage({
             queue, and an explanation below the thing it explains is read
             second. Renders nothing at all until an agent has done something —
             the island owns its own section for exactly that reason. */}
-        <AgentActivityFeed initial={activity} titles={gameTitles} />
+        <AgentActivityFeed
+          initial={activity}
+          titles={gameTitles}
+          idleMinutes={ACTIVITY_IDLE_MINUTES}
+        />
 
         {/* TRIAGE ---------------------------------------------------------- */}
         <Section

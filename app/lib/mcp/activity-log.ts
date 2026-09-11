@@ -31,7 +31,7 @@
 import "server-only";
 import { beta } from "@/app/lib/beta";
 import type { ActivityLine } from "./activity";
-import { ACTIVITY_RETENTION_DAYS, mcpActor } from "./config";
+import { ACTIVITY_IDLE_MINUTES, ACTIVITY_RETENTION_DAYS, mcpActor } from "./config";
 
 /** Append one line to the feed. Never throws. */
 export async function recordActivity(line: ActivityLine): Promise<void> {
@@ -44,8 +44,22 @@ export async function recordActivity(line: ActivityLine): Promise<void> {
       slug: line.slug,
       summary: line.summary,
       retainDays: ACTIVITY_RETENTION_DAYS,
+      idleMinutes: ACTIVITY_IDLE_MINUTES,
     });
   } catch (error) {
     console.error(`mcp activity log failed for ${line.tool}:`, error);
   }
+}
+
+/**
+ * Delete the whole feed, because the agent has finished. Answers how many lines
+ * went.
+ *
+ * THROWS, unlike {@link recordActivity}. Clearing is the entire job of the tool
+ * that calls this, so a failure has to reach the agent as an error — and the
+ * feed as a `failed` line, which the wrapper in `server.ts` writes — rather than
+ * being swallowed into a "finished" that left every line on the panel.
+ */
+export async function clearActivity(): Promise<number> {
+  return beta.clearAgentActivity();
 }

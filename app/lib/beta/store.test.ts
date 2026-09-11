@@ -586,11 +586,15 @@ describe("reportByIdWithAuthor", () => {
 /**
  * The agent activity trail.
  *
- * Two invariants live entirely in the SQL text, so both are tested structurally:
+ * Several invariants live entirely in the SQL text, so they are tested
+ * structurally:
  *
  *   * The sweep is part of the INSERT's statement. Splitting it into a second
  *     call would double the round trips on every tool call an agent makes, and
  *     the `neon()` driver would not run the pair in one transaction anyway.
+ *   * So is the reset of a quiet run, for a sharper reason: only on the
+ *     insert's own snapshot does "has anything been written lately?" leave out
+ *     the line being written.
  *   * `ORDER BY created_at DESC` is what the recent index serves. A read that
  *     ordered any other way would silently seq-scan a table that grows with
  *     every tool call.
@@ -610,11 +614,49 @@ describe("agent activity", () => {
       slug: "neon-snake",
       summary: "Report 42 marked fixed",
       retainDays: 14,
+      idleMinutes: 30,
     });
     expect(calls).toHaveLength(1);
     const text = flat(calls[0].text);
     expect(text).toContain("WITH logged AS ( INSERT INTO beta_agent_activity");
     expect(text).toContain("DELETE FROM beta_agent_activity WHERE created_at <");
+  });
+
+  /**
+   * A run that ended without `finish_agent_activity` is reset by the first line
+   * of the next one, and that has to happen in the SAME statement: on one
+   * snapshot the NOT EXISTS cannot see the line being written, so it asks
+   * whether the previous run went quiet, and the DELETE cannot remove the new
+   * line either.
+   */
+  it("resets a quiet run in the statement that starts the next one", async () => {
+    const { sql, calls } = makeFakeSql();
+    await createBetaStore(sql).logAgentActivity({
+      actor: "a",
+      tool: "list_bug_reports",
+      outcome: "ok",
+      summary: "Listed 3 reports (open)",
+      retainDays: 14,
+      idleMinutes: 30,
+    });
+    expect(calls).toHaveLength(1);
+    expect(flat(calls[0].text)).toContain(
+      "OR NOT EXISTS ( SELECT 1 FROM beta_agent_activity WHERE created_at > now() - make_interval(mins => ?) )",
+    );
+    // Position 7 is the idle window, after the six VALUES and the retention.
+    expect(calls[0].values[7]).toBe(30);
+  });
+
+  it("floors the idle window to a whole minute, and never to zero", async () => {
+    const { sql, calls } = makeFakeSql();
+    const store = createBetaStore(sql);
+    const line = { actor: "a", tool: "t", outcome: "ok", summary: "s", retainDays: 14 };
+    // A fraction would fail `make_interval`'s integer cast, and zero would reset
+    // the feed on every line.
+    await store.logAgentActivity({ ...line, idleMinutes: 12.7 });
+    await store.logAgentActivity({ ...line, idleMinutes: 0 });
+    expect(calls[0].values[7]).toBe(12);
+    expect(calls[1].values[7]).toBe(1);
   });
 
   it("truncates an over-long summary rather than failing the CHECK", async () => {
@@ -625,6 +667,7 @@ describe("agent activity", () => {
       outcome: "ok",
       summary: "x".repeat(500),
       retainDays: 14,
+      idleMinutes: 30,
     });
     expect(calls[0].values).toContain("x".repeat(300));
   });
@@ -637,6 +680,7 @@ describe("agent activity", () => {
       outcome: "ok",
       summary: "   ",
       retainDays: 14,
+      idleMinutes: 30,
     });
     expect(calls).toHaveLength(0);
   });
@@ -650,6 +694,7 @@ describe("agent activity", () => {
       reportId: -3,
       summary: "read something",
       retainDays: 14,
+      idleMinutes: 30,
     });
     // Position 3 is `report_id` in the VALUES list. A negative id would fail the
     // CHECK, and failing a LOG write is not worth failing a tool call over.
@@ -669,8 +714,36 @@ describe("agent activity", () => {
         created_at: "2026-01-01T00:00:00.000Z",
       },
     ]);
-    const rows = await createBetaStore(sql).recentAgentActivity(5);
+    const rows = await createBetaStore(sql).recentAgentActivity({ limit: 5, idleMinutes: 30 });
     expect(flat(calls[0].text)).toContain("ORDER BY created_at DESC, id DESC");
     expect(rows[0]).toMatchObject({ id: 7, tool: "list_bug_reports", reportId: null });
+  });
+
+  /**
+   * The panel closes because this read answers nothing once the run has gone
+   * quiet. It is judged in SQL, by the database's clock, so a browser whose
+   * clock is off can neither hold a dead run open nor close a live one.
+   */
+  it("answers nothing once the run has gone quiet", async () => {
+    const { sql, calls } = makeFakeSql();
+    await createBetaStore(sql).recentAgentActivity({ limit: 5, idleMinutes: 30 });
+    expect(flat(calls[0].text)).toContain(
+      "WHERE EXISTS ( SELECT 1 FROM beta_agent_activity WHERE created_at > now() - make_interval(mins => ?) )",
+    );
+    expect(calls[0].values).toEqual([30, 5]);
+  });
+
+  /**
+   * The finish tool's delete. Unscoped on purpose — the table holds one run and
+   * every agent writes the same actor — and counted in SQL, so a long run's ids
+   * never cross the wire just to be counted.
+   */
+  it("clears every line and says how many", async () => {
+    const { sql, calls } = makeFakeSql(() => [{ cleared: 53 }]);
+    await expect(createBetaStore(sql).clearAgentActivity()).resolves.toBe(53);
+    const text = flat(calls[0].text);
+    expect(text).toContain("DELETE FROM beta_agent_activity RETURNING id");
+    expect(text).toContain("SELECT count(*)::int AS cleared FROM cleared");
+    expect(text).not.toContain("WHERE");
   });
 });

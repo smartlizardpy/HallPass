@@ -11,7 +11,7 @@
  * decoration. The caller here is a language model choosing tools from their
  * text: a wrong description does not fail a type check or a test, it produces an
  * agent that closes the wrong bug and is confident about it. So each one below
- * states what the tool does to the DATABASE, in the imperative, and the three
+ * states what the tool does to the DATABASE, in the imperative, and the ones
  * that cannot be undone say so in the first sentence rather than the last.
  *
  * ── ANNOTATIONS ARE HOW A CLIENT KNOWS TO ASK ──────────────────────────────
@@ -37,7 +37,8 @@
  * the handlers, rather than inside `bugs.ts`: that module's stated virtue is
  * that it adds no SQL and no arithmetic of its own, and a cross-cutting concern
  * threaded through its five functions would also be a concern the sixth one
- * added later quietly forgets.
+ * added later quietly forgets. The one exception is a SUCCESSFUL
+ * `finish_agent_activity`, which clears the feed; see {@link logged}.
  */
 
 import "server-only";
@@ -45,7 +46,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { BUG_SEVERITIES, REPORT_KINDS, REPORT_STATUSES } from "@/app/lib/beta/config";
 import { SUMMARY_MAX, describeToolCall, describeToolFailure } from "./activity";
-import { recordActivity } from "./activity-log";
+import { clearActivity, recordActivity } from "./activity-log";
 import {
   closeBugReportDuplicate,
   getBugReport,
@@ -53,7 +54,13 @@ import {
   markBugReportFixed,
   triageBugReport,
 } from "./bugs";
-import { DEFAULT_REPORT_LIMIT, MAX_REPORT_LIMIT, MCP_SERVER_NAME, MCP_SERVER_VERSION } from "./config";
+import {
+  ACTIVITY_IDLE_MINUTES,
+  DEFAULT_REPORT_LIMIT,
+  MAX_REPORT_LIMIT,
+  MCP_SERVER_NAME,
+  MCP_SERVER_VERSION,
+} from "./config";
 
 /**
  * Enums built FROM the beta vocabulary rather than written out again.
@@ -114,12 +121,24 @@ function json(value: unknown) {
  * `render` is for the one tool whose wire answer differs from the value worth
  * describing: `get_bug_report` describes a missing report as "no longer exists"
  * while answering the agent with an explanation it can act on.
+ *
+ * `recordSuccess: false` is for the one tool whose success is the feed being
+ * EMPTY. `finish_agent_activity` deletes every line, and a line recording that
+ * it had would reopen the panel it had just closed (`agent-activity-design.md`
+ * §11). Its failure is still recorded above, like every other tool's: a finish
+ * that cleared nothing must stay on the panel, with its error.
  */
 async function logged<T>(
   tool: string,
   args: Record<string, unknown>,
   run: () => Promise<T>,
-  render: (value: T) => unknown = (value) => value,
+  {
+    render = (value: T): unknown => value,
+    recordSuccess = true,
+  }: {
+    render?: (value: T) => unknown;
+    recordSuccess?: boolean;
+  } = {},
 ) {
   let result: T;
   try {
@@ -128,12 +147,12 @@ async function logged<T>(
     await recordActivity(describeToolFailure({ tool, args, error }));
     throw error;
   }
-  await recordActivity(describeToolCall({ tool, args, result }));
+  if (recordSuccess) await recordActivity(describeToolCall({ tool, args, result }));
   return json(render(result));
 }
 
 /**
- * Build a server with the five bug tools registered.
+ * Build a server with the five bug tools and the two feed tools registered.
  *
  * @see `bug-mcp-design.md` §7 for the table this mirrors.
  */
@@ -151,7 +170,9 @@ export function createBugMcpServer(): McpServer {
         "XP, so do it only after the fix is actually made. Call " +
         "log_agent_activity whenever you start or finish a piece of work: the " +
         "site operator watches a live feed of it on their dashboard, and every " +
-        "other tool here only tells them WHAT you did, never why.",
+        "other tool here only tells them WHAT you did, never why. When ALL of " +
+        "your work is done, call finish_agent_activity once: it clears that " +
+        "feed, which is how the operator knows nothing is running any more.",
     },
   );
 
@@ -202,13 +223,10 @@ export function createBugMcpServer(): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ id }) =>
-      logged(
-        "get_bug_report",
-        { id },
-        () => getBugReport(id),
-        (report) =>
+      logged("get_bug_report", { id }, () => getBugReport(id), {
+        render: (report) =>
           report ?? { error: `Report ${id} does not exist. It may already have been closed.` },
-      ),
+      }),
   );
 
   server.registerTool(
@@ -319,6 +337,41 @@ export function createBugMcpServer(): McpServer {
         ok: true as const,
         message: summary,
       })),
+  );
+
+  server.registerTool(
+    "finish_agent_activity",
+    {
+      title: "Say you have finished (clears the feed)",
+      description:
+        "DELETES every line of the operator's activity feed and hides it from " +
+        "their dashboard, which is how they know nothing is running. Call it " +
+        "ONCE, when ALL of your work on the bug queue is done — not after each " +
+        "report. Any tool you call afterwards starts a fresh feed. Touches no " +
+        "report and pays nobody. If you never call it, the feed clears itself " +
+        `after ${ACTIVITY_IDLE_MINUTES} minutes without any activity.`,
+      // Deletes the feed's lines, which cannot be brought back, so it says so.
+      // Idempotent: a second call finds an empty table and leaves it that way.
+      annotations: { destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    // No `inputSchema`: the SDK advertises an empty object and calls this with
+    // no arguments. No wrap-up sentence either — it would be deleted in the
+    // moment it was written, so the last log_agent_activity is the wrap-up.
+    async () =>
+      logged(
+        "finish_agent_activity",
+        {},
+        async () => {
+          const cleared = await clearActivity();
+          return {
+            ok: true as const,
+            message:
+              `Cleared ${cleared} line${cleared === 1 ? "" : "s"} from the activity ` +
+              "feed; the operator's panel is hidden until your next tool call.",
+          };
+        },
+        { recordSuccess: false },
+      ),
   );
 
   return server;

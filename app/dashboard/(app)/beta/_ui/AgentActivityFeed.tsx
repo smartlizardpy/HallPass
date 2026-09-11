@@ -29,8 +29,19 @@
  * who starts an agent while watching the dashboard sees it arrive, which is the
  * entire point of polling.
  *
+ * ── EMPTY MEANS NO AGENT IS RUNNING ────────────────────────────────────────
+ * The read answers nothing once a run is over: the agent called
+ * `finish_agent_activity`, which deletes the run, or nothing has been written
+ * for the idle window (`agent-activity-design.md` §11). So the panel
+ * DISAPPEARS on the first poll after an agent stops, and the next agent's first
+ * line brings it back holding only its own run. That is decided on the server,
+ * by the database's clock; this component never hides a run on its own
+ * reckoning.
+ *
  * A FAILED POLL KEEPS THE LAST ROWS. Flashing the panel away would read as "the
- * agent stopped", which is the one thing this panel must never say by accident.
+ * agent stopped", which is the one thing this panel must never say by accident
+ * — and now that disappearing is exactly how it says so, the poll's Server
+ * Function throws on a database error rather than answering `[]`.
  */
 
 import { startTransition, useEffect, useState } from "react";
@@ -84,10 +95,17 @@ function since(iso: string, now: number | null): string {
 export function AgentActivityFeed({
   initial,
   titles,
+  idleMinutes,
 }: {
   initial: AgentActivity[];
   /** slug → game title, for the rows that name a game. */
   titles: Record<string, string>;
+  /**
+   * How long a quiet run lasts before the server stops returning it, for the
+   * footer's wording only. A prop, like `titles`: the page already has it, and
+   * the decision itself is the server's.
+   */
+  idleMinutes: number;
 }) {
   const [rows, setRows] = useState(initial);
   // Null until mounted — see `since`. Advanced by the same tick that re-reads,
@@ -194,9 +212,11 @@ export function AgentActivityFeed({
       </ul>
 
       {/* Says the panel is live, so an operator does not sit reloading a page
-          that is already refreshing itself. */}
+          that is already refreshing itself — and says when it will go, so its
+          disappearing reads as "the agent stopped" rather than as a fault. */}
       <p className="mt-2 text-[11px] font-semibold text-muted">
-        Newest first · refreshes every {POLL_MS / 1000}s while this tab is open
+        Newest first · refreshes every {POLL_MS / 1000}s while this tab is open ·
+        closes when the agent finishes or after {idleMinutes} quiet minutes
       </p>
     </section>
   );

@@ -191,8 +191,9 @@ is the entire point of polling.
   already on the row (`resolved_by`) and in the ledger (`awarded_by`).
 - **Anything on the tester's page.** A child does not need to know a machine is
   reading their bug report, and the feed carries an internal actor string.
-- **Editing or deleting feed rows from the UI.** It is an append-only trail with
-  a retention window. A trail somebody can tidy is not a trail.
+- **Editing or deleting feed rows from the UI.** A trail somebody can tidy is not
+  a trail. (Since §11 a run's lines are deleted when it ends — by the agent, or
+  by the idle window — but still never by an operator's hand.)
 
 ## 7. Rejected reports leave the dashboard
 
@@ -307,3 +308,128 @@ until it runs the panel stays empty while every tool goes on working.
    and nothing here escalates it.
 3. **Should the retention window be configurable?** Fourteen days is a constant.
    Making it an env var is one more thing to set and get wrong.
+
+## 11. The feed closes when the agent stops
+
+Added after the first real session, 2026-09-11. The agent finished at 20:12;
+half an hour later the panel still showed its 53 lines above a "refreshes every
+10s" footer, which reads as an agent at work. The ask was for the panel to
+close, and reset, when nothing is running.
+
+### Decisions taken with the user
+
+1. **Hidden completely** while no agent is running, not collapsed to a summary.
+   §5's panel already renders nothing when there is nothing to show; this makes
+   "the run is over" one of the ways of having nothing.
+2. **Reset deletes.** A finished run's lines are removed from the table, not
+   filtered out of the panel. This changes §3: a run is now kept until it ends,
+   and fourteen days is only a cap on a run that never does.
+3. **The agent closes it; thirty minutes of silence closes it anyway.**
+4. **A tool for "finished"**: `finish_agent_activity`, the seventh.
+
+### Why "running" has to be inferred
+
+The transport is stateless (`app/api/mcp/route.ts`): no session id is minted,
+nothing is held open, and `DELETE`, the method that ends a session, answers 405
+because there are no sessions to end. A server that is never told a client has
+gone cannot know an agent stopped. It can be told (the new tool) or notice
+silence (the window), and it needs both: the tool is the clean ending, and the
+window covers the agent that crashed, was killed, or forgot.
+
+Thirty minutes errs long on purpose. The longest gap between two lines while
+agents were working on 2026-09-11 was 5 m 34 s. A window that closed on an agent
+still thinking would tell the operator it had stopped, which §5 names as the one
+thing this panel must never say by accident.
+
+### How
+
+- **The table only ever holds one run.** Finishing deletes it, and the next
+  run's first line deletes a quiet one. So there is no run id and no migration:
+  the only question left is "has anything been written in the last thirty
+  minutes?"
+- **Read.** `recentAgentActivity` returns nothing unless a line is newer than
+  the window, judged by the database's `now()` rather than the browser's clock.
+  The panel disappears on the first poll after the window closes, although the
+  rows are still in the table.
+- **Write.** The insert's sweep (§3) gains a second condition: if nothing was
+  written within the window, delete every existing line. It is the same
+  statement, so it runs on the same snapshot. The sweep cannot see the line
+  being inserted, which makes the check "was the previous run quiet?" and keeps
+  the new line.
+- **Finish.** `finish_agent_activity` deletes every line and tells the agent how
+  many. It is the one tool whose success is not recorded, because recording it
+  would reopen the panel it had just closed. A failure is still recorded, like
+  every other tool's, so a finish that cleared nothing stays on the panel with
+  its error.
+- **A quiet run's rows stay until the next run starts.** Deleting at the
+  thirty-minute mark would need something to wake up for it. The read hides the
+  rows from that mark onward, so the difference only shows in the table.
+- **A failed poll no longer hides the panel.** Empty now means "no agent is
+  running", and `getAgentActivity` degrades a database error to `[]`, so a
+  hiccup would announce that the agent had stopped. The poll's Server Function
+  reads the store directly and lets the error throw. The island already keeps
+  its last rows when a poll throws, which its docblock promised all along. The
+  page's server render stays fail-soft.
+
+### Deliberately absent
+
+- **Per-agent runs.** Every agent authenticates with the same `MCP_SECRET` and
+  writes the same actor, so there is one feed. When two agents work at once, the
+  first to finish clears both, and the other's next call starts a new run.
+- **A wrap-up line from the finish tool.** It would be deleted in the moment it
+  was written. The agent's last `log_agent_activity` line is the wrap-up an
+  operator watching sees.
+- **Keeping finished runs.** The user chose deletion. Every decision a run made
+  is still in the XP ledger under `awarded_by`, which was the durable record
+  before this panel existed.
+- **A migration.** No column changes, and `029` stays byte-identical: its
+  checksum is in production's ledger.
+
+### File-by-file plan
+
+| # | Commit | Files |
+|---|---|---|
+| 1 | This plan | `agent-activity-design.md` |
+| 2 | The idle window | `mcp/config.ts` + test |
+| 3 | A quiet run is reset by the next line | `beta/store.ts` + test, `mcp/activity-log.ts` |
+| 4 | A quiet run leaves the panel | `beta/store.ts` + test, `beta/index.ts`, `dashboard/beta/page.tsx`, `actions.ts` |
+| 5 | A failed poll keeps the panel | `dashboard/beta/actions.ts` |
+| 6 | The store can clear the feed | `beta/store.ts` + test |
+| 7 | `finish_agent_activity` | `mcp/server.ts`, `mcp/activity-log.ts` |
+| 8 | The panel says when it closes | `dashboard/beta/_ui/AgentActivityFeed.tsx` |
+| 9 | Say so | `README.md`, `bug-mcp-design.md`, `beta/schema.sql` (comment), this file |
+
+**Checks.** `npm run lint`, `npm test` and `npm run build`. Then the protocol,
+against a local dev server on `dashboard-dev` (which needs migrations 027–029
+first): a line, a backdated quiet run reset by the next line, and a finish that
+empties the table. After the deploy, a finish against production.
+
+### What shipped, and what the checks showed
+
+Built as planned, in the nine commits above, with two additions: commit 8 also
+touches `page.tsx`, because the idle window reaches the panel as a prop rather
+than an import, and commit 9 also corrects the README's count of irreversible
+tools (four of seven).
+
+- `npm run lint`: 0 errors. The 11 warnings are all in files this branch does
+  not touch.
+- `npm test`: 1655 pass, 5 of them new. 17 fail, in `console-capture.test.ts`
+  and `streak-event.test.ts`, which this branch does not touch; the same 17
+  failed on `main` in the previous session.
+- `npm run build` succeeds: `/api/mcp` and `/dashboard/beta` stay dynamic, and
+  `public/sw-manifest.js` still carries 28 `/game/` routes.
+- The protocol, against a local dev server on `dashboard-dev` (brought to 029
+  with `npm run migrate` first), passed 14 of 14 checks. `tools/list`
+  advertises seven tools, with `finish_agent_activity` destructive, idempotent
+  and argument-free. A line backdated 31 minutes is in the table, but the
+  panel's read returns nothing. The next line deletes it and is the only row
+  left, and a second call keeps the first. Finish answers "Cleared 2 lines",
+  leaves the table empty and records nothing of its own. A second finish clears
+  0, and the call after it starts a fresh one-line run.
+
+**Not exercised: the dashboard page itself.** The panel needs a signed-in
+session, so hiding on an empty read was checked through the read (the store's
+SQL, run on the dev database) and by types, not in a browser. Production still
+holds the first session's 53 lines until this deploys. From then the panel hides
+them at once, since they are hours old, and the next agent's first line deletes
+them.

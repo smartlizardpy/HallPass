@@ -1278,8 +1278,21 @@ export function createBetaStore(sql: Sql) {
      * share this write's transaction and would be a second billed round trip on
      * every single tool call an agent makes.
      *
-     * The DELETE cannot touch the row just inserted — same statement, same
-     * snapshot, and the predicate is an age the new row does not have.
+     * The DELETE cannot touch the row just inserted: a data-modifying CTE's
+     * statements share one snapshot, so the new row is invisible to it
+     * whichever half of the predicate matches.
+     *
+     * ── A QUIET RUN IS RESET BY THE NEXT LINE ─────────────────────────────
+     * The sweep deletes two things: lines past the retention window, and —
+     * when nothing at all was written within the idle window — every line.
+     * The second is how a run that ended without `finish_agent_activity` is
+     * reset: the first line of the next run clears it (`agent-activity-
+     * design.md` §11). Nothing has to wake up at the idle mark itself,
+     * because the read already hides a quiet run from that moment on.
+     *
+     * The NOT EXISTS runs on that same snapshot, so it cannot see the line
+     * being written either: it asks whether the PREVIOUS run went quiet,
+     * which is exactly the question.
      *
      * ── THE CAPS ARE APPLIED HERE, NOT TRUSTED FROM THE CALLER ────────────
      * `summary` has a CHECK on it (1..300) and this is a logging path: a summary
@@ -1296,6 +1309,8 @@ export function createBetaStore(sql: Sql) {
       summary: string;
       /** How long a line is kept. See migration 029. */
       retainDays: number;
+      /** How long a quiet run survives before the next line resets it. */
+      idleMinutes: number;
     }): Promise<void> {
       const summary = input.summary.trim().slice(0, 300);
       if (!summary) return;
@@ -1303,6 +1318,10 @@ export function createBetaStore(sql: Sql) {
         input.reportId != null && Number.isInteger(input.reportId) && input.reportId > 0
           ? input.reportId
           : null;
+      // Whole minutes, because `make_interval(mins => …)` takes an integer and a
+      // fraction would fail the cast. At least one, because a zero window would
+      // reset the feed on every line and it would only ever hold one.
+      const idleMinutes = Math.max(1, Math.floor(input.idleMinutes));
       await sql`
         WITH logged AS (
           INSERT INTO beta_agent_activity
@@ -1313,18 +1332,68 @@ export function createBetaStore(sql: Sql) {
         )
         DELETE FROM beta_agent_activity
         WHERE created_at < now() - make_interval(days => ${Math.max(1, input.retainDays)})
+           OR NOT EXISTS (
+                SELECT 1 FROM beta_agent_activity
+                WHERE created_at > now() - make_interval(mins => ${idleMinutes})
+              )
       `;
     },
 
-    /** The newest lines, for the dashboard panel. Served by the recent index. */
-    async recentAgentActivity(limit = 20): Promise<AgentActivity[]> {
+    /**
+     * The newest lines of the current run, for the dashboard panel — or none at
+     * all once the run has gone quiet.
+     *
+     * "Quiet" is judged here, by the database's `now()`, rather than by the
+     * browser that renders the panel: a laptop clock a few minutes out would
+     * otherwise close a live run early or hold a dead one open. The table only
+     * ever holds one run (a finished run is deleted, and a quiet one goes with
+     * the next run's first line — see `logAgentActivity`), so "has anything
+     * been written lately?" is the whole question. Both halves are served by
+     * the recent index.
+     */
+    async recentAgentActivity(input: {
+      limit?: number;
+      /** A run with no line this recent is over. */
+      idleMinutes: number;
+    }): Promise<AgentActivity[]> {
+      // Floored exactly as `logAgentActivity` floors it, so the read and the
+      // reset can never disagree about when a run went quiet.
+      const idleMinutes = Math.max(1, Math.floor(input.idleMinutes));
       const rows = await sql`
         SELECT id, actor, tool, outcome, report_id, slug, summary, created_at
         FROM beta_agent_activity
+        WHERE EXISTS (
+          SELECT 1 FROM beta_agent_activity
+          WHERE created_at > now() - make_interval(mins => ${idleMinutes})
+        )
         ORDER BY created_at DESC, id DESC
-        LIMIT ${Math.max(1, Math.min(100, limit))}
+        LIMIT ${Math.max(1, Math.min(100, input.limit ?? 20))}
       `;
       return rows.map(mapAgentActivity);
+    },
+
+    /**
+     * Delete every line, because the agent has finished
+     * (`finish_agent_activity`). Answers how many went.
+     *
+     * No WHERE, deliberately. The table only ever holds one run
+     * (`agent-activity-design.md` §11), and every agent writes the same actor,
+     * so there is nothing narrower to delete by. Two agents working at once
+     * share one feed: the first to finish clears it, and the other's next line
+     * starts a new run.
+     *
+     * Counted in SQL rather than by returning every id: a run that went all
+     * afternoon is hundreds of rows, and the count is all the tool reports.
+     */
+    async clearAgentActivity(): Promise<number> {
+      const rows = await sql`
+        WITH cleared AS (
+          DELETE FROM beta_agent_activity
+          RETURNING id
+        )
+        SELECT count(*)::int AS cleared FROM cleared
+      `;
+      return toInt(rows[0]?.cleared);
     },
   };
 }

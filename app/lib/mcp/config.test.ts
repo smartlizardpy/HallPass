@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  ACTIVITY_IDLE_MINUTES,
+  ACTIVITY_RETENTION_DAYS,
   DEFAULT_MCP_ACTOR,
   DEFAULT_REPORT_LIMIT,
   MAX_REPORT_LIMIT,
@@ -7,6 +9,17 @@ import {
   clampLimit,
   mcpActor,
 } from "./config";
+
+describe("the feed's lifetime", () => {
+  /**
+   * The age sweep is only a cap on a run that never ends
+   * (`agent-activity-design.md` §11). An idle window at or past it would leave
+   * the sweep, not the idle rule, deciding when a quiet run's lines go.
+   */
+  it("closes a quiet run long before the age sweep would", () => {
+    expect(ACTIVITY_IDLE_MINUTES).toBeLessThan(ACTIVITY_RETENTION_DAYS * 24 * 60);
+  });
+});
 
 describe("clampLimit", () => {
   it("uses the default when the caller says nothing", () => {

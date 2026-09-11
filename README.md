@@ -626,7 +626,7 @@ argument; this is how to use it.
 
 **It is off until you turn it on.** Unlike `ALERTS_SECRET`, `MCP_SECRET` has no
 fallback chain: with nothing set the endpoint answers **503** and refuses
-everybody. Three of its six tools are irreversible, so it does not switch itself
+everybody. Four of its seven tools are irreversible, so it does not switch itself
 on because some older admin password happens to be set.
 
 ```bash
@@ -651,18 +651,20 @@ claude mcp add --transport http hallpass-bugs https://<your-site>/api/mcp \
 | `mark_bug_report_fixed` | **deletes** | Pays the severity award (if still open) plus the fix bonus, then removes the report. |
 | `close_bug_report_duplicate` | **deletes** | Pays the consolation award, then removes the report. Open reports only. |
 | `log_agent_activity` | yes | Says what the agent is working on, in its own words. Appears on `/dashboard/beta` (see below). Touches no report and pays nobody. |
+| `finish_agent_activity` | **deletes** | Says the agent has finished everything: clears the activity feed, which hides the panel. Touches no report and pays nobody. |
 
 The two removing outcomes are how the queue is meant to end — see
 [Beta programme XP](#dashboard-roles) and `app/lib/beta/config.ts` for the rate
-card. They are marked `destructiveHint` so a client asks before running them.
+card. They are marked `destructiveHint` so a client asks before running them, and
+so is `finish_agent_activity`, which deletes the feed's lines and never a report.
 
 ### Watching it work
 
 Every tool call is recorded to `beta_agent_activity` and rendered in an **Agent
 activity** panel at the top of `/dashboard/beta`, which refreshes every 10
-seconds while the tab is open. The panel is absent until an agent has done
-something, so a deployment that never turns the MCP on never grows an empty
-card.
+seconds while the tab is open. The panel shows only the run in progress and is
+absent whenever no agent is running, so a deployment that never turns the MCP on
+never grows an empty card.
 
 Two things are recorded: the mechanics of every call (which tool, which report,
 and whether it was applied or **refused** — a write whose row had already gone),
@@ -670,10 +672,22 @@ automatically; and whatever the agent says with `log_agent_activity`, which is
 the only thing that can tell you *why*. The server's instructions ask an agent to
 narrate as it works, so a well-behaved client does this unprompted.
 
-Lines are kept for 14 days (`ACTIVITY_RETENTION_DAYS` in `app/lib/mcp/config.ts`)
-and swept by the next write. Requires migration `029_beta_agent_activity.sql`; if
-it has not been applied, the tools carry on working and the panel stays empty —
-logging can never fail a tool call. `agent-activity-design.md` is the argument.
+A run ends in one of two ways, and either way its lines are **deleted** and the
+panel disappears within one refresh:
+
+- the agent calls `finish_agent_activity` when all of its work is done, which
+  the server's instructions ask it to do; or
+- nothing is written for 30 minutes (`ACTIVITY_IDLE_MINUTES` in
+  `app/lib/mcp/config.ts`), for an agent that crashed, was killed or forgot. The
+  panel hides at that mark, and the quiet run's lines are deleted by the first
+  line of the next run.
+
+The transport is stateless, so the server never learns that a client
+disconnected; those two are the only signals there are. Even a run that never
+ends keeps no line past 14 days (`ACTIVITY_RETENTION_DAYS`). Requires migration
+`029_beta_agent_activity.sql`; if it has not been applied, the bug tools carry on
+working and the panel stays empty — logging can never fail a tool call.
+`agent-activity-design.md` is the argument.
 
 ### Things worth knowing
 

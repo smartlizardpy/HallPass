@@ -211,7 +211,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS beta_xp_awards_shot_reason_uniq
 -- ON DELETE SET NULL would blank the subject of "marked report 42 fixed" in the
 -- same write that produced it, because that write is the one deleting report 42.
 --
--- Retention is by age, written by the insert itself (see store.ts).
+-- Kept only while its run lasts: `finish_agent_activity` deletes the lines, and
+-- the first line after 30 quiet minutes deletes the previous run's. No line
+-- outlives 14 days either way (see store.ts, agent-activity-design.md §11).
 CREATE TABLE IF NOT EXISTS beta_agent_activity (
   id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   actor      TEXT NOT NULL,
