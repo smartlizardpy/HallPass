@@ -11,6 +11,11 @@
  * `app/lib/permissions.ts` for what each rung may actually do — this module
  * stores the role, it does not interpret it.
  *
+ * How MANY may hold a rung at once is capped too (`ROLE_SEATS`, also in
+ * `permissions.ts`). The counting has to happen inside the same statement as the
+ * write, so it lives here even though the numbers do not — see the Seats section
+ * at the foot of this file, and `role-seats-design.md` for the reasoning.
+ *
  * Unlike the scoreboard store, there is no `createStore(sql)` factory here: this
  * module talks to the shared, server-only `sql` from `@/app/lib/db` directly.
  *
@@ -31,6 +36,14 @@
  */
 
 import { sql } from "@/app/lib/db";
+// The seat caps live with the ladder, not here: this module stores a role, it
+// does not decide policy about one. The import is one-way — `permissions.ts`
+// takes only `import type { Role }` back, so there is no runtime cycle.
+import {
+  ROLE_SEATS,
+  emptySeatCounts,
+  type SeatCounts,
+} from "@/app/lib/permissions";
 
 /**
  * The three dashboard authorization levels.
@@ -192,6 +205,14 @@ export async function getSessionRole(email: string): Promise<Role | null> {
  * branch (not a spliced fragment): they are inserted at — and on every login
  * re-asserted to — `'super_admin'`, so an env promotion is honoured even if the
  * row was previously a plain `admin`.
+ *
+ * NEITHER BRANCH CONSULTS A SEAT, and that is deliberate for the env one. A cap
+ * on the sign-in path could lock the last super admin out of a full table with
+ * no way back in — worse than one seat too many — so the allow-list is the
+ * break-glass path and stays uncapped. The row it writes is still COUNTED, which
+ * is what stops `addUser`/`setRole` granting a second super admin beside them.
+ * The non-env branch writes the role the CALLER already resolved for an existing
+ * or invited user, so it grants nothing new to check.
  */
 export async function upsertUserOnLogin(u: {
   email: string;
@@ -236,39 +257,170 @@ export async function listUsers(): Promise<DashboardUser[]> {
   return rows.map(mapUser);
 }
 
+// ---------------------------------------------------------------------------
+// Seats
+// ---------------------------------------------------------------------------
+//
+// How many people may hold a role at once is policy, and it lives in
+// `permissions.ts` (see `ROLE_SEATS` and `role-seats-design.md`). What lives
+// HERE is the counting and the refusal, because both have to happen inside the
+// same statement as the write.
+//
+// THE ENV ALLOW-LIST IS NOT CHECKED AND STILL COUNTS. `upsertUserOnLogin`'s
+// super-admin branch above deliberately does not consult a seat: a cap on the
+// sign-in path could lock the last super admin out of a full table with no way
+// back in, which is a worse failure than one seat too many. Their ROW is counted
+// like any other, which is what stops this layer granting a second super admin
+// beside them. So over capacity is reachable — the Users page reports it rather
+// than pretending it cannot happen.
+
 /**
- * Invite (or re-assert) a user AT A ROLE. `invitedBy` records who extended the
- * invite; on a pre-existing row we force the role back to the invited one and
- * refresh the inviter, which doubles as the "re-add a removed-then-returning"
- * path.
+ * The outcome of a write that had to fit in a seat.
+ *
+ * A discriminated result rather than a thrown error, because "that role is
+ * full" is an ordinary answer the screen renders as a banner, not an
+ * exceptional one. A genuine database failure still REJECTS, so the two stay
+ * distinguishable at the call site: the caller's `catch` means "the database
+ * broke", `ok: false` means "we decided not to".
+ *
+ * `taken` rides along so the banner can say `1 of 1` rather than only "full" —
+ * the person reading it is deciding who loses a seat.
+ */
+export type SeatResult =
+  | { ok: true }
+  | { ok: false; taken: number; limit: number };
+
+/**
+ * How many rows currently hold each role.
+ *
+ * Roles the CHECK constraint would not accept are not counted. Such a value
+ * grants nothing (`getUserRole` denies it, deliberately — see the note there),
+ * so counting it would hold a seat against a row that can do nothing with it.
+ *
+ * Returns a FULL record — `emptySeatCounts()` seeds every rung at zero, so a
+ * role nobody holds reads `0` and never `undefined`, which is the value that
+ * would make every `taken < limit` comparison `NaN < 1` and refuse every grant.
+ */
+export async function countRoleSeats(): Promise<SeatCounts> {
+  const rows = await sql`
+    SELECT role, count(*)::int AS held
+    FROM dashboard_users
+    GROUP BY role
+  `;
+  const counts = emptySeatCounts();
+  for (const row of rows) {
+    const role = String(row.role);
+    if (role in counts) counts[role as Role] += Number(row.held);
+  }
+  return counts;
+}
+
+/**
+ * Invite (or re-assert) a user AT A ROLE, if that role has a seat free.
+ * `invitedBy` records who extended the invite; on a pre-existing row we force
+ * the role back to the invited one and refresh the inviter, which doubles as the
+ * "re-add a removed-then-returning" path.
  *
  * `role` is a BOUND value, not a spliced fragment, so the module's SQL-safety
  * rule holds without branching into three query templates. It is still narrowed
  * by the caller before it gets here (`users/actions.ts`), because an unchecked
  * form value would otherwise reach the CHECK constraint and turn a typo into a
  * raw 500.
+ *
+ * ── ONE STATEMENT, NOT CHECK-THEN-WRITE ─────────────────────────────────────
+ * The count and the insert are a single statement so there is no round trip
+ * between them in which the last seat can be taken by somebody else's click.
+ * The data-modifying CTE runs exactly once whether or not the outer SELECT
+ * reads from it, and its `WHERE` is what actually refuses.
+ *
+ * Honest about the limit: under READ COMMITTED two concurrent grants can still
+ * each see the same free seat. The window is one statement wide on a screen used
+ * by a handful of people, and the worst it produces is a role one over its cap —
+ * which the Users page surfaces and the next removal clears. A schema-level
+ * guarantee would have to fire on the sign-in path too, where the env exemption
+ * above says it must not.
+ *
+ * The invitee is EXCLUDED from the count (`email <> target`). Otherwise
+ * re-asserting the single admin at the role they already hold would fail against
+ * the seat they themselves occupy, and moving somebody between roles would be
+ * blocked by a seat their move is about to free.
  */
 export async function addUser(
   email: string,
   role: Role,
   invitedBy: string,
-): Promise<void> {
+): Promise<SeatResult> {
   const target = normalizeEmail(email);
-  await sql`
-    INSERT INTO dashboard_users (email, role, invited_by)
-    VALUES (${target}, ${role}, ${invitedBy})
-    ON CONFLICT (email) DO UPDATE SET
-      role = EXCLUDED.role,
-      invited_by = EXCLUDED.invited_by
+  const rows = await sql`
+    WITH seat AS (
+      SELECT count(*)::int AS taken
+      FROM dashboard_users
+      WHERE role = ${role} AND email <> ${target}
+    ),
+    granted AS (
+      INSERT INTO dashboard_users (email, role, invited_by)
+      SELECT ${target}, ${role}, ${invitedBy}
+      FROM seat
+      WHERE seat.taken < ${ROLE_SEATS[role]}
+      ON CONFLICT (email) DO UPDATE SET
+        role = EXCLUDED.role,
+        invited_by = EXCLUDED.invited_by
+      RETURNING email
+    )
+    SELECT
+      (SELECT taken FROM seat) AS taken,
+      EXISTS (SELECT 1 FROM granted) AS granted
   `;
+  return seatResult(rows[0], role);
 }
 
-/** Set an existing user's role outright (no-op if the email has no row). */
-export async function setRole(email: string, role: Role): Promise<void> {
+/**
+ * Set an existing user's role outright, if that role has a seat free. A no-op
+ * (reported as success) when the email has no row — the screen only offers this
+ * for rows it has just listed, so a missing one is a stale page rather than
+ * something to explain.
+ *
+ * Same one-statement shape, same self-exclusion and the same honest limit as
+ * {@link addUser}; see there for why each is the way it is.
+ */
+export async function setRole(email: string, role: Role): Promise<SeatResult> {
   const target = normalizeEmail(email);
-  await sql`
-    UPDATE dashboard_users SET role = ${role} WHERE email = ${target}
+  const rows = await sql`
+    WITH seat AS (
+      SELECT count(*)::int AS taken
+      FROM dashboard_users
+      WHERE role = ${role} AND email <> ${target}
+    ),
+    granted AS (
+      UPDATE dashboard_users
+      SET role = ${role}
+      WHERE email = ${target}
+        AND (SELECT taken FROM seat) < ${ROLE_SEATS[role]}
+      RETURNING email
+    )
+    SELECT
+      (SELECT taken FROM seat) AS taken,
+      EXISTS (SELECT 1 FROM granted) AS granted
   `;
+  return seatResult(rows[0], role);
+}
+
+/**
+ * Read the `{ taken, granted }` row both writes above return into a
+ * {@link SeatResult}.
+ *
+ * `granted = false` is ambiguous on its own — it means either "no seat" or, for
+ * `setRole`, "no such row" — so the COUNT decides which: a write that did not
+ * happen while seats were free did not happen for some other reason, and that
+ * reason is not the cap's to report. Reading it the other way round would turn
+ * every stale-row no-op into a "role is full" banner that names a role with
+ * seats going spare.
+ */
+function seatResult(row: Row | undefined, role: Role): SeatResult {
+  const limit = ROLE_SEATS[role];
+  const taken = Number(row?.taken ?? 0);
+  if (row?.granted === true) return { ok: true };
+  return taken < limit ? { ok: true } : { ok: false, taken, limit };
 }
 
 /** Revoke a user entirely by deleting their row. */
