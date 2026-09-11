@@ -433,6 +433,8 @@ const AudioSys = {
 const Utils = {
     rand: (min, max) => Math.floor(Math.random() * (max - min + 1)) + min,
     rectIntersect: (r1, r2) => !(r2.x >= r1.x + r1.w || r2.x + r2.w <= r1.x || r2.y >= r1.y + r1.h || r2.y + r2.h <= r1.y),
+    // Walk-on triggers (portals, stairs) fire when the player's centre is on the tile, not when the 30px box grazes it: the sprite is narrower than the box and the art is inset.
+    centerIn: (e, r) => { let x = e.x + e.w/2, y = e.y + e.h/2; return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; },
     dist: (e1, e2) => Math.sqrt(Math.pow(e2.x - e1.x, 2) + Math.pow(e2.y - e1.y, 2)),
     checkCollide: (rect, walls) => {
         for(let w of walls) {
@@ -1547,14 +1549,14 @@ class Player {
         // Portal Interaction (Arena Hub)
         if (game.mode === 'arena' && game.inHub && map.portals) {
             for(let p of map.portals) {
-                if (Utils.rectIntersect(this, p)) {
+                if (Utils.centerIn(this, p)) {
                     game.loadBoss(p.dest);
                     return;
                 }
             }
         }
 
-        if (Utils.rectIntersect(this, map.stairs)) {
+        if (Utils.centerIn(this, map.stairs)) {
             let enemiesAlive = game.enemies.filter(e => e.active).length;
             if (enemiesAlive === 0) game.nextFloor();
             else if (Math.random() < 0.05) { game.log(`LOCKED! Kill ${enemiesAlive} enemies.`); AudioSys.sfx.locked(); }
@@ -1827,9 +1829,10 @@ class MapGen {
             }
             
             // Hub Lights
-            this.lights.push({x: this.w/2 * TILE, y: (this.h-6) * TILE, r: 300, c: '#f1c40f'});
+            this.lights.push({x: (this.w/2 + 2) * TILE, y: (this.h-4) * TILE, r: 300, c: '#f1c40f'});
             
-            game.spawn(this.w/2, this.h-6, 'player');
+            // Spawn between pad columns, below the grid: (w/2, h-6) was flush against the LVL 56 pad
+            game.spawn(this.w/2 + 2, this.h-4, 'player');
 
             let bossFloors = Object.keys(BOSS_NAMES).map(Number).sort((a,b)=>a-b);
             let colCount = 5;
