@@ -38,6 +38,7 @@
             image-rendering: pixelated;
             box-shadow: 0 0 50px rgba(0,0,0,0.8);
             background: #0b0b0d;
+            cursor: crosshair;
         }
 
         /* UI Overlays */
@@ -303,7 +304,7 @@
         <button onclick="game.resetData()" style="font-size: 0.9rem; border:none; color:#555; background:transparent; margin-top:20px;">RESET SAVE DATA</button>
         <div style="margin-top:30px; color:#666; font-size:0.8rem; line-height: 1.8;">
             <span style="color:#ccc">WASD / ARROWS</span> to Move<br>
-            <span style="color:#c3073f">SPACE / CLICK</span> to Attack<br>
+            <span style="color:#c3073f">SPACE / CLICK</span> to Attack &middot; <span style="color:#c3073f">MOUSE</span> to Aim<br>
             <span style="color:#3498db">SHIFT</span> to Dash<br>
         </div>
         <!-- Identity only. No challenge button here: challenge() needs a score
@@ -1472,7 +1473,7 @@ class Player {
         this.speed = 4.5;
         this.weaponId = 0;
         this.cooldown = 0; this.invuln = 0;
-        this.facing = 0; this.xp = 0;
+        this.facing = 0; this.aim = 0; this.xp = 0;
         this.level = 1; this.nextLvl = 100;
         this.anim = 0; this.moving = false;
         this.atkAnim = 0;
@@ -1542,6 +1543,9 @@ class Player {
         if (this.invuln > 0) this.invuln--;
         if (this.atkAnim > 0) this.atkAnim -= 0.1;
 
+        // Aim at the cursor while the mouse was the last thing used to aim; otherwise along movement, so keyboard and joystick aiming are unchanged.
+        this.aim = input.mouse.aim ? Math.atan2(input.mouse.y + game.cam.y - (this.y + this.h/2), input.mouse.x + game.cam.x - (this.x + this.w/2)) : this.facing;
+
         if ((input.keys[' '] || input.atk) && this.cooldown <= 0) {
             this.attack(); input.atk = false; 
         }
@@ -1589,8 +1593,8 @@ class Player {
         if (w.type === 'spin') {
              game.effects.push({x: this.x+this.w/2, y: this.y+this.h/2, r: 10, maxR: w.range || 80, damage: dmg, type: 'spin', color: w.color});
              if (w.dash) {
-                 this.x += Math.cos(this.facing) * 60;
-                 this.y += Math.sin(this.facing) * 60;
+                 this.x += Math.cos(this.aim) * 60;
+                 this.y += Math.sin(this.aim) * 60;
              }
              // Spawns zone on spin
              if (w.zone) game.zones.push(new Zone(this.x+this.w/2, this.y+this.h/2, w.zone));
@@ -1605,8 +1609,8 @@ class Player {
             let bx = this.x + this.w/2;
             let by = this.y + this.h/2;
             let range = 800;
-            let ex = bx + Math.cos(this.facing) * range;
-            let ey = by + Math.sin(this.facing) * range;
+            let ex = bx + Math.cos(this.aim) * range;
+            let ey = by + Math.sin(this.aim) * range;
             
             game.effects.push({type: 'beam', x1: bx, y1: by, x2: ex, y2: ey, life: 10, color: w.color});
             
@@ -1634,15 +1638,15 @@ class Player {
 
         if (w.type === 'melee' || w.type === 'dash') {
             let range = w.range || 50;
-            let hx = this.x + this.w/2 + Math.cos(this.facing) * range - 20;
-            let hy = this.y + this.h/2 + Math.sin(this.facing) * range - 20;
+            let hx = this.x + this.w/2 + Math.cos(this.aim) * range - 20;
+            let hy = this.y + this.h/2 + Math.sin(this.aim) * range - 20;
             
             // Melee Zone creation
             if (w.zone) game.zones.push(new Zone(hx+20, hy+20, w.zone));
 
             if (w.type === 'dash') {
-                this.x += Math.cos(this.facing) * 100;
-                this.y += Math.sin(this.facing) * 100;
+                this.x += Math.cos(this.aim) * 100;
+                this.y += Math.sin(this.aim) * 100;
                 game.createParticles(this.x, this.y, w.color, 5, 2);
             }
 
@@ -1663,11 +1667,11 @@ class Player {
                         if(w.poison) e.poisonTimer = 300; 
                         if(w.freeze || w.stun) e.frozenTimer = (w.freeze || w.stun);
                         if(w.pull) {
-                             e.x -= Math.cos(this.facing) * 15; 
-                             e.y -= Math.sin(this.facing) * 15;
+                             e.x -= Math.cos(this.aim) * 15; 
+                             e.y -= Math.sin(this.aim) * 15;
                         } else if (w.knockback) {
-                             e.x += Math.cos(this.facing) * w.knockback;
-                             e.y += Math.sin(this.facing) * w.knockback;
+                             e.x += Math.cos(this.aim) * w.knockback;
+                             e.y += Math.sin(this.aim) * w.knockback;
                         }
                     }
                     if (w.lifesteal) this.heal(2);
@@ -1686,7 +1690,7 @@ class Player {
             let count = w.count || 1;
             for(let i=0; i<count; i++) {
                 let spread = (i - (count-1)/2) * 0.2; 
-                let p = new Projectile(this.x + this.w/2, this.y + this.h/2, Math.cos(this.facing+spread) * w.speed, Math.sin(this.facing+spread) * w.speed, true, w);
+                let p = new Projectile(this.x + this.w/2, this.y + this.h/2, Math.cos(this.aim+spread) * w.speed, Math.sin(this.aim+spread) * w.speed, true, w);
                 p.cfg.damage = dmg;
                 game.projectiles.push(p);
             }
@@ -1773,7 +1777,7 @@ class Player {
         if(this.atkAnim > 0) {
             ctx.save();
             ctx.translate(0, -25 - bounce);
-            ctx.rotate(this.facing);
+            ctx.rotate(this.aim);
             const w = WEAPONS[this.weaponId] || WEAPONS[0];
             if (w.type === 'melee' || w.type === 'spin') {
                 ctx.beginPath();
@@ -1792,7 +1796,7 @@ class Player {
         let swing = 0;
         if(this.atkAnim > 0) swing = -Math.sin((1-this.atkAnim) * Math.PI) * 2.0; 
 
-        ctx.rotate(this.facing + swing);
+        ctx.rotate(this.aim + swing);
         const w = WEAPONS[this.weaponId] || WEAPONS[0];
         Drawer.weapon(ctx, w.look, w.color);
         ctx.restore();
@@ -2526,8 +2530,8 @@ const game = {
 };
 
 /** ---------------- INPUT ---------------- **/
-const input = { keys: {}, joystick: {x:0, y:0}, atk: false, dash: false };
-window.onkeydown = e => input.keys[e.key] = true;
+const input = { keys: {}, joystick: {x:0, y:0}, atk: false, dash: false, mouse: {x:0, y:0, aim:false} };
+window.onkeydown = e => { input.keys[e.key] = true; if(e.key===' ') input.mouse.aim = false; };
 window.onkeyup = e => { input.keys[e.key] = false; if(e.key===' ') input.atk=false; };
 
 if(('ontouchstart' in window) || navigator.maxTouchPoints > 0) {
@@ -2549,10 +2553,22 @@ if(('ontouchstart' in window) || navigator.maxTouchPoints > 0) {
     const d = document.getElementById('dash-btn');
     d.ontouchstart = e => { e.preventDefault(); input.dash = true; };
     d.ontouchend = e => { e.preventDefault(); input.dash = false; };
-} else {
-    window.onmousedown = () => input.atk = true;
-    window.onmouseup = () => input.atk = false;
 }
+
+/* Mouse aim. The button that fires picks the direction: a click fires toward
+   the cursor, Space along movement (onkeydown hands the aim back to the
+   keyboard; WASD does not, so WASD plus mouse works). These are installed on
+   every device rather than in an else of the touch check above, because
+   touchscreen laptops report maxTouchPoints > 0 and would otherwise get no
+   mouse at all. The pointerType test keeps a finger from stealing the aim, so
+   touch still aims with the joystick. The canvas is 1:1 with CSS pixels
+   (resize), but mapping through its rect keeps this right if that ever
+   changes. Zero-distance moves, which browsers send when the page changes under
+   a still cursor, are ignored so a mouse nobody touched never grabs the aim. */
+const setMouse = e => { const r = canvas.getBoundingClientRect(); input.mouse.x = (e.clientX - r.left) * canvas.width / r.width; input.mouse.y = (e.clientY - r.top) * canvas.height / r.height; input.mouse.aim = true; };
+window.onpointermove = e => { if (e.pointerType === 'mouse' && (e.movementX !== 0 || e.movementY !== 0)) setMouse(e); };
+window.onpointerdown = e => { if (e.pointerType !== 'mouse') return; setMouse(e); input.atk = true; };
+window.onpointerup = e => { if (e.pointerType === 'mouse') input.atk = false; };
 
 function resize() { width=window.innerWidth; height=window.innerHeight; canvas.width=width; canvas.height=height; }
 window.onresize = resize; resize();
@@ -2714,8 +2730,8 @@ document.getElementById("hpChallenge").addEventListener("click", async () => {
 
 /* The menus restart only from their own buttons — there is no tap-anywhere
    restart to swallow here — so no stopPropagation is needed. The window-level
-   onmousedown only raises an attack flag, which the loop ignores once state
-   leaves 'play'. */
+   onpointerdown only raises an attack flag and records the cursor, which the
+   loop ignores once state leaves 'play'. */
 
 HallPass.getPlayer().then(hpRefreshAuth);
 // The sign-in popup does not reload the game, so the label has to be told when
