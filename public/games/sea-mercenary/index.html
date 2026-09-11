@@ -789,6 +789,15 @@ const STATE = { MENU: 0, PLAYING: 1, SHOP: 2, GAMEOVER: 3, TUTORIAL: 4 };
 
 // Utils
 const rnd = (min, max) => Math.random() * (max - min) + min;
+// The letter or digit a key stands for by POSITION, for when the character it
+// typed isn't one Player.update reads: a Cyrillic layout types 'ц' on the W key,
+// and SHIFT (boost) turns the digit row into '!@#'. Latin letters are left alone,
+// so an AZERTY player's A still means A rather than also firing Q.
+const keyByPosition = (e, typed) => {
+    if (/^[a-z0-9]$/.test(typed)) return null;
+    const m = /^(?:Key([A-Z])|Digit([0-9]))$/.exec(e.code || '');
+    return m ? (m[1] || m[2]).toLowerCase() : null;
+};
 
 // Constants
 const WEAPONS = [
@@ -2389,17 +2398,21 @@ class Game {
         window.addEventListener('resize', () => this.resize());
         this.resize();
         window.addEventListener('keydown', (e) => {
-            if(e.key.toLowerCase() === 'b') this.toggleShop();
             // Letters are stored lower-case: with SHIFT (boost) or Caps Lock down
             // e.key is 'W', and Player.update only reads 'w'.
             const k = (e.key || '').length === 1 ? e.key.toLowerCase() : e.key;
+            const pos = keyByPosition(e, k);
+            if (k === 'b' || pos === 'b') this.toggleShop();
             this.keys[k] = true;
-            this.keys[e.code] = true; 
+            this.keys[e.code] = true;
+            if (pos) this.keys[pos] = true;
         });
         window.addEventListener('keyup', (e) => {
             const k = (e.key || '').length === 1 ? e.key.toLowerCase() : e.key;
+            const pos = keyByPosition(e, k);
             this.keys[k] = false;
             this.keys[e.code] = false;
+            if (pos) this.keys[pos] = false;
         });
 
         this.loop = this.loop.bind(this);
