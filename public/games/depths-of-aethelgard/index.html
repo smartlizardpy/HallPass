@@ -1697,7 +1697,7 @@ class Player {
         if (this.dashTimer > 0) return; 
         if (this.invuln > 0) return;
         this.hp -= dmg; this.invuln = 30; game.shake = 8;
-        game.addText(this.x, this.y, "-" + dmg, "#e74c3c");
+        game.addText(this.x, this.y, "-" + Math.floor(dmg), "#e74c3c");
         game.createParticles(this.x+15, this.y+15, '#c0392b', 5);
         AudioSys.sfx.hit();
         if (this.hp <= 0) game.over();
@@ -1706,7 +1706,7 @@ class Player {
     heal(amt) {
         let actual = Math.min(this.hp + amt, this.maxHp) - this.hp;
         this.hp += actual;
-        if(actual > 0) game.addText(this.x, this.y, "+" + actual, "#2ecc71");
+        if(actual >= 1) game.addText(this.x, this.y, "+" + Math.floor(actual), "#2ecc71");
     }
 
     draw(ctx, cx, cy) {
