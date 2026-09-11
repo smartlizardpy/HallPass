@@ -38,15 +38,23 @@ import {
   ROLE_RANK,
   SITE_WRITE_ROLE,
   toRole,
-  ROLE_SEATS,
+  DEFAULT_ROLE_SEATS,
+  SEAT_MAX,
+  SEAT_MIN,
+  defaultSeats,
   emptySeatCounts,
   firstFreeRole,
   isOverSeats,
   isRoleFull,
   roleFullMessage,
+  roleSeatsKey,
   seatsLeft,
   seatSummary,
+  toSeatLimit,
+  toSeatLimits,
+  totalSeats,
   type SeatCounts,
+  type SeatLimits,
 } from "./permissions";
 
 describe("the ladder", () => {
@@ -176,30 +184,40 @@ describe("exhaustiveness", () => {
 });
 
 describe("seats", () => {
-  /** A `SeatCounts` from a partial, so each case states only what it cares about. */
-  const held = (counts: Partial<SeatCounts>): SeatCounts => ({
-    ...emptySeatCounts(),
-    ...counts,
+  /**
+   * A `Seats` from a partial count, so each case states only what it cares
+   * about. Limits default to the shipped ones unless a case overrides them.
+   */
+  const held = (taken: Partial<SeatCounts>, limits?: Partial<SeatLimits>) => ({
+    limits: { ...DEFAULT_ROLE_SEATS, ...limits },
+    taken: { ...emptySeatCounts(), ...taken },
   });
 
-  it("caps the ladder at one, one and three", () => {
-    // The numbers themselves, pinned. They are policy, so a change to them
-    // should have to be a deliberate edit here rather than a silent widening.
-    expect(ROLE_SEATS).toEqual({ super_admin: 1, admin: 1, beta_admin: 3 });
+  it("starts at one, one and three", () => {
+    // The shipped defaults, pinned. They are policy, so a change to them should
+    // have to be a deliberate edit here rather than a silent widening.
+    expect(DEFAULT_ROLE_SEATS).toEqual({
+      super_admin: 1,
+      admin: 1,
+      beta_admin: 3,
+    });
+    expect(totalSeats(DEFAULT_ROLE_SEATS)).toBe(5);
   });
 
-  it("gives every role a seat count", () => {
+  it("gives every role a default", () => {
     // An uncapped rung is precisely the one that grows without anybody noticing.
     for (const role of ROLES) {
-      expect(ROLE_SEATS[role]).toBeGreaterThan(0);
-      expect(Number.isInteger(ROLE_SEATS[role])).toBe(true);
+      expect(DEFAULT_ROLE_SEATS[role]).toBeGreaterThanOrEqual(SEAT_MIN);
+      expect(DEFAULT_ROLE_SEATS[role]).toBeLessThanOrEqual(SEAT_MAX);
+      expect(Number.isInteger(DEFAULT_ROLE_SEATS[role])).toBe(true);
     }
   });
 
-  it("starts every role at zero, not undefined", () => {
-    // `undefined` here would make `taken < limit` read `NaN < 1` and refuse
-    // every grant on a database that simply has no rows yet.
+  it("starts every count at zero, not undefined", () => {
+    // `undefined` here would make `taken < limit` read `NaN < 1`, which is
+    // false, which would refuse every grant on a database with no rows yet.
     for (const role of ROLES) expect(emptySeatCounts()[role]).toBe(0);
+    expect(defaultSeats().limits).toEqual(DEFAULT_ROLE_SEATS);
   });
 
   it("counts a role full at its cap, not past it", () => {
@@ -209,29 +227,38 @@ describe("seats", () => {
     expect(isRoleFull(held({ beta_admin: 3 }), "beta_admin")).toBe(true);
   });
 
+  it("answers against the LIMIT IN FORCE, not the default", () => {
+    // The whole point of the settings page: a raised cap has to actually free a
+    // seat, and a lowered one has to actually close it.
+    expect(isRoleFull(held({ admin: 1 }, { admin: 2 }), "admin")).toBe(false);
+    expect(seatsLeft(held({ admin: 1 }, { admin: 4 }), "admin")).toBe(3);
+    expect(isRoleFull(held({ beta_admin: 1 }, { beta_admin: 1 }), "beta_admin"))
+      .toBe(true);
+  });
+
   it("never reports a negative number of free seats", () => {
-    // Over capacity is reachable (see `isOverSeats`), and a negative "free"
-    // count reads as free seats to anything doing arithmetic on it.
+    // Over capacity is reachable, and a negative "free" count reads as free
+    // seats to anything doing arithmetic on it.
     expect(seatsLeft(held({ super_admin: 3 }), "super_admin")).toBe(0);
     expect(seatsLeft(held({ beta_admin: 1 }), "beta_admin")).toBe(2);
   });
 
   it("separates full from over capacity", () => {
     // Full is the ordinary end state; over capacity is the one the Users page
-    // calls out, and only the env allow-list can produce it.
+    // calls out, reachable by the env allow-list or by lowering a limit.
     const atCap = held({ super_admin: 1 });
     expect(isRoleFull(atCap, "super_admin")).toBe(true);
     expect(isOverSeats(atCap, "super_admin")).toBe(false);
 
-    const over = held({ super_admin: 2 });
-    expect(isRoleFull(over, "super_admin")).toBe(true);
-    expect(isOverSeats(over, "super_admin")).toBe(true);
+    const lowered = held({ beta_admin: 3 }, { beta_admin: 1 });
+    expect(isRoleFull(lowered, "beta_admin")).toBe(true);
+    expect(isOverSeats(lowered, "beta_admin")).toBe(true);
   });
 
   it("falls back to the WEAKEST free role, never a stronger one", () => {
     // This picks a form's default. Falling back upward would answer "the rung
     // you asked for is full" by preselecting more access than was asked for.
-    expect(firstFreeRole(emptySeatCounts())).toBe("beta_admin");
+    expect(firstFreeRole(held({}))).toBe("beta_admin");
     expect(firstFreeRole(held({ beta_admin: 3 }))).toBe("admin");
     expect(firstFreeRole(held({ beta_admin: 3, admin: 1 }))).toBe("super_admin");
   });
@@ -256,7 +283,75 @@ describe("seats", () => {
     expect(message).toContain("admin");
     expect(message).toContain("1 of 1");
     for (const role of ROLES) {
-      expect(roleFullMessage(emptySeatCounts(), role)).toBeTruthy();
+      expect(roleFullMessage(held({}), role)).toBeTruthy();
     }
+  });
+});
+
+describe("stored limits", () => {
+  it("keys every role distinctly, under one namespace", () => {
+    // Built independently at the reader and the writer, a key is a setting that
+    // saves and never loads.
+    const keys = ROLES.map(roleSeatsKey);
+    expect(new Set(keys).size).toBe(ROLES.length);
+    for (const key of keys) expect(key.startsWith("role_seats:")).toBe(true);
+  });
+
+  it("accepts an integer inside the bounds, as text or as a number", () => {
+    // The value arrives from FormData at one end and a TEXT column at the other.
+    expect(toSeatLimit("3")).toBe(3);
+    expect(toSeatLimit(" 3 ")).toBe(3);
+    expect(toSeatLimit(3)).toBe(3);
+    expect(toSeatLimit(String(SEAT_MIN))).toBe(SEAT_MIN);
+    expect(toSeatLimit(String(SEAT_MAX))).toBe(SEAT_MAX);
+  });
+
+  it("refuses zero, negatives and anything past the ceiling", () => {
+    // Zero is a rung nobody may ever hold; the ceiling is what stops a mistyped
+    // 100000 saving cleanly and behaving as no cap at all.
+    expect(toSeatLimit("0")).toBeNull();
+    expect(toSeatLimit("-1")).toBeNull();
+    expect(toSeatLimit(String(SEAT_MAX + 1))).toBeNull();
+    expect(toSeatLimit("100000")).toBeNull();
+  });
+
+  it("refuses anything that is not a whole number", () => {
+    expect(toSeatLimit("2.5")).toBeNull();
+    expect(toSeatLimit("three")).toBeNull();
+    expect(toSeatLimit("2e1")).toBe(20); // still an integer, still in bounds
+    expect(toSeatLimit(Number.NaN)).toBeNull();
+    expect(toSeatLimit(Infinity)).toBeNull();
+    expect(toSeatLimit(null)).toBeNull();
+    expect(toSeatLimit(undefined)).toBeNull();
+    expect(toSeatLimit({ toString: () => "3" })).toBeNull();
+  });
+
+  it("reads a cleared field as absent, not as zero", () => {
+    // `Number("")` is 0, so without the empty check a blanked input would save
+    // as a deliberate cap of nothing.
+    expect(toSeatLimit("")).toBeNull();
+    expect(toSeatLimit("   ")).toBeNull();
+  });
+
+  it("defaults per role, not all-or-nothing", () => {
+    // The `app_settings` contract: a deployment that has only ever raised the
+    // beta cap keeps the shipped defaults for the other two.
+    const limits = toSeatLimits((role) =>
+      role === "beta_admin" ? "5" : null,
+    );
+    expect(limits).toEqual({ ...DEFAULT_ROLE_SEATS, beta_admin: 5 });
+  });
+
+  it("falls back to the default for a value it will not accept", () => {
+    // A row edited by hand in the Neon console is held to the same bounds the
+    // form is — and an out-of-range one must not read as no cap.
+    const limits = toSeatLimits(() => "999999");
+    expect(limits).toEqual(DEFAULT_ROLE_SEATS);
+  });
+
+  it("returns the defaults when nothing is stored at all", () => {
+    // The state of a database nobody has ever touched the settings on.
+    expect(toSeatLimits(() => null)).toEqual(DEFAULT_ROLE_SEATS);
+    expect(toSeatLimits(() => undefined)).toEqual(DEFAULT_ROLE_SEATS);
   });
 });

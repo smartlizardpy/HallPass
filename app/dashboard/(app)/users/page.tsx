@@ -47,14 +47,16 @@ import {
   ROLES,
   ROLE_HINT,
   ROLE_LABEL,
-  ROLE_SEATS,
-  emptySeatCounts,
+  defaultSeats,
   firstFreeRole,
   isOverSeats,
   isRoleFull,
+  seatsLeft,
   seatSummary,
-  type SeatCounts,
+  totalSeats,
+  type Seats,
 } from "@/app/lib/permissions";
+import { readSeatLimits } from "@/app/lib/role-seats";
 import { addAdminAction } from "./actions";
 import { DashHeader } from "../_ui/DashHeader";
 import { UserRowActions } from "./UserRowActions";
@@ -116,14 +118,22 @@ export default async function UsersPage({
   const ok = asString(params.ok);
   const error = asString(params.error);
 
+  // The limits never throw (an unreadable setting falls back to its default —
+  // see `role-seats.ts`), so they are read outside the try that guards the
+  // table. The page can always state what the caps ARE, even when it cannot say
+  // who is holding them.
+  const limits = await readSeatLimits();
+
   let users: DashboardUser[] | null = null;
-  let seats: SeatCounts = emptySeatCounts();
+  let seats: Seats = { ...defaultSeats(), limits };
   let dbError = false;
   try {
     // Both reads, one try. The count is what the form below disables against, so
     // a screen rendered with users but without it would offer every role as free
     // and hand the refusal to the store instead.
-    [users, seats] = await Promise.all([listUsers(), countRoleSeats()]);
+    const [listed, taken] = await Promise.all([listUsers(), countRoleSeats()]);
+    users = listed;
+    seats = { limits, taken };
   } catch {
     dbError = true;
   }
@@ -143,12 +153,20 @@ export default async function UsersPage({
         title="Users"
         subtitle="Manage who can sign in to the dashboard and at what level."
         action={
-          <Link
-            href="/dashboard"
-            className="text-sm font-semibold text-brand hover:text-brand-600"
-          >
-            ← Back to overview
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/dashboard/users/settings"
+              className="text-sm font-semibold text-brand hover:text-brand-600"
+            >
+              Settings
+            </Link>
+            <Link
+              href="/dashboard"
+              className="text-sm font-semibold text-brand hover:text-brand-600"
+            >
+              ← Back to overview
+            </Link>
+          </div>
         }
       />
 
@@ -164,6 +182,69 @@ export default async function UsersPage({
         </div>
       )}
 
+      {/* THE LIMITS, STATED. A cap is only a cap if the people it binds can see
+          it: refusing a grant with a banner that is the first mention of a seat
+          limit reads as a bug, and the person's next move is to try again. One
+          card per role, each carrying its own number, so "why can I not add
+          another admin" is answered before it is asked rather than after. */}
+      <section className="mb-8 rounded-xl border border-border bg-surface p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-lg font-black tracking-tight">Seat limits</h2>
+          <Link
+            href="/dashboard/users/settings"
+            className="text-sm font-semibold text-brand hover:text-brand-600"
+          >
+            Edit limits →
+          </Link>
+        </div>
+        <p className="mt-1 text-sm text-muted">
+          At most {totalSeats(seats.limits)} people may hold a dashboard role at
+          once. A grant that would pass a role&rsquo;s cap is refused — remove or
+          re-role somebody first, or raise the limit.
+        </p>
+        <dl className="mt-4 grid gap-3 sm:grid-cols-3">
+          {ROLES.map((role) => {
+            const full = isRoleFull(seats, role);
+            const over = isOverSeats(seats, role);
+            return (
+              <div
+                key={role}
+                className={`rounded-lg border px-4 py-3 ${
+                  over
+                    ? "border-amber-300 bg-amber-50"
+                    : full
+                      ? "border-border bg-surface-2"
+                      : "border-border bg-surface"
+                }`}
+              >
+                <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  {ROLE_LABEL[role]}
+                </dt>
+                <dd className="mt-1 text-2xl font-black tabular-nums text-foreground">
+                  {/* Usage over the cap, not a bare count: the number that
+                      matters to the reader is the gap between them. */}
+                  {seats.taken[role]}
+                  <span className="text-muted">/{seats.limits[role]}</span>
+                </dd>
+                <dd className="mt-0.5 text-xs text-muted">
+                  {over
+                    ? "over the limit"
+                    : full
+                      ? "full"
+                      : `${seatsLeft(seats, role)} free`}
+                </dd>
+              </div>
+            );
+          })}
+        </dl>
+        {dbError && (
+          <p className="mt-3 text-xs text-muted">
+            Usage is unavailable while the database is unreachable; the limits
+            above are the ones in force.
+          </p>
+        )}
+      </section>
+
       {overCapacity.length > 0 && (
         <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <p className="font-bold">More holders than seats.</p>
@@ -174,17 +255,19 @@ export default async function UsersPage({
               </li>
             ))}
           </ul>
-          {/* Naming the cause matters more than naming the numbers. This screen
-              cannot produce this state — only the env allow-list can, by
-              granting super admin without ever asking about a seat — so
-              somebody looking at it needs to know where to go and what will
-              happen next, not merely that something is off. */}
+          {/* Naming the cause matters more than naming the numbers. Somebody
+              looking at two super admins under a cap of one needs to know where
+              it came from and what happens next, not merely that something is
+              off. Both causes are named because both are ordinary: a limit was
+              lowered under the people holding it, or the env allow-list granted
+              a role without ever asking about a seat. */}
           <p className="mt-2">
-            Addresses in <code className="font-mono">SUPER_ADMIN_EMAILS</code>{" "}
-            hold their role whatever the cap says, so the allow-list can put a
-            role over its seats. Nothing is broken and nobody has lost access;
-            the role simply cannot be granted again until it is back within its
-            seats.
+            This happens when a limit is lowered below the people already holding
+            the role, or when an address in{" "}
+            <code className="font-mono">SUPER_ADMIN_EMAILS</code> signs in —
+            those hold their role whatever the cap says. Nothing is broken and
+            nobody has lost access; the role simply cannot be granted again until
+            it is back within its seats.
           </p>
         </div>
       )}
@@ -278,11 +361,12 @@ export default async function UsersPage({
         </ul>
         {defaultRole === null && (
           <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-            Every seat is taken ({ROLES.map((role) => ROLE_SEATS[role]).reduce(
-              (total, seatCount) => total + seatCount,
-              0,
-            )}{" "}
-            in total). Remove somebody below before inviting anyone else.
+            Every seat is taken ({totalSeats(seats.limits)} in total). Remove
+            somebody below before inviting anyone else, or raise a limit in{" "}
+            <Link href="/dashboard/users/settings" className="underline">
+              settings
+            </Link>
+            .
           </p>
         )}
       </section>

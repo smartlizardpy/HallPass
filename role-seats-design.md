@@ -34,9 +34,41 @@ The numbers are deliberately tight rather than "generous for now". A limit set
 above actual use enforces nothing and is discovered to be wrong only when it
 finally bites, which is the worst moment to find out.
 
+## The numbers are editable, and 1/1/3 is where they start
+
+The caps above are DEFAULTS, not constants. A super admin edits them at
+`/dashboard/users/settings`, and each one is stored as a `role_seats:<role>` row
+in `app_settings` — the table whose whole contract is already "a key that has
+never been written simply is not there, and the reader supplies its default".
+That is exactly the shape this needs: a database nobody has ever touched the
+settings on behaves identically to a fresh one, and `DEFAULT_ROLE_SEATS` in
+`permissions.ts` is what both of them mean by 1, 1 and 3.
+
+It also means the seat check has to read the limit rather than close over it, so
+every pure helper takes a `Seats` — the limits AND the counts together. Neither
+half answers anything alone: "2 used" is not a state without knowing whether the
+cap is 2 or 20.
+
+When the settings read FAILS, the limits fall back to those defaults rather than
+to "uncapped". `readAppSettings` is already fail-soft to an empty map, and the
+tightest known caps are the reading of a failure that cannot hand anybody access
+by accident.
+
+Bounds: **1 to 50**. Not zero, because a cap of zero means a role nobody may ever
+hold — a state better reached by deciding not to grant it than by a number that
+silently makes a whole rung ungrantable. Not unbounded, because a mistyped
+`100000` would read as a saved setting and behave as no cap at all.
+
+Lowering a cap under the people already holding it is ALLOWED. Nobody is
+demoted, nobody loses access, and the role simply cannot be granted again until
+it is back within its seats — the same over-capacity state the env allow-list can
+produce, reported the same way. Refusing the edit instead would mean a shrinking
+team has to remove people in an order dictated by the form.
+
 ## Decisions
 
 ### The env allow-list consumes a seat but is never blocked by one
+
 
 `SUPER_ADMIN_EMAILS` (see `isSuperAdminEmail`) grants `super_admin`
 unconditionally, with or without a row, and `upsertUserOnLogin` re-asserts that
@@ -94,26 +126,35 @@ against the seat they themselves occupy.
 
 ## Shape of the change
 
-1. `app/lib/permissions.ts` — `ROLE_SEATS`, a `SeatCounts` record, and the pure
-   questions the UI and the actions both ask: `seatsLeft`, `isRoleFull`,
-   `isOverSeats`, `firstFreeRole`, `seatSummary`, `roleFullMessage`.
-2. `app/lib/dashboard-users.ts` — `countRoleSeats()`; `addUser`/`setRole` become
+1. `app/lib/permissions.ts` — `DEFAULT_ROLE_SEATS`, the `Seats` pair (limits +
+   counts) and the pure questions the UI and the actions both ask: `seatsLeft`,
+   `isRoleFull`, `isOverSeats`, `firstFreeRole`, `seatSummary`,
+   `roleFullMessage`, plus the bounds and the narrowing the settings form needs.
+2. `app/lib/role-seats.ts` — the stored limits over `app_settings`: read them
+   (defaults where unwritten, defaults on failure) and write them.
+3. `app/lib/dashboard-users.ts` — `countRoleSeats()`; `addUser`/`setRole` become
    seat-aware and return a `SeatResult` instead of `void`.
-3. `app/dashboard/(app)/users/actions.ts` — turn a refusal into the usual
+4. `app/dashboard/(app)/users/actions.ts` — turn a refusal into the usual
    `?error=` banner.
-4. `app/dashboard/(app)/users/page.tsx` — seat usage on every role hint, full
-   roles disabled in the invite select, an over-capacity notice, and the invite
-   form closed when nothing is free.
-5. `app/dashboard/(app)/users/UserRowActions.tsx` — the same disabling in the
+5. `app/dashboard/(app)/users/page.tsx` — the limits stated up front, seat usage
+   on every role hint, full roles disabled in the invite select, an
+   over-capacity notice, and the invite form closed when nothing is free.
+6. `app/dashboard/(app)/users/UserRowActions.tsx` — the same disabling in the
    per-row modal, except for the row's own current role, which stays selectable
    so Save is a no-op rather than an impossibility.
-6. Tests in `permissions.test.ts` and `dashboard-users.test.ts`; README and
-   `auth.sql` updated to describe the cap where the roles are described.
+7. `app/dashboard/(app)/users/settings/` — the page that edits the limits, and
+   its action.
+8. Tests in `permissions.test.ts`, `role-seats.test.ts` and
+   `dashboard-users.test.ts`; README and `auth.sql` updated to describe the cap
+   where the roles are described.
 
 ## Explicitly not in scope
 
 * No change to what any rung may DO — this is how many may hold it, nothing else.
 * No seat check on sign-in (see the exemption above).
 * No automatic eviction, expiry, or "oldest admin loses their seat". A refusal
-  tells a human to choose; it never chooses for them.
+  tells a human to choose; it never chooses for them. Lowering a cap does not
+  demote anybody either — for the same reason.
+* No per-person overrides and no seats for anything but the three roles. The
+  settings page edits three numbers; it is not a policy engine.
 * `beta_testers` are not dashboard users and have no seats.

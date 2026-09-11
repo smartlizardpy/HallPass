@@ -36,6 +36,18 @@ vi.mock("@/app/lib/db", () => ({
   isUnconfiguredDbError: () => false,
 }));
 
+/**
+ * The seat limits are mocked rather than left to fall through to the same `sql`
+ * mock the writes use. Two reasons, and the second is the load-bearing one:
+ * a settings read sharing the mock would consume the call the assertions below
+ * index into, and a test that cannot say what the limit WAS cannot tell a
+ * refusal at three from a refusal at any other number.
+ */
+const seatLimits = vi.fn();
+vi.mock("@/app/lib/role-seats", () => ({
+  readSeatLimits: () => seatLimits(),
+}));
+
 import {
   addUser,
   countRoleSeats,
@@ -48,6 +60,8 @@ const OUTAGE = new Error("connection refused");
 
 beforeEach(() => {
   query.mockReset();
+  seatLimits.mockReset();
+  seatLimits.mockResolvedValue({ super_admin: 1, admin: 1, beta_admin: 3 });
   delete process.env.SUPER_ADMIN_EMAILS;
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -221,6 +235,30 @@ describe("seat-aware writes", () => {
     await expect(setRole("someone@example.com", "super_admin")).resolves.toEqual(
       { ok: false, taken: 1, limit: 1 },
     );
+  });
+
+  it("counts against the STORED limit, not the shipped default", async () => {
+    // The settings page would be decorative otherwise. A raised cap has to let
+    // the write through, and the refusal has to report the raised number.
+    seatLimits.mockResolvedValue({ super_admin: 1, admin: 1, beta_admin: 5 });
+    query.mockResolvedValue([{ taken: 3, granted: true }]);
+    await expect(
+      addUser("fourth@example.com", "beta_admin", "boss@example.com"),
+    ).resolves.toEqual({ ok: true });
+
+    query.mockResolvedValue([{ taken: 5, granted: false }]);
+    await expect(
+      addUser("sixth@example.com", "beta_admin", "boss@example.com"),
+    ).resolves.toEqual({ ok: false, taken: 5, limit: 5 });
+  });
+
+  it("binds the limit into the statement that writes", async () => {
+    // Bound as a value, so the comparison the database makes is the one the
+    // settings say — not one baked in when the module was compiled.
+    seatLimits.mockResolvedValue({ super_admin: 1, admin: 7, beta_admin: 3 });
+    query.mockResolvedValue([{ taken: 0, granted: true }]);
+    await addUser("new@example.com", "admin", "boss@example.com");
+    expect(query.mock.calls[0]).toContain(7);
   });
 
   it("still rejects when the database is unreachable", async () => {

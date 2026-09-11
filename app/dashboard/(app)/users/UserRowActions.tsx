@@ -42,7 +42,7 @@ import {
   ROLE_LABEL,
   isRoleFull,
   seatSummary,
-  type SeatCounts,
+  type Seats,
 } from "@/app/lib/permissions";
 
 export function UserRowActions({
@@ -52,7 +52,7 @@ export function UserRowActions({
 }: {
   email: string;
   role: Role;
-  seats: SeatCounts;
+  seats: Seats;
 }) {
   const [open, setOpen] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);

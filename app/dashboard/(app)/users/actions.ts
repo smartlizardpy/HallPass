@@ -56,7 +56,7 @@ import {
 } from "@/app/lib/dashboard-users";
 import {
   ROLE_LABEL,
-  emptySeatCounts,
+  defaultSeats,
   roleFullMessage,
   toRole,
 } from "@/app/lib/permissions";
@@ -121,23 +121,25 @@ function back(kind: "ok" | "error", message: string): never {
 /**
  * The sentence a seat refusal renders.
  *
- * Built from what the STORE counted rather than from a fresh read, for the same
- * reason the actions do not re-check the cap: the count that refused the write
- * is the only one that was ever true at the moment of the write, and a second
- * read could report a different number than the one that actually bit.
+ * Built from what the STORE counted and the limit it counted against, rather
+ * than from a fresh read, for the same reason the actions do not re-check the
+ * cap: those two numbers are the only ones that were ever true at the moment of
+ * the write. A second read could report a different limit — the settings page
+ * is one click away — and name a cap that did not refuse anything.
  *
- * `roleFullMessage` takes a `SeatCounts`, so the single count is lifted into one
- * — the shared wording lives there and is what the invite form shows too, so a
- * refused grant and the hint above it cannot describe the cap differently.
+ * `roleFullMessage` takes a `Seats`, so the pair is lifted into one covering
+ * just this role. The shared wording lives there and is what the invite form
+ * shows too, so a refused grant and the hint above it cannot describe the cap
+ * differently.
  */
 function seatsFullMessage(
   role: Role,
   refusal: { taken: number; limit: number },
 ): string {
-  return roleFullMessage(
-    { ...emptySeatCounts(), [role]: refusal.taken },
-    role,
-  );
+  const seats = defaultSeats();
+  seats.limits[role] = refusal.limit;
+  seats.taken[role] = refusal.taken;
+  return roleFullMessage(seats, role);
 }
 
 /**

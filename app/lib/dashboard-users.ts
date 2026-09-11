@@ -11,10 +11,11 @@
  * `app/lib/permissions.ts` for what each rung may actually do — this module
  * stores the role, it does not interpret it.
  *
- * How MANY may hold a rung at once is capped too (`ROLE_SEATS`, also in
- * `permissions.ts`). The counting has to happen inside the same statement as the
- * write, so it lives here even though the numbers do not — see the Seats section
- * at the foot of this file, and `role-seats-design.md` for the reasoning.
+ * How MANY may hold a rung at once is capped too. The counting has to happen
+ * inside the same statement as the write, so it lives here even though the
+ * numbers do not: the defaults and the pure questions are in `permissions.ts`
+ * and the editable values in `role-seats.ts`. See the Seats section at the foot
+ * of this file, and `role-seats-design.md` for the reasoning.
  *
  * Unlike the scoreboard store, there is no `createStore(sql)` factory here: this
  * module talks to the shared, server-only `sql` from `@/app/lib/db` directly.
@@ -39,11 +40,8 @@ import { sql } from "@/app/lib/db";
 // The seat caps live with the ladder, not here: this module stores a role, it
 // does not decide policy about one. The import is one-way — `permissions.ts`
 // takes only `import type { Role }` back, so there is no runtime cycle.
-import {
-  ROLE_SEATS,
-  emptySeatCounts,
-  type SeatCounts,
-} from "@/app/lib/permissions";
+import { emptySeatCounts, type SeatCounts } from "@/app/lib/permissions";
+import { readSeatLimits } from "@/app/lib/role-seats";
 
 /**
  * The three dashboard authorization levels.
@@ -262,9 +260,12 @@ export async function listUsers(): Promise<DashboardUser[]> {
 // ---------------------------------------------------------------------------
 //
 // How many people may hold a role at once is policy, and it lives in
-// `permissions.ts` (see `ROLE_SEATS` and `role-seats-design.md`). What lives
+// `permissions.ts` (the defaults) and `role-seats.ts` (what is stored), with the
+// reasoning in `role-seats-design.md`. What lives
 // HERE is the counting and the refusal, because both have to happen inside the
-// same statement as the write.
+// same statement as the write. The limit itself is read from `role-seats.ts`
+// (a cached settings read) rather than taken from the caller, so no call site
+// can be written with a cap of its own.
 //
 // THE ENV ALLOW-LIST IS NOT CHECKED AND STILL COUNTS. `upsertUserOnLogin`'s
 // super-admin branch above deliberately does not consult a seat: a cap on the
@@ -330,6 +331,9 @@ export async function countRoleSeats(): Promise<SeatCounts> {
  * ── ONE STATEMENT, NOT CHECK-THEN-WRITE ─────────────────────────────────────
  * The count and the insert are a single statement so there is no round trip
  * between them in which the last seat can be taken by somebody else's click.
+ * The LIMIT is read first and bound in as a value; a limit changed in the
+ * meantime is a setting saved a moment ago, not a seat taken, and the next write
+ * reads the new one.
  * The data-modifying CTE runs exactly once whether or not the outer SELECT
  * reads from it, and its `WHERE` is what actually refuses.
  *
@@ -351,6 +355,7 @@ export async function addUser(
   invitedBy: string,
 ): Promise<SeatResult> {
   const target = normalizeEmail(email);
+  const limit = (await readSeatLimits())[role];
   const rows = await sql`
     WITH seat AS (
       SELECT count(*)::int AS taken
@@ -361,7 +366,7 @@ export async function addUser(
       INSERT INTO dashboard_users (email, role, invited_by)
       SELECT ${target}, ${role}, ${invitedBy}
       FROM seat
-      WHERE seat.taken < ${ROLE_SEATS[role]}
+      WHERE seat.taken < ${limit}
       ON CONFLICT (email) DO UPDATE SET
         role = EXCLUDED.role,
         invited_by = EXCLUDED.invited_by
@@ -371,7 +376,7 @@ export async function addUser(
       (SELECT taken FROM seat) AS taken,
       EXISTS (SELECT 1 FROM granted) AS granted
   `;
-  return seatResult(rows[0], role);
+  return seatResult(rows[0], limit);
 }
 
 /**
@@ -385,6 +390,7 @@ export async function addUser(
  */
 export async function setRole(email: string, role: Role): Promise<SeatResult> {
   const target = normalizeEmail(email);
+  const limit = (await readSeatLimits())[role];
   const rows = await sql`
     WITH seat AS (
       SELECT count(*)::int AS taken
@@ -395,14 +401,14 @@ export async function setRole(email: string, role: Role): Promise<SeatResult> {
       UPDATE dashboard_users
       SET role = ${role}
       WHERE email = ${target}
-        AND (SELECT taken FROM seat) < ${ROLE_SEATS[role]}
+        AND (SELECT taken FROM seat) < ${limit}
       RETURNING email
     )
     SELECT
       (SELECT taken FROM seat) AS taken,
       EXISTS (SELECT 1 FROM granted) AS granted
   `;
-  return seatResult(rows[0], role);
+  return seatResult(rows[0], limit);
 }
 
 /**
@@ -416,8 +422,7 @@ export async function setRole(email: string, role: Role): Promise<SeatResult> {
  * every stale-row no-op into a "role is full" banner that names a role with
  * seats going spare.
  */
-function seatResult(row: Row | undefined, role: Role): SeatResult {
-  const limit = ROLE_SEATS[role];
+function seatResult(row: Row | undefined, limit: number): SeatResult {
   const taken = Number(row?.taken ?? 0);
   if (row?.granted === true) return { ok: true };
   return taken < limit ? { ok: true } : { ok: false, taken, limit };
