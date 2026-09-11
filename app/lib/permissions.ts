@@ -212,3 +212,118 @@ export const DASHBOARD_HOME: Record<Role, string> = {
   admin: "/dashboard",
   beta_admin: "/dashboard/beta",
 };
+
+// ---------------------------------------------------------------------------
+// Seats — how MANY people may hold a rung at once
+// ---------------------------------------------------------------------------
+//
+// Everything above answers "what may this rung do". This section answers a
+// different question about the same ladder: how many of them there may be. It
+// lives here for the reason `ROLE_LABEL` does — the invite form, the per-row
+// modal and the two store writes all have to agree on the number, and written
+// out at each of them they drift in the direction that grants more.
+//
+// See `role-seats-design.md` for the reasoning; the two rules worth repeating
+// at the call sites are:
+//
+//   * The env allow-list (`SUPER_ADMIN_EMAILS`) is EXEMPT from the check and
+//     still CONSUMES a seat. Capping the sign-in path could lock the last super
+//     admin out of a full table with no way back in, which is worse than one
+//     seat too many; counting their row is what stops the UI granting a second
+//     super admin beside them.
+//   * Over capacity is therefore reachable (an env address signing in for the
+//     first time, or several of them listed). It is a state to REPORT — see
+//     {@link isOverSeats} — never one to create.
+
+/**
+ * How many people may hold each role at once.
+ *
+ * `Record<Role, number>` so a role added to the ladder without a seat count is a
+ * compile error rather than an uncapped rung — which is precisely the one that
+ * would then grow without anybody noticing.
+ *
+ * Five holders in total, and deliberately tight rather than generous: a limit
+ * set above actual use enforces nothing and is discovered to be wrong only when
+ * it finally bites.
+ */
+export const ROLE_SEATS: Record<Role, number> = {
+  super_admin: 1,
+  admin: 1,
+  beta_admin: 3,
+};
+
+/**
+ * How many rows currently hold each role.
+ *
+ * A full `Record` rather than a sparse map, so "nobody holds this role" is `0`
+ * and never `undefined` — the value that makes `taken < limit` read `NaN < 1`
+ * and quietly refuse every grant.
+ */
+export type SeatCounts = Record<Role, number>;
+
+/** A zeroed {@link SeatCounts}, for the "database unreachable" render. */
+export function emptySeatCounts(): SeatCounts {
+  return { beta_admin: 0, admin: 0, super_admin: 0 };
+}
+
+/**
+ * Seats still free on `role`. Never negative: over capacity is a real state
+ * (see the section note), and a negative "free" count would read as free seats
+ * to any caller doing arithmetic on it.
+ */
+export function seatsLeft(taken: SeatCounts, role: Role): number {
+  return Math.max(0, ROLE_SEATS[role] - taken[role]);
+}
+
+/** Is `role` full — i.e. would granting it now take it past its cap? */
+export function isRoleFull(taken: SeatCounts, role: Role): boolean {
+  return taken[role] >= ROLE_SEATS[role];
+}
+
+/**
+ * Is `role` held by MORE people than it has seats?
+ *
+ * Distinct from {@link isRoleFull} on purpose: full is the ordinary end state
+ * and needs no comment, over-capacity is the one the Users page calls out. The
+ * only ways in are the env exemption and a role's seats being lowered under
+ * people who already hold it, so it is rare, benign, and worth saying out loud
+ * rather than leaving somebody to wonder why a grant will not go through.
+ */
+export function isOverSeats(taken: SeatCounts, role: Role): boolean {
+  return taken[role] > ROLE_SEATS[role];
+}
+
+/**
+ * The weakest role with a seat going spare, or `null` when every role is full.
+ *
+ * Weakest-first (`ROLES` order) because this picks the default for a form: the
+ * fallback for "the role we wanted to preselect is full" must not be a stronger
+ * rung than the one asked for.
+ */
+export function firstFreeRole(taken: SeatCounts): Role | null {
+  return ROLES.find((role) => !isRoleFull(taken, role)) ?? null;
+}
+
+/** `"2 of 3 seats used"` — the count as shown beside a role's hint. */
+export function seatSummary(taken: SeatCounts, role: Role): string {
+  const seats = ROLE_SEATS[role];
+  return `${taken[role]} of ${seats} ${seats === 1 ? "seat" : "seats"} used`;
+}
+
+/**
+ * The banner a refused grant renders, as a full sentence.
+ *
+ * It names the count rather than only saying "full", because the person reading
+ * it is about to decide whether somebody else should lose the seat, and
+ * "1 of 1" tells them what they are choosing between. Written here rather than
+ * at the action so the refusal reads the same wherever it is raised.
+ */
+export function roleFullMessage(taken: SeatCounts, role: Role): string {
+  const seats = ROLE_SEATS[role];
+  const held = taken[role];
+  const label = ROLE_LABEL[role].toLowerCase();
+  return (
+    `No ${label} seats left (${held} of ${seats} used). ` +
+    `Remove or re-role an existing ${label} first.`
+  );
+}
