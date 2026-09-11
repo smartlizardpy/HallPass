@@ -15,6 +15,10 @@
  *   * `canConfirmOwnWork` is the one rule that is NOT the ladder. Written as a
  *     rank ("admin and up may self-confirm") it would read almost identically
  *     and mean the opposite of what it is for.
+ *   * A seat count that reads `undefined` refuses every grant on an empty
+ *     database, and one that goes negative reads as free seats to anything
+ *     doing arithmetic on it. Both look like a working screen until somebody
+ *     tries to invite a colleague.
  */
 
 import { describe, expect, it } from "vitest";
@@ -34,6 +38,15 @@ import {
   ROLE_RANK,
   SITE_WRITE_ROLE,
   toRole,
+  ROLE_SEATS,
+  emptySeatCounts,
+  firstFreeRole,
+  isOverSeats,
+  isRoleFull,
+  roleFullMessage,
+  seatsLeft,
+  seatSummary,
+  type SeatCounts,
 } from "./permissions";
 
 describe("the ladder", () => {
@@ -159,5 +172,91 @@ describe("exhaustiveness", () => {
       super_admin: true,
     };
     expect(Object.keys(everyRole).sort()).toEqual([...ROLES].sort());
+  });
+});
+
+describe("seats", () => {
+  /** A `SeatCounts` from a partial, so each case states only what it cares about. */
+  const held = (counts: Partial<SeatCounts>): SeatCounts => ({
+    ...emptySeatCounts(),
+    ...counts,
+  });
+
+  it("caps the ladder at one, one and three", () => {
+    // The numbers themselves, pinned. They are policy, so a change to them
+    // should have to be a deliberate edit here rather than a silent widening.
+    expect(ROLE_SEATS).toEqual({ super_admin: 1, admin: 1, beta_admin: 3 });
+  });
+
+  it("gives every role a seat count", () => {
+    // An uncapped rung is precisely the one that grows without anybody noticing.
+    for (const role of ROLES) {
+      expect(ROLE_SEATS[role]).toBeGreaterThan(0);
+      expect(Number.isInteger(ROLE_SEATS[role])).toBe(true);
+    }
+  });
+
+  it("starts every role at zero, not undefined", () => {
+    // `undefined` here would make `taken < limit` read `NaN < 1` and refuse
+    // every grant on a database that simply has no rows yet.
+    for (const role of ROLES) expect(emptySeatCounts()[role]).toBe(0);
+  });
+
+  it("counts a role full at its cap, not past it", () => {
+    expect(isRoleFull(held({ admin: 0 }), "admin")).toBe(false);
+    expect(isRoleFull(held({ admin: 1 }), "admin")).toBe(true);
+    expect(isRoleFull(held({ beta_admin: 2 }), "beta_admin")).toBe(false);
+    expect(isRoleFull(held({ beta_admin: 3 }), "beta_admin")).toBe(true);
+  });
+
+  it("never reports a negative number of free seats", () => {
+    // Over capacity is reachable (see `isOverSeats`), and a negative "free"
+    // count reads as free seats to anything doing arithmetic on it.
+    expect(seatsLeft(held({ super_admin: 3 }), "super_admin")).toBe(0);
+    expect(seatsLeft(held({ beta_admin: 1 }), "beta_admin")).toBe(2);
+  });
+
+  it("separates full from over capacity", () => {
+    // Full is the ordinary end state; over capacity is the one the Users page
+    // calls out, and only the env allow-list can produce it.
+    const atCap = held({ super_admin: 1 });
+    expect(isRoleFull(atCap, "super_admin")).toBe(true);
+    expect(isOverSeats(atCap, "super_admin")).toBe(false);
+
+    const over = held({ super_admin: 2 });
+    expect(isRoleFull(over, "super_admin")).toBe(true);
+    expect(isOverSeats(over, "super_admin")).toBe(true);
+  });
+
+  it("falls back to the WEAKEST free role, never a stronger one", () => {
+    // This picks a form's default. Falling back upward would answer "the rung
+    // you asked for is full" by preselecting more access than was asked for.
+    expect(firstFreeRole(emptySeatCounts())).toBe("beta_admin");
+    expect(firstFreeRole(held({ beta_admin: 3 }))).toBe("admin");
+    expect(firstFreeRole(held({ beta_admin: 3, admin: 1 }))).toBe("super_admin");
+  });
+
+  it("returns null only when every single seat is taken", () => {
+    const full = held({ beta_admin: 3, admin: 1, super_admin: 1 });
+    expect(firstFreeRole(full)).toBeNull();
+    for (const role of ROLES) expect(isRoleFull(full, role)).toBe(true);
+  });
+
+  it("pluralises the seat summary", () => {
+    expect(seatSummary(held({ admin: 1 }), "admin")).toBe("1 of 1 seat used");
+    expect(seatSummary(held({ beta_admin: 1 }), "beta_admin")).toBe(
+      "1 of 3 seats used",
+    );
+  });
+
+  it("names the role and the count in the refusal", () => {
+    // The person reading it is deciding who loses a seat, so the sentence has
+    // to say which role is full and how full it is — not merely "full".
+    const message = roleFullMessage(held({ admin: 1 }), "admin");
+    expect(message).toContain("admin");
+    expect(message).toContain("1 of 1");
+    for (const role of ROLES) {
+      expect(roleFullMessage(emptySeatCounts(), role)).toBeTruthy();
+    }
   });
 });
