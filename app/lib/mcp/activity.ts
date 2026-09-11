@@ -42,6 +42,16 @@ export type ActivityOutcome = (typeof ACTIVITY_OUTCOMES)[number];
  */
 export const SUMMARY_MAX = 300;
 
+/**
+ * How many lines the dashboard panel shows, and therefore how big a poll is.
+ *
+ * Lives here, in the module both halves import, rather than beside the panel:
+ * the feed's shape is the MCP's business and the dashboard is one reader of it.
+ * Twenty is about a screen of one-liners — enough to see the shape of a session
+ * without the panel becoming the page.
+ */
+export const AGENT_FEED_LIMIT = 20;
+
 /** One row to write, before an actor and a timestamp are attached. */
 export type ActivityLine = {
   tool: string;

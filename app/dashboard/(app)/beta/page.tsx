@@ -38,12 +38,14 @@ import {
 } from "@/app/lib/permissions";
 import { resolveGames } from "@/app/lib/games-store";
 import {
+  getAgentActivity,
   getAllAssignments,
   getInviteRequests,
   getReportQueue,
   getRoster,
   getShotQueue,
 } from "@/app/lib/beta";
+import { AGENT_FEED_LIMIT } from "@/app/lib/mcp/activity";
 import type { BetaShot } from "@/app/lib/beta/store";
 import {
   BUG_SEVERITIES,
@@ -59,6 +61,7 @@ import {
   SeverityChip,
   ShotStatusChip,
 } from "@/app/beta/_ui/Chips";
+import { AgentActivityFeed } from "./_ui/AgentActivityFeed";
 import { DashHeader } from "../_ui/DashHeader";
 import { Section } from "../_ui/Section";
 import {
@@ -264,7 +267,7 @@ export default async function DashboardBetaPage({
       ? "Sign out and back in to judge submissions — this session predates the check that says whose they are."
       : "You submitted this — another admin has to judge it.";
 
-  const [{ ok, error }, roster, reports, shots, assignments, requests, games] =
+  const [{ ok, error }, roster, reports, shots, assignments, requests, games, activity] =
     await Promise.all([
       searchParams,
       getRoster(),
@@ -273,9 +276,15 @@ export default async function DashboardBetaPage({
       getAllAssignments(),
       getInviteRequests(),
       resolveGames(),
+      // Seeds the feed panel so it is right before any JavaScript runs. The
+      // island polls from there; this read is what makes it correct without JS.
+      getAgentActivity(AGENT_FEED_LIMIT),
     ]);
 
   const titleFor = new Map(games.map((g) => [g.slug, g.title]));
+  // The same lookup as a plain object, because the activity panel is a client
+  // component and a Map does not survive the serialisation boundary.
+  const gameTitles = Object.fromEntries(titleFor);
   const nameFor = new Map(roster.map((r) => [r.playerId, testerLabel(r)]));
   const active = roster.filter((r) => r.revokedAt == null);
   const openReports = reports.filter((r) => r.status === "open");
@@ -320,6 +329,13 @@ export default async function DashboardBetaPage({
       )}
 
       <div className="space-y-5">
+        {/* AGENT ----------------------------------------------------------- */}
+        {/* Above the queue, because it explains what has been happening TO the
+            queue, and an explanation below the thing it explains is read
+            second. Renders nothing at all until an agent has done something —
+            the island owns its own section for exactly that reason. */}
+        <AgentActivityFeed initial={activity} titles={gameTitles} />
+
         {/* TRIAGE ---------------------------------------------------------- */}
         <Section
           title="Triage queue"

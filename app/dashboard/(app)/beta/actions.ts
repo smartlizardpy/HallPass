@@ -48,7 +48,8 @@ import {
   SITE_WRITE_ROLE,
 } from "@/app/lib/permissions";
 import { blobOpDisabledMessage, isBlobOpEnabled } from "@/app/lib/blob-ops";
-import { beta } from "@/app/lib/beta";
+import { beta, getAgentActivity, type AgentActivity } from "@/app/lib/beta";
+import { AGENT_FEED_LIMIT } from "@/app/lib/mcp/activity";
 import {
   acceptanceReason,
   INVITE_NOTE_MAX,
@@ -864,4 +865,30 @@ export async function publishAcceptedShotsAction(): Promise<void> {
       ? `Published ${published} image${published === 1 ? "" : "s"} to the gallery`
       : `Published ${published}, but ${failures.length} failed — see the logs`,
   );
+}
+
+/* --------------------------------------------------------------- agent feed */
+
+/**
+ * The newest lines of what the bug-MCP agent has been doing.
+ *
+ * A Server FUNCTION used for a READ, the same unusual-enough-to-justify shape as
+ * `moderation/actions.ts`'s `openReportCountAction`. The panel has to refresh
+ * while an admin watches an agent work (`agent-activity-design.md` §5), and
+ * invoking a Server Function does NOT re-render the calling page — so a poll
+ * costs one POST and a twenty-row read, rather than re-rendering a dashboard
+ * that also holds the roster, both queues and every assignment.
+ *
+ * `requireRole` still runs. A Server Function is reachable by direct POST, and
+ * this returns an internal actor string and the titles of reports filed by
+ * children — not public information, and not guarded by the page having been
+ * rendered.
+ *
+ * Fail-soft through `getAgentActivity`, which degrades to `[]`. The panel
+ * renders nothing at all for an empty list, so a failed poll leaves the last
+ * good rows on screen rather than flashing the panel away.
+ */
+export async function agentActivityAction(): Promise<AgentActivity[]> {
+  await requireRole(BETA_MIN_ROLE);
+  return getAgentActivity(AGENT_FEED_LIMIT);
 }
