@@ -342,6 +342,41 @@ function mapAward(row: Row): XpAward {
   };
 }
 
+/**
+ * One line of what the bug-MCP agent did.
+ *
+ * Append-only and never edited. `reportId` is a plain number rather than a
+ * reference: the write this row most often records is the one that DELETED that
+ * report, so an FK with ON DELETE SET NULL would blank the subject of the
+ * sentence as it was written (see migration 029).
+ */
+export type AgentActivity = {
+  id: number;
+  /** Which credential did this — `MCP_ACTOR`, matching `resolved_by`. */
+  actor: string;
+  /** The MCP tool name, verbatim. */
+  tool: string;
+  /** `refused` is a write whose WHERE matched nothing, not an error. */
+  outcome: string;
+  reportId: number | null;
+  slug: string | null;
+  summary: string;
+  createdAt: string;
+};
+
+function mapAgentActivity(row: Row): AgentActivity {
+  return {
+    id: toInt(row.id),
+    actor: toStr(row.actor),
+    tool: toStr(row.tool),
+    outcome: toStr(row.outcome),
+    reportId: row.report_id == null ? null : toInt(row.report_id),
+    slug: toStrOrNull(row.slug),
+    summary: toStr(row.summary),
+    createdAt: toIso(row.created_at),
+  };
+}
+
 export type BetaStore = ReturnType<typeof createBetaStore>;
 
 export function createBetaStore(sql: Sql) {
@@ -1225,6 +1260,71 @@ export function createBetaStore(sql: Sql) {
         VALUES (${input.playerId}, ${Math.max(0, Math.floor(input.amount))},
                 ${input.reason}, ${input.awardedBy})
       `;
+    },
+
+    // -----------------------------------------------------------------------
+    // Agent activity
+    // -----------------------------------------------------------------------
+
+    /**
+     * Record one line of what the MCP agent did, and sweep the old ones.
+     *
+     * ── THE SWEEP RIDES ON THE INSERT ─────────────────────────────────────
+     * One row per tool call, so a working agent fills this table steadily and
+     * nothing else would ever empty it. The insert is therefore a data-modifying
+     * CTE whose TOP-LEVEL statement is the DELETE — which is what keeps the pair
+     * to a single round trip. It has to be one statement: `neon()` is SQL over
+     * HTTP with one stateless request per call, so a separate sweep would not
+     * share this write's transaction and would be a second billed round trip on
+     * every single tool call an agent makes.
+     *
+     * The DELETE cannot touch the row just inserted — same statement, same
+     * snapshot, and the predicate is an age the new row does not have.
+     *
+     * ── THE CAPS ARE APPLIED HERE, NOT TRUSTED FROM THE CALLER ────────────
+     * `summary` has a CHECK on it (1..300) and this is a logging path: a summary
+     * one character too long must not turn into a failed tool call for the agent
+     * that wrote it. So it is truncated and a blank one is refused before the
+     * statement, rather than left to the constraint.
+     */
+    async logAgentActivity(input: {
+      actor: string;
+      tool: string;
+      outcome: string;
+      reportId?: number | null;
+      slug?: string | null;
+      summary: string;
+      /** How long a line is kept. See migration 029. */
+      retainDays: number;
+    }): Promise<void> {
+      const summary = input.summary.trim().slice(0, 300);
+      if (!summary) return;
+      const reportId =
+        input.reportId != null && Number.isInteger(input.reportId) && input.reportId > 0
+          ? input.reportId
+          : null;
+      await sql`
+        WITH logged AS (
+          INSERT INTO beta_agent_activity
+            (actor, tool, outcome, report_id, slug, summary)
+          VALUES (${input.actor}, ${input.tool}, ${input.outcome},
+                  ${reportId}, ${input.slug ?? null}, ${summary})
+          RETURNING id
+        )
+        DELETE FROM beta_agent_activity
+        WHERE created_at < now() - make_interval(days => ${Math.max(1, input.retainDays)})
+      `;
+    },
+
+    /** The newest lines, for the dashboard panel. Served by the recent index. */
+    async recentAgentActivity(limit = 20): Promise<AgentActivity[]> {
+      const rows = await sql`
+        SELECT id, actor, tool, outcome, report_id, slug, summary, created_at
+        FROM beta_agent_activity
+        ORDER BY created_at DESC, id DESC
+        LIMIT ${Math.max(1, Math.min(100, limit))}
+      `;
+      return rows.map(mapAgentActivity);
     },
   };
 }
