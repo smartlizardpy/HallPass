@@ -238,10 +238,11 @@ export async function getReportQueue(): Promise<BetaReportWithAuthor[]> {
  * the current run, or nothing once it has gone quiet for `idleMinutes`
  * (`agent-activity-design.md` §11).
  *
- * Fail-soft to `[]` like every other read here, and this one has a second reason
- * beyond the usual schema-gap window: the panel renders NOTHING when the list is
- * empty, so degrading is indistinguishable from "no agent has run yet" — which
- * is the honest thing to show when the trail cannot be read.
+ * Fail-soft to `[]` like every other read here. That is the right degradation
+ * for the page's FIRST render, which has nothing better to show when the trail
+ * cannot be read. It is the wrong one for the panel's poll, where an empty
+ * answer means "no agent is running" — so `agentActivityAction` reads the store
+ * directly and lets an error throw.
  */
 export async function getAgentActivity(input: {
   limit?: number;

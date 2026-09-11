@@ -48,7 +48,7 @@ import {
   SITE_WRITE_ROLE,
 } from "@/app/lib/permissions";
 import { blobOpDisabledMessage, isBlobOpEnabled } from "@/app/lib/blob-ops";
-import { beta, getAgentActivity, type AgentActivity } from "@/app/lib/beta";
+import { beta, type AgentActivity } from "@/app/lib/beta";
 import { AGENT_FEED_LIMIT } from "@/app/lib/mcp/activity";
 import { ACTIVITY_IDLE_MINUTES } from "@/app/lib/mcp/config";
 import {
@@ -871,7 +871,7 @@ export async function publishAcceptedShotsAction(): Promise<void> {
 /* --------------------------------------------------------------- agent feed */
 
 /**
- * The newest lines of what the bug-MCP agent has been doing.
+ * The newest lines of the run the bug-MCP agent is on, or none once it is over.
  *
  * A Server FUNCTION used for a READ, the same unusual-enough-to-justify shape as
  * `moderation/actions.ts`'s `openReportCountAction`. The panel has to refresh
@@ -885,13 +885,18 @@ export async function publishAcceptedShotsAction(): Promise<void> {
  * children — not public information, and not guarded by the page having been
  * rendered.
  *
- * Fail-soft through `getAgentActivity`, which degrades to `[]`. The panel
- * renders nothing at all for an empty list, so a failed poll leaves the last
- * good rows on screen rather than flashing the panel away.
+ * ── IT THROWS; IT DOES NOT DEGRADE ─────────────────────────────────────────
+ * Reads the live store rather than `getAgentActivity`, whose fail-soft `[]` is
+ * right for the page's first render and wrong here. An empty answer says "no
+ * agent is running" and makes the panel disappear (`agent-activity-design.md`
+ * §11), so a database hiccup answered with `[]` would tell an operator their
+ * agent had stopped. A thrown poll is caught by the island, which keeps its
+ * last rows on screen. Before migration 029 is applied that is an error in the
+ * server log on every poll; the page still renders, through the fail-soft read.
  */
 export async function agentActivityAction(): Promise<AgentActivity[]> {
   await requireRole(BETA_MIN_ROLE);
-  return getAgentActivity({
+  return beta.recentAgentActivity({
     limit: AGENT_FEED_LIMIT,
     idleMinutes: ACTIVITY_IDLE_MINUTES,
   });
