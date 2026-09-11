@@ -403,7 +403,7 @@
         class Node {
             constructor(x, y, type) {
                 this.x = x; this.y = y; this.type = type;
-                this.connected = false; this.discovered = false;
+                this.connected = false; this.discovered = false; this.linking = false;
                 this.baseSize = type==='tree'?24:(type==='spore'?12:(type==='relic'?18:9));
                 this.seed = Math.random()*100;
                 this.tradeCount = 0;
@@ -715,7 +715,7 @@
                 return;
             }
 
-            if(n && !n.connected) {
+            if(n && !n.connected && !n.linking) {
                 let src = null, min = Infinity;
                 state.nodes.filter(x=>x.connected).forEach(x => {
                     const d = Math.hypot(x.x-n.x, x.y-n.y);
@@ -732,11 +732,12 @@
                         if(hasRelic('cost_red')) cost = Math.floor(cost * 0.7);
                         if(state.weather.type === 'storm') cost = Math.floor(cost * 0.5);
 
-                        const existingType = state.nodes.some(node => node.connected && node.type === n.type);
+                        const existingType = state.nodes.some(node => (node.connected || node.linking) && node.type === n.type);
                         if (!existingType && ['tree','mineral','water'].includes(n.type)) cost = 0;
 
                         if(state.res.c >= cost) {
                             state.res.c -= cost;
+                            n.linking = true; // bought now; connected only flips once the branch finishes growing
                             state.conns.push(new Conn(src, n));
                             const label = cost === 0 ? "Free!" : `-${cost} C`;
                             particles.spawn(n.x, n.y, '#fff', 'text', label);
@@ -837,7 +838,7 @@
             
             if(hov) {
                 if(hov.connected && hov.hasFruit) canvas.style.cursor = 'pointer';
-                else if (!hov.connected) {
+                else if (!hov.connected && !hov.linking) {
                     canvas.style.cursor = 'grab';
                     let src=null, min=Infinity;
                     state.nodes.filter(x=>x.connected).forEach(x=>{
@@ -851,7 +852,7 @@
                         if(hasRelic('cost_red')) dist = Math.floor(dist*0.7);
                         if(state.weather.type==='storm') dist = Math.floor(dist*0.5);
 
-                        const existingType = state.nodes.some(node => node.connected && node.type === hov.type);
+                        const existingType = state.nodes.some(node => (node.connected || node.linking) && node.type === hov.type);
                         if (!existingType && ['tree','mineral','water'].includes(hov.type)) dist = 0;
 
                         const valid = min <= state.stats.reach; const afford = state.res.c >= dist;
