@@ -714,8 +714,22 @@ describe("agent activity", () => {
         created_at: "2026-01-01T00:00:00.000Z",
       },
     ]);
-    const rows = await createBetaStore(sql).recentAgentActivity(5);
+    const rows = await createBetaStore(sql).recentAgentActivity({ limit: 5, idleMinutes: 30 });
     expect(flat(calls[0].text)).toContain("ORDER BY created_at DESC, id DESC");
     expect(rows[0]).toMatchObject({ id: 7, tool: "list_bug_reports", reportId: null });
+  });
+
+  /**
+   * The panel closes because this read answers nothing once the run has gone
+   * quiet. It is judged in SQL, by the database's clock, so a browser whose
+   * clock is off can neither hold a dead run open nor close a live one.
+   */
+  it("answers nothing once the run has gone quiet", async () => {
+    const { sql, calls } = makeFakeSql();
+    await createBetaStore(sql).recentAgentActivity({ limit: 5, idleMinutes: 30 });
+    expect(flat(calls[0].text)).toContain(
+      "WHERE EXISTS ( SELECT 1 FROM beta_agent_activity WHERE created_at > now() - make_interval(mins => ?) )",
+    );
+    expect(calls[0].values).toEqual([30, 5]);
   });
 });

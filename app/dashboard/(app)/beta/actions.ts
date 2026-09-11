@@ -50,6 +50,7 @@ import {
 import { blobOpDisabledMessage, isBlobOpEnabled } from "@/app/lib/blob-ops";
 import { beta, getAgentActivity, type AgentActivity } from "@/app/lib/beta";
 import { AGENT_FEED_LIMIT } from "@/app/lib/mcp/activity";
+import { ACTIVITY_IDLE_MINUTES } from "@/app/lib/mcp/config";
 import {
   acceptanceReason,
   INVITE_NOTE_MAX,
@@ -890,5 +891,8 @@ export async function publishAcceptedShotsAction(): Promise<void> {
  */
 export async function agentActivityAction(): Promise<AgentActivity[]> {
   await requireRole(BETA_MIN_ROLE);
-  return getAgentActivity(AGENT_FEED_LIMIT);
+  return getAgentActivity({
+    limit: AGENT_FEED_LIMIT,
+    idleMinutes: ACTIVITY_IDLE_MINUTES,
+  });
 }

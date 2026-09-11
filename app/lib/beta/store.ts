@@ -1339,13 +1339,35 @@ export function createBetaStore(sql: Sql) {
       `;
     },
 
-    /** The newest lines, for the dashboard panel. Served by the recent index. */
-    async recentAgentActivity(limit = 20): Promise<AgentActivity[]> {
+    /**
+     * The newest lines of the current run, for the dashboard panel — or none at
+     * all once the run has gone quiet.
+     *
+     * "Quiet" is judged here, by the database's `now()`, rather than by the
+     * browser that renders the panel: a laptop clock a few minutes out would
+     * otherwise close a live run early or hold a dead one open. The table only
+     * ever holds one run (a finished run is deleted, and a quiet one goes with
+     * the next run's first line — see `logAgentActivity`), so "has anything
+     * been written lately?" is the whole question. Both halves are served by
+     * the recent index.
+     */
+    async recentAgentActivity(input: {
+      limit?: number;
+      /** A run with no line this recent is over. */
+      idleMinutes: number;
+    }): Promise<AgentActivity[]> {
+      // Floored exactly as `logAgentActivity` floors it, so the read and the
+      // reset can never disagree about when a run went quiet.
+      const idleMinutes = Math.max(1, Math.floor(input.idleMinutes));
       const rows = await sql`
         SELECT id, actor, tool, outcome, report_id, slug, summary, created_at
         FROM beta_agent_activity
+        WHERE EXISTS (
+          SELECT 1 FROM beta_agent_activity
+          WHERE created_at > now() - make_interval(mins => ${idleMinutes})
+        )
         ORDER BY created_at DESC, id DESC
-        LIMIT ${Math.max(1, Math.min(100, limit))}
+        LIMIT ${Math.max(1, Math.min(100, input.limit ?? 20))}
       `;
       return rows.map(mapAgentActivity);
     },
