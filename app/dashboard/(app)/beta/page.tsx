@@ -46,7 +46,7 @@ import {
   getShotQueue,
 } from "@/app/lib/beta";
 import { AGENT_FEED_LIMIT } from "@/app/lib/mcp/activity";
-import type { BetaShot } from "@/app/lib/beta/store";
+import type { BetaReportWithAuthor, BetaShot } from "@/app/lib/beta/store";
 import {
   BUG_SEVERITIES,
   DUPLICATE_XP,
@@ -236,6 +236,202 @@ function ShotTile({
   );
 }
 
+/**
+ * One report in the triage queue.
+ *
+ * Extracted so the settled list can render the SAME card rather than a second,
+ * drifting summary of the same row — the mistake `ShotTile` above already exists
+ * to avoid. `readOnly` is the only difference between the two lists: a rejected
+ * report has no decision left to make, and a card with no buttons is the honest
+ * way to say so.
+ */
+function ReportCard({
+  report,
+  gameTitle,
+  blockedNote,
+  readOnly = false,
+}: {
+  report: BetaReportWithAuthor;
+  gameTitle: string;
+  /** Set when the viewer may not judge this one; rendered in place of the
+      controls, so a missing button always comes with its reason. */
+  blockedNote?: string;
+  /** Closed business: render the evidence, offer nothing. */
+  readOnly?: boolean;
+}) {
+  return (
+    <li
+      className="rounded-lg border border-border bg-surface-2 p-4"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <p className="min-w-0 flex-1 font-bold text-zinc-900">
+          {report.title}
+        </p>
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+          <KindChip kind={report.kind} />
+          {report.severity && (
+            <SeverityChip severity={report.severity} />
+          )}
+          <ReportStatusChip status={report.status} />
+        </div>
+      </div>
+
+      <p className="mt-1 text-xs font-semibold text-muted">
+        {gameTitle} ·{" "}
+        {report.authorUsername
+          ? `@${report.authorUsername}`
+          : (report.authorHandle ??
+            report.authorName ??
+            "deleted player")}{" "}
+        · {formatDay(report.createdAt)}
+      </p>
+
+      {/* Tester-authored text. Rendered as a plain string child, so
+          React escapes it — never dangerouslySetInnerHTML here. */}
+      <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-700">
+        {report.body}
+      </p>
+
+      {report.shotUrl && (
+        // The URL is stored on the row, so rendering evidence costs
+        // no Blob head() — see migration 017.
+        <a
+          href={report.shotUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 block w-fit overflow-hidden rounded-lg border border-border transition hover:border-brand"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={report.shotUrl}
+            alt={`Screenshot attached to "${report.title}"`}
+            className="h-32 w-auto"
+          />
+        </a>
+      )}
+
+      {report.clipBlobPath && (
+        <video
+          // Served through our own authenticated route, never the
+          // raw Blob URL: a replay is a recording of a child's
+          // screen and must not be readable by anyone holding a
+          // guessable link.
+          src={`/api/v1/beta/clips/${report.id}`}
+          controls
+          preload="metadata"
+          className="mt-2 h-48 w-auto rounded-lg border border-border bg-black"
+        />
+      )}
+
+      {report.errorCount > 0 && (
+        <ErrorList raw={report.errorLog} count={report.errorCount} />
+      )}
+
+      {report.device && (
+        <p className="mt-2 truncate text-[11px] font-semibold text-muted">
+          {report.device}
+        </p>
+      )}
+
+      {/* `readOnly` suppresses the CONTROLS, never the record: the settled list
+          still says who rejected the report and when, which is the only thing
+          anybody opens that list to find out. */}
+      {blockedNote && !readOnly ? (
+        <p className="mt-3 rounded-lg border border-dashed border-border px-3 py-2 text-xs font-semibold text-muted">
+          {blockedNote}
+        </p>
+      ) : report.status === "open" && !readOnly ? (
+        <form
+          action={triageReportAction}
+          className="mt-3 flex flex-wrap items-center gap-2"
+        >
+          <input type="hidden" name="id" value={report.id} />
+          {report.kind === "bug" && (
+            <select
+              name="severity"
+              defaultValue={report.severity ?? "minor"}
+              aria-label="Severity"
+              className="rounded-lg border border-border bg-white px-2 py-1.5 text-xs font-bold text-zinc-700"
+            >
+              {BUG_SEVERITIES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          )}
+          {/* Submit buttons sharing one form: the clicked button's
+              name/value is what the browser sends, so the decision
+              travels without any client JS. */}
+          <button
+            type="submit"
+            name="status"
+            value="accepted"
+            className="rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-extrabold text-white transition hover:bg-emerald-700"
+          >
+            Accept
+          </button>
+          {/* `formAction` retargets THIS button at a different
+              server action while keeping the form's severity select,
+              so fixing on sight pays the right band without a second
+              duplicated dropdown. It sends no `status`, which is
+              correct — a fixed report is deleted, not re-stated. */}
+          <button
+            type="submit"
+            formAction={fixReportAction}
+            title={`Pays the severity award plus ${FIX_BONUS_XP} XP, then removes the report`}
+            className="rounded-full bg-brand px-4 py-1.5 text-xs font-extrabold text-white transition hover:bg-brand-600"
+          >
+            Fixed +{FIX_BONUS_XP}
+          </button>
+          {/* Retargeted like Fixed, and for the same reason: this
+              outcome REMOVES the report rather than restating it,
+              so it sends no `status` at all. */}
+          <button
+            type="submit"
+            formAction={duplicateReportAction}
+            title={`Pays ${DUPLICATE_XP} XP and removes the report`}
+            className={BTN_QUIET}
+          >
+            Duplicate
+          </button>
+          <button
+            type="submit"
+            name="status"
+            value="rejected"
+            className={BTN_QUIET}
+          >
+            Reject
+          </button>
+        </form>
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <p className="text-xs font-semibold text-muted">
+            {report.status} by {report.resolvedBy ?? "—"}
+          </p>
+          {/* An already-judged report can still be fixed later, which
+              is the ordinary case: you agree on Monday and ship on
+              Friday. Pays the bonus only — the severity award is
+              already in the ledger. Absent for `rejected`, the one
+              status where "fixed" contradicts the decision. */}
+          {!readOnly && report.status !== "rejected" && (
+            <form action={fixReportAction}>
+              <input type="hidden" name="id" value={report.id} />
+              <button
+                type="submit"
+                title={`Pays ${FIX_BONUS_XP} XP and removes the report`}
+                className="rounded-full bg-brand px-4 py-1.5 text-xs font-extrabold text-white transition hover:bg-brand-600"
+              >
+                Fixed +{FIX_BONUS_XP}
+              </button>
+            </form>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
 const INPUT =
   "w-full rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30";
 const BTN_PRIMARY =
@@ -288,6 +484,12 @@ export default async function DashboardBetaPage({
   const nameFor = new Map(roster.map((r) => [r.playerId, testerLabel(r)]));
   const active = roster.filter((r) => r.revokedAt == null);
   const openReports = reports.filter((r) => r.status === "open");
+  // A rejected report has no decision left in it — no XP to pay, no fix to
+  // make, no button on its card — so it stops competing for attention with the
+  // reports that do. An ACCEPTED one stays in the live list: it still carries
+  // Fixed, which pays the bonus, so it is not finished business.
+  const rejectedReports = reports.filter((r) => r.status === "rejected");
+  const liveReports = reports.filter((r) => r.status !== "rejected");
   const pendingRequests = requests.filter((r) => r.status === "pending");
   const decidedRequests = requests.filter((r) => r.status !== "pending");
   const pendingShots = shots.filter((s) => s.status === "pending");
@@ -339,184 +541,53 @@ export default async function DashboardBetaPage({
         {/* TRIAGE ---------------------------------------------------------- */}
         <Section
           title="Triage queue"
-          subtitle={`${openReports.length} open of ${reports.length}`}
+          subtitle={`${openReports.length} open of ${liveReports.length}`}
         >
           {reports.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-8 text-center text-sm text-muted">
               Nothing filed yet.
             </p>
+          ) : liveReports.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-8 text-center text-sm text-muted">
+              Nothing waiting — every report has been dealt with.
+            </p>
           ) : (
             <ul className="space-y-3">
-              {reports.map((report) => (
-                <li
+              {liveReports.map((report) => (
+                <ReportCard
                   key={report.id}
-                  className="rounded-lg border border-border bg-surface-2 p-4"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <p className="min-w-0 flex-1 font-bold text-zinc-900">
-                      {report.title}
-                    </p>
-                    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                      <KindChip kind={report.kind} />
-                      {report.severity && (
-                        <SeverityChip severity={report.severity} />
-                      )}
-                      <ReportStatusChip status={report.status} />
-                    </div>
-                  </div>
-
-                  <p className="mt-1 text-xs font-semibold text-muted">
-                    {titleFor.get(report.slug) ?? report.slug} ·{" "}
-                    {report.authorUsername
-                      ? `@${report.authorUsername}`
-                      : (report.authorHandle ??
-                        report.authorName ??
-                        "deleted player")}{" "}
-                    · {formatDay(report.createdAt)}
-                  </p>
-
-                  {/* Tester-authored text. Rendered as a plain string child, so
-                      React escapes it — never dangerouslySetInnerHTML here. */}
-                  <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-700">
-                    {report.body}
-                  </p>
-
-                  {report.shotUrl && (
-                    // The URL is stored on the row, so rendering evidence costs
-                    // no Blob head() — see migration 017.
-                    <a
-                      href={report.shotUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-2 block w-fit overflow-hidden rounded-lg border border-border transition hover:border-brand"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={report.shotUrl}
-                        alt={`Screenshot attached to "${report.title}"`}
-                        className="h-32 w-auto"
-                      />
-                    </a>
-                  )}
-
-                  {report.clipBlobPath && (
-                    <video
-                      // Served through our own authenticated route, never the
-                      // raw Blob URL: a replay is a recording of a child's
-                      // screen and must not be readable by anyone holding a
-                      // guessable link.
-                      src={`/api/v1/beta/clips/${report.id}`}
-                      controls
-                      preload="metadata"
-                      className="mt-2 h-48 w-auto rounded-lg border border-border bg-black"
-                    />
-                  )}
-
-                  {report.errorCount > 0 && (
-                    <ErrorList raw={report.errorLog} count={report.errorCount} />
-                  )}
-
-                  {report.device && (
-                    <p className="mt-2 truncate text-[11px] font-semibold text-muted">
-                      {report.device}
-                    </p>
-                  )}
-
-                  {isOwn(report.playerId) ? (
-                    <p className="mt-3 rounded-lg border border-dashed border-border px-3 py-2 text-xs font-semibold text-muted">
-                      {blockedNote}
-                    </p>
-                  ) : report.status === "open" ? (
-                    <form
-                      action={triageReportAction}
-                      className="mt-3 flex flex-wrap items-center gap-2"
-                    >
-                      <input type="hidden" name="id" value={report.id} />
-                      {report.kind === "bug" && (
-                        <select
-                          name="severity"
-                          defaultValue={report.severity ?? "minor"}
-                          aria-label="Severity"
-                          className="rounded-lg border border-border bg-white px-2 py-1.5 text-xs font-bold text-zinc-700"
-                        >
-                          {BUG_SEVERITIES.map((s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                      {/* Submit buttons sharing one form: the clicked button's
-                          name/value is what the browser sends, so the decision
-                          travels without any client JS. */}
-                      <button
-                        type="submit"
-                        name="status"
-                        value="accepted"
-                        className="rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-extrabold text-white transition hover:bg-emerald-700"
-                      >
-                        Accept
-                      </button>
-                      {/* `formAction` retargets THIS button at a different
-                          server action while keeping the form's severity select,
-                          so fixing on sight pays the right band without a second
-                          duplicated dropdown. It sends no `status`, which is
-                          correct — a fixed report is deleted, not re-stated. */}
-                      <button
-                        type="submit"
-                        formAction={fixReportAction}
-                        title={`Pays the severity award plus ${FIX_BONUS_XP} XP, then removes the report`}
-                        className="rounded-full bg-brand px-4 py-1.5 text-xs font-extrabold text-white transition hover:bg-brand-600"
-                      >
-                        Fixed +{FIX_BONUS_XP}
-                      </button>
-                      {/* Retargeted like Fixed, and for the same reason: this
-                          outcome REMOVES the report rather than restating it,
-                          so it sends no `status` at all. */}
-                      <button
-                        type="submit"
-                        formAction={duplicateReportAction}
-                        title={`Pays ${DUPLICATE_XP} XP and removes the report`}
-                        className={BTN_QUIET}
-                      >
-                        Duplicate
-                      </button>
-                      <button
-                        type="submit"
-                        name="status"
-                        value="rejected"
-                        className={BTN_QUIET}
-                      >
-                        Reject
-                      </button>
-                    </form>
-                  ) : (
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <p className="text-xs font-semibold text-muted">
-                        {report.status} by {report.resolvedBy ?? "—"}
-                      </p>
-                      {/* An already-judged report can still be fixed later, which
-                          is the ordinary case: you agree on Monday and ship on
-                          Friday. Pays the bonus only — the severity award is
-                          already in the ledger. Absent for `rejected`, the one
-                          status where "fixed" contradicts the decision. */}
-                      {report.status !== "rejected" && (
-                        <form action={fixReportAction}>
-                          <input type="hidden" name="id" value={report.id} />
-                          <button
-                            type="submit"
-                            title={`Pays ${FIX_BONUS_XP} XP and removes the report`}
-                            className="rounded-full bg-brand px-4 py-1.5 text-xs font-extrabold text-white transition hover:bg-brand-600"
-                          >
-                            Fixed +{FIX_BONUS_XP}
-                          </button>
-                        </form>
-                      )}
-                    </div>
-                  )}
-                </li>
+                  report={report}
+                  gameTitle={titleFor.get(report.slug) ?? report.slug}
+                  blockedNote={isOwn(report.playerId) ? blockedNote : undefined}
+                />
               ))}
             </ul>
+          )}
+
+          {/* Collapsed by default, exactly as the image panel's settled shots
+              are: an admin who has learned where finished business goes on this
+              page finds it in the same place in the next panel down.
+
+              HIDDEN, NOT DELETED. A rejection pays nothing, so unlike a fixed or
+              duplicate report — whose XP is in the ledger and whose row is
+              therefore redundant — this row is the ONLY record of what was
+              decided, and the tester reads it on /beta. */}
+          {rejectedReports.length > 0 && (
+            <details className="mt-3 rounded-lg border border-border bg-white px-3 py-2">
+              <summary className="cursor-pointer text-xs font-black uppercase tracking-wide text-muted">
+                {rejectedReports.length} rejected
+              </summary>
+              <ul className="mt-3 space-y-3">
+                {rejectedReports.map((report) => (
+                  <ReportCard
+                    key={report.id}
+                    report={report}
+                    gameTitle={titleFor.get(report.slug) ?? report.slug}
+                    readOnly
+                  />
+                ))}
+              </ul>
+            </details>
           )}
         </Section>
 
