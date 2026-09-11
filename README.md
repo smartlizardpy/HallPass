@@ -223,11 +223,13 @@ Google proves *identity*; `dashboard_users` decides *authorization*. Three roles
 lowest first, enforced by `requireRole(min)` against the rank map in
 `app/lib/permissions.ts`:
 
-| Role | Can |
-|---|---|
-| `beta_admin` | The beta programme: send playtests, triage reports and images. Reads the overview, growth, the games list, a game's page and curation, and can change none of them. Cannot open moderation, leaderboards or the tracker. |
-| `admin` | Everything above, plus games, the catalogue, curation, leaderboards, moderation and the tracker. |
-| `super_admin` | Everything, including managing dashboard users, logs and blob ops. |
+| Role | Seats | Can |
+|---|---|---|
+| `beta_admin` | 3 | The beta programme: send playtests, triage reports and images. Reads the overview, growth, the games list, a game's page and curation, and can change none of them. Cannot open moderation, leaderboards or the tracker. |
+| `admin` | 1 | Everything above, plus games, the catalogue, curation, leaderboards, moderation and the tracker. |
+| `super_admin` | 1 | Everything, including managing dashboard users, logs and blob ops. |
+
+Seats are defaults, not constants — see below.
 
 **`requireRole` used to only half-enforce.** Its check was
 `min === "super_admin" && role !== "super_admin"`, so `requireRole("admin")` —
@@ -236,6 +238,25 @@ correct by accident while `admin` was the floor; a role below it made every
 guard a hole. It now compares ranks, and a refused caller lands on their own
 role's `DASHBOARD_HOME` rather than a fixed `/dashboard`, because the page you
 cannot open and the page you land on must not be the same page.
+
+**Each role has a seat limit** — one super admin, one admin, three beta admins
+by default, edited at `/dashboard/users/settings` and stored as `role_seats:<role>`
+rows in `app_settings` (so a key nobody has written means that role's default,
+and a failed settings read means the defaults too — never "uncapped"). A grant
+that would take a role past its cap is refused: `addUser`/`setRole` count the
+role and write in a single statement, so there is no round trip in which the last
+seat is taken by somebody else's click. The person being written is excluded from
+the count, so re-asserting somebody at the role they already hold, or moving them
+between roles, is not blocked by the seat they occupy or are about to free.
+
+Two things are deliberately *not* capped. The `SUPER_ADMIN_EMAILS` allow-list is
+exempt at sign-in — a seat check there could lock the last super admin out of a
+full table with no way back in — though the row it writes still consumes a seat,
+which is what stops the UI granting a second super admin beside them. And
+lowering a limit under the people already holding a role demotes nobody. Both
+routes lead to the same benign over-capacity state, which the Users page reports
+rather than hides: nobody has lost access, and the role cannot be granted again
+until it is back within its seats.
 
 **Every "may this role" question lives in `app/lib/permissions.ts`** and is
 imported by both halves of the permission — the guard the action enforces and
@@ -668,7 +689,7 @@ and auth vars below are not in it.
 | `AUTH_SECRET` | Auth.js (`app/lib/auth.ts`), `app/lib/scoreboard/claim.ts` | Signs the session JWT, and is second in the claim-token secret chain. No sign-in without it. |
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | Auth.js, by convention | The Google OAuth client. Resolved from `AUTH_<PROVIDER>_ID`/`_SECRET` inside `@auth/core`, which is why no file in this repo references them. |
 | `AUTH_URL` | Auth.js, by convention | Pins the callback origin. Needed for local development (`http://localhost:3000`); on Vercel the host header is the authority and `trustHost: true` covers it. |
-| `SUPER_ADMIN_EMAILS` | `app/lib/dashboard-users.ts`, `app/lib/notifications/admins.ts` | Comma- or whitespace-separated allow-list, matched case-insensitively. A listed address is `super_admin` unconditionally — even with no `dashboard_users` row — which is how the first admin gets in, and the one role exempt from the four-eyes rule (see [Dashboard roles](#dashboard-roles)). |
+| `SUPER_ADMIN_EMAILS` | `app/lib/dashboard-users.ts`, `app/lib/notifications/admins.ts` | Comma- or whitespace-separated allow-list, matched case-insensitively. A listed address is `super_admin` unconditionally — even with no `dashboard_users` row — which is how the first admin gets in, the one role exempt from the four-eyes rule, and the one grant exempt from the seat limits (see [Dashboard roles](#dashboard-roles)). Listing several addresses puts the role over its seats on purpose. |
 | `BLOB_READ_WRITE_TOKEN` | `@vercel/blob` (`put`, `copy`, `head`, `del`) | Auto-provisioned by Vercel when a Blob store is linked. |
 | `BLOB_READ_ONLY` | `app/lib/blob-ops.ts` | Optional emergency lock. Set to `1` (or `true`/`yes`/`on`) to force **every** advanced-blob feature off — publishing, media, beta evidence, cover caching, shot promotion, reindex — **without needing the database**, for when the allowance is spent and migration 026 has not been applied. Beats the `app_settings` switches and greys out the dashboard toggles. Anything unrecognised (including `0` and `false`) fails open and leaves the switches in charge. Takes effect on the next deploy. |
 | `ADMIN_HTML_PASSWORD` | `app/lib/admin-html-auth.ts` | Plain string; gates `/admin/html`. Required for uploads. |
