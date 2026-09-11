@@ -538,3 +538,47 @@ describe("decoding", () => {
     expect(calls[0].values).toContain(0);
   });
 });
+
+describe("reportByIdWithAuthor", () => {
+  it("fetches ONE row rather than scanning the queue for it", async () => {
+    const { sql, calls } = makeFakeSql(() => [{ id: 7, kind: "bug", status: "open" }]);
+    await createBetaStore(sql).reportByIdWithAuthor(7);
+    const text = flat(calls[0].text);
+    expect(calls).toHaveLength(1);
+    expect(text).toContain("WHERE r.id =");
+    // No LIMIT and no ORDER BY: this is a primary-key lookup, not a page of the
+    // queue narrowed down after the fact.
+    expect(text).not.toContain("ORDER BY");
+    expect(calls[0].values).toContain(7);
+  });
+
+  /**
+   * The same invariant the admin queue is held to: a query that cannot select
+   * `players.email` cannot leak one into serialised props.
+   */
+  it("joins only PUBLIC player columns", async () => {
+    const { sql, calls } = makeFakeSql(() => []);
+    await createBetaStore(sql).reportByIdWithAuthor(1);
+    const text = flat(calls[0].text);
+    expect(text).toContain("p.username AS author_username");
+    expect(text).toContain("p.handle AS author_handle");
+    expect(text).toContain("p.name AS author_name");
+    expect(text).not.toContain("email");
+  });
+
+  /**
+   * `player_id` is ON DELETE SET NULL, so a report outlives its author. An INNER
+   * join would silently drop exactly those reports — and an orphaned report is
+   * still a real bug somebody filed.
+   */
+  it("LEFT joins, so an orphaned report is still returned", async () => {
+    const { sql, calls } = makeFakeSql(() => []);
+    await createBetaStore(sql).reportByIdWithAuthor(1);
+    expect(flat(calls[0].text)).toContain("LEFT JOIN players p ON p.id = r.player_id");
+  });
+
+  it("is null when no such report exists", async () => {
+    const { sql } = makeFakeSql(() => []);
+    await expect(createBetaStore(sql).reportByIdWithAuthor(99)).resolves.toBeNull();
+  });
+});

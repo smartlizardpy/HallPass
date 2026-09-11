@@ -739,6 +739,35 @@ export function createBetaStore(sql: Sql) {
       return rows.length > 0 ? mapReport(rows[0]) : null;
     },
 
+    /**
+     * One report joined to its author's public display fields.
+     *
+     * The single-row counterpart to {@link reportQueue}, for a caller that wants
+     * ONE report and its author — the bug MCP's detail tool. Without it that
+     * caller has to read the whole queue and find its row in the result, paying
+     * for five hundred bodies and error logs to recover one handle.
+     *
+     * Joins only PUBLIC player columns, exactly as the queue does. A query that
+     * cannot select `players.email` cannot leak one, and `store.test.ts` asserts
+     * the column list rather than trusting it.
+     */
+    async reportByIdWithAuthor(id: number): Promise<BetaReportWithAuthor | null> {
+      const rows = await sql`
+        SELECT r.id, r.player_id, r.assignment_id, r.slug, r.kind, r.severity,
+               r.title, r.body, r.status, r.clip_blob_path, r.clip_url, r.clip_bytes,
+               r.clip_ms, r.shot_blob_path, r.shot_url,
+               r.error_log, r.error_count,
+               r.device, r.created_at, r.resolved_by, r.resolved_at,
+               p.username AS author_username,
+               p.handle   AS author_handle,
+               p.name     AS author_name
+        FROM beta_reports r
+        LEFT JOIN players p ON p.id = r.player_id
+        WHERE r.id = ${id}
+      `;
+      return rows.length > 0 ? mapReportWithAuthor(rows[0]) : null;
+    },
+
     /** One tester's own reports, newest first. */
     async reportsFor(playerId: string, limit = 50): Promise<BetaReport[]> {
       const rows = await sql`
