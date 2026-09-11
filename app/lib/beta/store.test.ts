@@ -732,4 +732,18 @@ describe("agent activity", () => {
     );
     expect(calls[0].values).toEqual([30, 5]);
   });
+
+  /**
+   * The finish tool's delete. Unscoped on purpose — the table holds one run and
+   * every agent writes the same actor — and counted in SQL, so a long run's ids
+   * never cross the wire just to be counted.
+   */
+  it("clears every line and says how many", async () => {
+    const { sql, calls } = makeFakeSql(() => [{ cleared: 53 }]);
+    await expect(createBetaStore(sql).clearAgentActivity()).resolves.toBe(53);
+    const text = flat(calls[0].text);
+    expect(text).toContain("DELETE FROM beta_agent_activity RETURNING id");
+    expect(text).toContain("SELECT count(*)::int AS cleared FROM cleared");
+    expect(text).not.toContain("WHERE");
+  });
 });

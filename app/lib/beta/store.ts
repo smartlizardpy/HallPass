@@ -1371,5 +1371,29 @@ export function createBetaStore(sql: Sql) {
       `;
       return rows.map(mapAgentActivity);
     },
+
+    /**
+     * Delete every line, because the agent has finished
+     * (`finish_agent_activity`). Answers how many went.
+     *
+     * No WHERE, deliberately. The table only ever holds one run
+     * (`agent-activity-design.md` §11), and every agent writes the same actor,
+     * so there is nothing narrower to delete by. Two agents working at once
+     * share one feed: the first to finish clears it, and the other's next line
+     * starts a new run.
+     *
+     * Counted in SQL rather than by returning every id: a run that went all
+     * afternoon is hundreds of rows, and the count is all the tool reports.
+     */
+    async clearAgentActivity(): Promise<number> {
+      const rows = await sql`
+        WITH cleared AS (
+          DELETE FROM beta_agent_activity
+          RETURNING id
+        )
+        SELECT count(*)::int AS cleared FROM cleared
+      `;
+      return toInt(rows[0]?.cleared);
+    },
   };
 }
