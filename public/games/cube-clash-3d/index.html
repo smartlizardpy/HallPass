@@ -1541,12 +1541,6 @@
             camera.position.z += ((target.z + 35) - camera.position.z) * 0.1; 
             camera.lookAt(target.x, 0, target.z);
             
-            // JUICE: Lerp FOV back to normal
-            let targetFov = 45;
-            if(players[0].isDashing) targetFov = 50;
-            camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, 0.1);
-            camera.updateProjectionMatrix();
-            
             // Rotational Shake
             if(shakeIntensity > 0) {
                  camera.rotation.z = (Math.random()-0.5)*shakeIntensity*0.05;
@@ -1571,6 +1565,14 @@
             
             camera.lookAt(midX, 0, midZ);
         }
+
+        // JUICE: Lerp FOV back to normal in EVERY mode. shoot() kicks camera.fov up
+        // on each P1 shot; without this the 2-player camera never recovers and the
+        // arena shrinks every round.
+        let targetFov = 45;
+        if(players[0].isDashing) targetFov = 50;
+        camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, 0.1);
+        camera.updateProjectionMatrix();
     }
 
     function applyLoot(p, type) {
