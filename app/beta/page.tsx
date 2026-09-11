@@ -34,7 +34,13 @@ import {
   getOwnReports,
   requireBetaTester,
 } from "@/app/lib/beta";
-import { BUG_XP, FEATURE_XP, FIX_BONUS_XP, SHOT_XP } from "@/app/lib/beta/config";
+import {
+  BUG_XP,
+  FEATURE_XP,
+  FIX_BONUS_XP,
+  SHOT_XP,
+  isActiveAssignment,
+} from "@/app/lib/beta/config";
 import {
   AssignmentStatusChip,
   KindChip,
@@ -70,12 +76,12 @@ export default async function BetaHomePage() {
   // One lookup for the whole page rather than a find() per assignment row.
   const bySlug = new Map(games.map((game) => [game.slug, game]));
 
-  const open = assignments.filter(
-    (a) => a.status === "assigned" || a.status === "in_progress",
-  );
-  const done = assignments.filter(
-    (a) => a.status === "submitted" || a.status === "closed",
-  );
+  // The same question the admin's assign panel asks, answered from the same
+  // vocabulary rather than by repeating the status names here — this page is
+  // where a playtest the dashboard has stopped showing still lives, so the two
+  // must not be able to disagree about which ones those are.
+  const open = assignments.filter((a) => isActiveAssignment(a.status));
+  const done = assignments.filter((a) => !isActiveAssignment(a.status));
 
   return (
     <main className="min-h-screen bg-background px-6 py-10">

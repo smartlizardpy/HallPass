@@ -52,6 +52,7 @@ import {
   DUPLICATE_XP,
   FIX_BONUS_XP,
   INVITE_NOTE_MAX,
+  isActiveAssignment,
 } from "@/app/lib/beta/config";
 import { rankFor } from "@/app/lib/beta/xp";
 import {
@@ -492,6 +493,44 @@ export default async function DashboardBetaPage({
   const liveReports = reports.filter((r) => r.status !== "rejected");
   const pendingRequests = requests.filter((r) => r.status === "pending");
   const decidedRequests = requests.filter((r) => r.status !== "pending");
+  // ── THE ASSIGN PANEL IS GROUPED, AND SHOWS ACTIVE PLAYTESTS ONLY ──────────
+  // It was the fastest-growing thing on this page: nothing ever left it, so a
+  // tester who had finished six playtests contributed six rows that looked
+  // exactly like the one they are working on now.
+  //
+  // NOTHING IS LOST BY DROPPING THE FINISHED ONES, which is what makes this
+  // safe: `/beta` already renders a tester's finished playtests under its own
+  // "Finished" heading, and that is the audience who wants them. The subtitle
+  // still counts them so the number does not silently vanish.
+  //
+  // Grouped in ROSTER order (active members first, newest invite first) rather
+  // than by assignment date, because the question this panel answers is "what
+  // is $TESTER on" — and a tester with nothing active is not rendered at all,
+  // an empty group per idle tester being the same clutter in a new shape.
+  const activeAssignments = assignments.filter((a) => isActiveAssignment(a.status));
+  const finishedAssignments = assignments.length - activeAssignments.length;
+  const assignedTo = new Map<string, typeof activeAssignments>();
+  for (const assignment of activeAssignments) {
+    const rows = assignedTo.get(assignment.playerId);
+    if (rows) rows.push(assignment);
+    else assignedTo.set(assignment.playerId, [assignment]);
+  }
+  const assignmentGroups = [
+    // Roster order first…
+    ...roster.map((entry) => entry.playerId).filter((id) => assignedTo.has(id)),
+    // …then anyone holding a playtest who is not on it. Membership rows are
+    // kept on revoke rather than deleted, so this is close to unreachable — and
+    // an assignment that quietly stopped being rendered would be worse than a
+    // row with an unfamiliar name on it.
+    ...[...assignedTo.keys()].filter(
+      (id) => !roster.some((entry) => entry.playerId === id),
+    ),
+  ].map((playerId) => ({
+    playerId,
+    label: nameFor.get(playerId) ?? "Not on the roster",
+    rows: assignedTo.get(playerId) ?? [],
+  }));
+
   const pendingShots = shots.filter((s) => s.status === "pending");
   const unpublishedShots = shots.filter(
     (s) => s.status === "accepted" && s.promotedMediaId == null,
@@ -658,7 +697,14 @@ export default async function DashboardBetaPage({
         </Section>
 
         {/* ASSIGN ---------------------------------------------------------- */}
-        <Section title="Assign a game" subtitle="Lands in the tester's queue">
+        <Section
+          title="Assign a game"
+          subtitle={`${activeAssignments.length} in flight${
+            finishedAssignments > 0
+              ? ` · ${finishedAssignments} finished, on the testers' own pages`
+              : ""
+          }`}
+        >
           {active.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-8 text-center text-sm text-muted">
               Invite a tester first.
@@ -706,33 +752,54 @@ export default async function DashboardBetaPage({
             </form>
           )}
 
-          {assignments.length > 0 && (
-            <ul className="mt-4 space-y-1.5">
-              {assignments.map((a) => (
-                <li
-                  key={a.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
-                >
-                  <span className="min-w-0 truncate text-sm">
-                    <span className="font-bold text-zinc-900">
-                      {titleFor.get(a.slug) ?? a.slug}
-                    </span>{" "}
-                    <span className="font-semibold text-muted">
-                      → {nameFor.get(a.playerId) ?? "unknown"}
+          {assignmentGroups.length > 0 ? (
+            <ul className="mt-4 space-y-4">
+              {assignmentGroups.map((group) => (
+                <li key={group.playerId}>
+                  <p className="text-[11px] font-black uppercase tracking-wide text-muted">
+                    {group.label}
+                    <span className="ml-1.5 font-bold normal-case">
+                      · {group.rows.length} in flight
                     </span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-2">
-                    <AssignmentStatusChip status={a.status} />
-                    <form action={unassignAction}>
-                      <input type="hidden" name="id" value={a.id} />
-                      <button type="submit" className={BTN_QUIET}>
-                        Remove
-                      </button>
-                    </form>
-                  </span>
+                  </p>
+                  <ul className="mt-1.5 space-y-1.5">
+                    {group.rows.map((a) => (
+                      <li
+                        key={a.id}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
+                      >
+                        {/* The tester's name is the group heading now, so the
+                            row carries the game alone rather than repeating it
+                            on every line. */}
+                        <span className="min-w-0 truncate text-sm font-bold text-zinc-900">
+                          {titleFor.get(a.slug) ?? a.slug}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <AssignmentStatusChip status={a.status} />
+                          <form action={unassignAction}>
+                            <input type="hidden" name="id" value={a.id} />
+                            <button type="submit" className={BTN_QUIET}>
+                              Remove
+                            </button>
+                          </form>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </li>
               ))}
             </ul>
+          ) : (
+            assignments.length > 0 && (
+              // Not an empty state: there ARE assignments, they are all
+              // finished. Saying where they went is the difference between a
+              // tidy panel and a panel that looks like it lost something.
+              <p className="mt-4 rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-center text-sm text-muted">
+                Nothing in flight — {finishedAssignments} finished playtest
+                {finishedAssignments === 1 ? "" : "s"} are on the testers&rsquo;
+                own pages.
+              </p>
+            )
           )}
         </Section>
 
