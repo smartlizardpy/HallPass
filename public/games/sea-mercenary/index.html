@@ -2390,11 +2390,15 @@ class Game {
         this.resize();
         window.addEventListener('keydown', (e) => {
             if(e.key.toLowerCase() === 'b') this.toggleShop();
-            this.keys[e.key] = true;
+            // Letters are stored lower-case: with SHIFT (boost) or Caps Lock down
+            // e.key is 'W', and Player.update only reads 'w'.
+            const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+            this.keys[k] = true;
             this.keys[e.code] = true; 
         });
         window.addEventListener('keyup', (e) => {
-            this.keys[e.key] = false;
+            const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+            this.keys[k] = false;
             this.keys[e.code] = false;
         });
 
