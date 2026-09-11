@@ -564,11 +564,6 @@
             if (menu.style.display === 'flex') renderCraftingMenu();
         }
         
-        window.addEventListener('keydown', e => { 
-            resumeAudio();
-            if(e.key.toLowerCase() === 'c') toggleCrafting(); 
-        });
-
         function isNearWorkbench() {
             const tx = Math.floor((player.x + player.width/2)/TILE_SIZE);
             const ty = Math.floor((player.y + player.height/2)/TILE_SIZE);
