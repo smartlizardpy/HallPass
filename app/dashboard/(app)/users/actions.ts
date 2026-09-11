@@ -27,6 +27,17 @@
  *     against a hand-written pair, so a role added to the ladder is offered here
  *     the moment it exists and a value that is not a role bounces to a banner
  *     instead of the CHECK constraint.
+ *   - A role that is at its SEAT CAP (`ROLE_SEATS`) refuses the grant. The store
+ *     decides that inside the same statement as the write — see `addUser` — so
+ *     what these actions do is turn its `ok: false` into a sentence. Nothing is
+ *     re-checked here: a second check in JS would be a second source of truth
+ *     for the same question, and the one the page could pass while the statement
+ *     refuses.
+ *
+ * Refusals and BREAKAGES stay separate throughout. `ok: false` is a decision
+ * this surface made and reads as a sentence about seats; a rejected promise is
+ * the database being down and reads as "(database error)". Collapsing them would
+ * tell somebody to go free up a seat because Neon was unreachable.
  *
  * Result reporting uses the querystring: `?ok=<message>` / `?error=<message>`
  * are full human-readable sentences (the page renders them verbatim in a banner).
@@ -40,8 +51,15 @@ import {
   setRole,
   removeUser,
   isSuperAdminEmail,
+  type Role,
+  type SeatResult,
 } from "@/app/lib/dashboard-users";
-import { ROLE_LABEL, toRole } from "@/app/lib/permissions";
+import {
+  ROLE_LABEL,
+  emptySeatCounts,
+  roleFullMessage,
+  toRole,
+} from "@/app/lib/permissions";
 import { parseAdminIdentifier } from "@/app/lib/admin-identifier";
 import { getPlayerByUsername, type Player } from "@/app/lib/players";
 
@@ -101,6 +119,28 @@ function back(kind: "ok" | "error", message: string): never {
 }
 
 /**
+ * The sentence a seat refusal renders.
+ *
+ * Built from what the STORE counted rather than from a fresh read, for the same
+ * reason the actions do not re-check the cap: the count that refused the write
+ * is the only one that was ever true at the moment of the write, and a second
+ * read could report a different number than the one that actually bit.
+ *
+ * `roleFullMessage` takes a `SeatCounts`, so the single count is lifted into one
+ * — the shared wording lives there and is what the invite form shows too, so a
+ * refused grant and the hint above it cannot describe the cap differently.
+ */
+function seatsFullMessage(
+  role: Role,
+  refusal: { taken: number; limit: number },
+): string {
+  return roleFullMessage(
+    { ...emptySeatCounts(), [role]: refusal.taken },
+    role,
+  );
+}
+
+/**
  * Invite (or re-assert) a user AT A ROLE. The acting super admin's address is
  * recorded as the inviter. A missing or malformed address bounces back to the
  * form; a valid one is upserted and the list revalidated.
@@ -129,11 +169,15 @@ export async function addAdminAction(formData: FormData): Promise<void> {
   // Only the store write can throw on a down/unconfigured DB; keep it INSIDE the
   // try so a raw 500 becomes a banner. The success back() (a redirect) must stay
   // OUTSIDE — redirect() throws a control signal that this catch would swallow.
+  let result: SeatResult;
   try {
-    await addUser(email, role, actor);
+    result = await addUser(email, role, actor);
   } catch {
     back("error", "Add admin failed (database error)");
   }
+  // A full role is a DECISION, so it is reported as one. The row was not
+  // written, so there is nothing to revalidate and the path below is skipped.
+  if (!result.ok) back("error", seatsFullMessage(role, result));
   revalidatePath(USERS_PATH);
   back("ok", `Added as ${ROLE_LABEL[role].toLowerCase()}`);
 }
@@ -160,11 +204,13 @@ export async function setRoleAction(formData: FormData): Promise<void> {
 
   // See addAdminAction: wrap only the store write so a DB error degrades to a
   // banner, leaving the success redirect outside the try where it belongs.
+  let result: SeatResult;
   try {
-    await setRole(email, role);
+    result = await setRole(email, role);
   } catch {
     back("error", "Set role failed (database error)");
   }
+  if (!result.ok) back("error", seatsFullMessage(role, result));
   revalidatePath(USERS_PATH);
   back("ok", "Role updated");
 }
