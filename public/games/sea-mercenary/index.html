@@ -2392,12 +2392,12 @@ class Game {
             if(e.key.toLowerCase() === 'b') this.toggleShop();
             // Letters are stored lower-case: with SHIFT (boost) or Caps Lock down
             // e.key is 'W', and Player.update only reads 'w'.
-            const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+            const k = (e.key || '').length === 1 ? e.key.toLowerCase() : e.key;
             this.keys[k] = true;
             this.keys[e.code] = true; 
         });
         window.addEventListener('keyup', (e) => {
-            const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+            const k = (e.key || '').length === 1 ? e.key.toLowerCase() : e.key;
             this.keys[k] = false;
             this.keys[e.code] = false;
         });
