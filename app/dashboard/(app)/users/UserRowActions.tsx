@@ -165,8 +165,8 @@ function ConnectorPanel({ connectors }: { connectors: ConnectorSummary | null })
               approvals outlive the account and come back with a re-invite. */}
           {connectors.connections > 0 && (
             <p className="mt-2 text-xs text-muted">
-              Removing this user blocks these straight away, but the approvals
-              stay on record — revoke them to end them for good.
+              Removal blocks these at once, but the approvals themselves last
+              until revoked.
             </p>
           )}
         </>
@@ -247,8 +247,11 @@ export function UserRowActions({
             className="absolute inset-0 cursor-default bg-black/40"
           />
 
-          {/* Dialog card. */}
-          <div className="relative z-10 w-full max-w-sm rounded-2xl border border-border bg-white p-6 text-left shadow-xl">
+          {/* Dialog card. It SCROLLS: role + connectors + removal is more than
+              a short laptop viewport holds, and the page behind it is
+              `overflow: hidden` while this is open — so a card that overflowed
+              would put "Remove from dashboard" somewhere nothing can reach. */}
+          <div className="relative z-10 max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-2xl border border-border bg-white p-6 text-left shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="text-base font-black tracking-tight text-foreground">
