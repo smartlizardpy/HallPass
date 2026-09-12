@@ -175,3 +175,25 @@ export function clampRows(limit: number | undefined): number {
   if (whole > MAX_ROWS) return MAX_ROWS;
   return whole;
 }
+
+/**
+ * The same shape check for a HogQL query against PostHog.
+ *
+ * HogQL is ClickHouse-flavoured SQL and PostHog's `HogQLQuery` kind only ever
+ * runs a read — so, as with the Postgres side, this is about SHAPE and COST
+ * rather than authority. The difference is where the authority comes from:
+ * there is no second Postgres role here, only a personal API key that PostHog
+ * scopes to `query:read`. That is a weaker guarantee than a role with no write
+ * grants, which is why the leading-keyword check is the same and the ceiling is
+ * lower — a PostHog event table is very much larger than any table here.
+ *
+ * The wrapper is identical because ClickHouse accepts the same subquery form.
+ */
+export function guardHogqlQuery(raw: unknown, limit?: number): GuardResult {
+  const result = guardAnalyticsSql(raw, limit);
+  if (!result.ok) return result;
+  // `guardAnalyticsSql` has already stripped the trailing semicolon, refused a
+  // second statement and pinned the leading keyword; only the alias differs, and
+  // it does not, so the accepted form is reused verbatim.
+  return result;
+}

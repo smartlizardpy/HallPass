@@ -196,6 +196,18 @@ afternoon; one that does not is the only failure this feature cannot have.
 | `run_analytics_sql` | One read-only `SELECT` over the `mcp` schema. |
 | `run_analytics_hogql` | One read-only HogQL query over PostHog events. |
 
+**These tools do NOT write to the agent activity feed, and that reverses the
+plan.** The bug tools do, through `logged()`. Dropping it was decided on contact
+rather than in advance: `activity.ts`'s `describeToolCall` is written entirely
+around bug reports — its fallback summary is literally `"<tool> on report ?"` —
+so an analytics call would land on the operator's triage panel as a line about a
+report that does not exist. The feed's stated job
+(`agent-activity-design.md`) is narrating a run through the bug QUEUE, and it is
+cleared when that run ends. The audit trail for an analytics caller is a
+different and better one: every request stamps `last_used_at` on its OAuth
+grant, and `/dashboard/mcp` shows it per connection beside the account that
+approved it.
+
 The curated four add no SQL. They call the functions the dashboard calls, so a number
 read through the MCP and a number read on the screen cannot disagree — if they ever
 do, one of them is a bug in a shared function rather than a discrepancy to
