@@ -47,6 +47,7 @@ import "server-only";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDashboardStats, hogqlNamed, isStatsConfigured } from "@/app/lib/stats";
+import { SITE_URL } from "@/app/lib/site";
 import { getCommunityStats, WINDOW_DAYS } from "@/app/lib/overview";
 import { getAcquisition } from "@/app/lib/growth/acquisition";
 import { getShareLoop } from "@/app/lib/growth/share-loop";
@@ -58,6 +59,8 @@ import {
   POSTHOG_EVENTS,
   POSTHOG_PROPERTIES,
 } from "./definitions";
+import { MAX_SEARCH_RESULTS, rankDocs } from "./doc-index";
+import { getDocument, listDocuments } from "./documents";
 import {
   DEFAULT_ROWS,
   MAX_ROWS,
@@ -73,6 +76,23 @@ import {
 /** JSON in a text block — the same answer shape the bug tools use. */
 function json(value: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] };
+}
+
+/**
+ * The answer shape the HOSTED assistants require: `structuredContent` AND a
+ * `content` text block carrying the identical JSON.
+ *
+ * Both, and identical, is not redundancy — it is the contract. ChatGPT reads
+ * `structuredContent` to build citations and reads `content` as what the model
+ * actually sees, and a server that sends only one of them either renders no
+ * source links or hands the model nothing to read. Deriving the second from the
+ * first here is what stops them drifting apart per tool.
+ */
+function structured(value: unknown) {
+  return {
+    structuredContent: value as Record<string, unknown>,
+    content: [{ type: "text" as const, text: JSON.stringify(value) }],
+  };
 }
 
 /** Every tool here reads and nothing here reaches an unbounded outside world. */
@@ -111,6 +131,88 @@ const rowLimit = z
  * will be wrong. `describe_analytics_schema` says so in words instead.
  */
 export function registerAnalyticsTools(server: McpServer): void {
+  // ── `search` and `fetch`: the hosted-assistant contract ──────────────────
+  //
+  // Registered FIRST because they are the two tools ChatGPT's connector looks
+  // for by name, and because they are the right first tools for a person on a
+  // phone: name a report, read it, ask a follow-up. The other five remain for
+  // the questions that need a query rather than a document.
+  //
+  // Their answer shape is fixed by that contract (see `structured` above), which
+  // is why these two do not use `json()` like everything else here.
+  server.registerTool(
+    "search",
+    {
+      title: "Search HallPass analytics",
+      description:
+        "Find HallPass analytics reports by name or subject. Returns a list of " +
+        "documents with an id, a title and a citable URL — pass an id to `fetch` " +
+        "to read one. Covers the arcade overview, growth and acquisition, " +
+        "catalogue health, live alerts, the metric definitions, the data schema, " +
+        "and a per-game report for every game on the site. Try a game's name, or " +
+        "a subject like \"retention\", \"where do players come from\" or \"is " +
+        "anything broken\".",
+      inputSchema: {
+        query: z.string().describe("What to look for. A game name, or a subject."),
+      },
+      annotations: READ_ONLY,
+    },
+    async ({ query }) => {
+      try {
+        const docs = await listDocuments();
+        const hits = rankDocs(docs, query ?? "", MAX_SEARCH_RESULTS);
+        return structured({
+          results: hits.map((hit) => ({ id: hit.id, title: hit.title, url: hit.url })),
+        });
+      } catch (error) {
+        // An empty result list, not a thrown error: a hosted assistant renders a
+        // tool failure as "the connector is broken", which is a worse and less
+        // actionable answer than "nothing matched" plus the reason.
+        return structured({ results: [], error: failure(error).error });
+      }
+    },
+  );
+
+  server.registerTool(
+    "fetch",
+    {
+      title: "Read a HallPass analytics report",
+      description:
+        "Read one analytics report in full, by the id `search` returned. Reports " +
+        "are written to be read: the numbers with their comparisons and the " +
+        "caveats that apply to them, not raw rows. Ids are `overview`, `growth`, " +
+        "`content-health`, `alerts`, `metrics`, `schema`, or `game:<slug>` for a " +
+        "single game.",
+      inputSchema: {
+        id: z.string().describe("A document id from `search`, e.g. `overview` or `game:duskfall`."),
+      },
+      annotations: READ_ONLY,
+    },
+    async ({ id }) => {
+      try {
+        const document = await getDocument(id);
+        if (!document) {
+          return structured({
+            id,
+            title: "Not found",
+            text:
+              `There is no HallPass analytics report with the id "${id}". Call ` +
+              "`search` to list the reports that exist.",
+            url: `${SITE_URL}/dashboard`,
+          });
+        }
+        return structured(document);
+      } catch (error) {
+        return structured({
+          id,
+          title: "Unavailable",
+          text: `That report could not be built: ${failure(error).error}`,
+          url: `${SITE_URL}/dashboard`,
+        });
+      }
+    },
+  );
+
   server.registerTool(
     "get_overview",
     {
