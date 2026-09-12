@@ -212,6 +212,14 @@
                 ⚡ <b>HARMONIC FLASH:</b> Parry perfectly on impact to unleash a Black Flash!<br>
             </p>
             <button id="startBtn">BEGIN EXORCISM</button>
+            <!-- Identity row: Sign in only, never a Challenge button. A
+                 challenge dares somebody to beat a score you have just posted,
+                 and on the start screen there is no such score -- challenge()
+                 would answer "no-score" every time it was pressed here. -->
+            <div class="hp-auth">
+                <button id="hpSignIn" class="hp-ghost">Sign in</button>
+                <span id="hpAuthStatus">Playing as Guest</span>
+            </div>
         </div>
 
         <div id="gameOverPanel" class="panel hidden">
@@ -230,6 +238,23 @@
                     ZEN GOD MODE
                 </button>
             </div>
+        </div>
+        <!-- The HallPass board, Challenge button and result message.
+
+             ONE copy, moved into whichever panel the run ended on, rather than
+             a copy inside each. Both endings post, so both need it -- but ids
+             must be unique in a document, and duplicating them fails quietly
+             instead of loudly: getElementById returns the FIRST match, so every
+             listener and every render would keep targeting the loss panel even
+             while the win panel is the one on screen. A single block cannot
+             drift out of step with itself. -->
+        <div id="hpBlock" class="hidden">
+            <div class="hp-title">Rhythm Hell &middot; High Scores</div>
+            <div class="hp-board" id="hpBoard"></div>
+            <div class="hp-actions">
+                <button id="hpChallenge" class="hp-ghost">Challenge a friend</button>
+            </div>
+            <div class="hp-msg hidden" id="hpChallengeMsg"></div>
         </div>
     </div>
 
