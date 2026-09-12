@@ -73,6 +73,91 @@
             background: rgba(4, 5, 12, 0.85); padding: 10px 20px; border-radius: 9999px;
             border: 1px solid #ff007f; box-shadow: 0 0 20px rgba(255, 0, 127, 0.2);
         }
+        /* --- HallPass -------------------------------------------------------
+           Online leaderboard and friend challenges: the board plus a Challenge
+           button on the two end screens, and an identity row on the start
+           screen.
+
+           Every rule below stands on its own rather than leaning on .panel or
+           the `button` rule above. That started as a workaround: this file used
+           to be indented with U+00A0, which CSS does not treat as whitespace --
+           it is a valid ident code point, so `<U+00A0>.panel {` parsed as a type
+           selector for an element literally named "<U+00A0>" and matched
+           nothing, leaving the whole stylesheet inert. The indentation is
+           ordinary spaces now and those rules do apply, but keeping this block
+           self-contained costs nothing and means the board looks the same in
+           whichever panel it is attached to. Palette and shapes follow the
+           author's intent above -- cyan #00f3ff, pink #ff007f, monospace for
+           figures. */
+        .hp-auth {
+            display: flex; gap: 10px; align-items: center;
+            justify-content: center; flex-wrap: wrap; margin-top: 1.2rem;
+        }
+        #hpAuthStatus {
+            font-family: monospace; font-size: 0.8rem; letter-spacing: 0.12em;
+            text-transform: uppercase; color: #7d8b99;
+        }
+        #hpAuthStatus b { color: #00f3ff; font-weight: 700; }
+        #hpBlock {
+            max-width: 340px; margin: 1.4rem auto 0; text-align: center;
+        }
+        .hp-title {
+            font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase;
+            color: #7d8b99; margin-bottom: 0.5rem;
+        }
+        .hp-board { min-height: 22px; }
+        /* table-layout:fixed is load-bearing. Without it the browser sizes the
+           columns to their content, and the ellipsis on .hp-who then truncates
+           a long handle to a single character instead of clipping it. Fixed
+           layout lets .hp-who take whatever the other two columns leave. */
+        .hp-board table {
+            width: 100%; border-collapse: collapse; table-layout: fixed;
+            font-variant-numeric: tabular-nums;
+        }
+        .hp-board td { padding: 3px 0; font-size: 0.95rem; }
+        .hp-board .hp-rank {
+            width: 26px; color: #7d8b99; font-family: monospace; text-align: left;
+        }
+        .hp-board .hp-who {
+            text-align: left; color: #d6e4f0;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .hp-board .hp-pts {
+            width: 36%; text-align: right; font-family: monospace; color: #00f3ff;
+        }
+        .hp-board .hp-tick { color: #ff007f; margin-left: 4px; font-size: 0.75rem; }
+        .hp-empty {
+            font-size: 0.8rem; letter-spacing: 0.12em; text-transform: uppercase;
+            color: #7d8b99; padding: 4px 0;
+        }
+        .hp-actions { margin-top: 0.9rem; }
+        .hp-msg {
+            margin-top: 0.7rem; font-size: 0.8rem; letter-spacing: 0.12em;
+            text-transform: uppercase; color: #7d8b99;
+        }
+        .hp-msg b { color: #00f3ff; font-weight: 700; }
+        /* Secondary next to the primary action, so "RETRY SEQUENCE" and "BEGIN
+           EXORCISM" stay the obvious thing to press. A class outranks the bare
+           `button` type selector above, so every property that rule sets is
+           restated here -- including box-shadow on :hover, which would
+           otherwise hang the pink glow of a primary button on a ghost one. */
+        .hp-ghost {
+            background: none; color: #00f3ff; border: 1px solid #00f3ff;
+            box-shadow: none; margin: 0; padding: 9px 22px;
+            font-size: 0.8rem; font-weight: 700; font-family: inherit;
+            border-radius: 9999px; cursor: pointer; text-transform: uppercase;
+            letter-spacing: 2px; transition: all 0.2s ease-in-out;
+        }
+        .hp-ghost:hover {
+            background: rgba(0, 243, 255, 0.14); color: #ffffff; box-shadow: none;
+        }
+        .hp-ghost:disabled { opacity: 0.5; cursor: default; }
+        /* The panels in this file hide themselves with Tailwind's .hidden, and
+           the HallPass elements follow that convention -- but stated locally as
+           well, so the board still hides correctly if the Tailwind CDN is
+           blocked or offline. */
+        #hpBlock.hidden, #hpChallenge.hidden,
+        #hpChallengeMsg.hidden, #hpSignIn.hidden { display: none; }
     </style>
 </head>
 <body>
