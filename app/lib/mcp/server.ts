@@ -416,7 +416,10 @@ function registerBugTools(server: McpServer): void {
  * a different thing to each: a secret-holder still sees `hallpass-bugs`, with
  * the instructions it has always had, and nothing about that path changes.
  */
-export function createMcpServer(actor: McpActor): McpServer {
+export function createMcpServer(
+  actor: McpActor,
+  { sendWidgets = false }: { sendWidgets?: boolean } = {},
+): McpServer {
   const isSecret = actor.kind === "secret";
   const server = new McpServer(
     {
@@ -431,7 +434,7 @@ export function createMcpServer(actor: McpActor): McpServer {
   );
 
   if (isSecret) registerBugTools(server);
-  registerAnalyticsTools(server);
+  registerAnalyticsTools(server, { sendWidgets });
 
   return server;
 }

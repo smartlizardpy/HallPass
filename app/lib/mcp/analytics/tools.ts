@@ -61,6 +61,15 @@ import {
 } from "./definitions";
 import { MAX_SEARCH_RESULTS, rankDocs } from "./doc-index";
 import { getDocument, listDocuments } from "./documents";
+import { mdHeading, mdRows, mdSections } from "./md";
+import {
+  REPORT_WIDGET_HTML,
+  REPORT_WIDGET_URI,
+  WIDGET_MIME_TYPE,
+  type WidgetPayload,
+  type WidgetStat,
+  type WidgetTable,
+} from "./widgets";
 import {
   DEFAULT_ROWS,
   MAX_ROWS,
@@ -99,6 +108,77 @@ function structured(value: unknown) {
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: false } as const;
 
 /**
+ * A Markdown answer, optionally with a card attached.
+ *
+ * THE TEXT IS ALWAYS SENT AND IS ALWAYS THE SUBSTANCE. A widget is for the
+ * person; the MODEL only ever reads `content[0].text`, so a card that carried
+ * numbers the text did not would produce an assistant that cannot discuss what
+ * the user is looking at. `structuredContent` is the same numbers in the shape
+ * `widgets.ts` draws.
+ *
+ * `sendWidget` is the operator's setting (`output-mode.ts`). When it is off,
+ * `structuredContent` still rides along — it is machine-readable and harmless —
+ * but no `_meta` points at a resource, so no host tries to render anything.
+ */
+function report(
+  markdown: string,
+  payload: WidgetPayload | null,
+  sendWidget: boolean,
+) {
+  const result: {
+    content: { type: "text"; text: string }[];
+    structuredContent?: Record<string, unknown>;
+    _meta?: Record<string, unknown>;
+  } = { content: [{ type: "text" as const, text: markdown }] };
+
+  if (payload) {
+    result.structuredContent = payload as unknown as Record<string, unknown>;
+    if (sendWidget) {
+      // `ui.resourceUri` is the shared MCP Apps field; the `openai/` key is
+      // ChatGPT's documented alias for the same thing. Both, because clients
+      // read different ones and sending only the shared field means ChatGPT
+      // renders nothing.
+      result._meta = {
+        "ui.resourceUri": REPORT_WIDGET_URI,
+        ui: { resourceUri: REPORT_WIDGET_URI },
+        "openai/outputTemplate": REPORT_WIDGET_URI,
+      };
+    }
+  }
+  return result;
+}
+
+/** A stat tile whose colour follows the direction of a change. */
+function statFromDelta(
+  label: string,
+  delta: { value: number; prev: number; pct: number | null },
+  note: string,
+): WidgetStat {
+  const fmt = new Intl.NumberFormat("en-US");
+  return {
+    label,
+    value: fmt.format(Math.round(delta.value)),
+    note: delta.pct === null ? note : `${delta.pct >= 0 ? "+" : ""}${Math.round(delta.pct)}% · ${note}`,
+    trend: delta.pct === null ? "flat" : delta.pct >= 0 ? "up" : "down",
+  };
+}
+
+/** A widget table from a list of `{label, value}`-ish rows. */
+function widgetTable(
+  title: string,
+  headers: [string, string],
+  rows: [string, number][],
+): WidgetTable | null {
+  if (rows.length === 0) return null;
+  const fmt = new Intl.NumberFormat("en-US");
+  return {
+    title,
+    headers,
+    rows: rows.slice(0, 10).map(([label, value]) => [label, fmt.format(value)]),
+  };
+}
+
+/**
  * Turn a thrown error into the tool's ANSWER rather than letting it become a
  * protocol error.
  *
@@ -130,7 +210,37 @@ const rowLimit = z
  * absent: it will keep trying, and its explanation of why the data is missing
  * will be wrong. `describe_analytics_schema` says so in words instead.
  */
-export function registerAnalyticsTools(server: McpServer): void {
+export function registerAnalyticsTools(
+  server: McpServer,
+  { sendWidgets = false }: { sendWidgets?: boolean } = {},
+): void {
+  // The card every widget-bearing tool points at. Registered whenever widgets
+  // are enabled, because a tool whose `_meta` names a resource the server does
+  // not serve is the one shape guaranteed to render as an empty box.
+  if (sendWidgets) {
+    server.registerResource(
+      "hallpass-report-card",
+      REPORT_WIDGET_URI,
+      {
+        title: "HallPass report card",
+        description:
+          "The card an MCP Apps host renders for a HallPass analytics answer. " +
+          "Reads the tool's structuredContent; degrades to a written explanation " +
+          "if the host hands it nothing.",
+        mimeType: WIDGET_MIME_TYPE,
+      },
+      async () => ({
+        contents: [
+          {
+            uri: REPORT_WIDGET_URI,
+            mimeType: WIDGET_MIME_TYPE,
+            text: REPORT_WIDGET_HTML,
+          },
+        ],
+      }),
+    );
+  }
+
   // ── `search` and `fetch`: the hosted-assistant contract ──────────────────
   //
   // Registered FIRST because they are the two tools ChatGPT's connector looks
@@ -232,11 +342,50 @@ export function registerAnalyticsTools(server: McpServer): void {
     },
     async () => {
       try {
-        const [traffic, community] = await Promise.all([
+        const [document, traffic, community] = await Promise.all([
+          getDocument("overview"),
           getDashboardStats(),
           getCommunityStats(),
         ]);
-        return json({ windowDays: WINDOW_DAYS, traffic, community });
+
+        const stats: WidgetStat[] = [];
+        if (traffic.configured && !traffic.unavailable) {
+          stats.push(
+            statFromDelta("Plays", traffic.playsDelta, `last ${WINDOW_DAYS} days`),
+            statFromDelta("Visitors", traffic.visitorsDelta, `last ${WINDOW_DAYS} days`),
+            statFromDelta("Searches", traffic.searchesDelta, `last ${WINDOW_DAYS} days`),
+          );
+        }
+        if (community.available) {
+          stats.push(
+            { label: "Players", value: String(community.players), note: "all time" },
+            {
+              label: "Active (7d)",
+              value: String(community.activePlayers7),
+              note: "signed in, not played",
+            },
+            { label: "Scores", value: String(community.scores), note: "all time" },
+          );
+        }
+
+        const payload: WidgetPayload = {
+          kind: "hallpass-report",
+          title: "Arcade overview",
+          subtitle: `Last ${WINDOW_DAYS} days against the ${WINDOW_DAYS} before`,
+          stats,
+          tables: [
+            widgetTable("Top games", ["Game", "Plays"], traffic.topGames.map((g) => [g.slug, g.plays])),
+            widgetTable("Busiest boards", ["Board", "Scores"], community.topBoards.map((b) => [b.title, b.scores])),
+            widgetTable("Devices", ["Device", "Plays"], traffic.devices.map((d) => [d.label, d.value])),
+          ].filter((table): table is WidgetTable => table !== null),
+          notes: [
+            "PostHog counts anonymous devices; the community numbers count registered people. Do not divide one by the other.",
+            '"Active" means signed in to the site, not played.',
+          ],
+          url: document?.url,
+        };
+
+        return report(document?.text ?? "The overview could not be built.", payload, sendWidgets);
       } catch (error) {
         return json(failure(error));
       }
@@ -259,11 +408,24 @@ export function registerAnalyticsTools(server: McpServer): void {
     },
     async () => {
       try {
-        const [acquisition, shareLoop] = await Promise.all([
+        const [document, acquisition, shareLoop] = await Promise.all([
+          getDocument("growth"),
           getAcquisition(),
           getShareLoop(),
         ]);
-        return json({ acquisition, shareLoop });
+        const payload: WidgetPayload = {
+          kind: "hallpass-report",
+          title: "Growth",
+          subtitle: `Acquisition and the share loop, last ${WINDOW_DAYS} days`,
+          tables: [],
+          notes: ["PostHog counts devices, not people. The share loop counts real challenge rows."],
+          url: document?.url,
+        };
+        return report(
+          document?.text ?? JSON.stringify({ acquisition, shareLoop }, null, 2),
+          payload,
+          sendWidgets,
+        );
       } catch (error) {
         return json(failure(error));
       }
@@ -285,7 +447,31 @@ export function registerAnalyticsTools(server: McpServer): void {
     },
     async () => {
       try {
-        return json(await getContentHealth());
+        const [document, health] = await Promise.all([
+          getDocument("content-health"),
+          getContentHealth(),
+        ]);
+        const problems = health.games.filter((game) => game.issues.length > 0);
+        const payload: WidgetPayload = {
+          kind: "hallpass-report",
+          title: "Catalogue health",
+          subtitle: `${health.healthy} of ${health.total} games are complete`,
+          stats: [
+            { label: "Complete", value: String(health.healthy), note: `of ${health.total}` },
+            { label: "Needs work", value: String(problems.length), note: "games" },
+          ],
+          tables: problems.length
+            ? [
+                {
+                  title: "What is missing",
+                  headers: ["Game", "Missing"],
+                  rows: problems.slice(0, 15).map((game) => [game.slug, game.issues.join(", ")]),
+                },
+              ]
+            : [],
+          url: document?.url,
+        };
+        return report(document?.text ?? "Catalogue health is unavailable.", payload, sendWidgets);
       } catch (error) {
         return json(failure(error));
       }
@@ -309,20 +495,36 @@ export function registerAnalyticsTools(server: McpServer): void {
     async () => {
       try {
         const result = await getAlertSnapshot();
+        const document = await getDocument("alerts");
         if (!result.ok) {
-          return json({
-            available: false,
-            reason: result.reason,
-            note:
-              "The alert probe could not read PostHog. This is NOT 'no alerts' — " +
-              "nothing was measured.",
-          });
+          return report(
+            document?.text ??
+              `The alert probe could not measure anything: ${result.reason}\n\n` +
+                "This is **not** 'no alerts' — nothing was measured.",
+            null,
+            sendWidgets,
+          );
         }
-        return json({
-          available: true,
-          snapshot: result.snapshot,
-          fired: evaluateAlerts(result.snapshot),
-        });
+        const fired = evaluateAlerts(result.snapshot);
+        const payload: WidgetPayload = {
+          kind: "hallpass-report",
+          title: fired.length ? `${fired.length} alert(s) firing` : "Nothing is firing",
+          subtitle: "Measured against the same window on previous days",
+          stats: [
+            { label: "Firing", value: String(fired.length), trend: fired.length ? "down" : "up" },
+          ],
+          tables: fired.length
+            ? [
+                {
+                  title: "Alerts",
+                  headers: ["Alert"],
+                  rows: fired.map((alert) => [JSON.stringify(alert)]),
+                },
+              ]
+            : [],
+          url: document?.url,
+        };
+        return report(document?.text ?? "Alerts unavailable.", payload, sendWidgets);
       } catch (error) {
         return json(failure(error));
       }
@@ -353,6 +555,18 @@ export function registerAnalyticsTools(server: McpServer): void {
         viewsError = failure(error).error;
       }
 
+      const document = await getDocument("schema").catch(() => null);
+      if (document) {
+        return report(
+          mdSections([
+            document.text,
+            mdHeading("Metric definitions — read these before computing anything", 3),
+            METRIC_DEFINITIONS.map((line, index) => `${index + 1}. ${line}`).join("\n\n"),
+          ]),
+          null,
+          sendWidgets,
+        );
+      }
       return json({
         metricDefinitions: METRIC_DEFINITIONS,
         postgres: {
@@ -418,12 +632,46 @@ export function registerAnalyticsTools(server: McpServer): void {
       }
       try {
         const rows = await hogqlNamed<Record<string, unknown>>(guarded.sql, "mcp-analytics");
-        return json({
-          rows,
-          rowCount: rows.length,
-          truncated: rows.length >= guarded.limit,
-          limit: guarded.limit,
-        });
+        const truncated = rows.length >= guarded.limit;
+        const payload: WidgetPayload =
+          rows.length > 0
+            ? {
+                kind: "hallpass-report",
+                title: "PostHog query",
+                subtitle: `${rows.length} row(s)${truncated ? ", truncated" : ""}`,
+                tables: [
+                  {
+                    headers: Object.keys(rows[0]).slice(0, 8),
+                    rows: rows.slice(0, 25).map((row) =>
+                      Object.keys(rows[0])
+                        .slice(0, 8)
+                        .map((key) => {
+                          const value = row[key];
+                          return value == null
+                            ? null
+                            : typeof value === "object"
+                              ? JSON.stringify(value)
+                              : (value as string | number);
+                        }),
+                    ),
+                  },
+                ],
+                notes: truncated
+                  ? [`Only the first ${guarded.limit} rows were returned — this answer is partial.`]
+                  : undefined,
+              }
+            : { kind: "hallpass-report", title: "PostHog query", subtitle: "No rows" };
+
+        return report(
+          mdSections([
+            mdRows(rows),
+            truncated
+              ? `> Capped at ${guarded.limit} rows — this answer is **partial**. Aggregate in the query rather than raising the cap.`
+              : null,
+          ]),
+          payload,
+          sendWidgets,
+        );
       } catch (error) {
         return json(failure(error));
       }
@@ -457,7 +705,45 @@ export function registerAnalyticsTools(server: McpServer): void {
       if (!guarded.ok) return json({ error: guarded.reason });
       try {
         const { rows, truncated } = await runAnalyticsQuery(guarded.sql, guarded.limit);
-        return json({ rows, rowCount: rows.length, truncated, limit: guarded.limit });
+        const payload: WidgetPayload =
+          rows.length > 0
+            ? {
+                kind: "hallpass-report",
+                title: "Database query",
+                subtitle: `${rows.length} row(s)${truncated ? ", truncated" : ""}`,
+                tables: [
+                  {
+                    headers: Object.keys(rows[0]).slice(0, 8),
+                    rows: rows.slice(0, 25).map((row) =>
+                      Object.keys(rows[0])
+                        .slice(0, 8)
+                        .map((key) => {
+                          const value = row[key];
+                          return value == null
+                            ? null
+                            : typeof value === "object"
+                              ? JSON.stringify(value)
+                              : (value as string | number);
+                        }),
+                    ),
+                  },
+                ],
+                notes: truncated
+                  ? [`Only the first ${guarded.limit} rows were returned — this answer is partial.`]
+                  : undefined,
+              }
+            : { kind: "hallpass-report", title: "Database query", subtitle: "No rows" };
+
+        return report(
+          mdSections([
+            mdRows(rows),
+            truncated
+              ? `> Capped at ${guarded.limit} rows — this answer is **partial**. Aggregate in the query rather than raising the cap.`
+              : null,
+          ]),
+          payload,
+          sendWidgets,
+        );
       } catch (error) {
         return json(failure(error));
       }

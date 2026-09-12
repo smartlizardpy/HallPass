@@ -35,6 +35,7 @@ import {
   GAME_DOC_PREFIX,
   type DocRef,
 } from "./doc-index";
+import { mdHeading, mdList, mdNumber, mdSections, mdStat, mdTable } from "./md";
 import { METRIC_DEFINITIONS, POSTHOG_EVENTS } from "./definitions";
 import { describeAnalyticsViews, isAnalyticsDbConfigured } from "./db";
 
@@ -62,7 +63,8 @@ const n = (value: number) => nf.format(Math.round(value));
  * ALL-TIME count; `playersDelta` is about sign-ups IN THE WINDOW. The dashboard
  * gets away with showing them together because they sit in separate visual
  * slots with separate labels; prose has no such slots, so a total and a
- * windowed change have to be separate sentences. See {@link total} below.
+ * windowed change have to be separate sentences — the overview now renders the
+ * total with an "all time" note beside it and the change on its own line.
  */
 function withDelta(delta: { value: number; prev: number; pct: number | null }): string {
   if (delta.pct === null) {
@@ -72,13 +74,15 @@ function withDelta(delta: { value: number; prev: number; pct: number | null }): 
   return `${n(delta.value)} (${direction} ${Math.abs(Math.round(delta.pct))}% on the previous ${WINDOW_DAYS} days, from ${n(delta.prev)})`;
 }
 
-/** An all-time total, labelled as one so it cannot be read as a window. */
-function total(value: number): string {
-  return `${n(value)} in total, all time`;
+
+function list(lines: (string | null | undefined | false)[]): string {
+  return mdList(lines);
 }
 
-function list(lines: (string | null | undefined)[]): string {
-  return lines.filter(Boolean).join("\n");
+/** A ranked `label — count` table, or null when there is nothing to rank. */
+function ranked(headers: [string, string], rows: [string, number][]): string | null {
+  if (rows.length === 0) return null;
+  return mdTable([headers[0], headers[1]], rows.map(([label, value]) => [label, n(value)]));
 }
 
 /** Where the fixed reports point for their citation. */
@@ -183,72 +187,93 @@ async function overviewDocument(): Promise<AnalyticsDocument> {
   ]);
 
   const trafficLines = !traffic.configured
-    ? "Traffic analytics are not configured on this deployment (no PostHog key), so nothing below covers anonymous visitors."
+    ? "_Traffic analytics are not configured on this deployment (no PostHog key), so nothing below covers anonymous visitors._"
     : traffic.unavailable
-      ? `Traffic analytics could not be read: ${traffic.unavailableReason ?? "unknown error"}. This is NOT zero traffic — nothing was measured.`
-      : list([
-          `Plays: ${withDelta(traffic.playsDelta)}`,
-          `Unique visitors: ${withDelta(traffic.visitorsDelta)}`,
-          `Searches: ${withDelta(traffic.searchesDelta)}`,
-          `Ad clicks: ${n(traffic.adClicks)}`,
-          traffic.topGames.length
-            ? `Top games by plays: ${traffic.topGames.map((g) => `${g.slug} (${n(g.plays)})`).join(", ")}`
-            : null,
-          traffic.hourly.length
-            ? `Busiest hour (PostHog project time): ${
-                traffic.hourly.reduce((best, cur) => (cur.value > best.value ? cur : best)).hour
-              }:00`
-            : null,
-          traffic.weekdays.length
-            ? `By weekday: ${traffic.weekdays.map((d) => `${d.label} ${n(d.value)}`).join(", ")}`
-            : null,
-          traffic.devices.length
-            ? `Devices: ${traffic.devices.map((d) => `${d.label} ${n(d.value)}`).join(", ")}`
-            : null,
-          traffic.countries.length
-            ? `Top countries: ${traffic.countries.map((c) => `${c.label} ${n(c.value)}`).join(", ")}`
-            : null,
+      ? `_Traffic analytics could not be read: ${traffic.unavailableReason ?? "unknown error"}. This is **not** zero traffic — nothing was measured._`
+      : mdSections([
+          list([
+            mdStat("Plays", withDelta(traffic.playsDelta)),
+            mdStat("Unique visitors", withDelta(traffic.visitorsDelta)),
+            mdStat("Searches", withDelta(traffic.searchesDelta)),
+            mdStat("Ad clicks", mdNumber(traffic.adClicks)),
+            traffic.hourly.length
+              ? mdStat(
+                  "Busiest hour",
+                  `**${traffic.hourly.reduce((best, cur) => (cur.value > best.value ? cur : best)).hour}:00**`,
+                  "PostHog project time, not UTC and not the player's",
+                )
+              : null,
+          ]),
+          ranked(["Top game", "Plays"], traffic.topGames.map((g) => [g.slug, g.plays])),
+          ranked(["Weekday", "Plays"], traffic.weekdays.map((d) => [d.label, d.value])),
+          ranked(["Device", "Plays"], traffic.devices.map((d) => [d.label, d.value])),
+          ranked(["Country", "Visitors"], traffic.countries.map((c) => [c.label, c.value])),
           traffic.zeroResultTerms.length
-            ? `Searches that found NOTHING (the next games to add): ${traffic.zeroResultTerms
-                .map((t) => `${t.label} (${n(t.value)} people)`)
-                .join(", ")}`
+            ? mdSections([
+                "**Searches that found nothing** — the next games to add:",
+                mdTable(
+                  ["Term", "People"],
+                  traffic.zeroResultTerms.map((t) => [t.label, n(t.value)]),
+                ),
+              ])
             : null,
         ]);
 
   const communityLines = !community.available
-    ? "The first-party database could not be read, so the community numbers are unavailable (not zero)."
-    : list([
-        `Registered players: ${total(community.players)}.`,
-        `New sign-ups in the last ${WINDOW_DAYS} days: ${withDelta(community.playersDelta)}`,
-        `Scores submitted: ${total(community.scores)}.`,
-        `Scores in the last ${WINDOW_DAYS} days: ${withDelta(community.scoresDelta)}`,
-        `Players active in the last 7 days: ${n(community.activePlayers7)}; last 30 days: ${n(community.activePlayers30)}`,
-        `Players who came back on a later day than they signed up: ${n(community.returningPlayers)}`,
-        `Players who have ever set a score: ${n(community.scoringPlayers)}`,
-        `Share of scores attached to a signed-in player: ${share(community.identifiedScores, community.scores) ?? "—"}%`,
-        `Leaderboards: ${n(community.boards)} (${n(community.emptyBoards)} have never received a score)`,
-        `Player comments: ${total(community.comments)} — ${n(community.recommended)} recommending, ${n(community.flaggedComments)} reported.`,
-        `Comments in the last ${WINDOW_DAYS} days: ${withDelta(community.commentsDelta)}`,
-        community.topBoards.length
-          ? `Busiest boards: ${community.topBoards.map((b) => `${b.title} (${n(b.scores)} scores)`).join(", ")}`
-          : null,
+    ? "_The first-party database could not be read, so the community numbers are unavailable (not zero)._"
+    : mdSections([
+        list([
+          mdStat("Registered players", mdNumber(community.players), "all time"),
+          mdStat(`New sign-ups`, withDelta(community.playersDelta), `last ${WINDOW_DAYS} days`),
+          mdStat("Scores submitted", mdNumber(community.scores), "all time"),
+          mdStat("Scores", withDelta(community.scoresDelta), `last ${WINDOW_DAYS} days`),
+          mdStat(
+            "Active players",
+            `${mdNumber(community.activePlayers7)} in 7 days, ${mdNumber(community.activePlayers30)} in 30`,
+            "signed in to the site — not played",
+          ),
+          mdStat(
+            "Returning players",
+            mdNumber(community.returningPlayers),
+            "came back on a later day than they signed up",
+          ),
+          mdStat("Players who have ever scored", mdNumber(community.scoringPlayers)),
+          mdStat(
+            "Scores attached to a signed-in player",
+            `**${share(community.identifiedScores, community.scores) ?? "—"}%**`,
+            "the rest are anonymous handles, which still count on the board",
+          ),
+          mdStat(
+            "Leaderboards",
+            mdNumber(community.boards),
+            `${n(community.emptyBoards)} have never received a score`,
+          ),
+          mdStat(
+            "Player comments",
+            mdNumber(community.comments),
+            `${n(community.recommended)} recommending, ${n(community.flaggedComments)} reported`,
+          ),
+        ]),
+        ranked(
+          ["Busiest board", "Scores"],
+          community.topBoards.map((b) => [b.title, b.scores]),
+        ),
       ]);
 
   return doc(
     "overview",
     "Arcade overview — plays, players, searches, retention",
-    list([
-      `HallPass arcade, the last ${WINDOW_DAYS} days against the ${WINDOW_DAYS} before.`,
-      "",
-      "TRAFFIC (PostHog — anonymous devices):",
+    mdSections([
+      `_HallPass arcade — the last ${WINDOW_DAYS} days against the ${WINDOW_DAYS} before._`,
+      mdHeading("Traffic", 3),
+      "_PostHog, counting anonymous devices._",
       trafficLines,
-      "",
-      "COMMUNITY (first-party database — signed-in people):",
+      mdHeading("Community", 3),
+      "_First-party database, counting signed-in people._",
       communityLines,
-      "",
-      "CAVEAT: the two halves count different things. PostHog counts anonymous devices; " +
+      "> **The two halves count different things.** PostHog counts anonymous devices; " +
         "the community numbers count registered people. Do not divide one by the other. " +
-        "'Active' means signed in to the site, not played.",
+        '"Active" means signed in to the site, not played.',
     ]),
     { windowDays: String(WINDOW_DAYS) },
   );
@@ -256,15 +281,45 @@ async function overviewDocument(): Promise<AnalyticsDocument> {
 
 async function growthDocument(): Promise<AnalyticsDocument> {
   const [acquisition, shareLoop] = await Promise.all([getAcquisition(), getShareLoop()]);
+  const a = acquisition as unknown as Record<string, unknown>;
+  const num = (key: string) => (typeof a[key] === "number" ? (a[key] as number) : null);
+  const rows = (key: string) => (Array.isArray(a[key]) ? (a[key] as Record<string, unknown>[]) : []);
+
+  /** Turn one of acquisition's `{label-ish, count-ish}` lists into a table. */
+  const listTable = (key: string, headers: [string, string]): string | null => {
+    const entries = rows(key);
+    if (entries.length === 0) return null;
+    const [labelKey, valueKey] = Object.keys(entries[0]);
+    return mdSections([
+      `**${headers[0]}**`,
+      mdTable(headers, entries.slice(0, 10).map((row) => [row[labelKey], row[valueKey]])),
+    ]);
+  };
+
   return doc(
     "growth",
     "Growth — where players come from and whether they return",
-    list([
-      `Acquisition over the last ${WINDOW_DAYS} days (PostHog, counting DEVICES):`,
-      JSON.stringify(acquisition, null, 2),
-      "",
-      "Challenge-link share loop (first-party):",
-      JSON.stringify(shareLoop, null, 2),
+    mdSections([
+      `_Acquisition over the last ${WINDOW_DAYS} days. PostHog counts **devices**, not people._`,
+      list([
+        num("devices") !== null ? mdStat("Devices seen", mdNumber(num("devices")!)) : null,
+        num("firstTime") !== null ? mdStat("First-time devices", mdNumber(num("firstTime")!)) : null,
+        num("returning") !== null
+          ? mdStat("Returning devices", mdNumber(num("returning")!), "the north-star number")
+          : null,
+        num("returnRate") !== null ? mdStat("Return rate", `**${num("returnRate")}%**`) : null,
+      ]),
+      listTable("channels", ["Channel", "Devices"]),
+      listTable("referrers", ["Referring domain", "Devices"]),
+      listTable("entryPages", ["Entry page", "Devices"]),
+      mdHeading("Challenge-link share loop", 3),
+      "_First-party: real challenge rows, not events._",
+      mdTable(
+        ["Metric", "Count"],
+        Object.entries(shareLoop as unknown as Record<string, unknown>)
+          .filter(([, value]) => typeof value === "number")
+          .map(([key, value]) => [key, n(value as number)]),
+      ) || "_No share-loop activity yet._",
     ]),
   );
 }
@@ -275,17 +330,15 @@ async function contentHealthDocument(): Promise<AnalyticsDocument> {
   return doc(
     "content-health",
     "Catalogue health — games missing art, video or description",
-    list([
-      `${health.healthy} of ${health.total} games have everything they need.`,
-      "",
+    mdSections([
+      `${mdNumber(health.healthy)} of ${mdNumber(health.total)} games have everything they need.`,
       problems.length
-        ? list([
-            "Games with something missing:",
-            ...problems.map((game) => `- ${game.slug}: ${game.issues.join(", ")}`),
-          ])
+        ? mdTable(
+            ["Game", "Missing"],
+            problems.map((game) => [game.slug, game.issues.join(", ")]),
+          )
         : "Every game in the catalogue is complete.",
-      "",
-      "Cross-reference this against the top games in the overview: a popular game " +
+      "> Cross-reference this against the top games in the overview: a popular game " +
         "with no screenshots is a different problem from an unplayed one with none.",
     ]),
   );
@@ -306,16 +359,22 @@ async function alertsDocument(): Promise<AnalyticsDocument> {
   return doc(
     "alerts",
     "Alerts — traffic spikes, error spikes and dead games",
-    list([
+    mdSections([
       fired.length
-        ? list(["FIRING NOW:", ...fired.map((alert) => `- ${JSON.stringify(alert)}`)])
-        : "Nothing is firing.",
-      "",
-      "The measurements behind that judgement:",
-      JSON.stringify(result.snapshot, null, 2),
-      "",
-      "Each ratio compares the SAME sixty minutes of the day against the same window " +
-        "on previous days, because a site played from school has a daily shape.",
+        ? mdSections([
+            `### ⚠️ ${fired.length} alert(s) firing`,
+            mdList(fired.map((alert) => `\`${JSON.stringify(alert)}\``)),
+          ])
+        : "**Nothing is firing.**",
+      mdHeading("The measurements behind that judgement", 3),
+      mdTable(
+        ["Measure", "Value"],
+        Object.entries(result.snapshot as unknown as Record<string, unknown>).map(
+          ([key, value]) => [key, typeof value === "object" ? JSON.stringify(value) : value],
+        ),
+      ),
+      "> Each ratio compares the **same sixty minutes of the day** against the same " +
+        "window on previous days, because a site played from school has a daily shape.",
     ]),
   );
 }
@@ -324,11 +383,10 @@ function metricsDocument(): AnalyticsDocument {
   return doc(
     "metrics",
     "How HallPass counts things — metric definitions",
-    list([
-      "These definitions are what the dashboard uses. A number computed a different " +
-        "way will disagree with it, usually silently.",
-      "",
-      ...METRIC_DEFINITIONS.map((line, index) => `${index + 1}. ${line}`),
+    mdSections([
+      "_These definitions are what the dashboard uses. A number computed a different " +
+        "way will disagree with it, usually silently._",
+      METRIC_DEFINITIONS.map((line, index) => `${index + 1}. ${line}`).join("\n\n"),
     ]),
   );
 }
@@ -343,22 +401,25 @@ async function schemaDocument(): Promise<AnalyticsDocument> {
   return doc(
     "schema",
     "Analytics schema — the tables and event catalogue",
-    list([
+    mdSections([
+      mdHeading("First-party SQL views", 3),
       isAnalyticsDbConfigured()
-        ? list([
-            "First-party SQL views (query with run_analytics_sql). No view carries an " +
-              "email, real name or photo; `player_public_id` is the only player key.",
-            ...views.map((v) => `- ${v.view}(${v.columns.map((c) => c.name).join(", ")})`),
+        ? mdSections([
+            "_Query with `run_analytics_sql`. No view carries an email, real name or " +
+              "photo; `player_public_id` is the only player key._",
+            mdTable(
+              ["View", "Columns"],
+              views.map((v) => [v.view, v.columns.map((c) => c.name).join(", ")]),
+            ),
           ])
-        : "First-party SQL is not available on this deployment (the read-only database " +
-          "role is not provisioned).",
-      "",
+        : "_Not available on this deployment: the read-only database role is not provisioned._",
+      mdHeading("PostHog events", 3),
       isStatsConfigured()
-        ? list([
-            "PostHog events (query with run_analytics_hogql):",
-            ...POSTHOG_EVENTS.map((e) => `- ${e.event}: ${e.meaning}`),
+        ? mdSections([
+            "_Query with `run_analytics_hogql`._",
+            mdTable(["Event", "Meaning"], POSTHOG_EVENTS.map((e) => [e.event, e.meaning])),
           ])
-        : "PostHog reading is not configured on this deployment.",
+        : "_PostHog reading is not configured on this deployment._",
     ]),
   );
 }
@@ -390,24 +451,29 @@ async function gameDocument(slug: string): Promise<AnalyticsDocument | null> {
     title: `${game.title} — game report`,
     url: `${SITE_URL}/game/${slug}`,
     metadata: { slug, category: game.category },
-    text: list([
-      `${game.title} (${slug}) — ${game.category}`,
-      game.tagline ? `"${game.tagline}"` : null,
-      "",
-      plays
+    text: mdSections([
+      `**${game.title}** (\`${slug}\`) — ${game.category}`,
+      game.tagline ? `_${game.tagline}_` : null,
+      list([plays
         ? `Plays in the last ${WINDOW_DAYS} days: ${n(plays.plays)} (ranked in the site's top games).`
-        : `Not in the site's top games for the last ${WINDOW_DAYS} days. That is a ranking, ` +
-          "not a zero — use run_analytics_hogql for its exact play count.",
-      comments ? `Player comments: ${n(comments.count)}.` : "No player comments among the most-commented games.",
-      board ? `Leaderboard: ${n(board.scores)} scores from ${n(board.players)} signed-in players.` : null,
+        : `Not in the site's top games for the last ${WINDOW_DAYS} days — that is a ranking, ` +
+          "not a zero. Use `run_analytics_hogql` for its exact play count.",
+      comments
+        ? mdStat("Player comments", mdNumber(comments.count))
+        : "No player comments among the most-commented games.",
+      board
+        ? mdStat(
+            "Leaderboard",
+            `${mdNumber(board.scores)} scores from ${mdNumber(board.players)} signed-in players`,
+          )
+        : null,
       issues.length
-        ? `Catalogue gaps: ${issues.join(", ")}.`
-        : "Catalogue entry is complete (art, description, video, reviews).",
-      "",
-      "For anything more specific — this game's plays by hour, its score " +
-        "distribution, who replays it — use run_analytics_hogql with " +
-        `properties.game_slug = '${slug}', or run_analytics_sql against the scores ` +
-        "and player_plays views.",
+        ? mdStat("Catalogue gaps", issues.join(", "))
+        : "Catalogue entry is complete — art, description, video and reviews.",
+      ]),
+      "> For anything more specific — plays by hour, the score distribution, who " +
+        `replays it — use \`run_analytics_hogql\` with \`properties.game_slug = '${slug}'\`, ` +
+        "or `run_analytics_sql` against the `scores` and `player_plays` views.",
     ]),
   };
 }
@@ -422,10 +488,16 @@ async function boardDocument(boardId: string): Promise<AnalyticsDocument | null>
     title: `${board.title} — leaderboard`,
     url: `${SITE_URL}/dashboard/boards`,
     metadata: { boardId },
-    text: list([
-      `${board.title} (${boardId})`,
-      `Scores submitted: ${n(board.scores)}`,
-      `Distinct signed-in players: ${n(board.players)} (anonymous scores are not counted here)`,
+    text: mdSections([
+      `**${board.title}** (\`${boardId}\`)`,
+      mdList([
+        mdStat("Scores submitted", mdNumber(board.scores)),
+        mdStat(
+          "Distinct signed-in players",
+          mdNumber(board.players),
+          "anonymous scores are not counted here",
+        ),
+      ]),
     ]),
   };
 }
