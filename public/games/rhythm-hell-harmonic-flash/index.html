@@ -1250,17 +1250,28 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             }
         }
 
+        /* Whether this run's score has already gone to HallPass. Two functions
+           end a run here -- gameOver() and gameWin() -- and they are mutually
+           exclusive in practice, since each returns early unless isPlaying is
+           still true. The latch is not defending against those two racing; it
+           is defending against a duplicate row on a shared leaderboard, which
+           is not worth leaving to an argument about control flow.
+           startGame() clears it. */
+        let hpPosted = false;
+
         function gameOver() {
             if (!isPlaying || (currentPhase >= 32 && !isFreeplayMode)) return;
             isPlaying = false; cleanupAudio(); if (gameLoopId) cancelAnimationFrame(gameLoopId);
             hud.style.display = 'none'; meterContainer.style.display = 'none'; soloBtn.style.display = 'none'; freeplayInstructions.style.display = 'none'; pauseBtn.style.display = 'none';
             gameOverPanel.classList.remove('hidden'); finalScoreDisplay.innerText = Math.floor(score);
+            hpFinish(gameOverPanel, restartBtn);
         }
         function gameWin() {
             if (!isPlaying) return;
             isPlaying = false; cleanupAudio(); if (gameLoopId) cancelAnimationFrame(gameLoopId);
             hud.style.display = 'none'; meterContainer.style.display = 'none'; soloBtn.style.display = 'none'; freeplayInstructions.style.display = 'none'; pauseBtn.style.display = 'none';
             winPanel.classList.remove('hidden'); winScoreDisplay.innerText = Math.floor(score);
+            hpFinish(winPanel, winRestartBtn.parentElement);
         }
 
         // --- MAIN INTEGRATED ENGINE LOOP ---
@@ -1947,6 +1958,10 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
 
             startPanel.classList.add('hidden'); gameOverPanel.classList.add('hidden'); winPanel.classList.add('hidden');
             hud.style.display = 'block'; meterContainer.style.display = 'block'; pauseBtn.style.display = 'block';
+            // A new run may post again. All four ways back into the game --
+            // start, retry, play again and Zen -- funnel through startGame(),
+            // so clearing the latch here covers every one of them.
+            hpPosted = false;
             resetGameState(); initAudio(); isPlaying = true; gameLoopId = requestAnimationFrame(gameLoop);
         }
 
@@ -1954,6 +1969,217 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
         restartBtn.addEventListener('click', () => startGame(false));
         winRestartBtn.addEventListener('click', () => startGame(false));
         winFreeplayBtn.addEventListener('click', () => startGame(true));
+
+        /* --- HallPass --------------------------------------------------------
+           The inline stub immediately above this script installs window.HallPass
+           synchronously, so every call below is safe the moment it runs even
+           while the real bundle is still in flight.
+
+           Each SDK method RESOLVES -- none reject and none throw -- including
+           when the board has not been provisioned server-side yet, which simply
+           answers { ok:false }. Nothing here is therefore wrapped in try/catch:
+           a rejection is not one of the outcomes, and a game with no board must
+           play exactly like a game with one. */
+
+        const hpBlock = document.getElementById('hpBlock');
+        const hpBoard = document.getElementById('hpBoard');
+        const hpChallengeBtn = document.getElementById('hpChallenge');
+        const hpChallengeMsg = document.getElementById('hpChallengeMsg');
+        const hpSignInBtn = document.getElementById('hpSignIn');
+        const hpAuthStatus = document.getElementById('hpAuthStatus');
+
+        /* A one-line status where the table would go. Everything in this
+           section is built with createElement and textContent rather than
+           innerHTML: handles and display names come from other players and must
+           never be parsed as markup. */
+        function hpNote(text) {
+            hpBoard.textContent = '';
+            const note = document.createElement('div');
+            note.className = 'hp-empty';
+            note.textContent = text;
+            hpBoard.appendChild(note);
+        }
+
+        /* Move the single block into the panel this run ended on.
+
+           insertBefore rather than appendChild, so the board reads ABOVE the
+           big "RETRY SEQUENCE" / "PLAY AGAIN" button instead of being stranded
+           underneath it. The anchor is passed in by the caller as an element it
+           already holds -- not a child index -- so adding markup to either panel
+           later cannot silently relocate the board. */
+        function hpAttach(panel, anchor) {
+            panel.insertBefore(hpBlock, anchor);
+            hpBlock.classList.remove('hidden');
+        }
+
+        /* Post the run that just ended, then draw the board underneath it.
+
+           BOTH ENDINGS POST. To a scoreboard a win and a loss are the same
+           thing -- a finished run carrying a final score -- and skipping the win
+           would drop precisely the runs most worth ranking.
+
+           NOT CALLED FROM quitGame(). Backing out to the menu mid-run has not
+           finished anything, and a partial score posted for it would sit on the
+           board indistinguishable from a real result.
+
+           ZEN GOD MODE IS NEVER POSTED. In Freeplay the bullet-collision check
+           takes its isFreeplayMode branch and skips the damage entirely, so the
+           player cannot die, and scheduleNote() returns early so no win event is
+           ever queued. The run therefore has no end and the score has no
+           ceiling. A single unbounded, invulnerable entry would sit above every
+           honest score permanently and make the whole board worthless. The
+           player is told so where the board would be, because silently doing
+           nothing reads as a bug rather than as a rule.
+
+           submitScore resolves either way and never throws, so this cannot stop
+           the end screen from appearing or delay it. The board is drawn AFTER
+           the post resolves, so the run that just ended is already in the list
+           rather than first appearing on the next one. */
+        function hpFinish(panel, anchor) {
+            if (hpPosted) return;
+            hpPosted = true;
+
+            hpAttach(panel, anchor);
+            // Clear the previous run's result, or "Dared Ali to beat 4,200"
+            // would sit under a score that is no longer the one in question.
+            hpChallengeMsg.classList.add('hidden');
+
+            if (isFreeplayMode) {
+                hpChallengeBtn.classList.add('hidden');
+                hpNote('Zen God Mode runs are not posted');
+                return;
+            }
+
+            hpChallengeBtn.classList.remove('hidden');
+            hpNote('Posting your score...');
+            // Math.floor because `score` accumulates as a float; the panels
+            // above already display it floored, and the board must agree with
+            // the number the player was just shown.
+            HallPass.submitScore(Math.floor(score)).then(hpRenderBoard);
+        }
+
+        /* Draw the online top five.
+
+           FIVE, not ten: the panel already carries a final score and two
+           buttons, and a list long enough to need scrolling inside it would
+           fight the touch input that drives the game.
+
+           TEN ARE REQUESTED because one player can hold several of the top
+           rows; after collapsing each handle to their best, five is what is
+           left to show. */
+        function hpRenderBoard() {
+            hpNote('Loading scores...');
+            HallPass.getScores({ limit: 10 }).then((rows) => {
+                if (!rows || !rows.length) {
+                    hpNote('Be the first to score');
+                    return;
+                }
+                const seen = new Set();
+                const best = rows.filter((r) => seen.has(r.handle) ? false : (seen.add(r.handle), true))
+                                 .slice(0, 5);
+                const table = document.createElement('table');
+                let rank = 0;
+                for (const row of best) {
+                    const tr = document.createElement('tr');
+                    const n = document.createElement('td');
+                    n.className = 'hp-rank';
+                    n.textContent = ++rank;
+                    const who = document.createElement('td');
+                    who.className = 'hp-who';
+                    who.textContent = row.handle;              // untrusted
+                    if (row.verified) {
+                        const tick = document.createElement('span');
+                        tick.className = 'hp-tick';
+                        tick.textContent = '✓';
+                        who.appendChild(tick);
+                    }
+                    const pts = document.createElement('td');
+                    pts.className = 'hp-pts';
+                    pts.textContent = Number(row.score).toLocaleString();
+                    tr.append(n, who, pts);
+                    table.appendChild(tr);
+                }
+                hpBoard.textContent = '';
+                hpBoard.appendChild(table);
+            });
+        }
+
+        /* Paint the start screen's identity row. `player` is null when signed
+           out. */
+        function hpRefreshAuth(player) {
+            if (player) {
+                hpSignInBtn.classList.add('hidden');
+                hpAuthStatus.textContent = 'Signed in as ';
+                const name = document.createElement('b');
+                name.textContent = player.name;                // untrusted
+                hpAuthStatus.appendChild(name);
+            } else {
+                hpSignInBtn.classList.remove('hidden');
+                hpAuthStatus.textContent = 'Playing as Guest';
+            }
+        }
+
+        /* Only the outcomes the PICKER CANNOT REPORT ITSELF are listed here.
+           Server refusals -- signed out, not friends, no score -- are already
+           rendered inside the panel the player is looking at, and repeating
+           them underneath would be noise. These three stop that panel before it
+           can say anything at all. */
+        const HP_CHALLENGE_MSG = {
+            'popup-blocked': 'Your browser blocked the challenge window',
+            'inert': 'Challenges need the online leaderboard, offline here',
+            'network': 'Could not reach HallPass - try again shortly',
+        };
+
+        hpChallengeBtn.addEventListener('click', async () => {
+            hpChallengeBtn.disabled = true;
+            hpChallengeMsg.classList.add('hidden');
+            // No try/catch: every SDK method resolves, so there is nothing to
+            // catch.
+            const res = await HallPass.challenge();
+            hpChallengeBtn.disabled = false;
+
+            /* READ `sent`, NOT `ok`. Closing the picker resolves
+               { ok:true, sent:false, reason:"closed" } -- the call worked and the
+               player simply changed their mind, which must never be reported
+               back to them as a failure. */
+            if (res && res.sent && res.challenge) {
+                hpChallengeMsg.textContent = 'Dared ';
+                const who = document.createElement('b');
+                who.textContent = res.challenge.to;            // untrusted
+                const target = document.createElement('b');
+                target.textContent = Number(res.challenge.targetScore).toLocaleString();
+                hpChallengeMsg.append(who, ' to beat ', target);
+                hpChallengeMsg.classList.remove('hidden');
+                return;
+            }
+            const text = res && res.reason ? HP_CHALLENGE_MSG[res.reason] : null;
+            if (text) {
+                hpChallengeMsg.textContent = text;
+                hpChallengeMsg.classList.remove('hidden');
+            }
+        });
+
+        /* The board is the one part of an end screen a player is meant to sit
+           and read, and this game binds parry and dash to window. The existing
+           mousedown and touchstart handlers already exempt <button>, so
+           hpSignIn and hpChallenge need no guard and adding one would be
+           redundant -- but a <table> of handles is not a button, and touchstart
+           additionally calls preventDefault(). Swallowing the event on this
+           subtree keeps a tap on the leaderboard from registering as a game
+           input. */
+        for (const el of [hpBoard, hpChallengeMsg]) {
+            el.addEventListener('mousedown', (e) => e.stopPropagation());
+            el.addEventListener('touchstart', (e) => e.stopPropagation());
+        }
+
+        HallPass.getPlayer().then(hpRefreshAuth);
+        // The sign-in popup does not reload the game, so the label has to be
+        // told when it finishes -- otherwise it still reads "Guest" to somebody
+        // who has just signed in.
+        HallPass.on('auth', (e) => hpRefreshAuth(e.player));
+        // Must be a real click: browsers block a popup opened without a user
+        // gesture.
+        hpSignInBtn.addEventListener('click', () => HallPass.signIn());
     </script>
 </body>
 </html>
