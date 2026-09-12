@@ -697,6 +697,34 @@ server speaks all three ways a hosted assistant identifies itself:
 Each opens a browser, asks you to sign in with your HallPass account, and shows
 the consent screen before anything is granted.
 
+### How answers look
+
+Every answer is **Markdown** — stat lines with their caveats, ranked tables,
+query results as a table with truncation stated rather than clipped in silence.
+That is what the model reads and, in most clients, what you see.
+
+On top of that, an app that supports [MCP Apps](https://modelcontextprotocol.io)
+can draw a **card**: the same KPI tiles, delta pills, sparklines and tables as
+`/dashboard`, in the same brand colours. ChatGPT renders these today.
+
+**Claude does not, for a custom remote connector.** Its tracker carries
+[claude-ai-mcp#471](https://github.com/anthropics/claude-ai-mcp/issues/471),
+closed as not planned, and
+[claude-code#65653](https://github.com/anthropics/claude-code/issues/65653)
+reports an empty labelled container rather than a graceful fallback. An empty
+box is worse than a table, which is why **Dashboard → Connections** has a
+switch:
+
+| Mode | What it does |
+|---|---|
+| **Automatic** (default) | Cards only to clients that look like ones known to render them; text to everyone else. |
+| **Always send cards** | Cards to every client. Pick it once you have seen one render. |
+| **Text only** | Never send cards. Pick it if an app is showing empty boxes. |
+
+The setting is read per request, so flipping it takes effect on the next call
+rather than the next deploy. The card also degrades on its own: handed no data
+it says so in words instead of rendering blank.
+
 Two things are worth knowing:
 
 - **`search` and `fetch` exist for ChatGPT's contract**, which is a
