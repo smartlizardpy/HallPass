@@ -94,6 +94,9 @@ export function protectedResourceMetadata(origin: string) {
  *   * `registration_endpoint` — the MCP spec makes dynamic client registration
  *     optional, but omitting it means a client with no pre-registered id has no
  *     way in at all, which in practice means Claude cannot connect.
+ *   * `client_id_metadata_document_supported` — the newer way in, which the
+ *     2026-07-28 spec prefers and ChatGPT looks for. Advertising both is the
+ *     point: a client picks whichever it implements.
  */
 export function authorizationServerMetadata(origin: string) {
   return {
@@ -107,6 +110,12 @@ export function authorizationServerMetadata(origin: string) {
     grant_types_supported: ["authorization_code", "refresh_token"],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none"],
+    // Client ID Metadata Documents: a client may identify itself with an https
+    // URL serving its own metadata instead of registering. The 2026-07-28 MCP
+    // specification deprecates dynamic registration in favour of this, and
+    // ChatGPT's connector prefers it — but `registration_endpoint` above stays,
+    // because every client that already uses DCR must keep working.
+    client_id_metadata_document_supported: true,
     revocation_endpoint_auth_methods_supported: ["none"],
   };
 }

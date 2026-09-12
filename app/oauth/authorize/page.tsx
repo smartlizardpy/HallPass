@@ -41,7 +41,7 @@ import {
 } from "@/app/lib/mcp/oauth/config";
 import { mcpResource } from "@/app/lib/mcp/oauth/metadata";
 import { checkAuthorizeRequest } from "@/app/lib/mcp/oauth/request";
-import { getClient } from "@/app/lib/mcp/oauth/store";
+import { resolveOauthClient } from "@/app/lib/mcp/oauth/client";
 import { approveConnection, denyConnection } from "./actions";
 
 export const metadata: Metadata = {
@@ -129,7 +129,10 @@ export default async function AuthorizePage({
 
   const origin = await currentOrigin();
   const clientId = typeof query.client_id === "string" ? query.client_id : "";
-  const client = clientId ? await getClient(clientId) : null;
+  // Either namespace: an opaque id from dynamic registration, or an https URL
+  // that serves its own metadata document (`oauth/cimd.ts`).
+  const resolved = clientId ? await resolveOauthClient(clientId) : null;
+  const client = resolved?.ok ? resolved.client : null;
   const checked = checkAuthorizeRequest(query, client, mcpResource(origin));
 
   // State 3. Rendered, never redirected — there is no address yet that HallPass

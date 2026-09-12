@@ -24,7 +24,8 @@ import { DASHBOARD_MIN_ROLE, atLeast } from "@/app/lib/permissions";
 import { OAUTH_SCOPE, isOauthEnabled } from "@/app/lib/mcp/oauth/config";
 import { mcpResource } from "@/app/lib/mcp/oauth/metadata";
 import { checkAuthorizeRequest, codeRedirectUrl, errorRedirectUrl } from "@/app/lib/mcp/oauth/request";
-import { getClient, issueCode } from "@/app/lib/mcp/oauth/store";
+import { resolveOauthClient } from "@/app/lib/mcp/oauth/client";
+import { issueCode } from "@/app/lib/mcp/oauth/store";
 
 /** Re-derive this deployment's own origin, as the discovery documents do. */
 async function currentOrigin(): Promise<string> {
@@ -73,8 +74,12 @@ export async function approveConnection(form: FormData): Promise<void> {
 
   const origin = await currentOrigin();
   const query = queryFrom(form);
-  const client = await getClient(query.client_id);
-  const checked = checkAuthorizeRequest(query, client, mcpResource(origin));
+  const resolved = await resolveOauthClient(query.client_id);
+  const checked = checkAuthorizeRequest(
+    query,
+    resolved.ok ? resolved.client : null,
+    mcpResource(origin),
+  );
 
   // A crafted POST lands here. There is still nowhere safe to redirect, so it
   // goes to the dashboard rather than to anything the form named.
@@ -107,8 +112,12 @@ export async function approveConnection(form: FormData): Promise<void> {
 export async function denyConnection(form: FormData): Promise<void> {
   const origin = await currentOrigin();
   const query = queryFrom(form);
-  const client = await getClient(query.client_id);
-  const checked = checkAuthorizeRequest(query, client, mcpResource(origin));
+  const resolved = await resolveOauthClient(query.client_id);
+  const checked = checkAuthorizeRequest(
+    query,
+    resolved.ok ? resolved.client : null,
+    mcpResource(origin),
+  );
 
   if (checked.kind === "render-error") redirect("/dashboard");
 

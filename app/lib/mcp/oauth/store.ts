@@ -146,6 +146,43 @@ export async function registerClient(input: {
   };
 }
 
+/**
+ * Record a CIMD client so everything downstream can treat it like any other.
+ *
+ * A client identified by URL has no registration row, but `mcp_oauth_codes` and
+ * `mcp_oauth_tokens` both carry a foreign key to `mcp_oauth_clients`, and
+ * `/dashboard/mcp` renders `client_name` through a JOIN. Rather than weaken the
+ * key or special-case the dashboard, the resolved document is UPSERTED under
+ * its own URL as the primary key — so a grant to a CIMD client is stored,
+ * listed and revoked by exactly the same code as any other.
+ *
+ * The row is a CACHE OF A SNAPSHOT, not the source of truth: the live document
+ * is re-fetched and re-validated on every authorization request, so a client
+ * that removes a redirect URI from its document stops being able to use it
+ * immediately rather than at the next upsert.
+ */
+export async function upsertCimdClient(client: {
+  clientId: string;
+  clientName: string;
+  redirectUris: string[];
+}): Promise<OauthClient> {
+  const rows = await sql`
+    INSERT INTO mcp_oauth_clients (client_id, client_name, redirect_uris)
+    VALUES (${client.clientId}, ${client.clientName}, ${client.redirectUris})
+    ON CONFLICT (client_id) DO UPDATE
+      SET client_name   = EXCLUDED.client_name,
+          redirect_uris = EXCLUDED.redirect_uris
+    RETURNING client_id, client_name, redirect_uris, created_at
+  `;
+  const row = rows[0];
+  return {
+    clientId: text(row.client_id),
+    clientName: text(row.client_name),
+    redirectUris: (row.redirect_uris as string[]) ?? [],
+    createdAt: iso(row.created_at),
+  };
+}
+
 /** One client by id, or `null` when it was never registered. */
 export async function getClient(clientId: string): Promise<OauthClient | null> {
   const rows = await sql`

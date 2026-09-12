@@ -37,7 +37,8 @@ import {
   oauthPreflight,
   oauthUnconfigured,
 } from "@/app/lib/mcp/oauth/http";
-import { consumeRefreshToken, getClient, issueTokens, redeemCode } from "@/app/lib/mcp/oauth/store";
+import { resolveOauthClient } from "@/app/lib/mcp/oauth/client";
+import { consumeRefreshToken, issueTokens, redeemCode } from "@/app/lib/mcp/oauth/store";
 
 export const dynamic = "force-dynamic";
 
@@ -69,11 +70,13 @@ export async function POST(req: Request): Promise<Response> {
     return oauthError("invalid_client", "client_id is required.", 401);
   }
   // Every client here is public and holds no secret, so "does this client
-  // exist" is the whole of client authentication. It is still worth doing: it
-  // stops a code being redeemed under a client id that was never registered.
-  const client = await getClient(clientId);
-  if (!client) {
-    return oauthError("invalid_client", "No such client is registered.", 401);
+  // resolve" is the whole of client authentication. It is still worth doing: it
+  // stops a code being redeemed under a client id that was never registered —
+  // and for a CIMD client it re-checks that the document still exists and still
+  // names this id.
+  const client = await resolveOauthClient(clientId);
+  if (!client.ok) {
+    return oauthError("invalid_client", client.reason, 401);
   }
 
   if (grantType === "authorization_code") {
