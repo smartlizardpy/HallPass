@@ -40,7 +40,19 @@ import { SITE_URL } from "@/app/lib/site";
 import { DashHeader } from "../_ui/DashHeader";
 import { Section } from "../_ui/Section";
 import { RevokeConnection } from "./RevokeConnection";
-import { createConnectorAction, deleteConnectorAction } from "./actions";
+import { readAppSetting } from "@/app/lib/app-settings";
+import {
+  OUTPUT_MODES,
+  OUTPUT_MODE_HINT,
+  OUTPUT_MODE_KEY,
+  OUTPUT_MODE_LABEL,
+  toOutputMode,
+} from "@/app/lib/mcp/analytics/output-mode";
+import {
+  createConnectorAction,
+  deleteConnectorAction,
+  setOutputModeAction,
+} from "./actions";
 
 export const metadata: Metadata = {
   title: "Connections · Dashboard",
@@ -276,6 +288,9 @@ export default async function McpConnectionsPage({
   const others = everyone.filter((grant) => grant.email !== email);
   const connectors =
     oauthOn && role === "super_admin" ? await listManualClients().catch(() => []) : [];
+  // Fail-soft through readAppSetting, so an unreachable database shows the
+  // default rather than an error — the same posture the reader takes.
+  const outputMode = toOutputMode(await readAppSetting(OUTPUT_MODE_KEY));
 
   // The origin a connector form needs. SITE_URL rather than the request's host:
   // these values are copied into another service that will call them from the
@@ -329,6 +344,68 @@ export default async function McpConnectionsPage({
           </>
         )}
       </Section>
+
+      {oauthOn && (
+        <Section title="How answers are presented" className="mb-8">
+          <p className="mb-4 text-sm text-muted">
+            Some apps can draw a HallPass report as a <strong>card</strong> — the
+            same KPI tiles and tables as the overview — instead of formatted
+            text. Support is uneven and the failure is ugly: an app that only
+            half-supports it shows an <em>empty box</em> rather than falling back.
+            If you see that, switch to text and the answer comes back.
+          </p>
+
+          <form action={setOutputModeAction} className="space-y-3">
+            <fieldset className="space-y-2">
+              <legend className="sr-only">Presentation mode</legend>
+              {OUTPUT_MODES.map((mode) => (
+                <label
+                  key={mode}
+                  className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${
+                    mode === outputMode
+                      ? "border-brand bg-brand-50"
+                      : "border-border bg-surface hover:bg-surface-2"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="mode"
+                    value={mode}
+                    defaultChecked={mode === outputMode}
+                    className="mt-1"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-foreground">
+                      {OUTPUT_MODE_LABEL[mode]}
+                      {mode === outputMode && (
+                        <span className="ml-2 text-xs font-semibold text-brand">
+                          current
+                        </span>
+                      )}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-muted">
+                      {OUTPUT_MODE_HINT[mode]}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+            {role === "super_admin" ? (
+              <button
+                type="submit"
+                className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+              >
+                Save
+              </button>
+            ) : (
+              <p className="text-xs text-muted">
+                Only a super admin can change this — it affects every connected
+                account, not just yours.
+              </p>
+            )}
+          </form>
+        </Section>
+      )}
 
       {role === "super_admin" && oauthOn && (
         <Section

@@ -21,6 +21,15 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/app/lib/auth";
 import { getUserRole } from "@/app/lib/dashboard-users";
 import { DASHBOARD_MIN_ROLE, atLeast } from "@/app/lib/permissions";
+import { updateTag } from "next/cache";
+import { APP_SETTINGS_CACHE_TAG, writeAppSetting } from "@/app/lib/app-settings";
+import {
+  OUTPUT_MODES,
+  OUTPUT_MODE_KEY,
+  OUTPUT_MODE_LABEL,
+  toOutputMode,
+  type OutputMode,
+} from "@/app/lib/mcp/analytics/output-mode";
 import { normalizeClientName, validateRedirectUris } from "@/app/lib/mcp/oauth/config";
 import {
   createManualClient,
@@ -169,4 +178,57 @@ export async function deleteConnectorAction(form: FormData): Promise<void> {
       ? "Connector deleted, along with every connection made through it."
       : "Nothing was deleted — that connector is already gone.",
   );
+}
+
+
+/**
+ * Switch between cards and text.
+ *
+ * ── WHY THIS IS A BUTTON AND NOT A DEPLOY ────────────────────────────────
+ * Whether an MCP Apps card renders is a fact about somebody else's client, and
+ * it changes without warning: Claude's support is tracked as not planned today
+ * and could ship tomorrow, and a client that half-implements it shows an EMPTY
+ * BOX rather than falling back to the text. The person who can see that is the
+ * one holding the phone, and they should be able to fix it in the ten seconds
+ * before they give up on the feature — not file an issue and wait for a build.
+ *
+ * `updateTag` rather than `revalidatePath`: the setting is read through the
+ * cached `readAppSettings`, whose tag every other writer in this codebase also
+ * invalidates. Revalidating this page alone would leave `/api/mcp` serving the
+ * old value for up to an hour, which is precisely the wait this exists to
+ * avoid.
+ */
+export async function setOutputModeAction(form: FormData): Promise<void> {
+  const session = await auth().catch(() => null);
+  const email = session?.user?.email?.trim().toLowerCase();
+  if (!email) redirect("/dashboard/signin");
+
+  const role = await getUserRole(email).catch(() => null);
+  // A rung higher than reading the page: this changes what every OTHER
+  // connected account sees, so it is not a personal preference.
+  if (role !== "super_admin") {
+    back("error", "Only a super admin may change how answers are presented.");
+  }
+
+  const raw = String(form.get("mode") ?? "");
+  // Narrowed rather than trusted: a form value is a public input, and an
+  // unrecognised one must land on the default rather than be written.
+  const mode: OutputMode = toOutputMode(raw);
+  if (!OUTPUT_MODES.includes(raw as OutputMode)) {
+    back("error", "That is not a presentation mode.");
+  }
+
+  try {
+    await writeAppSetting(OUTPUT_MODE_KEY, mode, email);
+  } catch (error) {
+    console.error("Failed to write the MCP output mode:", error);
+    // Never report a saved setting that was not saved: the operator would
+    // believe a switch was thrown when it was not. Same argument as
+    // `writeAppSetting`'s own docblock for throwing rather than swallowing.
+    back("error", "That setting could not be saved. Try again.");
+  }
+
+  updateTag(APP_SETTINGS_CACHE_TAG);
+  revalidatePath(MCP_PATH);
+  back("ok", `Answers will now use: ${OUTPUT_MODE_LABEL[mode]}.`);
 }
