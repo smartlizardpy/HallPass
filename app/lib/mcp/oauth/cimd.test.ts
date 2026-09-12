@@ -14,6 +14,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CIMD_MAX_BYTES,
+  CIMD_MAX_REDIRECTS,
   clearCimdCache,
   fetchClientMetadata,
   isBlockedHost,
@@ -166,7 +167,7 @@ describe("fetchClientMetadata", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("does not follow redirects", async () => {
+  it("never lets fetch follow redirects itself", async () => {
     const calls: RequestInit[] = [];
     vi.stubGlobal(
       "fetch",
@@ -177,6 +178,117 @@ describe("fetchClientMetadata", () => {
     );
     await fetchClientMetadata(URL_ID);
     expect(calls[0]?.redirect).toBe("manual");
+  });
+
+  it("follows an ordinary redirect by hand — apex to www is not an attack", async () => {
+    const seen: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        seen.push(String(url));
+        if (seen.length === 1) {
+          return Promise.resolve(
+            new Response(null, {
+              status: 301,
+              headers: { location: "https://www.app.example.com/oauth/client-metadata.json" },
+            }),
+          );
+        }
+        return Promise.resolve(new Response(JSON.stringify(validDoc()), { status: 200 }));
+      }),
+    );
+    const result = await fetchClientMetadata(URL_ID);
+    expect(result.ok).toBe(true);
+    expect(seen).toHaveLength(2);
+  });
+
+  it("resolves a RELATIVE Location against the current URL", async () => {
+    const seen: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        seen.push(String(url));
+        if (seen.length === 1) {
+          return Promise.resolve(
+            new Response(null, { status: 302, headers: { location: "/oauth/meta-v2.json" } }),
+          );
+        }
+        return Promise.resolve(new Response(JSON.stringify(validDoc()), { status: 200 }));
+      }),
+    );
+    await fetchClientMetadata(URL_ID);
+    expect(seen[1]).toBe("https://app.example.com/oauth/meta-v2.json");
+  });
+
+  it("REFUSES a redirect to a private host — the SSRF hop", async () => {
+    const seen: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        seen.push(String(url));
+        return Promise.resolve(
+          new Response(null, {
+            status: 302,
+            headers: { location: "http://169.254.169.254/latest/meta-data/" },
+          }),
+        );
+      }),
+    );
+    const result = await fetchClientMetadata(URL_ID);
+    expect(result.ok).toBe(false);
+    // The second request must never have been made.
+    expect(seen).toHaveLength(1);
+  });
+
+  it("refuses a redirect chain longer than the cap", async () => {
+    let n = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => {
+        n += 1;
+        return Promise.resolve(
+          new Response(null, {
+            status: 302,
+            headers: { location: `https://app.example.com/hop${n}.json` },
+          }),
+        );
+      }),
+    );
+    const result = await fetchClientMetadata(URL_ID);
+    expect(result.ok).toBe(false);
+    expect(n).toBe(CIMD_MAX_REDIRECTS + 1);
+  });
+
+  it("refuses a redirect with no Location header", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(null, { status: 302 }))));
+    expect((await fetchClientMetadata(URL_ID)).ok).toBe(false);
+  });
+
+  it("validates the document against the ORIGINAL id, not the redirected URL", async () => {
+    // Otherwise a redirect could change which identity a document may claim.
+    let first = true;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => {
+        if (first) {
+          first = false;
+          return Promise.resolve(
+            new Response(null, {
+              status: 301,
+              headers: { location: "https://www.app.example.com/m.json" },
+            }),
+          );
+        }
+        return Promise.resolve(
+          new Response(
+            JSON.stringify(validDoc({ client_id: "https://www.app.example.com/m.json" })),
+            { status: 200 },
+          ),
+        );
+      }),
+    );
+    const result = await fetchClientMetadata(URL_ID);
+    expect(result.ok).toBe(false);
   });
 
   it("refuses a document larger than the ceiling", async () => {

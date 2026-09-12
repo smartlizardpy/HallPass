@@ -133,7 +133,12 @@ export default async function AuthorizePage({
   // that serves its own metadata document (`oauth/cimd.ts`).
   const resolved = clientId ? await resolveOauthClient(clientId) : null;
   const client = resolved?.ok ? resolved.client : null;
-  const checked = checkAuthorizeRequest(query, client, mcpResource(origin));
+  const checked = checkAuthorizeRequest(
+    query,
+    client,
+    mcpResource(origin),
+    resolved && !resolved.ok ? resolved.reason : undefined,
+  );
 
   // State 3. Rendered, never redirected — there is no address yet that HallPass
   // is willing to send a browser to.
