@@ -22,13 +22,20 @@
             text-align: center; pointer-events: auto; border: 2px solid #00f3ff;
             box-shadow: 0 0 40px rgba(0, 243, 255, 0.4); backdrop-filter: blur(15px);
         }
-        button {
+        /* Qualified with `body` purely to win on specificity. The Tailwind
+           play CDN injects its preflight into <head> at runtime, which lands
+           AFTER this sheet, and preflight resets `button` background-image to
+           none and padding to 0 at the same (0,0,1) specificity -- so on source
+           order it took every primary button in the game back to bare text.
+           `body button` is (0,0,2) and wins; .hp-ghost is a class and still
+           outranks this, so the secondary buttons are unaffected. */
+        body button {
             background: linear-gradient(135deg, #00f3ff, #ff007f); color: black; font-weight: 900; padding: 14px 35px;
             border-radius: 9999px; border: none; cursor: pointer; margin-top: 1.5rem; text-transform: uppercase; letter-spacing: 2px; transition: all 0.2s ease-in-out;
             box-shadow: 0 0 15px rgba(0, 243, 255, 0.5);
         }
-        button:hover { transform: scale(1.05); box-shadow: 0 0 25px rgba(255, 0, 127, 0.8); color: white;}
-        button:active { transform: scale(0.95); }
+        body button:hover { transform: scale(1.05); box-shadow: 0 0 25px rgba(255, 0, 127, 0.8); color: white;}
+        body button:active { transform: scale(0.95); }
         #hud {
             position: absolute; top: 20px; left: 20px; color: white; font-family: monospace; font-size: 1.1rem;
             pointer-events: none; text-shadow: 0 0 8px rgba(0,243,255,0.8); display: none;
