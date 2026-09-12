@@ -231,11 +231,24 @@ self.addEventListener("fetch", (event) => {
   // a shared cache anyway: it is a third party's client, its GET responses can
   // be viewer-specific, and an analytics request that fails should simply fail
   // rather than be answered from a cache a deploy ago.
+  //
+  // `/.well-known/*` AND `/oauth/*` ARE THE OAUTH FLOW, and neither is under
+  // `/api/`, so without these two lines both fall through to `cacheFirst`. The
+  // discovery documents (`/.well-known/oauth-authorization-server` and friends)
+  // would then be pinned in `hp-runtime` at whatever a browser saw first and
+  // served from there forever — a cache that is deliberately never swept and
+  // survives deploys. Move the site to a new domain, or change an endpoint
+  // path, and every returning browser keeps signing in against the old one with
+  // no way to notice. `/oauth/authorize` is worse still: it is a consent screen
+  // whose whole content depends on the query string and the session, and a
+  // cached copy would show one app's name while approving another's request.
   if (
     url.pathname.startsWith("/admin") ||
     url.pathname.startsWith("/dashboard") ||
     url.pathname.startsWith("/api/") ||
     url.pathname.startsWith("/ingest/") ||
+    url.pathname.startsWith("/.well-known/") ||
+    url.pathname.startsWith("/oauth/") ||
     url.pathname === "/games-version"
   ) {
     return;

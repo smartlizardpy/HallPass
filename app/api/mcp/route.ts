@@ -13,10 +13,11 @@
  * argument; `app/lib/mcp/actor.ts` resolves which of the two is calling, and
  * `server.ts` decides what that caller may see.
  *
- * Operator surface, like `admin/alerts`: deliberately NO CORS headers here, and
- * every request gated before the protocol is touched at all. (The OAuth and
- * discovery routes DO answer CORS, because a browser-based client has to reach
- * them; this one is only ever called by the client's own process.)
+ * Operator surface, like `admin/alerts`: every request is gated before the
+ * protocol is touched at all. CORS is answered for an ALLOW-LISTED origin only
+ * (`mcpCorsHeaders`), which is what lets a web-based MCP client reach it at
+ * all; a caller with no `Origin` — every CLI and every agent process — is
+ * unaffected either way.
  *
  * ── WHY IT LIVES UNDER `/api/` ─────────────────────────────────────────────
  * Two protections come free and neither needed editing. `app/robots.ts`
@@ -50,7 +51,7 @@
 
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { authenticateMcp, type McpActor } from "@/app/lib/mcp/actor";
-import { mcpDenialResponse } from "@/app/lib/mcp/http";
+import { mcpCorsHeaders, mcpDenialResponse } from "@/app/lib/mcp/http";
 import { mcpResource, originOf } from "@/app/lib/mcp/oauth/metadata";
 import { createMcpServer } from "@/app/lib/mcp/server";
 
@@ -78,8 +79,9 @@ function methodNotAllowed(): Response {
 
 export async function POST(req: Request): Promise<Response> {
   const origin = originOf(req.url);
+  const cors = mcpCorsHeaders(req.headers);
   const auth = await authenticateMcp(req.headers, mcpResource(origin));
-  if (!auth.ok) return mcpDenialResponse(auth.denial, origin);
+  if (!auth.ok) return withCors(mcpDenialResponse(auth.denial, origin), cors);
 
   const transport = new WebStandardStreamableHTTPServerTransport({
     // Stateless: no session id is minted, because nothing on this runtime would
@@ -91,7 +93,28 @@ export async function POST(req: Request): Promise<Response> {
 
   const server = createMcpServer(auth.actor satisfies McpActor);
   await server.connect(transport);
-  return transport.handleRequest(req);
+  return withCors(await transport.handleRequest(req), cors);
+}
+
+/**
+ * Copy CORS headers onto a response the SDK built.
+ *
+ * A new `Response` around the original body rather than mutating `res.headers`,
+ * which is immutable on a constructed `Response`. The body is passed through
+ * untouched, so a streamed answer stays streamed.
+ */
+function withCors(res: Response, cors: Record<string, string>): Response {
+  if (Object.keys(cors).length === 0) return res;
+  const headers = new Headers(res.headers);
+  for (const [key, value] of Object.entries(cors)) headers.set(key, value);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+/** Preflight, for the browser-based clients the allow-list admits. */
+export async function OPTIONS(req: Request): Promise<Response> {
+  const cors = mcpCorsHeaders(req.headers);
+  if (Object.keys(cors).length === 0) return new Response(null, { status: 403 });
+  return new Response(null, { status: 204, headers: cors });
 }
 
 /**
