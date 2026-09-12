@@ -45,6 +45,8 @@ import "server-only";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { BUG_SEVERITIES, REPORT_KINDS, REPORT_STATUSES } from "@/app/lib/beta/config";
+import type { McpActor } from "./actor";
+import { registerAnalyticsTools } from "./analytics/tools";
 import { SUMMARY_MAX, describeToolCall, describeToolFailure } from "./activity";
 import { clearActivity, recordActivity } from "./activity-log";
 import {
@@ -58,6 +60,7 @@ import {
   ACTIVITY_IDLE_MINUTES,
   DEFAULT_REPORT_LIMIT,
   MAX_REPORT_LIMIT,
+  MCP_ANALYTICS_SERVER_NAME,
   MCP_SERVER_NAME,
   MCP_SERVER_VERSION,
 } from "./config";
@@ -151,31 +154,45 @@ async function logged<T>(
   return json(render(result));
 }
 
+/** What a client is told this server is, and how to work it, per credential. */
+const BUG_INSTRUCTIONS =
+  "Bug reports filed by HallPass playtesters against individual games. " +
+  "Start with list_bug_reports (status \"open\" is the triage queue), then " +
+  "get_bug_report for the full body, the device and the game's own " +
+  "JavaScript errors before attempting a fix. Reports are per-game: the " +
+  "`slug` field names the game, whose code lives in public/games/<slug>/. " +
+  "Closing a report as fixed or duplicate DELETES it and pays the tester " +
+  "XP, so do it only after the fix is actually made. Call " +
+  "log_agent_activity whenever you start or finish a piece of work: the " +
+  "site operator watches a live feed of it on their dashboard, and every " +
+  "other tool here only tells them WHAT you did, never why. When ALL of " +
+  "your work is done, call finish_agent_activity once: it clears that " +
+  "feed, which is how the operator knows nothing is running any more.";
+
+const ANALYTICS_INSTRUCTIONS =
+  "Read-only analytics for the HallPass arcade, for the signed-in dashboard " +
+  "account that approved this connection. Call describe_analytics_schema " +
+  "FIRST: it carries the metric definitions this site already settled, and a " +
+  "query written without them will disagree with the operator's dashboard for " +
+  "reasons neither of you can reconstruct later. get_overview returns exactly " +
+  "what that dashboard shows, so it is the cheapest way to sanity-check " +
+  "anything you compute. Use run_analytics_sql (first-party: players, scores, " +
+  "plays, reviews, challenges) and run_analytics_hogql (PostHog events: " +
+  "traffic, funnels, retention) for the questions the fixed panels do not " +
+  "answer. Nothing here can write, and no view carries a player's email, real " +
+  "name or photo.";
+
 /**
- * Build a server with the five bug tools and the two feed tools registered.
+ * Register the five bug tools and the two feed tools.
  *
  * @see `bug-mcp-design.md` §7 for the table this mirrors.
+ *
+ * Split out of the old `createBugMcpServer` when the endpoint gained a second
+ * credential: WHICH tools exist now depends on who is asking
+ * (`analytics-mcp-design.md` §3), so building the server and filling it are two
+ * decisions rather than one. The tool bodies below are unchanged.
  */
-export function createBugMcpServer(): McpServer {
-  const server = new McpServer(
-    { name: MCP_SERVER_NAME, version: MCP_SERVER_VERSION },
-    {
-      instructions:
-        "Bug reports filed by HallPass playtesters against individual games. " +
-        "Start with list_bug_reports (status \"open\" is the triage queue), then " +
-        "get_bug_report for the full body, the device and the game's own " +
-        "JavaScript errors before attempting a fix. Reports are per-game: the " +
-        "`slug` field names the game, whose code lives in public/games/<slug>/. " +
-        "Closing a report as fixed or duplicate DELETES it and pays the tester " +
-        "XP, so do it only after the fix is actually made. Call " +
-        "log_agent_activity whenever you start or finish a piece of work: the " +
-        "site operator watches a live feed of it on their dashboard, and every " +
-        "other tool here only tells them WHAT you did, never why. When ALL of " +
-        "your work is done, call finish_agent_activity once: it clears that " +
-        "feed, which is how the operator knows nothing is running any more.",
-    },
-  );
-
+function registerBugTools(server: McpServer): void {
   server.registerTool(
     "list_bug_reports",
     {
@@ -373,6 +390,48 @@ export function createBugMcpServer(): McpServer {
         { recordSuccess: false },
       ),
   );
+}
+
+/**
+ * Build the server this caller gets.
+ *
+ * ONE ENDPOINT, TWO CREDENTIALS, TWO TOOL LISTS. A holder of `MCP_SECRET` gets
+ * exactly what it always got — the seven bug tools — plus the analytics ones,
+ * which are read-only and cost it nothing. An OAuth caller gets the analytics
+ * tools ONLY.
+ *
+ * Withholding the bug tools from a signed-in person looks backwards until you
+ * read `bug-mcp-design.md` §3, which skipped `assertNotOwnWork` — the guard
+ * that stops somebody triaging a report they filed themselves — with this
+ * reasoning: "The MCP actor is a machine holding a secret; it has no
+ * `playerId` and cannot be the author of any report." An OAuth actor HAS a
+ * `playerId`, so that case stops being impossible and the four-eyes rule in
+ * `permissions.ts` comes back into scope. Deciding how a machine-mediated close
+ * interacts with it is a feature, not a side effect of adding a credential.
+ *
+ * The upshot is a sentence that is true rather than aspirational: an OAuth
+ * session on this server can read and cannot write.
+ *
+ * The server also NAMES ITSELF differently per caller, because it genuinely is
+ * a different thing to each: a secret-holder still sees `hallpass-bugs`, with
+ * the instructions it has always had, and nothing about that path changes.
+ */
+export function createMcpServer(actor: McpActor): McpServer {
+  const isSecret = actor.kind === "secret";
+  const server = new McpServer(
+    {
+      name: isSecret ? MCP_SERVER_NAME : MCP_ANALYTICS_SERVER_NAME,
+      version: MCP_SERVER_VERSION,
+    },
+    {
+      instructions: isSecret
+        ? `${BUG_INSTRUCTIONS}\n\n${ANALYTICS_INSTRUCTIONS}`
+        : ANALYTICS_INSTRUCTIONS,
+    },
+  );
+
+  if (isSecret) registerBugTools(server);
+  registerAnalyticsTools(server);
 
   return server;
 }

@@ -64,6 +64,12 @@ export const METRIC_DEFINITIONS: readonly string[] = [
     "only exists on events captured after the debounce shipped, so a search with " +
     "no `results` property is unknown, not zero.",
 
+  "COUNTS COME BACK AS STRINGS from run_analytics_sql. Postgres `count()` is " +
+    "`bigint`, which exceeds a JavaScript safe integer, so the driver serialises " +
+    "it as a string — `{\"scores\": \"2\"}`, not `{\"scores\": 2}`. Add `::int` in " +
+    "the SELECT when you want a number you can sort or compare, exactly as every " +
+    "query in overview.ts does.",
+
   "IN THE `mcp` SCHEMA every player is `player_public_id` (`players.public_id`). " +
     "There is no email, real name or photo in any view, and no way to join to " +
     "one. A NULL `player_public_id` means the row is genuinely anonymous, not " +

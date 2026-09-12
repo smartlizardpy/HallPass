@@ -17,40 +17,64 @@
  */
 
 import type { ApiError } from "@/sdk/src/contract";
-import { verifyMcpSecret } from "./guard";
+import type { McpDenial } from "./actor";
+import { OAUTH_SCOPE } from "./oauth/config";
+import { protectedResourceMetadataUrl } from "./oauth/metadata";
 
 /**
- * Gate the endpoint, mapping the three auth outcomes to an early `Response` —
- * or `null` to continue into the protocol.
+ * Render a refusal from {@link McpDenial}.
  *
- * `unconfigured` is a 503 and not a 401 on purpose, exactly as the alerts gate
- * argues: "this deploy has no secret set" is a server condition, and an operator
- * staring at a client that will not connect needs to tell it apart from "my key
- * is wrong". The message names the variable to set, because the alternative is
- * reading the source to find out.
+ * ── THE 401 IS THE MOST LOAD-BEARING LINE IN THIS FILE ────────────────────
+ * `WWW-Authenticate: Bearer resource_metadata="…"` is what RFC 9728 and the MCP
+ * specification use to tell a client WHERE to go and sign in. Without the
+ * `resource_metadata` parameter a client reports "unauthorized" and stops — it
+ * never opens a browser, never discovers the authorization server, and the
+ * whole OAuth flow appears to be broken while every route works perfectly. It
+ * is the single easiest way to ship this feature dead.
  *
- * The 401 carries `WWW-Authenticate: Bearer`. That is what the status code is
- * defined to require, and it is the difference between a client reporting "not
- * authorised" and a client reporting nothing useful at all.
+ * ── FOUR OUTCOMES, NOT TWO ────────────────────────────────────────────────
+ * The original gate had two, and both survive with their reasoning intact:
+ * `unconfigured` is 503 so an operator can tell "I never set this up" from "my
+ * key is wrong", and `unauthorized` is 401. Two are new:
+ *
+ *   * `forbidden` (403) — the credential is GOOD and the account has lost its
+ *     dashboard role. A 401 here would send the client round the entire browser
+ *     sign-in flow, which would succeed and change nothing.
+ *   * `unavailable` (503) — the credential could not be CHECKED because the
+ *     database is unreachable. Reporting an outage as a bad credential sends
+ *     somebody to rotate a key that was never the problem.
  */
-export function mcpAuthGate(headers: Headers): Response | null {
-  const result = verifyMcpSecret(headers);
-  if (result === "unconfigured") {
+export function mcpDenialResponse(denial: McpDenial, origin: string): Response {
+  if (denial.kind === "unconfigured") {
     return Response.json(
       {
         error:
-          "The bug MCP is not configured. Set MCP_SECRET on the deployment to enable it.",
+          "The HallPass MCP is not configured. Set MCP_SECRET for the bug tools, " +
+          "or MCP_OAUTH_ENABLED=1 to let dashboard accounts sign in for analytics.",
       } satisfies ApiError,
       { status: 503 },
     );
   }
-  if (result === "unauthorized") {
-    return Response.json({ error: "Unauthorized" } satisfies ApiError, {
-      status: 401,
-      headers: { "www-authenticate": "Bearer" },
-    });
+
+  if (denial.kind === "unavailable") {
+    return Response.json({ error: denial.detail } satisfies ApiError, { status: 503 });
   }
-  return null;
+
+  if (denial.kind === "forbidden") {
+    return Response.json({ error: denial.detail } satisfies ApiError, { status: 403 });
+  }
+
+  return Response.json(
+    { error: denial.detail ?? "Unauthorized" } satisfies ApiError,
+    {
+      status: 401,
+      headers: {
+        "www-authenticate":
+          `Bearer resource_metadata="${protectedResourceMetadataUrl(origin)}", ` +
+          `scope="${OAUTH_SCOPE}"`,
+      },
+    },
+  );
 }
 
 /** One error body, shaped like every other error this API answers. */
