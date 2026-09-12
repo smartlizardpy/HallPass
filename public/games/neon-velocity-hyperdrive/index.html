@@ -589,9 +589,11 @@
                 o.update(actualSpeed);
                 o.draw(ctx);
                 
-                // Collision
-                let dx = Math.abs((player.x) - (o.x + o.w/2));
-                let dy = Math.abs((player.y) - (o.y + o.h/2));
+                // Collision - a mine is drawn centred on (x, y), a wall from its top-left corner
+                let cx = o.type === 'MINE' ? o.x : o.x + o.w/2;
+                let cy = o.type === 'MINE' ? o.y : o.y + o.h/2;
+                let dx = Math.abs(player.x - cx);
+                let dy = Math.abs(player.y - cy);
                 
                 // Simple hit box
                 if (dx < o.w/2 + 10 && dy < o.h/2 + 10) {
