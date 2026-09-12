@@ -221,6 +221,66 @@ describe("isRegisteredRedirectUri", () => {
   it("refuses a trailing-slash variant", () => {
     expect(isRegisteredRedirectUri(registered, "https://example.com/cb/")).toBe(false);
   });
+
+  it("refuses a PORT difference on a non-loopback host", () => {
+    // The loopback exception below must not leak to the public internet.
+    expect(isRegisteredRedirectUri(registered, "https://example.com:8443/cb")).toBe(false);
+  });
+});
+
+describe("isRegisteredRedirectUri — the RFC 8252 §7.3 loopback exception", () => {
+  // "The authorization server MUST allow any port to be specified at the time of
+  // the request for loopback IP redirect URIs." A native client binds whatever
+  // port the OS gives it and cannot know it at registration time.
+  const loopback = ["http://127.0.0.1/callback", "http://localhost/callback"];
+
+  it("accepts any port on a registered loopback URI", () => {
+    expect(isRegisteredRedirectUri(loopback, "http://127.0.0.1:51234/callback")).toBe(true);
+    expect(isRegisteredRedirectUri(loopback, "http://localhost:3118/callback")).toBe(true);
+    expect(isRegisteredRedirectUri(loopback, "http://127.0.0.1:1/callback")).toBe(true);
+  });
+
+  it("accepts the portless form too, which is the exact match", () => {
+    expect(isRegisteredRedirectUri(loopback, "http://127.0.0.1/callback")).toBe(true);
+  });
+
+  it("accepts a port when the REGISTERED uri carries one and the request differs", () => {
+    // The flexibility runs both ways: a client that registered on one port and
+    // came back on another is the same case.
+    expect(
+      isRegisteredRedirectUri(["http://127.0.0.1:1234/cb"], "http://127.0.0.1:5678/cb"),
+    ).toBe(true);
+  });
+
+  it("still refuses a different PATH on loopback", () => {
+    expect(isRegisteredRedirectUri(loopback, "http://127.0.0.1:51234/evil")).toBe(false);
+  });
+
+  it("still refuses a different loopback HOST", () => {
+    // 127.0.0.2 is loopback to the OS but is not one of the three names the
+    // exception covers, so it gets no leeway.
+    expect(isRegisteredRedirectUri(loopback, "http://127.0.0.2:51234/callback")).toBe(false);
+  });
+
+  it("does not let a loopback registration match a public host", () => {
+    expect(isRegisteredRedirectUri(loopback, "http://evil.example:80/callback")).toBe(false);
+    expect(isRegisteredRedirectUri(loopback, "https://localhost.evil.example/callback")).toBe(false);
+  });
+
+  it("still refuses a different QUERY on loopback", () => {
+    expect(
+      isRegisteredRedirectUri(["http://127.0.0.1/cb?a=1"], "http://127.0.0.1:9/cb?a=2"),
+    ).toBe(false);
+  });
+
+  it("accepts Claude Code's real document against a ported callback", () => {
+    // Pinned from the live document at
+    // https://claude.ai/oauth/claude-code-client-metadata — this exact pair is
+    // what "This application is not registered" was really about.
+    const claudeCode = ["http://localhost/callback", "http://127.0.0.1/callback"];
+    expect(isRegisteredRedirectUri(claudeCode, "http://localhost:51234/callback")).toBe(true);
+    expect(isRegisteredRedirectUri(claudeCode, "http://127.0.0.1:3118/callback")).toBe(true);
+  });
 });
 
 describe("normalizeClientName", () => {

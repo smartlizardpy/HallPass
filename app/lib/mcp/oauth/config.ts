@@ -246,19 +246,77 @@ export function validateRedirectUris(input: unknown): RedirectUrisResult {
   return { ok: true, uris };
 }
 
+/** Is this host the machine the browser is running on? */
+function isLoopbackHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  return host === "127.0.0.1" || host === "::1" || host === "localhost";
+}
+
+/**
+ * Do these two URIs differ ONLY in their port, on a loopback host?
+ *
+ * Everything else is compared exactly — scheme, host, path and query — so this
+ * widens the match by precisely one component and only for an address that
+ * cannot leave the user's machine.
+ */
+function loopbackMatchIgnoringPort(registered: string, presented: string): boolean {
+  let a: URL;
+  let b: URL;
+  try {
+    a = new URL(registered);
+    b = new URL(presented);
+  } catch {
+    return false;
+  }
+  if (!isLoopbackHost(a.hostname) || !isLoopbackHost(b.hostname)) return false;
+  return (
+    a.protocol === b.protocol &&
+    a.hostname.toLowerCase() === b.hostname.toLowerCase() &&
+    a.pathname === b.pathname &&
+    a.search === b.search &&
+    a.hash === b.hash
+  );
+}
+
 /**
  * Is the presented redirect URI one this client registered?
  *
- * EXACT string equality, deliberately. Not `startsWith`, not origin comparison,
- * not URL-object equality — each of those admits a URI the client never
- * registered, and the authorization code is handed to whatever this returns
- * true for.
+ * ── EXACT, EXCEPT FOR THE PORT OF A LOOPBACK ADDRESS ──────────────────────
+ * The default is byte-exact string equality, and that is the control that stops
+ * an authorization code being delivered somewhere the client never registered.
+ * Not `startsWith`, not origin comparison, not URL-object equality — each of
+ * those admits a URI the client never named, and the code is handed to whatever
+ * this returns true for.
+ *
+ * The ONE exception is the port of a loopback host, and it is required rather
+ * than convenient. RFC 8252 §7.3:
+ *
+ *   > The authorization server MUST allow any port to be specified at the time
+ *   > of the request for loopback IP redirect URIs, to accommodate clients that
+ *   > obtain an available ephemeral port from the operating system at the time
+ *   > of the request.
+ *
+ * A native client binds whatever port the OS gives it, so it cannot know at
+ * registration time what it will be. Claude Code's own metadata document lists
+ * `http://localhost/callback` and `http://127.0.0.1/callback` — no port at all —
+ * and then asks for `http://localhost:51234/callback`. Byte-exact matching
+ * refuses that, which is what "This application is not registered" was really
+ * about. The same trap is filed against fastmcp and the MCP TypeScript SDK, so
+ * it is a common mistake and not a local peculiarity.
+ *
+ * WHY WIDENING IT IS SAFE HERE and nowhere else: a loopback redirect resolves to
+ * the machine the browser is already running on. An attacker who can listen on
+ * another port of the user's own loopback interface is already running code
+ * there. Every other component — scheme, host, path, query — is still compared
+ * exactly, and a non-loopback URI gets no leeway whatsoever, so
+ * `https://example.com/cb` still refuses `https://example.com:8443/cb`.
  */
 export function isRegisteredRedirectUri(
   registered: readonly string[],
   presented: string,
 ): boolean {
-  return registered.includes(presented);
+  if (registered.includes(presented)) return true;
+  return registered.some((uri) => loopbackMatchIgnoringPort(uri, presented));
 }
 
 /** Trim a client-supplied name to something the consent screen can render. */

@@ -222,7 +222,16 @@ async function fetchUncached(clientId: string): Promise<CimdResult> {
         // Off, so every hop goes through the host check below rather than
         // being followed blind. See the module header.
         redirect: "manual",
-        headers: { accept: "application/json" },
+        headers: {
+          accept: "application/json",
+          // Named, and named as a browser-ish string rather than left to
+          // undici's default. `claude.ai` sits behind Cloudflare — a sibling
+          // path already answers a challenge page — and a request from a
+          // datacenter IP with no User-Agent is the exact shape bot protection
+          // dislikes. Insurance rather than a diagnosis: the fetch works from a
+          // laptop with the headers this used to send.
+          "user-agent": "HallPass-MCP/1.0 (+https://hallpass-rouge.vercel.app)",
+        },
         signal: AbortSignal.timeout(CIMD_TIMEOUT_MS),
       });
     } catch (error) {
