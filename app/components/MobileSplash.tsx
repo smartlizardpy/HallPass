@@ -95,7 +95,13 @@ const WARM_ROUTES = ["/play/you", "/play/you/friends"];
  */
 
 /** Full-screen worlds where a launch splash would be noise, not a welcome. */
-const SKIP_PREFIXES = ["/dashboard", "/play/signin", "/play/signout", "/play/auth"];
+const SKIP_PREFIXES = [
+  "/dashboard",
+  "/play/signin",
+  "/play/signout",
+  "/play/auth",
+  "/oauth",
+];
 
 /**
  * HOW LONG THE SPLASH STAYS, and why it is a range rather than a number.

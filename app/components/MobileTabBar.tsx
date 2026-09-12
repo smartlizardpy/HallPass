@@ -110,6 +110,9 @@ const HIDDEN_PREFIXES = [
   "/play/signout",
   "/play/welcome",
   "/play/auth",
+  // The OAuth consent screen. Arcade navigation on a page whose whole job is
+  // "approve or cancel" offers a third answer that abandons the flow silently.
+  "/oauth",
 ];
 
 /**

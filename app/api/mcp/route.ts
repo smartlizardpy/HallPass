@@ -6,9 +6,18 @@
  * then triage, fix or close it. `bug-mcp-design.md` is the whole argument;
  * `README.md` says how to point a client at it.
  *
- * Server-to-server / operator surface, like `admin/alerts`: deliberately NO CORS
- * headers, and every request gated by `verifyMcpSecret` before the protocol is
- * touched at all.
+ * ── TWO CREDENTIALS SINCE THE ANALYTICS TOOLS LANDED ───────────────────────
+ * `MCP_SECRET` still opens the bug tools and behaves exactly as it did. Beside
+ * it, a dashboard account can sign in through OAuth and gets the read-only
+ * analytics tools — and ONLY those. `analytics-mcp-design.md` §3 has the
+ * argument; `app/lib/mcp/actor.ts` resolves which of the two is calling, and
+ * `server.ts` decides what that caller may see.
+ *
+ * Operator surface, like `admin/alerts`: every request is gated before the
+ * protocol is touched at all. CORS is answered for an ALLOW-LISTED origin only
+ * (`mcpCorsHeaders`), which is what lets a web-based MCP client reach it at
+ * all; a caller with no `Origin` — every CLI and every agent process — is
+ * unaffected either way.
  *
  * ── WHY IT LIVES UNDER `/api/` ─────────────────────────────────────────────
  * Two protections come free and neither needed editing. `app/robots.ts`
@@ -41,8 +50,17 @@
  */
 
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { mcpAuthGate } from "@/app/lib/mcp/http";
-import { createBugMcpServer } from "@/app/lib/mcp/server";
+import { authenticateMcp, type McpActor } from "@/app/lib/mcp/actor";
+import { mcpCorsHeaders, mcpDenialResponse } from "@/app/lib/mcp/http";
+import { mcpResource, originOf } from "@/app/lib/mcp/oauth/metadata";
+import { createMcpServer } from "@/app/lib/mcp/server";
+import { readAppSetting } from "@/app/lib/app-settings";
+import {
+  OUTPUT_MODE_KEY,
+  clientHintFrom,
+  shouldSendWidgets,
+  toOutputMode,
+} from "@/app/lib/mcp/analytics/output-mode";
 
 /**
  * Never prerender, never cache. `POST` is uncached by default in Next 16, but
@@ -67,8 +85,10 @@ function methodNotAllowed(): Response {
 }
 
 export async function POST(req: Request): Promise<Response> {
-  const denied = mcpAuthGate(req.headers);
-  if (denied) return denied;
+  const origin = originOf(req.url);
+  const cors = mcpCorsHeaders(req.headers);
+  const auth = await authenticateMcp(req.headers, mcpResource(origin));
+  if (!auth.ok) return withCors(mcpDenialResponse(auth.denial, origin), cors);
 
   const transport = new WebStandardStreamableHTTPServerTransport({
     // Stateless: no session id is minted, because nothing on this runtime would
@@ -78,9 +98,39 @@ export async function POST(req: Request): Promise<Response> {
     enableJsonResponse: true,
   });
 
-  const server = createBugMcpServer();
+  // Whether this answer carries a rendered card is an operator setting, read
+  // per request so flipping it in the dashboard takes effect on the next call
+  // rather than the next deploy — which is the whole point of it being a
+  // setting (`analytics/output-mode.ts`). Fail-soft: `readAppSetting` returns
+  // null on an unreachable database, and `toOutputMode` reads that as the
+  // default, so a Neon blip costs a card and never an answer.
+  const mode = toOutputMode(await readAppSetting(OUTPUT_MODE_KEY));
+  const sendWidgets = shouldSendWidgets(mode, clientHintFrom(req.headers));
+
+  const server = createMcpServer(auth.actor satisfies McpActor, { sendWidgets });
   await server.connect(transport);
-  return transport.handleRequest(req);
+  return withCors(await transport.handleRequest(req), cors);
+}
+
+/**
+ * Copy CORS headers onto a response the SDK built.
+ *
+ * A new `Response` around the original body rather than mutating `res.headers`,
+ * which is immutable on a constructed `Response`. The body is passed through
+ * untouched, so a streamed answer stays streamed.
+ */
+function withCors(res: Response, cors: Record<string, string>): Response {
+  if (Object.keys(cors).length === 0) return res;
+  const headers = new Headers(res.headers);
+  for (const [key, value] of Object.entries(cors)) headers.set(key, value);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+/** Preflight, for the browser-based clients the allow-list admits. */
+export async function OPTIONS(req: Request): Promise<Response> {
+  const cors = mcpCorsHeaders(req.headers);
+  if (Object.keys(cors).length === 0) return new Response(null, { status: 403 });
+  return new Response(null, { status: 204, headers: cors });
 }
 
 /**
@@ -93,14 +143,23 @@ export async function POST(req: Request): Promise<Response> {
  * exists, not which methods it implements.
  */
 export async function GET(req: Request): Promise<Response> {
-  const denied = mcpAuthGate(req.headers);
-  if (denied) return denied;
-  return methodNotAllowed();
+  const denied = await gate(req);
+  return denied ?? methodNotAllowed();
 }
 
 /** DELETE ends a session, and there are no sessions to end. */
 export async function DELETE(req: Request): Promise<Response> {
-  const denied = mcpAuthGate(req.headers);
-  if (denied) return denied;
-  return methodNotAllowed();
+  const denied = await gate(req);
+  return denied ?? methodNotAllowed();
+}
+
+/**
+ * Authenticate without building a server, for the two methods that only ever
+ * refuse. Kept so an unauthenticated caller learns whether the endpoint exists,
+ * not which methods it implements.
+ */
+async function gate(req: Request): Promise<Response | null> {
+  const origin = originOf(req.url);
+  const auth = await authenticateMcp(req.headers, mcpResource(origin));
+  return auth.ok ? null : mcpDenialResponse(auth.denial, origin);
 }

@@ -118,6 +118,10 @@ const SUPPRESSED_PREFIXES = [
   "/play/signout",
   "/play/welcome",
   "/play/auth",
+  // Approving an MCP client is the most mid-flow surface on the site: a modal
+  // over a consent screen asks somebody to grant access to their analytics
+  // while something else covers the list of what they are granting.
+  "/oauth",
   "/offline",
 ];
 

@@ -61,6 +61,13 @@ const ITEMS: NavItem[] = [
   { href: "/dashboard/games", label: "Games" },
   { href: "/dashboard/curation", label: "Curation" },
   { href: "/dashboard/beta", label: "Beta" },
+  // LAST in the main list, and deliberately not in the super-admin block below.
+  // `/dashboard/users` is about other people's access and is rightly restricted;
+  // this is about your own — a beta admin who connects a laptop needs somewhere
+  // to disconnect it, and gating that on a role they do not hold would make
+  // asking somebody else the only way out. It sits last because nothing is ever
+  // waiting on it: it is an account surface, not a work surface.
+  { href: "/dashboard/mcp", label: "Connections" },
 ];
 
 // Super-admin-only links, appended when the caller holds that role.

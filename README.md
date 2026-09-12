@@ -616,13 +616,26 @@ An admin only receives these if they have signed into the arcade itself (the
 dashboard and the arcade are separate sign-ins) — notifications are owned by a
 player row. See `app/lib/notifications/admins.ts`.
 
-## Bug MCP
+## MCP
 
-`POST /api/mcp` is an [MCP](https://modelcontextprotocol.io) server exposing the
-playtest bug queue (`beta_reports`) to a coding agent, so the round trip from "a
-tester filed a bug" to "the bug is fixed and the tester is paid" does not need
-anybody to read the dashboard and retype it. `bug-mcp-design.md` is the full
-argument; this is how to use it.
+`POST /api/mcp` is an [MCP](https://modelcontextprotocol.io) server, and it is
+**two surfaces behind one URL**. Which one you get depends on how you
+authenticate:
+
+| Credential | Tools | For |
+|---|---|---|
+| `MCP_SECRET` bearer token | the 7 bug tools **and** the 7 analytics tools | a coding agent working the playtest bug queue |
+| **Sign in with your HallPass account** (OAuth) | the 7 analytics tools only | asking questions about the arcade |
+
+The two are independent: either can be unconfigured without disabling the other,
+and rotating one does not touch the other. `bug-mcp-design.md` and
+`analytics-mcp-design.md` are the two arguments.
+
+### Bug tools — for an agent, on a shared secret
+
+Exposes the playtest bug queue (`beta_reports`) to a coding agent, so the round
+trip from "a tester filed a bug" to "the bug is fixed and the tester is paid"
+does not need anybody to read the dashboard and retype it.
 
 **It is off until you turn it on.** Unlike `ALERTS_SECRET`, `MCP_SECRET` has no
 fallback chain: with nothing set the endpoint answers **503** and refuses
@@ -658,9 +671,138 @@ The two removing outcomes are how the queue is meant to end — see
 card. They are marked `destructiveHint` so a client asks before running them, and
 so is `finish_agent_activity`, which deletes the feed's lines and never a report.
 
+## Analytics MCP — for a person, on their own account
+
+The other half of `/api/mcp`. Instead of pasting a secret, the client opens a
+browser, you sign in with the same Google account that opens the dashboard, and
+approve a consent screen. The connection is yours: it carries your role, it is
+listed at **Dashboard → Connections**, and you can revoke it there.
+
+```bash
+# No secret, no header. The browser opens.
+claude mcp add --transport http hallpass https://<your-site>/api/mcp
+```
+
+### Adding it to Claude, ChatGPT and Gemini
+
+The point of the OAuth half is asking these questions from a phone, so the
+server speaks all three ways a hosted assistant identifies itself:
+
+| Client | How to add it | What it uses |
+|---|---|---|
+| **Claude** (web, desktop, mobile) | Settings → Connectors → Add custom connector → `https://<your-site>/api/mcp` | Registers itself (dynamic registration), then the browser sign-in |
+| **ChatGPT** | Settings → Connectors → Add → the same URL | A Client ID Metadata Document, and the `search` / `fetch` tools |
+| **Gemini Enterprise** and other typed-in forms | Create a connector at **Dashboard → Connections**, then paste the four values | A client ID and secret you issued |
+
+Each opens a browser, asks you to sign in with your HallPass account, and shows
+the consent screen before anything is granted.
+
+### How answers look
+
+Every answer is **Markdown** — stat lines with their caveats, ranked tables,
+query results as a table with truncation stated rather than clipped in silence.
+That is what the model reads and, in most clients, what you see.
+
+On top of that, an app that supports [MCP Apps](https://modelcontextprotocol.io)
+can draw a **card**: the same KPI tiles, delta pills, sparklines and tables as
+`/dashboard`, in the same brand colours. ChatGPT renders these today.
+
+**Claude does not, for a custom remote connector.** Its tracker carries
+[claude-ai-mcp#471](https://github.com/anthropics/claude-ai-mcp/issues/471),
+closed as not planned, and
+[claude-code#65653](https://github.com/anthropics/claude-code/issues/65653)
+reports an empty labelled container rather than a graceful fallback. An empty
+box is worse than a table, which is why **Dashboard → Connections** has a
+switch:
+
+| Mode | What it does |
+|---|---|
+| **Automatic** (default) | Cards only to clients that look like ones known to render them; text to everyone else. |
+| **Always send cards** | Cards to every client. Pick it once you have seen one render. |
+| **Text only** | Never send cards. Pick it if an app is showing empty boxes. |
+
+The setting is read per request, so flipping it takes effect on the next call
+rather than the next deploy. The card also degrades on its own: handed no data
+it says so in words instead of rendering blank.
+
+Two things are worth knowing:
+
+- **`search` and `fetch` exist for ChatGPT's contract**, which is a
+  document-retrieval interface rather than a tool-calling one. They turn the
+  analytics into named reports — `overview`, `growth`, `alerts`, `metrics`,
+  `game:<slug>` — that an assistant can find and read, with a citable URL each.
+  They are useful everywhere, not just there.
+- **Gemini Enterprise is a paid Google product.** The connector form on the
+  dashboard is generic — it works for anything that asks you to type in an
+  authorization URL, a token URL, a client ID and a secret — but Gemini
+  specifically needs a Workspace plan that HallPass does not otherwise require.
+
+**Turn it on** with `MCP_OAUTH_ENABLED=1`, and provision the read-only database
+role that `run_analytics_sql` needs:
+
+```bash
+node scripts/provision-mcp-reader.mjs            # dry run
+node scripts/provision-mcp-reader.mjs --yes      # create it, then PROVE the boundary
+```
+
+That script prints a connection string for `MCP_ANALYTICS_DATABASE_URL`. Without
+that variable everything else still works and `run_analytics_sql` is simply
+absent — it never falls back to `DATABASE_URL`.
+
+### The tools
+
+| Tool | What it does |
+|---|---|
+| `get_overview` | Exactly what `/dashboard` shows — the PostHog traffic half and the Neon community half, 30 days against the 30 before. |
+| `get_growth` | Acquisition channels, referrers, entry pages, first-vs-returning devices, and the challenge-link share loop. |
+| `get_content_health` | Every game and what it is missing: cover, screenshots, trailer, description, reviews. |
+| `get_alerts` | What the half-hourly alert probe measures and which rules currently fire. |
+| `describe_analytics_schema` | The `mcp` views, the PostHog event catalogue, and **the metric definitions**. |
+| `run_analytics_hogql` | One read-only HogQL query over PostHog events. |
+| `run_analytics_sql` | One read-only SELECT over the `mcp` schema. |
+| `search` | Find reports by name or subject. Returns `{id, title, url}`. |
+| `fetch` | Read one report in full, as prose with its caveats attached. |
+
+`describe_analytics_schema` is the one that matters. A model handed a schema and
+left to infer the metrics infers them plausibly and wrongly, and the failure is
+silent — so it hands over the definitions this codebase already settled: only
+`game_started` is a play (the featured banner also fires
+`featured_game_opened`, and counting both double-counts), "active" means signed
+in rather than played, hour-of-day is on PostHog's project clock, and PostHog
+counts devices while Neon counts people.
+
+### Who may connect, and what they can see
+
+Sign-in is gated on `DASHBOARD_MIN_ROLE` — **if you can read `/dashboard`, you
+can read this**, and if you cannot, you cannot. The role is re-resolved from
+`dashboard_users` on every request, so a revoked role takes effect on the next
+call rather than at token expiry.
+
+Nothing here can write. `run_analytics_sql` connects as a **separate Postgres
+role** (`mcp_reader`) with no privileges on the `public` schema at all and
+`SELECT` on the `mcp` views only, opened in a `READ ONLY` transaction. Those
+views are the public tables with every personal column removed:
+
+- no `email`, real `name`, avatar, Google subject id, friend code or challenge
+  code — anywhere;
+- `players.public_id` is the only player key, and the only names exposed are the
+  self-chosen `username` and `handle` already printed on public leaderboards;
+- no beta report prose, screenshots or replay clips; no `dashboard_users`, push
+  endpoints, blocks or moderation records at all.
+
+A view is not a permission, which is why the role exists and why
+`provision-mcp-reader.mjs` ends by reconnecting as it and asserting that reading
+`public.players` **fails**, exiting non-zero if it succeeds.
+
 ### Watching it work
 
-Every tool call is recorded to `beta_agent_activity` and rendered in an **Agent
+The analytics tools deliberately do **not** write to the agent activity feed
+below — that panel narrates a run through the bug queue and is cleared when one
+ends. An analytics connection is accounted for differently: every request stamps
+`last_used_at` on its grant, and Dashboard → Connections shows it per
+connection beside the account that approved it.
+
+Every **bug** tool call is recorded to `beta_agent_activity` and rendered in an **Agent
 activity** panel at the top of `/dashboard/beta`, which refreshes every 10
 seconds while the tab is open. The panel shows only the run in progress and is
 absent whenever no agent is running, so a deployment that never turns the MCP on
@@ -731,6 +873,9 @@ and auth vars below are not in it.
 | `VAPID_SUBJECT` | `app/lib/push/config.ts` | A `mailto:` the push service can contact about a misbehaving sender. Required by the VAPID spec. |
 | `ALERTS_SECRET` | `app/lib/alerts/guard.ts` | Gates `GET /api/v1/admin/alerts` and `POST /api/v1/admin/alerts/notify`, and is what the alerts cron holds as a repository secret. Falls back to `SCOREBOARD_ADMIN_SECRET`, then `ADMIN_HTML_PASSWORD`, so the feature works with what you already have — but setting it **replaces** those, so rotating it actually revokes the old credential. Unset everywhere means both endpoints answer 503. |
 | `MCP_SECRET` | `app/lib/mcp/guard.ts` | Gates `POST /api/mcp`, the bug MCP. **Deliberately has no fallback** — unlike `ALERTS_SECRET`, it is not satisfied by `SCOREBOARD_ADMIN_SECRET` or `ADMIN_HTML_PASSWORD`, because this surface deletes reports and pays XP and must not switch itself on by inheritance. Unset means the endpoint answers 503 and refuses everybody. Independently rotatable: nothing else authenticates with it. |
+| `MCP_OAUTH_ENABLED` | `app/lib/mcp/oauth/config.ts` | Set to `1` (or `true`/`yes`/`on`) to let dashboard accounts sign in to the MCP for analytics. **Off by default, and deliberately not inferred** from Google sign-in already being configured: this surface reads the whole player base of a children's site, so turning it on is a deliberate act. Unset means `/oauth/*` answers 503 and only `MCP_SECRET` opens the endpoint. |
+| `MCP_ANALYTICS_DATABASE_URL` | `app/lib/mcp/analytics/db.ts` | The connection string for the `mcp_reader` Postgres role, printed by `node scripts/provision-mcp-reader.mjs --yes`. Gates `run_analytics_sql`, which is **not registered at all** without it — it never falls back to `DATABASE_URL`, because a fail-open here would hand a language model every player's email address. Everything else keeps working. |
+| `MCP_CORS_ORIGINS` | `app/lib/mcp/http.ts` | Optional. **Extra** browser origins allowed to call `/api/mcp` cross-origin, comma-separated. Claude, ChatGPT and Gemini's own origins are allowed by default, so most deployments need nothing here. Non-browser callers send no `Origin` and are unaffected either way. |
 | `MCP_ACTOR` | `app/lib/mcp/config.ts` | Optional. What the bug MCP records in `beta_reports.resolved_by` and `beta_xp_awards.awarded_by`. Defaults to `mcp@hallpass.invalid` — an RFC 2606 reserved domain, so a machine's decision in the XP ledger can never be read as an admin's. |
 | `SCOREBOARD_ADMIN_SECRET` | `app/lib/scoreboard/guard.ts` | Gates `POST\|GET /api/v1/admin/boards` (board provisioning), and salts `scores.ip_hash` when `SCOREBOARD_IP_SALT` is unset. Falls back to `ADMIN_HTML_PASSWORD`. |
 | `SCOREBOARD_CLAIM_SECRET` | `app/lib/scoreboard/claim.ts` | Signs the short-lived tokens that let a player claim scores they set before signing in. Falls back to `AUTH_SECRET`, then `SCOREBOARD_ADMIN_SECRET`, then `ADMIN_HTML_PASSWORD`. With none of them set, minting returns `null` and claiming is silently disabled — an anonymous score can never be kept. |
@@ -754,6 +899,7 @@ and auth vars below are not in it.
 - `npm run sync-games` — runs `scripts/sync-games.mjs`; mirrors every `games/**` blob into `public/games/` (needs `BLOB_READ_WRITE_TOKEN`).
 - `npm run publish-game -- <slug>` — publishes `public/games/<slug>/index.html` to Blob and records it in `game_blobs` (needs `BLOB_READ_WRITE_TOKEN` and `DATABASE_URL`; dry-run without `--yes`).
 - `npm run backfill-media-urls` — fills `game_media.blob_url` for rows written before migration 015. An optimisation, not a requirement (the media route self-heals a NULL row with one `head()`); safe to re-run.
+- `node scripts/provision-mcp-reader.mjs` — creates the read-only `mcp_reader` Postgres role the analytics MCP queries through, grants it `SELECT` on the `mcp` views and nothing on `public`, then **reconnects as it and asserts that reading `public.players` fails**, exiting non-zero if it does not. Prints the `MCP_ANALYTICS_DATABASE_URL` to set and stores it nowhere. Dry-run without `--yes`; `--rotate` mints a new password. Needs migration `031`.
 - `node scripts/provision-boards.mjs` — creates the leaderboard `boards` rows for games wired to the SDK, idempotently. Without a board, score posts answer 409 and are dropped silently.
 - `node scripts/check-alerts.mjs` — probes the live site for alerts and notifies the admins if any fired (needs `ALERTS_SECRET`; `--dry-run` measures without notifying; `HALLPASS_SITE_URL` points it at another deployment). Run every 30 minutes by `.github/workflows/alerts.yml`.
 - `node scripts/check-build-env.mjs` — fails a deploy whose build-time-inlined env vars are missing; run by `.github/workflows/deploy.yml` before the build.

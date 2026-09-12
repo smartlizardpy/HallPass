@@ -19,6 +19,17 @@
 export const MCP_SERVER_NAME = "hallpass-bugs";
 
 /**
+ * What the server calls itself to an OAUTH caller, who gets the analytics tools
+ * and not the bug ones.
+ *
+ * Two names for one endpoint, because it genuinely is two things depending on
+ * the credential (`analytics-mcp-design.md` §3). A client list that said
+ * "hallpass-bugs" beside a tool list containing no bug tools would be the
+ * server lying about itself in the one place a person actually reads it.
+ */
+export const MCP_ANALYTICS_SERVER_NAME = "hallpass-analytics";
+
+/**
  * Advertised server version. NOT the protocol version — the SDK negotiates that
  * per connection across the five versions it supports, which is most of why the
  * SDK is a dependency at all (`bug-mcp-design.md` §4).
