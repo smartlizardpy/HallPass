@@ -34,11 +34,13 @@ import { DASHBOARD_MIN_ROLE } from "@/app/lib/permissions";
 import { agoLabel } from "@/app/lib/insights";
 import { ACCESS_TOKEN_TTL_SECONDS, isOauthEnabled } from "@/app/lib/mcp/oauth/config";
 import { isAnalyticsDbConfigured } from "@/app/lib/mcp/analytics/db";
-import { listGrants, type OauthGrant } from "@/app/lib/mcp/oauth/store";
+import { listGrants, listManualClients, type OauthClient, type OauthGrant } from "@/app/lib/mcp/oauth/store";
+import { OAUTH_SCOPE } from "@/app/lib/mcp/oauth/config";
 import { SITE_URL } from "@/app/lib/site";
 import { DashHeader } from "../_ui/DashHeader";
 import { Section } from "../_ui/Section";
 import { RevokeConnection } from "./RevokeConnection";
+import { createConnectorAction, deleteConnectorAction } from "./actions";
 
 export const metadata: Metadata = {
   title: "Connections · Dashboard",
@@ -155,13 +157,111 @@ function SetupCard() {
   );
 }
 
+/**
+ * The four values a connector form asks for, and the freshly-minted secret.
+ *
+ * Shown ONCE. The secret is stored hashed, so this render is the only time it
+ * exists anywhere — said plainly on the card, because a person who closes it
+ * assuming they can come back has lost it.
+ */
+function NewConnector({
+  clientId,
+  secret,
+  origin,
+}: {
+  clientId: string;
+  secret?: string;
+  origin: string;
+}) {
+  const rows: [string, string][] = [
+    ["Authorization URL", `${origin}/oauth/authorize`],
+    ["Token URL", `${origin}/api/oauth/token`],
+    ["Scope", OAUTH_SCOPE],
+    ["Client ID", clientId],
+  ];
+  if (secret) rows.push(["Client Secret", secret]);
+
+  return (
+    <div className="mb-8 rounded-xl border border-emerald-300 bg-emerald-50 p-5">
+      <p className="text-sm font-bold text-emerald-900">Connector created.</p>
+      <p className="mt-1 text-sm text-emerald-900">
+        Paste these into the other service&apos;s form.
+        {secret ? " The secret is shown once and is not stored — copy it now." : ""}
+      </p>
+      <dl className="mt-4 space-y-2">
+        {rows.map(([label, value]) => (
+          <div key={label} className="sm:flex sm:gap-3">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-emerald-900 sm:w-40 sm:shrink-0 sm:pt-1">
+              {label}
+            </dt>
+            <dd className="min-w-0 flex-1">
+              <code className="block overflow-x-auto rounded-lg border border-emerald-300 bg-white px-3 py-1.5 font-mono text-xs">
+                {value}
+              </code>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+/** The hand-made connectors, listed so a forgotten one can be found and removed. */
+function ConnectorTable({ clients, now }: { clients: OauthClient[]; now: Date }) {
+  return (
+    <div className="overflow-x-auto rounded-xl border border-border bg-surface">
+      <table className="w-full min-w-[640px] text-sm">
+        <thead>
+          <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-muted">
+            <th className="px-4 py-3">Name</th>
+            <th className="px-4 py-3">Client ID</th>
+            <th className="px-4 py-3">Secret</th>
+            <th className="px-4 py-3">Created</th>
+            <th className="px-4 py-3" />
+          </tr>
+        </thead>
+        <tbody>
+          {clients.map((client) => (
+            <tr key={client.clientId} className="border-b border-border last:border-0">
+              <td className="px-4 py-3 font-semibold text-foreground">{client.clientName}</td>
+              <td className="max-w-[16rem] truncate px-4 py-3 font-mono text-xs text-muted">
+                {client.clientId}
+              </td>
+              <td className="px-4 py-3 text-muted">{client.secretHash ? "yes" : "public"}</td>
+              <td className="px-4 py-3 tabular-nums text-muted">
+                {agoLabel(client.createdAt, now) ?? "—"}
+              </td>
+              <td className="px-4 py-3 text-right">
+                <form action={deleteConnectorAction}>
+                  <input type="hidden" name="clientId" value={client.clientId} />
+                  <button
+                    type="submit"
+                    className="rounded-full border border-border px-3 py-1 text-xs font-bold text-zinc-700 hover:bg-surface-2"
+                  >
+                    Delete
+                  </button>
+                </form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default async function McpConnectionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string }>;
+  searchParams: Promise<{
+    ok?: string;
+    error?: string;
+    created?: string;
+    secret?: string;
+  }>;
 }) {
   const { email, role } = await requireRole(DASHBOARD_MIN_ROLE);
-  const { ok, error } = await searchParams;
+  const { ok, error, created, secret } = await searchParams;
   const now = new Date();
   const hours = Math.round(ACCESS_TOKEN_TTL_SECONDS / 3600);
 
@@ -174,6 +274,13 @@ export default async function McpConnectionsPage({
   const everyone =
     oauthOn && role === "super_admin" ? await listGrants(null).catch(() => []) : [];
   const others = everyone.filter((grant) => grant.email !== email);
+  const connectors =
+    oauthOn && role === "super_admin" ? await listManualClients().catch(() => []) : [];
+
+  // The origin a connector form needs. SITE_URL rather than the request's host:
+  // these values are copied into another service that will call them from the
+  // internet, so a localhost origin pasted there is useless.
+  const origin = SITE_URL;
 
   return (
     <>
@@ -183,6 +290,8 @@ export default async function McpConnectionsPage({
       />
 
       <Banner ok={ok} error={error} />
+
+      {created && <NewConnector clientId={created} secret={secret} origin={origin} />}
 
       {!oauthOn && (
         <Notice title="Signing in is switched off.">
@@ -220,6 +329,71 @@ export default async function McpConnectionsPage({
           </>
         )}
       </Section>
+
+      {role === "super_admin" && oauthOn && (
+        <Section
+          title="Connectors for services that cannot sign themselves up"
+          subtitle={connectors.length ? `${connectors.length} created` : undefined}
+          className="mb-8"
+        >
+          <p className="mb-4 text-sm text-muted">
+            Claude and ChatGPT register themselves — they need nothing here. Some
+            connector forms instead ask you to <em>type in</em> an authorization
+            URL, a token URL, a client ID and a secret. Create one of those here
+            and paste the values across.
+          </p>
+
+          {connectors.length > 0 && (
+            <div className="mb-5">
+              <ConnectorTable clients={connectors} now={now} />
+              <p className="mt-2 text-xs text-muted">
+                Deleting a connector also revokes every connection made through it.
+              </p>
+            </div>
+          )}
+
+          <form action={createConnectorAction} className="space-y-3">
+            <label className="block text-sm font-semibold text-foreground">
+              Name
+              <input
+                name="clientName"
+                required
+                placeholder="Gemini Enterprise"
+                className="mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30"
+              />
+            </label>
+            <label className="block text-sm font-semibold text-foreground">
+              Redirect URIs
+              <input
+                name="redirectUris"
+                required
+                placeholder="https://the-service.example/oauth/callback"
+                className="mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30"
+              />
+              <span className="mt-1 block text-xs font-normal text-muted">
+                Whatever the other service says it will return to, exactly. One per
+                line or comma-separated. Must be https, or http on localhost.
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm text-foreground">
+              <input type="checkbox" name="withSecret" defaultChecked className="mt-1" />
+              <span>
+                Issue a client secret
+                <span className="block text-xs text-muted">
+                  Tick this if the other service&apos;s form has a Client Secret
+                  box. It is shown once and stored hashed.
+                </span>
+              </span>
+            </label>
+            <button
+              type="submit"
+              className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
+            >
+              Create connector
+            </button>
+          </form>
+        </Section>
+      )}
 
       {role === "super_admin" && (
         <Section

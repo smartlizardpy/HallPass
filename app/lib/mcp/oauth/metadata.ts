@@ -88,9 +88,11 @@ export function protectedResourceMetadata(origin: string) {
  *   * `code_challenge_methods_supported: ["S256"]` — advertising `plain` as
  *     well would invite a client to use it, and `oauth/config.ts` refuses it.
  *     What is advertised and what is accepted must be the same list.
- *   * `token_endpoint_auth_methods_supported: ["none"]` — every client here is
- *     public. Claiming otherwise would have clients trying to authenticate with
- *     a secret they were never issued.
+ *   * `token_endpoint_auth_methods_supported` — `none` for the self-registered
+ *     clients, which are public and bound by PKCE alone, plus the two
+ *     secret-bearing methods for a client an admin created by hand. Advertising
+ *     a method the token endpoint does not implement is worse than omitting it:
+ *     a client will try it and fail with `invalid_client`.
  *   * `registration_endpoint` — the MCP spec makes dynamic client registration
  *     optional, but omitting it means a client with no pre-registered id has no
  *     way in at all, which in practice means Claude cannot connect.
@@ -109,7 +111,11 @@ export function authorizationServerMetadata(origin: string) {
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code", "refresh_token"],
     code_challenge_methods_supported: ["S256"],
-    token_endpoint_auth_methods_supported: ["none"],
+    // `none` is every self-registered client. The two secret-bearing methods
+    // are for a client an admin created by hand at /dashboard/mcp, which exists
+    // because some connector forms have a Client Secret box and no way to
+    // register automatically.
+    token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
     // Client ID Metadata Documents: a client may identify itself with an https
     // URL serving its own metadata instead of registering. The 2026-07-28 MCP
     // specification deprecates dynamic registration in favour of this, and

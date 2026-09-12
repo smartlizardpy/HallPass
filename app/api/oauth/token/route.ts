@@ -24,9 +24,11 @@
  * client, and that client has the dev server logs.
  */
 
+import { timingSafeSecretEqual } from "@/app/lib/admin-secret";
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   OAUTH_SCOPE,
+  hashSecret,
   isOauthEnabled,
   isValidCodeVerifier,
   verifyPkceS256,
@@ -64,7 +66,11 @@ export async function POST(req: Request): Promise<Response> {
   };
 
   const grantType = field("grant_type");
-  const clientId = field("client_id");
+  // A confidential client may send its credentials as HTTP Basic instead of in
+  // the body — RFC 6749 §2.3.1 says a server MUST support Basic and MAY support
+  // the body form, and connector UIs differ on which they use.
+  const basic = basicCredentials(req.headers);
+  const clientId = field("client_id") || basic?.id || "";
 
   if (!clientId) {
     return oauthError("invalid_client", "client_id is required.", 401);
@@ -74,9 +80,40 @@ export async function POST(req: Request): Promise<Response> {
   // stops a code being redeemed under a client id that was never registered —
   // and for a CIMD client it re-checks that the document still exists and still
   // names this id.
-  const client = await resolveOauthClient(clientId);
-  if (!client.ok) {
-    return oauthError("invalid_client", client.reason, 401);
+  const resolved = await resolveOauthClient(clientId);
+  if (!resolved.ok) {
+    return oauthError("invalid_client", resolved.reason, 401);
+  }
+
+  // ── CONFIDENTIAL CLIENTS ────────────────────────────────────────────────
+  // A client created by hand at /dashboard/mcp may hold a secret, because some
+  // connector forms (Gemini Enterprise's, for one) have a box for one and no
+  // way to register automatically. When a client HAS a secret the token
+  // endpoint requires it; when it does not, PKCE is the only binding and
+  // presenting a secret is refused rather than ignored — a client that believes
+  // it is authenticating and is not should be told so.
+  const presentedSecret = field("client_secret") || basic?.secret || "";
+  const expectedHash = resolved.client.secretHash;
+
+  if (expectedHash) {
+    if (!presentedSecret) {
+      return oauthError(
+        "invalid_client",
+        "This client is registered with a secret, which must be sent as client_secret or HTTP Basic.",
+        401,
+      );
+    }
+    // Constant-time, and over the hash both sides — the stored value IS a hash,
+    // so the presented secret is hashed to compare like with like.
+    if (!timingSafeSecretEqual(hashSecret(presentedSecret), expectedHash)) {
+      return oauthError("invalid_client", "The client secret is not correct.", 401);
+    }
+  } else if (presentedSecret) {
+    return oauthError(
+      "invalid_client",
+      "This client is public and holds no secret. Remove client_secret from the request.",
+      401,
+    );
   }
 
   if (grantType === "authorization_code") {
@@ -156,4 +193,31 @@ function tokenResponse(tokens: {
 
 export async function OPTIONS(): Promise<Response> {
   return oauthPreflight();
+}
+
+/**
+ * Pull `client_id` / `client_secret` from an `Authorization: Basic` header.
+ *
+ * RFC 6749 §2.3.1 form-encodes both halves before base64, because either may
+ * contain characters that would otherwise be ambiguous around the colon. Ours
+ * are base64url and never do, but decoding per the spec is what makes this
+ * correct for a client that follows it to the letter.
+ */
+function basicCredentials(headers: Headers): { id: string; secret: string } | null {
+  const header = headers.get("authorization");
+  if (!header) return null;
+  const match = /^Basic\s+(.+)$/i.exec(header.trim());
+  if (!match) return null;
+  let decoded: string;
+  try {
+    decoded = Buffer.from(match[1], "base64").toString("utf8");
+  } catch {
+    return null;
+  }
+  const colon = decoded.indexOf(":");
+  if (colon === -1) return null;
+  return {
+    id: decodeURIComponent(decoded.slice(0, colon)),
+    secret: decodeURIComponent(decoded.slice(colon + 1)),
+  };
 }

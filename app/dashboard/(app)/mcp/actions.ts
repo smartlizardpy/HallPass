@@ -21,7 +21,12 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/app/lib/auth";
 import { getUserRole } from "@/app/lib/dashboard-users";
 import { DASHBOARD_MIN_ROLE, atLeast } from "@/app/lib/permissions";
-import { revokeGrant } from "@/app/lib/mcp/oauth/store";
+import { normalizeClientName, validateRedirectUris } from "@/app/lib/mcp/oauth/config";
+import {
+  createManualClient,
+  deleteManualClient,
+  revokeGrant,
+} from "@/app/lib/mcp/oauth/store";
 
 const MCP_PATH = "/dashboard/mcp";
 
@@ -69,4 +74,99 @@ export async function revokeConnectionAction(form: FormData): Promise<void> {
   }
 
   back("ok", "Connection revoked. Its next request will be refused.");
+}
+
+
+/**
+ * Create a connector by hand, for a UI that cannot register itself.
+ *
+ * ── WHY THE SECRET IS RETURNED IN THE URL ────────────────────────────────
+ * It is shown once and never stored, so it has to survive the redirect that
+ * server actions use to report back. The alternatives are worse: storing it to
+ * render on the next page defeats hashing it, and a client component holding it
+ * in state loses it on any refresh. A URL is short-lived, and the page tells
+ * the reader plainly that it will not be shown again.
+ *
+ * It does land in browser history. That is the accepted cost, stated here
+ * rather than left to be discovered, and the mitigation is that the secret can
+ * be replaced at any time by deleting the connector and making another.
+ */
+export async function createConnectorAction(form: FormData): Promise<void> {
+  const session = await auth().catch(() => null);
+  const email = session?.user?.email?.trim().toLowerCase();
+  if (!email) redirect("/dashboard/signin");
+
+  const role = await getUserRole(email).catch(() => null);
+  // Creating a credential another service holds is a different act from
+  // revoking your own, so it sits a rung higher than the page itself.
+  if (role !== "super_admin") {
+    back("error", "Only a super admin may create a connector.");
+  }
+
+  const name = normalizeClientName(form.get("clientName"));
+  const raw = String(form.get("redirectUris") ?? "")
+    .split(/[\s,]+/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  const redirects = validateRedirectUris(raw);
+  if (!redirects.ok) back("error", redirects.reason);
+
+  const withSecret = form.get("withSecret") === "on";
+
+  let created;
+  try {
+    created = await createManualClient({
+      clientName: name,
+      redirectUris: redirects.uris,
+      withSecret,
+      createdBy: email,
+    });
+  } catch (error) {
+    console.error("Manual MCP connector creation failed:", error);
+    back("error", "The connector could not be created. Try again.");
+  }
+
+  revalidatePath(MCP_PATH);
+  const params = new URLSearchParams({ created: created.client.clientId });
+  if (created.secret) params.set("secret", created.secret);
+  redirect(`${MCP_PATH}?${params.toString()}`);
+}
+
+/**
+ * Delete a hand-made connector.
+ *
+ * The cascade on `mcp_oauth_codes` and `mcp_oauth_tokens` means this also
+ * revokes every grant made through it, which is the behaviour somebody deleting
+ * a connector expects — and is why the store refuses to touch a self-registered
+ * client by the same route.
+ */
+export async function deleteConnectorAction(form: FormData): Promise<void> {
+  const session = await auth().catch(() => null);
+  const email = session?.user?.email?.trim().toLowerCase();
+  if (!email) redirect("/dashboard/signin");
+
+  const role = await getUserRole(email).catch(() => null);
+  if (role !== "super_admin") {
+    back("error", "Only a super admin may delete a connector.");
+  }
+
+  const clientId = String(form.get("clientId") ?? "").trim();
+  if (!clientId) back("error", "That connector could not be identified.");
+
+  let deleted = false;
+  try {
+    deleted = await deleteManualClient(clientId);
+  } catch (error) {
+    console.error("Manual MCP connector deletion failed:", error);
+    back("error", "The connector could not be deleted. Try again.");
+  }
+
+  revalidatePath(MCP_PATH);
+  back(
+    deleted ? "ok" : "error",
+    deleted
+      ? "Connector deleted, along with every connection made through it."
+      : "Nothing was deleted — that connector is already gone.",
+  );
 }

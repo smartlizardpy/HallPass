@@ -52,6 +52,17 @@ export type OauthClient = {
   clientName: string;
   redirectUris: string[];
   createdAt: string;
+  /**
+   * sha256 of this client's secret, or `null` for a public client.
+   *
+   * Carried on the type rather than checked with a separate query because the
+   * token endpoint's decision — "must this request present a secret?" — has to
+   * be made from the SAME row it resolved the client from. Two reads would
+   * admit a window in which a secret is added between them.
+   */
+  secretHash: string | null;
+  /** The admin who created it by hand, or `null` for a self-registered one. */
+  createdBy: string | null;
 };
 
 /** What a redeemed authorization code carried. */
@@ -127,23 +138,88 @@ export async function registerClient(input: {
       SELECT count(*) AS n FROM mcp_oauth_clients
       WHERE created_at >= now()
             - make_interval(0,0,0,0,0,0,${REGISTRATION_RATE_LIMIT.windowSeconds})
+        AND created_by IS NULL
     ),
     ins AS (
       INSERT INTO mcp_oauth_clients (client_id, client_name, redirect_uris)
       SELECT ${clientId}, ${input.clientName}, ${input.redirectUris}
       WHERE (SELECT n FROM recent) < ${REGISTRATION_RATE_LIMIT.maxPerWindow}
-      RETURNING client_id, client_name, redirect_uris, created_at
+      RETURNING client_id, client_name, redirect_uris, created_at,
+                client_secret_hash, created_by
     )
     SELECT * FROM ins
   `;
   const row = rows[0];
   if (!row) return null;
+  return toClient(row);
+}
+
+/** Map a `mcp_oauth_clients` row. One place, so a new column cannot be missed. */
+function toClient(row: Record<string, unknown>): OauthClient {
   return {
     clientId: text(row.client_id),
     clientName: text(row.client_name),
     redirectUris: (row.redirect_uris as string[]) ?? [],
     createdAt: iso(row.created_at),
+    secretHash: nullableText(row.client_secret_hash),
+    createdBy: nullableText(row.created_by),
   };
+}
+
+/**
+ * Create a client by hand, for a connector UI that has no registration call.
+ *
+ * Returns the PLAINTEXT secret when one was asked for; it is shown once and
+ * never stored. `createdBy` marks the row as deliberate, which also keeps these
+ * out of the self-registration rate limit above — an admin filling in a form is
+ * not the thing that limit is defending against.
+ */
+export async function createManualClient(input: {
+  clientName: string;
+  redirectUris: string[];
+  withSecret: boolean;
+  createdBy: string;
+}): Promise<{ client: OauthClient; secret: string | null }> {
+  const clientId = mintSecret(randomBytes);
+  const secret = input.withSecret ? mintSecret(randomBytes) : null;
+  const rows = await sql`
+    INSERT INTO mcp_oauth_clients
+      (client_id, client_name, redirect_uris, client_secret_hash, created_by)
+    VALUES (${clientId}, ${input.clientName}, ${input.redirectUris},
+            ${secret ? hashSecret(secret) : null}, ${input.createdBy})
+    RETURNING client_id, client_name, redirect_uris, created_at,
+              client_secret_hash, created_by
+  `;
+  return { client: toClient(rows[0]), secret };
+}
+
+/** The hand-made connectors, for the dashboard to list and revoke. */
+export async function listManualClients(): Promise<OauthClient[]> {
+  const rows = await sql`
+    SELECT client_id, client_name, redirect_uris, created_at,
+           client_secret_hash, created_by
+    FROM mcp_oauth_clients
+    WHERE created_by IS NOT NULL
+    ORDER BY created_at DESC
+  `;
+  return rows.map(toClient);
+}
+
+/**
+ * Delete a hand-made client. Its codes and tokens go with it by cascade, so
+ * deleting a connector revokes every grant made through it.
+ *
+ * `created_by IS NOT NULL` is in the predicate so this can never reach a
+ * self-registered client — those are removed by revoking their grants, not by
+ * deleting a row somebody else's client still depends on.
+ */
+export async function deleteManualClient(clientId: string): Promise<boolean> {
+  const rows = await sql`
+    DELETE FROM mcp_oauth_clients
+    WHERE client_id = ${clientId} AND created_by IS NOT NULL
+    RETURNING client_id
+  `;
+  return rows.length > 0;
 }
 
 /**
@@ -172,32 +248,22 @@ export async function upsertCimdClient(client: {
     ON CONFLICT (client_id) DO UPDATE
       SET client_name   = EXCLUDED.client_name,
           redirect_uris = EXCLUDED.redirect_uris
-    RETURNING client_id, client_name, redirect_uris, created_at
+    RETURNING client_id, client_name, redirect_uris, created_at,
+              client_secret_hash, created_by
   `;
-  const row = rows[0];
-  return {
-    clientId: text(row.client_id),
-    clientName: text(row.client_name),
-    redirectUris: (row.redirect_uris as string[]) ?? [],
-    createdAt: iso(row.created_at),
-  };
+  return toClient(rows[0]);
 }
 
 /** One client by id, or `null` when it was never registered. */
 export async function getClient(clientId: string): Promise<OauthClient | null> {
   const rows = await sql`
-    SELECT client_id, client_name, redirect_uris, created_at
+    SELECT client_id, client_name, redirect_uris, created_at,
+           client_secret_hash, created_by
     FROM mcp_oauth_clients
     WHERE client_id = ${clientId}
   `;
   const row = rows[0];
-  if (!row) return null;
-  return {
-    clientId: text(row.client_id),
-    clientName: text(row.client_name),
-    redirectUris: (row.redirect_uris as string[]) ?? [],
-    createdAt: iso(row.created_at),
-  };
+  return row ? toClient(row) : null;
 }
 
 /**
