@@ -148,18 +148,31 @@ function report(
   return result;
 }
 
-/** A stat tile whose colour follows the direction of a change. */
+/**
+ * A stat tile from a {@link Delta}, shaped exactly like the dashboard's own
+ * KPI card: the value, a delta pill beside it, and a trailing sparkline where
+ * there is a series to draw.
+ *
+ * `deltaPct` is passed through as `null` rather than as 0 when there is no
+ * baseline, because the card renders that as "— new" — the same distinction
+ * `insights.ts` insists on and the same one the dashboard makes.
+ */
 function statFromDelta(
   label: string,
   delta: { value: number; prev: number; pct: number | null },
   note: string,
+  spark?: number[],
+  sparkColor?: string,
 ): WidgetStat {
   const fmt = new Intl.NumberFormat("en-US");
   return {
     label,
     value: fmt.format(Math.round(delta.value)),
-    note: delta.pct === null ? note : `${delta.pct >= 0 ? "+" : ""}${Math.round(delta.pct)}% · ${note}`,
-    trend: delta.pct === null ? "flat" : delta.pct >= 0 ? "up" : "down",
+    note,
+    deltaPct: delta.pct,
+    deltaPrev: fmt.format(Math.round(delta.prev)),
+    spark,
+    sparkColor,
   };
 }
 
@@ -350,21 +363,29 @@ export function registerAnalyticsTools(
 
         const stats: WidgetStat[] = [];
         if (traffic.configured && !traffic.unavailable) {
+          // The same three series the dashboard trails under its KPI cards, in
+          // the same brand colours (`page.tsx`'s `C`), so the card is
+          // recognisably the same object as the panel.
           stats.push(
-            statFromDelta("Plays", traffic.playsDelta, `last ${WINDOW_DAYS} days`),
-            statFromDelta("Visitors", traffic.visitorsDelta, `last ${WINDOW_DAYS} days`),
-            statFromDelta("Searches", traffic.searchesDelta, `last ${WINDOW_DAYS} days`),
+            statFromDelta("Plays", traffic.playsDelta, `last ${WINDOW_DAYS} days`,
+              traffic.daily.map((d) => d.plays), "#7c2eef"),
+            statFromDelta("Visitors", traffic.visitorsDelta, `last ${WINDOW_DAYS} days`,
+              traffic.daily.map((d) => d.visitors), "#ff4f8b"),
+            statFromDelta("Searches", traffic.searchesDelta, `last ${WINDOW_DAYS} days`,
+              traffic.daily.map((d) => d.searches), "#00cfd6"),
           );
         }
         if (community.available) {
           stats.push(
-            { label: "Players", value: String(community.players), note: "all time" },
+            statFromDelta("New players", community.playersDelta, `last ${WINDOW_DAYS} days`,
+              community.daily.map((d) => d.players), "#ffc700"),
             {
               label: "Active (7d)",
               value: String(community.activePlayers7),
-              note: "signed in, not played",
+              note: "signed in to the site — not played",
             },
-            { label: "Scores", value: String(community.scores), note: "all time" },
+            statFromDelta("New scores", community.scoresDelta, `last ${WINDOW_DAYS} days`,
+              community.daily.map((d) => d.scores), "#7c2eef"),
           );
         }
 
@@ -511,7 +532,11 @@ export function registerAnalyticsTools(
           title: fired.length ? `${fired.length} alert(s) firing` : "Nothing is firing",
           subtitle: "Measured against the same window on previous days",
           stats: [
-            { label: "Firing", value: String(fired.length), trend: fired.length ? "down" : "up" },
+            {
+              label: "Firing",
+              value: String(fired.length),
+              note: fired.length ? "needs attention" : "all clear",
+            },
           ],
           tables: fired.length
             ? [
