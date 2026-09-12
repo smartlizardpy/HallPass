@@ -77,6 +77,72 @@ export function mcpDenialResponse(denial: McpDenial, origin: string): Response {
   );
 }
 
+/**
+ * Origins allowed to reach `/api/mcp` from a browser.
+ *
+ * ── WHY THIS EXISTS AT ALL, GIVEN THE ROUTE SAYS "NO CORS" ────────────────
+ * It said that when the only caller was a coding agent's own process, which is
+ * not a browser and has no origin. A web-based MCP client IS a browser, and
+ * without a preflight answer it cannot reach the endpoint at all — the OAuth
+ * flow would complete and then the first tool call would fail on a CORS error
+ * that names nothing useful.
+ *
+ * ── AND WHY IT IS AN ALLOW-LIST RATHER THAN `*` ───────────────────────────
+ * `*` would in fact be SAFE here: every credential this endpoint accepts is a
+ * bearer token in a header, never a cookie, so a browser on a hostile page
+ * gains nothing it could not already do with `curl`. The allow-list is not
+ * defending against that. It is defending against the next person to read this
+ * file concluding that the endpoint is origin-agnostic and adding a
+ * cookie-based path to it — at which point `*` becomes a hole and nobody
+ * remembers why it was there.
+ *
+ * Defaults to the hosted assistants this server is meant to be added to,
+ * extended by `MCP_CORS_ORIGINS` (comma-separated). Read at call time, like
+ * every other env read here.
+ *
+ * The list is origins, not products: `chat.openai.com` is still in it because
+ * it still resolves for existing sessions, and dropping an origin somebody is
+ * mid-conversation on is a silent breakage.
+ */
+export const DEFAULT_MCP_CORS_ORIGINS = [
+  "https://claude.ai",
+  "https://www.claude.ai",
+  "https://chatgpt.com",
+  "https://chat.openai.com",
+  "https://gemini.google.com",
+  "https://aistudio.google.com",
+] as const;
+
+function allowedOrigins(): string[] {
+  const extra = (process.env.MCP_CORS_ORIGINS ?? "")
+    .split(/[\s,]+/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return [...DEFAULT_MCP_CORS_ORIGINS, ...extra];
+}
+
+/**
+ * The CORS headers for a request, or `{}` when its origin is not allowed.
+ *
+ * A disallowed origin gets NO headers rather than a refusal: that is how CORS
+ * is specified to fail, and the browser produces the error. Answering 403 here
+ * would break non-browser callers, which send no `Origin` at all.
+ */
+export function mcpCorsHeaders(headers: Headers): Record<string, string> {
+  const origin = headers.get("origin");
+  if (!origin || !allowedOrigins().includes(origin)) return {};
+  return {
+    "access-control-allow-origin": origin,
+    // Without this an intermediary may serve one origin's response to another.
+    vary: "origin",
+    "access-control-allow-methods": "POST, OPTIONS",
+    "access-control-allow-headers":
+      "content-type, authorization, mcp-protocol-version, mcp-session-id, last-event-id",
+    "access-control-expose-headers": "mcp-protocol-version, mcp-session-id, www-authenticate",
+    "access-control-max-age": "86400",
+  };
+}
+
 /** One error body, shaped like every other error this API answers. */
 export function mcpError(message: string, status: number): Response {
   return Response.json({ error: message } satisfies ApiError, { status });

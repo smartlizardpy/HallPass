@@ -89,8 +89,28 @@ describe("authorizationServerMetadata", () => {
     expect(doc.code_challenge_methods_supported).toEqual(["S256"]);
   });
 
-  it("advertises public clients only", () => {
-    expect(doc.token_endpoint_auth_methods_supported).toEqual(["none"]);
+  it("advertises exactly the three auth methods the token endpoint implements", () => {
+    // `none` for self-registered public clients, and the two secret-bearing
+    // methods for a connector an admin created by hand. Advertising a method
+    // the token endpoint does not implement is worse than omitting it: a client
+    // will pick it and fail with invalid_client.
+    expect(doc.token_endpoint_auth_methods_supported).toEqual([
+      "none",
+      "client_secret_post",
+      "client_secret_basic",
+    ]);
+  });
+
+  it("still offers `none`, so a public client is never forced to hold a secret", () => {
+    expect(doc.token_endpoint_auth_methods_supported).toContain("none");
+  });
+
+  it("advertises Client ID Metadata Documents alongside dynamic registration", () => {
+    // Both, because a client picks whichever it implements: the 2026-07-28 spec
+    // prefers CIMD and ChatGPT looks for it, while every client already using
+    // DCR must keep working.
+    expect(doc.client_id_metadata_document_supported).toBe(true);
+    expect(doc.registration_endpoint).toBeTruthy();
   });
 
   it("advertises a registration endpoint — without it Claude cannot connect", () => {
