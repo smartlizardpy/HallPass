@@ -26,8 +26,14 @@
  *   * NO LOOPBACK OR PRIVATE HOSTS. A metadata document on `127.0.0.1` or
  *     `169.254.169.254` is not a client identifying itself, it is somebody
  *     using this server as a proxy into a network it cannot reach.
- *   * NO REDIRECTS FOLLOWED. `redirect: "manual"`, because a redirect is how an
- *     allowed host hands the request to a disallowed one after the check.
+ *   * REDIRECTS ARE FOLLOWED BY HAND, AND EVERY HOP IS RE-CHECKED. `fetch`'s
+ *     own following is off, because that would let an allowed host hand the
+ *     request to a private one after the check has passed. Refusing redirects
+ *     outright was the first version and was too strict for the real world: an
+ *     `https://example.com/meta.json` that 301s to `https://www.example.com/...`
+ *     is an ordinary hosting arrangement, not an attack. So up to
+ *     {@link CIMD_MAX_REDIRECTS} hops are followed, each one validated by the
+ *     same rules as the original URL.
  *   * BOUNDED IN TIME AND SIZE. A five-second timeout and a 64 kB ceiling, so a
  *     slow or endless response cannot hold a request open.
  *   * NOTHING FROM THE RESPONSE IS ECHOED BACK. A failure is reported as "that
@@ -45,6 +51,15 @@ export const CIMD_MAX_BYTES = 64 * 1024;
 
 /** How long to wait for one, in milliseconds. */
 export const CIMD_TIMEOUT_MS = 5000;
+
+/**
+ * How many redirects to follow, each re-validated against the same host rules.
+ *
+ * Two, because the common legitimate case is one hop (apex → `www`, or a
+ * path normalisation) and a second covers both happening. A chain longer than
+ * that is not a metadata document being served, it is something else.
+ */
+export const CIMD_MAX_REDIRECTS = 2;
 
 /** A client that identified itself with a URL. */
 export type CimdClient = {
@@ -198,26 +213,62 @@ async function fetchUncached(clientId: string): Promise<CimdResult> {
     };
   }
 
-  let res: Response;
-  try {
-    res = await fetch(clientId, {
-      // See the header: an allowed host must not be able to hand the request on.
-      redirect: "manual",
-      headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(CIMD_TIMEOUT_MS),
-    });
-  } catch {
-    return { ok: false, reason: "The client metadata document could not be fetched." };
+  let url = clientId;
+  let res: Response | null = null;
+
+  for (let hop = 0; hop <= CIMD_MAX_REDIRECTS; hop++) {
+    try {
+      res = await fetch(url, {
+        // Off, so every hop goes through the host check below rather than
+        // being followed blind. See the module header.
+        redirect: "manual",
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(CIMD_TIMEOUT_MS),
+      });
+    } catch (error) {
+      // Logged with the detail, returned without it: the caller supplied the
+      // URL and must not learn what this server saw at it, but an operator
+      // staring at a failed connection needs exactly this line.
+      console.error(`CIMD fetch failed for ${url}:`, error);
+      return { ok: false, reason: "The client metadata document could not be fetched." };
+    }
+
+    if (res.status < 300 || res.status >= 400) break;
+
+    const location = res.headers.get("location");
+    if (!location) {
+      console.error(`CIMD ${res.status} with no Location header at ${url}`);
+      return { ok: false, reason: "The client metadata document could not be fetched." };
+    }
+    // Resolved against the current URL so a relative Location works, then held
+    // to the same rules as the original — this is the hop an attacker would use
+    // to reach a private address.
+    const next = new URL(location, url).toString();
+    if (!isFetchableMetadataUrl(next)) {
+      console.error(`CIMD redirect from ${url} to a disallowed URL ${next}`);
+      return {
+        ok: false,
+        reason:
+          "The client metadata document redirects somewhere HallPass will not follow.",
+      };
+    }
+    url = next;
+    res = null;
+  }
+
+  if (!res) {
+    console.error(`CIMD exceeded ${CIMD_MAX_REDIRECTS} redirects from ${clientId}`);
+    return { ok: false, reason: "The client metadata document redirects too many times." };
   }
 
   if (!res.ok) {
-    // Deliberately without the status: the caller supplied the URL and must not
-    // learn what this server saw at it.
+    console.error(`CIMD fetch for ${url} answered ${res.status}`);
     return { ok: false, reason: "The client metadata document could not be fetched." };
   }
 
   const text = await res.text().catch(() => "");
   if (!text || text.length > CIMD_MAX_BYTES) {
+    console.error(`CIMD document at ${url} was empty or ${text.length} bytes`);
     return {
       ok: false,
       reason: `The client metadata document is empty or larger than ${CIMD_MAX_BYTES} bytes.`,
@@ -228,8 +279,14 @@ async function fetchUncached(clientId: string): Promise<CimdResult> {
   try {
     body = JSON.parse(text);
   } catch {
+    console.error(`CIMD document at ${url} is not JSON; starts: ${text.slice(0, 120)}`);
     return { ok: false, reason: "The client metadata document is not valid JSON." };
   }
 
-  return validateClientMetadata(clientId, body);
+  // Validated against the ORIGINAL client_id, not the final URL: the id the
+  // client presented is the identity being claimed, and a redirect must not be
+  // able to change which id a document is allowed to speak for.
+  const result = validateClientMetadata(clientId, body);
+  if (!result.ok) console.error(`CIMD document at ${url} rejected: ${result.reason}`);
+  return result;
 }

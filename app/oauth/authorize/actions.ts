@@ -79,6 +79,7 @@ export async function approveConnection(form: FormData): Promise<void> {
     query,
     resolved.ok ? resolved.client : null,
     mcpResource(origin),
+    resolved.ok ? undefined : resolved.reason,
   );
 
   // A crafted POST lands here. There is still nowhere safe to redirect, so it
@@ -117,6 +118,7 @@ export async function denyConnection(form: FormData): Promise<void> {
     query,
     resolved.ok ? resolved.client : null,
     mcpResource(origin),
+    resolved.ok ? undefined : resolved.reason,
   );
 
   if (checked.kind === "render-error") redirect("/dashboard");

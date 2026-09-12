@@ -64,6 +64,18 @@ export function checkAuthorizeRequest(
   query: Record<string, string | string[] | undefined>,
   client: { clientId: string; redirectUris: string[] } | null,
   serverResource: string,
+  /**
+   * WHY the client could not be resolved, when it could not be.
+   *
+   * Added after a real failure that took server logs to diagnose. A client that
+   * identifies with a Client ID Metadata Document is never "not registered" —
+   * there is nothing to register — so when its document cannot be fetched or
+   * does not validate, `resolveOauthClient` produces a precise reason and this
+   * function used to THROW IT AWAY, reporting "no client with that id has
+   * registered" instead. That sentence is not merely unhelpful, it is wrong,
+   * and it sends somebody to re-add a connection that was never the problem.
+   */
+  clientError?: string,
 ): AuthorizeCheck {
   const clientId = first(query.client_id);
   const redirectUri = first(query.redirect_uri);
@@ -78,11 +90,19 @@ export function checkAuthorizeRequest(
   }
 
   if (!client) {
+    // A URL client_id is a Client ID Metadata Document, so "not registered" is
+    // never the right diagnosis for one — see `clientError` above.
+    const isUrlClientId = /^https:\/\//i.test(clientId);
     return {
       kind: "render-error",
-      title: "This application is not registered",
+      title: isUrlClientId
+        ? "This application's details could not be read"
+        : "This application is not registered",
       detail:
-        "No client with that id has registered with HallPass. If the deployment was reset, remove the connection in your MCP client and add it again.",
+        clientError ??
+        (isUrlClientId
+          ? `HallPass could not use the client metadata document at ${clientId}.`
+          : "No client with that id has registered with HallPass. If the deployment was reset, remove the connection in your MCP client and add it again."),
     };
   }
 
