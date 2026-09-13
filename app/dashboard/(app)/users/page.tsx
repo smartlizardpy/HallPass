@@ -27,6 +27,15 @@
  * — and somebody looking at two super admins under a cap of one deserves to be
  * told why rather than left to wonder whether the cap works.
  *
+ * CONNECTIONS. Each row's dialog also reports what that account has connected
+ * over MCP, because "remove from dashboard" and "revoke their connections" are
+ * two different acts and only the first one happens here. Removal does stop the
+ * connections working — `mcp/actor.ts` re-resolves the role on every request
+ * and answers 403 once there is none — but the grants themselves survive it
+ * (`mcp_oauth_tokens.email` is a plain column, not a key into this table), so
+ * re-inviting the person hands them back. Somebody about to remove an account
+ * deserves to see that there are three of them, and where they are ended.
+ *
  * The user store throws when `DATABASE_URL` is unset (the Neon connection is
  * lazy), so the read is wrapped: an unconfigured database renders a friendly
  * notice instead of a 500. The seat count rides in that same try — a screen that
@@ -57,6 +66,8 @@ import {
   type Seats,
 } from "@/app/lib/permissions";
 import { readSeatLimits } from "@/app/lib/role-seats";
+import { listGrants, listManualClients } from "@/app/lib/mcp/oauth/store";
+import { connectorsFor, summarizeConnectors } from "@/app/lib/mcp/oauth/connectors";
 import { addAdminAction } from "./actions";
 import { DashHeader } from "../_ui/DashHeader";
 import { UserRowActions } from "./UserRowActions";
@@ -124,6 +135,26 @@ export default async function UsersPage({
   // who is holding them.
   const limits = await readSeatLimits();
 
+  /**
+   * What each account has connected, for the row dialogs.
+   *
+   * Started BEFORE the user read below rather than inside it, for two reasons.
+   * It overlaps that round trip instead of queueing behind it — this page is
+   * already two queries deep — and its failure is independent: connections are
+   * a detail inside a dialog, while the table is the screen. A connections read
+   * that took the user list down with it would trade the whole page for a line
+   * of it.
+   *
+   * `.catch` is attached HERE, at construction, not awaited inside a try later:
+   * a rejection arriving while the user list is still in flight would be an
+   * unhandled rejection before anything was waiting for it. `null` means the
+   * question could not be asked, and the dialog says so rather than showing a
+   * zero it did not verify.
+   */
+  const connectorRead = Promise.all([listGrants(null), listManualClients()]).catch(
+    () => null,
+  );
+
   let users: DashboardUser[] | null = null;
   let seats: Seats = { ...defaultSeats(), limits };
   let dbError = false;
@@ -137,6 +168,11 @@ export default async function UsersPage({
   } catch {
     dbError = true;
   }
+
+  const connectorRows = await connectorRead;
+  const connectors = connectorRows
+    ? summarizeConnectors(connectorRows[0], connectorRows[1])
+    : null;
 
   // The role the invite select opens on. `admin` is the historical default and
   // stays the default while it has a seat; when it does not, fall back to the
@@ -444,6 +480,7 @@ export default async function UsersPage({
                             email={user.email}
                             role={user.role}
                             seats={seats}
+                            connectors={connectorsFor(connectors, user.email)}
                           />
                         )}
                       </td>
