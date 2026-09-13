@@ -752,7 +752,7 @@ describe("agent activity", () => {
         created_at: "2026-01-01T00:00:00.000Z",
       },
     ]);
-    const rows = await createBetaStore(sql).recentAgentActivity({ limit: 5, idleMinutes: 30 });
+    const rows = await createBetaStore(sql).recentAgentActivity({ limit: 5, idleMinutes: 30, includeTracker: true });
     expect(flat(calls[0].text)).toContain("ORDER BY created_at DESC, id DESC");
     expect(rows[0]).toMatchObject({ id: 7, tool: "list_bug_reports", reportId: null });
   });
@@ -764,7 +764,7 @@ describe("agent activity", () => {
    */
   it("answers nothing once the run has gone quiet", async () => {
     const { sql, calls } = makeFakeSql();
-    await createBetaStore(sql).recentAgentActivity({ limit: 5, idleMinutes: 30 });
+    await createBetaStore(sql).recentAgentActivity({ limit: 5, idleMinutes: 30, includeTracker: true });
     expect(flat(calls[0].text)).toContain(
       "WHERE EXISTS ( SELECT 1 FROM beta_agent_activity WHERE created_at > now() - make_interval(mins => ?) )",
     );
@@ -776,6 +776,21 @@ describe("agent activity", () => {
    * every agent writes the same actor — and counted in SQL, so a long run's ids
    * never cross the wire just to be counted.
    */
+  /**
+   * The panel this read feeds lives on `/dashboard/beta`, which a `beta_admin`
+   * can open, while the tracker board is `admin` and up. So a viewer who cannot
+   * open the board must not read it here either — a permission expressed as a
+   * WHERE clause, asserted because it is invisible in the returned rows.
+   */
+  it("hides tracker lines from a viewer who may not read the board", async () => {
+    const { sql, calls } = makeFakeSql();
+    const store = createBetaStore(sql);
+    await store.recentAgentActivity({ idleMinutes: 30, includeTracker: false });
+    await store.recentAgentActivity({ idleMinutes: 30, includeTracker: true });
+    expect(flat(calls[0].text)).toContain("AND tracker_item_id IS NULL");
+    expect(flat(calls[1].text)).not.toContain("AND tracker_item_id IS NULL");
+  });
+
   /**
    * The board's green marker. The invariant lives entirely in the SQL text:
    * `DISTINCT ON (tracker_item_id)` with the item first in the ORDER BY is what

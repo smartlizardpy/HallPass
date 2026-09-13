@@ -249,6 +249,8 @@ export async function getReportQueue(): Promise<BetaReportWithAuthor[]> {
 export async function getAgentActivity(input: {
   limit?: number;
   idleMinutes: number;
+  /** Whether the viewer may see tracker lines. See `recentAgentActivity`. */
+  includeTracker: boolean;
 }): Promise<AgentActivity[]> {
   try {
     return await beta.recentAgentActivity(input);

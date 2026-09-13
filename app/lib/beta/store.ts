@@ -1396,21 +1396,51 @@ export function createBetaStore(sql: Sql) {
       limit?: number;
       /** A run with no line this recent is over. */
       idleMinutes: number;
+      /**
+       * Whether to show lines about TRACKER ITEMS as well as bug reports.
+       *
+       * Required rather than defaulted, because the answer is a permission and
+       * a default would be one surface silently deciding it for another. The
+       * feed is rendered on `/dashboard/beta`, which is `beta_admin` and up,
+       * while `/dashboard/tracker` is `admin` and up — so a tracker line on
+       * that panel would be the way a beta admin reads a roadmap they cannot
+       * open. The caller knows the role; this only knows the rows.
+       */
+      includeTracker: boolean;
     }): Promise<AgentActivity[]> {
       // Floored exactly as `logAgentActivity` floors it, so the read and the
       // reset can never disagree about when a run went quiet.
       const idleMinutes = Math.max(1, Math.floor(input.idleMinutes));
-      const rows = await sql`
-        SELECT id, actor, tool, outcome, report_id, tracker_item_id, slug,
-               summary, created_at
-        FROM beta_agent_activity
-        WHERE EXISTS (
-          SELECT 1 FROM beta_agent_activity
-          WHERE created_at > now() - make_interval(mins => ${idleMinutes})
-        )
-        ORDER BY created_at DESC, id DESC
-        LIMIT ${Math.max(1, Math.min(100, input.limit ?? 20))}
-      `;
+      const limit = Math.max(1, Math.min(100, input.limit ?? 20));
+      // TWO FULLY-WRITTEN TEMPLATES rather than one with a boolean parameter or
+      // a spliced clause. It is the rule this module's header states for
+      // anything whose behaviour depends on a flag, and it is cheap here: the
+      // difference is one line, and neither version can be turned into the
+      // other by a value arriving from a caller.
+      const rows = input.includeTracker
+        ? await sql`
+            SELECT id, actor, tool, outcome, report_id, tracker_item_id, slug,
+                   summary, created_at
+            FROM beta_agent_activity
+            WHERE EXISTS (
+              SELECT 1 FROM beta_agent_activity
+              WHERE created_at > now() - make_interval(mins => ${idleMinutes})
+            )
+            ORDER BY created_at DESC, id DESC
+            LIMIT ${limit}
+          `
+        : await sql`
+            SELECT id, actor, tool, outcome, report_id, tracker_item_id, slug,
+                   summary, created_at
+            FROM beta_agent_activity
+            WHERE EXISTS (
+              SELECT 1 FROM beta_agent_activity
+              WHERE created_at > now() - make_interval(mins => ${idleMinutes})
+            )
+              AND tracker_item_id IS NULL
+            ORDER BY created_at DESC, id DESC
+            LIMIT ${limit}
+          `;
       return rows.map(mapAgentActivity);
     },
 

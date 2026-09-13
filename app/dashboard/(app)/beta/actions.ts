@@ -43,6 +43,7 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import type { Role } from "@/app/lib/dashboard-users";
 import {
+  atLeast,
   BETA_MIN_ROLE,
   canConfirmOwnWork,
   SITE_WRITE_ROLE,
@@ -895,9 +896,13 @@ export async function publishAcceptedShotsAction(): Promise<void> {
  * server log on every poll; the page still renders, through the fail-soft read.
  */
 export async function agentActivityAction(): Promise<AgentActivity[]> {
-  await requireRole(BETA_MIN_ROLE);
+  const { role } = await requireRole(BETA_MIN_ROLE);
   return beta.recentAgentActivity({
     limit: AGENT_FEED_LIMIT,
     idleMinutes: ACTIVITY_IDLE_MINUTES,
+    // Re-decided here rather than passed in from the page. A Server Function is
+    // reachable by direct POST, so a permission the CALLER supplied would be a
+    // permission the caller chose — the same reason `requireRole` runs at all.
+    includeTracker: atLeast(role, SITE_WRITE_ROLE),
   });
 }
