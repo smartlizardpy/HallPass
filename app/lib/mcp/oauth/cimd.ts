@@ -36,9 +36,14 @@
  *     same rules as the original URL.
  *   * BOUNDED IN TIME AND SIZE. A five-second timeout and a 64 kB ceiling, so a
  *     slow or endless response cannot hold a request open.
- *   * NOTHING FROM THE RESPONSE IS ECHOED BACK. A failure is reported as "that
- *     document could not be used", never with the body or the status, so this
- *     cannot be used to read what it fetched.
+ *   * NOTHING IS ECHOED BACK UNTIL THE DOCUMENT HAS NAMED ITSELF. Every
+ *     failure up to and including the `client_id` equality check is reported as
+ *     "that document could not be used", never with the body or the status, so
+ *     this cannot be used to read what it fetched. AFTER that check the
+ *     document has declared itself to be the metadata for this exact URL, which
+ *     nothing at an address an attacker merely pointed at will do, so the
+ *     remaining checks may quote the field they rejected — and they should, or
+ *     the operator is left guessing which line of their own document is wrong.
  */
 
 import { MAX_REDIRECT_URIS, normalizeClientName, validateRedirectUris } from "./config";
