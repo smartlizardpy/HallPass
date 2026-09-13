@@ -12,7 +12,10 @@
  * migrations/`), so there is always a window where the code is live against a
  * database that has no `beta_agent_activity` yet — and an agent that could not
  * close a bug because the FEED table was missing would be a feature breaking the
- * thing it was built to observe. Same reasoning as `beta/index.ts`'s fail-soft
+ * thing it was built to observe. Migration 033 widened that window rather than
+ * closing it: a deployment carrying the tracker tools against a database
+ * without `tracker_item_id` logs nothing and goes on working, which is why that
+ * column is an addition to this table rather than a table of its own. Same reasoning as `beta/index.ts`'s fail-soft
  * reads, with the failure swallowed one layer lower because the caller here is a
  * tool handler with nowhere sensible to put the news.
  *
@@ -41,6 +44,7 @@ export async function recordActivity(line: ActivityLine): Promise<void> {
       tool: line.tool,
       outcome: line.outcome,
       reportId: line.reportId,
+      trackerItemId: line.itemId,
       slug: line.slug,
       summary: line.summary,
       retainDays: ACTIVITY_RETENTION_DAYS,
