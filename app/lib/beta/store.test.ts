@@ -618,7 +618,7 @@ describe("agent activity", () => {
     });
     expect(calls).toHaveLength(1);
     const text = flat(calls[0].text);
-    expect(text).toContain("WITH logged AS ( INSERT INTO beta_agent_activity");
+    expect(text).toContain("logged AS ( INSERT INTO beta_agent_activity");
     expect(text).toContain("DELETE FROM beta_agent_activity WHERE created_at <");
   });
 
@@ -640,11 +640,17 @@ describe("agent activity", () => {
       idleMinutes: 30,
     });
     expect(calls).toHaveLength(1);
-    expect(flat(calls[0].text)).toContain(
-      "OR NOT EXISTS ( SELECT 1 FROM beta_agent_activity WHERE created_at > now() - make_interval(mins => ?) )",
+    const text = flat(calls[0].text);
+    // The quiet check is computed ONCE and spent twice — by the sweep and by
+    // the returned flag — so a run cannot be reset without being announced, or
+    // announced without being reset.
+    expect(text).toContain(
+      "WITH began AS ( SELECT NOT EXISTS ( SELECT 1 FROM beta_agent_activity WHERE created_at > now() - make_interval(mins => ?) ) AS started )",
     );
-    // Position 8 is the idle window, after the seven VALUES and the retention.
-    expect(calls[0].values[8]).toBe(30);
+    expect(text).toContain("OR (SELECT started FROM began)");
+    expect(text).toContain("SELECT started FROM began");
+    // Position 0 now: the idle window is asked before the row is written.
+    expect(calls[0].values[0]).toBe(30);
   });
 
   it("floors the idle window to a whole minute, and never to zero", async () => {
@@ -655,8 +661,8 @@ describe("agent activity", () => {
     // the feed on every line.
     await store.logAgentActivity({ ...line, idleMinutes: 12.7 });
     await store.logAgentActivity({ ...line, idleMinutes: 0 });
-    expect(calls[0].values[8]).toBe(12);
-    expect(calls[1].values[8]).toBe(1);
+    expect(calls[0].values[0]).toBe(12);
+    expect(calls[1].values[0]).toBe(1);
   });
 
   it("truncates an over-long summary rather than failing the CHECK", async () => {
@@ -672,9 +678,9 @@ describe("agent activity", () => {
     expect(calls[0].values).toContain("x".repeat(300));
   });
 
-  it("writes nothing at all for a blank summary", async () => {
+  it("writes nothing at all for a blank summary, and starts no run", async () => {
     const { sql, calls } = makeFakeSql();
-    await createBetaStore(sql).logAgentActivity({
+    const result = await createBetaStore(sql).logAgentActivity({
       actor: "a",
       tool: "log_agent_activity",
       outcome: "ok",
@@ -683,6 +689,9 @@ describe("agent activity", () => {
       idleMinutes: 30,
     });
     expect(calls).toHaveLength(0);
+    // A line that was never written cannot be the one that began a run — which
+    // would otherwise buzz an admin's phone about an agent that said nothing.
+    expect(result).toEqual({ started: false });
   });
 
   it("nulls a report id that is not a positive integer", async () => {
@@ -696,9 +705,10 @@ describe("agent activity", () => {
       retainDays: 14,
       idleMinutes: 30,
     });
-    // Position 3 is `report_id` in the VALUES list. A negative id would fail the
-    // CHECK, and failing a LOG write is not worth failing a tool call over.
-    expect(calls[0].values[3]).toBeNull();
+    // Position 4 is `report_id` in the VALUES list, after the idle window. A
+    // negative id would fail the CHECK, and failing a LOG write is not worth
+    // failing a tool call over.
+    expect(calls[0].values[4]).toBeNull();
   });
 
   /**
@@ -718,8 +728,8 @@ describe("agent activity", () => {
       retainDays: 14,
       idleMinutes: 30,
     });
-    // Position 4, straight after `report_id`.
-    expect(calls[0].values[4]).toBeNull();
+    // Position 5, straight after `report_id`.
+    expect(calls[0].values[5]).toBeNull();
   });
 
   /** Both ids at once is the case migration 033 deliberately allows. */
@@ -735,8 +745,40 @@ describe("agent activity", () => {
       retainDays: 14,
       idleMinutes: 30,
     });
-    expect(calls[0].values[3]).toBe(42);
-    expect(calls[0].values[4]).toBe(7);
+    expect(calls[0].values[4]).toBe(42);
+    expect(calls[0].values[5]).toBe(7);
+  });
+
+  /**
+   * The flag the run-start notification is built on
+   * (`agent-activity-design.md` §12). It is the sweep's own question, answered
+   * once, so a line cannot reset a quiet run without announcing that it started
+   * one — or announce one it did not start.
+   */
+  it("says whether the line started a run", async () => {
+    const started = makeFakeSql(() => [{ started: true }]);
+    await expect(
+      createBetaStore(started.sql).logAgentActivity({
+        actor: "a",
+        tool: "log_agent_activity",
+        outcome: "ok",
+        summary: "picking up the open queue",
+        retainDays: 14,
+        idleMinutes: 30,
+      }),
+    ).resolves.toEqual({ started: true });
+
+    const continued = makeFakeSql(() => [{ started: false }]);
+    await expect(
+      createBetaStore(continued.sql).logAgentActivity({
+        actor: "a",
+        tool: "log_agent_activity",
+        outcome: "ok",
+        summary: "still on it",
+        retainDays: 14,
+        idleMinutes: 30,
+      }),
+    ).resolves.toEqual({ started: false });
   });
 
   it("reads newest first, which is what the recent index serves", async () => {

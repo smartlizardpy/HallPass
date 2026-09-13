@@ -1305,7 +1305,8 @@ export function createBetaStore(sql: Sql) {
     // -----------------------------------------------------------------------
 
     /**
-     * Record one line of what the MCP agent did, and sweep the old ones.
+     * Record one line of what the MCP agent did, sweep the old ones, and say
+     * whether this line STARTED a run.
      *
      * ── THE SWEEP RIDES ON THE INSERT ─────────────────────────────────────
      * One row per tool call, so a working agent fills this table steadily and
@@ -1332,6 +1333,20 @@ export function createBetaStore(sql: Sql) {
      * being written either: it asks whether the PREVIOUS run went quiet,
      * which is exactly the question.
      *
+     * ── AND THAT ANSWER IS RETURNED, BECAUSE IT IS ALSO "A RUN STARTED" ────
+     * "The previous run was quiet" and "this line begins a new run" are the
+     * same sentence, so the flag is lifted into its own CTE, used by the sweep,
+     * and returned. One value, computed once: the reset and the notification
+     * that announces the run (`mcp/activity-log.ts`) cannot disagree about
+     * whether it began. A second statement asking again could not even be made
+     * to agree — the `neon()` driver is one request per call, so it would be a
+     * different snapshot.
+     *
+     * The sweep moves into a CTE of its own to make room for that. Postgres
+     * runs a data-modifying CTE exactly once and to completion whether or not
+     * the primary query reads its output, so the DELETE is not skippable for
+     * having stopped being the top-level statement.
+     *
      * ── THE CAPS ARE APPLIED HERE, NOT TRUSTED FROM THE CALLER ────────────
      * `summary` has a CHECK on it (1..300) and this is a logging path: a summary
      * one character too long must not turn into a failed tool call for the agent
@@ -1351,9 +1366,11 @@ export function createBetaStore(sql: Sql) {
       retainDays: number;
       /** How long a quiet run survives before the next line resets it. */
       idleMinutes: number;
-    }): Promise<void> {
+    }): Promise<{ started: boolean }> {
       const summary = input.summary.trim().slice(0, 300);
-      if (!summary) return;
+      // Nothing was written, so nothing started. Reported as `false` rather
+      // than thrown: the caller is a logging path.
+      if (!summary) return { started: false };
       const reportId = positiveIdOrNull(input.reportId);
       // Narrowed exactly as `reportId` is, and for the same reason: both
       // columns carry a CHECK that a zero or a float would fail, and a logging
@@ -1363,21 +1380,27 @@ export function createBetaStore(sql: Sql) {
       // fraction would fail the cast. At least one, because a zero window would
       // reset the feed on every line and it would only ever hold one.
       const idleMinutes = Math.max(1, Math.floor(input.idleMinutes));
-      await sql`
-        WITH logged AS (
+      const rows = await sql`
+        WITH began AS (
+          SELECT NOT EXISTS (
+            SELECT 1 FROM beta_agent_activity
+            WHERE created_at > now() - make_interval(mins => ${idleMinutes})
+          ) AS started
+        ), logged AS (
           INSERT INTO beta_agent_activity
             (actor, tool, outcome, report_id, tracker_item_id, slug, summary)
           VALUES (${input.actor}, ${input.tool}, ${input.outcome},
                   ${reportId}, ${trackerItemId}, ${input.slug ?? null}, ${summary})
           RETURNING id
+        ), swept AS (
+          DELETE FROM beta_agent_activity
+          WHERE created_at < now() - make_interval(days => ${Math.max(1, input.retainDays)})
+             OR (SELECT started FROM began)
+          RETURNING id
         )
-        DELETE FROM beta_agent_activity
-        WHERE created_at < now() - make_interval(days => ${Math.max(1, input.retainDays)})
-           OR NOT EXISTS (
-                SELECT 1 FROM beta_agent_activity
-                WHERE created_at > now() - make_interval(mins => ${idleMinutes})
-              )
+        SELECT started FROM began
       `;
+      return { started: Boolean(rows[0]?.started) };
     },
 
     /**
