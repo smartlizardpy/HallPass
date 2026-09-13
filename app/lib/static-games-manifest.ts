@@ -52,6 +52,8 @@ export const STATIC_GAME_FILES: ReadonlySet<string> = new Set([
   "rhythm-hell-harmonic-flash/index.html",
   "sea-mercenary/cover.png",
   "sea-mercenary/index.html",
+  "shadow-core-halloween-dash/cover.png",
+  "shadow-core-halloween-dash/index.html",
   "silence/cover.png",
   "silence/index.html",
   "snag/cover.png",
