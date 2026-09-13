@@ -273,6 +273,7 @@ export async function getAgentActivity(input: {
  */
 export async function getLiveTrackerActivity(input: {
   idleMinutes: number;
+  tools: readonly string[];
   limit?: number;
 }): Promise<TrackerAgentActivity[]> {
   try {

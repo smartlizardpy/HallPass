@@ -39,6 +39,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
 import { getLiveTrackerActivity } from "@/app/lib/beta";
+import { ITEM_WORK_TOOLS } from "@/app/lib/mcp/activity";
 import { ACTIVITY_IDLE_MINUTES } from "@/app/lib/mcp/config";
 import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { getBoard, getTags, isTrackerReady } from "@/app/lib/tracker";
@@ -89,7 +90,10 @@ export default async function TrackerBoardPage({
     getTags(),
     // Seeds the markers so they are right before any JavaScript runs, and stay
     // right if none ever does. The provider polls on from there.
-    getLiveTrackerActivity({ idleMinutes: ACTIVITY_IDLE_MINUTES }),
+    getLiveTrackerActivity({
+      idleMinutes: ACTIVITY_IDLE_MINUTES,
+      tools: ITEM_WORK_TOOLS,
+    }),
   ]);
   const visible = tag ? cards.filter((card) => card.tags.includes(tag)) : cards;
 

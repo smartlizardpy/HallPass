@@ -61,6 +61,33 @@ export const SUMMARY_MAX = 300;
  */
 export const AGENT_FEED_LIMIT = 20;
 
+/**
+ * The tools whose lines mean an agent is WORKING ON a tracker item, and
+ * therefore the only ones that light the green marker on the board.
+ *
+ * Every tracker tool records which item its line is about — that is what makes
+ * the feed row faithful — but "is about item 7" and "is working on item 7" are
+ * different claims, and the marker makes the second one. The difference is
+ * visible the first time you look at a real board:
+ *
+ *   * `create_tracker_item` files a proposal into the `new` lane for a human to
+ *     triage. Marking it green says an agent is building something nobody has
+ *     agreed to yet.
+ *   * `get_tracker_item` and `list_tracker_items` are how an agent DECIDES what
+ *     to work on. An agent that reads ten briefs to pick one would light all
+ *     ten, which is the exact failure the marker exists to avoid — a board that
+ *     says an agent is everywhere is a board that says nothing.
+ *
+ * What is left is the three deliberate acts: moving it, commenting on it, and
+ * naming it while narrating. All three are things an agent does BECAUSE it is
+ * working on that item.
+ */
+export const ITEM_WORK_TOOLS = [
+  "move_tracker_item",
+  "comment_on_tracker_item",
+  "log_agent_activity",
+] as const;
+
 /** One row to write, before an actor and a timestamp are attached. */
 export type ActivityLine = {
   tool: string;

@@ -1460,6 +1460,14 @@ export function createBetaStore(sql: Sql) {
      * {@link recentAgentActivity} already gives: a laptop clock a few minutes
      * out would close a live run early or hold a dead one open.
      *
+     * ── AND ONLY THE TOOLS THAT MEAN WORK ────────────────────────────────
+     * `tools` is passed in rather than known here, because which tool names
+     * mean "working on it" is the MCP's vocabulary and this module only knows
+     * rows (`mcp/activity.ts`'s `ITEM_WORK_TOOLS` is the list and the
+     * argument). It rides in comma-joined for the reason `tracker/store.ts`
+     * gives for tag lists: every bound parameter stays a plain scalar, with no
+     * dependence on how the HTTP driver serialises an array.
+     *
      * The subquery is there because `DISTINCT ON` forces an ORDER BY starting
      * with `tracker_item_id`, which is not the order anybody wants to read —
      * so the outer query re-sorts by recency and applies the cap. The cap is
@@ -1469,6 +1477,8 @@ export function createBetaStore(sql: Sql) {
      */
     async liveTrackerActivity(input: {
       idleMinutes: number;
+      /** Tool names whose lines count as work. See the header. */
+      tools: readonly string[];
       limit?: number;
     }): Promise<TrackerAgentActivity[]> {
       const idleMinutes = Math.max(1, Math.floor(input.idleMinutes));
@@ -1478,6 +1488,7 @@ export function createBetaStore(sql: Sql) {
                  tracker_item_id, actor, tool, outcome, summary, created_at
             FROM beta_agent_activity
            WHERE tracker_item_id IS NOT NULL
+             AND tool = ANY(string_to_array(${input.tools.join(",")}, ','))
              AND created_at > now() - make_interval(mins => ${idleMinutes})
            ORDER BY tracker_item_id, created_at DESC, id DESC
         ) newest

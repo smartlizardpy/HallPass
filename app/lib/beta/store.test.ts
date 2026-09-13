@@ -809,10 +809,13 @@ describe("agent activity", () => {
         created_at: "2026-01-01T00:00:00.000Z",
       },
     ]);
-    const rows = await createBetaStore(sql).liveTrackerActivity({ idleMinutes: 30 });
+    const rows = await createBetaStore(sql).liveTrackerActivity({ idleMinutes: 30, tools: ["move_tracker_item"] });
     const text = flat(calls[0].text);
     expect(text).toContain("SELECT DISTINCT ON (tracker_item_id)");
     expect(text).toContain("WHERE tracker_item_id IS NOT NULL");
+    // Only the tools that mean work light the marker: reading ten briefs to
+    // pick one must not mark all ten as being built.
+    expect(text).toContain("AND tool = ANY(string_to_array(?, ','))");
     expect(text).toContain("created_at > now() - make_interval(mins => ?)");
     expect(text).toContain("ORDER BY tracker_item_id, created_at DESC, id DESC");
     expect(rows[0]).toEqual({
@@ -827,10 +830,10 @@ describe("agent activity", () => {
 
   it("floors the marker's window the same way the insert does", async () => {
     const { sql, calls } = makeFakeSql();
-    await createBetaStore(sql).liveTrackerActivity({ idleMinutes: 0 });
+    await createBetaStore(sql).liveTrackerActivity({ idleMinutes: 0, tools: ["move_tracker_item"] });
     // Read and reset must never disagree about when a run went quiet, so both
-    // floor to at least one whole minute.
-    expect(calls[0].values[0]).toBe(1);
+    // floor to at least one whole minute. Position 1, after the tool list.
+    expect(calls[0].values[1]).toBe(1);
   });
 
   it("clears every line and says how many", async () => {

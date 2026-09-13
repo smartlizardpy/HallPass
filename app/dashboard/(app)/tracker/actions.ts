@@ -50,6 +50,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { beta, type TrackerAgentActivity } from "@/app/lib/beta";
+import { ITEM_WORK_TOOLS } from "@/app/lib/mcp/activity";
 import { ACTIVITY_IDLE_MINUTES } from "@/app/lib/mcp/config";
 import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { tracker } from "@/app/lib/tracker";
@@ -348,5 +349,8 @@ export async function restoreItemAction(formData: FormData): Promise<void> {
  */
 export async function trackerAgentActivityAction(): Promise<TrackerAgentActivity[]> {
   await requireRole(SITE_WRITE_ROLE);
-  return beta.liveTrackerActivity({ idleMinutes: ACTIVITY_IDLE_MINUTES });
+  return beta.liveTrackerActivity({
+    idleMinutes: ACTIVITY_IDLE_MINUTES,
+    tools: ITEM_WORK_TOOLS,
+  });
 }

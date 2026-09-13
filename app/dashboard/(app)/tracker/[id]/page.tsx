@@ -52,6 +52,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { getLiveTrackerActivity } from "@/app/lib/beta";
+import { ITEM_WORK_TOOLS } from "@/app/lib/mcp/activity";
 import { ACTIVITY_IDLE_MINUTES, mcpActor } from "@/app/lib/mcp/config";
 import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { getEvents, getItem, getUpdates } from "@/app/lib/tracker";
@@ -152,9 +153,10 @@ export default async function TrackerItemPage({
     // Narrowed to THIS item: the read answers for every item an agent has
     // touched lately, and handing the rest of them to a client component would
     // put the state of the whole board in one item page's flight data.
-    getLiveTrackerActivity({ idleMinutes: ACTIVITY_IDLE_MINUTES }).then((rows) =>
-      rows.filter((row) => row.itemId === id),
-    ),
+    getLiveTrackerActivity({
+      idleMinutes: ACTIVITY_IDLE_MINUTES,
+      tools: ITEM_WORK_TOOLS,
+    }).then((rows) => rows.filter((row) => row.itemId === id)),
   ]);
 
   // Read from the same function the MCP writes with, so a deployment that sets
