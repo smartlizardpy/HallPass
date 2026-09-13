@@ -433,3 +433,104 @@ SQL, run on the dev database) and by types, not in a browser. Production still
 holds the first session's 53 lines until this deploys. From then the panel hides
 them at once, since they are hours old, and the next agent's first line deletes
 them.
+
+## 12. The admins are told when a run starts and when it ends
+
+Added 2026-09-13, after the tracker landed on the same MCP
+(`tracker-mcp-design.md`). The ask was "send a notification to the admins on
+agent start".
+
+### What this fixes, and what §5 got wrong about it
+
+§5 argues for a polling panel on the grounds that "watching an agent work is the
+point; a panel that needs a reload is a panel you check after the fact". That is
+true and it quietly assumes somebody is looking at the page. The operator is
+usually not: the whole reason the feed exists is that they left an agent running
+and came back later. A live panel answers "what is it doing" for somebody
+already watching; nothing until now answered **"is anything running?"** for
+somebody who is not.
+
+`notifications/` is exactly the machinery for that, and it already carries the
+hard parts: the admin roster resolved at send time (`admins.ts`), per-admin
+preferences, the bell and Web Push from one call, and copy with a discreet
+counterpart for a school lock screen. So this is a producer and two catalogue
+entries. No new transport, no new table.
+
+### Two kinds, not one
+
+`agent_started` and `agent_finished` are separate entries because they answer
+different questions and deserve different answers. "Something is running now" is
+worth a buzz to somebody who did not start it; "it has stopped" is worth a buzz
+to the person who did. One kind would force one toggle for both, and the first
+thing anybody would want is exactly that split.
+
+Both default to **push**, which is the ask taken literally. Both are one click
+away from the bell, or off, on the notifications settings page — the catalogue's
+whole design is that a default is a product judgement rather than a decision.
+The frequency justifies it: a run is a handful of events a day, not the dozen an
+hour `challenge_beaten`'s docblock refuses to push.
+
+They go in a new group, **Agent**, rather than into `ops`. That group is
+described as "what the site notices on its own" — traffic, errors, gaps — and an
+agent run is not something the site noticed. It is somebody's tool, working.
+Groups are an array the settings page maps over, so a new one costs nothing.
+
+### "Started" is decided by the statement that already decides it
+
+There is no run id and nothing to hang a start on (§11: "the table only ever
+holds one run"). But the insert ALREADY asks the question — its sweep deletes
+every line when nothing was written inside the idle window, which is the same
+sentence as "the previous run is over, this line starts a new one".
+
+So `logAgentActivity` now returns that flag rather than a second query asking it
+again. The value is computed once in a CTE and used twice, by the DELETE and by
+the returned row, so the reset and the notification cannot disagree about
+whether a run began. A second statement could not even be made to agree: the
+`neon()` driver is one request per call, so it would be a different snapshot.
+
+### What the notification may quote, and what it may not
+
+`copy.ts` states the rule this has to satisfy: every string is a candidate
+lock-screen banner, and an admin kind "names the game, never the reported text,
+because a report is frequently about the text being vile".
+
+A feed line is not uniformly safe to quote. `describeToolCall` builds most of
+them mechanically, and those summaries EMBED the thing they are about — `Read
+report 12 — "<a child's title>"`. One tool is different: `log_agent_activity`
+carries the agent's own sentence about its own intent, first-party text about
+this codebase.
+
+So the start notification quotes the line **only when it came from the narration
+tool**, and otherwise says the generic thing. It is one condition, it is
+checkable from the line the producer already holds, and it means no notification
+can put a tester's words on a lock screen.
+
+The finish notification quotes nothing and carries a count. Counts are fine here
+— `trafficSpikeCopy` carries one and argues "the figure is the whole message" —
+and the agent's last words are on a panel that is about to be empty anyway.
+
+### Deliberately absent
+
+- **A notification when a run ends by the idle window.** Nothing wakes up at the
+  thirty-minute mark; §11 makes that choice and this inherits it. An agent that
+  crashed is silent, exactly as the panel is. Being told "it finished" only when
+  it says so is honest; inventing a timer to say it otherwise would mean a cron.
+- **A notification per report closed or per item shipped.** A run does dozens of
+  those and the panel is the surface for them. The two ends of a run are what a
+  person who is not watching needs; everything between is what the dashboard is
+  for. Either is one `notifyAdmins` call if that turns out to be wrong.
+- **Anything to the tester or the player.** Unchanged from §6: "a child does not
+  need to know a machine is reading their bug report".
+- **Failing a tool call over a notification.** `recordActivity` already swallows
+  its own errors and `notifyAdmins` never throws; the producer sits inside both.
+
+### File-by-file plan
+
+| # | Commit | Files |
+|---|---|---|
+| 1 | This plan | `agent-activity-design.md` |
+| 2 | Two kinds and a group | `notifications/config.ts` + test |
+| 3 | What they say | `notifications/copy.ts` + test |
+| 4 | A line knows it started a run | `beta/store.ts` + test |
+| 5 | The producer | `mcp/activity-log.ts` |
+| 6 | Say so | `README.md` |
