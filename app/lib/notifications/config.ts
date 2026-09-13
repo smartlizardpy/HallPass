@@ -102,6 +102,14 @@ export const NOTIFICATION_GROUPS = [
     label: "Site health",
     blurb: "Traffic, errors and gaps the site notices on its own, for admins.",
   },
+  {
+    // Separate from `ops` on purpose. That group is what the SITE notices about
+    // itself — traffic, exceptions, searches that found nothing — and an agent
+    // run is not something the site noticed. It is somebody's tool, working.
+    id: "agent",
+    label: "Agent runs",
+    blurb: "When a coding agent starts and finishes working on the site, for admins.",
+  },
 ] as const;
 
 export type NotificationGroup = (typeof NOTIFICATION_GROUPS)[number]["id"];
@@ -336,6 +344,33 @@ export const NOTIFICATION_KINDS = {
     description: "Players keep searching for a game the arcade does not have.",
     defaultChannel: "bell",
     discreet: "There is something to look at on the dashboard.",
+  },
+  agent_started: {
+    audience: "admin",
+    scope: "personal",
+    group: "agent",
+    label: "An agent starts",
+    icon: "🤖",
+    description: "A coding agent begins a run on the bug queue or the tracker.",
+    // PUSH, and the reason is who is NOT in the room. The live panel on
+    // /dashboard/beta already serves somebody watching; this kind exists for
+    // the operator who left an agent running and went out, and a bell they see
+    // tomorrow answers a question that expired. A run is a handful of events a
+    // day, nowhere near the volume `challenge_beaten` refuses to push.
+    defaultChannel: "push",
+    discreet: "Something is happening on the site.",
+  },
+  agent_finished: {
+    audience: "admin",
+    scope: "personal",
+    group: "agent",
+    label: "An agent finishes",
+    icon: "🏁",
+    description: "An agent says it has finished everything and clears its feed.",
+    // The other end of the same run. Pushed for the same reason and with the
+    // same volume, and it is the one that says the queue is worth looking at.
+    defaultChannel: "push",
+    discreet: "Something is happening on the site.",
   },
 } as const satisfies Record<string, NotificationKindDef>;
 

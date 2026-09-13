@@ -367,3 +367,91 @@ export function contentGapCopy(input: {
     url: OPS_URL,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Agent runs
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a tap lands for both agent kinds: the panel that shows what it is
+ * doing, live (`agent-activity-design.md` §5).
+ *
+ * Not `OPS_URL`. These are not something the site noticed about itself, and the
+ * growth page has nothing to say about an agent.
+ */
+const AGENT_URL = "/dashboard/beta";
+
+/**
+ * Clip to `max`, with an ellipsis, leaving whole words alone.
+ *
+ * NOT {@link shortName}, which stops at 24 characters because it bounds a
+ * HANDLE — one word that must not push a verb off a banner. What is bounded
+ * here is a sentence, capped at 300 by the feed's own column, and truncating it
+ * to a handle's length would throw away the message rather than shorten it. The
+ * margin `agentStartedCopy` passes leaves room for the quotation marks, so the
+ * closing one cannot be the character `bound()` cuts.
+ */
+function clip(text: string, max: number): string {
+  const clean = text.trim();
+  return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+}
+
+/**
+ * "An agent is working on the site."
+ *
+ * ── WHAT MAY BE QUOTED HERE, AND WHY IT IS NOT JUST ANY FEED LINE ──────────
+ * This is the sharpest wording decision in this file since the moderation
+ * kinds, and it is the same one. `describeToolCall` builds most feed summaries
+ * mechanically, and those EMBED the thing they are about — `Read report 12 —
+ * "<the title a child typed>"`. Every string here is a candidate lock-screen
+ * banner on a school Chromebook, and this file's rule for an admin kind is that
+ * it names the game and never the reported text.
+ *
+ * `log_agent_activity` is the exception, and the producer only ever passes
+ * `note` from that tool: it is the agent's own sentence about its own intent —
+ * first-party text about this codebase, written by the operator's own tool. So
+ * a run that begins with narration says what it is about, and a run that begins
+ * with anything else says that it began. Both are more than the operator had.
+ */
+export function agentStartedCopy(input: {
+  /**
+   * The agent's own words, when its first line was narration. `null` for a run
+   * that started with any other tool — see the docblock.
+   */
+  note: string | null;
+}): NotificationCopy {
+  const note = input.note?.trim();
+  return bound({
+    title: "An agent is working on the site",
+    body: note
+      ? `“${clip(note, NOTIFICATION_BODY_MAX - 2)}”`
+      : "It has just started. Its live feed is on the beta dashboard.",
+    url: AGENT_URL,
+  });
+}
+
+/**
+ * "The agent has finished."
+ *
+ * QUOTES NOTHING AND CARRIES A COUNT. The count is fine — `trafficSpikeCopy`
+ * carries one and argues the figure is the whole message — and there is nothing
+ * left to quote: the tool that produces this notification is the one that
+ * deletes the feed, so its last line is already gone by the time anybody taps.
+ *
+ * It says the run is OVER rather than what it achieved, because what it
+ * achieved is a queue and a board somebody now has a reason to open. A summary
+ * on a banner would be a worse version of the page it links to.
+ */
+export function agentFinishedCopy(input: {
+  /** How many lines the run wrote before it ended. */
+  steps: number;
+}): NotificationCopy {
+  return bound({
+    title: "The agent has finished",
+    body:
+      input.steps > 0
+        ? `${count(input.steps)} steps recorded. Nothing is running now.`
+        : "Nothing is running now.",
+    url: AGENT_URL,
+  });
+}
