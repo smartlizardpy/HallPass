@@ -444,6 +444,15 @@ Overview tile showing what is `building`.
 
 **Phase 3 — GitHub.** §6, once the ownership question is answered.
 
+**Landed out of phase: the board is on the MCP.** An agent can read the board,
+move an item, comment on it and paste a new one in, and the item shows a live
+green marker while it is being worked on. That is `tracker-mcp-design.md`, and
+it settles the question §5 leaves open by implication — a machine may move a
+lane, because the rule there is about who can truthfully say "this is being
+built" and the agent is the one building it. Nothing about the dashboard's own
+permissions changed: `canMoveStatus` is still `super_admin` and is still the
+only thing the UI reads.
+
 Deliberately not building, at any phase: drag-and-drop (no dnd library in
 `package.json`, and it is the most expensive thing on this page), markdown
 rendering, notifications, real-time sync, and sprint/date machinery.

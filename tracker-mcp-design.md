@@ -222,6 +222,25 @@ same rows and the same window as the panel on `/dashboard/beta`, and it goes out
 in the same three ways: the agent calls `finish_agent_activity`, the run goes
 quiet for `ACTIVITY_IDLE_MINUTES`, or the run is replaced by a newer one.
 
+**And only what an agent does BECAUSE it is working on the item.** This was
+wrong in the first build and was caught by looking at a real board: every item
+was marked, including two the agent had only *created*. Every tracker tool
+records which item its line is about — that is what makes the feed row faithful
+— but "is about item 7" and "is working on item 7" are different claims, and the
+marker makes the second.
+
+So `ITEM_WORK_TOOLS` (`mcp/activity.ts`) names the three that mean work —
+`move_tracker_item`, `comment_on_tracker_item`, `log_agent_activity` — and the
+read counts only those. The two excluded cases each have a reason:
+`create_tracker_item` files a proposal into `new` for a human to triage, and
+marking it says an agent is building something nobody has agreed to;
+`get_tracker_item` and `list_tracker_items` are how an agent DECIDES what to
+work on, so an agent reading ten briefs to pick one would light all ten — a
+board that says the agent is everywhere says nothing.
+
+The list is passed to the store rather than written into it: which tool names
+mean work is the MCP's vocabulary, and `beta/store.ts` only knows rows.
+
 **Per item, not per run.** The panel asks "has anything been written lately";
 the marker asks "has anything been written lately *about this item*". An agent
 that spent an hour on item 5 and then moved to item 7 must not leave item 5
@@ -343,7 +362,7 @@ sets `MCP_ACTOR` does not silently stop matching.
 
 ## 9. Phasing — the file-by-file plan
 
-Thirteen commits, each leaving the tree working.
+Fourteen commits, each leaving the tree working.
 
 | # | Commit | Files |
 |---|---|---|
@@ -359,14 +378,46 @@ Thirteen commits, each leaving the tree working.
 | 10 | A beta admin does not see tracker lines | `beta/store.ts` + test, `beta/index.ts`, `beta/actions.ts` |
 | 11 | The marker | `tracker/actions.ts`, `tracker/_ui/AgentWatch.tsx`, `_ui/ItemCard.tsx`, `tracker/page.tsx` |
 | 12 | The item page: marker and agent comments | `tracker/[id]/page.tsx` |
-| 13 | Say so | `README.md`, `bug-mcp-design.md`, `tracker-design.md` |
+| 13 | Only deliberate work lights the marker | `mcp/activity.ts`, `beta/store.ts` + test, `beta/index.ts`, the three call sites |
+| 14 | Say so | `README.md`, `bug-mcp-design.md`, `tracker-design.md`, this file |
+
+**Commit 13 was not in the plan.** It came out of looking at the built board
+rather than from changing our minds — see §5, *"And only what an agent does
+BECAUSE it is working on the item"*.
 
 **Checks**, per `AGENTS.md`: `npm run lint`, `npm test`, `npm run build`, and
 the protocol exercised against a running dev server rather than reasoned about —
 the tool list, a move, a comment, a refused move, and the live read the marker
 depends on.
 
-## 10. Open questions
+## 10. What shipped, and what the checks showed
+
+Built as planned, in the fourteen commits above.
+
+**The protocol was exercised against a running dev server rather than reasoned
+about**, on the `dashboard-dev` Neon branch with migration 033 applied:
+
+- `tools/list` advertises **21** tools to a secret holder — the seven bug tools,
+  the five tracker ones, and the analytics ones — with the tracker writers
+  marked non-destructive and `move_tracker_item` idempotent.
+- Three items created, two moved, one commented on, one narrated with `itemId`.
+- The two paths that must not read as success both refused correctly: moving an
+  item that does not exist answers `ok: false` with a reason, and moving an item
+  to the lane it is already in answers `ok: true` saying nothing changed.
+- The board and the item page were then opened in a browser. The marker appeared
+  on exactly the worked items; the agent's comment is in the Updates thread with
+  its **Agent** label; the activity trail shows `created`, `moved new →
+  building` and `posted an update`, all attributed to `mcp@hallpass.invalid`.
+
+That browser pass is what found the bug in commit 13. It is worth recording
+that it was invisible to every other check: the types were right, the tests
+passed, and the feature was wrong.
+
+**Not exercised: production.** Migration 033 is applied to `dashboard-dev` only.
+Until it is applied to `main`, the tracker tools work there and the feed writes
+fail silently, so the markers never appear — the degradation §7 describes.
+
+## 11. Open questions
 
 1. **Should the agent be able to tag?** §8 says no for now. If the board grows
    past what one person can label, it is one tool and a converge-vs-add
