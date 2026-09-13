@@ -131,22 +131,99 @@ export function isFetchableMetadataUrl(raw: string): boolean {
 type CimdCheck = { ok: true } | { ok: false; reason: string };
 
 /**
+ * Client authentication methods a CIMD client can never use, because each one
+ * is built on a secret the client and the server are supposed to have agreed
+ * on in advance — and a client that registers by publishing a URL has agreed
+ * nothing with anybody. The CIMD draft forbids them by name.
+ */
+const SHARED_SECRET_AUTH_METHODS = new Set([
+  "client_secret_basic",
+  "client_secret_post",
+  "client_secret_jwt",
+]);
+
+/**
+ * Does the document say the client can fall back to authenticating with
+ * nothing but PKCE?
+ *
+ * `token_endpoint_auth_methods_supported` is NOT an RFC 7591 client metadata
+ * field. It is RFC 8414's, where it describes an authorization SERVER. ChatGPT
+ * publishes it in its CLIENT document anyway, to mean "these are the methods I
+ * can do", and it is the only signal a client offers that it is willing to
+ * negotiate. Reading it can only ever NARROW what happens here: it is consulted
+ * for exactly one purpose, deciding whether a client that asked for something
+ * HallPass does not implement would rather be a public client than fail.
+ */
+function offersNoneAsFallback(supported: unknown): boolean {
+  return Array.isArray(supported) && supported.includes("none");
+}
+
+/**
  * Can HallPass serve the client authentication this document asks for?
  *
- * A CIMD client is public by construction — its identity is a public URL, so
- * there is no secret to hold.
+ * ── WHY THIS IS NOT SIMPLY `must be "none"` ───────────────────────────────
+ * It was, and it kept ChatGPT out. Its document asks for `private_key_jwt`,
+ * which is not a client overreaching: the CIMD draft forbids only the
+ * SHARED-SECRET methods above, and separately RECOMMENDS `private_key_jwt` for
+ * any client able to hold a key. Refusing it punished the one connector that
+ * took the specification's own advice, and the consent screen said "this
+ * application's details could not be read" — which reads as a broken document
+ * rather than a rule on this side.
+ *
+ * So the three cases are now distinguished:
+ *
+ *   * NOTHING, or `none`. A public client. (RFC 7591 says an absent value means
+ *     `client_secret_basic`; that default is meaningless for a client with no
+ *     secret, so absence is read as `none`, which is what such clients mean.)
+ *   * A SHARED-SECRET METHOD. Still refused, and now says why rather than
+ *     restating the rule.
+ *   * ANYTHING ELSE — an asymmetric method such as `private_key_jwt`. Legal in
+ *     a CIMD document, and NOT IMPLEMENTED at `/api/oauth/token`, which
+ *     authenticates public clients with PKCE alone. Accepted only when the
+ *     client has published that `none` is also acceptable to it, which is a
+ *     downgrade the client offered rather than one taken behind its back. The
+ *     authorization server metadata never advertises the asymmetric method, so
+ *     a client reading it picks `none` of its own accord and the two agree.
+ *
+ * The last case is the whole substance of the change. Accepting a client that
+ * WANTS to authenticate and then not making it do so is a real, if small,
+ * weakening — it is why the fallback must be published by the client instead of
+ * assumed, and why a client that names no fallback is turned away with the
+ * reason rather than quietly treated as public.
  */
 function checkTokenEndpointAuthMethod(doc: Record<string, unknown>): CimdCheck {
   const requested = doc.token_endpoint_auth_method;
-  if (requested != null && requested !== "none") {
+  if (requested == null || requested === "none") return { ok: true };
+
+  // Past the client_id check above, so everything read here comes from a
+  // document that named itself as this exact URL. That is what makes it safe to
+  // quote a field back in a reason — see the module header on not echoing.
+  if (typeof requested !== "string") {
+    return {
+      ok: false,
+      reason: "Client metadata document: token_endpoint_auth_method must be a string.",
+    };
+  }
+
+  if (SHARED_SECRET_AUTH_METHODS.has(requested)) {
     return {
       ok: false,
       reason:
-        "Client metadata document: only public clients are supported, so " +
-        'token_endpoint_auth_method must be "none".',
+        `Client metadata document: token_endpoint_auth_method "${requested}" needs a ` +
+        "secret shared with HallPass in advance, which a client identified by a URL " +
+        'has no way to have. Public clients use "none" and PKCE.',
     };
   }
-  return { ok: true };
+
+  if (offersNoneAsFallback(doc.token_endpoint_auth_methods_supported)) return { ok: true };
+
+  return {
+    ok: false,
+    reason:
+      `Client metadata document: HallPass does not implement "${requested}", and the ` +
+      'document does not list "none" in token_endpoint_auth_methods_supported, so ' +
+      "there is no method both sides can use.",
+  };
 }
 
 /**
