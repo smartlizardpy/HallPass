@@ -49,6 +49,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
+import { beta, type TrackerAgentActivity } from "@/app/lib/beta";
+import { ACTIVITY_IDLE_MINUTES } from "@/app/lib/mcp/config";
+import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { tracker } from "@/app/lib/tracker";
 import {
   BRIEF_MAX,
@@ -317,4 +320,33 @@ export async function restoreItemAction(formData: FormData): Promise<void> {
 
   revalidateTracker(id);
   redirect(target(itemPath(id), "ok", "Restored"));
+}
+
+/**
+ * Which items an agent is working on right now — the board's green markers.
+ *
+ * A Server FUNCTION used for a READ, the same shape `beta/actions.ts`'s
+ * `agentActivityAction` and `moderation/actions.ts`'s `openReportCountAction`
+ * use, and for the same reason: the markers have to move while somebody
+ * watches, and invoking a Server Function does NOT re-render the calling page,
+ * so a poll costs one POST and a small read rather than re-rendering the whole
+ * board.
+ *
+ * `requireRole` still runs. A Server Function is reachable by direct POST, this
+ * answers with the agent's own words about internal work, and the board itself
+ * is `admin` and up — none of which is guarded by the page having been
+ * rendered.
+ *
+ * ── IT THROWS; IT DOES NOT DEGRADE ─────────────────────────────────────────
+ * Reads the live store rather than `getLiveTrackerActivity`, whose fail-soft
+ * `[]` is right for the page's first render and wrong here. An empty answer is
+ * the sentence "no agent is working on this", so a database hiccup answered
+ * with `[]` would take every marker off the board. A thrown poll is caught by
+ * the island, which keeps its last state. Before migration 033 is applied that
+ * is an error in the server log on every poll; the board still renders,
+ * unmarked, through the fail-soft read.
+ */
+export async function trackerAgentActivityAction(): Promise<TrackerAgentActivity[]> {
+  await requireRole(SITE_WRITE_ROLE);
+  return beta.liveTrackerActivity({ idleMinutes: ACTIVITY_IDLE_MINUTES });
 }
