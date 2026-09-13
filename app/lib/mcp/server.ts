@@ -385,6 +385,8 @@ function registerBugTools(server: McpServer): void {
         "when you are about to make a change — one short sentence each time. " +
         "Every other tool records only its own mechanics, so this is the only " +
         "way anything you REASONED about reaches the person running the site. " +
+        "If the work is against a tracker item, pass its id as `itemId` every " +
+        "time: that is what keeps the live marker lit beside it on the board. " +
         "Writes nothing to any report and pays nobody.",
       inputSchema: {
         summary: z
@@ -401,7 +403,16 @@ function registerBugTools(server: McpServer): void {
           .int()
           .positive()
           .optional()
-          .describe("The report this is about, if it is about one."),
+          .describe("The bug report this is about, if it is about one."),
+        itemId: trackerItemId
+          .optional()
+          .describe(
+            "The TRACKER ITEM this is about, if it is about one. Pass it on " +
+              "every line while you are working on that item: it is what keeps " +
+              "the live marker lit beside the item on the operator's board, and " +
+              "the marker goes out when you stop mentioning it. Not the same " +
+              "number as reportId — pass both if the line is about both.",
+          ),
         slug: z
           .string()
           .optional()
@@ -413,8 +424,8 @@ function registerBugTools(server: McpServer): void {
       // submit to be absorbed.
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async ({ summary, reportId, slug }) =>
-      logged("log_agent_activity", { summary, reportId, slug }, async () => ({
+    async ({ summary, reportId, itemId, slug }) =>
+      logged("log_agent_activity", { summary, reportId, itemId, slug }, async () => ({
         // Echoed back rather than answered with a bare "ok": the agent sees
         // exactly what was recorded, including any truncation, and the feed
         // takes its line from the same string.
