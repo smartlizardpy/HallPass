@@ -127,6 +127,28 @@ export function isFetchableMetadataUrl(raw: string): boolean {
   return !isBlockedHost(url.hostname);
 }
 
+/** The outcome of one check within {@link validateClientMetadata}. */
+type CimdCheck = { ok: true } | { ok: false; reason: string };
+
+/**
+ * Can HallPass serve the client authentication this document asks for?
+ *
+ * A CIMD client is public by construction — its identity is a public URL, so
+ * there is no secret to hold.
+ */
+function checkTokenEndpointAuthMethod(doc: Record<string, unknown>): CimdCheck {
+  const requested = doc.token_endpoint_auth_method;
+  if (requested != null && requested !== "none") {
+    return {
+      ok: false,
+      reason:
+        "Client metadata document: only public clients are supported, so " +
+        'token_endpoint_auth_method must be "none".',
+    };
+  }
+  return { ok: true };
+}
+
 /**
  * Validate a parsed metadata document against the URL it came from.
  *
@@ -154,17 +176,8 @@ export function validateClientMetadata(url: string, body: unknown): CimdResult {
     return { ok: false, reason: `Client metadata document: ${redirects.reason}` };
   }
 
-  // A client asking for a secret-bearing auth method has misunderstood what it
-  // is: a CIMD client is public by construction — its identity is a public URL.
-  const authMethod = doc.token_endpoint_auth_method;
-  if (authMethod != null && authMethod !== "none") {
-    return {
-      ok: false,
-      reason:
-        "Client metadata document: only public clients are supported, so " +
-        'token_endpoint_auth_method must be "none".',
-    };
-  }
+  const auth = checkTokenEndpointAuthMethod(doc);
+  if (!auth.ok) return auth;
 
   return {
     ok: true,
