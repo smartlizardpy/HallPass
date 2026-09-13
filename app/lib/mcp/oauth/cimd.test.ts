@@ -132,9 +132,100 @@ describe("validateClientMetadata", () => {
   });
 
   it("refuses a client asking to hold a secret", () => {
+    // The three the CIMD draft forbids by name: each needs a secret agreed in
+    // advance, and nothing was ever agreed with a client identified by a URL.
+    for (const method of ["client_secret_post", "client_secret_basic", "client_secret_jwt"]) {
+      const result = validateClientMetadata(URL_ID, validDoc({ token_endpoint_auth_method: method }));
+      expect(result.ok).toBe(false);
+      // The refusal names the method, so the operator is not left comparing
+      // their document against a rule restated at them.
+      if (!result.ok) expect(result.reason).toContain(method);
+    }
+  });
+
+  it("reads an absent token_endpoint_auth_method as a public client", () => {
+    // RFC 7591's default is client_secret_basic, which is meaningless for a
+    // client that cannot have a secret. Absence means "none" here.
+    expect(validateClientMetadata(URL_ID, validDoc({ token_endpoint_auth_method: undefined })).ok).toBe(
+      true,
+    );
+  });
+
+  it("refuses a token_endpoint_auth_method that is not a string", () => {
+    expect(validateClientMetadata(URL_ID, validDoc({ token_endpoint_auth_method: 7 })).ok).toBe(false);
+    expect(validateClientMetadata(URL_ID, validDoc({ token_endpoint_auth_method: ["none"] })).ok).toBe(
+      false,
+    );
+  });
+
+  it("ACCEPTS private_key_jwt when the client publishes that it can also do none", () => {
+    // The case this whole branch exists for. private_key_jwt is not a client
+    // overreaching -- the draft recommends it -- and HallPass simply does not
+    // implement it, so the client's own published fallback is what makes the
+    // two agree on "none".
+    const result = validateClientMetadata(
+      URL_ID,
+      validDoc({
+        token_endpoint_auth_method: "private_key_jwt",
+        token_endpoint_auth_methods_supported: ["none", "private_key_jwt"],
+        jwks_uri: "https://app.example.com/jwks.json",
+      }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("refuses private_key_jwt with no published fallback, rather than silently downgrading it", () => {
+    // Accepting this would mean issuing tokens to a client that believes it
+    // authenticated with a key nothing here ever checked.
+    const result = validateClientMetadata(
+      URL_ID,
+      validDoc({ token_endpoint_auth_method: "private_key_jwt" }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toContain("private_key_jwt");
+  });
+
+  it("does not take a shared-secret method as negotiable, fallback or not", () => {
+    // token_endpoint_auth_methods_supported may only narrow the outcome. It
+    // must never rescue a method the draft forbids outright.
     expect(
-      validateClientMetadata(URL_ID, validDoc({ token_endpoint_auth_method: "client_secret_post" })).ok,
+      validateClientMetadata(
+        URL_ID,
+        validDoc({
+          token_endpoint_auth_method: "client_secret_post",
+          token_endpoint_auth_methods_supported: ["none", "client_secret_post"],
+        }),
+      ).ok,
     ).toBe(false);
+  });
+
+  it("accepts ChatGPT's real connector document", () => {
+    // Copied verbatim from https://chatgpt.com/oauth/<id>/client.json on
+    // 2026-09-13, the document that was being refused. Kept whole rather than
+    // reduced to the one field, because the point is that a real connector's
+    // document passes end to end, not that one branch returns true.
+    const chatgpt = "https://chatgpt.com/oauth/09QNletoUsmb/client.json";
+    const result = validateClientMetadata(chatgpt, {
+      client_id: chatgpt,
+      client_uri: "https://chatgpt.com/",
+      redirect_uris: ["https://chatgpt.com/connector/oauth/09QNletoUsmb"],
+      token_endpoint_auth_method: "private_key_jwt",
+      token_endpoint_auth_methods_supported: ["none", "private_key_jwt"],
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      client_name: "ChatGPT",
+      logo_uri: "https://persistent.oaistatic.com/sonic/misc/openai-logo.png",
+      token_endpoint_auth_signing_alg: "RS256",
+      jwks_uri: "https://chatgpt.com/oauth/jwks.json",
+    });
+    expect(result).toEqual({
+      ok: true,
+      client: {
+        clientId: chatgpt,
+        clientName: "ChatGPT",
+        redirectUris: ["https://chatgpt.com/connector/oauth/09QNletoUsmb"],
+      },
+    });
   });
 
   it("names the absence when a document has no client_name", () => {
