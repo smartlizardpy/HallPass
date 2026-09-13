@@ -1,8 +1,8 @@
 /**
- * HallPass — the bug MCP's tool surface.
+ * HallPass — the MCP's tool surface.
  *
- * SERVER-ONLY, because every tool body reaches `bugs.ts` and therefore the live
- * database. `config.ts` and `report-view.ts` hold the parts worth unit-testing;
+ * SERVER-ONLY, because every tool body reaches `bugs.ts` or `tracker.ts` and
+ * therefore the live database. `config.ts` and `report-view.ts` hold the parts worth unit-testing;
  * this module is wiring, and its correctness is mostly a question of whether the
  * descriptions tell an agent the truth.
  *
@@ -37,14 +37,24 @@
  * the handlers, rather than inside `bugs.ts`: that module's stated virtue is
  * that it adds no SQL and no arithmetic of its own, and a cross-cutting concern
  * threaded through its five functions would also be a concern the sixth one
- * added later quietly forgets. The one exception is a SUCCESSFUL
- * `finish_agent_activity`, which clears the feed; see {@link logged}.
+ * added later quietly forgets. `tracker.ts` was that sixth thing, and it
+ * inherited the trail without a line of its own. The one exception is a
+ * SUCCESSFUL `finish_agent_activity`, which clears the feed; see
+ * {@link logged}.
  */
 
 import "server-only";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { BUG_SEVERITIES, REPORT_KINDS, REPORT_STATUSES } from "@/app/lib/beta/config";
+import {
+  STATUS_HINT,
+  STATUS_LABEL,
+  TAG_PATTERN,
+  TITLE_MAX,
+  TRACKER_STATUSES,
+  UPDATE_BODY_MAX,
+} from "@/app/lib/tracker/config";
 import type { McpActor } from "./actor";
 import { registerAnalyticsTools } from "./analytics/tools";
 import { SUMMARY_MAX, describeToolCall, describeToolFailure } from "./activity";
@@ -57,9 +67,18 @@ import {
   triageBugReport,
 } from "./bugs";
 import {
+  commentOnTrackerItem,
+  createTrackerItem,
+  getTrackerItem,
+  listTrackerItems,
+  moveTrackerItem,
+} from "./tracker";
+import {
   ACTIVITY_IDLE_MINUTES,
   DEFAULT_REPORT_LIMIT,
+  DEFAULT_TRACKER_LIMIT,
   MAX_REPORT_LIMIT,
+  MAX_TRACKER_LIMIT,
   MCP_ANALYTICS_SERVER_NAME,
   MCP_SERVER_NAME,
   MCP_SERVER_VERSION,
@@ -100,6 +119,29 @@ const severityOverride = severityEnum
       "award is priced from. Ignored for feature requests, which never carry a " +
       "severity. Omit to keep the tester's own value.",
   );
+
+/**
+ * The tracker's own vocabulary, built from `tracker/config.ts` for exactly the
+ * reason the beta enums above are built from `beta/config.ts`: a lane added
+ * there must not need an edit here, and a hand-written list would fail at the
+ * `tracker_items_status_check` CHECK on a call this schema had already accepted.
+ */
+const trackerStatusEnum = z.enum(TRACKER_STATUSES);
+
+/**
+ * A positive tracker item id.
+ *
+ * NAMED `itemId`, NEVER `id`, and that is load-bearing rather than tidy. The
+ * activity feed reads the subject of a line off the argument name — `id` is a
+ * bug report, `itemId` is a tracker item (`activity.ts`) — so a tracker tool
+ * that called this `id` would file its lines against a bug report with the same
+ * number, and the board's green marker would never light at all.
+ */
+const trackerItemId = z
+  .number()
+  .int()
+  .positive()
+  .describe("The tracker item's numeric id, as returned by list_tracker_items.");
 
 /** JSON in a text block — what every tool here answers with. */
 function json(value: unknown) {
@@ -168,6 +210,31 @@ const BUG_INSTRUCTIONS =
   "other tool here only tells them WHAT you did, never why. When ALL of " +
   "your work is done, call finish_agent_activity once: it clears that " +
   "feed, which is how the operator knows nothing is running any more.";
+
+/**
+ * The tracker half of what a secret-holder is told.
+ *
+ * Its own constant rather than more sentences on {@link BUG_INSTRUCTIONS},
+ * because it is a different board with a different job and the two are already
+ * the thing most worth keeping apart. The rules it states — move it when it is
+ * true, comment for next week, narrate for right now — are the ones nothing
+ * else can enforce: `agent-activity-design.md` §2 makes the point that a tool
+ * whose entire value is that it gets called at all lives or dies by this
+ * string.
+ */
+const TRACKER_INSTRUCTIONS =
+  "The project tracker is the board where this site's admins paste in what " +
+  "they want built. Before you start a piece of work, call list_tracker_items " +
+  "and get_tracker_item: the brief is the specification and the comments are " +
+  "what earlier sessions found out. When you actually begin, " +
+  "move_tracker_item to \"building\" — that is how the operator knows, and it " +
+  "puts a live marker on their board for as long as you keep saying something " +
+  "about the item. Move it to \"shipped\" only once the change is really live. " +
+  "Use comment_on_tracker_item for what somebody reading the item next week " +
+  "needs to know, and log_agent_activity for the running commentary: the " +
+  "comment is permanent and the feed is deleted when you finish. Pass the " +
+  "item's id to log_agent_activity as `itemId` while you are working on it, so " +
+  "the marker stays lit.";
 
 const ANALYTICS_INSTRUCTIONS =
   "Read-only analytics for the HallPass arcade, for the signed-in dashboard " +
@@ -318,6 +385,8 @@ function registerBugTools(server: McpServer): void {
         "when you are about to make a change — one short sentence each time. " +
         "Every other tool records only its own mechanics, so this is the only " +
         "way anything you REASONED about reaches the person running the site. " +
+        "If the work is against a tracker item, pass its id as `itemId` every " +
+        "time: that is what keeps the live marker lit beside it on the board. " +
         "Writes nothing to any report and pays nobody.",
       inputSchema: {
         summary: z
@@ -334,7 +403,16 @@ function registerBugTools(server: McpServer): void {
           .int()
           .positive()
           .optional()
-          .describe("The report this is about, if it is about one."),
+          .describe("The bug report this is about, if it is about one."),
+        itemId: trackerItemId
+          .optional()
+          .describe(
+            "The TRACKER ITEM this is about, if it is about one. Pass it on " +
+              "every line while you are working on that item: it is what keeps " +
+              "the live marker lit beside the item on the operator's board, and " +
+              "the marker goes out when you stop mentioning it. Not the same " +
+              "number as reportId — pass both if the line is about both.",
+          ),
         slug: z
           .string()
           .optional()
@@ -346,8 +424,8 @@ function registerBugTools(server: McpServer): void {
       // submit to be absorbed.
       annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async ({ summary, reportId, slug }) =>
-      logged("log_agent_activity", { summary, reportId, slug }, async () => ({
+    async ({ summary, reportId, itemId, slug }) =>
+      logged("log_agent_activity", { summary, reportId, itemId, slug }, async () => ({
         // Echoed back rather than answered with a bare "ok": the agent sees
         // exactly what was recorded, including any truncation, and the feed
         // takes its line from the same string.
@@ -393,12 +471,203 @@ function registerBugTools(server: McpServer): void {
 }
 
 /**
+ * Register the five project-tracker tools.
+ *
+ * @see `tracker-mcp-design.md` §3 for the table this mirrors.
+ *
+ * A SECOND BOARD, WITH A SECOND VOCABULARY. These sit beside the bug tools for
+ * the same credential, and the descriptions have to keep the two apart: a
+ * "report" is a bug a child filed against a game, an "item" is a piece of work
+ * an admin asked for. The one place that distinction is most likely to be lost
+ * is an id, which is why every tool here takes `itemId` — see
+ * {@link trackerItemId}.
+ *
+ * NOTHING HERE DELETES ANYTHING, and the absence is the design. The bug tools
+ * carry two destructive closers because a fixed report genuinely has nothing
+ * left to do; archiving or deleting a tracker item is a curation decision a
+ * human makes on the board, behind a disclosure that names what is lost.
+ * `tracker-mcp-design.md` §8.
+ */
+function registerTrackerTools(server: McpServer): void {
+  server.registerTool(
+    "list_tracker_items",
+    {
+      title: "List what is on the project tracker",
+      description:
+        "The project board: what the site's admins have asked to be built, and " +
+        "where each of those things has got to. Read this before starting work " +
+        "and before proposing any — it is the record of what is wanted, what is " +
+        "already being built and what was declined. Returns summaries only; " +
+        "call get_tracker_item for the brief that says what the thing actually " +
+        "is. Archived items are not listed.",
+      inputSchema: {
+        status: trackerStatusEnum
+          .optional()
+          .describe(
+            `Only this lane. ${TRACKER_STATUSES.map(
+              (status) => `"${status}" — ${STATUS_HINT[status].toLowerCase()}`,
+            ).join("; ")}.`,
+          ),
+        tag: z
+          .string()
+          .optional()
+          .describe('Only items carrying this tag, e.g. "pwa" or "mobile".'),
+        limit: z
+          .number()
+          .int()
+          .optional()
+          .describe(
+            `How many to return. Default ${DEFAULT_TRACKER_LIMIT}, maximum ${MAX_TRACKER_LIMIT}. ` +
+              "The answer's `total` says how many matched, whether or not they all fit.",
+          ),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ status, tag, limit }) =>
+      logged("list_tracker_items", { status, tag, limit }, () =>
+        listTrackerItems({ status, tag, limit }),
+      ),
+  );
+
+  server.registerTool(
+    "get_tracker_item",
+    {
+      title: "Read one tracker item",
+      description:
+        "Everything about one item: the BRIEF — what an admin pasted in when " +
+        "they asked for it, which is the specification — its lane, its tags, " +
+        "and the newest comments on it. Read the comments as well as the " +
+        "brief: they are where an earlier session recorded what it tried and " +
+        "why it did not work.",
+      inputSchema: { itemId: trackerItemId },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ itemId }) =>
+      logged("get_tracker_item", { itemId }, () => getTrackerItem(itemId), {
+        render: (item) =>
+          item ?? { error: `Tracker item ${itemId} does not exist.` },
+      }),
+  );
+
+  server.registerTool(
+    "move_tracker_item",
+    {
+      title: "Move a tracker item to another lane",
+      description:
+        "Change which lane an item sits in. This is the board's answer to " +
+        "\"what is being built right now\", and the site operator reads it as a " +
+        `statement of fact — so move an item to "building" when you ACTUALLY ` +
+        `start work on it, and to "shipped" only once the change is live. ` +
+        "While you are in a lane, the item shows a live marker on the " +
+        "operator's board for as long as you keep saying something about it. " +
+        `Lanes: ${TRACKER_STATUSES.map(
+          (status) => `"${status}" (${STATUS_LABEL[status]}) — ${STATUS_HINT[status].toLowerCase()}`,
+        ).join("; ")}. Nothing is deleted and a move can be undone by moving it back.`,
+      inputSchema: {
+        itemId: trackerItemId,
+        status: trackerStatusEnum.describe("The lane to move it to."),
+      },
+      // Writes, and reversible: the row survives, and moving it back restores
+      // the previous lane. Idempotent because moving an item to the lane it is
+      // already in is a no-op the store handles rather than a second write.
+      annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ itemId, status }) =>
+      logged("move_tracker_item", { itemId, status }, () =>
+        moveTrackerItem({ itemId, status }),
+      ),
+  );
+
+  server.registerTool(
+    "comment_on_tracker_item",
+    {
+      title: "Comment on a tracker item",
+      description:
+        "Post a note on the item, where it stays forever, beside the notes the " +
+        "admins write themselves. THIS IS NOT log_agent_activity: that feed is " +
+        "a live view of the session you are in and is deleted when you finish, " +
+        "while a comment here is read next week by somebody deciding what " +
+        "happened. So write what a person needs to KNOW — what you built, what " +
+        "you could not, what you found out that changes the ask — and leave the " +
+        "running narration to log_agent_activity. One comment when you finish a " +
+        "piece of work beats ten while you do it.",
+      inputSchema: {
+        itemId: trackerItemId,
+        body: z
+          .string()
+          .min(1)
+          .max(UPDATE_BODY_MAX)
+          .describe(
+            "The note, in plain text. Newlines are kept; it is never rendered " +
+              "as HTML or markdown.",
+          ),
+      },
+      // Appends a row to a thread. Nothing is overwritten and the item is
+      // untouched, so it is additive; not idempotent because two identical
+      // notes are two real moments, not a double submit to be absorbed.
+      annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ itemId, body }) =>
+      logged("comment_on_tracker_item", { itemId, body }, () =>
+        commentOnTrackerItem({ itemId, body }),
+      ),
+  );
+
+  server.registerTool(
+    "create_tracker_item",
+    {
+      title: "Put a new item on the tracker",
+      description:
+        "Paste a new piece of work onto the board — follow-up work you found, " +
+        "or something worth doing that nobody has asked for yet. It lands in " +
+        `the "new" lane, which is where an admin triages it: creating an item ` +
+        "is proposing work, not scheduling it. Put the whole of what you know " +
+        "in the brief, the way a person pasting a spec would; it is what " +
+        "somebody reads to decide.",
+      inputSchema: {
+        title: z
+          .string()
+          .min(1)
+          .max(TITLE_MAX)
+          .describe("One line, what the thing is. Shown on the card."),
+        brief: z
+          .string()
+          .optional()
+          .describe(
+            "The detail: what is wanted and why, in plain text. Long is fine — " +
+              "this is the field somebody pastes a whole spec into.",
+          ),
+        tags: z
+          .array(z.string())
+          .optional()
+          .describe(
+            `Optional labels, lowercase and hyphenated (${TAG_PATTERN.source}), e.g. ` +
+              '["pwa", "mobile"]. Anything unusable is dropped rather than ' +
+              "failing the call.",
+          ),
+      },
+      annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ title, brief, tags }) =>
+      logged("create_tracker_item", { title, brief, tags }, () =>
+        createTrackerItem({ title, brief, tags }),
+      ),
+  );
+}
+
+/**
  * Build the server this caller gets.
  *
  * ONE ENDPOINT, TWO CREDENTIALS, TWO TOOL LISTS. A holder of `MCP_SECRET` gets
- * exactly what it always got — the seven bug tools — plus the analytics ones,
+ * the seven bug tools, the five project-tracker ones, and the analytics ones,
  * which are read-only and cost it nothing. An OAuth caller gets the analytics
  * tools ONLY.
+ *
+ * The tracker tools are on the secret's side of that line for a second reason
+ * beyond the one below: they include moving a lane, which `tracker/config.ts`
+ * restricts to `super_admin` because the status is a claim only whoever is
+ * building can make truthfully. `mcp/tracker.ts`'s header argues why a machine
+ * holding the secret satisfies that and a signed-in reader does not.
  *
  * Withholding the bug tools from a signed-in person looks backwards until you
  * read `bug-mcp-design.md` §3, which skipped `assertNotOwnWork` — the guard
@@ -428,12 +697,15 @@ export function createMcpServer(
     },
     {
       instructions: isSecret
-        ? `${BUG_INSTRUCTIONS}\n\n${ANALYTICS_INSTRUCTIONS}`
+        ? `${BUG_INSTRUCTIONS}\n\n${TRACKER_INSTRUCTIONS}\n\n${ANALYTICS_INSTRUCTIONS}`
         : ANALYTICS_INSTRUCTIONS,
     },
   );
 
-  if (isSecret) registerBugTools(server);
+  if (isSecret) {
+    registerBugTools(server);
+    registerTrackerTools(server);
+  }
   registerAnalyticsTools(server, { sendWidgets });
 
   return server;

@@ -26,15 +26,26 @@
  * indistinguishable from a return value alone, which is why `isTrackerReady()`
  * is a separate probe. Any OTHER error is rethrown: a real Neon outage must not
  * be disguised as "nobody has pasted anything in yet".
+ *
+ * THE GREEN MARKERS ARE THE ONE LIVE THING HERE. `AgentWatch` wraps the lanes
+ * and polls for which items an MCP agent is working on right now
+ * (`tracker-mcp-design.md` §5). The board itself is still entirely
+ * server-rendered — the provider takes `children` — and the markers are seeded
+ * from this render, so a browser with no JavaScript sees the state at load and
+ * nothing breaks.
  */
 
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
+import { getLiveTrackerActivity } from "@/app/lib/beta";
+import { ITEM_WORK_TOOLS } from "@/app/lib/mcp/activity";
+import { ACTIVITY_IDLE_MINUTES } from "@/app/lib/mcp/config";
 import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { getBoard, getTags, isTrackerReady } from "@/app/lib/tracker";
 import { TRACKER_STATUSES } from "@/app/lib/tracker/config";
 import { Section } from "../_ui/Section";
+import { AgentWatch } from "./_ui/AgentWatch";
 import { ItemCard } from "./_ui/ItemCard";
 import { Lane } from "./_ui/Lane";
 import { PRIMARY_BUTTON, ResultBanner, TagChip } from "./_ui/Chips";
@@ -74,7 +85,16 @@ export default async function TrackerBoardPage({
     );
   }
 
-  const [cards, tags] = await Promise.all([getBoard(), getTags()]);
+  const [cards, tags, live] = await Promise.all([
+    getBoard(),
+    getTags(),
+    // Seeds the markers so they are right before any JavaScript runs, and stay
+    // right if none ever does. The provider polls on from there.
+    getLiveTrackerActivity({
+      idleMinutes: ACTIVITY_IDLE_MINUTES,
+      tools: ITEM_WORK_TOOLS,
+    }),
+  ]);
   const visible = tag ? cards.filter((card) => card.tags.includes(tag)) : cards;
 
   return (
@@ -123,21 +143,28 @@ export default async function TrackerBoardPage({
           </p>
         </Section>
       ) : (
-        // Horizontally scrolling columns on desktop, a vertical stack on a
-        // phone. `overflow-x-auto` sits here rather than on the page so the
-        // dashboard shell never scrolls sideways as a whole.
-        <div className="flex flex-col gap-3 md:flex-row md:overflow-x-auto md:pb-2">
-          {TRACKER_STATUSES.map((status) => {
-            const inLane = visible.filter((card) => card.status === status);
-            return (
-              <Lane key={status} status={status} count={inLane.length}>
-                {inLane.map((card) => (
-                  <ItemCard key={card.id} card={card} />
-                ))}
-              </Lane>
-            );
-          })}
-        </div>
+        // Every lane and card below stays server-rendered: `AgentWatch` is a
+        // Client Component taking `children`, which is the documented way to
+        // wrap a server tree in context, so the green markers cost one poll for
+        // the whole board rather than one per card.
+        //
+        // Inside it, horizontally scrolling columns on desktop and a vertical
+        // stack on a phone. `overflow-x-auto` sits on that div rather than on
+        // the page so the dashboard shell never scrolls sideways as a whole.
+        <AgentWatch initial={live}>
+          <div className="flex flex-col gap-3 md:flex-row md:overflow-x-auto md:pb-2">
+            {TRACKER_STATUSES.map((status) => {
+              const inLane = visible.filter((card) => card.status === status);
+              return (
+                <Lane key={status} status={status} count={inLane.length}>
+                  {inLane.map((card) => (
+                    <ItemCard key={card.id} card={card} />
+                  ))}
+                </Lane>
+              );
+            })}
+          </div>
+        </AgentWatch>
       )}
     </div>
   );

@@ -33,6 +33,14 @@
  * reachable endpoint. Both halves read `canMoveStatus`/`canDeleteItem` from
  * `tracker/config` so they cannot drift from the guards.
  *
+ * TWO THINGS ON THIS PAGE COME FROM AN AGENT. A live banner at the top says one
+ * is working on this item right now, polled by the same provider the board uses
+ * (`tracker-mcp-design.md` §5) and absent the rest of the time. And a comment
+ * posted through the MCP appears in Updates like any other, labelled: it is a
+ * COMMENT rather than a log line, which is the distinction the whole feature
+ * turns on — the agent's running narration is on `/dashboard/beta` and is
+ * deleted when its run ends, while this thread is kept.
+ *
  * A missing item is a `notFound()`, not an empty page. A database with no
  * migration 021 reaches here as a missing item too, which is acceptable on a
  * detail route: the BOARD is the surface that explains the missing migration,
@@ -43,6 +51,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
+import { getLiveTrackerActivity } from "@/app/lib/beta";
+import { ITEM_WORK_TOOLS } from "@/app/lib/mcp/activity";
+import { ACTIVITY_IDLE_MINUTES, mcpActor } from "@/app/lib/mcp/config";
 import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { getEvents, getItem, getUpdates } from "@/app/lib/tracker";
 import {
@@ -57,6 +68,7 @@ import {
   canMoveStatus,
 } from "@/app/lib/tracker/config";
 import { Section } from "../../_ui/Section";
+import { AgentBanner, AgentWatch } from "../_ui/AgentWatch";
 import {
   PRIMARY_BUTTON,
   ResultBanner,
@@ -134,7 +146,22 @@ export default async function TrackerItemPage({
   const item = await getItem(id);
   if (!item) notFound();
 
-  const [updates, events] = await Promise.all([getUpdates(id), getEvents(id)]);
+  const [updates, events, live] = await Promise.all([
+    getUpdates(id),
+    getEvents(id),
+    // Seeds the live banner, so it is right before any JavaScript runs.
+    // Narrowed to THIS item: the read answers for every item an agent has
+    // touched lately, and handing the rest of them to a client component would
+    // put the state of the whole board in one item page's flight data.
+    getLiveTrackerActivity({
+      idleMinutes: ACTIVITY_IDLE_MINUTES,
+      tools: ITEM_WORK_TOOLS,
+    }).then((rows) => rows.filter((row) => row.itemId === id)),
+  ]);
+
+  // Read from the same function the MCP writes with, so a deployment that sets
+  // `MCP_ACTOR` does not silently stop recognising its own agent's comments.
+  const agentActor = mcpActor();
 
   return (
     <div className="flex flex-col gap-4">
@@ -149,6 +176,12 @@ export default async function TrackerItemPage({
       </div>
 
       <ResultBanner ok={ok} error={error} />
+
+      {/* Renders nothing unless an agent is on this item right now. The
+          provider polls; see `_ui/AgentWatch.tsx`. */}
+      <AgentWatch initial={live}>
+        <AgentBanner itemId={item.id} />
+      </AgentWatch>
 
       {item.archivedAt && (
         <Section title="Archived">
@@ -321,19 +354,38 @@ export default async function TrackerItemPage({
           </p>
         ) : (
           <ul className="flex flex-col gap-3">
-            {updates.map((update) => (
-              <li
-                key={update.id}
-                className="rounded-lg border border-border bg-surface-2/40 p-3"
-              >
-                <p className="whitespace-pre-wrap break-words text-sm text-foreground">
-                  {update.body}
-                </p>
-                <p className="mt-2 text-xs text-muted">
-                  {update.authorEmail} · {stamp(update.createdAt)}
-                </p>
-              </li>
-            ))}
+            {updates.map((update) => {
+              // An agent's note is a comment like any other — permanent, in the
+              // thread, beside the ones people write. It is LABELLED because
+              // `mcp@hallpass.invalid` rendered plainly reads as an admin
+              // nobody recognises, and because knowing a machine wrote it is
+              // part of knowing how much to trust it.
+              const byAgent = update.authorEmail === agentActor;
+              return (
+                <li
+                  key={update.id}
+                  className={
+                    byAgent
+                      ? "rounded-lg border border-emerald-200 bg-emerald-50/50 p-3"
+                      : "rounded-lg border border-border bg-surface-2/40 p-3"
+                  }
+                >
+                  <p className="whitespace-pre-wrap break-words text-sm text-foreground">
+                    {update.body}
+                  </p>
+                  <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                    {byAgent && (
+                      <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-emerald-900">
+                        Agent
+                      </span>
+                    )}
+                    <span>
+                      {update.authorEmail} · {stamp(update.createdAt)}
+                    </span>
+                  </p>
+                </li>
+              );
+            })}
           </ul>
         )}
       </Section>

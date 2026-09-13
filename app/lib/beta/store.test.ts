@@ -618,7 +618,7 @@ describe("agent activity", () => {
     });
     expect(calls).toHaveLength(1);
     const text = flat(calls[0].text);
-    expect(text).toContain("WITH logged AS ( INSERT INTO beta_agent_activity");
+    expect(text).toContain("logged AS ( INSERT INTO beta_agent_activity");
     expect(text).toContain("DELETE FROM beta_agent_activity WHERE created_at <");
   });
 
@@ -640,11 +640,17 @@ describe("agent activity", () => {
       idleMinutes: 30,
     });
     expect(calls).toHaveLength(1);
-    expect(flat(calls[0].text)).toContain(
-      "OR NOT EXISTS ( SELECT 1 FROM beta_agent_activity WHERE created_at > now() - make_interval(mins => ?) )",
+    const text = flat(calls[0].text);
+    // The quiet check is computed ONCE and spent twice — by the sweep and by
+    // the returned flag — so a run cannot be reset without being announced, or
+    // announced without being reset.
+    expect(text).toContain(
+      "WITH began AS ( SELECT NOT EXISTS ( SELECT 1 FROM beta_agent_activity WHERE created_at > now() - make_interval(mins => ?) ) AS started )",
     );
-    // Position 7 is the idle window, after the six VALUES and the retention.
-    expect(calls[0].values[7]).toBe(30);
+    expect(text).toContain("OR (SELECT started FROM began)");
+    expect(text).toContain("SELECT began.started, logged.id FROM began, logged");
+    // Position 0 now: the idle window is asked before the row is written.
+    expect(calls[0].values[0]).toBe(30);
   });
 
   it("floors the idle window to a whole minute, and never to zero", async () => {
@@ -655,8 +661,8 @@ describe("agent activity", () => {
     // the feed on every line.
     await store.logAgentActivity({ ...line, idleMinutes: 12.7 });
     await store.logAgentActivity({ ...line, idleMinutes: 0 });
-    expect(calls[0].values[7]).toBe(12);
-    expect(calls[1].values[7]).toBe(1);
+    expect(calls[0].values[0]).toBe(12);
+    expect(calls[1].values[0]).toBe(1);
   });
 
   it("truncates an over-long summary rather than failing the CHECK", async () => {
@@ -672,9 +678,9 @@ describe("agent activity", () => {
     expect(calls[0].values).toContain("x".repeat(300));
   });
 
-  it("writes nothing at all for a blank summary", async () => {
+  it("writes nothing at all for a blank summary, and starts no run", async () => {
     const { sql, calls } = makeFakeSql();
-    await createBetaStore(sql).logAgentActivity({
+    const result = await createBetaStore(sql).logAgentActivity({
       actor: "a",
       tool: "log_agent_activity",
       outcome: "ok",
@@ -683,6 +689,9 @@ describe("agent activity", () => {
       idleMinutes: 30,
     });
     expect(calls).toHaveLength(0);
+    // A line that was never written cannot be the one that began a run — which
+    // would otherwise buzz an admin's phone about an agent that said nothing.
+    expect(result).toEqual({ started: false, id: null });
   });
 
   it("nulls a report id that is not a positive integer", async () => {
@@ -696,9 +705,82 @@ describe("agent activity", () => {
       retainDays: 14,
       idleMinutes: 30,
     });
-    // Position 3 is `report_id` in the VALUES list. A negative id would fail the
-    // CHECK, and failing a LOG write is not worth failing a tool call over.
-    expect(calls[0].values[3]).toBeNull();
+    // Position 4 is `report_id` in the VALUES list, after the idle window. A
+    // negative id would fail the CHECK, and failing a LOG write is not worth
+    // failing a tool call over.
+    expect(calls[0].values[4]).toBeNull();
+  });
+
+  /**
+   * The tracker id gets the same treatment as the report id, and this is worth
+   * its own test rather than trusting the shared helper: the two columns carry
+   * the same `> 0` CHECK, and an agent that passed `itemId: 0` for "no item"
+   * would otherwise fail a constraint several layers below its mistake.
+   */
+  it("nulls a tracker item id that is not a positive integer", async () => {
+    const { sql, calls } = makeFakeSql();
+    await createBetaStore(sql).logAgentActivity({
+      actor: "a",
+      tool: "move_tracker_item",
+      outcome: "ok",
+      trackerItemId: 0,
+      summary: "moved something",
+      retainDays: 14,
+      idleMinutes: 30,
+    });
+    // Position 5, straight after `report_id`.
+    expect(calls[0].values[5]).toBeNull();
+  });
+
+  /** Both ids at once is the case migration 033 deliberately allows. */
+  it("carries a report id and a tracker item id together", async () => {
+    const { sql, calls } = makeFakeSql();
+    await createBetaStore(sql).logAgentActivity({
+      actor: "a",
+      tool: "log_agent_activity",
+      outcome: "ok",
+      reportId: 42,
+      trackerItemId: 7,
+      summary: "fixing report 42, which is tracker item 7",
+      retainDays: 14,
+      idleMinutes: 30,
+    });
+    expect(calls[0].values[4]).toBe(42);
+    expect(calls[0].values[5]).toBe(7);
+  });
+
+  /**
+   * The flag the run-start notification is built on
+   * (`agent-activity-design.md` §12). It is the sweep's own question, answered
+   * once, so a line cannot reset a quiet run without announcing that it started
+   * one — or announce one it did not start.
+   */
+  it("says whether the line started a run, and which line it was", async () => {
+    const started = makeFakeSql(() => [{ started: true, id: "91" }]);
+    await expect(
+      createBetaStore(started.sql).logAgentActivity({
+        actor: "a",
+        tool: "log_agent_activity",
+        outcome: "ok",
+        summary: "picking up the open queue",
+        retainDays: 14,
+        idleMinutes: 30,
+      }),
+      // The id is what the run-start notification is keyed on, so a retried
+      // delivery is absorbed and two runs a minute apart are still two.
+    ).resolves.toEqual({ started: true, id: 91 });
+
+    const continued = makeFakeSql(() => [{ started: false, id: "92" }]);
+    await expect(
+      createBetaStore(continued.sql).logAgentActivity({
+        actor: "a",
+        tool: "log_agent_activity",
+        outcome: "ok",
+        summary: "still on it",
+        retainDays: 14,
+        idleMinutes: 30,
+      }),
+    ).resolves.toEqual({ started: false, id: 92 });
   });
 
   it("reads newest first, which is what the recent index serves", async () => {
@@ -714,7 +796,7 @@ describe("agent activity", () => {
         created_at: "2026-01-01T00:00:00.000Z",
       },
     ]);
-    const rows = await createBetaStore(sql).recentAgentActivity({ limit: 5, idleMinutes: 30 });
+    const rows = await createBetaStore(sql).recentAgentActivity({ limit: 5, idleMinutes: 30, includeTracker: true });
     expect(flat(calls[0].text)).toContain("ORDER BY created_at DESC, id DESC");
     expect(rows[0]).toMatchObject({ id: 7, tool: "list_bug_reports", reportId: null });
   });
@@ -726,7 +808,7 @@ describe("agent activity", () => {
    */
   it("answers nothing once the run has gone quiet", async () => {
     const { sql, calls } = makeFakeSql();
-    await createBetaStore(sql).recentAgentActivity({ limit: 5, idleMinutes: 30 });
+    await createBetaStore(sql).recentAgentActivity({ limit: 5, idleMinutes: 30, includeTracker: true });
     expect(flat(calls[0].text)).toContain(
       "WHERE EXISTS ( SELECT 1 FROM beta_agent_activity WHERE created_at > now() - make_interval(mins => ?) )",
     );
@@ -738,6 +820,66 @@ describe("agent activity", () => {
    * every agent writes the same actor — and counted in SQL, so a long run's ids
    * never cross the wire just to be counted.
    */
+  /**
+   * The panel this read feeds lives on `/dashboard/beta`, which a `beta_admin`
+   * can open, while the tracker board is `admin` and up. So a viewer who cannot
+   * open the board must not read it here either — a permission expressed as a
+   * WHERE clause, asserted because it is invisible in the returned rows.
+   */
+  it("hides tracker lines from a viewer who may not read the board", async () => {
+    const { sql, calls } = makeFakeSql();
+    const store = createBetaStore(sql);
+    await store.recentAgentActivity({ idleMinutes: 30, includeTracker: false });
+    await store.recentAgentActivity({ idleMinutes: 30, includeTracker: true });
+    expect(flat(calls[0].text)).toContain("AND tracker_item_id IS NULL");
+    expect(flat(calls[1].text)).not.toContain("AND tracker_item_id IS NULL");
+  });
+
+  /**
+   * The board's green marker. The invariant lives entirely in the SQL text:
+   * `DISTINCT ON (tracker_item_id)` with the item first in the ORDER BY is what
+   * makes this one line PER ITEM rather than the run's newest lines, and the
+   * WHERE ages each of those lines on its own. Lose either and an agent that
+   * moved from item 5 to item 7 leaves item 5 glowing.
+   */
+  it("takes the newest line per tracker item, aged individually", async () => {
+    const { sql, calls } = makeFakeSql(() => [
+      {
+        tracker_item_id: "12",
+        actor: "mcp@hallpass.invalid",
+        tool: "move_tracker_item",
+        outcome: "ok",
+        summary: "Moved #12 to building",
+        created_at: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+    const rows = await createBetaStore(sql).liveTrackerActivity({ idleMinutes: 30, tools: ["move_tracker_item"] });
+    const text = flat(calls[0].text);
+    expect(text).toContain("SELECT DISTINCT ON (tracker_item_id)");
+    expect(text).toContain("WHERE tracker_item_id IS NOT NULL");
+    // Only the tools that mean work light the marker: reading ten briefs to
+    // pick one must not mark all ten as being built.
+    expect(text).toContain("AND tool = ANY(string_to_array(?, ','))");
+    expect(text).toContain("created_at > now() - make_interval(mins => ?)");
+    expect(text).toContain("ORDER BY tracker_item_id, created_at DESC, id DESC");
+    expect(rows[0]).toEqual({
+      itemId: 12,
+      actor: "mcp@hallpass.invalid",
+      tool: "move_tracker_item",
+      outcome: "ok",
+      summary: "Moved #12 to building",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("floors the marker's window the same way the insert does", async () => {
+    const { sql, calls } = makeFakeSql();
+    await createBetaStore(sql).liveTrackerActivity({ idleMinutes: 0, tools: ["move_tracker_item"] });
+    // Read and reset must never disagree about when a run went quiet, so both
+    // floor to at least one whole minute. Position 1, after the tool list.
+    expect(calls[0].values[1]).toBe(1);
+  });
+
   it("clears every line and says how many", async () => {
     const { sql, calls } = makeFakeSql(() => [{ cleared: 53 }]);
     await expect(createBetaStore(sql).clearAgentActivity()).resolves.toBe(53);

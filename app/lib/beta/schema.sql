@@ -211,6 +211,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS beta_xp_awards_shot_reason_uniq
 -- ON DELETE SET NULL would blank the subject of "marked report 42 fixed" in the
 -- same write that produced it, because that write is the one deleting report 42.
 --
+-- `tracker_item_id` (migration 033) is the same column for the project board: a
+-- line can be about a bug report, a tracker item, both, or neither. One table
+-- rather than two because the feed is a RUN with one ending, not just rows —
+-- see `tracker-mcp-design.md` §4, and the `beta_` prefix it admits is wrong.
+--
 -- Kept only while its run lasts: `finish_agent_activity` deletes the lines, and
 -- the first line after 30 quiet minutes deletes the previous run's. No line
 -- outlives 14 days either way (see store.ts, agent-activity-design.md §11).
@@ -221,11 +226,21 @@ CREATE TABLE IF NOT EXISTS beta_agent_activity (
   outcome    TEXT NOT NULL DEFAULT 'ok'
                CHECK (outcome IN ('ok','refused','failed')),
   report_id  BIGINT CHECK (report_id > 0),
+  tracker_item_id BIGINT
+               CONSTRAINT beta_agent_activity_tracker_item_id_check
+               CHECK (tracker_item_id IS NULL OR tracker_item_id > 0),
   slug       TEXT CHECK (slug ~ '^[a-z0-9][a-z0-9-]*$'),
   summary    TEXT NOT NULL CHECK (length(summary) BETWEEN 1 AND 300),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- The only read this table serves: the newest N lines.
+-- The newest N lines, for the dashboard panel.
 CREATE INDEX IF NOT EXISTS beta_agent_activity_recent_idx
   ON beta_agent_activity (created_at DESC);
+
+-- The newest line PER TRACKER ITEM, for the green "an agent is working on this"
+-- marker on the board. Partial: the bug lines are the majority and none of them
+-- is ever an answer to it.
+CREATE INDEX IF NOT EXISTS beta_agent_activity_tracker_idx
+  ON beta_agent_activity (tracker_item_id, created_at DESC)
+  WHERE tracker_item_id IS NOT NULL;

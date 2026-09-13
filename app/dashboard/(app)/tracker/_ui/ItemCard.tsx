@@ -13,10 +13,17 @@
  * board exists to answer is "what is happening with this", and a card that has
  * sat in `building` untouched for three weeks should look different from one
  * that moved yesterday.
+ *
+ * THE ONE LIVE THING ON IT is {@link AgentBadge}, a Client Component that reads
+ * the board's `AgentWatch` provider and renders nothing at all unless an agent
+ * is working on this item right now. A server component may render a client one
+ * freely; what it must not do is hold the polling itself, which is why the
+ * provider is one level up and shared by every card on the board.
  */
 
 import Link from "next/link";
 import type { TrackerCard } from "@/app/lib/tracker/store";
+import { AgentBadge } from "./AgentWatch";
 import { TagChip } from "./Chips";
 
 /**
@@ -59,6 +66,8 @@ export function ItemCard({ card }: { card: TrackerCard }) {
           ))}
         </div>
       )}
+
+      <AgentBadge itemId={card.id} />
 
       <p className="mt-2 text-xs text-muted">
         {card.updateCount > 0 && card.lastUpdateAt ? (

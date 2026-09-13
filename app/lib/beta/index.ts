@@ -36,6 +36,7 @@ import type {
   BetaReportWithAuthor,
   BetaShot,
   RosterEntry,
+  TrackerAgentActivity,
   XpAward,
 } from "./store";
 import { rankFor, type RankProgress } from "./xp";
@@ -54,6 +55,7 @@ export type {
   BetaStore,
   BetaTester,
   RosterEntry,
+  TrackerAgentActivity,
   XpAward,
 } from "./store";
 
@@ -247,11 +249,37 @@ export async function getReportQueue(): Promise<BetaReportWithAuthor[]> {
 export async function getAgentActivity(input: {
   limit?: number;
   idleMinutes: number;
+  /** Whether the viewer may see tracker lines. See `recentAgentActivity`. */
+  includeTracker: boolean;
 }): Promise<AgentActivity[]> {
   try {
     return await beta.recentAgentActivity(input);
   } catch (error) {
     return degrade("recentAgentActivity", error, []);
+  }
+}
+
+/**
+ * Which tracker items an agent has touched lately, for the board's green
+ * marker — one line per item, or nothing once its run has gone quiet
+ * (`tracker-mcp-design.md` §5).
+ *
+ * Fail-soft to `[]` for the same split {@link getAgentActivity} draws: this is
+ * the board's FIRST render, which has nothing better to show than an unmarked
+ * board when the feed cannot be read. The poll behind the marker reads the
+ * store directly and lets an error throw, because there an empty answer is the
+ * statement "no agent is working on this" and a database hiccup must not make
+ * it.
+ */
+export async function getLiveTrackerActivity(input: {
+  idleMinutes: number;
+  tools: readonly string[];
+  limit?: number;
+}): Promise<TrackerAgentActivity[]> {
+  try {
+    return await beta.liveTrackerActivity(input);
+  } catch (error) {
+    return degrade("liveTrackerActivity", error, []);
   }
 }
 

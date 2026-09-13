@@ -203,13 +203,19 @@ new server and transport are constructed per request for the same reason.
 
 ## 6. Deliberately absent
 
-- **`tracker_items`.** The site feature board is a different shape — lanes,
-  positions, briefs meant for a human reader — and the tracker's own schema
-  header draws exactly this line: "this tracker is for SITE features, and game
-  bugs already live in `beta_reports`." Adding it means deciding whether an agent
-  may move lanes, which `tracker/config.ts` restricts to `super_admin` with an
-  argument about who may truthfully claim "this is being built". One source, done
-  properly, first.
+- **`tracker_items`.** ~~The site feature board is a different shape~~ — **no
+  longer true; built in `tracker-mcp-design.md`.** The original reasoning, kept
+  because it is the question that got answered: the board is a different shape
+  (lanes, positions, briefs meant for a human reader), and "adding it means
+  deciding whether an agent may move lanes, which `tracker/config.ts` restricts
+  to `super_admin` with an argument about who may truthfully claim 'this is
+  being built'. One source, done properly, first."
+
+  One source was done properly, and the answer to the lane question turned out
+  to be that the rule is about KNOWLEDGE rather than about roles: only the party
+  doing the work can make that claim truthfully, and the agent holding the
+  secret is that party. See `tracker-mcp-design.md` §2, and `mcp/tracker.ts`'s
+  header.
 - **GitHub issues.** The `gh_repo` / `gh_issue_number` seam on `tracker_items` is
   still nullable and unused. Claude Code already has GitHub tools; an MCP that
   proxied them would be a second, worse way to do something that already works.
@@ -237,6 +243,10 @@ say what it is doing, and a seventh, `finish_agent_activity`, so it can say it
 has stopped; see `agent-activity-design.md`, which also explains why every call
 below is now recorded to the beta dashboard. Named so an agent can guess them,
 and shaped so the destructive ones read as destructive.
+
+The five tracker tools added later are a separate table, in
+`tracker-mcp-design.md` §3 — they share this server, this secret and this
+activity feed, and nothing else.
 
 | Tool | Writes? | What it does |
 |---|---|---|

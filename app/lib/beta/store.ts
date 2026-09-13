@@ -74,6 +74,19 @@ function toStrOrNull(value: unknown): string | null {
   return value == null ? null : String(value);
 }
 
+/**
+ * Narrow a caller-supplied row id to something the `> 0` CHECKs will accept, or
+ * to NULL.
+ *
+ * Used only by the agent feed, whose whole contract is that logging must never
+ * fail the tool call it is describing. A zero, a float or a negative arriving
+ * from an argument an agent invented is dropped here rather than failing a
+ * constraint several layers below the mistake.
+ */
+function positiveIdOrNull(value: number | null | undefined): number | null {
+  return value != null && Number.isInteger(value) && value > 0 ? value : null;
+}
+
 // ---------------------------------------------------------------------------
 // Shapes
 // ---------------------------------------------------------------------------
@@ -349,6 +362,10 @@ function mapAward(row: Row): XpAward {
  * reference: the write this row most often records is the one that DELETED that
  * report, so an FK with ON DELETE SET NULL would blank the subject of the
  * sentence as it was written (see migration 029).
+ *
+ * `trackerItemId` is the same column for the project board (migration 033). A
+ * line can carry either, both or neither — both is the case worth allowing,
+ * because "fixing report 42, which is tracker item 7" is one sentence.
  */
 export type AgentActivity = {
   id: number;
@@ -359,7 +376,26 @@ export type AgentActivity = {
   /** `refused` is a write whose WHERE matched nothing, not an error. */
   outcome: string;
   reportId: number | null;
+  /** The `tracker_items` row this line is about, when it is about one. */
+  trackerItemId: number | null;
   slug: string | null;
+  summary: string;
+  createdAt: string;
+};
+
+/**
+ * The newest line about ONE tracker item, which is what the board's green
+ * marker is: "an agent said something about this item, recently".
+ *
+ * Deliberately not `AgentActivity` with a non-null id. The panel on
+ * `/dashboard/beta` renders a run; this renders one claim per item, and it
+ * carries no `id` because nothing keys off a row here — the item is the key.
+ */
+export type TrackerAgentActivity = {
+  itemId: number;
+  actor: string;
+  tool: string;
+  outcome: string;
   summary: string;
   createdAt: string;
 };
@@ -371,6 +407,8 @@ function mapAgentActivity(row: Row): AgentActivity {
     tool: toStr(row.tool),
     outcome: toStr(row.outcome),
     reportId: row.report_id == null ? null : toInt(row.report_id),
+    trackerItemId:
+      row.tracker_item_id == null ? null : toInt(row.tracker_item_id),
     slug: toStrOrNull(row.slug),
     summary: toStr(row.summary),
     createdAt: toIso(row.created_at),
@@ -1267,7 +1305,8 @@ export function createBetaStore(sql: Sql) {
     // -----------------------------------------------------------------------
 
     /**
-     * Record one line of what the MCP agent did, and sweep the old ones.
+     * Record one line of what the MCP agent did, sweep the old ones, and say
+     * whether this line STARTED a run.
      *
      * ── THE SWEEP RIDES ON THE INSERT ─────────────────────────────────────
      * One row per tool call, so a working agent fills this table steadily and
@@ -1294,6 +1333,20 @@ export function createBetaStore(sql: Sql) {
      * being written either: it asks whether the PREVIOUS run went quiet,
      * which is exactly the question.
      *
+     * ── AND THAT ANSWER IS RETURNED, BECAUSE IT IS ALSO "A RUN STARTED" ────
+     * "The previous run was quiet" and "this line begins a new run" are the
+     * same sentence, so the flag is lifted into its own CTE, used by the sweep,
+     * and returned. One value, computed once: the reset and the notification
+     * that announces the run (`mcp/activity-log.ts`) cannot disagree about
+     * whether it began. A second statement asking again could not even be made
+     * to agree — the `neon()` driver is one request per call, so it would be a
+     * different snapshot.
+     *
+     * The sweep moves into a CTE of its own to make room for that. Postgres
+     * runs a data-modifying CTE exactly once and to completion whether or not
+     * the primary query reads its output, so the DELETE is not skippable for
+     * having stopped being the top-level statement.
+     *
      * ── THE CAPS ARE APPLIED HERE, NOT TRUSTED FROM THE CALLER ────────────
      * `summary` has a CHECK on it (1..300) and this is a logging path: a summary
      * one character too long must not turn into a failed tool call for the agent
@@ -1305,38 +1358,55 @@ export function createBetaStore(sql: Sql) {
       tool: string;
       outcome: string;
       reportId?: number | null;
+      /** The tracker item this is about, when it is about one (migration 033). */
+      trackerItemId?: number | null;
       slug?: string | null;
       summary: string;
       /** How long a line is kept. See migration 029. */
       retainDays: number;
       /** How long a quiet run survives before the next line resets it. */
       idleMinutes: number;
-    }): Promise<void> {
+    }): Promise<{ started: boolean; id: number | null }> {
       const summary = input.summary.trim().slice(0, 300);
-      if (!summary) return;
-      const reportId =
-        input.reportId != null && Number.isInteger(input.reportId) && input.reportId > 0
-          ? input.reportId
-          : null;
+      // Nothing was written, so nothing started. Reported rather than thrown:
+      // the caller is a logging path.
+      if (!summary) return { started: false, id: null };
+      const reportId = positiveIdOrNull(input.reportId);
+      // Narrowed exactly as `reportId` is, and for the same reason: both
+      // columns carry a CHECK that a zero or a float would fail, and a logging
+      // path must never turn a bad argument into a failed tool call.
+      const trackerItemId = positiveIdOrNull(input.trackerItemId);
       // Whole minutes, because `make_interval(mins => …)` takes an integer and a
       // fraction would fail the cast. At least one, because a zero window would
       // reset the feed on every line and it would only ever hold one.
       const idleMinutes = Math.max(1, Math.floor(input.idleMinutes));
-      await sql`
-        WITH logged AS (
+      const rows = await sql`
+        WITH began AS (
+          SELECT NOT EXISTS (
+            SELECT 1 FROM beta_agent_activity
+            WHERE created_at > now() - make_interval(mins => ${idleMinutes})
+          ) AS started
+        ), logged AS (
           INSERT INTO beta_agent_activity
-            (actor, tool, outcome, report_id, slug, summary)
+            (actor, tool, outcome, report_id, tracker_item_id, slug, summary)
           VALUES (${input.actor}, ${input.tool}, ${input.outcome},
-                  ${reportId}, ${input.slug ?? null}, ${summary})
+                  ${reportId}, ${trackerItemId}, ${input.slug ?? null}, ${summary})
+          RETURNING id
+        ), swept AS (
+          DELETE FROM beta_agent_activity
+          WHERE created_at < now() - make_interval(days => ${Math.max(1, input.retainDays)})
+             OR (SELECT started FROM began)
           RETURNING id
         )
-        DELETE FROM beta_agent_activity
-        WHERE created_at < now() - make_interval(days => ${Math.max(1, input.retainDays)})
-           OR NOT EXISTS (
-                SELECT 1 FROM beta_agent_activity
-                WHERE created_at > now() - make_interval(mins => ${idleMinutes})
-              )
+        SELECT began.started, logged.id FROM began, logged
       `;
+      // A cross join of two one-row CTEs, so exactly one row. The id is what
+      // the run-start notification is keyed on: a run has no id of its own, and
+      // the line that begins it is the closest thing there is to one.
+      return {
+        started: Boolean(rows[0]?.started),
+        id: rows[0]?.id == null ? null : toInt(rows[0].id),
+      };
     },
 
     /**
@@ -1355,21 +1425,113 @@ export function createBetaStore(sql: Sql) {
       limit?: number;
       /** A run with no line this recent is over. */
       idleMinutes: number;
+      /**
+       * Whether to show lines about TRACKER ITEMS as well as bug reports.
+       *
+       * Required rather than defaulted, because the answer is a permission and
+       * a default would be one surface silently deciding it for another. The
+       * feed is rendered on `/dashboard/beta`, which is `beta_admin` and up,
+       * while `/dashboard/tracker` is `admin` and up — so a tracker line on
+       * that panel would be the way a beta admin reads a roadmap they cannot
+       * open. The caller knows the role; this only knows the rows.
+       */
+      includeTracker: boolean;
     }): Promise<AgentActivity[]> {
       // Floored exactly as `logAgentActivity` floors it, so the read and the
       // reset can never disagree about when a run went quiet.
       const idleMinutes = Math.max(1, Math.floor(input.idleMinutes));
-      const rows = await sql`
-        SELECT id, actor, tool, outcome, report_id, slug, summary, created_at
-        FROM beta_agent_activity
-        WHERE EXISTS (
-          SELECT 1 FROM beta_agent_activity
-          WHERE created_at > now() - make_interval(mins => ${idleMinutes})
-        )
-        ORDER BY created_at DESC, id DESC
-        LIMIT ${Math.max(1, Math.min(100, input.limit ?? 20))}
-      `;
+      const limit = Math.max(1, Math.min(100, input.limit ?? 20));
+      // TWO FULLY-WRITTEN TEMPLATES rather than one with a boolean parameter or
+      // a spliced clause. It is the rule this module's header states for
+      // anything whose behaviour depends on a flag, and it is cheap here: the
+      // difference is one line, and neither version can be turned into the
+      // other by a value arriving from a caller.
+      const rows = input.includeTracker
+        ? await sql`
+            SELECT id, actor, tool, outcome, report_id, tracker_item_id, slug,
+                   summary, created_at
+            FROM beta_agent_activity
+            WHERE EXISTS (
+              SELECT 1 FROM beta_agent_activity
+              WHERE created_at > now() - make_interval(mins => ${idleMinutes})
+            )
+            ORDER BY created_at DESC, id DESC
+            LIMIT ${limit}
+          `
+        : await sql`
+            SELECT id, actor, tool, outcome, report_id, tracker_item_id, slug,
+                   summary, created_at
+            FROM beta_agent_activity
+            WHERE EXISTS (
+              SELECT 1 FROM beta_agent_activity
+              WHERE created_at > now() - make_interval(mins => ${idleMinutes})
+            )
+              AND tracker_item_id IS NULL
+            ORDER BY created_at DESC, id DESC
+            LIMIT ${limit}
+          `;
       return rows.map(mapAgentActivity);
+    },
+
+    /**
+     * The newest line about each tracker item an agent has touched lately —
+     * the board's green "working on this right now" marker.
+     *
+     * ── PER ITEM, NOT PER RUN ─────────────────────────────────────────────
+     * {@link recentAgentActivity} asks "has ANYTHING been written lately",
+     * because the panel it feeds shows one run. This asks it per item, and the
+     * difference is load-bearing: an agent that spent an hour on item 5 and
+     * then moved to item 7 must not leave item 5 marked. `DISTINCT ON` takes
+     * each item's own newest line and the WHERE judges that line on its own
+     * age.
+     *
+     * Judged by the database's `now()`, never a browser's, for the reason
+     * {@link recentAgentActivity} already gives: a laptop clock a few minutes
+     * out would close a live run early or hold a dead one open.
+     *
+     * ── AND ONLY THE TOOLS THAT MEAN WORK ────────────────────────────────
+     * `tools` is passed in rather than known here, because which tool names
+     * mean "working on it" is the MCP's vocabulary and this module only knows
+     * rows (`mcp/activity.ts`'s `ITEM_WORK_TOOLS` is the list and the
+     * argument). It rides in comma-joined for the reason `tracker/store.ts`
+     * gives for tag lists: every bound parameter stays a plain scalar, with no
+     * dependence on how the HTTP driver serialises an array.
+     *
+     * The subquery is there because `DISTINCT ON` forces an ORDER BY starting
+     * with `tracker_item_id`, which is not the order anybody wants to read —
+     * so the outer query re-sorts by recency and applies the cap. The cap is
+     * generous and exists only so a pathological run cannot hand a page an
+     * unbounded array; the real bound is how many items one agent touches
+     * inside the idle window.
+     */
+    async liveTrackerActivity(input: {
+      idleMinutes: number;
+      /** Tool names whose lines count as work. See the header. */
+      tools: readonly string[];
+      limit?: number;
+    }): Promise<TrackerAgentActivity[]> {
+      const idleMinutes = Math.max(1, Math.floor(input.idleMinutes));
+      const rows = await sql`
+        SELECT * FROM (
+          SELECT DISTINCT ON (tracker_item_id)
+                 tracker_item_id, actor, tool, outcome, summary, created_at
+            FROM beta_agent_activity
+           WHERE tracker_item_id IS NOT NULL
+             AND tool = ANY(string_to_array(${input.tools.join(",")}, ','))
+             AND created_at > now() - make_interval(mins => ${idleMinutes})
+           ORDER BY tracker_item_id, created_at DESC, id DESC
+        ) newest
+        ORDER BY created_at DESC
+        LIMIT ${Math.max(1, Math.min(200, input.limit ?? 50))}
+      `;
+      return rows.map((row) => ({
+        itemId: toInt(row.tracker_item_id),
+        actor: toStr(row.actor),
+        tool: toStr(row.tool),
+        outcome: toStr(row.outcome),
+        summary: toStr(row.summary),
+        createdAt: toIso(row.created_at),
+      }));
     },
 
     /**

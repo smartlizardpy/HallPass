@@ -19,6 +19,8 @@ import {
 } from "./config";
 import {
   achievementCopy,
+  agentFinishedCopy,
+  agentStartedCopy,
   betaAssignmentCopy,
   bugReportCopy,
   challengeBeatenCopy,
@@ -61,6 +63,8 @@ const EVERY_KIND: Record<string, NotificationCopy> = {
   traffic_spike: trafficSpikeCopy({ visitors: 312, ratio: 4.2 }),
   error_spike: errorSpikeCopy({ errors: 84, ratio: 6 }),
   content_gap: contentGapCopy({ term: "geometry dash", people: 9 }),
+  agent_started: agentStartedCopy({ note: "reading the open queue" }),
+  agent_finished: agentFinishedCopy({ steps: 53 }),
 };
 
 describe("challengeBeatenCopy", () => {
@@ -247,6 +251,45 @@ describe("the site-health copy", () => {
       contentGapCopy({ term: "x", people: 1 }),
     ]) {
       expect(copy.url).toBe("/dashboard/growth");
+    }
+  });
+});
+
+describe("the agent kinds", () => {
+  it("quotes the agent's own narration, which is first-party text", () => {
+    // The producer only ever passes a `log_agent_activity` line here. A
+    // mechanical summary would embed a tester's own report title, and every one
+    // of these strings is a candidate lock-screen banner.
+    const copy = agentStartedCopy({ note: "reproducing the collision bug" });
+    expect(copy.body).toContain("reproducing the collision bug");
+  });
+
+  it("still says the run began when there was nothing to quote", () => {
+    for (const note of [null, "   "]) {
+      const copy = agentStartedCopy({ note });
+      expect(copy.title).toContain("agent");
+      expect(copy.body.length).toBeGreaterThan(0);
+      expect(copy.body).not.toContain("“");
+    }
+  });
+
+  it("bounds a long narration like any other interpolated text", () => {
+    const copy = agentStartedCopy({ note: "z".repeat(400) });
+    expect(copy.body.length).toBeLessThanOrEqual(NOTIFICATION_BODY_MAX);
+    expect(copy.body).toContain("…");
+  });
+
+  it("says the run is over rather than what it achieved", () => {
+    expect(agentFinishedCopy({ steps: 53 }).body).toContain("53 steps");
+    // "1 steps recorded" is what the first live send said. The producer never
+    // passes zero — a finish that cleared nothing ended nothing and sends no
+    // notification at all — so the singular is the only edge here.
+    expect(agentFinishedCopy({ steps: 1 }).body).toContain("1 step recorded");
+  });
+
+  it("lands on the panel that shows what the agent is doing", () => {
+    for (const copy of [agentStartedCopy({ note: null }), agentFinishedCopy({ steps: 1 })]) {
+      expect(copy.url).toBe("/dashboard/beta");
     }
   });
 });

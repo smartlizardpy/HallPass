@@ -624,12 +624,12 @@ authenticate:
 
 | Credential | Tools | For |
 |---|---|---|
-| `MCP_SECRET` bearer token | the 7 bug tools **and** the 7 analytics tools | a coding agent working the playtest bug queue |
+| `MCP_SECRET` bearer token | the 7 bug tools, the 5 tracker tools **and** the 7 analytics tools | a coding agent working the playtest bug queue and the project board |
 | **Sign in with your HallPass account** (OAuth) | the 7 analytics tools only | asking questions about the arcade |
 
 The two are independent: either can be unconfigured without disabling the other,
-and rotating one does not touch the other. `bug-mcp-design.md` and
-`analytics-mcp-design.md` are the two arguments.
+and rotating one does not touch the other. `bug-mcp-design.md`,
+`tracker-mcp-design.md` and `analytics-mcp-design.md` are the three arguments.
 
 ### Bug tools — for an agent, on a shared secret
 
@@ -670,6 +670,38 @@ The two removing outcomes are how the queue is meant to end — see
 [Beta programme XP](#dashboard-roles) and `app/lib/beta/config.ts` for the rate
 card. They are marked `destructiveHint` so a client asks before running them, and
 so is `finish_agent_activity`, which deletes the feed's lines and never a report.
+
+### Tracker tools — the project board, on the same secret
+
+The other half of what the secret opens: **Dashboard → Tracker**, where admins
+paste in what they want built. An agent reads the brief before it starts, moves
+the item as it goes, and comments on it when it is done.
+
+| Tool | Writes? | What it does |
+|---|---|---|
+| `list_tracker_items` | no | The board. Filters: `status`, `tag`, `limit`. Summaries only. |
+| `get_tracker_item` | no | One item in full: the brief, the tags, the stamps and the newest comments. |
+| `move_tracker_item` | yes | Move it to another lane. Reversible; moving it to the lane it is in is a no-op. |
+| `comment_on_tracker_item` | yes | A permanent note in the item's Updates thread, beside the ones people write. |
+| `create_tracker_item` | yes | Paste a new item in. Lands in **New**, where a human triages it. |
+
+**Nothing here deletes anything**, and that is the design rather than an
+oversight: archiving and deleting are curation decisions a person makes on the
+board, behind a disclosure that names what is lost.
+
+Two things show up on the dashboard while an agent works:
+
+* **A green "agent working" marker** on the item, on the board and on its own
+  page, for as long as the agent keeps saying something about it — the same
+  feed and the same idle window as the panel on `/dashboard/beta`, so
+  `finish_agent_activity` clears both.
+* **Its comments**, in the Updates thread, labelled **Agent**. A comment is not
+  a log line: the feed is a live view of one session and is deleted when it
+  ends, while a comment is what somebody reads next week.
+
+Moving a lane is `super_admin`-only on the dashboard, and the secret gets it
+here — the rule is about who can truthfully say "this is being built", and the
+agent is the one building it. `tracker-mcp-design.md` §2 is the argument.
 
 ## Analytics MCP — for a person, on their own account
 

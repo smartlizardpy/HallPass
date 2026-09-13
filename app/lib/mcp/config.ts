@@ -79,20 +79,56 @@ export const DEFAULT_REPORT_LIMIT = 20;
 export const MAX_REPORT_LIMIT = 100;
 
 /**
- * Clamp a caller-supplied limit into the allowed band.
+ * Clamp a caller-supplied limit into the bug queue's band. See
+ * {@link clampInto} for what it does with a float or a missing value.
+ */
+export function clampLimit(limit: number | undefined): number {
+  return clampInto(limit, DEFAULT_REPORT_LIMIT, MAX_REPORT_LIMIT);
+}
+
+/**
+ * How many tracker items `list_tracker_items` returns by default, and at most.
+ *
+ * Both larger than the report numbers, because the units are not comparable. A
+ * bug report carries a body and an error log; a tracker summary is a title, a
+ * lane and a few tags, and "the whole board" is the question an agent actually
+ * wants answered before it decides what to build. The board is tens to low
+ * hundreds of rows by design (`tracker/store.ts`), so the default is usually
+ * all of it.
+ */
+export const DEFAULT_TRACKER_LIMIT = 50;
+export const MAX_TRACKER_LIMIT = 200;
+
+/** {@link clampLimit}, for the tracker's own band. */
+export function clampTrackerLimit(limit: number | undefined): number {
+  return clampInto(limit, DEFAULT_TRACKER_LIMIT, MAX_TRACKER_LIMIT);
+}
+
+/**
+ * The shared body of both clamps.
  *
  * Undefined means "use the default", not "use the maximum". A non-integer or
  * out-of-range number is CLAMPED rather than refused: the tool's job is to
- * return bugs, and failing a whole call over a float is a worse answer than
+ * return rows, and failing a whole call over a float is a worse answer than
  * returning the nearest sensible page.
  */
-export function clampLimit(limit: number | undefined): number {
-  if (limit == null || !Number.isFinite(limit)) return DEFAULT_REPORT_LIMIT;
+function clampInto(limit: number | undefined, fallback: number, max: number): number {
+  if (limit == null || !Number.isFinite(limit)) return fallback;
   const whole = Math.floor(limit);
   if (whole < 1) return 1;
-  if (whole > MAX_REPORT_LIMIT) return MAX_REPORT_LIMIT;
+  if (whole > max) return max;
   return whole;
 }
+
+/**
+ * The board a tracker write invalidates, and the prefix its item pages sit
+ * under.
+ *
+ * Only the dashboard: unlike a bug decision, which changes what a TESTER sees
+ * on `/beta`, nothing on the tracker is rendered off the dashboard at all
+ * (`tracker-design.md` §5 — "Nothing is exposed through /api/v1/*").
+ */
+export const TRACKER_BOARD_PATH = "/dashboard/tracker";
 
 /**
  * The longest any line of the agent activity feed is kept.

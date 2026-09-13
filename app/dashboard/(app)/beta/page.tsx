@@ -31,10 +31,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
 import {
+  atLeast,
   BETA_MIN_ROLE,
   canConfirmOwnWork,
   canManageTesters,
   mustRequestTesters,
+  SITE_WRITE_ROLE,
 } from "@/app/lib/permissions";
 import { resolveGames } from "@/app/lib/games-store";
 import {
@@ -479,6 +481,11 @@ export default async function DashboardBetaPage({
       getAgentActivity({
         limit: AGENT_FEED_LIMIT,
         idleMinutes: ACTIVITY_IDLE_MINUTES,
+        // The agent also works the project tracker, whose board is `admin` and
+        // up while this page is `beta_admin` and up. Passing the viewer's own
+        // answer keeps this panel from becoming the way a beta admin reads a
+        // roadmap they cannot open.
+        includeTracker: atLeast(role, SITE_WRITE_ROLE),
       }),
     ]);
 

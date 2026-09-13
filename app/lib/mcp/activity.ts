@@ -1,5 +1,5 @@
 /**
- * HallPass — turning a bug-MCP tool call into one line of the dashboard feed.
+ * HallPass — turning an MCP tool call into one line of the dashboard feed.
  *
  * PURE and free of `server-only`, like `config.ts` and `report-view.ts`: no
  * database, no SDK import, no `next/*`. The server-only half that actually
@@ -13,6 +13,15 @@
  * the question: which report, which game, what happened to it. A summary that
  * said `mark_bug_report_fixed({"id":42})` would be a faithful transcript of a
  * call and a useless account of an afternoon.
+ *
+ * ── TWO SUBJECTS, AND THE ARGUMENT NAME DECIDES WHICH ──────────────────────
+ * A line can be about a bug report or about a tracker item. Which one is read
+ * off the ARGUMENT NAME: `id`/`reportId` is a report, `itemId` is a tracker
+ * item. That is why every tracker tool names its argument `itemId` while every
+ * bug tool names its `id` (`tracker-mcp-design.md` §3) — an agent working both
+ * queues in one session is one confident mistake away from closing report 12
+ * when it meant to move item 12, and a feed that recorded the wrong subject
+ * would not be the thing that told anybody.
  *
  * ── REFUSAL IS NOT SUCCESS, AND THIS IS WHERE THAT IS DECIDED ──────────────
  * `bugs.ts` returns `{ ok: false, reason }` rather than throwing when a write's
@@ -52,11 +61,48 @@ export const SUMMARY_MAX = 300;
  */
 export const AGENT_FEED_LIMIT = 20;
 
+/**
+ * The tools whose lines mean an agent is WORKING ON a tracker item, and
+ * therefore the only ones that light the green marker on the board.
+ *
+ * Every tracker tool records which item its line is about — that is what makes
+ * the feed row faithful — but "is about item 7" and "is working on item 7" are
+ * different claims, and the marker makes the second one. The difference is
+ * visible the first time you look at a real board:
+ *
+ *   * `create_tracker_item` files a proposal into the `new` lane for a human to
+ *     triage. Marking it green says an agent is building something nobody has
+ *     agreed to yet.
+ *   * `get_tracker_item` and `list_tracker_items` are how an agent DECIDES what
+ *     to work on. An agent that reads ten briefs to pick one would light all
+ *     ten, which is the exact failure the marker exists to avoid — a board that
+ *     says an agent is everywhere is a board that says nothing.
+ *
+ * What is left is the three deliberate acts: moving it, commenting on it, and
+ * naming it while narrating. All three are things an agent does BECAUSE it is
+ * working on that item.
+ */
+export const ITEM_WORK_TOOLS = [
+  "move_tracker_item",
+  "comment_on_tracker_item",
+  "log_agent_activity",
+] as const;
+
 /** One row to write, before an actor and a timestamp are attached. */
 export type ActivityLine = {
   tool: string;
   outcome: ActivityOutcome;
   reportId: number | null;
+  /**
+   * The tracker item this is about, when it is about one.
+   *
+   * Separate from {@link ActivityLine.reportId} rather than one "subject"
+   * field, because the two numbering spaces are unrelated and the dashboard
+   * reads them differently: a report id is a bug and an item id is a lane on
+   * the board. A line may carry both — "fixing report 42, which is tracker item
+   * 7" — which is exactly why they are not one column (migration 033).
+   */
+  itemId: number | null;
   slug: string | null;
   summary: string;
 };
@@ -90,14 +136,22 @@ function describeFilters(args: Record<string, unknown>): string {
   return parts.length > 0 ? ` (${parts.join(", ")})` : "";
 }
 
+/** The same, for the filters a tracker list call narrowed by. */
+function describeTrackerFilters(args: Record<string, unknown>): string {
+  const parts = [readString(args.status), readString(args.tag)].filter(
+    (part): part is string => part != null,
+  );
+  return parts.length > 0 ? ` (${parts.join(", ")})` : "";
+}
+
 /**
  * Describe a call that completed — whether the tool agreed to it or not.
  *
  * Branches on the SHAPE of the result rather than on a table of tool names, so a
- * sixth tool that returns the same `{ ok, message }` shape as the three writers
- * is described correctly on the day it is added rather than falling through to a
- * bare tool name. The two readers are named because their results are the shapes
- * that carry a report in them.
+ * tool that returns the same `{ ok, message }` shape as the six writers is
+ * described correctly on the day it is added rather than falling through to a
+ * bare tool name. The four readers are named because their results are the
+ * shapes that carry their subject INSIDE them rather than in a message.
  */
 export function describeToolCall(call: {
   tool: string;
@@ -107,15 +161,18 @@ export function describeToolCall(call: {
   const args = readRecord(call.args);
   const result = readRecord(call.result);
   const reportId = readNumber(args.id) ?? readNumber(args.reportId);
+  const itemId = readNumber(args.itemId);
   const slug = readString(args.slug);
 
-  // The three writers, plus anything later that answers in their shape.
+  // The writers — three for bugs, three for the tracker — plus anything later
+  // that answers in their shape.
   if (typeof result.ok === "boolean") {
     const refused = result.ok === false;
     return {
       tool: call.tool,
       outcome: refused ? "refused" : "ok",
       reportId,
+      itemId: itemId ?? readNumber(result.itemId),
       slug,
       summary: toSummary(
         readString(result.message) ??
@@ -133,6 +190,7 @@ export function describeToolCall(call: {
       tool: call.tool,
       outcome: "ok",
       reportId,
+      itemId,
       slug: readString(result.slug) ?? slug,
       summary: toSummary(
         title
@@ -148,9 +206,44 @@ export function describeToolCall(call: {
       tool: call.tool,
       outcome: "ok",
       reportId: null,
+      itemId: null,
       slug,
       summary: toSummary(
         `Listed ${reports.length} report${reports.length === 1 ? "" : "s"}${describeFilters(args)}`,
+      ),
+    };
+  }
+
+  if (call.tool === "get_tracker_item") {
+    // Named for the same reason the two bug readers are: their results are the
+    // shapes that carry their subject inside them rather than in an `ok`.
+    const title = readString(result.title);
+    return {
+      tool: call.tool,
+      outcome: "ok",
+      reportId: null,
+      itemId,
+      slug,
+      summary: toSummary(
+        title
+          ? `Read tracker item ${itemId ?? "?"} — “${title}”`
+          : `Looked up tracker item ${itemId ?? "?"}, which does not exist`,
+      ),
+    };
+  }
+
+  if (call.tool === "list_tracker_items") {
+    const items = Array.isArray(result.items) ? result.items : [];
+    return {
+      tool: call.tool,
+      outcome: "ok",
+      reportId: null,
+      // A list is about the board, not about an item, so it marks nothing
+      // green — which is the point of the marker being per item.
+      itemId: null,
+      slug,
+      summary: toSummary(
+        `Listed ${items.length} tracker item${items.length === 1 ? "" : "s"}${describeTrackerFilters(args)}`,
       ),
     };
   }
@@ -160,6 +253,7 @@ export function describeToolCall(call: {
     tool: call.tool,
     outcome: "ok",
     reportId,
+    itemId,
     slug,
     summary: toSummary(readString(args.summary) ?? call.tool),
   };
@@ -185,6 +279,7 @@ export function describeToolFailure(call: {
     tool: call.tool,
     outcome: "failed",
     reportId: readNumber(args.id) ?? readNumber(args.reportId),
+    itemId: readNumber(args.itemId),
     slug: readString(args.slug),
     summary: toSummary(`${call.tool} failed: ${message}`),
   };
