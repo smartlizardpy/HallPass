@@ -533,6 +533,21 @@ export const games: Game[] = [
     isNew: true,
     platform: "both",
   },
+  {
+    slug: "shadow-core-halloween-dash",
+    author: "Sohan",
+    title: "Shadow Core: Halloween Dash",
+    tagline: "Dash the dark. Mind the spikes.",
+    description:
+      "Fifteen sectors of Halloween precision platforming. Time your jumps over neon spike beds, hunt the three pumpkin souls hidden in every run, and race your best time to the flag.",
+    category: "Platformer",
+    tags: ["Platformer", "Halloween", "Precision", "Neon"],
+    gradient: ["#2a1820", "#f43f5e"],
+    accent: "#f43f5e",
+    art: "speed",
+    isNew: true,
+    platform: "both",
+  },
 ];
 
 export const categories = Array.from(
