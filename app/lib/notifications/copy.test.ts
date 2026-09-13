@@ -280,10 +280,11 @@ describe("the agent kinds", () => {
   });
 
   it("says the run is over rather than what it achieved", () => {
-    expect(agentFinishedCopy({ steps: 53 }).body).toContain("53");
-    // A run that wrote nothing is still a run that ended; the count is dropped
-    // rather than rendered as "0 steps".
-    expect(agentFinishedCopy({ steps: 0 }).body).not.toContain("0");
+    expect(agentFinishedCopy({ steps: 53 }).body).toContain("53 steps");
+    // "1 steps recorded" is what the first live send said. The producer never
+    // passes zero — a finish that cleared nothing ended nothing and sends no
+    // notification at all — so the singular is the only edge here.
+    expect(agentFinishedCopy({ steps: 1 }).body).toContain("1 step recorded");
   });
 
   it("lands on the panel that shows what the agent is doing", () => {

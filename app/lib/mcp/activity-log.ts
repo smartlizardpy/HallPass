@@ -74,24 +74,26 @@ const NARRATION_TOOL = "log_agent_activity";
  * response is sent, and this runs once per RUN rather than once per call, so
  * the round trip is not worth the risk of never sending it.
  */
-async function announceStart(line: ActivityLine): Promise<void> {
+async function announceStart(line: ActivityLine, lineId: number): Promise<void> {
   await notifyAdmins({
     kind: "agent_started",
     copy: agentStartedCopy({
       note: line.tool === NARRATION_TOOL ? line.summary : null,
     }),
-    // One per run, and a run has no id (`agent-activity-design.md` §11). The
-    // actor and the minute are enough: two agents starting within the same
-    // minute on the same key are one run as far as this feed is concerned,
-    // which is exactly what §11 says about them sharing it.
-    dedupeKey: `agent-start:${mcpActor()}:${new Date().toISOString().slice(0, 16)}`,
+    // Keyed on the LINE that began the run. A run has no id of its own
+    // (`agent-activity-design.md` §11) and the first thing it wrote is the
+    // closest thing there is to one — unique per run, and stable, so a retried
+    // delivery is absorbed. A clock-based key was the first attempt and was
+    // wrong in the direction that matters: two runs inside the same minute
+    // would have collapsed into one notification.
+    dedupeKey: `agent-start:${lineId}`,
   });
 }
 
 /** Append one line to the feed. Never throws. */
 export async function recordActivity(line: ActivityLine): Promise<void> {
   try {
-    const { started } = await beta.logAgentActivity({
+    const { started, id } = await beta.logAgentActivity({
       actor: mcpActor(),
       tool: line.tool,
       outcome: line.outcome,
@@ -102,7 +104,7 @@ export async function recordActivity(line: ActivityLine): Promise<void> {
       retainDays: ACTIVITY_RETENTION_DAYS,
       idleMinutes: ACTIVITY_IDLE_MINUTES,
     });
-    if (started) await announceStart(line);
+    if (started && id != null) await announceStart(line, id);
   } catch (error) {
     console.error(`mcp activity log failed for ${line.tool}:`, error);
   }
@@ -119,17 +121,24 @@ export async function recordActivity(line: ActivityLine): Promise<void> {
  */
 export async function clearActivity(): Promise<number> {
   const cleared = await beta.clearAgentActivity();
-  // AFTER the delete, and outside its failure. A "the agent has finished" that
-  // went out while the panel still showed a live run would be the one thing
-  // §5 says this surface must never say by accident — so the notification
-  // follows the clear, and a clear that threw never reaches it.
-  await notifyAdmins({
-    kind: "agent_finished",
-    copy: agentFinishedCopy({ steps: cleared }),
-    // Keyed on the run's SIZE as well as the minute, so a second finish
-    // moments after the first — which clears nothing — cannot be mistaken for
-    // the same event and swallowed.
-    dedupeKey: `agent-finish:${mcpActor()}:${new Date().toISOString().slice(0, 16)}:${cleared}`,
-  });
+
+  // ONLY WHEN SOMETHING WAS ACTUALLY CLEARED. A finish that cleared nothing
+  // ended nothing — the run was already over, by an earlier finish or by the
+  // idle window — and "the agent has finished" for a run that was not running
+  // is the kind of notification that teaches somebody to mute the group.
+  //
+  // AFTER the delete, and outside its failure: a finish that threw never
+  // reaches this, so the notification cannot go out while the panel still
+  // shows a live run.
+  if (cleared > 0) {
+    await notifyAdmins({
+      kind: "agent_finished",
+      copy: agentFinishedCopy({ steps: cleared }),
+      // No id to key on — the rows this describes have just been deleted — so
+      // the actor and the minute. Two runs that both END inside the same
+      // minute would need a whole run to have happened between them.
+      dedupeKey: `agent-finish:${mcpActor()}:${new Date().toISOString().slice(0, 16)}`,
+    });
+  }
   return cleared;
 }

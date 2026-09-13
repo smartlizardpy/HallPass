@@ -648,7 +648,7 @@ describe("agent activity", () => {
       "WITH began AS ( SELECT NOT EXISTS ( SELECT 1 FROM beta_agent_activity WHERE created_at > now() - make_interval(mins => ?) ) AS started )",
     );
     expect(text).toContain("OR (SELECT started FROM began)");
-    expect(text).toContain("SELECT started FROM began");
+    expect(text).toContain("SELECT began.started, logged.id FROM began, logged");
     // Position 0 now: the idle window is asked before the row is written.
     expect(calls[0].values[0]).toBe(30);
   });
@@ -691,7 +691,7 @@ describe("agent activity", () => {
     expect(calls).toHaveLength(0);
     // A line that was never written cannot be the one that began a run — which
     // would otherwise buzz an admin's phone about an agent that said nothing.
-    expect(result).toEqual({ started: false });
+    expect(result).toEqual({ started: false, id: null });
   });
 
   it("nulls a report id that is not a positive integer", async () => {
@@ -755,8 +755,8 @@ describe("agent activity", () => {
    * once, so a line cannot reset a quiet run without announcing that it started
    * one — or announce one it did not start.
    */
-  it("says whether the line started a run", async () => {
-    const started = makeFakeSql(() => [{ started: true }]);
+  it("says whether the line started a run, and which line it was", async () => {
+    const started = makeFakeSql(() => [{ started: true, id: "91" }]);
     await expect(
       createBetaStore(started.sql).logAgentActivity({
         actor: "a",
@@ -766,9 +766,11 @@ describe("agent activity", () => {
         retainDays: 14,
         idleMinutes: 30,
       }),
-    ).resolves.toEqual({ started: true });
+      // The id is what the run-start notification is keyed on, so a retried
+      // delivery is absorbed and two runs a minute apart are still two.
+    ).resolves.toEqual({ started: true, id: 91 });
 
-    const continued = makeFakeSql(() => [{ started: false }]);
+    const continued = makeFakeSql(() => [{ started: false, id: "92" }]);
     await expect(
       createBetaStore(continued.sql).logAgentActivity({
         actor: "a",
@@ -778,7 +780,7 @@ describe("agent activity", () => {
         retainDays: 14,
         idleMinutes: 30,
       }),
-    ).resolves.toEqual({ started: false });
+    ).resolves.toEqual({ started: false, id: 92 });
   });
 
   it("reads newest first, which is what the recent index serves", async () => {

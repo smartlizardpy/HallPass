@@ -441,17 +441,21 @@ export function agentStartedCopy(input: {
  * It says the run is OVER rather than what it achieved, because what it
  * achieved is a queue and a board somebody now has a reason to open. A summary
  * on a banner would be a worse version of the page it links to.
+ *
+ * `steps` is never zero: the producer only sends this when a run was actually
+ * cleared, because a finish that cleared nothing did not end anything. So there
+ * is no "0 steps" wording to get right, and the singular is the real edge —
+ * "1 steps recorded" is what the first live send said.
  */
 export function agentFinishedCopy(input: {
-  /** How many lines the run wrote before it ended. */
+  /** How many lines the run wrote before it ended. Always at least one. */
   steps: number;
 }): NotificationCopy {
   return bound({
     title: "The agent has finished",
     body:
-      input.steps > 0
-        ? `${count(input.steps)} steps recorded. Nothing is running now.`
-        : "Nothing is running now.",
+      `${count(input.steps)} step${input.steps === 1 ? "" : "s"} recorded. ` +
+      "Nothing is running now.",
     url: AGENT_URL,
   });
 }

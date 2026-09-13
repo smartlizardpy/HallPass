@@ -1366,11 +1366,11 @@ export function createBetaStore(sql: Sql) {
       retainDays: number;
       /** How long a quiet run survives before the next line resets it. */
       idleMinutes: number;
-    }): Promise<{ started: boolean }> {
+    }): Promise<{ started: boolean; id: number | null }> {
       const summary = input.summary.trim().slice(0, 300);
-      // Nothing was written, so nothing started. Reported as `false` rather
-      // than thrown: the caller is a logging path.
-      if (!summary) return { started: false };
+      // Nothing was written, so nothing started. Reported rather than thrown:
+      // the caller is a logging path.
+      if (!summary) return { started: false, id: null };
       const reportId = positiveIdOrNull(input.reportId);
       // Narrowed exactly as `reportId` is, and for the same reason: both
       // columns carry a CHECK that a zero or a float would fail, and a logging
@@ -1398,9 +1398,15 @@ export function createBetaStore(sql: Sql) {
              OR (SELECT started FROM began)
           RETURNING id
         )
-        SELECT started FROM began
+        SELECT began.started, logged.id FROM began, logged
       `;
-      return { started: Boolean(rows[0]?.started) };
+      // A cross join of two one-row CTEs, so exactly one row. The id is what
+      // the run-start notification is keyed on: a run has no id of its own, and
+      // the line that begins it is the closest thing there is to one.
+      return {
+        started: Boolean(rows[0]?.started),
+        id: rows[0]?.id == null ? null : toInt(rows[0].id),
+      };
     },
 
     /**
