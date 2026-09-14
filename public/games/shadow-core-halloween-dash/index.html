@@ -171,6 +171,9 @@
                     <span id="menu-audio-icon">🔊</span>
                 </button>
             </div>
+
+            <!-- Filled by updateAuthUI(): a sign-in button, or who you are. -->
+            <div id="hp-auth-container" class="w-full mt-3"></div>
         </div>
 
         <!-- Level Select Menu -->
@@ -205,10 +208,12 @@
                 <!-- Stars / Souls collected display -->
             </div>
 
-            <div class="glass-panel px-5 py-2 rounded-xl text-center mb-6 border-slate-700">
+            <div class="glass-panel px-5 py-2 rounded-xl text-center mb-3 border-slate-700 w-full">
                 <p class="text-xs text-slate-400 uppercase tracking-widest font-semibold">TIME RECORD</p>
                 <p id="completed-time-text" class="text-2xl font-mono text-cyan-300 font-bold">00:00.0</p>
             </div>
+
+            <div id="hp-complete-leaderboard" class="w-full mb-4 glass-panel p-3 rounded-xl max-h-40 overflow-y-auto"></div>
 
             <button onclick="SoundFX.playClick(); nextLevel();" class="glass-button w-full py-4 mb-3 font-spooky text-lg rounded-xl text-slate-100 shadow-[0_0_20px_rgba(255,255,255,0.15)]">
                 NEXT LEVEL
@@ -223,9 +228,12 @@
             </div>
             <h2 class="font-spooky text-4xl font-black mb-1 text-rose-500 tracking-wider">SPOOKED!</h2>
             <!-- Dynamic funny death reason message injected here -->
-            <p id="death-reason-text" class="text-amber-300 font-medium mb-6 text-sm md:text-base px-2 italic leading-relaxed">
+            <p id="death-reason-text" class="text-amber-300 font-medium mb-4 text-sm md:text-base px-2 italic leading-relaxed">
                 "You fell into the abyss."
             </p>
+
+            <div id="hp-death-leaderboard" class="w-full mb-4 glass-panel p-3 rounded-xl max-h-36 overflow-y-auto text-left"></div>
+
             <button onclick="SoundFX.playClick(); restartLevel();" class="w-full py-3.5 mb-3 bg-gradient-to-r from-rose-700 to-amber-700 hover:from-rose-600 hover:to-amber-600 text-white font-spooky text-lg rounded-xl shadow-lg transition transform hover:scale-102">
                 TRY AGAIN
             </button>
@@ -822,9 +830,11 @@
                 document.getElementById('screen-complete').classList.remove('hidden');
                 document.getElementById('completed-level-text').innerText = currentLevel;
                 renderSoulsRating();
+                loadLeaderboard('hp-complete-leaderboard');
             } else if (newState === 'DEATH') {
                 document.getElementById('ui-main').classList.remove('hidden');
                 document.getElementById('screen-death').classList.remove('hidden');
+                loadLeaderboard('hp-death-leaderboard');
             }
             updateControlsVisibility();
         }
@@ -866,6 +876,145 @@
                 return `${mStr}:${sStr}.${ms}`;
             }
             return `${mStr}:${sStr}`;
+        }
+
+        /* --- HallPass ---------------------------------------------------------
+           The board holds ONE number per player: the time to clear all fifteen
+           sectors, summed from each sector's personal best. It is an ASCENDING
+           board - lowest time ranks first - and the only one on the site that
+           sorts that way.
+
+           Times cross the wire as INTEGER MILLISECONDS. The score column is
+           BIGINT and the API truncates with Math.trunc, so a fractional value is
+           silently floored: posting 12.3 seconds would store 12 and every close
+           run would tie on a whole second.
+        ---------------------------------------------------------------------- */
+
+        const HP_BOARD_LABEL = 'FASTEST FULL CLEAR';
+
+        /* Escape text bound for innerHTML. Handles arrive server-sanitised to
+           [A-Za-z0-9 _-], but a signed-in player's Google name does not, and it
+           is rendered straight into the auth row. */
+        function hpEscape(value) {
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+            return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => map[c]);
+        }
+
+        /* Format a board time from WHOLE MILLISECONDS, using integer maths only.
+           formatTime() takes float seconds and floors the tenth, so binary
+           floating point drags a boundary value down a tenth: 252700 ms is
+           252.7 s, which is stored as 252.69999999999999, and (s % 1) * 10
+           floors to 6 - the board would read 04:12.6 for a 04:12.7 run. The
+           scores arrive as integers, so nothing here needs to leave them. */
+        function hpFormatMs(ms) {
+            const total = Math.max(0, Math.round(Number(ms) || 0));
+            const mins = Math.floor(total / 60000);
+            const secs = Math.floor((total % 60000) / 1000);
+            const tenths = Math.floor((total % 1000) / 100);
+            return String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0') + '.' + tenths;
+        }
+
+        /* Sectors with a recorded best, out of TOTAL_LEVELS. */
+        function hpSectorsCleared() {
+            let cleared = 0;
+            for (let i = 1; i <= TOTAL_LEVELS; i++) {
+                const stat = levelStats[i];
+                if (stat && stat.time) cleared++;
+            }
+            return cleared;
+        }
+
+        /* Total clear time in whole milliseconds, or null until every sector has
+           a best. levelStats stores seconds as floats; the sum is rounded once,
+           at the end, rather than per sector. */
+        function hpTotalClearMs() {
+            let totalSeconds = 0;
+            for (let i = 1; i <= TOTAL_LEVELS; i++) {
+                const stat = levelStats[i];
+                if (!stat || !stat.time) return null;
+                totalSeconds += stat.time;
+            }
+            return Math.round(totalSeconds * 1000);
+        }
+
+        function loadLeaderboard(containerId) {
+            const el = document.getElementById(containerId);
+            if (!el || !window.HallPass) return;
+
+            el.innerHTML = '<div class="text-xs text-slate-400 py-1 text-center">Loading fastest times...</div>';
+
+            /* getScores never rejects - it resolves [] when offline or inert. */
+            window.HallPass.getScores({ limit: 10 }).then((rows) => {
+                let html = '<div class="text-xs font-spooky text-amber-400 mb-1.5 font-bold tracking-wider text-center">\u{1F3C6} '
+                    + HP_BOARD_LABEL + '</div>';
+
+                if (!rows || rows.length === 0) {
+                    html += '<div class="text-xs text-amber-300 py-1 text-center font-semibold">No full clears yet - be the first!</div>';
+                } else {
+                    html += '<div class="space-y-1 text-xs font-mono">';
+                    rows.forEach((r) => {
+                        const badge = r.verified ? ' <span class="text-cyan-400" title="Verified">\u2713</span>' : '';
+                        html += '<div class="flex justify-between items-center bg-slate-900/80 px-2.5 py-1 rounded border border-slate-800 text-slate-200">'
+                            + '<span>#' + r.rank + ' ' + hpEscape(r.handle || 'Guest') + badge + '</span>'
+                            + '<span class="text-cyan-300 font-bold">' + hpFormatMs(r.score) + '</span>'
+                            + '</div>';
+                    });
+                    html += '</div>';
+                }
+
+                /* Say why nothing of yours is up there yet. */
+                const cleared = hpSectorsCleared();
+                if (cleared < TOTAL_LEVELS) {
+                    html += '<div class="text-[11px] text-slate-400 mt-2 text-center leading-snug">Clear all '
+                        + TOTAL_LEVELS + ' sectors to post a time - ' + cleared + '/' + TOTAL_LEVELS + ' done.</div>';
+                }
+
+                el.innerHTML = html;
+            });
+        }
+
+        /* Post the full clear, but only when it beats what this browser last got
+           on the board. Every sector keeps its minimum, so the total only ever
+           falls; without the guard each later sector clear would re-post an
+           identical number as a duplicate row.
+
+           The marker is written only once the API confirms the row, so a run
+           posted while offline is retried on the next clear instead of being
+           recorded as sent. */
+        function hpSubmitClearIfImproved() {
+            const totalMs = hpTotalClearMs();
+            if (totalMs === null || !window.HallPass) return;
+
+            let posted = null;
+            try {
+                const raw = localStorage.getItem('shadow_dash_hp_posted_ms');
+                if (raw !== null) posted = parseInt(raw, 10);
+            } catch(e) {}
+            if (posted !== null && Number.isFinite(posted) && totalMs >= posted) return;
+
+            window.HallPass.submitScore(totalMs).then((res) => {
+                if (!res || !res.ok) return;
+                try {
+                    localStorage.setItem('shadow_dash_hp_posted_ms', String(totalMs));
+                } catch(e) {}
+                /* Repaint so the player sees the rank they just took. */
+                loadLeaderboard('hp-complete-leaderboard');
+            });
+        }
+
+        function updateAuthUI(playerData) {
+            const container = document.getElementById('hp-auth-container');
+            if (!container) return;
+
+            if (playerData) {
+                /* Show the handle the board will credit, not the Google name. */
+                container.innerHTML = '<div class="text-xs text-emerald-400 font-semibold bg-emerald-950/50 border border-emerald-800/60 py-2.5 px-4 rounded-xl flex items-center justify-center gap-2">'
+                    + '<span>\u{1F464}</span> Signed in as <strong class="text-white">'
+                    + hpEscape(playerData.handle || playerData.name) + '</strong></div>';
+            } else {
+                container.innerHTML = '<button onclick="window.HallPass && window.HallPass.signIn()" class="glass-button w-full py-2.5 px-4 rounded-xl text-amber-300 font-spooky text-sm flex items-center justify-center gap-2 hover:border-amber-400 transition">'
+                    + '<span>\u{1F511}</span> Sign In with Google</button>';
+            }
         }
 
         function generateLevel(levelIdx) {
@@ -1144,6 +1293,7 @@
             try {
                 localStorage.removeItem('shadow_dash_max_level');
                 localStorage.removeItem('shadow_dash_level_stats');
+                localStorage.removeItem('shadow_dash_hp_posted_ms');
             } catch(e) {}
             buildLevelGrid();
         }
@@ -1372,6 +1522,8 @@
                 try {
                     localStorage.setItem('shadow_dash_level_stats', JSON.stringify(levelStats));
                 } catch(e) {}
+
+                hpSubmitClearIfImproved();
 
                 document.getElementById('completed-time-text').innerText = formatTime(levelTimer, true);
                 SoundFX.playWin();
@@ -1709,6 +1861,40 @@
         changeState('MENU');
         lastTime = performance.now();
         requestAnimationFrame(gameLoop);
+    </script>
+
+    <!-- HallPass: online leaderboard for the 15-sector clear time. The stub below
+         installs window.HallPass synchronously so calls made before the bundle
+         lands are queued, and settles them inert after 2s if it never arrives.
+
+         data-game is the BOARD id, not the game slug. This board is the one
+         exception in the catalogue: it is `haloween-fastest-level-time`, while
+         the game is `shadow-core-halloween-dash`. Sending the slug would hit an
+         unprovisioned board and every submission would 409. -->
+    <script>
+    (function(w){if(w.HallPass&&w.HallPass.version!=="0")return;var q=[];
+    function e(n){return function(){var a=[].slice.call(arguments);
+    return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
+    w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
+    submitScore:e("submitScore"),getScores:e("getScores"),
+    getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
+    unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
+    getAchievements:e("getAchievements"),challenge:e("challenge"),
+    signIn:function(){},signOut:function(){},
+    getHandle:function(){return null},setHandle:function(v){return v},
+    on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
+    off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
+    setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
+    q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:{ok:false,reason:"inert"})})},2000)})(window);
+    </script>
+    <script src="/sdk/v1/hallpass.js" data-game="haloween-fastest-level-time" defer></script>
+    <script>
+        /* The stub above guarantees window.HallPass exists, so these queue and
+           replay once the bundle lands. "auth" is sticky: a listener added after
+           sign-in already completed still fires once with the current identity. */
+        updateAuthUI(null);
+        window.HallPass.getPlayer().then(updateAuthUI);
+        window.HallPass.on('auth', (e) => updateAuthUI(e.player));
     </script>
 </body>
 </html>

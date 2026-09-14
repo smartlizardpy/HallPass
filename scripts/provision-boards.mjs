@@ -30,6 +30,12 @@
  * NOT listed — this script provisions the backfill, and an upsert would overwrite
  * titles somebody chose by hand.
  *
+ * A BOARD ID IS NOT ALWAYS A GAME SLUG. `boards.game_slug` is a link, not a key,
+ * so an entry may carry `gameSlug` when the two differ — as the Halloween Dash
+ * clear-time board does. `gameSlug` says which game's HTML to check for the SDK
+ * tag and which game the row links to; the board's own `slug` stays the id that
+ * `data-game` must name and that scores are filed under.
+ *
  * Reads `DATABASE_URL` from the environment, falling back to `.env.local`, and
  * always prints the host first — the same convention as `scripts/migrate.mjs`,
  * for the same reason: "which Neon branch am I pointed at" is the question you
@@ -88,6 +94,19 @@ const BOARDS = [
   // "Earnings", not "Score": this board ranks everything the player ever earned,
   // which is a different number from the cash they finished holding.
   { slug: "sea-mercenary", title: "Sea Mercenary - Top Earnings", sort: "desc", label: "Earnings" },
+  // The one ASCENDING board on the site, and the one whose id is not a game
+  // slug. It ranks the summed best time across all fifteen sectors, in whole
+  // milliseconds, so the lowest number wins and the label is "Time", not
+  // "Score". Listed here mainly so `sort` is written down: the upsert below
+  // sets sort from this row, and provisioning it without `asc` would silently
+  // flip the board to desc and rank the slowest run first.
+  {
+    slug: "haloween-fastest-level-time",
+    gameSlug: "shadow-core-halloween-dash",
+    title: "Shadow Core: Halloween Dash - Fastest Full Clear",
+    sort: "asc",
+    label: "Time",
+  },
 ];
 
 const args = process.argv.slice(2);
@@ -112,13 +131,15 @@ console.log(`[boards] target: ${new URL(process.env.DATABASE_URL).host}`);
  * Does this game's HTML actually carry the SDK tag for this slug? Guards against
  * provisioning a board nothing posts to — see the docblock.
  */
-function isWired(slug) {
-  const file = path.join(rootDir, "public", "games", slug, "index.html");
+function isWired(board) {
+  const gameSlug = board.gameSlug ?? board.slug;
+  const file = path.join(rootDir, "public", "games", gameSlug, "index.html");
   if (!existsSync(file)) return false;
-  return readFileSync(file, "utf8").includes(`data-game="${slug}"`);
+  // The tag must name the BOARD, not the game: that mismatch is the silent 409.
+  return readFileSync(file, "utf8").includes(`data-game="${board.slug}"`);
 }
 
-const unwired = BOARDS.filter((b) => !isWired(b.slug));
+const unwired = BOARDS.filter((b) => !isWired(b));
 if (unwired.length > 0) {
   console.error(
     `error: these games do not carry data-game in their HTML: ${unwired
@@ -149,14 +170,16 @@ let created = 0;
 let updated = 0;
 for (const b of BOARDS) {
   if (dryRun) {
-    console.log(`  would upsert ${b.slug} → "${b.title}" (${b.sort}, ${b.label})`);
+    console.log(
+      `  would upsert ${b.slug} → "${b.title}" (${b.sort}, ${b.label}, game: ${b.gameSlug ?? b.slug})`,
+    );
     continue;
   }
   // The same statement store.createBoard runs, including the `xmax = 0` trick
   // that distinguishes a fresh insert from an idempotent update.
   const rows = await sql`
     INSERT INTO boards (id, game_slug, title, sort, score_label, max_score)
-    VALUES (${b.slug}, ${b.slug}, ${b.title}, ${b.sort}, ${b.label}, ${null})
+    VALUES (${b.slug}, ${b.gameSlug ?? b.slug}, ${b.title}, ${b.sort}, ${b.label}, ${null})
     ON CONFLICT (id) DO UPDATE SET
       game_slug = EXCLUDED.game_slug,
       title = EXCLUDED.title,
