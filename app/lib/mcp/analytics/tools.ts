@@ -108,7 +108,7 @@ function structured(value: unknown) {
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: false } as const;
 
 /**
- * A Markdown answer, optionally with a card attached.
+ * A Markdown answer with the card's payload alongside it.
  *
  * THE TEXT IS ALWAYS SENT AND IS ALWAYS THE SUBSTANCE. A widget is for the
  * person; the MODEL only ever reads `content[0].text`, so a card that carried
@@ -116,36 +116,59 @@ const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: f
  * the user is looking at. `structuredContent` is the same numbers in the shape
  * `widgets.ts` draws.
  *
- * `sendWidget` is the operator's setting (`output-mode.ts`). When it is off,
- * `structuredContent` still rides along — it is machine-readable and harmless —
- * but no `_meta` points at a resource, so no host tries to render anything.
+ * THE UI LINK IS NOT HERE. It lives on the tool DESCRIPTOR
+ * (`REPORT_TOOL_META`), which is where `tools/list` carries it and where a host
+ * looks for it — at connection time, before the tool has ever been called, so
+ * it can fetch the resource in advance. Hosts are documented to strip
+ * unrecognised `_meta` from a RESULT before forwarding it to the view, so the
+ * payload rides in `structuredContent`, which is forwarded verbatim as the
+ * params of `ui/notifications/tool-result`.
+ *
+ * `payload` is NOT optional. See {@link problemReport}.
  */
-function report(
-  markdown: string,
-  payload: WidgetPayload | null,
-  sendWidget: boolean,
-) {
-  const result: {
-    content: { type: "text"; text: string }[];
-    structuredContent?: Record<string, unknown>;
-    _meta?: Record<string, unknown>;
-  } = { content: [{ type: "text" as const, text: markdown }] };
+function report(markdown: string, payload: WidgetPayload) {
+  return {
+    content: [{ type: "text" as const, text: markdown }],
+    structuredContent: payload as unknown as Record<string, unknown>,
+  };
+}
 
-  if (payload) {
-    result.structuredContent = payload as unknown as Record<string, unknown>;
-    if (sendWidget) {
-      // `ui.resourceUri` is the shared MCP Apps field; the `openai/` key is
-      // ChatGPT's documented alias for the same thing. Both, because clients
-      // read different ones and sending only the shared field means ChatGPT
-      // renders nothing.
-      result._meta = {
-        "ui.resourceUri": REPORT_WIDGET_URI,
-        ui: { resourceUri: REPORT_WIDGET_URI },
-        "openai/outputTemplate": REPORT_WIDGET_URI,
-      };
-    }
-  }
-  return result;
+/**
+ * A Markdown answer from a tool that has NO card.
+ *
+ * Distinct from {@link report} on purpose: a tool without a `ui://` resource on
+ * its descriptor must not send `structuredContent` shaped like a card, because
+ * the shape is the only thing telling a host what it is looking at.
+ */
+function plain(markdown: string) {
+  return { content: [{ type: "text" as const, text: markdown }] };
+}
+
+/**
+ * A card-shaped problem.
+ *
+ * ── WHY A FAILURE NEEDS A CARD ────────────────────────────────────────────
+ * The `ui://` resource is declared on the TOOL, not on the answer, so a host
+ * renders the card for EVERY result the tool gives — including the ones that
+ * failed. An answer that carried no `structuredContent` would leave the card
+ * drawing its "could not be displayed" state over a perfectly good
+ * explanation, which is exactly the empty labelled box this whole subsystem
+ * exists to avoid. So a failure gets a card of its own and the reason is the
+ * thing on it.
+ */
+function problemReport(title: string, markdown: string, reason: string) {
+  return report(markdown, {
+    kind: "hallpass-report",
+    title,
+    subtitle: "This report could not be built",
+    notes: [reason],
+  });
+}
+
+/** {@link problemReport} for a thrown error, which is the common case. */
+function failureReport(title: string, error: unknown) {
+  const reason = failure(error).error;
+  return problemReport(title, `**${title} could not be built.**\n\n\`\`\`\n${reason}\n\`\`\``, reason);
 }
 
 /**
@@ -406,9 +429,9 @@ export function registerAnalyticsTools(
           url: document?.url,
         };
 
-        return report(document?.text ?? "The overview could not be built.", payload, sendWidgets);
+        return report(document?.text ?? "The overview could not be built.", payload);
       } catch (error) {
-        return json(failure(error));
+        return failureReport("Arcade overview", error);
       }
     },
   );
@@ -445,10 +468,9 @@ export function registerAnalyticsTools(
         return report(
           document?.text ?? JSON.stringify({ acquisition, shareLoop }, null, 2),
           payload,
-          sendWidgets,
         );
       } catch (error) {
-        return json(failure(error));
+        return failureReport("Growth", error);
       }
     },
   );
@@ -492,9 +514,9 @@ export function registerAnalyticsTools(
             : [],
           url: document?.url,
         };
-        return report(document?.text ?? "Catalogue health is unavailable.", payload, sendWidgets);
+        return report(document?.text ?? "Catalogue health is unavailable.", payload);
       } catch (error) {
-        return json(failure(error));
+        return failureReport("Catalogue health", error);
       }
     },
   );
@@ -518,12 +540,15 @@ export function registerAnalyticsTools(
         const result = await getAlertSnapshot();
         const document = await getDocument("alerts");
         if (!result.ok) {
-          return report(
+          // A card of its own, and the most important one here: "the probe
+          // broke" must not arrive looking like "nothing is firing".
+          return problemReport(
+            "The alert probe could not measure anything",
             document?.text ??
               `The alert probe could not measure anything: ${result.reason}\n\n` +
                 "This is **not** 'no alerts' — nothing was measured.",
-            null,
-            sendWidgets,
+            `${result.reason} — this is not "no alerts". A silent all-clear from a ` +
+              "broken probe is indistinguishable from a healthy site.",
           );
         }
         const fired = evaluateAlerts(result.snapshot);
@@ -549,9 +574,9 @@ export function registerAnalyticsTools(
             : [],
           url: document?.url,
         };
-        return report(document?.text ?? "Alerts unavailable.", payload, sendWidgets);
+        return report(document?.text ?? "Alerts unavailable.", payload);
       } catch (error) {
-        return json(failure(error));
+        return failureReport("Live alerts", error);
       }
     },
   );
@@ -582,14 +607,14 @@ export function registerAnalyticsTools(
 
       const document = await getDocument("schema").catch(() => null);
       if (document) {
-        return report(
+        // No card: this tool answers a wall of definitions FOR THE MODEL, and
+        // there is nothing on it a person would want drawn as tiles.
+        return plain(
           mdSections([
             document.text,
             mdHeading("Metric definitions — read these before computing anything", 3),
             METRIC_DEFINITIONS.map((line, index) => `${index + 1}. ${line}`).join("\n\n"),
           ]),
-          null,
-          sendWidgets,
         );
       }
       return json({
@@ -646,14 +671,15 @@ export function registerAnalyticsTools(
     },
     async ({ query, limit }) => {
       const guarded = guardHogqlQuery(query, limit);
-      if (!guarded.ok) return json({ error: guarded.reason });
+      if (!guarded.ok) {
+        return problemReport("PostHog query", `**Refused.** ${guarded.reason}`, guarded.reason);
+      }
       if (!isStatsConfigured()) {
-        return json({
-          error:
-            "PostHog reading is not configured on this deployment " +
-            "(POSTHOG_PERSONAL_API_KEY is unset). No events could be read; this is " +
-            "not the same as there being no events.",
-        });
+        const reason =
+          "PostHog reading is not configured on this deployment " +
+          "(POSTHOG_PERSONAL_API_KEY is unset). No events could be read; this is " +
+          "not the same as there being no events.";
+        return problemReport("PostHog query", `**Unavailable.** ${reason}`, reason);
       }
       try {
         const rows = await hogqlNamed<Record<string, unknown>>(guarded.sql, "mcp-analytics");
@@ -695,10 +721,9 @@ export function registerAnalyticsTools(
               : null,
           ]),
           payload,
-          sendWidgets,
         );
       } catch (error) {
-        return json(failure(error));
+        return failureReport("PostHog query", error);
       }
     },
   );
@@ -727,7 +752,9 @@ export function registerAnalyticsTools(
     },
     async ({ query, limit }) => {
       const guarded = guardAnalyticsSql(query, limit);
-      if (!guarded.ok) return json({ error: guarded.reason });
+      if (!guarded.ok) {
+        return problemReport("Database query", `**Refused.** ${guarded.reason}`, guarded.reason);
+      }
       try {
         const { rows, truncated } = await runAnalyticsQuery(guarded.sql, guarded.limit);
         const payload: WidgetPayload =
@@ -767,10 +794,9 @@ export function registerAnalyticsTools(
               : null,
           ]),
           payload,
-          sendWidgets,
         );
       } catch (error) {
-        return json(failure(error));
+        return failureReport("Database query", error);
       }
     },
   );
