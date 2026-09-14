@@ -82,6 +82,74 @@ export const REPORT_WIDGET_URI = "ui://hallpass/report";
 /** The MIME type MCP Apps uses to mark an HTML document as a widget. */
 export const WIDGET_MIME_TYPE = "text/html;profile=mcp-app";
 
+/** The extension's own identifier, for the docs and for grep. */
+export const UI_EXTENSION_ID = "io.modelcontextprotocol/ui";
+
+/**
+ * The wire version the card announces in `ui/initialize`.
+ *
+ * Pinned rather than inferred so the next person can diff the spec against this
+ * file instead of re-deriving it. Source of truth:
+ * `modelcontextprotocol/ext-apps@specification/2026-01-26/apps.mdx`, and
+ * `LATEST_PROTOCOL_VERSION` in that repo's `src/spec.types.ts`.
+ */
+export const UI_PROTOCOL_VERSION = "2026-01-26";
+
+/**
+ * The deprecated flat alias for `ui.resourceUri`.
+ *
+ * Still written, and that is deliberate. The extension's own `constants.ts`
+ * marks it deprecated and in the same breath tells hosts they "must check both
+ * formats for compatibility" — and the official `registerAppTool` still emits
+ * both. Sending only the nested form loses every host that has not migrated.
+ */
+const LEGACY_RESOURCE_URI_KEY = "ui/resourceUri";
+
+/**
+ * What a card-bearing tool DESCRIPTOR carries.
+ *
+ * ── WHY THE DESCRIPTOR AND NOT THE ANSWER ─────────────────────────────────
+ * This is the whole bug that kept the card from ever rendering. A host reads
+ * `tools/list` to learn which tools have a UI, fetches the resource, and only
+ * then calls anything — so a link attached to a tool RESULT is a link nobody
+ * ever looks for. The spec's normative example puts it here, and so does
+ * `registerAppTool`.
+ *
+ * `visibility: ["model"]` narrows the default `["model", "app"]`. The default
+ * advertises that the card may call these tools back; it has no interactive
+ * surface and never does. One word to widen again if it ever gains a refresh
+ * button, and a wrong annotation is worse than an absent one (`mcp/server.ts`).
+ *
+ * The `openai/` key is ChatGPT's own Apps SDK alias. Belt and braces rather
+ * than load-bearing — ChatGPT reads the standard keys too — but it is one key.
+ */
+export const REPORT_TOOL_META: Readonly<Record<string, unknown>> = Object.freeze({
+  ui: { resourceUri: REPORT_WIDGET_URI, visibility: ["model"] },
+  [LEGACY_RESOURCE_URI_KEY]: REPORT_WIDGET_URI,
+  "openai/outputTemplate": REPORT_WIDGET_URI,
+});
+
+/**
+ * What the card's RESOURCE carries, on both `resources/list` and the
+ * `resources/read` content item.
+ *
+ * ── NO `csp` KEY, AND THAT IS THE DECISION ────────────────────────────────
+ * Omitting it makes the host apply its restrictive default — `default-src
+ * 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';
+ * img-src 'self' data:; connect-src 'none'` — which this document satisfies
+ * exactly: one inline <style>, one inline <script>, inline SVG, and no network
+ * use at all. Declaring domains it does not need would widen the sandbox for
+ * nothing, and `widgets.test.ts` asserts the key stays absent.
+ *
+ * `prefersBorder: false` because the card paints its own page background and
+ * its own bordered surfaces; a host frame around it would double the border.
+ * Stated rather than left to default, which the spec recommends because hosts
+ * differ.
+ */
+export const REPORT_RESOURCE_META: Readonly<Record<string, unknown>> = Object.freeze({
+  ui: { prefersBorder: false },
+});
+
 /**
  * The card.
  *
