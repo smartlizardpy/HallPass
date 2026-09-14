@@ -959,6 +959,35 @@
             });
         }
 
+        /* Post the full clear, but only when it beats what this browser last got
+           on the board. Every sector keeps its minimum, so the total only ever
+           falls; without the guard each later sector clear would re-post an
+           identical number as a duplicate row.
+
+           The marker is written only once the API confirms the row, so a run
+           posted while offline is retried on the next clear instead of being
+           recorded as sent. */
+        function hpSubmitClearIfImproved() {
+            const totalMs = hpTotalClearMs();
+            if (totalMs === null || !window.HallPass) return;
+
+            let posted = null;
+            try {
+                const raw = localStorage.getItem('shadow_dash_hp_posted_ms');
+                if (raw !== null) posted = parseInt(raw, 10);
+            } catch(e) {}
+            if (posted !== null && Number.isFinite(posted) && totalMs >= posted) return;
+
+            window.HallPass.submitScore(totalMs).then((res) => {
+                if (!res || !res.ok) return;
+                try {
+                    localStorage.setItem('shadow_dash_hp_posted_ms', String(totalMs));
+                } catch(e) {}
+                /* Repaint so the player sees the rank they just took. */
+                loadLeaderboard('hp-complete-leaderboard');
+            });
+        }
+
         function updateAuthUI(playerData) {
             const container = document.getElementById('hp-auth-container');
             if (!container) return;
@@ -1250,6 +1279,7 @@
             try {
                 localStorage.removeItem('shadow_dash_max_level');
                 localStorage.removeItem('shadow_dash_level_stats');
+                localStorage.removeItem('shadow_dash_hp_posted_ms');
             } catch(e) {}
             buildLevelGrid();
         }
@@ -1478,6 +1508,8 @@
                 try {
                     localStorage.setItem('shadow_dash_level_stats', JSON.stringify(levelStats));
                 } catch(e) {}
+
+                hpSubmitClearIfImproved();
 
                 document.getElementById('completed-time-text').innerText = formatTime(levelTimer, true);
                 SoundFX.playWin();
