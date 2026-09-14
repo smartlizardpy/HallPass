@@ -830,9 +830,11 @@
                 document.getElementById('screen-complete').classList.remove('hidden');
                 document.getElementById('completed-level-text').innerText = currentLevel;
                 renderSoulsRating();
+                loadLeaderboard('hp-complete-leaderboard');
             } else if (newState === 'DEATH') {
                 document.getElementById('ui-main').classList.remove('hidden');
                 document.getElementById('screen-death').classList.remove('hidden');
+                loadLeaderboard('hp-death-leaderboard');
             }
             updateControlsVisibility();
         }
