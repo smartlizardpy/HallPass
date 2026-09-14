@@ -735,27 +735,51 @@ Every answer is **Markdown** — stat lines with their caveats, ranked tables,
 query results as a table with truncation stated rather than clipped in silence.
 That is what the model reads and, in most clients, what you see.
 
-On top of that, an app that supports [MCP Apps](https://modelcontextprotocol.io)
-can draw a **card**: the same KPI tiles, delta pills, sparklines and tables as
-`/dashboard`, in the same brand colours. ChatGPT renders these today.
+On top of that, an app that implements **MCP Apps** — the MCP extension
+`io.modelcontextprotocol/ui`, stable since 2026-01-26 — can draw a **card**: the
+same KPI tiles, delta pills, sparklines and tables as `/dashboard`. The card is
+offered to every app and each one decides; an app that does not implement the
+extension ignores the offer and shows the same Markdown it always did, which is
+what the spec requires of it.
 
-**Claude does not, for a custom remote connector.** Its tracker carries
-[claude-ai-mcp#471](https://github.com/anthropics/claude-ai-mcp/issues/471),
-closed as not planned, and
-[claude-code#65653](https://github.com/anthropics/claude-code/issues/65653)
-reports an empty labelled container rather than a graceful fallback. An empty
-box is worse than a table, which is why **Dashboard → Connections** has a
-switch:
+The extension's own client matrix lists Claude (web and desktop), ChatGPT,
+Cursor, VS Code Copilot, Microsoft 365 Copilot, Goose, Postman and others as
+implementing it. Two caveats worth having in writing:
+
+- **Report what you actually see, not what the matrix says.** There is a
+  standing report — [claude-ai-mcp#471](https://github.com/anthropics/claude-ai-mcp/issues/471),
+  closed as not planned — of a spec-correct server still getting text-only
+  rendering in Claude for a *custom remote connector*. Whether that is current
+  is not established here. If a card does not appear for you, that is worth
+  knowing and worth writing down; it is not necessarily something wrong with
+  this server.
+- **MCP Inspector does not implement MCP Apps.** A blank where a card should be
+  in Inspector means nothing at all. Use it to check the metadata, never the
+  rendering.
+
+That is what **Dashboard → Connections** has a switch for:
 
 | Mode | What it does |
 |---|---|
-| **Automatic** (default) | Cards only to clients that look like ones known to render them; text to everyone else. |
-| **Always send cards** | Cards to every client. Pick it once you have seen one render. |
-| **Text only** | Never send cards. Pick it if an app is showing empty boxes. |
+| **Cards** (default) | Offer the card to every app and let each one decide. |
+| **Text only** | Never offer the card. Pick it if an app is showing an empty box. |
 
 The setting is read per request, so flipping it takes effect on the next call
 rather than the next deploy. The card also degrades on its own: handed no data
 it says so in words instead of rendering blank.
+
+Under the hood the link lives on the **tool descriptor** (`_meta.ui.resourceUri`
+in `tools/list`), which is where a host looks for it, and the card performs the
+`ui/initialize` handshake a host waits for before sending it anything. Both were
+wrong before, which is why cards never rendered anywhere at all. To check the
+wire yourself:
+
+```bash
+curl -sS "$SITE/api/mcp" -H "authorization: Bearer $MCP_SECRET" \
+  -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' |
+  jq '.result.tools[] | select(._meta) | {name, ui: ._meta.ui}'
+```
 
 Two things are worth knowing:
 
