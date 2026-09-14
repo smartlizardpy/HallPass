@@ -876,6 +876,102 @@
             return `${mStr}:${sStr}`;
         }
 
+        /* --- HallPass ---------------------------------------------------------
+           The board holds ONE number per player: the time to clear all fifteen
+           sectors, summed from each sector's personal best. It is an ASCENDING
+           board - lowest time ranks first - and the only one on the site that
+           sorts that way.
+
+           Times cross the wire as INTEGER MILLISECONDS. The score column is
+           BIGINT and the API truncates with Math.trunc, so a fractional value is
+           silently floored: posting 12.3 seconds would store 12 and every close
+           run would tie on a whole second.
+        ---------------------------------------------------------------------- */
+
+        const HP_BOARD_LABEL = 'FASTEST FULL CLEAR';
+
+        /* Escape text bound for innerHTML. Handles arrive server-sanitised to
+           [A-Za-z0-9 _-], but a signed-in player's Google name does not, and it
+           is rendered straight into the auth row. */
+        function hpEscape(value) {
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+            return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => map[c]);
+        }
+
+        /* Sectors with a recorded best, out of TOTAL_LEVELS. */
+        function hpSectorsCleared() {
+            let cleared = 0;
+            for (let i = 1; i <= TOTAL_LEVELS; i++) {
+                const stat = levelStats[i];
+                if (stat && stat.time) cleared++;
+            }
+            return cleared;
+        }
+
+        /* Total clear time in whole milliseconds, or null until every sector has
+           a best. levelStats stores seconds as floats; the sum is rounded once,
+           at the end, rather than per sector. */
+        function hpTotalClearMs() {
+            let totalSeconds = 0;
+            for (let i = 1; i <= TOTAL_LEVELS; i++) {
+                const stat = levelStats[i];
+                if (!stat || !stat.time) return null;
+                totalSeconds += stat.time;
+            }
+            return Math.round(totalSeconds * 1000);
+        }
+
+        function loadLeaderboard(containerId) {
+            const el = document.getElementById(containerId);
+            if (!el || !window.HallPass) return;
+
+            el.innerHTML = '<div class="text-xs text-slate-400 py-1 text-center">Loading fastest times...</div>';
+
+            /* getScores never rejects - it resolves [] when offline or inert. */
+            window.HallPass.getScores({ limit: 10 }).then((rows) => {
+                let html = '<div class="text-xs font-spooky text-amber-400 mb-1.5 font-bold tracking-wider text-center">\u{1F3C6} '
+                    + HP_BOARD_LABEL + '</div>';
+
+                if (!rows || rows.length === 0) {
+                    html += '<div class="text-xs text-amber-300 py-1 text-center font-semibold">No full clears yet - be the first!</div>';
+                } else {
+                    html += '<div class="space-y-1 text-xs font-mono">';
+                    rows.forEach((r) => {
+                        const badge = r.verified ? ' <span class="text-cyan-400" title="Verified">\u2713</span>' : '';
+                        html += '<div class="flex justify-between items-center bg-slate-900/80 px-2.5 py-1 rounded border border-slate-800 text-slate-200">'
+                            + '<span>#' + r.rank + ' ' + hpEscape(r.handle || 'Guest') + badge + '</span>'
+                            + '<span class="text-cyan-300 font-bold">' + formatTime(r.score / 1000, true) + '</span>'
+                            + '</div>';
+                    });
+                    html += '</div>';
+                }
+
+                /* Say why nothing of yours is up there yet. */
+                const cleared = hpSectorsCleared();
+                if (cleared < TOTAL_LEVELS) {
+                    html += '<div class="text-[11px] text-slate-400 mt-2 text-center leading-snug">Clear all '
+                        + TOTAL_LEVELS + ' sectors to post a time - ' + cleared + '/' + TOTAL_LEVELS + ' done.</div>';
+                }
+
+                el.innerHTML = html;
+            });
+        }
+
+        function updateAuthUI(playerData) {
+            const container = document.getElementById('hp-auth-container');
+            if (!container) return;
+
+            if (playerData) {
+                /* Show the handle the board will credit, not the Google name. */
+                container.innerHTML = '<div class="text-xs text-emerald-400 font-semibold bg-emerald-950/50 border border-emerald-800/60 py-2.5 px-4 rounded-xl flex items-center justify-center gap-2">'
+                    + '<span>\u{1F464}</span> Signed in as <strong class="text-white">'
+                    + hpEscape(playerData.handle || playerData.name) + '</strong></div>';
+            } else {
+                container.innerHTML = '<button onclick="window.HallPass && window.HallPass.signIn()" class="glass-button w-full py-2.5 px-4 rounded-xl text-amber-300 font-spooky text-sm flex items-center justify-center gap-2 hover:border-amber-400 transition">'
+                    + '<span>\u{1F511}</span> Sign In with Google</button>';
+            }
+        }
+
         function generateLevel(levelIdx) {
             platforms = [];
             hazards = [];
@@ -1744,5 +1840,13 @@
     q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:{ok:false,reason:"inert"})})},2000)})(window);
     </script>
     <script src="/sdk/v1/hallpass.js" data-game="haloween-fastest-level-time" defer></script>
+    <script>
+        /* The stub above guarantees window.HallPass exists, so these queue and
+           replay once the bundle lands. "auth" is sticky: a listener added after
+           sign-in already completed still fires once with the current identity. */
+        updateAuthUI(null);
+        window.HallPass.getPlayer().then(updateAuthUI);
+        window.HallPass.on('auth', (e) => updateAuthUI(e.player));
+    </script>
 </body>
 </html>
