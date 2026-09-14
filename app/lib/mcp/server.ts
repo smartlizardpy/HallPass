@@ -687,7 +687,7 @@ function registerTrackerTools(server: McpServer): void {
  */
 export function createMcpServer(
   actor: McpActor,
-  { sendWidgets = false }: { sendWidgets?: boolean } = {},
+  { declareUi = false }: { declareUi?: boolean } = {},
 ): McpServer {
   const isSecret = actor.kind === "secret";
   const server = new McpServer(
@@ -706,7 +706,7 @@ export function createMcpServer(
     registerBugTools(server);
     registerTrackerTools(server);
   }
-  registerAnalyticsTools(server, { sendWidgets });
+  registerAnalyticsTools(server, { declareUi });
 
   return server;
 }

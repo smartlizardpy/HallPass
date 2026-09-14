@@ -57,8 +57,7 @@ import { createMcpServer } from "@/app/lib/mcp/server";
 import { readAppSetting } from "@/app/lib/app-settings";
 import {
   OUTPUT_MODE_KEY,
-  clientHintFrom,
-  shouldSendWidgets,
+  shouldDeclareUi,
   toOutputMode,
 } from "@/app/lib/mcp/analytics/output-mode";
 
@@ -98,16 +97,16 @@ export async function POST(req: Request): Promise<Response> {
     enableJsonResponse: true,
   });
 
-  // Whether this answer carries a rendered card is an operator setting, read
+  // Whether these tools declare their card is an operator setting, read
   // per request so flipping it in the dashboard takes effect on the next call
   // rather than the next deploy — which is the whole point of it being a
   // setting (`analytics/output-mode.ts`). Fail-soft: `readAppSetting` returns
   // null on an unreachable database, and `toOutputMode` reads that as the
   // default, so a Neon blip costs a card and never an answer.
   const mode = toOutputMode(await readAppSetting(OUTPUT_MODE_KEY));
-  const sendWidgets = shouldSendWidgets(mode, clientHintFrom(req.headers));
-
-  const server = createMcpServer(auth.actor satisfies McpActor, { sendWidgets });
+  const server = createMcpServer(auth.actor satisfies McpActor, {
+    declareUi: shouldDeclareUi(mode),
+  });
   await server.connect(transport);
   return withCors(await transport.handleRequest(req), cors);
 }
