@@ -55,3 +55,6 @@ capture-sample.json
 # branches this repo already holds, so committing them would vendor a copy of the
 # tree into itself.
 /.claude/worktrees/
+
+# Personal permission overrides for this checkout — never committed.
+/.claude/settings.local.json
