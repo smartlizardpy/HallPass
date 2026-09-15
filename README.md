@@ -941,6 +941,7 @@ and auth vars below are not in it.
 | `POSTHOG_PERSONAL_API_KEY` | `app/lib/stats.ts` | Personal API key with read access for play-count queries (server-side read; separate from the client capture token above). Also what the site alerts read themselves through — without it the alerts probe answers 503. |
 | `POSTHOG_ENV_CHECK` | `scripts/check-build-env.mjs` | Set to `warn` to stop a missing `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` failing the deploy. |
 | `HALLPASS_SITE_URL` | `scripts/check-alerts.mjs` | Repository *variable*, not a secret. Points a workflow run at a deployment other than production. |
+| `CREDIT_GEO_GATE` | `app/lib/credit-visibility.ts` | Optional, **on by default**. The public footer shows the team's real names only to visitors `GET /api/v1/credit-visibility` geolocates (via `@vercel/functions`) to the UK or Turkey; everyone else sees "Sigma Alpha Male Game Studios". Set to `off`/`0`/`false`/`no` to turn the gate off and show the real names to everybody, same as before this existed. |
 
 ## Scripts
 

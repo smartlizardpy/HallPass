@@ -1,4 +1,5 @@
 import { DeviceSwitch } from "./DeviceSwitch";
+import { FooterCredits } from "./FooterCredits";
 import { Wordmark } from "./Wordmark";
 
 /**
@@ -16,6 +17,9 @@ import { Wordmark } from "./Wordmark";
  * Uses `Wordmark`, which documents itself as the single source of truth for the
  * brand mark; the footer previously hand-inlined its own copy (one of four such
  * copies across the arcade).
+ *
+ * The byline itself is `FooterCredits`, a client island — see its docblock for
+ * why the real names can only be shown once the visitor's country is known.
  */
 export function SiteFooter() {
   return (
@@ -26,10 +30,7 @@ export function SiteFooter() {
       <div className="flex flex-col items-start justify-between gap-4 rounded-3xl bg-white p-6 sm:flex-row sm:items-center sm:p-8">
         <Wordmark />
         <div className="text-[13px] font-bold text-muted sm:text-right">
-          <p>
-            Games by <span className="text-zinc-900">Ateş Demir</span> · Site by{" "}
-            <span className="text-zinc-900">Ozan Kaygusuz</span>
-          </p>
+          <FooterCredits />
           {/* Flat `text-muted`, NOT `text-muted/80`. --muted (#6b6b7b) is
               5.23:1 on this white card — it clears WCAG AA with very little
               room, which is exactly why an opacity modifier breaks it: /80
