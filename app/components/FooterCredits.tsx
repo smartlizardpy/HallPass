@@ -15,6 +15,12 @@ import { CREDIT_PLACEHOLDER } from "../lib/credit-visibility";
  * defaults to the placeholder and only SWAPS to the real names once the fetch
  * confirms them — never the other way around, so a slow or failed request
  * never flashes a real name at a visitor the gate meant to hide it from.
+ *
+ * THE PLACEHOLDER IS ALSO A BUTTON. Clicking "{@link CREDIT_PLACEHOLDER}"
+ * reveals the real names on the spot, same local `showReal` state the fetch
+ * would have set — a deliberate escape hatch, not a leak: the gate hides the
+ * names from a random visitor by default, but never from someone who
+ * specifically goes looking.
  */
 export function FooterCredits() {
   const [showReal, setShowReal] = useState(false);
@@ -45,7 +51,14 @@ export function FooterCredits() {
 
   return (
     <p>
-      Made by <span className="text-zinc-900">{CREDIT_PLACEHOLDER}</span>
+      Made by{" "}
+      <button
+        type="button"
+        onClick={() => setShowReal(true)}
+        className="text-zinc-900 underline underline-offset-2 transition hover:text-brand"
+      >
+        {CREDIT_PLACEHOLDER}
+      </button>
     </p>
   );
 }
