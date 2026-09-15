@@ -434,11 +434,15 @@ export default async function McpConnectionsPage({
               How answers are presented
             </h2>
             <p className="mb-4 text-sm text-muted">
-              Some apps can draw a HallPass report as a <strong>card</strong> — the
-              same KPI tiles and tables as the overview — instead of formatted
-              text. Support is uneven and the failure is ugly: an app that only
-              half-supports it shows an <em>empty box</em> rather than falling back.
-              If you see that, switch to text and the answer comes back.
+              Apps that support{" "}
+              <strong>MCP Apps</strong> can draw a HallPass report as a{" "}
+              <strong>card</strong> — the same KPI tiles and tables as the
+              overview — instead of formatted text. The card is offered to every
+              app and each one decides; an app that cannot draw it ignores the
+              offer and shows the same text it always did. The switch is here for
+              the app nobody anticipated: if you ever see an <em>empty box</em>{" "}
+              instead of your answer, pick text and it comes back on the next
+              question.
             </p>
 
             <form action={setOutputModeAction} className="space-y-3">

@@ -1,123 +1,112 @@
 /**
  * HallPass — how the analytics tools present their answers.
  *
- * PURE and free of `server-only`, like every other rule here, so the fallback
- * logic is unit-tested rather than discovered in a client that shows an empty
- * box.
+ * PURE and free of `server-only`, like every other rule here, so the decision is
+ * unit-tested rather than discovered in a client that shows an empty box.
  *
- * ── WHY THIS IS A SETTING AND NOT A CONSTANT ──────────────────────────────
- * MCP Apps (SEP-1865) lets a tool attach an HTML widget: the tool answers with
- * text for the model AND a `ui://` resource the host renders in a sandboxed
- * iframe. Done right that is a genuine card instead of a wall of numbers.
+ * ── WHAT MCP APPS ACTUALLY ASKS OF A SERVER ───────────────────────────────
+ * MCP Apps (SEP-1865, stable since 2026-01-26 as the extension
+ * `io.modelcontextprotocol/ui`) lets a TOOL declare a `ui://` resource on its
+ * descriptor. A host that implements the extension reads `tools/list`, fetches
+ * that resource, renders it in a sandboxed iframe and hands it the tool's
+ * `structuredContent`. A host that does not implement it is required to ignore
+ * the unrecognised `_meta` and show the text — `_meta` is the protocol's
+ * designated ignore-me channel, and that is exactly what makes declaring safe.
  *
- * Support for it is uneven, and the failure mode is not a graceful fallback.
- * ChatGPT renders widgets today. Claude's own tracker carries
- * `anthropics/claude-ai-mcp#471` — a spec-correct custom remote connector whose
- * widget never renders — closed as not planned, and `claude-code#65653`
- * reports a **labelled but completely empty container** rather than the text.
- * An empty box is strictly worse than a Markdown table: the person sees a
- * broken feature instead of their answer.
+ * ── WHY THIS NO LONGER GUESSES WHO IS CALLING ─────────────────────────────
+ * It used to. `WIDGET_CAPABLE_HINTS` matched `Origin` and `User-Agent` against
+ * a list of clients believed to render cards, and it was wrong twice over:
  *
- * So which of the two a client gets is an operator decision, taken from what
- * they can actually see on their own screen, and changed without a deploy.
- * `app_settings` is the right home for exactly the reason its own header gives:
- * a key that has never been written simply is not there, and the reader
- * supplies the default.
+ *   * THE EVIDENCE IS NOT THERE. ChatGPT and Claude call an MCP server from
+ *     their BACKENDS, not from a browser. There is no `Origin` on a tool call
+ *     and the `User-Agent` is generic, so the hint was empty and `auto` read
+ *     empty as "not known". The default mode never sent a card to anything —
+ *     including the one client the list was written for.
+ *   * THE LIST NAMED THE WRONG HOSTS. It withheld cards from Claude by name,
+ *     while the extension's own client matrix records Claude (web and desktop),
+ *     ChatGPT, Cursor, VS Code Copilot, Goose and others as implementing it.
+ *
+ * So the guess is gone. Every answer declares its card and each host decides,
+ * which is what the spec asks for and the only arrangement that does not
+ * depend on this file knowing things it cannot know.
+ *
+ * For the record, and contrary to what this module used to assert: the protocol
+ * DOES have a capability for this. A client may advertise
+ * `capabilities.extensions["io.modelcontextprotocol/ui"]` at `initialize`, and
+ * per request in `params._meta["io.modelcontextprotocol/clientCapabilities"]` —
+ * the latter would even survive this deployment's stateless transport. Reading
+ * it means parsing the JSON-RPC body ahead of the transport in the auth path
+ * for a signal almost nothing sends yet, so it is deferred rather than denied.
+ * `analytics-mcp-design.md` §9 carries it as an open question.
+ *
+ * ── WHY THE SETTING SURVIVES AT ALL ───────────────────────────────────────
+ * One operator-visible escape hatch, changed without a deploy, for the host
+ * nobody anticipated. If a client ever draws a broken box, `markdown` turns the
+ * declaration off on the next request. That is the whole job, and it is why
+ * there are two modes rather than three: "automatic" described a guess that no
+ * longer happens, and a setting with two names for one behaviour is a ceremony.
  *
  * ── THE TEXT IS ALWAYS SENT ───────────────────────────────────────────────
- * In every mode. In `widget` and `auto` it is the fallback the MCP Apps spec
- * expects a host to show when it cannot render the resource, and it is what the
- * MODEL reads in all cases — a widget is for the person, never for the model.
- * The setting only decides whether the widget metadata rides along.
+ * In both modes. It is the fallback the spec expects a host to show when it
+ * cannot render the resource, and it is what the MODEL reads in all cases — a
+ * card is for the person, never for the model. The setting only decides whether
+ * the card is declared alongside it.
  */
 
 /** The `app_settings` key. Namespaced like every other key in that table. */
 export const OUTPUT_MODE_KEY = "mcp:output_mode";
 
 /** What an operator may choose. */
-export const OUTPUT_MODES = ["auto", "widget", "markdown"] as const;
+export const OUTPUT_MODES = ["cards", "markdown"] as const;
 export type OutputMode = (typeof OUTPUT_MODES)[number];
 
 /**
  * What an unwritten key means.
  *
- * `auto` rather than `widget`, because the cost of being wrong is asymmetric: a
- * client that would have rendered a card shows a good Markdown table instead,
- * which is a mild loss, whereas a client that cannot render one shows an empty
- * box, which reads as broken. Defaulting to the outcome that is never broken is
- * the same instinct as `MCP_OAUTH_ENABLED` defaulting off.
+ * `cards` now, where it used to be the withhold-by-default guess. The old
+ * default's premise — that withholding was "never broken" — held only because
+ * the card itself was broken: it never declared itself where a host looks, and
+ * never opened the handshake a host waits for. With both fixed and the card
+ * degrading in words when it is handed nothing, the asymmetry that justified
+ * defaulting to silence is gone.
  */
-export const DEFAULT_OUTPUT_MODE: OutputMode = "auto";
+export const DEFAULT_OUTPUT_MODE: OutputMode = "cards";
 
-/** Narrow a stored string, falling back to the default for anything unknown. */
+/**
+ * Narrow a stored string.
+ *
+ * `auto` and `widget` are the pre-2026 names and both meant "declare where we
+ * think it will render", so both narrow to `cards`. That is the migration
+ * contract for rows already sitting in `app_settings`, and it has its own test:
+ * an operator who chose a mode once should not silently get a different one.
+ */
 export function toOutputMode(value: unknown): OutputMode {
-  return OUTPUT_MODES.includes(value as OutputMode)
-    ? (value as OutputMode)
-    : DEFAULT_OUTPUT_MODE;
+  if (value === "markdown") return "markdown";
+  return DEFAULT_OUTPUT_MODE;
 }
 
 /**
- * The client names and origins known to render MCP Apps widgets.
+ * Does this answer declare its card?
  *
- * ── WHY THIS IS MATCHED ON HEADERS AND NOT ON `clientInfo` ────────────────
- * A client names itself in `initialize`, which would be the right signal — and
- * is unavailable here. The transport is STATELESS (`app/api/mcp/route.ts`): a
- * new server is built per request, `tools/list` arrives as its own HTTP request
- * carrying no memory of the `initialize` before it, and `tools/list` is exactly
- * where a tool's widget metadata has to be decided. So the only per-request
- * evidence of who is calling is the HTTP headers.
- *
- * That makes `auto` A COARSE GUESS, and it is worth being blunt about it rather
- * than implying a negotiation that does not exist. The protocol has no "I
- * render `ui://` resources" capability at all — MCP Apps is an extension, and a
- * host that does not implement it is supposed to ignore the `_meta`. The two
- * reliable controls are the operator's own eyes, which is why `widget` and
- * `markdown` override this entirely and why the dashboard says so.
+ * The only question left. No client hint, because there is no client hint worth
+ * reading — see the header.
  */
-export const WIDGET_CAPABLE_HINTS = ["chatgpt", "openai", "chat.openai.com"] as const;
-
-/**
- * A lowercase hint for who is calling, from `Origin` then `User-Agent`.
- *
- * `Origin` first because it is the more trustworthy of the two: a browser sets
- * it and a page cannot forge it, whereas a User-Agent is whatever the caller
- * typed. Neither is a security control here — the worst a spoofed hint achieves
- * is a card in a client that cannot draw one, which the operator fixes with the
- * setting.
- */
-export function clientHintFrom(headers: Headers): string {
-  const origin = headers.get("origin")?.trim();
-  const agent = headers.get("user-agent")?.trim();
-  return `${origin ?? ""} ${agent ?? ""}`.toLowerCase().trim();
-}
-
-/**
- * Should this request carry widget metadata?
- *
- * `widget` and `markdown` are absolute — an operator who has looked at their
- * own screen outranks any guess this module could make, and that is the whole
- * point of the setting existing. Only `auto` consults the hint.
- */
-export function shouldSendWidgets(mode: OutputMode, hint: string | null): boolean {
-  if (mode === "markdown") return false;
-  if (mode === "widget") return true;
-  const value = (hint ?? "").toLowerCase();
-  if (!value) return false;
-  return WIDGET_CAPABLE_HINTS.some((known) => value.includes(known));
+export function shouldDeclareUi(mode: OutputMode): boolean {
+  return mode !== "markdown";
 }
 
 /** What the dashboard explains each choice means. */
 export const OUTPUT_MODE_LABEL: Record<OutputMode, string> = {
-  auto: "Automatic",
-  widget: "Always send cards",
+  cards: "Cards",
   markdown: "Text only",
 };
 
 export const OUTPUT_MODE_HINT: Record<OutputMode, string> = {
-  auto:
-    "Send cards only to clients that look like ones known to render them (ChatGPT today), and formatted text to everyone else. A coarse guess from the request headers — the protocol offers nothing better — but it is the choice that is never broken.",
-  widget:
-    "Send cards to every client. Pick this once you have seen a client render one. If it cannot, it may show an empty box instead of your answer.",
+  cards:
+    "Offer the card to every app, and let each one decide. Apps that implement " +
+    "MCP Apps draw the report as tiles and tables; every other app ignores the " +
+    "offer and shows the same formatted text it always did.",
   markdown:
-    "Never send cards, only formatted text. Pick this if a client is showing empty boxes, or if you simply prefer reading tables.",
+    "Never offer the card, only formatted text. Pick this if an app is showing " +
+    "an empty box, or if you simply prefer reading tables.",
 };

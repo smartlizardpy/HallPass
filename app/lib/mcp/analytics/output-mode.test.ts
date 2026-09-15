@@ -1,10 +1,21 @@
 /**
- * Tests for the widget/Markdown output setting.
+ * Tests for the card/Markdown output setting.
  *
- * The property that matters is that an OPERATOR'S CHOICE OUTRANKS THE GUESS.
- * The client-name list is a heuristic — the protocol has no capability to
- * negotiate against — so `widget` and `markdown` must be absolute, or somebody
- * staring at an empty box has no way to fix it.
+ * Two properties matter now, and they are not the ones this file used to
+ * assert:
+ *
+ *   * AN OPERATOR'S CHOICE IS ABSOLUTE. `markdown` withholds the card from
+ *     everyone, because it is the only remedy somebody staring at a broken box
+ *     has, and it has to work on the next request.
+ *   * A STORED CHOICE SURVIVES THE RENAME. `auto` and `widget` were the old
+ *     names; rows carrying them are still in `app_settings`, and an operator
+ *     who chose one once must not silently end up on a different setting.
+ *
+ * What this file NO LONGER asserts is the interesting part. It used to test
+ * that Claude was withheld from and that a hint of `chatgpt` was matched — a
+ * heuristic that was wrong in both directions: the header evidence is absent
+ * from backend-to-backend callers, and the extension's own client matrix
+ * records Claude as implementing MCP Apps. See `output-mode.ts`'s header.
  */
 
 import { describe, expect, it } from "vitest";
@@ -13,87 +24,60 @@ import {
   OUTPUT_MODES,
   OUTPUT_MODE_HINT,
   OUTPUT_MODE_LABEL,
-  clientHintFrom,
-  shouldSendWidgets,
+  shouldDeclareUi,
   toOutputMode,
 } from "./output-mode";
 
 describe("toOutputMode", () => {
-  it("defaults an unwritten key to the never-broken option", () => {
-    expect(toOutputMode(null)).toBe("auto");
-    expect(toOutputMode(undefined)).toBe("auto");
-    expect(DEFAULT_OUTPUT_MODE).toBe("auto");
+  it("defaults an unwritten key to offering the card", () => {
+    expect(toOutputMode(null)).toBe("cards");
+    expect(toOutputMode(undefined)).toBe("cards");
+    expect(DEFAULT_OUTPUT_MODE).toBe("cards");
   });
 
-  it("accepts the three modes and nothing else", () => {
+  it("accepts the two modes and nothing else", () => {
     for (const mode of OUTPUT_MODES) expect(toOutputMode(mode)).toBe(mode);
-    expect(toOutputMode("cards")).toBe("auto");
-    expect(toOutputMode(42)).toBe("auto");
-    expect(toOutputMode("WIDGET")).toBe("auto");
+    expect(toOutputMode(42)).toBe("cards");
+    expect(toOutputMode("MARKDOWN")).toBe("cards");
+    expect(toOutputMode("nonsense")).toBe("cards");
+  });
+
+  it("carries the pre-2026 names onto the setting that means the same thing", () => {
+    // The migration contract. Both old names meant "declare where we think it
+    // will render", so both land on `cards`; only an explicit `markdown` —
+    // which an operator picks after SEEING something broken — still withholds.
+    expect(toOutputMode("auto")).toBe("cards");
+    expect(toOutputMode("widget")).toBe("cards");
+    expect(toOutputMode("markdown")).toBe("markdown");
   });
 });
 
-describe("shouldSendWidgets", () => {
-  it("never sends widgets in markdown mode, whoever is asking", () => {
-    for (const client of ["ChatGPT", "Claude", "openai-mcp", null, ""]) {
-      expect(shouldSendWidgets("markdown", client)).toBe(false);
-    }
+describe("shouldDeclareUi", () => {
+  it("offers the card in every mode but text-only", () => {
+    expect(shouldDeclareUi("cards")).toBe(true);
+    expect(shouldDeclareUi("markdown")).toBe(false);
   });
 
-  it("always sends widgets in widget mode, whoever is asking", () => {
-    for (const client of ["ChatGPT", "Claude", "some-cli", null, ""]) {
-      expect(shouldSendWidgets("widget", client)).toBe(true);
-    }
-  });
-
-  it("in auto, sends to hints that look like a client known to render them", () => {
-    expect(shouldSendWidgets("auto", "https://chatgpt.com")).toBe(true);
-    expect(shouldSendWidgets("auto", "chatgpt-connector/1.0")).toBe(true);
-    expect(shouldSendWidgets("auto", "openai-mcp")).toBe(true);
-  });
-
-  it("in auto, withholds them from everyone else", () => {
-    // Claude is the case this protects: its tracker has a spec-correct custom
-    // remote connector whose widget never renders, closed as not planned.
-    expect(shouldSendWidgets("auto", "Claude")).toBe(false);
-    expect(shouldSendWidgets("auto", "claude-code")).toBe(false);
-    expect(shouldSendWidgets("auto", "mcp-inspector")).toBe(false);
-  });
-
-  it("in auto, withholds them from a client that gave no hint at all", () => {
-    expect(shouldSendWidgets("auto", null)).toBe(false);
-    expect(shouldSendWidgets("auto", "")).toBe(false);
-  });
-});
-
-describe("clientHintFrom", () => {
-  const h = (init: Record<string, string>) => new Headers(init);
-
-  it("prefers the origin, which a page cannot forge", () => {
-    expect(clientHintFrom(h({ origin: "https://ChatGPT.com" }))).toContain("chatgpt.com");
-  });
-
-  it("falls back to the user agent for a non-browser caller", () => {
-    expect(clientHintFrom(h({ "user-agent": "openai-mcp/1.2" }))).toContain("openai-mcp");
-  });
-
-  it("is empty when a caller sends neither, which auto reads as \"not known\"", () => {
-    expect(clientHintFrom(h({}))).toBe("");
-    expect(shouldSendWidgets("auto", clientHintFrom(h({})))).toBe(false);
-  });
-
-  it("carries a CLI through to a no-widget decision in auto", () => {
-    const hint = clientHintFrom(h({ "user-agent": "node" }));
-    expect(shouldSendWidgets("auto", hint)).toBe(false);
-    expect(shouldSendWidgets("widget", hint)).toBe(true);
+  it("does not consult who is calling, because there is nothing worth reading", () => {
+    // Guards the whole point of the rewrite: the decision is a function of the
+    // operator's setting and nothing else. If this ever grows a second
+    // parameter again, it should be the negotiated client capability, not a
+    // header sniff.
+    expect(shouldDeclareUi.length).toBe(1);
   });
 });
 
 describe("the dashboard copy", () => {
-  it("labels and explains every mode, so the select cannot render a blank", () => {
+  it("labels and explains every mode, so the radio group cannot render a blank", () => {
     for (const mode of OUTPUT_MODES) {
       expect(OUTPUT_MODE_LABEL[mode]).toBeTruthy();
-      expect(OUTPUT_MODE_HINT[mode].length).toBeGreaterThan(20);
+      expect(OUTPUT_MODE_HINT[mode]).toBeTruthy();
     }
+  });
+
+  it("no longer promises a guess it does not make", () => {
+    const copy = Object.values(OUTPUT_MODE_HINT).join(" ").toLowerCase();
+    expect(copy).not.toContain("look like");
+    expect(copy).not.toContain("known to render");
   });
 });
