@@ -284,6 +284,7 @@ function ArcadeRows({
     return (
       <MobileCatalog
         games={mobileGames}
+        query={query}
         favorites={mobileCatalog(favoriteGames)}
         onPlay={requestPlay}
         pending={pending}
@@ -435,10 +436,13 @@ function ArcadeRows({
  * favourited) the section is omitted rather than shown empty: its empty state
  * says "no phone games yet", which would be a flat contradiction of the full grid
  * sitting directly above it. That message survives only for the case it was
- * written for — a genuinely empty phone catalogue, where `games` itself is empty.
+ * written for — a genuinely empty phone catalogue, where `games` itself is empty
+ * AND nothing was typed in the search box; a search that matched no phone game
+ * gets its own sentence, because it is a different fact (see {@link query}).
  */
 function MobileCatalog({
   games,
+  query,
   favorites,
   onPlay,
   pending,
@@ -448,6 +452,17 @@ function MobileCatalog({
   onToggleFavorite,
 }: {
   games: Game[];
+  /**
+   * What is in the search box, for the empty state ALONE — the list arrives
+   * already filtered by it.
+   *
+   * Passed down because an empty `games` has two causes that need two different
+   * sentences, and this component cannot tell them apart from the list: an empty
+   * phone catalogue means "nothing is tagged yet", while an empty SEARCH means
+   * "nothing touch-playable matches what you typed", which is not the same claim
+   * and is the common one now that most of the catalogue is tagged.
+   */
+  query: string;
   favorites: Game[];
   onPlay: (slug: string) => void;
   pending: Game | null;
@@ -524,8 +539,16 @@ function MobileCatalog({
       {games.length === 0 ? (
         <MobileSection title="Games">
           <div className="rounded-3xl bg-white p-10 text-center">
+            {/* Two different facts, so two different sentences. A search that
+                matched nothing phone-playable is not evidence that the phone
+                catalogue is empty — the games it matched may all be
+                keyboard-only — and telling a player "no phone games yet" after
+                they typed a name they can see on their laptop reads as the site
+                being broken rather than as the game being desktop-only. */}
             <p className="text-[15px] font-bold text-muted">
-              No phone games yet — more are on the way.
+              {query.trim()
+                ? `No phone games match “${query.trim()}”. It may be one of the keyboard-only games — try it on a computer.`
+                : "No phone games yet — more are on the way."}
             </p>
           </div>
         </MobileSection>
