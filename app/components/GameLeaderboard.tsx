@@ -111,12 +111,17 @@ export function GameLeaderboard({ slug }: { slug: string }) {
             </div>
           )}
           <ol className="space-y-2">
-            {board.rows.map((row) => (
-              // The board id is in the key because two boards on one game can
-              // hold the same handle at the same position, and the position is
-              // in it because a tie means two rows legitimately share a number.
+            {board.rows.map((row, index) => (
+              // KEYED BY INDEX WITHIN THE BOARD, which is the honest key here:
+              // nothing on a row is unique. Two verified players may share a
+              // display handle, a tie means two rows legitimately share a
+              // position, and the wire carries no player id (the body is
+              // identity-free on purpose — see the route's docblock). The list is
+              // replaced wholesale by one fetch and never reordered in place, so
+              // an index key cannot mis-associate state; the board id prefixes it
+              // because a game may render several boards at once.
               <BoardRow
-                key={`${board.boardId}:${row.position}:${row.handle}`}
+                key={`${board.boardId}:${index}`}
                 row={row}
                 scoreLabel={board.scoreLabel}
               />
