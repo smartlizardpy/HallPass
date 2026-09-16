@@ -44,7 +44,8 @@ export function FooterCredits() {
     return (
       <p>
         Games by <span className="text-zinc-900">Ateş Demir</span> · Site by{" "}
-        <span className="text-zinc-900">Ozan Kaygusuz</span>
+        <span className="text-zinc-900">Ozan Kaygusuz</span> · Marketing by{" "}
+        <span className="text-zinc-900">Sohan Kanti Dolai</span>
       </p>
     );
   }
