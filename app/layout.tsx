@@ -50,6 +50,7 @@ export const metadata: Metadata = {
   authors: [
     { name: "Ozan Kaygusuz" },
     { name: "Ateş Demir" },
+    { name: "Sohan Kanti Dolai" },
   ],
   creator: "Ozan Kaygusuz",
   openGraph: {
