@@ -136,16 +136,18 @@ describe("getTopScores", () => {
     ]);
   });
 
-  it("tags a verified entry from joined player columns (player_id + p_name)", async () => {
-    // A row with player_id set maps to verified:true; the effective display falls
-    // through p_handle -> p_name (here p_handle is null), and avatar = p_image.
+  it("tags a verified entry from joined player columns and carries its public id", async () => {
+    // A row with player_id set maps to verified:true; the display is the chosen
+    // handle, avatar = p_image, and playerId is the public_id UUID — never
+    // players.id, which is a Google subject.
     const { sql } = makeFakeSql(() => [
       {
         handle: "anon-fallback",
         score: "500",
         player_id: "google-sub-1",
-        p_handle: null,
-        p_name: "Ada Lovelace",
+        p_handle: "Countess",
+        p_username: "ada",
+        p_public_id: "11111111-2222-3333-4444-555555555555",
         p_image: "https://example.test/a.png",
       },
     ]);
@@ -159,12 +161,77 @@ describe("getTopScores", () => {
     expect(scores).toEqual([
       {
         rank: 1,
-        handle: "Ada Lovelace",
+        handle: "Countess",
         score: 500,
         verified: true,
         avatar: "https://example.test/a.png",
+        playerId: "11111111-2222-3333-4444-555555555555",
       },
     ]);
+  });
+
+  it("falls back to @username, never to the Google name, for a handleless player", async () => {
+    // THE PRIVACY CASE. players.name is not selected by these templates at all,
+    // so even a mapper edit cannot reintroduce a real name here; a row that
+    // somehow carried one must still never render it.
+    const { sql, calls } = makeFakeSql(() => [
+      {
+        handle: "Ada Lovelace",
+        score: "500",
+        player_id: "google-sub-1",
+        p_handle: null,
+        p_name: "Ada Lovelace",
+        p_username: "ada",
+        p_public_id: "11111111-2222-3333-4444-555555555555",
+        p_image: null,
+      },
+    ]);
+    const store = createStore(sql);
+    const scores = await store.getTopScores("neon-snake", {
+      limit: 10,
+      period: "all",
+      sort: "desc",
+    });
+
+    expect(scores[0].handle).toBe("@ada");
+    expect(calls[0].text).not.toContain("p.name");
+  });
+
+  it('falls back to "Player" when a verified row has neither handle nor username', async () => {
+    // The stored scores.handle is NOT the next fallback for a verified row: it is
+    // a snapshot of the display name at submit time, which for a player who never
+    // chose a handle is that same Google name, frozen.
+    const { sql } = makeFakeSql(() => [
+      {
+        handle: "Ada Lovelace",
+        score: "500",
+        player_id: "google-sub-1",
+        p_handle: null,
+        p_username: null,
+        p_public_id: "11111111-2222-3333-4444-555555555555",
+        p_image: null,
+      },
+    ]);
+    const store = createStore(sql);
+    const scores = await store.getTopScores("neon-snake", {
+      limit: 10,
+      period: "all",
+      sort: "desc",
+    });
+
+    expect(scores[0].handle).toBe("Player");
+  });
+
+  it("leaves an anonymous row's own submitted handle alone and gives it no player id", async () => {
+    const { sql } = makeFakeSql(() => [{ handle: "GUEST", score: "100" }]);
+    const store = createStore(sql);
+    const scores = await store.getTopScores("neon-snake", {
+      limit: 10,
+      period: "all",
+      sort: "desc",
+    });
+
+    expect(scores[0]).toEqual({ rank: 1, handle: "GUEST", score: 100, verified: false });
   });
 
   it("selects the desc + all-time branch (no interval, score DESC)", async () => {
