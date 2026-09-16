@@ -51,6 +51,32 @@ export const FRIEND_BOARD_ROWS = 10;
  */
 export const FRIEND_BOARD_MAX_BOARDS = 3;
 
+/**
+ * Rows the PUBLIC leaderboard panel on a game page shows PER BOARD.
+ *
+ * Fifteen, not {@link FRIEND_BOARD_ROWS}'s ten and not {@link MAX_LIMIT}'s
+ * hundred. The friends panel is a class group and ten is the whole race; this one
+ * is the whole board, where the interesting question is how far off the top the
+ * reader is, and ten answers it too rarely. A hundred is a different surface —
+ * a page you scroll, not a card you glance at beside the Play button.
+ *
+ * It is a SEPARATE CONSTANT from the friends cap rather than a reuse of it: the
+ * two panels sit on the same page but answer to different audiences, and tuning
+ * one must never silently resize the other.
+ */
+export const GAME_BOARD_ROWS = 15;
+
+/**
+ * Boards from one game the public leaderboard panel will render.
+ *
+ * Same value and the same reasoning as {@link FRIEND_BOARD_MAX_BOARDS}, and
+ * deliberately its own constant for the reason above: `boards.game_slug` is a
+ * link rather than a key, so a game may carry several, and the cap exists so a
+ * game that later provisions a dozen cannot turn a store page into a wall of
+ * tables.
+ */
+export const GAME_BOARD_MAX_BOARDS = 3;
+
 /** Shape of a sliding-window rate limit, shared by the store's `appendScore`. */
 export interface RateLimit {
   maxPerWindow: number;
