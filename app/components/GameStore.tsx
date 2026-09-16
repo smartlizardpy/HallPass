@@ -409,33 +409,10 @@ export function GameStore({
         </p>
       </section>
 
-      {/* FAQ — VISIBLE COPY, not markup dressing.
-          `app/game/[slug]/page.tsx` emits a FAQPage for exactly these entries,
-          and structured data is only allowed to describe what a visitor can
-          read. Both sides call the same pure `gameFaq(game)` on the same game,
-          so they cannot describe different questions; nothing is collapsed
-          behind a toggle, so nothing is marked up that is not on the page. */}
-      <section className="mt-5 max-w-3xl rounded-3xl bg-white p-5 sm:p-6">
-        <h2 className="text-[11px] font-black uppercase tracking-wider text-muted">
-          Questions
-        </h2>
-        <dl className="mt-3">
-          {gameFaq(game).map(({ question, answer }) => (
-            <div key={question} className="mt-4 first:mt-0">
-              <dt className="text-[15px] font-black tracking-tight text-zinc-900">
-                {question}
-              </dt>
-              <dd className="mt-1 text-[15px] font-semibold leading-relaxed text-zinc-700">
-                {answer}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-
       {/* The islands below the fold, in the order a player cares about them: how
           they are doing against people they know, then against everybody, then
-          against the game, then what everyone thinks of it. All of them decide
+          against the game, then what everyone thinks of it — and only then the
+          FAQ, which is the one block here that never changes. All of them decide
           for themselves whether to render, so an empty one leaves no gap.
 
           FRIENDS BEFORE THE WHOLE BOARD, deliberately. Five names you recognise
@@ -455,6 +432,39 @@ export function GameStore({
       <GameAchievements slug={game.slug} />
 
       <GameReviews slug={game.slug} title={game.title} />
+
+      {/* FAQ — VISIBLE COPY, not markup dressing.
+          `app/game/[slug]/page.tsx` emits a FAQPage for exactly these entries,
+          and structured data is only allowed to describe what a visitor can
+          read. Both sides call the same pure `gameFaq(game)` on the same game,
+          so they cannot describe different questions; nothing is collapsed
+          behind a toggle, so nothing is marked up that is not on the page.
+
+          BELOW THE BOARDS, deliberately. These four answers are the same on
+          every visit — a returning player has read them once and never needs
+          them again, whereas the board they came back for changes daily. The
+          FAQ sat directly under the hero and pushed the boards a screen further
+          down for everyone, so it now sits after them: still rendered, still
+          the exact array the page marks up, just not in front of the thing
+          people came for. Nothing about the markup depends on where this sits;
+          only that it is on the page at all. */}
+      <section className="mt-5 max-w-3xl rounded-3xl bg-white p-5 sm:p-6">
+        <h2 className="text-[11px] font-black uppercase tracking-wider text-muted">
+          Questions
+        </h2>
+        <dl className="mt-3">
+          {gameFaq(game).map(({ question, answer }) => (
+            <div key={question} className="mt-4 first:mt-0">
+              <dt className="text-[15px] font-black tracking-tight text-zinc-900">
+                {question}
+              </dt>
+              <dd className="mt-1 text-[15px] font-semibold leading-relaxed text-zinc-700">
+                {answer}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </section>
 
       {related.length > 0 && (
         <section className="mt-10">
