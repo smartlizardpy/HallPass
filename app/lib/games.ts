@@ -102,9 +102,20 @@ export type Game = {
    * badge, no reordering, no warning — so an untagged catalogue looks precisely
    * like the site did before the field existed.
    *
-   * NEVER used to remove a game from a listing, only to sort and label it. The
-   * catalogue is identical on every device because search crawlers are mobile
-   * clients: hiding desktop games on small screens hides them from the index.
+   * IT DECIDES MEMBERSHIP OF THE PHONE SHELL, and this line used to say the
+   * opposite — "never used to remove a game from a listing, only to sort and
+   * label it" — which stopped being true the day `MobileCatalog` shipped.
+   * `mobileCatalog()` keeps `"mobile"` and `"both"` and drops everything else,
+   * so a game tagged `"desktop"` is not demoted on a phone, it is GONE from the
+   * phone catalogue. Tag by what a human (or a scripted phone check) actually
+   * saw; a `"desktop"` written to mean "not looked at yet" deletes a working
+   * game from the only listing phone visitors ever see. That is precisely how
+   * the phone grid came to hold four games out of twenty-nine.
+   *
+   * The crawler is unaffected, and that constraint still holds: the device is
+   * `null` in the prerender and on the first client paint, so the shared HTML —
+   * the copy Googlebot and the service-worker precache both see — is always the
+   * full desktop catalogue. The filter happens on the second paint only.
    */
   platform?: GamePlatform;
 };
