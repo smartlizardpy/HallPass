@@ -86,6 +86,39 @@ export function placeholderName(publicId: string | null | undefined): string {
 }
 
 /**
+ * The shape the guest generator minted BEFORE it shared a stem with the
+ * signed-in placeholder. Four digits exactly, which is all it ever produced.
+ */
+const LEGACY_GUEST = /^Guest#(\d{4})$/;
+
+/**
+ * The published name for one ANONYMOUS row: the guest's own stored handle,
+ * except that a name the OLD generator minted is re-stemmed on the way out.
+ *
+ * ── WHY THIS IS A RENDERING RULE AND NOT A MIGRATION ──────────────────────
+ *
+ * `scores.handle` is not merely a label for a guest row: it IS that guest's
+ * identity. `getTopScores` dedupes anonymous rows by `'g:' || s.handle`, and the
+ * SDK persists the same string in `localStorage` and resends it with every later
+ * score. Rewriting the stored value — in the database or in the browser — would
+ * therefore split one guest across two identities: their old scores under
+ * `Guest#1053` and their new ones under `SigmaAlphaMale#1053`, as two rows on
+ * one board wearing the same name. Renaming only the OUTPUT leaves the identity
+ * exactly where it was.
+ *
+ * THE NUMBER IS KEPT. It is the only thing distinguishing one guest from
+ * another, and a returning player who was `#1053` last week is still `#1053`.
+ *
+ * Only an anonymous row goes through here. A signed-in player who deliberately
+ * chose `Guest#1053` as their handle keeps it verbatim — they typed it, and this
+ * function never sees it.
+ */
+export function publicGuestName(storedHandle: string): string {
+  const match = LEGACY_GUEST.exec(storedHandle.trim());
+  return match ? `${PLACEHOLDER_STEM}#${match[1]}` : storedHandle;
+}
+
+/**
  * The published name for one scoreboard row belonging to a VERIFIED player.
  *
  * Anonymous rows never come through here: their handle is the guest's own

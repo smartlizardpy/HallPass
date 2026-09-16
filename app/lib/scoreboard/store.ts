@@ -35,7 +35,7 @@ import {
   FRIEND_BOARD_ROWS,
   type RateLimit,
 } from "./config";
-import { publicScoreName } from "./display-name";
+import { publicGuestName, publicScoreName } from "./display-name";
 
 /** The subset of the Neon query function the store needs: callable as a tag. */
 type Sql = NeonQueryFunction<false, false>;
@@ -264,8 +264,11 @@ export function createStore(sql: Sql) {
       return {
         rank,
         // An anonymous row's handle is the guest's own submission, already
-        // charset-clamped by `sanitizeHandle` — nobody's account name.
-        handle: String(row.handle),
+        // charset-clamped by `sanitizeHandle` — nobody's account name. It passes
+        // through untouched apart from one case: a name the OLD generator minted
+        // is re-stemmed, keeping its number. See `publicGuestName` for why that
+        // is a rendering rule rather than a migration.
+        handle: publicGuestName(String(row.handle)),
         score: Number(row.score),
         verified: false,
       };

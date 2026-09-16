@@ -6,7 +6,12 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { PLACEHOLDER_STEM, placeholderName, publicScoreName } from "./display-name";
+import {
+  PLACEHOLDER_STEM,
+  placeholderName,
+  publicGuestName,
+  publicScoreName,
+} from "./display-name";
 
 const UUID = "11111111-2222-3333-4444-5555aaaa0417";
 
@@ -96,5 +101,33 @@ describe("publicScoreName", () => {
     const published = publicScoreName({ handle: null, username: null, ...ids });
     expect(published).not.toContain(" ");
     expect(published.startsWith(PLACEHOLDER_STEM)).toBe(true);
+  });
+});
+
+describe("publicGuestName", () => {
+  it("re-stems a name the old generator minted, keeping its number", () => {
+    // A returning guest who was #1053 last week is still #1053.
+    expect(publicGuestName("Guest#1053")).toBe(`${PLACEHOLDER_STEM}#1053`);
+    expect(publicGuestName("Guest#9999")).toBe(`${PLACEHOLDER_STEM}#9999`);
+  });
+
+  it("leaves a name the guest actually typed alone", () => {
+    expect(publicGuestName("Ates2")).toBe("Ates2");
+    expect(publicGuestName("Guest")).toBe("Guest");
+    expect(publicGuestName("xXGuest#1053Xx")).toBe("xXGuest#1053Xx");
+    expect(publicGuestName("Guest#105")).toBe("Guest#105");
+    expect(publicGuestName("Guest#10531")).toBe("Guest#10531");
+  });
+
+  it("passes a current generated name straight through", () => {
+    expect(publicGuestName(`${PLACEHOLDER_STEM}#1053`)).toBe(
+      `${PLACEHOLDER_STEM}#1053`,
+    );
+  });
+
+  it("does not invent a name for an empty handle", () => {
+    // Unreachable in practice — `sanitizeHandle` never stores one — and if it
+    // ever happened, a blank row is a truer report than a fabricated number.
+    expect(publicGuestName("")).toBe("");
   });
 });
