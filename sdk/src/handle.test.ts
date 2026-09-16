@@ -1,14 +1,17 @@
 // @vitest-environment jsdom
 /**
- * Handle storage + sanitisation. Anonymous players get a stable auto `Guest#NNNN`
- * name (never a prompt); an explicit handle overrides and is sanitised; the `#`
- * character survives sanitisation so generated Guest names are preserved.
+ * Handle storage + sanitisation. Anonymous players get a stable auto name from
+ * the shared stem list (never a prompt); an explicit handle overrides and
+ * is sanitised; a generated name survives being read back, length cap included,
+ * which is what keeps a returning guest on one leaderboard row.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ensureHandle, generateGuestHandle, sanitizeHandle } from "./handle";
 
-/** "Guest#" followed by exactly four digits. */
-const GUEST = /^Guest#\d{4}$/;
+import { GENERATED_STEMS, isGeneratedName } from "./names";
+
+/** Any name the shared stem list can mint. */
+const isGenerated = (value: string) => isGeneratedName(value);
 
 /**
  * This repo's jsdom ships a non-functional `localStorage` (its methods are not
@@ -49,43 +52,74 @@ afterEach(() => {
 });
 
 describe("generateGuestHandle", () => {
-  it("returns 'Guest#' + four digits in the 1000..9999 range", () => {
-    for (let i = 0; i < 50; i++) {
+  it("returns a listed stem + four digits in the 1000..9999 range", () => {
+    for (let i = 0; i < 200; i++) {
       const handle = generateGuestHandle();
-      expect(handle).toMatch(GUEST);
-      const n = Number(handle.slice("Guest#".length));
+      expect(isGenerated(handle)).toBe(true);
+      const [stem, digits] = handle.split("#");
+      expect(GENERATED_STEMS).toContain(stem);
+      const n = Number(digits);
       expect(n).toBeGreaterThanOrEqual(1000);
       expect(n).toBeLessThanOrEqual(9999);
     }
   });
+
+  it("does not always mint the same stem", () => {
+    const seen = new Set<string>();
+    for (let i = 0; i < 300; i++) seen.add(generateGuestHandle().split("#")[0]);
+    expect(seen.size).toBeGreaterThan(1);
+  });
 });
 
 describe("sanitizeHandle", () => {
-  it("preserves a '#' so a Guest name survives", () => {
-    expect(sanitizeHandle("Guest#4821")).toBe("Guest#4821");
+  it("preserves a '#' in a typed handle", () => {
     expect(sanitizeHandle("Wild#Cat!!")).toBe("Wild#Cat");
+  });
+
+  it("round-trips a generated name whole, past the typed-input cap", () => {
+    // The name this file mints is longer than MAX_LEN and is read back through
+    // here on every later session. Truncating it would rename the player
+    // mid-session and split them into two leaderboard rows, since the server
+    // identifies a guest by their handle string.
+    const minted = generateGuestHandle();
+    expect(minted.length).toBeGreaterThan(12);
+    expect(sanitizeHandle(minted)).toBe(minted);
+  });
+
+  it("still caps anything that merely looks like a generated name", () => {
+    const stem = GENERATED_STEMS[0];
+    expect(sanitizeHandle(`${stem}#48210`)).toHaveLength(12);
+    expect(sanitizeHandle(`${stem}#abcd`)).toHaveLength(12);
+    expect(sanitizeHandle(stem)).toHaveLength(12);
+    expect(sanitizeHandle("NotAStemAtAll#4821")).toHaveLength(12);
+  });
+
+  it("round-trips every stem on the list", () => {
+    for (const stem of GENERATED_STEMS) {
+      expect(sanitizeHandle(`${stem}#4821`)).toBe(`${stem}#4821`);
+    }
   });
 });
 
 describe("ensureHandle", () => {
-  it("mints a stable Guest# handle when nothing is stored and persists it", () => {
+  it("mints a stable generated handle when nothing is stored and persists it", () => {
     const promptSpy = vi.fn();
     vi.stubGlobal("prompt", promptSpy);
 
     const handle = ensureHandle();
 
-    expect(handle).toMatch(GUEST);
+    expect(isGenerated(handle)).toBe(true);
     // Persisted so it survives across sessions.
     expect(window.localStorage.getItem("hallpass:handle")).toBe(handle);
     // Anonymous players are NEVER prompted.
     expect(promptSpy).not.toHaveBeenCalled();
   });
 
-  it("returns the SAME stored Guest handle on a later call (stability)", () => {
+  it("returns the SAME stored handle on a later call (stability)", () => {
     const first = ensureHandle();
     const second = ensureHandle();
 
-    expect(first).toMatch(GUEST);
+    expect(isGenerated(first)).toBe(true);
     expect(second).toBe(first);
   });
 

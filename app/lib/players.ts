@@ -124,7 +124,7 @@ export function effectiveHandle(p: { handle: string | null; name: string | null 
  * `reviews/store.ts` also does — because those stores take their `sql` as an
  * argument and must not pull a `server-only` module into that graph. They also
  * end the chain differently: a scoreboard row with no handle and no username
- * reads as a stable `SigmaAlphaMale#0417` placeholder rather than "Player",
+ * reads as a stable generated name like `AuraFarmer#0417` rather than "Player",
  * because a board of fifteen rows where four say "Player" reads as four entries
  * by one person.
  */

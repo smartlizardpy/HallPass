@@ -164,7 +164,9 @@ export default async function YouSettingsPage({
               />
             </label>
             <p className="mt-2 text-xs text-muted">
-              Shown on leaderboards. Leave blank to use your Google name.
+              Shown on leaderboards. Leave blank and you appear as your
+              @username, or as a generated name if you have not set one — never
+              as your Google name.
             </p>
             <button
               type="submit"

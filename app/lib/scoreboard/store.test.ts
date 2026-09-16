@@ -220,7 +220,7 @@ describe("getTopScores", () => {
       sort: "desc",
     });
 
-    expect(scores[0].handle).toBe("SigmaAlphaMale#5765");
+    expect(scores[0].handle).toBe("NPCEnergy#5765");
     expect(scores[0].handle).not.toContain("Ada");
   });
 
@@ -234,6 +234,21 @@ describe("getTopScores", () => {
     });
 
     expect(scores[0]).toEqual({ rank: 1, handle: "GUEST", score: 100, verified: false });
+  });
+
+  it("re-stems a legacy Guest# row without touching its number", async () => {
+    // Rows stored before the generator changed still say Guest#NNNN. They are
+    // renamed on the way out rather than in the database, because that string is
+    // the guest's identity for dedup — see `publicGuestName`.
+    const { sql } = makeFakeSql(() => [{ handle: "Guest#1053", score: "820" }]);
+    const store = createStore(sql);
+    const scores = await store.getTopScores("neon-snake", {
+      limit: 10,
+      period: "all",
+      sort: "desc",
+    });
+
+    expect(scores[0].handle).toBe("DeluluDemon#1053");
   });
 
   it("selects the desc + all-time branch (no interval, score DESC)", async () => {
@@ -625,7 +640,7 @@ describe("getFriendStandingsForGame", () => {
     // page, so a nameless player must not read differently one section apart.
     expect(standings.map((s) => s.player.displayName)).toEqual([
       "@ates",
-      "SigmaAlphaMale#2306",
+      "AuraFarmer#2306",
     ]);
     expect(standings[1].player.image).toBeNull();
   });

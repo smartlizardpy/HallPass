@@ -27,17 +27,30 @@ import {
   type AdminAuthResult,
 } from "@/app/lib/admin-secret";
 import { GLOBAL_MAX_SCORE } from "./config";
+import { formatGeneratedName, isGeneratedName, randomStem } from "@/sdk/src/names";
 
 const HANDLE_ALLOWED = /[^A-Za-z0-9 _#-]/g;
 const HANDLE_MAX_LENGTH = 12;
 
 /**
- * Generate an anonymous display handle of the form `Guest####` (four digits,
- * 1000–9999). Used when no usable handle was supplied; replaces the old
- * static `"ANON"` fallback. `Math.random` is fine for a non-security label.
+ * Generate an anonymous display handle: a stem from the shared list plus four
+ * digits (1000–9999). Used when no usable handle was supplied. `Math.random` is
+ * fine for a non-security label.
+ *
+ * THE LIST IS SHARED WITH `display-name.ts` ON PURPOSE: a board should not read
+ * as two populations, one called `Guest#…` and one called something else, when
+ * the only difference between them is whether the player happened to be signed
+ * in. Both stem and digits are drawn at random here rather than derived, because
+ * at submission time a guest has no id to derive anything from — which is
+ * exactly why the result is STORED in `scores.handle` and the SDK persists its
+ * own copy: randomness once, then stability forever.
+ *
+ * `sdk/src/handle.ts` mints the same shape in the browser and is the copy that
+ * usually wins, since the SDK sends a handle with every submission. The two must
+ * agree, which is why neither owns the list.
  */
 function guestHandle(): string {
-  return `Guest#${Math.floor(1000 + Math.random() * 9000)}`;
+  return formatGeneratedName(randomStem(), Math.floor(1000 + Math.random() * 9000));
 }
 
 /**
@@ -62,18 +75,34 @@ const SCOREBOARD_SECRET_HEADER = "x-scoreboard-secret";
 
 /**
  * Reduce arbitrary user input to a safe display handle: keep only
- * `[A-Za-z0-9 _#-]`, trim, cap at 12 characters. When nothing usable remains
- * (empty, all-illegal, or a non-string), fall back to a generated guest handle
- * (`Guest#` + four random digits) via {@link guestHandle}. An already-valid
- * handle such as `"Guest#4821"` passes through unchanged since `#` is allowed.
+ * `[A-Za-z0-9 _#-]`, trim, cap at {@link HANDLE_MAX_LENGTH} characters. When
+ * nothing usable remains (empty, all-illegal, or a non-string), fall back to a
+ * generated guest handle via {@link guestHandle}.
+ *
+ * ── THE ONE EXEMPTION, AND WHY IT IS NOT A HOLE ────────────────────────────
+ *
+ * A handle we generated passes through whole, cap and all. It has to: the SDK
+ * mints one in the browser, persists it in `localStorage`, and RESENDS it with
+ * every later score. The generated name is longer than the typed-input cap, so
+ * without this the guest's second score would arrive as a truncated stub and the
+ * player would watch their name change under them — and, because `getTopScores`
+ * identifies a guest BY their handle string, would split into two leaderboard
+ * rows.
+ *
+ * It is not a way to smuggle a long handle in: {@link isGeneratedName} is
+ * anchored to the exact shapes this codebase mints, so the only thing it admits
+ * is a name this code chose. What it does admit is somebody claiming a generated name that is not
+ * theirs, which is the same collision a guest can already reach by chance and
+ * which nothing treats as an identity.
+ *
+ * The cap still binds everything a person actually types.
  */
 export function sanitizeHandle(input?: string): string {
   if (typeof input !== "string") return guestHandle();
-  const cleaned = input
-    .replace(HANDLE_ALLOWED, "")
-    .trim()
-    .slice(0, HANDLE_MAX_LENGTH)
-    .trim();
+  const allowed = input.replace(HANDLE_ALLOWED, "");
+  const whole = allowed.trim();
+  if (isGeneratedName(whole)) return whole;
+  const cleaned = allowed.trim().slice(0, HANDLE_MAX_LENGTH).trim();
   return cleaned.length > 0 ? cleaned : guestHandle();
 }
 

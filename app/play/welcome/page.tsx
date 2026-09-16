@@ -7,9 +7,10 @@
  * step can never be seen twice.
  *
  * Gating on `handle IS NULL` rather than "is this their first login" is
- * deliberate — it also catches existing players who never chose one, which is
- * exactly the population whose real Google name is on the leaderboards today.
- * They get asked once, on their next sign-in, and are then fixed for good.
+ * deliberate — it also catches existing players who never chose one, the
+ * population that otherwise appears on a board under a generated name rather
+ * than one they picked. They get asked once, on their next sign-in, and are then
+ * fixed for good.
  *
  * TWO STEPS, DECIDED BY STATE rather than by a wizard counter, so a refresh, a
  * back button or a double submit can never land on the wrong one: no handle asks

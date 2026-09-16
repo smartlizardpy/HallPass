@@ -6,8 +6,10 @@
  * an ordinary player to the arcade home `/`. Either way we append a `?welcome`
  * flag the client-side toast picks up.
  *
- * A player with no handle is routed through `/play/welcome` first, so their real
- * Google name is never what lands on a leaderboard by default.
+ * A player with no handle is routed through `/play/welcome` first, so they get
+ * to choose the name that lands on a leaderboard. It is no longer the LAST line
+ * of defence — `getTopScores` cannot publish a Google name at all now — but a
+ * name somebody chose still beats the generated stand-in they get otherwise.
  *
  * Returning-vs-first-time: the player's row is upserted during the auth callback
  * (so `last_login` is already ~now). On a brand-new player `created_at` is also
@@ -40,8 +42,8 @@ export default async function AuthLandingPage() {
     if (player) {
       // No handle yet -> send them through the one-time chooser first. Gating on
       // the COLUMN rather than on "is this their first login" also catches
-      // existing players who never picked one, which is precisely the population
-      // whose real Google name is on the leaderboards today.
+      // existing players who never picked one — the population that otherwise
+      // appears under a generated name rather than one they chose.
       needsHandle = !player.handle;
       // Fail-soft: if the social read hiccups, treat the username as present so a
       // database blip cannot insert an extra step into everybody's sign-in.

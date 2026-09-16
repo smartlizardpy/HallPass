@@ -6,8 +6,9 @@
  * string, and the difference in CONTRACT is the whole reason this module exists
  * separately from the two existing sanitisers:
  *
- *   `scoreboard/guard.ts` sanitizeHandle  — COERCES, never fails (max 12, falls
- *                                           back to "Guest#4821")
+ *   `scoreboard/guard.ts` sanitizeHandle  — COERCES, never fails (max 12 for
+ *                                           typed input, falls back to a
+ *                                           generated "SkibidiToilet#4821")
  *   `players.ts`          sanitizeHandle  — COERCES, never fails (max 24,
  *                                           Unicode-hardened, falls back to NULL)
  *   THIS MODULE          validateUsername — VALIDATES, fails with a reason
