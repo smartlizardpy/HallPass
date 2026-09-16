@@ -142,6 +142,98 @@ describe("buildGameBoards", () => {
   });
 });
 
+describe("buildGameBoards — marking the reader's own row", () => {
+  const ME = "11111111-2222-3333-4444-555555555555";
+  const THEM = "99999999-8888-7777-6666-555555555555";
+
+  it("marks the row whose playerId is the reader's, and only that row", () => {
+    const [built] = buildGameBoards(
+      [
+        board({
+          scores: [
+            entry({ score: 900, handle: "Them", verified: true, playerId: THEM }),
+            entry({ score: 500, handle: "Me", verified: true, playerId: ME }),
+            entry({ score: 100, handle: "GUEST" }),
+          ],
+        }),
+      ],
+      ME,
+    );
+
+    expect(built.rows.map((r) => r.isYou)).toEqual([false, true, false]);
+  });
+
+  it("marks the reader on every board they appear on", () => {
+    const boards = buildGameBoards(
+      [
+        board({ scores: [entry({ score: 900, verified: true, playerId: ME })] }),
+        board({
+          boardId: "nv-time-attack",
+          scores: [entry({ score: 12, verified: true, playerId: ME })],
+        }),
+      ],
+      ME,
+    );
+
+    expect(boards.map((b) => b.rows[0].isYou)).toEqual([true, true]);
+  });
+
+  it("marks nothing for a signed-out reader, anonymous rows included", () => {
+    // THE GUARD THAT MATTERS. A guest row has no playerId and a signed-out reader
+    // has no id; comparing two absent values would mark every anonymous row on
+    // the board as "you".
+    const [built] = buildGameBoards(
+      [
+        board({
+          scores: [entry({ score: 900 }), entry({ score: 500 }), entry({ score: 100 })],
+        }),
+      ],
+      null,
+    );
+
+    expect(built.rows.map((r) => r.isYou)).toEqual([false, false, false]);
+  });
+
+  it("marks nothing when no viewer is supplied at all", () => {
+    const [built] = buildGameBoards([
+      board({ scores: [entry({ score: 900, verified: true, playerId: ME })] }),
+    ]);
+
+    expect(built.rows[0].isYou).toBe(false);
+  });
+
+  it("does not match on the display handle, which is not unique", () => {
+    // Copying somebody's handle must not highlight their row as yours.
+    const [built] = buildGameBoards(
+      [
+        board({
+          scores: [entry({ score: 900, handle: "Me", verified: true, playerId: THEM })],
+        }),
+      ],
+      ME,
+    );
+
+    expect(built.rows[0].isYou).toBe(false);
+  });
+
+  it("still marks the reader when they are tied with somebody else", () => {
+    const [built] = buildGameBoards(
+      [
+        board({
+          scores: [
+            entry({ score: 900, verified: true, playerId: THEM }),
+            entry({ score: 900, verified: true, playerId: ME }),
+          ],
+        }),
+      ],
+      ME,
+    );
+
+    expect(built.rows.map((r) => r.position)).toEqual([1, 1]);
+    expect(built.rows.map((r) => r.isYou)).toEqual([false, true]);
+  });
+});
+
 describe("shouldNameBoards", () => {
   it("stays quiet for a single board, whose title is the game's own name", () => {
     expect(shouldNameBoards(buildGameBoards([board({ scores: [entry({ score: 1 })] })]))).toBe(

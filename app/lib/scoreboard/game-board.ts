@@ -23,6 +23,13 @@
  * So the panel re-numbers competition-style — 1, 1, 3 — and marks both rows
  * `tied`, which is what lets it print "=1". The two surfaces on this page then
  * agree with each other, which matters more than either agreeing with the index.
+ *
+ * ── WHY "THIS ROW IS YOU" IS DECIDED HERE AND NOT ON THE SERVER ────────────
+ * The board body is identical for every reader, which is what lets it be cached
+ * by a CDN and is a deliberate property of its endpoint. The one per-viewer fact
+ * needed to highlight a row — which public id is the reader's — comes separately
+ * from `/api/v1/me`, so the two are joined in the client. Nothing about the
+ * shared body changes when a reader signs in.
  */
 
 import type { ScoreEntry, SortDir } from "@/sdk/src/contract";
@@ -43,6 +50,8 @@ export interface GameBoardRow extends ScoreEntry {
   position: number;
   /** True when at least one other row on this board holds the same score. */
   tied: boolean;
+  /** True when this row is the reader's own. See {@link buildGameBoards}. */
+  isYou: boolean;
 }
 
 /** One board's worth of rows, in the order the endpoint returned them. */
@@ -69,7 +78,10 @@ export interface GameBoard {
  * would be a second implementation of the same rule, free to disagree with the
  * first.
  */
-export function buildGameBoards(payloads: GameBoardPayload[]): GameBoard[] {
+export function buildGameBoards(
+  payloads: GameBoardPayload[],
+  viewerId?: string | null,
+): GameBoard[] {
   return payloads
     .filter((payload) => payload.scores.length > 0)
     .map((payload) => ({
@@ -77,7 +89,7 @@ export function buildGameBoards(payloads: GameBoardPayload[]): GameBoard[] {
       title: payload.title,
       scoreLabel: payload.scoreLabel,
       sort: payload.sort,
-      rows: numberRows(payload.scores),
+      rows: numberRows(payload.scores, viewerId ?? null),
     }));
 }
 
@@ -90,7 +102,7 @@ export function buildGameBoards(payloads: GameBoardPayload[]): GameBoard[] {
  * by score — the invariant the module docblock relies on, and the one the store's
  * six whitelisted SELECT templates guarantee.
  */
-function numberRows(scores: ScoreEntry[]): GameBoardRow[] {
+function numberRows(scores: ScoreEntry[], viewerId: string | null): GameBoardRow[] {
   const positions: number[] = [];
   for (let i = 0; i < scores.length; i += 1) {
     positions.push(
@@ -103,7 +115,28 @@ function numberRows(scores: ScoreEntry[]): GameBoardRow[] {
     tied:
       (i > 0 && scores[i - 1].score === score.score) ||
       (i < scores.length - 1 && scores[i + 1].score === score.score),
+    isYou: isViewer(score, viewerId),
   }));
+}
+
+/**
+ * Is this row the reader's own?
+ *
+ * ONLY EVER AN ID MATCH, and both sides must be present. A guest row has no
+ * `playerId` and belongs to nobody the site can name, so a signed-out reader —
+ * whose `viewerId` is null — matches NOTHING. That asymmetry is the whole guard:
+ * comparing two absent values would mark every anonymous row on the board as
+ * "you", which is worse than no highlight at all, and would do it on exactly the
+ * pages where the most rows are anonymous.
+ *
+ * Deliberately NOT a handle match. Display handles are not unique — the reason
+ * `ReviewRow` prints an @username and a #tag beside every one of them — so
+ * matching on the name would let anyone highlight themselves in a stranger's
+ * board by copying their handle.
+ */
+function isViewer(score: ScoreEntry, viewerId: string | null): boolean {
+  if (!viewerId) return false;
+  return score.playerId === viewerId;
 }
 
 /**
