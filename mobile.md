@@ -8,9 +8,19 @@ uses that tag to stop serving people games they physically cannot play.
 > Built and committed on `feat/mobile-platform-tag`, rebased onto current `main`
 > (which by then included the Blob work through PR #36).
 >
-> - **Phase 6 backfill is DONE**: Pixel Slicer and Depths of Aethelgard are
->   `both`; the other 25 are `desktop`. Written into `app/lib/games.ts` so the
->   tags ship with a deploy rather than living in one Neon branch.
+> - **Phase 6 has been REDONE, and the first pass was wrong.** It recorded Pixel
+>   Slicer and Depths of Aethelgard as `both` and wrote `desktop` across the
+>   other 25 in one go — the blanket backfill this document argues against two
+>   sections down, and the reason the phone grid held four games out of
+>   twenty-nine. Ten of those 25 take touch input and always did; see
+>   [Phase 6 — backfill](#phase-6--backfill) for what each one was checked
+>   against. The catalogue now stands at 14 `both` and 15 `desktop`, still
+>   written into `app/lib/games.ts` so the tags ship with a deploy rather than
+>   living in one Neon branch.
+> - **A `game_overrides` row beats this file.** Anything tagged through the
+>   dashboard keeps its value after a deploy, so a slug corrected here that is
+>   still wrong in production has a row to clear at
+>   `/dashboard/games/<slug>` → "Plays on" → Unknown.
 > - Migration `014` is applied to the branch `.env.local` points at
 >   (`ep-raspy-waterfall-a6sp6ijx`). **Production still needs `npm run migrate`**
 >   — that is the one remaining step (Phase 7, step 5).
@@ -45,6 +55,13 @@ on the catalogue, an interstitial on the play path, and platform inference in th
   model, and this site is ISR + CDN + a cache-first service worker.
 - **No hiding of desktop games on mobile.** See _Gotcha 2_. Google crawls as a
   phone; hiding is how you delete most of your catalogue from the index.
+  **Superseded, in part, by the phone shell that shipped later:** `MobileCatalog`
+  lists `mobileCatalog()` only, so a `desktop` game IS absent from a phone
+  visitor's grid. What survives untouched is the reason this bullet existed —
+  the prerendered HTML is device-neutral (see _Gotcha 2_), so the crawler and
+  the service-worker precache still see all 29 games. Which makes the TAG the
+  only thing standing between a game and its phone audience: read the note on
+  `Game.platform` in `app/lib/games.ts` before writing one.
 - **No new "mobile" category or separate mobile route.** The tag is a property of
   a game, not a place. A `/mobile` page can be added later off the same data if
   it turns out people want one.
@@ -353,6 +370,58 @@ This is the phase that makes the feature real — everything before it is
 scaffolding that renders as nothing. Do not skip it, and do not automate it: the
 whole point of the tag is that a human confirmed the game is playable.
 
+### What the first pass cost, and what the second one found
+
+The first pass did skip it. Two games were tagged from knowing them, and the
+other 25 were written down as `desktop` without being opened — which is exactly
+the blanket backfill "The data model" above rejects, made worse by the phone
+shell that landed afterwards: `mobileCatalog()` DROPS everything not tagged
+`mobile`/`both`, so those 25 guesses did not demote ten working touch games,
+they deleted them. The phone grid showed four games; the desktop grid showed
+twenty-nine, which is why the two looked like different sites and why a browser
+tab in desktop mode "had all the games".
+
+The redo followed 3a-ii of the `add-game` skill for all 29: a touch-only
+Chromium context at 390×844, no mouse, the game started by tapping its own start
+control, then a tap and a swipe in gameplay, judged from the screenshots plus a
+read of the input code.
+
+Ten games moved `desktop` → `both`:
+
+| game | what it takes from a finger |
+|---|---|
+| Core vs Swarm | its HUD says "TAP EDGES FOR SPEED / CENTER FOR TANK"; binds no keys at all |
+| Neon Hockey | canvas `touchmove` drives each paddle (catch stays Shift-only) |
+| Neon Snake | on-screen d-pad, turbo button, double-tap dash |
+| Neon Tether | title card says "Mobile: Touch & Drag • Double-Tap to Dash" |
+| Nuclear Reactor Manager | five-button console bar mapping `a/d/q/w+space/e+enter` |
+| Paddle Crawler | window `touchmove` slides the paddle (dash stays Shift-only) |
+| Pixel Bullet Quest | twin virtual sticks + roll/gadget/ult, shown when touch is detected |
+| Rhythm Hell | tap to parry, double-tap to dash, drag to draw, button for domain |
+| Symbiosis | tap to connect, drag to pan, no `keydown` listener in the file |
+| System Restore | a clicker; its one button listens for `mousedown`, which a tap synthesises |
+
+Three stayed `desktop` DESPITE taking touch input, each for a reason that is a
+small fix in the game rather than a fact about the game. Worth fixing, and worth
+re-checking after:
+
+- **Chroma Orbit** — draws a complete control pad (left/right/fire/swap/dash/
+  nuke) and would qualify outright, but at 390px wide `INITIATE SEQUENCE` sits
+  under `#game-container`; `elementFromPoint` on the button's own centre returns
+  the container, so the start button cannot be pressed.
+- **Neon Velocity: Hyperdrive** — "SINGLE TAP to FLIP" is the whole game and the
+  handler is there, but its window-level `touchstart` calls `preventDefault()`
+  unconditionally, which suppresses the click the browser would synthesise from
+  a tap — and the menu (`INITIATE`, the rig cards) is `onclick`. Nothing on the
+  title screen responds to a finger. Vanta Void guards the same handler with
+  `if (e.target.closest('.screen')) return;` and works.
+- **Vanta Void** — gameplay is touch-ready (finger aims and fires). The rig
+  picker overflows a 664px-tall viewport and `.screen` is `position:absolute;
+  inset:0` with `overflow` unset while `html`/`body` are `overflow:hidden`, so
+  `INITIATE` is below the fold with no way to scroll to it.
+
+The remaining 12 are keyboard games with no touch handler of any kind.
+
 ---
 
 ## Phase 7 — ship
@@ -397,6 +466,19 @@ For a site whose traffic is organic search for game names, that is a direct hit
 to the thing that brings people here at all.
 
 Rank and badge; never remove. Every game stays in the DOM on every device.
+
+**What the phone shell changed, and what it deliberately did not.** `MobileCatalog`
+does remove: a phone visitor's grid is `mobileCatalog()` and nothing else. That is
+safe for exactly one reason, and it is a reason that has to be preserved by anything
+built here later — the removal happens on the SECOND paint. `useDevicePlatform()`
+is `null` during the prerender and the first client render, so the HTML Googlebot
+receives, and the copy sitting in the service-worker precache, is the full desktop
+catalogue every time. Move the device decision into the server render (Gotcha 1)
+and this gotcha becomes real again, at full cost.
+
+The cost that remains is to PLAYERS rather than to the index, and it is the reason
+Phase 6 is not optional: a game wrongly tagged `desktop` is invisible to every
+phone visitor, while looking perfectly fine to whoever tagged it on a laptop.
 
 ### 3. `upsertOverride` full-replaces the row
 
