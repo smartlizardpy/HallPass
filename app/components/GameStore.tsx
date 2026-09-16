@@ -12,6 +12,7 @@ import { PlatformConfirmSheet, usePlayGuard } from "./PlatformGate";
 import { CoverImage, coverImageSrc } from "./CoverImage";
 import { GameCard } from "./GameCard";
 import { GameAchievements } from "./GameAchievements";
+import { GameLeaderboard } from "./GameLeaderboard";
 import { GameReviews } from "./reviews/GameReviews";
 import { GameTrailer } from "./GameTrailer";
 import { ChallengedHere } from "./ChallengedHere";
@@ -432,11 +433,21 @@ export function GameStore({
         </dl>
       </section>
 
-      {/* The personalised islands, in the order a player cares about them: how
-          they are doing against people they know, then against the game, then
-          what everyone thinks of it. All three decide for themselves whether to
-          render, so an empty one leaves no gap. */}
+      {/* The islands below the fold, in the order a player cares about them: how
+          they are doing against people they know, then against everybody, then
+          against the game, then what everyone thinks of it. All of them decide
+          for themselves whether to render, so an empty one leaves no gap.
+
+          FRIENDS BEFORE THE WHOLE BOARD, deliberately. Five names you recognise
+          is a race you can win this lunchtime; fifteen you do not is a wall. The
+          friends panel is also the one that renders for the fewest people, so
+          putting it second would bury the personal result under a table that is
+          identical for every visitor. */}
       <FriendsBoard slug={game.slug} />
+
+      {/* The public board. Renders nothing for a game with no leaderboard
+          provisioned, which is most of them. */}
+      <GameLeaderboard slug={game.slug} />
 
       {/* Renders nothing at all unless this game has achievements provisioned —
           the island decides that itself after fetching, because only the fetch
