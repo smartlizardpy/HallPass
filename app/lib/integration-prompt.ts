@@ -149,7 +149,7 @@ ${embedScript}
 
   HallPass.submitScore(THE_SCORE_VARIABLE_I_TOLD_YOU);
 
-Anonymous players are automatically given a name like "SigmaAlphaMale#1234" — no prompt ever appears — while signed-in players post under their chosen handle (or their @username). It never throws and never blocks the game.
+Anonymous players are automatically given a name like "SkibidiToilet#1234" — no prompt ever appears — while signed-in players post under their chosen handle (or their @username). It never throws and never blocks the game.
 
 (c) Show the leaderboard and a Sign-in button where I asked in answer 3. An anonymous player can press Sign in to claim a verified identity — their chosen handle plus a verified badge — instead of staying anonymous. A signed-in player's Google name is never published on a board.
 

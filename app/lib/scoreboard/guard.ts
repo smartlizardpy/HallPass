@@ -27,40 +27,30 @@ import {
   type AdminAuthResult,
 } from "@/app/lib/admin-secret";
 import { GLOBAL_MAX_SCORE } from "./config";
-import { PLACEHOLDER_STEM } from "./display-name";
+import { formatGeneratedName, isGeneratedName, randomStem } from "@/sdk/src/names";
 
 const HANDLE_ALLOWED = /[^A-Za-z0-9 _#-]/g;
 const HANDLE_MAX_LENGTH = 12;
 
 /**
- * A handle THIS CODE generated, rather than one a person typed.
+ * Generate an anonymous display handle: a stem from the shared list plus four
+ * digits (1000–9999). Used when no usable handle was supplied. `Math.random` is
+ * fine for a non-security label.
  *
- * `sanitizeHandle` lets one through unchanged, length cap included — see there
- * for why that exemption has to exist. Anchored and four digits exactly, so it
- * matches what {@link guestHandle} mints and nothing longer.
- */
-const GENERATED_HANDLE = new RegExp(`^${PLACEHOLDER_STEM}#\\d{4}$`);
-
-/**
- * Generate an anonymous display handle: the same {@link PLACEHOLDER_STEM} a
- * signed-in player with no chosen name gets, plus four digits (1000–9999).
- * Used when no usable handle was supplied. `Math.random` is fine for a
- * non-security label.
- *
- * THE STEM IS SHARED WITH `display-name.ts` ON PURPOSE: a board should not read
+ * THE LIST IS SHARED WITH `display-name.ts` ON PURPOSE: a board should not read
  * as two populations, one called `Guest#…` and one called something else, when
  * the only difference between them is whether the player happened to be signed
- * in. The digits are random here rather than derived, because at submission time
- * a guest has no id to derive anything from — which is exactly why the result is
- * STORED in `scores.handle` and the SDK persists its own copy: randomness once,
- * then stability forever.
+ * in. Both stem and digits are drawn at random here rather than derived, because
+ * at submission time a guest has no id to derive anything from — which is
+ * exactly why the result is STORED in `scores.handle` and the SDK persists its
+ * own copy: randomness once, then stability forever.
  *
  * `sdk/src/handle.ts` mints the same shape in the browser and is the copy that
  * usually wins, since the SDK sends a handle with every submission. The two must
- * agree; this one is the fallback for a submission that carries none.
+ * agree, which is why neither owns the list.
  */
 function guestHandle(): string {
-  return `${PLACEHOLDER_STEM}#${Math.floor(1000 + Math.random() * 9000)}`;
+  return formatGeneratedName(randomStem(), Math.floor(1000 + Math.random() * 9000));
 }
 
 /**
@@ -99,9 +89,9 @@ const SCOREBOARD_SECRET_HEADER = "x-scoreboard-secret";
  * identifies a guest BY their handle string, would split into two leaderboard
  * rows.
  *
- * It is not a way to smuggle a long handle in: the pattern is anchored to the
- * exact shape this file mints, so the only thing it admits is a name this code
- * chose. What it does admit is somebody claiming a generated name that is not
+ * It is not a way to smuggle a long handle in: {@link isGeneratedName} is
+ * anchored to the exact shapes this codebase mints, so the only thing it admits
+ * is a name this code chose. What it does admit is somebody claiming a generated name that is not
  * theirs, which is the same collision a guest can already reach by chance and
  * which nothing treats as an identity.
  *
@@ -111,7 +101,7 @@ export function sanitizeHandle(input?: string): string {
   if (typeof input !== "string") return guestHandle();
   const allowed = input.replace(HANDLE_ALLOWED, "");
   const whole = allowed.trim();
-  if (GENERATED_HANDLE.test(whole)) return whole;
+  if (isGeneratedName(whole)) return whole;
   const cleaned = allowed.trim().slice(0, HANDLE_MAX_LENGTH).trim();
   return cleaned.length > 0 ? cleaned : guestHandle();
 }

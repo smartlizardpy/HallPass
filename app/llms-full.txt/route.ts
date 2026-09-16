@@ -127,7 +127,7 @@ At game over, submit the final score:
   HallPass.submitScore(finalScore);
 
 Note: anonymous players are NEVER prompted. The first submitScore with no stored
-handle mints a stable "SigmaAlphaMale#NNNN" name, persists it in localStorage, and reuses it
+handle mints a stable name like "SkibidiToilet#4821", persists it in localStorage, and reuses it
 on every later session — no dialog ever appears. Call HallPass.setHandle("ZK")
 earlier to choose a name, or pass an explicit one with
 HallPass.submitScore(finalScore, { handle: "ZK" }).

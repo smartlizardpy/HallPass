@@ -1,17 +1,17 @@
 // @vitest-environment jsdom
 /**
- * Handle storage + sanitisation. Anonymous players get a stable auto
- * `SigmaAlphaMale#NNNN` name (never a prompt); an explicit handle overrides and
+ * Handle storage + sanitisation. Anonymous players get a stable auto name from
+ * the shared stem list (never a prompt); an explicit handle overrides and
  * is sanitised; a generated name survives being read back, length cap included,
  * which is what keeps a returning guest on one leaderboard row.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ensureHandle, generateGuestHandle, sanitizeHandle } from "./handle";
 
-/** The generated stem followed by exactly four digits. */
-const GUEST = /^SigmaAlphaMale#\d{4}$/;
-/** Kept in one place so the round-trip tests below cannot drift from it. */
-const STEM = "SigmaAlphaMale";
+import { GENERATED_STEMS, isGeneratedName } from "./names";
+
+/** Any name the shared stem list can mint. */
+const isGenerated = (value: string) => isGeneratedName(value);
 
 /**
  * This repo's jsdom ships a non-functional `localStorage` (its methods are not
@@ -52,14 +52,22 @@ afterEach(() => {
 });
 
 describe("generateGuestHandle", () => {
-  it("returns the stem + four digits in the 1000..9999 range", () => {
-    for (let i = 0; i < 50; i++) {
+  it("returns a listed stem + four digits in the 1000..9999 range", () => {
+    for (let i = 0; i < 200; i++) {
       const handle = generateGuestHandle();
-      expect(handle).toMatch(GUEST);
-      const n = Number(handle.slice(`${STEM}#`.length));
+      expect(isGenerated(handle)).toBe(true);
+      const [stem, digits] = handle.split("#");
+      expect(GENERATED_STEMS).toContain(stem);
+      const n = Number(digits);
       expect(n).toBeGreaterThanOrEqual(1000);
       expect(n).toBeLessThanOrEqual(9999);
     }
+  });
+
+  it("does not always mint the same stem", () => {
+    const seen = new Set<string>();
+    for (let i = 0; i < 300; i++) seen.add(generateGuestHandle().split("#")[0]);
+    expect(seen.size).toBeGreaterThan(1);
   });
 });
 
@@ -79,9 +87,17 @@ describe("sanitizeHandle", () => {
   });
 
   it("still caps anything that merely looks like a generated name", () => {
-    expect(sanitizeHandle(`${STEM}#48210`)).toHaveLength(12);
-    expect(sanitizeHandle(`${STEM}#abcd`)).toHaveLength(12);
-    expect(sanitizeHandle(STEM)).toHaveLength(12);
+    const stem = GENERATED_STEMS[0];
+    expect(sanitizeHandle(`${stem}#48210`)).toHaveLength(12);
+    expect(sanitizeHandle(`${stem}#abcd`)).toHaveLength(12);
+    expect(sanitizeHandle(stem)).toHaveLength(12);
+    expect(sanitizeHandle("NotAStemAtAll#4821")).toHaveLength(12);
+  });
+
+  it("round-trips every stem on the list", () => {
+    for (const stem of GENERATED_STEMS) {
+      expect(sanitizeHandle(`${stem}#4821`)).toBe(`${stem}#4821`);
+    }
   });
 });
 
@@ -92,7 +108,7 @@ describe("ensureHandle", () => {
 
     const handle = ensureHandle();
 
-    expect(handle).toMatch(GUEST);
+    expect(isGenerated(handle)).toBe(true);
     // Persisted so it survives across sessions.
     expect(window.localStorage.getItem("hallpass:handle")).toBe(handle);
     // Anonymous players are NEVER prompted.
@@ -103,7 +119,7 @@ describe("ensureHandle", () => {
     const first = ensureHandle();
     const second = ensureHandle();
 
-    expect(first).toMatch(GUEST);
+    expect(isGenerated(first)).toBe(true);
     expect(second).toBe(first);
   });
 

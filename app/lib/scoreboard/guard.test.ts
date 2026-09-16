@@ -12,7 +12,7 @@ import {
   verifyAdminSecret,
 } from "./guard";
 import { GLOBAL_MAX_SCORE } from "./config";
-import { PLACEHOLDER_STEM } from "./display-name";
+import { GENERATED_STEMS, isGeneratedName } from "@/sdk/src/names";
 
 const ORIGINAL_ADMIN_SECRET = process.env.SCOREBOARD_ADMIN_SECRET;
 const ORIGINAL_ADMIN_HTML_PASSWORD = process.env.ADMIN_HTML_PASSWORD;
@@ -31,7 +31,8 @@ afterEach(() => {
 });
 
 describe("sanitizeHandle", () => {
-  const GUEST_PATTERN = /^SigmaAlphaMale#\d{4}$/;
+  /** Any name the shared list can mint — not one hardcoded stem. */
+  const isGenerated = (value: string) => isGeneratedName(value);
 
   it("strips characters outside [A-Za-z0-9 _#-] but keeps '#'", () => {
     expect(sanitizeHandle("a!b@c#1")).toBe("abc#1");
@@ -41,13 +42,17 @@ describe("sanitizeHandle", () => {
     expect(sanitizeHandle("co_op pro-1")).toBe("co_op pro-1");
   });
 
-  it("passes a generated handle through whole, past the length cap", () => {
+  it("passes EVERY generated stem through whole, past the length cap", () => {
     // THE ROUND TRIP THAT MATTERS: the SDK persists this name and resends it on
     // every later score. Truncating it here would rename the player mid-session
     // and split them into two leaderboard rows, since a guest is identified by
-    // their handle string.
-    expect(sanitizeHandle("SigmaAlphaMale#4821")).toBe("SigmaAlphaMale#4821");
-    expect("SigmaAlphaMale#4821".length).toBeGreaterThan(12);
+    // their handle string. Looping the whole list is the point — a stem one side
+    // can mint but the other cannot match is exactly that bug.
+    for (const stem of GENERATED_STEMS) {
+      const minted = `${stem}#4821`;
+      expect(sanitizeHandle(minted)).toBe(minted);
+      expect(minted.length).toBeGreaterThan(12);
+    }
   });
 
   it("still caps anything that is not exactly a generated handle", () => {
@@ -63,20 +68,23 @@ describe("sanitizeHandle", () => {
   });
 
   it("falls back to a generated handle for empty, whitespace, or all-illegal input", () => {
-    expect(sanitizeHandle("")).toMatch(GUEST_PATTERN);
-    expect(sanitizeHandle("   ")).toMatch(GUEST_PATTERN);
-    expect(sanitizeHandle("™®©")).toMatch(GUEST_PATTERN);
-    expect(sanitizeHandle(undefined)).toMatch(GUEST_PATTERN);
+    expect(isGenerated(sanitizeHandle(""))).toBe(true);
+    expect(isGenerated(sanitizeHandle("   "))).toBe(true);
+    expect(isGenerated(sanitizeHandle("™®©"))).toBe(true);
+    expect(isGenerated(sanitizeHandle(undefined))).toBe(true);
   });
 
   it("falls back to a generated handle for a non-string", () => {
-    expect(sanitizeHandle(123 as unknown as string)).toMatch(GUEST_PATTERN);
+    expect(isGenerated(sanitizeHandle(123 as unknown as string))).toBe(true);
   });
 
-  it("shares its stem with the signed-in placeholder", () => {
+  it("mints only from the list the signed-in placeholder draws on", () => {
     // A board must not read as two populations whose only difference is whether
     // the player happened to be signed in.
-    expect(sanitizeHandle("")).toContain(PLACEHOLDER_STEM);
+    for (let i = 0; i < 100; i += 1) {
+      const [stem] = sanitizeHandle("").split("#");
+      expect(GENERATED_STEMS).toContain(stem);
+    }
   });
 });
 

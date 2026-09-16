@@ -62,7 +62,7 @@ import { Avatar } from "./friends/Avatar";
  * beside their friends.
  *
  * Names here are PUBLIC names — chosen handle, else `@username`, else a stable
- * `SigmaAlphaMale#0417` placeholder — resolved in `getTopScores`, which does not
+ * generated name like `AuraFarmer#0417` — resolved in `getTopScores`, which does not
  * select the Google account name at all. A leaderboard is the most public surface
  * this site has and a real name must never reach it. The friends panel above
  * publishes the same name for the same player, deliberately; see

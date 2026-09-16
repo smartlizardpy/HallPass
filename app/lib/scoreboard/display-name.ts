@@ -12,7 +12,7 @@
  *   1. the player's CHOSEN HANDLE — what they asked to be called;
  *   2. else `@username` — the unique public name their profile lives at;
  *   3. else {@link placeholderName} — a stable stand-in derived from their
- *      public id.
+ *      public id, drawn from the shared stem list in `sdk/src/names.ts`.
  *
  * `players.name` — the Google account name, for most players their REAL NAME —
  * is not in the chain and is not selected by the queries that feed it. That was
@@ -26,15 +26,23 @@
  * without anybody being named.
  */
 
-/** The stem every generated placeholder is built from. */
-export const PLACEHOLDER_STEM = "SigmaAlphaMale";
+import {
+  GENERATED_STEMS,
+  NAME_DIGITS,
+  formatGeneratedName,
+  stemAt,
+} from "@/sdk/src/names";
 
-/** Digits in a placeholder's discriminator, zero-padded. */
-const PLACEHOLDER_DIGITS = 4;
+/**
+ * Re-exported so callers in this folder keep importing the name rule from one
+ * place. The list itself lives in `sdk/src/names.ts` — see there for why it is
+ * shared with the browser SDK rather than copied.
+ */
+export { GENERATED_STEMS };
 
 /**
  * A stable, non-identifying stand-in name for a player who has neither a chosen
- * handle nor a username: `SigmaAlphaMale#0417`.
+ * handle nor a username: `AuraFarmer#0417`, `SkibidiToilet#1194`, and so on.
  *
  * ── THE NUMBER COMES FROM `public_id`, AND ONLY FROM `public_id` ───────────
  *
@@ -54,17 +62,16 @@ const PLACEHOLDER_DIGITS = 4;
  *
  * ── HONEST LIMITS ──────────────────────────────────────────────────────────
  *
- * Four digits is ten thousand values, so two nameless players sharing a number is
- * possible — likely somewhere on the site once a few hundred of them exist. That
- * is acceptable because this is a PLACEHOLDER, not an identity: it replaces
- * "Player", which collides with every other nameless player, and nothing in the
- * product treats it as a key.
+ * Four digits across {@link GENERATED_STEMS} is tens of thousands of names, so
+ * two nameless players sharing one is possible. That is acceptable because this
+ * is a PLACEHOLDER, not an identity: it replaces "Player", which collided with
+ * every other nameless player, and nothing in the product treats it as a key.
  *
  * It is also not a claim of authenticity. A signed-in player may set a handle
  * that looks like one of these (`sanitizeHandle` in `lib/players.ts` caps at 24
- * characters, and this is 19), so a reader cannot conclude from the shape alone
- * that a row is unnamed. A GUEST cannot: anonymous handles are capped at 12
- * characters by `scoreboard/guard.ts`, which is shorter than the stem.
+ * characters, and the longest of these is 19), so a reader cannot conclude from
+ * the shape alone that a row is unnamed. A guest cannot type one that long:
+ * anonymous handles are capped at 12 characters by `scoreboard/guard.ts`.
  *
  * Returns the bare "Player" when there is no usable id — unreachable in practice
  * (`public_id` is NOT NULL), and a generic name is a better answer there than a
@@ -75,14 +82,19 @@ export function placeholderName(publicId: string | null | undefined): string {
   // 8 hex digits comfortably exceed the 4 decimal ones we keep, and stay inside
   // the range `parseInt` represents exactly.
   const tail = hex.slice(-8);
-  if (tail.length < PLACEHOLDER_DIGITS || !/^[0-9a-f]+$/i.test(tail)) return "Player";
+  if (tail.length < NAME_DIGITS || !/^[0-9a-f]+$/i.test(tail)) return "Player";
 
-  const parsed = Number.parseInt(tail, 16);
-  if (!Number.isFinite(parsed)) return "Player";
+  const number = Number.parseInt(tail, 16);
+  if (!Number.isFinite(number)) return "Player";
 
-  const modulus = 10 ** PLACEHOLDER_DIGITS;
-  const number = String(parsed % modulus).padStart(PLACEHOLDER_DIGITS, "0");
-  return `${PLACEHOLDER_STEM}#${number}`;
+  // THE STEM AND THE NUMBER COME FROM DIFFERENT ENDS of the id, so they vary
+  // independently. Deriving both from one slice would make two players who
+  // collide on the number collide on the whole name; this way they usually
+  // differ in one or the other.
+  const head = hex.slice(0, 8);
+  const seed = /^[0-9a-f]+$/i.test(head) ? Number.parseInt(head, 16) : number;
+
+  return formatGeneratedName(stemAt(seed), number);
 }
 
 /**
@@ -102,7 +114,7 @@ const LEGACY_GUEST = /^Guest#(\d{4})$/;
  * SDK persists the same string in `localStorage` and resends it with every later
  * score. Rewriting the stored value — in the database or in the browser — would
  * therefore split one guest across two identities: their old scores under
- * `Guest#1053` and their new ones under `SigmaAlphaMale#1053`, as two rows on
+ * `Guest#1053` and their new ones under `DeluluDemon#1053`, as two rows on
  * one board wearing the same name. Renaming only the OUTPUT leaves the identity
  * exactly where it was.
  *
@@ -115,7 +127,11 @@ const LEGACY_GUEST = /^Guest#(\d{4})$/;
  */
 export function publicGuestName(storedHandle: string): string {
   const match = LEGACY_GUEST.exec(storedHandle.trim());
-  return match ? `${PLACEHOLDER_STEM}#${match[1]}` : storedHandle;
+  if (!match) return storedHandle;
+  // The stem is derived FROM THE NUMBER, not drawn at random: this runs on every
+  // render, and a random pick would rename the same row on every page load.
+  const number = Number(match[1]);
+  return formatGeneratedName(stemAt(number), number);
 }
 
 /**

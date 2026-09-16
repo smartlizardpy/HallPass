@@ -40,7 +40,7 @@ export interface ScoreEntry {
    * identity) rather than an anonymous handle submission. When `true`, `handle`
    * carries the player's PUBLIC display name: their chosen handle, else
    * `@username`, else a stable placeholder derived from their public id
-   * (`SigmaAlphaMale#0417`). Absent/`false` for anonymous entries, whose
+   * (`AuraFarmer#0417`). Absent/`false` for anonymous entries, whose
    * `handle` is the guest's own submission. Added in v1 (append-only).
    *
    * It carried the Google account name as a middle fallback until that was

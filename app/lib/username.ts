@@ -8,7 +8,7 @@
  *
  *   `scoreboard/guard.ts` sanitizeHandle  — COERCES, never fails (max 12 for
  *                                           typed input, falls back to a
- *                                           generated "SigmaAlphaMale#4821")
+ *                                           generated "SkibidiToilet#4821")
  *   `players.ts`          sanitizeHandle  — COERCES, never fails (max 24,
  *                                           Unicode-hardened, falls back to NULL)
  *   THIS MODULE          validateUsername — VALIDATES, fails with a reason

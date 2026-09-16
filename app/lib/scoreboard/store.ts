@@ -214,7 +214,7 @@ export function createStore(sql: Sql) {
    * `players.image`, `playerId` carries the `public_id` UUID (the only player
    * identifier that crosses the wire anywhere in this codebase), and `handle`
    * becomes the player's PUBLIC display — chosen `p_handle`, else `@p_username`,
-   * else the stable `SigmaAlphaMale#0417` placeholder built from that public id
+   * else a stable generated name like `AuraFarmer#0417`, built from that public id
    * (`display-name.ts`). An anonymous row (no `player_id`) maps to `verified = false`
    * with the guest's own submitted handle and no avatar.
    *

@@ -220,7 +220,7 @@ describe("getTopScores", () => {
       sort: "desc",
     });
 
-    expect(scores[0].handle).toBe("SigmaAlphaMale#5765");
+    expect(scores[0].handle).toBe("NPCEnergy#5765");
     expect(scores[0].handle).not.toContain("Ada");
   });
 
@@ -248,7 +248,7 @@ describe("getTopScores", () => {
       sort: "desc",
     });
 
-    expect(scores[0].handle).toBe("SigmaAlphaMale#1053");
+    expect(scores[0].handle).toBe("DeluluDemon#1053");
   });
 
   it("selects the desc + all-time branch (no interval, score DESC)", async () => {
@@ -640,7 +640,7 @@ describe("getFriendStandingsForGame", () => {
     // page, so a nameless player must not read differently one section apart.
     expect(standings.map((s) => s.player.displayName)).toEqual([
       "@ates",
-      "SigmaAlphaMale#2306",
+      "AuraFarmer#2306",
     ]);
     expect(standings[1].player.image).toBeNull();
   });
