@@ -38,8 +38,15 @@ export interface ScoreEntry {
   /**
    * Whether this entry is tied to a verified player (a signed-in Google
    * identity) rather than an anonymous handle submission. When `true`, `handle`
-   * carries the player's effective display name (their chosen handle, else their
-   * Google name). Absent/`false` for anonymous entries. Added in v1 (append-only).
+   * carries the player's PUBLIC display name: their chosen handle, else
+   * `@username`, else a stable placeholder derived from their public id
+   * (`SigmaAlphaMale#0417`). Absent/`false` for anonymous entries, whose
+   * `handle` is the guest's own submission. Added in v1 (append-only).
+   *
+   * It carried the Google account name as a middle fallback until that was
+   * removed as a privacy fix — for most players that is their real name, and a
+   * leaderboard is the most public surface this site has. The FIELD is unchanged;
+   * only which name it can hold is, so a v1 consumer keeps working.
    */
   verified?: boolean;
   /**
@@ -48,6 +55,18 @@ export interface ScoreEntry {
    * exposed here or anywhere else. Added in v1 (append-only).
    */
   avatar?: string | null;
+  /**
+   * The verified player's PUBLIC id — the `public_id` UUID that is the only
+   * player identifier crossing the wire anywhere in this codebase (never
+   * `players.id`, a Google subject, which would be a durable cross-site
+   * identifier for a minor). `null`/absent for anonymous entries.
+   *
+   * It is here so that a caller rendering a board can tell which row is the
+   * VIEWER'S without the board body itself having to be per-viewer — the row is
+   * the same for everybody, and only the reader knows which id is theirs. That is
+   * what keeps a leaderboard response CDN-cacheable. Added in v1 (append-only).
+   */
+  playerId?: string | null;
 }
 
 // ---- Wire types: public leaderboard endpoint --------------------------------
@@ -127,6 +146,14 @@ export interface MeResponse {
    * status, never an email. Added in v1.
    */
   isBetaTester?: boolean;
+  /**
+   * The caller's own `public_id` — the identifier their own rows carry on public
+   * surfaces, so a page can tell which row of a shared, CDN-cached list (a
+   * leaderboard, a review list) belongs to the reader WITHOUT that list having to
+   * be fetched per viewer. Null for a guest. Never `players.id`, the Google
+   * subject. Added in v1 (append-only).
+   */
+  publicId?: string | null;
 }
 
 /** Request body to set the current player's chosen handle. Added in v1. */

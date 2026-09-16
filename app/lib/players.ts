@@ -117,10 +117,16 @@ export function effectiveHandle(p: { handle: string | null; name: string | null 
  * Use THIS on anything another player can see. Use `effectiveHandle` only where
  * the viewer is the owner.
  *
- * Known related gap, out of scope here: `getTopScores` in
- * `app/lib/scoreboard/store.ts` still falls back to the Google name on public
- * leaderboards, so real names are already published there today. Same bug, its
- * own fix.
+ * That gap is now closed: `getTopScores` in `app/lib/scoreboard/store.ts` used to
+ * fall back to the Google name on public leaderboards, and no longer selects
+ * `players.name` at all. The scoreboard states this rule in its own pure
+ * `scoreboard/display-name.ts` rather than calling this function — as
+ * `reviews/store.ts` also does — because those stores take their `sql` as an
+ * argument and must not pull a `server-only` module into that graph. They also
+ * end the chain differently: a scoreboard row with no handle and no username
+ * reads as a stable `SigmaAlphaMale#0417` placeholder rather than "Player",
+ * because a board of fifteen rows where four say "Player" reads as four entries
+ * by one person.
  */
 export function publicDisplayName(p: {
   handle: string | null;
@@ -215,6 +221,26 @@ export async function getPublicIdentity(id: string): Promise<PlayerIdentity | nu
   if (!player) return null;
   const display = effectiveHandle(player);
   return { id: player.id, name: display, image: player.image, handle: display };
+}
+
+/**
+ * The caller's OWN `public_id` — the identifier their rows wear on public
+ * surfaces (leaderboards, reviews, friends lists).
+ *
+ * Its own tiny read rather than a field on {@link PlayerIdentity}, because that
+ * type is the SDK's published identity shape and this is a site-internal join
+ * key: a page fetches it to work out which row of an already-public,
+ * already-cached list is the reader's. Keeping the two apart is what stops a
+ * "which one is me" feature from turning a shared, cacheable body into a
+ * per-viewer one.
+ *
+ * `public_id` is NOT a secret — it is the id every social endpoint already takes
+ * and returns — so learning your own is not a disclosure. `players.id`, the
+ * Google subject, is the one that never crosses the wire.
+ */
+export async function getPublicPlayerId(id: string): Promise<string | null> {
+  const rows = await sql`SELECT public_id FROM players WHERE id = ${id}`;
+  return rows.length > 0 ? String(rows[0].public_id) : null;
 }
 
 /**

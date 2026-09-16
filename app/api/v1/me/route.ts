@@ -18,7 +18,7 @@
 
 import { auth } from "@/app/lib/auth";
 import { isBetaTester } from "@/app/lib/beta";
-import { getPublicIdentity } from "@/app/lib/players";
+import { getPublicIdentity, getPublicPlayerId } from "@/app/lib/players";
 import type { Session } from "next-auth";
 import type { MeResponse, PlayerIdentity } from "@/sdk/src/contract";
 
@@ -61,16 +61,32 @@ export async function GET(): Promise<Response> {
   // than a header that throws on every page of the site.
   let ident: PlayerIdentity | null = null;
   let betaTester = false;
+  // The caller's own public id, for a page that has to tell which row of an
+  // already-public list is theirs. RESOLVED HERE rather than by the page, because
+  // the alternative is every such surface growing its own per-viewer endpoint —
+  // and because this one is already on the critical path, so the marginal cost is
+  // a third parallel statement rather than a third round trip.
+  let publicId: string | null = null;
   try {
-    [ident, betaTester] = await Promise.all([
+    [ident, betaTester, publicId] = await Promise.all([
       getPublicIdentity(playerId),
       isBetaTester(playerId),
+      // Fail-soft on its own, like the other two: a page that cannot find itself
+      // in a list renders the list unhighlighted, which is the guest view — never
+      // an error, and never somebody else's row highlighted instead.
+      getPublicPlayerId(playerId).catch(() => null),
     ]);
   } catch (error) {
     console.error("me GET identity read failed:", error);
   }
   return Response.json(
-    { player: ident, isAdmin, role, isBetaTester: betaTester } satisfies MeResponse,
+    {
+      player: ident,
+      isAdmin,
+      role,
+      isBetaTester: betaTester,
+      publicId,
+    } satisfies MeResponse,
     { headers: CORS_HEADERS },
   );
 }

@@ -35,6 +35,7 @@ import {
   FRIEND_BOARD_ROWS,
   type RateLimit,
 } from "./config";
+import { publicScoreName } from "./display-name";
 
 /** The subset of the Neon query function the store needs: callable as a tag. */
 type Sql = NeonQueryFunction<false, false>;
@@ -104,10 +105,16 @@ export interface PlayerStanding {
  * set (or the viewer) with their personal best on one of that game's boards.
  *
  * `player` deliberately MIRRORS `social/store.ts`'s `PublicProfile` — same four
- * fields, same `handle || @username || "Player"` fallback — rather than importing
- * it. This module is the scoreboard's data layer and owes nothing to the social
- * one; the shape is repeated so `Avatar` and the rest of the friends UI can
- * consume this row unchanged. If that fallback ever changes, it changes in both.
+ * fields — rather than importing it. This module is the scoreboard's data layer
+ * and owes nothing to the social one; the shape is repeated so `Avatar` and the
+ * rest of the friends UI can consume this row unchanged.
+ *
+ * The display name is NOT repeated, though: it comes from `display-name.ts`,
+ * shared with `getTopScores`, because both render on the same store page and one
+ * player must not appear under two names one section apart. `social/store.ts`
+ * still carries its own copy of the older `handle || @username || "Player"`
+ * chain, so a nameless player reads as "Player" on the friends surfaces outside
+ * this page.
  */
 export interface FriendStanding {
   boardId: string;
@@ -203,11 +210,29 @@ export function createStore(sql: Sql) {
    * an interpolated fragment. Rank is positional (1..N) over those best rows.
    *
    * Each branch LEFT JOINs `players` so a verified row (`scores.player_id` set)
-   * is tagged in its `ScoreEntry`: `verified = true`, `handle` becomes the
-   * player's effective display (chosen `p_handle`, else Google `p_name`, else the
-   * stored `scores.handle`), and `avatar` carries `players.image`. An anonymous
-   * row (no `player_id`) maps to `verified = false` with the stored handle and no
-   * avatar. EMAIL is never selected here.
+   * is tagged in its `ScoreEntry`: `verified = true`, `avatar` carries
+   * `players.image`, `playerId` carries the `public_id` UUID (the only player
+   * identifier that crosses the wire anywhere in this codebase), and `handle`
+   * becomes the player's PUBLIC display — chosen `p_handle`, else `@p_username`,
+   * else the stable `SigmaAlphaMale#0417` placeholder built from that public id
+   * (`display-name.ts`). An anonymous row (no `player_id`) maps to `verified = false`
+   * with the guest's own submitted handle and no avatar.
+   *
+   * ── WHY `players.name` IS NOT SELECTED HERE AT ALL ────────────────────────
+   *
+   * It used to be, as the second link in that fallback chain, and
+   * `publicDisplayName` in `lib/players.ts` carried a standing note naming this
+   * function as the last place the Google account name — for most players, a
+   * child's REAL NAME — still reached a public surface. This is that fix.
+   *
+   * The column is dropped from the six templates rather than merely skipped in
+   * the mapping, which is the point: a value that was never selected cannot be
+   * rendered by a later edit that only reads the mapper. The stored
+   * `scores.handle` leaves the verified chain for the same reason — it is a
+   * SNAPSHOT of the display name at submit time, so for a player who never chose
+   * a handle it is that same Google name, frozen.
+   *
+   * EMAIL is never selected here.
    */
   async function getTopScores(
     boardId: string,
@@ -217,18 +242,29 @@ export function createStore(sql: Sql) {
     return rows.map((row, index) => {
       const rank = index + 1;
       if (row.player_id != null) {
-        const pHandle = typeof row.p_handle === "string" ? row.p_handle.trim() : "";
-        const pName = typeof row.p_name === "string" ? row.p_name.trim() : "";
+        const publicId = row.p_public_id == null ? null : String(row.p_public_id);
         return {
           rank,
-          handle: pHandle || pName || String(row.handle),
+          // Chosen handle, else "@username", else a stable placeholder built
+          // from the public id. NEVER `players.name`, and never the stored
+          // `scores.handle` snapshot for a verified row: both can be the Google
+          // account name, i.e. a child's real name, on the most public surface
+          // this site has. See `display-name.ts` for the whole rule.
+          handle: publicScoreName({
+            handle: typeof row.p_handle === "string" ? row.p_handle : null,
+            username: typeof row.p_username === "string" ? row.p_username : null,
+            publicId,
+          }),
           score: Number(row.score),
           verified: true,
           avatar: row.p_image == null ? null : String(row.p_image),
+          playerId: publicId,
         };
       }
       return {
         rank,
+        // An anonymous row's handle is the guest's own submission, already
+        // charset-clamped by `sanitizeHandle` — nobody's account name.
         handle: String(row.handle),
         score: Number(row.score),
         verified: false,
@@ -245,8 +281,9 @@ export function createStore(sql: Sql) {
    * `DISTINCT ON (identity)` keeps the first row per identity under the inner
    * `ORDER BY`, i.e. each player's best (highest for desc, lowest for asc); the
    * outer query then ranks those bests. Each LEFT JOINs `players p ON p.id =
-   * s.player_id` to carry the verified player's `handle`/`name`/`image`; an
-   * anonymous row yields NULL for the `p_*` columns. `score` lives only on
+   * s.player_id` to carry the verified player's `handle`/`username`/`public_id`/
+   * `image` — deliberately NOT `name`, see `getTopScores`; an anonymous row
+   * yields NULL for the `p_*` columns. `score` lives only on
    * `scores`, so it stays unqualified. Only `boardId` and `limit` are ever bound
    * — the join and dedup introduce no spliced fragment.
    */
@@ -254,9 +291,10 @@ export function createStore(sql: Sql) {
     if (sort === "asc") {
       if (period === "day") {
         return sql`
-          SELECT handle, score, player_id, p_handle, p_name, p_image FROM (
+          SELECT handle, score, player_id, p_handle, p_username, p_public_id, p_image FROM (
             SELECT DISTINCT ON (COALESCE('p:' || s.player_id, 'g:' || s.handle))
-              s.handle, s.score, s.player_id, p.handle AS p_handle, p.name AS p_name, p.image AS p_image, s.created_at, s.id
+              s.handle, s.score, s.player_id, p.handle AS p_handle, p.username AS p_username,
+              p.public_id AS p_public_id, p.image AS p_image, s.created_at, s.id
             FROM scores s LEFT JOIN players p ON p.id = s.player_id
             WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 0, 1)
             ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score ASC, s.created_at ASC, s.id ASC
@@ -267,9 +305,10 @@ export function createStore(sql: Sql) {
       }
       if (period === "week") {
         return sql`
-          SELECT handle, score, player_id, p_handle, p_name, p_image FROM (
+          SELECT handle, score, player_id, p_handle, p_username, p_public_id, p_image FROM (
             SELECT DISTINCT ON (COALESCE('p:' || s.player_id, 'g:' || s.handle))
-              s.handle, s.score, s.player_id, p.handle AS p_handle, p.name AS p_name, p.image AS p_image, s.created_at, s.id
+              s.handle, s.score, s.player_id, p.handle AS p_handle, p.username AS p_username,
+              p.public_id AS p_public_id, p.image AS p_image, s.created_at, s.id
             FROM scores s LEFT JOIN players p ON p.id = s.player_id
             WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 1)
             ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score ASC, s.created_at ASC, s.id ASC
@@ -279,9 +318,10 @@ export function createStore(sql: Sql) {
         `;
       }
       return sql`
-        SELECT handle, score, player_id, p_handle, p_name, p_image FROM (
+        SELECT handle, score, player_id, p_handle, p_username, p_public_id, p_image FROM (
           SELECT DISTINCT ON (COALESCE('p:' || s.player_id, 'g:' || s.handle))
-            s.handle, s.score, s.player_id, p.handle AS p_handle, p.name AS p_name, p.image AS p_image, s.created_at, s.id
+            s.handle, s.score, s.player_id, p.handle AS p_handle, p.username AS p_username,
+              p.public_id AS p_public_id, p.image AS p_image, s.created_at, s.id
           FROM scores s LEFT JOIN players p ON p.id = s.player_id
           WHERE s.board_id = ${boardId}
           ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score ASC, s.created_at ASC, s.id ASC
@@ -293,9 +333,10 @@ export function createStore(sql: Sql) {
     // sort === "desc"
     if (period === "day") {
       return sql`
-        SELECT handle, score, player_id, p_handle, p_name, p_image FROM (
+        SELECT handle, score, player_id, p_handle, p_username, p_public_id, p_image FROM (
           SELECT DISTINCT ON (COALESCE('p:' || s.player_id, 'g:' || s.handle))
-            s.handle, s.score, s.player_id, p.handle AS p_handle, p.name AS p_name, p.image AS p_image, s.created_at, s.id
+            s.handle, s.score, s.player_id, p.handle AS p_handle, p.username AS p_username,
+              p.public_id AS p_public_id, p.image AS p_image, s.created_at, s.id
           FROM scores s LEFT JOIN players p ON p.id = s.player_id
           WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 0, 1)
           ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score DESC, s.created_at ASC, s.id ASC
@@ -306,9 +347,10 @@ export function createStore(sql: Sql) {
     }
     if (period === "week") {
       return sql`
-        SELECT handle, score, player_id, p_handle, p_name, p_image FROM (
+        SELECT handle, score, player_id, p_handle, p_username, p_public_id, p_image FROM (
           SELECT DISTINCT ON (COALESCE('p:' || s.player_id, 'g:' || s.handle))
-            s.handle, s.score, s.player_id, p.handle AS p_handle, p.name AS p_name, p.image AS p_image, s.created_at, s.id
+            s.handle, s.score, s.player_id, p.handle AS p_handle, p.username AS p_username,
+              p.public_id AS p_public_id, p.image AS p_image, s.created_at, s.id
           FROM scores s LEFT JOIN players p ON p.id = s.player_id
           WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 1)
           ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score DESC, s.created_at ASC, s.id ASC
@@ -318,9 +360,10 @@ export function createStore(sql: Sql) {
       `;
     }
     return sql`
-      SELECT handle, score, player_id, p_handle, p_name, p_image FROM (
+      SELECT handle, score, player_id, p_handle, p_username, p_public_id, p_image FROM (
         SELECT DISTINCT ON (COALESCE('p:' || s.player_id, 'g:' || s.handle))
-          s.handle, s.score, s.player_id, p.handle AS p_handle, p.name AS p_name, p.image AS p_image, s.created_at, s.id
+          s.handle, s.score, s.player_id, p.handle AS p_handle, p.username AS p_username,
+              p.public_id AS p_public_id, p.image AS p_image, s.created_at, s.id
         FROM scores s LEFT JOIN players p ON p.id = s.player_id
         WHERE s.board_id = ${boardId}
         ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score DESC, s.created_at ASC, s.id ASC
@@ -682,6 +725,7 @@ export function createStore(sql: Sql) {
     return rows.map((row) => {
       const handle = row.handle == null ? null : String(row.handle).trim();
       const username = row.username == null ? null : String(row.username);
+      const publicId = String(row.public_id);
       return {
         boardId: String(row.board_id),
         boardTitle: String(row.title),
@@ -689,9 +733,13 @@ export function createStore(sql: Sql) {
         sort: row.sort === "asc" ? ("asc" as SortDir) : ("desc" as SortDir),
         isYou: Boolean(row.is_you),
         player: {
-          id: String(row.public_id),
+          id: publicId,
           username,
-          displayName: handle || (username ? `@${username}` : "Player"),
+          // THE SAME RULE `getTopScores` PUBLISHES, and that is the requirement
+          // rather than a tidy-up: this panel and the public board render on the
+          // same store page, so a player who has set no handle must not appear
+          // under two different names one section apart.
+          displayName: publicScoreName({ handle, username, publicId }),
           image: row.image == null ? null : String(row.image),
         },
         best: Number(row.best),
