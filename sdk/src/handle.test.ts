@@ -1,14 +1,17 @@
 // @vitest-environment jsdom
 /**
- * Handle storage + sanitisation. Anonymous players get a stable auto `Guest#NNNN`
- * name (never a prompt); an explicit handle overrides and is sanitised; the `#`
- * character survives sanitisation so generated Guest names are preserved.
+ * Handle storage + sanitisation. Anonymous players get a stable auto
+ * `SigmaAlphaMale#NNNN` name (never a prompt); an explicit handle overrides and
+ * is sanitised; a generated name survives being read back, length cap included,
+ * which is what keeps a returning guest on one leaderboard row.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ensureHandle, generateGuestHandle, sanitizeHandle } from "./handle";
 
-/** "Guest#" followed by exactly four digits. */
-const GUEST = /^Guest#\d{4}$/;
+/** The generated stem followed by exactly four digits. */
+const GUEST = /^SigmaAlphaMale#\d{4}$/;
+/** Kept in one place so the round-trip tests below cannot drift from it. */
+const STEM = "SigmaAlphaMale";
 
 /**
  * This repo's jsdom ships a non-functional `localStorage` (its methods are not
@@ -49,11 +52,11 @@ afterEach(() => {
 });
 
 describe("generateGuestHandle", () => {
-  it("returns 'Guest#' + four digits in the 1000..9999 range", () => {
+  it("returns the stem + four digits in the 1000..9999 range", () => {
     for (let i = 0; i < 50; i++) {
       const handle = generateGuestHandle();
       expect(handle).toMatch(GUEST);
-      const n = Number(handle.slice("Guest#".length));
+      const n = Number(handle.slice(`${STEM}#`.length));
       expect(n).toBeGreaterThanOrEqual(1000);
       expect(n).toBeLessThanOrEqual(9999);
     }
@@ -61,14 +64,29 @@ describe("generateGuestHandle", () => {
 });
 
 describe("sanitizeHandle", () => {
-  it("preserves a '#' so a Guest name survives", () => {
-    expect(sanitizeHandle("Guest#4821")).toBe("Guest#4821");
+  it("preserves a '#' in a typed handle", () => {
     expect(sanitizeHandle("Wild#Cat!!")).toBe("Wild#Cat");
+  });
+
+  it("round-trips a generated name whole, past the typed-input cap", () => {
+    // The name this file mints is longer than MAX_LEN and is read back through
+    // here on every later session. Truncating it would rename the player
+    // mid-session and split them into two leaderboard rows, since the server
+    // identifies a guest by their handle string.
+    const minted = generateGuestHandle();
+    expect(minted.length).toBeGreaterThan(12);
+    expect(sanitizeHandle(minted)).toBe(minted);
+  });
+
+  it("still caps anything that merely looks like a generated name", () => {
+    expect(sanitizeHandle(`${STEM}#48210`)).toHaveLength(12);
+    expect(sanitizeHandle(`${STEM}#abcd`)).toHaveLength(12);
+    expect(sanitizeHandle(STEM)).toHaveLength(12);
   });
 });
 
 describe("ensureHandle", () => {
-  it("mints a stable Guest# handle when nothing is stored and persists it", () => {
+  it("mints a stable generated handle when nothing is stored and persists it", () => {
     const promptSpy = vi.fn();
     vi.stubGlobal("prompt", promptSpy);
 
@@ -81,7 +99,7 @@ describe("ensureHandle", () => {
     expect(promptSpy).not.toHaveBeenCalled();
   });
 
-  it("returns the SAME stored Guest handle on a later call (stability)", () => {
+  it("returns the SAME stored handle on a later call (stability)", () => {
     const first = ensureHandle();
     const second = ensureHandle();
 
