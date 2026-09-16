@@ -229,7 +229,7 @@ export const games: Game[] = [
     accent: "#4ade80",
     art: "serpent",
     plays: 96214,
-    platform: "desktop",
+    platform: "both",
   },
   {
     slug: "system-restore",
@@ -440,7 +440,7 @@ export const games: Game[] = [
     art: "swarm",
     isNew: true,
     plays: 0,
-    platform: "desktop",
+    platform: "both",
   },
   {
     slug: "system-error",
@@ -470,7 +470,7 @@ export const games: Game[] = [
     accent: "#33ff33",
     art: "glitch",
     isNew: true,
-    platform: "desktop",
+    platform: "both",
   },
   {
     slug: "paddle-crawler",
