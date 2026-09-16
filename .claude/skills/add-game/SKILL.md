@@ -100,18 +100,45 @@ Still with the temp server running:
   `mcp__playwright__browser_take_screenshot`.
 - Tap the middle of the play area with `mcp__playwright__browser_click`, wait ~1s,
   and screenshot again.
+- **Then get past the title screen and tap again.** A tap on a menu proves the
+  menu works, not the game. Press the game's own start control (BOOT, INITIATE,
+  PLAY, ENTER DUNGEON — whatever it calls it), wait ~2s, screenshot, then tap and
+  swipe in gameplay and screenshot once more. Most of the mis-tagging this check
+  exists to prevent happens in that gap.
 
-Then judge from the two screenshots plus a read of the controls code:
+Three failures this catches only if you look for them — all three were found in
+the shipped catalogue, in games whose touch handlers are perfectly good:
+
+- **The start control does not answer a finger.** A window-level
+  `touchstart` handler that calls `preventDefault()` unconditionally suppresses
+  the click the browser synthesises from a tap, so every `onclick` button on the
+  page — including INITIATE — is dead on a phone while working under a mouse.
+  Guard it (`if (e.target.closest('.screen')) return;`) or the game is
+  `"desktop"` whatever its gameplay takes.
+- **Something covers the start control.** Run
+  `document.elementFromPoint()` on the button's own centre: if it returns
+  anything but the button (a full-bleed game container, a control overlay), a
+  finger cannot reach it at that width.
+- **A control is below the fold with no way to scroll.** Compare each control's
+  `getBoundingClientRect()` against `innerHeight`, and check whether `html`/`body`
+  are `overflow:hidden` — programmatic `scrollTo` still moves a page a finger
+  cannot.
+
+Then judge from the screenshots plus a read of the controls code:
 
 | What you see | `platform` |
 |---|---|
 | Responds to the tap; UI fits the portrait viewport | `"both"` (or `"mobile"` if it *only* makes sense on touch — gyro, swipe, portrait-locked) |
-| Nothing responds, or the playfield is cut off / needs keys | `"desktop"` |
+| Nothing responds, the playfield is cut off, a control is unreachable, or it needs keys | `"desktop"` |
 | Cannot tell, the check did not run, or Playwright is unavailable | **omit the field** |
 
 Omitting is a real, correct outcome — it means "unknown", which renders exactly
 like the site did before the field existed. A wrong guess is worse than no guess:
-it badges the game and re-sorts it on every visitor's phone.
+it badges the game and re-sorts it on every visitor's phone — and a wrong
+`"desktop"` costs more than a badge: the phone shell lists `mobileCatalog()`
+only, so that game is absent from the grid every phone visitor sees. Omitting
+the field leaves it out of the phone grid too, but honestly, and the dashboard
+shows it as still needing a look.
 
 If Playwright MCP isn't available, fall back to a solid-color placeholder using the chosen accent color: `magick -size 659x613 xc:'<accent-hex>' public/games/<slug>/cover.png`, and warn the user in the final summary.
 
