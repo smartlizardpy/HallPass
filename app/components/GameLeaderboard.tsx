@@ -61,10 +61,12 @@ import { Avatar } from "./friends/Avatar";
  * job directly above, which already prints the viewer's rank on the whole board
  * beside their friends.
  *
- * Names here are PUBLIC names — chosen handle, else `@username`, else "Player",
- * resolved in `getTopScores`, which does not select the Google account name at
- * all. A leaderboard is the most public surface this site has and a real name
- * must never reach it.
+ * Names here are PUBLIC names — chosen handle, else `@username`, else a stable
+ * `SigmaAlphaMale#0417` placeholder — resolved in `getTopScores`, which does not
+ * select the Google account name at all. A leaderboard is the most public surface
+ * this site has and a real name must never reach it. The friends panel above
+ * publishes the same name for the same player, deliberately; see
+ * `lib/scoreboard/display-name.ts`.
  *
  * Nothing is cached client-side. This is a page that may be open on a shared
  * school computer, and it must not outlive the session.

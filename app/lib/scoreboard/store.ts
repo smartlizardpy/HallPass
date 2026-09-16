@@ -35,6 +35,7 @@ import {
   FRIEND_BOARD_ROWS,
   type RateLimit,
 } from "./config";
+import { publicScoreName } from "./display-name";
 
 /** The subset of the Neon query function the store needs: callable as a tag. */
 type Sql = NeonQueryFunction<false, false>;
@@ -104,10 +105,16 @@ export interface PlayerStanding {
  * set (or the viewer) with their personal best on one of that game's boards.
  *
  * `player` deliberately MIRRORS `social/store.ts`'s `PublicProfile` — same four
- * fields, same `handle || @username || "Player"` fallback — rather than importing
- * it. This module is the scoreboard's data layer and owes nothing to the social
- * one; the shape is repeated so `Avatar` and the rest of the friends UI can
- * consume this row unchanged. If that fallback ever changes, it changes in both.
+ * fields — rather than importing it. This module is the scoreboard's data layer
+ * and owes nothing to the social one; the shape is repeated so `Avatar` and the
+ * rest of the friends UI can consume this row unchanged.
+ *
+ * The display name is NOT repeated, though: it comes from `display-name.ts`,
+ * shared with `getTopScores`, because both render on the same store page and one
+ * player must not appear under two names one section apart. `social/store.ts`
+ * still carries its own copy of the older `handle || @username || "Player"`
+ * chain, so a nameless player reads as "Player" on the friends surfaces outside
+ * this page.
  */
 export interface FriendStanding {
   boardId: string;
@@ -207,7 +214,8 @@ export function createStore(sql: Sql) {
    * `players.image`, `playerId` carries the `public_id` UUID (the only player
    * identifier that crosses the wire anywhere in this codebase), and `handle`
    * becomes the player's PUBLIC display — chosen `p_handle`, else `@p_username`,
-   * else "Player". An anonymous row (no `player_id`) maps to `verified = false`
+   * else the stable `SigmaAlphaMale#0417` placeholder built from that public id
+   * (`display-name.ts`). An anonymous row (no `player_id`) maps to `verified = false`
    * with the guest's own submitted handle and no avatar.
    *
    * ── WHY `players.name` IS NOT SELECTED HERE AT ALL ────────────────────────
@@ -234,20 +242,23 @@ export function createStore(sql: Sql) {
     return rows.map((row, index) => {
       const rank = index + 1;
       if (row.player_id != null) {
-        const pHandle = typeof row.p_handle === "string" ? row.p_handle.trim() : "";
-        const pUsername = typeof row.p_username === "string" ? row.p_username.trim() : "";
+        const publicId = row.p_public_id == null ? null : String(row.p_public_id);
         return {
           rank,
-          // Chosen handle, else "@username", else "Player" — the rule
-          // `publicDisplayName` states and `reviews/store.ts` inlines the same
-          // way. NEVER `players.name`, and never the stored `scores.handle`
-          // snapshot for a verified row: both can be the Google account name,
-          // i.e. a child's real name, on the most public surface this site has.
-          handle: pHandle || (pUsername ? `@${pUsername}` : "Player"),
+          // Chosen handle, else "@username", else a stable placeholder built
+          // from the public id. NEVER `players.name`, and never the stored
+          // `scores.handle` snapshot for a verified row: both can be the Google
+          // account name, i.e. a child's real name, on the most public surface
+          // this site has. See `display-name.ts` for the whole rule.
+          handle: publicScoreName({
+            handle: typeof row.p_handle === "string" ? row.p_handle : null,
+            username: typeof row.p_username === "string" ? row.p_username : null,
+            publicId,
+          }),
           score: Number(row.score),
           verified: true,
           avatar: row.p_image == null ? null : String(row.p_image),
-          playerId: row.p_public_id == null ? null : String(row.p_public_id),
+          playerId: publicId,
         };
       }
       return {
@@ -714,6 +725,7 @@ export function createStore(sql: Sql) {
     return rows.map((row) => {
       const handle = row.handle == null ? null : String(row.handle).trim();
       const username = row.username == null ? null : String(row.username);
+      const publicId = String(row.public_id);
       return {
         boardId: String(row.board_id),
         boardTitle: String(row.title),
@@ -721,9 +733,13 @@ export function createStore(sql: Sql) {
         sort: row.sort === "asc" ? ("asc" as SortDir) : ("desc" as SortDir),
         isYou: Boolean(row.is_you),
         player: {
-          id: String(row.public_id),
+          id: publicId,
           username,
-          displayName: handle || (username ? `@${username}` : "Player"),
+          // THE SAME RULE `getTopScores` PUBLISHES, and that is the requirement
+          // rather than a tidy-up: this panel and the public board render on the
+          // same store page, so a player who has set no handle must not appear
+          // under two different names one section apart.
+          displayName: publicScoreName({ handle, username, publicId }),
           image: row.image == null ? null : String(row.image),
         },
         best: Number(row.best),

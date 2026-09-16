@@ -197,10 +197,11 @@ describe("getTopScores", () => {
     expect(calls[0].text).not.toContain("p.name");
   });
 
-  it('falls back to "Player" when a verified row has neither handle nor username', async () => {
+  it("falls back to the public-id placeholder, never the stored snapshot", async () => {
     // The stored scores.handle is NOT the next fallback for a verified row: it is
     // a snapshot of the display name at submit time, which for a player who never
-    // chose a handle is that same Google name, frozen.
+    // chose a handle is that same Google name, frozen. The placeholder is derived
+    // from the public id — see `display-name.ts` for the number.
     const { sql } = makeFakeSql(() => [
       {
         handle: "Ada Lovelace",
@@ -219,7 +220,8 @@ describe("getTopScores", () => {
       sort: "desc",
     });
 
-    expect(scores[0].handle).toBe("Player");
+    expect(scores[0].handle).toBe("SigmaAlphaMale#5765");
+    expect(scores[0].handle).not.toContain("Ada");
   });
 
   it("leaves an anonymous row's own submitted handle alone and gives it no player id", async () => {
@@ -606,7 +608,7 @@ describe("getFriendStandingsForGame", () => {
     expect(text).toContain("r.board_pos <=");
   });
 
-  it("falls back through handle, @username and Player for the display name", async () => {
+  it("falls back through handle, @username and the placeholder for the display name", async () => {
     const { sql } = makeFakeSql(() => [
       row({ handle: "   ", username: "ates" }),
       row({
@@ -619,7 +621,12 @@ describe("getFriendStandingsForGame", () => {
     const store = createStore(sql);
     const standings = await store.getFriendStandingsForGame("google-sub-1", "neon-snake");
 
-    expect(standings.map((s) => s.player.displayName)).toEqual(["@ates", "Player"]);
+    // THE SAME NAME `getTopScores` PUBLISHES: both panels render on one store
+    // page, so a nameless player must not read differently one section apart.
+    expect(standings.map((s) => s.player.displayName)).toEqual([
+      "@ates",
+      "SigmaAlphaMale#2306",
+    ]);
     expect(standings[1].player.image).toBeNull();
   });
 

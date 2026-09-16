@@ -117,12 +117,16 @@ export function effectiveHandle(p: { handle: string | null; name: string | null 
  * Use THIS on anything another player can see. Use `effectiveHandle` only where
  * the viewer is the owner.
  *
- * That gap is now closed everywhere: `getTopScores` in
- * `app/lib/scoreboard/store.ts` used to fall back to the Google name on public
- * leaderboards, and no longer selects `players.name` at all. It inlines this
- * rule rather than calling this function, exactly as `reviews/store.ts` does,
- * because both map database rows inside a store that takes its `sql` as an
- * argument and must not pull a `server-only` module into that graph.
+ * That gap is now closed: `getTopScores` in `app/lib/scoreboard/store.ts` used to
+ * fall back to the Google name on public leaderboards, and no longer selects
+ * `players.name` at all. The scoreboard states this rule in its own pure
+ * `scoreboard/display-name.ts` rather than calling this function — as
+ * `reviews/store.ts` also does — because those stores take their `sql` as an
+ * argument and must not pull a `server-only` module into that graph. They also
+ * end the chain differently: a scoreboard row with no handle and no username
+ * reads as a stable `SigmaAlphaMale#0417` placeholder rather than "Player",
+ * because a board of fifteen rows where four say "Player" reads as four entries
+ * by one person.
  */
 export function publicDisplayName(p: {
   handle: string | null;
