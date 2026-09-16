@@ -199,7 +199,7 @@ export const games: Game[] = [
     accent: "#34d399",
     art: "orbit",
     plays: 5680,
-    platform: "desktop",
+    platform: "both",
   },
   {
     slug: "silence",
@@ -244,7 +244,7 @@ export const games: Game[] = [
     accent: "#38bdf8",
     art: "glitch",
     plays: 7423,
-    platform: "desktop",
+    platform: "both",
   },
   {
     slug: "neon-fracture",
@@ -334,7 +334,7 @@ export const games: Game[] = [
     accent: "#22d3ee",
     art: "rink",
     plays: 33421,
-    platform: "desktop",
+    platform: "both",
   },
   {
     slug: "core-vs-swarm",
@@ -349,7 +349,7 @@ export const games: Game[] = [
     accent: "#fde68a",
     art: "swarm",
     plays: 19120,
-    platform: "desktop",
+    platform: "both",
   },
   {
     slug: "jjk-domain-survival-v3",
@@ -394,7 +394,7 @@ export const games: Game[] = [
     accent: "#a5b4fc",
     art: "tether",
     plays: 4221,
-    platform: "desktop",
+    platform: "both",
   },
   {
     slug: "chroma-orbit",
@@ -485,7 +485,7 @@ export const games: Game[] = [
     accent: "#ff0055",
     art: "glitch",
     isNew: true,
-    platform: "desktop",
+    platform: "both",
   },
   {
     slug: "rhythm-hell-harmonic-flash",
@@ -500,7 +500,7 @@ export const games: Game[] = [
     accent: "#00f3ff",
     art: "slash",
     isNew: true,
-    platform: "desktop",
+    platform: "both",
   },
   {
     slug: "duskfall",
