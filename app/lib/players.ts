@@ -220,6 +220,26 @@ export async function getPublicIdentity(id: string): Promise<PlayerIdentity | nu
 }
 
 /**
+ * The caller's OWN `public_id` — the identifier their rows wear on public
+ * surfaces (leaderboards, reviews, friends lists).
+ *
+ * Its own tiny read rather than a field on {@link PlayerIdentity}, because that
+ * type is the SDK's published identity shape and this is a site-internal join
+ * key: a page fetches it to work out which row of an already-public,
+ * already-cached list is the reader's. Keeping the two apart is what stops a
+ * "which one is me" feature from turning a shared, cacheable body into a
+ * per-viewer one.
+ *
+ * `public_id` is NOT a secret — it is the id every social endpoint already takes
+ * and returns — so learning your own is not a disclosure. `players.id`, the
+ * Google subject, is the one that never crosses the wire.
+ */
+export async function getPublicPlayerId(id: string): Promise<string | null> {
+  const rows = await sql`SELECT public_id FROM players WHERE id = ${id}`;
+  return rows.length > 0 ? String(rows[0].public_id) : null;
+}
+
+/**
  * Set (or clear) a player's chosen handle. The input is sanitised to a safe
  * display string and capped; if nothing usable remains the handle is set to NULL
  * — reverting the effective display to the Google `name`. Both the bound handle

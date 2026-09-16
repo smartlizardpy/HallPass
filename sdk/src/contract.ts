@@ -145,6 +145,14 @@ export interface MeResponse {
    * status, never an email. Added in v1.
    */
   isBetaTester?: boolean;
+  /**
+   * The caller's own `public_id` — the identifier their own rows carry on public
+   * surfaces, so a page can tell which row of a shared, CDN-cached list (a
+   * leaderboard, a review list) belongs to the reader WITHOUT that list having to
+   * be fetched per viewer. Null for a guest. Never `players.id`, the Google
+   * subject. Added in v1 (append-only).
+   */
+  publicId?: string | null;
 }
 
 /** Request body to set the current player's chosen handle. Added in v1. */
