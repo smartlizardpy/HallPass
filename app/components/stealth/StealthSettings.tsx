@@ -276,7 +276,7 @@ export function StealthSettings({
             type="button"
             onClick={handleClose}
             aria-label="Close"
-            className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 transition hover:bg-surface-2 hover:text-foreground"
+            className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 dark:text-zinc-400 dark:text-zinc-500 transition hover:bg-surface-2 hover:text-foreground"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
               <path d="M6 6l12 12M18 6 6 18" />

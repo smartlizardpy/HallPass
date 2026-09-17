@@ -370,7 +370,7 @@ export function GameStore({
               onClick={() => handleToggleFavorite(game.slug)}
               style={{ touchAction: "manipulation" }}
               className={`grid h-14 w-14 shrink-0 place-items-center rounded-full border border-border bg-surface transition hover:bg-surface-2 active:scale-90 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30 ${
-                favorited ? "text-accent-pink" : "text-zinc-400"
+                favorited ? "text-accent-pink" : "text-zinc-400 dark:text-zinc-500"
               }`}
             >
               <svg

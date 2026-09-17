@@ -1086,7 +1086,7 @@ export default async function GameControlPage({
                   className={inputClass}
                 />
               </label>
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 dark:text-zinc-500">
                 PNG, JPEG or WebP · up to {MAX_MEDIA_PER_UPLOAD} at a time · max
                 4 MB and at least 640px wide each · landscape only. The first
                 screenshot becomes the store-page hero and the social preview
@@ -1163,7 +1163,7 @@ export default async function GameControlPage({
             />
           </div>
 
-          <p className="border-t border-border pt-6 text-xs text-zinc-500">
+          <p className="border-t border-border pt-6 text-xs text-zinc-500 dark:text-zinc-400 dark:text-zinc-500">
             Publishing any source below replaces <strong>everything</strong>{" "}
             previously published for this game — a single HTML file counts as a
             one-file bundle.

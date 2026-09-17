@@ -170,7 +170,7 @@ export function AccountMenu() {
         // white bar (see its docblock), where white would erase it. The signed-
         // out `bg-brand` button above needs no such treatment, and the dropdown
         // below stays white — it floats over the page, not on the bar.
-        className="flex h-11 items-center gap-2 rounded-full bg-surface-2 pl-1.5 pr-2 text-sm font-bold text-zinc-800 transition hover:text-brand sm:pr-3"
+        className="flex h-11 items-center gap-2 rounded-full bg-surface-2 pl-1.5 pr-2 text-sm font-bold text-zinc-800 dark:text-zinc-200 transition hover:text-brand sm:pr-3"
       >
         <span className="relative">
           <Avatar src={player.image} initial={initial} size={32} />
@@ -308,7 +308,7 @@ export function AccountMenu() {
               triggerRef.current?.focus();
               openStealthSettings();
             }}
-            className="block w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-zinc-800 transition hover:bg-surface-2"
+            className="block w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-zinc-800 dark:text-zinc-200 transition hover:bg-surface-2"
           >
             <span aria-hidden className="mr-1.5">
               🕶️
@@ -356,7 +356,7 @@ function MenuLink({
       href={href}
       onNavigate={onNavigate}
       role="menuitem"
-      className="block rounded-lg px-3 py-2 text-sm font-semibold text-zinc-800 transition hover:bg-surface-2"
+      className="block rounded-lg px-3 py-2 text-sm font-semibold text-zinc-800 dark:text-zinc-200 transition hover:bg-surface-2"
     >
       {children}
     </Link>

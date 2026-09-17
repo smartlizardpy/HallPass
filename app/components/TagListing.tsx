@@ -98,7 +98,7 @@ export function TagListing({
         <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl">
           {tag} Games — Unblocked
         </h1>
-        <p className="mt-2 text-[15px] font-semibold leading-relaxed text-zinc-600">
+        <p className="mt-2 text-[15px] font-semibold leading-relaxed text-zinc-600 dark:text-zinc-300">
           {games.length === 1
             ? `One ${tag.toLowerCase()} game, free in your browser.`
             : `${games.length} ${tag.toLowerCase()} games, free in your browser.`}{" "}

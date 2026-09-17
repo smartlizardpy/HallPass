@@ -54,7 +54,7 @@ export default async function WhatsNewPage() {
             <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl">
               What&apos;s New in HALLPASS
             </h1>
-            <p className="mt-2 text-[15px] font-semibold leading-relaxed text-zinc-600">
+            <p className="mt-2 text-[15px] font-semibold leading-relaxed text-zinc-600 dark:text-zinc-300">
               Every drop and every fix, newest first — new games as they land,
               plus the features around them. Nothing here needs an account, and
               the arcade itself keeps working offline once you have opened it.

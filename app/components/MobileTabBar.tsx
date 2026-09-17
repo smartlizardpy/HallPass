@@ -395,7 +395,7 @@ function TabInner({
   return (
     <span
       className={`flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-bold ${
-        active ? "text-brand" : "text-zinc-500"
+        active ? "text-brand" : "text-zinc-500 dark:text-zinc-400 dark:text-zinc-500"
       }`}
     >
       <svg

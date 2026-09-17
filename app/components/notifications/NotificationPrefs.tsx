@@ -160,7 +160,7 @@ export function NotificationPrefs({
                             className={`rounded-full px-3 py-1.5 text-xs font-extrabold transition focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30 ${
                               active
                                 ? "bg-brand text-white"
-                                : "text-zinc-600 hover:text-foreground"
+                                : "text-zinc-600 dark:text-zinc-300 hover:text-foreground"
                             }`}
                           >
                             {CHANNEL_LABEL[channel]}

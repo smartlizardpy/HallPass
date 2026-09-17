@@ -60,8 +60,8 @@ export function SeverityChip({ severity }: { severity: BugSeverity }) {
 const REPORT_STATUS_TONES: Record<ReportStatus, string> = {
   open: "bg-brand-50 text-brand",
   accepted: "bg-emerald-50 text-emerald-900",
-  rejected: "bg-surface-2 text-zinc-600",
-  duplicate: "bg-surface-2 text-zinc-600",
+  rejected: "bg-surface-2 text-zinc-600 dark:text-zinc-300",
+  duplicate: "bg-surface-2 text-zinc-600 dark:text-zinc-300",
 };
 
 export function ReportStatusChip({ status }: { status: ReportStatus }) {
@@ -81,7 +81,7 @@ const ASSIGNMENT_STATUS_TONES: Record<AssignmentStatus, string> = {
   assigned: "bg-brand-50 text-brand",
   in_progress: "bg-amber-100 text-amber-900",
   submitted: "bg-emerald-50 text-emerald-900",
-  closed: "bg-surface-2 text-zinc-600",
+  closed: "bg-surface-2 text-zinc-600 dark:text-zinc-300",
 };
 
 /** Underscores never reach the screen; `in_progress` reads as "In progress". */
@@ -103,7 +103,7 @@ export function AssignmentStatusChip({ status }: { status: AssignmentStatus }) {
 const SHOT_STATUS_TONES: Record<ShotStatus, string> = {
   pending: "bg-brand-50 text-brand",
   accepted: "bg-emerald-50 text-emerald-900",
-  rejected: "bg-surface-2 text-zinc-600",
+  rejected: "bg-surface-2 text-zinc-600 dark:text-zinc-300",
 };
 
 export function ShotStatusChip({ status }: { status: ShotStatus }) {

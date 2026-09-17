@@ -65,7 +65,7 @@ const inputClass =
 
 /** Read-only variant: visibly inert, still selectable so the key can be copied. */
 const readOnlyInputClass =
-  "mt-2 w-full cursor-not-allowed rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-sm text-zinc-600 outline-none";
+  "mt-2 w-full cursor-not-allowed rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-sm text-zinc-600 dark:text-zinc-300 outline-none";
 
 export async function AchievementPanel({ slug }: { slug: string }) {
   const list = await getAchievementCatalogue(slug);
@@ -73,7 +73,7 @@ export async function AchievementPanel({ slug }: { slug: string }) {
 
   return (
     <div className="space-y-6">
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400 dark:text-zinc-500">
         {list.length} / {MAX_ACHIEVEMENTS_PER_GAME} defined. A game earns one by
         calling{" "}
         <code className="font-mono">HallPass.unlock(&quot;key&quot;)</code> — or{" "}

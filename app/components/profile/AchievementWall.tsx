@@ -73,7 +73,7 @@ export function AchievementWall({ groups }: { groups: AchievementGroup[] }) {
                     // in an sr-only span, because a tooltip alone is unreachable
                     // by keyboard.
                     title={item.description || undefined}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-3 py-1.5 text-[12px] font-black text-zinc-800"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-3 py-1.5 text-[12px] font-black text-zinc-800 dark:text-zinc-200"
                   >
                     <span aria-hidden>{item.icon}</span>
                     {item.name}

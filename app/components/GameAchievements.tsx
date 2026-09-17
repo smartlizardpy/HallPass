@@ -178,7 +178,7 @@ function AchievementCard({
         <div className="flex items-baseline justify-between gap-2">
           <p
             className={`truncate text-[15px] font-extrabold ${
-              unlocked ? "text-foreground" : "text-zinc-600"
+              unlocked ? "text-foreground" : "text-zinc-600 dark:text-zinc-300"
             }`}
           >
             {achievement.name}
@@ -194,7 +194,7 @@ function AchievementCard({
           )}
         </div>
 
-        <p className="mt-1 text-[13px] font-semibold leading-snug text-zinc-600">
+        <p className="mt-1 text-[13px] font-semibold leading-snug text-zinc-600 dark:text-zinc-300">
           {hidden ? "Hidden until you find it." : achievement.description}
         </p>
 

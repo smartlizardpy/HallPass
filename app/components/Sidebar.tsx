@@ -514,7 +514,7 @@ export function Sidebar({
               className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${
                 pinned
                   ? "bg-brand-50 text-brand"
-                  : "text-zinc-500 hover:bg-surface-2 hover:text-foreground"
+                  : "text-zinc-500 dark:text-zinc-400 dark:text-zinc-500 hover:bg-surface-2 hover:text-foreground"
               }`}
             >
               {/* A double chevron pointing the way the rail will move: « to put

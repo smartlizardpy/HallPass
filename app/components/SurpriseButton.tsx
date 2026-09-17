@@ -164,13 +164,14 @@ export function SurpriseButton({ games }: { games: Game[] }) {
       // `text-zinc-800`, not `--muted`: the header docblock's rule is that text
       // on `--surface-2` may not use `--muted` (4.45:1, under AA) while icons
       // may. A lone die IS an icon and would clear the 3:1 non-text floor on
-      // `--muted` — but every sibling control in the cluster is zinc-800/700, and
-      // being a peer of them is the entire point of this control.
+      // `--muted` — but every sibling control in the cluster is zinc-800 or
+      // `--foreground-2`, and being a peer of them is the entire point of this
+      // control; the `dark:` twin keeps it a peer in the dark theme too.
       //
       // No `focus:outline-none` + custom ring either. The header controls all
       // rely on the UA focus ring; overriding it here alone would make this the
       // one control in the row that focuses differently.
-      className="group inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-2 text-zinc-800 transition hover:text-brand"
+      className="group inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-2 text-zinc-800 dark:text-zinc-200 transition hover:text-brand"
       style={{ touchAction: "manipulation" }}
     >
       {/* The die. The rotate is a RESTING affordance — the invitation to press,
