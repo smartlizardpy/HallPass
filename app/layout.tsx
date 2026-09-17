@@ -8,8 +8,10 @@ import { MobileTabBar } from "./components/MobileTabBar";
 import { PWA } from "./components/PWA";
 import { StealthController } from "./components/stealth/StealthController";
 import { StreakToast } from "./components/streak/StreakToast";
+import { ThemeController } from "./components/theme/ThemeController";
 import { WelcomeToast } from "./components/WelcomeToast";
 import { cloakBootScript } from "./lib/stealth/boot";
+import { themeBootScript } from "./lib/theme/boot";
 import { SITE_URL } from "./lib/site";
 import "./globals.css";
 
@@ -86,6 +88,14 @@ export default function RootLayout({
       className={`${nunito.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        {/* Resolves the saved appearance choice during head parse, before first
+            paint, so a player who chose Dark never gets a white flash on a cold
+            load. It publishes `data-theme` on <html>; every token in
+            `globals.css` hangs off that attribute, with the OS preference as the
+            fallback for the case where this script never runs. */}
+        <Script id="hp-theme-boot" strategy="beforeInteractive">
+          {themeBootScript()}
+        </Script>
         {/* Applies a saved tab cloak during head parse, before first paint, so a
             disguised tab never flashes "HALLPASS" on a cold load. */}
         <Script id="hp-cloak-boot" strategy="beforeInteractive">
@@ -99,6 +109,9 @@ export default function RootLayout({
         <MobileSplash />
         <StealthController />
         <StreakToast />
+        {/* Renders nothing — keeps `data-theme` in step with the stored choice
+            and with a device whose own preference changes mid-session. */}
+        <ThemeController />
         {/* Renders nothing — listens to the same streak event as the toast above
             and reports the first play of a new day. See its header for why it is
             not folded into the toast. */}
