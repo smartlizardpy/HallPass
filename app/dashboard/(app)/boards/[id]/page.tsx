@@ -197,7 +197,7 @@ export default async function BoardDetailPage({
           value={board.gameSlug ?? ""}
         />
 
-        <label className="block text-sm font-semibold text-zinc-900">
+        <label className="block text-sm font-semibold text-foreground">
           Board id
           <input
             type="text"
@@ -208,7 +208,7 @@ export default async function BoardDetailPage({
           />
         </label>
 
-        <label className="block text-sm font-semibold text-zinc-900">
+        <label className="block text-sm font-semibold text-foreground">
           Title
           <input
             name="title"
@@ -220,7 +220,7 @@ export default async function BoardDetailPage({
         </label>
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Sort
             <select
               name="sort"
@@ -232,7 +232,7 @@ export default async function BoardDetailPage({
             </select>
           </label>
 
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Score label
             <input
               name="scoreLabel"
@@ -244,7 +244,7 @@ export default async function BoardDetailPage({
         </div>
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Max score
             <input
               name="maxScore"
@@ -257,7 +257,7 @@ export default async function BoardDetailPage({
             />
           </label>
 
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Game
             <select
               name="gameSlug"
@@ -445,7 +445,7 @@ export default async function BoardDetailPage({
             spellCheck={false}
             placeholder={board.slug}
             aria-label="Type the board id to confirm deletion"
-            className="rounded-lg border border-red-300 bg-white px-3 py-2 font-mono text-xs text-zinc-900 outline-none focus:ring-2 focus:ring-red-300"
+            className="rounded-lg border border-red-300 bg-surface px-3 py-2 font-mono text-xs text-foreground outline-none focus:ring-2 focus:ring-red-300"
           />
           <button
             type="submit"

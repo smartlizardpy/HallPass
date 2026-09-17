@@ -180,7 +180,7 @@ export default async function CurationPage({
                       className={
                         isNew
                           ? "rounded-full bg-brand-50 px-4 py-1.5 text-sm font-bold text-brand hover:bg-brand-50/70"
-                          : "rounded-full border border-border bg-white px-4 py-1.5 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                          : "rounded-full border border-border bg-surface px-4 py-1.5 text-sm font-bold text-foreground-2 hover:bg-surface-2"
                       }
                     >
                       {isNew ? "New ✓" : "Mark new"}
@@ -271,7 +271,7 @@ export default async function CurationPage({
                       <input type="hidden" name="from" value={tag} />
                       <button
                         type="submit"
-                        className="rounded-full border border-red-300 bg-white px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-50"
+                        className="rounded-full border border-red-300 bg-surface px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-50"
                       >
                         Delete
                       </button>

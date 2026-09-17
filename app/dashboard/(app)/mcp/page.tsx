@@ -279,7 +279,7 @@ function NewConnector({
               {label}
             </dt>
             <dd className="min-w-0 flex-1">
-              <code className="block overflow-x-auto rounded-lg border border-emerald-300 bg-white px-3 py-1.5 font-mono text-xs">
+              <code className="block overflow-x-auto rounded-lg border border-emerald-300 bg-surface px-3 py-1.5 font-mono text-xs">
                 {value}
               </code>
             </dd>
@@ -320,7 +320,7 @@ function ConnectorTable({ clients, now }: { clients: OauthClient[]; now: Date })
                   <input type="hidden" name="clientId" value={client.clientId} />
                   <button
                     type="submit"
-                    className="rounded-full border border-border px-3 py-1 text-xs font-bold text-zinc-700 hover:bg-surface-2"
+                    className="rounded-full border border-border px-3 py-1 text-xs font-bold text-foreground-2 hover:bg-surface-2"
                   >
                     Delete
                   </button>

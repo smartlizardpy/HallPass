@@ -72,7 +72,7 @@ export default async function NewExternalGamePage({
 
       <Section>
         <form action={createExternalGameAction} className="space-y-5">
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Title
             <input
               name="title"
@@ -86,7 +86,7 @@ export default async function NewExternalGamePage({
             </span>
           </label>
 
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             External URL
             <input
               name="externalUrl"
@@ -97,7 +97,7 @@ export default async function NewExternalGamePage({
             />
           </label>
 
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Tagline
             <input
               name="tagline"
@@ -107,7 +107,7 @@ export default async function NewExternalGamePage({
             />
           </label>
 
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Description
             <textarea
               name="description"
@@ -117,7 +117,7 @@ export default async function NewExternalGamePage({
             />
           </label>
 
-          <label className="block text-sm font-semibold text-zinc-900 sm:max-w-xs">
+          <label className="block text-sm font-semibold text-foreground sm:max-w-xs">
             Category
             <input
               name="category"
@@ -133,7 +133,7 @@ export default async function NewExternalGamePage({
             </datalist>
           </label>
 
-          <label className="block text-sm font-semibold text-zinc-900 sm:max-w-xs">
+          <label className="block text-sm font-semibold text-foreground sm:max-w-xs">
             Plays on
             {/* Defaults to Unknown, NOT to "Both". Whoever adds an external game
                 has usually only seen it on the machine they added it from, and a
@@ -148,7 +148,7 @@ export default async function NewExternalGamePage({
             </select>
           </label>
 
-          <div className="block text-sm font-semibold text-zinc-900">
+          <div className="block text-sm font-semibold text-foreground">
             Tags
             <div className="mt-2">
               <TagEditor defaultTags={[]} suggestions={tagSuggestions} />
@@ -156,7 +156,7 @@ export default async function NewExternalGamePage({
           </div>
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-            <label className="block text-sm font-semibold text-zinc-900">
+            <label className="block text-sm font-semibold text-foreground">
               Accent color
               <input
                 name="accent"
@@ -166,7 +166,7 @@ export default async function NewExternalGamePage({
               />
             </label>
 
-            <label className="block text-sm font-semibold text-zinc-900">
+            <label className="block text-sm font-semibold text-foreground">
               Gradient from
               <input
                 name="gradientFrom"
@@ -176,7 +176,7 @@ export default async function NewExternalGamePage({
               />
             </label>
 
-            <label className="block text-sm font-semibold text-zinc-900">
+            <label className="block text-sm font-semibold text-foreground">
               Gradient to
               <input
                 name="gradientTo"
@@ -187,7 +187,7 @@ export default async function NewExternalGamePage({
             </label>
           </div>
 
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Cover URL override
             <input
               name="coverUrl"
@@ -213,7 +213,7 @@ export default async function NewExternalGamePage({
             </button>
             <Link
               href="/dashboard/games"
-              className="rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+              className="rounded-full border border-border bg-surface px-5 py-2 text-sm font-bold text-foreground-2 hover:bg-surface-2"
             >
               Cancel
             </Link>

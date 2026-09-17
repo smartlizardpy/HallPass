@@ -47,7 +47,7 @@ export function CopyBox({
 
   return (
     <details open={defaultOpen} className="rounded-xl border border-border bg-surface-2">
-      <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-zinc-900">
+      <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-foreground">
         <span>
           {label}{" "}
           <span className="font-mono text-xs font-normal text-muted">{sizeKb} KB</span>
@@ -81,7 +81,7 @@ export function CopyBox({
           rows={12}
           aria-label={`${label} (${language})`}
           onFocus={(e) => e.currentTarget.select()}
-          className="block w-full resize-y rounded-lg border border-border bg-white px-3 py-2 font-mono text-xs leading-relaxed text-zinc-900 outline-none focus:ring-2 focus:ring-brand/30"
+          className="block w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 font-mono text-xs leading-relaxed text-foreground outline-none focus:ring-2 focus:ring-brand/30"
         />
       </div>
     </details>

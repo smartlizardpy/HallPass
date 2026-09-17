@@ -208,7 +208,7 @@ function ShotTile({
       </div>
       <div className="p-2">
         <div className="flex items-center justify-between gap-1">
-          <span className="truncate text-xs font-bold text-zinc-900">{gameTitle}</span>
+          <span className="truncate text-xs font-bold text-foreground">{gameTitle}</span>
           <ShotStatusChip status={shot.status} />
         </div>
         {shot.status === "pending" && blockedNote && (
@@ -229,7 +229,7 @@ function ShotTile({
               type="submit"
               name="status"
               value="rejected"
-              className="flex-1 rounded-full border border-border bg-white px-2 py-1 text-[11px] font-bold text-zinc-700 transition hover:bg-surface-2"
+              className="flex-1 rounded-full border border-border bg-surface px-2 py-1 text-[11px] font-bold text-foreground-2 transition hover:bg-surface-2"
             >
               Reject
             </button>
@@ -268,7 +268,7 @@ function ReportCard({
       className="rounded-lg border border-border bg-surface-2 p-4"
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="min-w-0 flex-1 font-bold text-zinc-900">
+        <p className="min-w-0 flex-1 font-bold text-foreground">
           {report.title}
         </p>
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
@@ -292,7 +292,7 @@ function ReportCard({
 
       {/* Tester-authored text. Rendered as a plain string child, so
           React escapes it — never dangerouslySetInnerHTML here. */}
-      <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-700">
+      <p className="mt-2 whitespace-pre-wrap text-sm text-foreground-2">
         {report.body}
       </p>
 
@@ -355,7 +355,7 @@ function ReportCard({
               name="severity"
               defaultValue={report.severity ?? "minor"}
               aria-label="Severity"
-              className="rounded-lg border border-border bg-white px-2 py-1.5 text-xs font-bold text-zinc-700"
+              className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs font-bold text-foreground-2"
             >
               {BUG_SEVERITIES.map((s) => (
                 <option key={s} value={s}>
@@ -437,11 +437,11 @@ function ReportCard({
 }
 
 const INPUT =
-  "w-full rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30";
+  "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30";
 const BTN_PRIMARY =
   "rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white transition hover:bg-brand-600";
 const BTN_QUIET =
-  "rounded-full border border-border bg-white px-3 py-1.5 text-xs font-bold text-zinc-700 transition hover:bg-surface-2";
+  "rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-bold text-foreground-2 transition hover:bg-surface-2";
 
 export default async function DashboardBetaPage({
   searchParams,
@@ -627,7 +627,7 @@ export default async function DashboardBetaPage({
               therefore redundant — this row is the ONLY record of what was
               decided, and the tester reads it on /beta. */}
           {rejectedReports.length > 0 && (
-            <details className="mt-3 rounded-lg border border-border bg-white px-3 py-2">
+            <details className="mt-3 rounded-lg border border-border bg-surface px-3 py-2">
               <summary className="cursor-pointer text-xs font-black uppercase tracking-wide text-muted">
                 {rejectedReports.length} rejected
               </summary>
@@ -694,7 +694,7 @@ export default async function DashboardBetaPage({
 
           {/* Collapsed by default. Closed business, kept reachable. */}
           {settledShots.length > 0 && (
-            <details className="mt-3 rounded-lg border border-border bg-white px-3 py-2">
+            <details className="mt-3 rounded-lg border border-border bg-surface px-3 py-2">
               <summary className="cursor-pointer text-xs font-black uppercase tracking-wide text-muted">
                 {settledShots.length} already dealt with
               </summary>
@@ -786,7 +786,7 @@ export default async function DashboardBetaPage({
                         {/* The tester's name is the group heading now, so the
                             row carries the game alone rather than repeating it
                             on every line. */}
-                        <span className="min-w-0 truncate text-sm font-bold text-zinc-900">
+                        <span className="min-w-0 truncate text-sm font-bold text-foreground">
                           {titleFor.get(a.slug) ?? a.slug}
                         </span>
                         <span className="flex shrink-0 items-center gap-2">
@@ -840,7 +840,7 @@ export default async function DashboardBetaPage({
                     className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface-2 px-4 py-3"
                   >
                     <div className="min-w-0">
-                      <div className="truncate font-bold text-zinc-900">
+                      <div className="truncate font-bold text-foreground">
                         {testerLabel(request)}
                       </div>
                       <div className="mt-0.5 text-xs font-semibold text-muted">
@@ -849,7 +849,7 @@ export default async function DashboardBetaPage({
                       {request.note && (
                         // Written by another admin, rendered as a plain string
                         // child so React escapes it.
-                        <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-700">
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-foreground-2">
                           {request.note}
                         </p>
                       )}
@@ -886,7 +886,7 @@ export default async function DashboardBetaPage({
                 images use. It is also the only record of who allowed a tester
                 in, so it must not become unreachable. */}
             {decidedRequests.length > 0 && (
-              <details className="mt-3 rounded-lg border border-border bg-white px-3 py-2">
+              <details className="mt-3 rounded-lg border border-border bg-surface px-3 py-2">
                 <summary className="cursor-pointer text-xs font-black uppercase tracking-wide text-muted">
                   {decidedRequests.length} already decided
                 </summary>
@@ -896,7 +896,7 @@ export default async function DashboardBetaPage({
                       key={request.id}
                       className="flex flex-wrap items-center justify-between gap-2 text-xs"
                     >
-                      <span className="font-bold text-zinc-900">
+                      <span className="font-bold text-foreground">
                         {testerLabel(request)}
                       </span>
                       <span className="font-semibold text-muted">
@@ -991,7 +991,7 @@ export default async function DashboardBetaPage({
                     }`}
                   >
                     <div className="min-w-0">
-                      <div className="truncate font-bold text-zinc-900">
+                      <div className="truncate font-bold text-foreground">
                         {testerLabel(entry)}
                         {entry.revokedAt && (
                           <span className="ml-2 text-xs font-black uppercase text-muted">

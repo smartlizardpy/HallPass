@@ -68,7 +68,7 @@ export function IntegratePanel({
             onClick={() => setShowModal(false)}
             className="absolute inset-0 cursor-default bg-black/40"
           />
-          <div className="relative z-10 flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-border bg-white p-6 shadow-xl">
+          <div className="relative z-10 flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-border bg-surface p-6 shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-xl font-black tracking-tight text-foreground">
@@ -98,7 +98,7 @@ export function IntegratePanel({
               <button
                 type="button"
                 onClick={() => setShowModal(false)}
-                className="rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 transition hover:bg-surface-2"
+                className="rounded-full border border-border bg-surface px-5 py-2 text-sm font-bold text-foreground-2 transition hover:bg-surface-2"
               >
                 Done
               </button>

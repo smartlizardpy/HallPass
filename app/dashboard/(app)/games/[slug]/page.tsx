@@ -134,7 +134,7 @@ function PlatformSection({
           {PLATFORM_CHOICES.map((choice) => (
             <label
               key={choice.label}
-              className="flex cursor-pointer items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold text-zinc-900 hover:border-brand has-checked:border-brand has-checked:bg-brand/10"
+              className="flex cursor-pointer items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold text-foreground hover:border-brand has-checked:border-brand has-checked:bg-brand/10"
             >
               <input
                 type="radio"
@@ -250,7 +250,7 @@ function GameReadOnlyView({ game, slug }: { game: Game; slug: string }) {
               <Link
                 href={`/game/${slug}`}
                 target="_blank"
-                className="inline-block rounded-full border border-border bg-white px-4 py-1.5 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                className="inline-block rounded-full border border-border bg-surface px-4 py-1.5 text-sm font-bold text-foreground-2 hover:bg-surface-2"
               >
                 Open in arcade ↗
               </Link>
@@ -259,7 +259,7 @@ function GameReadOnlyView({ game, slug }: { game: Game; slug: string }) {
                   href={game.externalUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-block rounded-full border border-border bg-white px-4 py-1.5 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                  className="inline-block rounded-full border border-border bg-surface px-4 py-1.5 text-sm font-bold text-foreground-2 hover:bg-surface-2"
                 >
                   Open source site ↗
                 </a>
@@ -270,7 +270,7 @@ function GameReadOnlyView({ game, slug }: { game: Game; slug: string }) {
       </Section>
 
       <Section title="Description">
-        <p className="whitespace-pre-wrap text-sm text-zinc-700">
+        <p className="whitespace-pre-wrap text-sm text-foreground-2">
           {game.description || "No description."}
         </p>
       </Section>
@@ -283,7 +283,7 @@ function GameReadOnlyView({ game, slug }: { game: Game; slug: string }) {
             {game.tags.map((tag) => (
               <li
                 key={tag}
-                className="rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-bold text-zinc-700"
+                className="rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-bold text-foreground-2"
               >
                 {tag}
               </li>
@@ -392,7 +392,7 @@ export default async function GameControlPage({
                 <Link
                   href={`/game/${slug}`}
                   target="_blank"
-                  className="inline-block rounded-full border border-border bg-white px-4 py-1.5 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                  className="inline-block rounded-full border border-border bg-surface px-4 py-1.5 text-sm font-bold text-foreground-2 hover:bg-surface-2"
                 >
                   Open in arcade ↗
                 </Link>
@@ -401,7 +401,7 @@ export default async function GameControlPage({
                     href={game.externalUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-block rounded-full border border-border bg-white px-4 py-1.5 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                    className="inline-block rounded-full border border-border bg-surface px-4 py-1.5 text-sm font-bold text-foreground-2 hover:bg-surface-2"
                   >
                     Open source site ↗
                   </a>
@@ -417,7 +417,7 @@ export default async function GameControlPage({
           <form action={updateExternalGameAction} className="space-y-5">
             <input type="hidden" name="slug" value={slug} />
 
-            <label className="block text-sm font-semibold text-zinc-900">
+            <label className="block text-sm font-semibold text-foreground">
               Title
               <input
                 name="title"
@@ -428,7 +428,7 @@ export default async function GameControlPage({
               />
             </label>
 
-            <label className="block text-sm font-semibold text-zinc-900">
+            <label className="block text-sm font-semibold text-foreground">
               External URL
               <input
                 name="externalUrl"
@@ -440,7 +440,7 @@ export default async function GameControlPage({
               />
             </label>
 
-            <label className="block text-sm font-semibold text-zinc-900">
+            <label className="block text-sm font-semibold text-foreground">
               Tagline
               <input
                 name="tagline"
@@ -450,7 +450,7 @@ export default async function GameControlPage({
               />
             </label>
 
-            <label className="block text-sm font-semibold text-zinc-900">
+            <label className="block text-sm font-semibold text-foreground">
               Description
               <textarea
                 name="description"
@@ -460,7 +460,7 @@ export default async function GameControlPage({
               />
             </label>
 
-            <label className="block text-sm font-semibold text-zinc-900 sm:max-w-xs">
+            <label className="block text-sm font-semibold text-foreground sm:max-w-xs">
               Category
               <input
                 name="category"
@@ -477,7 +477,7 @@ export default async function GameControlPage({
             </label>
 
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-              <label className="block text-sm font-semibold text-zinc-900">
+              <label className="block text-sm font-semibold text-foreground">
                 Accent color
                 <input
                   name="accent"
@@ -486,7 +486,7 @@ export default async function GameControlPage({
                   className="mt-2 h-10 w-full rounded-lg border border-border px-1 py-1 outline-none focus:ring-2 focus:ring-brand/30"
                 />
               </label>
-              <label className="block text-sm font-semibold text-zinc-900">
+              <label className="block text-sm font-semibold text-foreground">
                 Gradient from
                 <input
                   name="gradientFrom"
@@ -495,7 +495,7 @@ export default async function GameControlPage({
                   className="mt-2 h-10 w-full rounded-lg border border-border px-1 py-1 outline-none focus:ring-2 focus:ring-brand/30"
                 />
               </label>
-              <label className="block text-sm font-semibold text-zinc-900">
+              <label className="block text-sm font-semibold text-foreground">
                 Gradient to
                 <input
                   name="gradientTo"
@@ -506,7 +506,7 @@ export default async function GameControlPage({
               </label>
             </div>
 
-            <label className="block text-sm font-semibold text-zinc-900">
+            <label className="block text-sm font-semibold text-foreground">
               Cover URL override
               <input
                 name="coverUrl"
@@ -614,7 +614,7 @@ export default async function GameControlPage({
               <input type="hidden" name="slug" value={slug} />
               <button
                 type="submit"
-                className="rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                className="rounded-full border border-border bg-surface px-5 py-2 text-sm font-bold text-foreground-2 hover:bg-surface-2"
                 title="Download the current cover (or screenshot the site) and re-host it on our storage"
               >
                 Re-cache cover
@@ -709,7 +709,7 @@ export default async function GameControlPage({
             <Link
               href={`/game/${slug}`}
               target="_blank"
-              className="mt-3 inline-block rounded-full border border-border bg-white px-4 py-1.5 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+              className="mt-3 inline-block rounded-full border border-border bg-surface px-4 py-1.5 text-sm font-bold text-foreground-2 hover:bg-surface-2"
             >
               Open live ↗
             </Link>
@@ -722,7 +722,7 @@ export default async function GameControlPage({
         <form action={updateGameAction} className="space-y-5">
           <input type="hidden" name="slug" value={slug} />
 
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Title
             <input
               name="title"
@@ -733,7 +733,7 @@ export default async function GameControlPage({
             />
           </label>
 
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Tagline
             <input
               name="tagline"
@@ -744,7 +744,7 @@ export default async function GameControlPage({
             />
           </label>
 
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Description
             <textarea
               name="description"
@@ -755,7 +755,7 @@ export default async function GameControlPage({
             />
           </label>
 
-          <label className="block text-sm font-semibold text-zinc-900 sm:max-w-xs">
+          <label className="block text-sm font-semibold text-foreground sm:max-w-xs">
             Category
             <input
               name="category"
@@ -794,7 +794,7 @@ export default async function GameControlPage({
           <input type="hidden" name="slug" value={slug} />
           <button
             type="submit"
-            className="rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+            className="rounded-full border border-border bg-surface px-5 py-2 text-sm font-bold text-foreground-2 hover:bg-surface-2"
           >
             Reset to defaults
           </button>
@@ -994,7 +994,7 @@ export default async function GameControlPage({
                           type="submit"
                           disabled={index === 0}
                           aria-label={`Move screenshot ${index + 1} earlier`}
-                          className="grid h-7 w-7 place-items-center rounded border border-border text-xs font-bold text-zinc-700 hover:bg-surface-2 disabled:opacity-30"
+                          className="grid h-7 w-7 place-items-center rounded border border-border text-xs font-bold text-foreground-2 hover:bg-surface-2 disabled:opacity-30"
                         >
                           ↑
                         </button>
@@ -1007,7 +1007,7 @@ export default async function GameControlPage({
                           type="submit"
                           disabled={index === media.length - 1}
                           aria-label={`Move screenshot ${index + 1} later`}
-                          className="grid h-7 w-7 place-items-center rounded border border-border text-xs font-bold text-zinc-700 hover:bg-surface-2 disabled:opacity-30"
+                          className="grid h-7 w-7 place-items-center rounded border border-border text-xs font-bold text-foreground-2 hover:bg-surface-2 disabled:opacity-30"
                         >
                           ↓
                         </button>
@@ -1035,7 +1035,7 @@ export default async function GameControlPage({
                   >
                     <input type="hidden" name="slug" value={slug} />
                     <input type="hidden" name="id" value={item.id} />
-                    <label className="block min-w-0 flex-1 text-xs font-semibold text-zinc-900">
+                    <label className="block min-w-0 flex-1 text-xs font-semibold text-foreground">
                       Description for #{index + 1}{" "}
                       <span className="font-normal text-muted">
                         (screen readers)
@@ -1050,7 +1050,7 @@ export default async function GameControlPage({
                     </label>
                     <button
                       type="submit"
-                      className="shrink-0 rounded-full border border-border bg-white px-4 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                      className="shrink-0 rounded-full border border-border bg-surface px-4 py-2 text-sm font-bold text-foreground-2 hover:bg-surface-2"
                     >
                       Save
                     </button>
@@ -1076,7 +1076,7 @@ export default async function GameControlPage({
               className="space-y-3 border-t border-border pt-6"
             >
               <input type="hidden" name="slug" value={slug} />
-              <label className="block text-sm font-semibold text-zinc-900">
+              <label className="block text-sm font-semibold text-foreground">
                 Add screenshots
                 <input
                   name="files"
@@ -1170,7 +1170,7 @@ export default async function GameControlPage({
           </p>
           <form action={uploadHtmlAction} className="space-y-3">
             <input type="hidden" name="slug" value={slug} />
-            <label className="block text-sm font-semibold text-zinc-900">
+            <label className="block text-sm font-semibold text-foreground">
               Upload an <code className="font-mono">.html</code> file
               <input
                 name="htmlFile"
@@ -1190,7 +1190,7 @@ export default async function GameControlPage({
 
           <form action={pasteHtmlAction} className="space-y-3 border-t border-border pt-6">
             <input type="hidden" name="slug" value={slug} />
-            <label className="block text-sm font-semibold text-zinc-900">
+            <label className="block text-sm font-semibold text-foreground">
               …or paste a full HTML document
               <textarea
                 name="html"
@@ -1211,7 +1211,7 @@ export default async function GameControlPage({
 
           <form action={uploadBundleAction} className="space-y-3 border-t border-border pt-6">
             <input type="hidden" name="slug" value={slug} />
-            <label className="block text-sm font-semibold text-zinc-900">
+            <label className="block text-sm font-semibold text-foreground">
               …or upload a multi-file bundle (<code className="font-mono">.zip</code> with{" "}
               <code className="font-mono">index.html</code> at its root)
               <input
@@ -1292,7 +1292,7 @@ export default async function GameControlPage({
                         <input type="hidden" name="gameSlug" value={slug} />
                         <button
                           type="submit"
-                          className="rounded-full border border-border bg-white px-3 py-1 text-xs font-bold text-zinc-700 hover:bg-surface-2"
+                          className="rounded-full border border-border bg-surface px-3 py-1 text-xs font-bold text-foreground-2 hover:bg-surface-2"
                         >
                           Unlink
                         </button>
@@ -1311,7 +1311,7 @@ export default async function GameControlPage({
               <input type="hidden" name="gameSlug" value={slug} />
               <input type="hidden" name="returnTo" value={`/dashboard/games/${slug}`} />
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <label className="block text-sm font-semibold text-zinc-900">
+                <label className="block text-sm font-semibold text-foreground">
                   Board id
                   <input
                     name="slug"
@@ -1323,7 +1323,7 @@ export default async function GameControlPage({
                     className={inputClass}
                   />
                 </label>
-                <label className="block text-sm font-semibold text-zinc-900">
+                <label className="block text-sm font-semibold text-foreground">
                   Title
                   <input
                     name="title"
@@ -1334,7 +1334,7 @@ export default async function GameControlPage({
                   />
                 </label>
               </div>
-              <label className="block text-sm font-semibold text-zinc-900 sm:max-w-xs">
+              <label className="block text-sm font-semibold text-foreground sm:max-w-xs">
                 Sort
                 <select name="sort" defaultValue="desc" className={inputClass}>
                   <option value="desc">Descending (highest first)</option>
@@ -1355,7 +1355,7 @@ export default async function GameControlPage({
                 className="flex flex-wrap items-end gap-3 border-t border-border pt-6"
               >
                 <input type="hidden" name="gameSlug" value={slug} />
-                <label className="block text-sm font-semibold text-zinc-900">
+                <label className="block text-sm font-semibold text-foreground">
                   Link an existing standalone board
                   <select name="boardId" defaultValue="" required className={inputClass}>
                     <option value="" disabled>
@@ -1370,7 +1370,7 @@ export default async function GameControlPage({
                 </label>
                 <button
                   type="submit"
-                  className="rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                  className="rounded-full border border-border bg-surface px-5 py-2 text-sm font-bold text-foreground-2 hover:bg-surface-2"
                 >
                   Link
                 </button>

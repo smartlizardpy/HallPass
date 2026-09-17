@@ -86,7 +86,7 @@ export default async function DashboardSignInPage({
             >
               <button
                 type="submit"
-                className="w-full rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                className="w-full rounded-full border border-border bg-surface px-5 py-2 text-sm font-bold text-foreground-2 hover:bg-surface-2"
               >
                 Sign out
               </button>

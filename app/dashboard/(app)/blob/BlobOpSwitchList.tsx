@@ -211,7 +211,7 @@ export function BlobOpSwitchList({
               type="button"
               onClick={() => setStaged(saved)}
               disabled={locked || dirty.length === 0}
-              className="rounded-full border border-border bg-white px-4 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-full border border-border bg-surface px-4 py-2 text-sm font-bold text-foreground-2 hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Revert
             </button>

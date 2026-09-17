@@ -507,7 +507,7 @@ function QueueCard({
                   <button
                     type="submit"
                     title="This report was wrong — resolve it without touching the review."
-                    className="rounded-full border border-border bg-white px-3 py-1 text-xs font-bold text-zinc-700 transition hover:bg-surface-2"
+                    className="rounded-full border border-border bg-surface px-3 py-1 text-xs font-bold text-foreground-2 transition hover:bg-surface-2"
                   >
                     Dismiss
                   </button>
@@ -526,7 +526,7 @@ function QueueCard({
                     <button
                       type="submit"
                       title="Dismiss every open report this person has filed, anywhere on the site."
-                      className="rounded-full border border-border bg-white px-3 py-1 text-xs font-bold text-muted transition hover:bg-surface-2 hover:text-zinc-700"
+                      className="rounded-full border border-border bg-surface px-3 py-1 text-xs font-bold text-muted transition hover:bg-surface-2 hover:text-foreground-2"
                     >
                       Dismiss all theirs
                     </button>
@@ -768,7 +768,7 @@ function ReviewVerbs({
             <button
               type="submit"
               title="Put it back and clear the auto-hide counter, so one more report cannot instantly re-hide it."
-              className="rounded-full border border-border bg-white px-4 py-1.5 text-xs font-bold text-zinc-700 transition hover:bg-surface-2"
+              className="rounded-full border border-border bg-surface px-4 py-1.5 text-xs font-bold text-foreground-2 transition hover:bg-surface-2"
             >
               Unhide
             </button>
@@ -794,7 +794,7 @@ function ReviewVerbs({
             <button
               type="submit"
               title="Let them write reviews again. Reviews hidden when the ban was applied stay hidden."
-              className="rounded-full border border-border bg-white px-4 py-1.5 text-xs font-bold text-zinc-700 transition hover:bg-surface-2"
+              className="rounded-full border border-border bg-surface px-4 py-1.5 text-xs font-bold text-foreground-2 transition hover:bg-surface-2"
             >
               Lift ban
             </button>
@@ -849,7 +849,7 @@ function PurgePanel({ reviewId }: { reviewId: number }) {
           autoComplete="off"
           placeholder="Why (goes in the audit log)"
           aria-label="Reason for purging"
-          className="mt-3 w-full rounded-lg border border-red-200 bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-red-300"
+          className="mt-3 w-full rounded-lg border border-red-200 bg-surface px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-red-300"
         />
         <button
           type="submit"
@@ -903,7 +903,7 @@ function BanPanel({
             maxLength={300}
             autoComplete="off"
             placeholder="What happened"
-            className="mt-1 w-full rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-normal outline-none focus:ring-2 focus:ring-red-300"
+            className="mt-1 w-full rounded-lg border border-red-200 bg-surface px-3 py-2 text-xs font-normal outline-none focus:ring-2 focus:ring-red-300"
           />
         </label>
 
@@ -912,7 +912,7 @@ function BanPanel({
           <input
             name="expiresAt"
             type="date"
-            className="mt-1 w-full rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-normal outline-none focus:ring-2 focus:ring-red-300"
+            className="mt-1 w-full rounded-lg border border-red-200 bg-surface px-3 py-2 text-xs font-normal outline-none focus:ring-2 focus:ring-red-300"
           />
           <span className="mt-1 block font-normal text-red-900/70">
             Ends at the close of that day (UTC).

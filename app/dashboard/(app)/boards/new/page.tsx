@@ -54,7 +54,7 @@ export default async function NewBoardPage({
         action={createBoardAction}
         className="space-y-5 rounded-xl border border-border bg-surface p-5"
       >
-        <label className="block text-sm font-semibold text-zinc-900">
+        <label className="block text-sm font-semibold text-foreground">
           Board id
           <input
             name="slug"
@@ -71,7 +71,7 @@ export default async function NewBoardPage({
           </span>
         </label>
 
-        <label className="block text-sm font-semibold text-zinc-900">
+        <label className="block text-sm font-semibold text-foreground">
           Title
           <input
             name="title"
@@ -83,7 +83,7 @@ export default async function NewBoardPage({
         </label>
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Sort
             <select
               name="sort"
@@ -95,7 +95,7 @@ export default async function NewBoardPage({
             </select>
           </label>
 
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Score label
             <input
               name="scoreLabel"
@@ -107,7 +107,7 @@ export default async function NewBoardPage({
         </div>
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Max score
             <input
               name="maxScore"
@@ -122,7 +122,7 @@ export default async function NewBoardPage({
             </span>
           </label>
 
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Game
             <select
               name="gameSlug"
@@ -148,7 +148,7 @@ export default async function NewBoardPage({
           </button>
           <Link
             href="/dashboard/boards"
-            className="rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+            className="rounded-full border border-border bg-surface px-5 py-2 text-sm font-bold text-foreground-2 hover:bg-surface-2"
           >
             Cancel
           </Link>

@@ -179,7 +179,7 @@ export function AgentActivityFeed({
           >
             <span
               className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${
-                OUTCOME_TONES[row.outcome] ?? "bg-surface-2 text-zinc-700"
+                OUTCOME_TONES[row.outcome] ?? "bg-surface-2 text-foreground-2"
               }`}
             >
               {row.outcome}
@@ -191,7 +191,7 @@ export function AgentActivityFeed({
                 than a column. */}
             <span
               title={row.tool}
-              className="min-w-0 flex-1 text-sm font-semibold text-zinc-900"
+              className="min-w-0 flex-1 text-sm font-semibold text-foreground"
             >
               {row.summary}
             </span>

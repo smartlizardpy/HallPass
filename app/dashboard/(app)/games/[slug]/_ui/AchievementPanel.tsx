@@ -164,7 +164,7 @@ function AchievementRow({
               type="submit"
               disabled={index === 0}
               aria-label={`Move ${achievement.name} earlier`}
-              className="grid h-7 w-7 place-items-center rounded border border-border text-xs font-bold text-zinc-700 hover:bg-surface-2 disabled:opacity-30"
+              className="grid h-7 w-7 place-items-center rounded border border-border text-xs font-bold text-foreground-2 hover:bg-surface-2 disabled:opacity-30"
             >
               ↑
             </button>
@@ -177,7 +177,7 @@ function AchievementRow({
               type="submit"
               disabled={index === total - 1}
               aria-label={`Move ${achievement.name} later`}
-              className="grid h-7 w-7 place-items-center rounded border border-border text-xs font-bold text-zinc-700 hover:bg-surface-2 disabled:opacity-30"
+              className="grid h-7 w-7 place-items-center rounded border border-border text-xs font-bold text-foreground-2 hover:bg-surface-2 disabled:opacity-30"
             >
               ↓
             </button>
@@ -193,7 +193,7 @@ function AchievementRow({
         <input type="hidden" name="id" value={idValue} />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Key
             <input
               type="text"
@@ -215,7 +215,7 @@ function AchievementRow({
             </span>
           </label>
 
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Name
             <input
               name="name"
@@ -228,7 +228,7 @@ function AchievementRow({
           </label>
         </div>
 
-        <label className="mt-4 block text-sm font-semibold text-zinc-900">
+        <label className="mt-4 block text-sm font-semibold text-foreground">
           Description
           <textarea
             name="description"
@@ -241,7 +241,7 @@ function AchievementRow({
         </label>
 
         <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Icon
             <input
               name="icon"
@@ -252,7 +252,7 @@ function AchievementRow({
               className={inputClass}
             />
           </label>
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Points
             <input
               name="points"
@@ -265,7 +265,7 @@ function AchievementRow({
               className={inputClass}
             />
           </label>
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Target
             <input
               name="target"
@@ -278,7 +278,7 @@ function AchievementRow({
               className={inputClass}
             />
           </label>
-          <label className="flex items-end gap-2 pb-2.5 text-sm font-semibold text-zinc-900">
+          <label className="flex items-end gap-2 pb-2.5 text-sm font-semibold text-foreground">
             <input
               name="secret"
               type="checkbox"
@@ -330,7 +330,7 @@ function CreateForm({ slug }: { slug: string }) {
       <input type="hidden" name="slug" value={slug} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <label className="block text-sm font-semibold text-zinc-900">
+        <label className="block text-sm font-semibold text-foreground">
           Key
           <input
             name="key"
@@ -351,7 +351,7 @@ function CreateForm({ slug }: { slug: string }) {
           </span>
         </label>
 
-        <label className="block text-sm font-semibold text-zinc-900">
+        <label className="block text-sm font-semibold text-foreground">
           Name
           <input
             name="name"
@@ -364,7 +364,7 @@ function CreateForm({ slug }: { slug: string }) {
         </label>
       </div>
 
-      <label className="block text-sm font-semibold text-zinc-900">
+      <label className="block text-sm font-semibold text-foreground">
         Description
         <textarea
           name="description"
@@ -376,7 +376,7 @@ function CreateForm({ slug }: { slug: string }) {
       </label>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <label className="block text-sm font-semibold text-zinc-900">
+        <label className="block text-sm font-semibold text-foreground">
           Icon
           <input
             name="icon"
@@ -386,7 +386,7 @@ function CreateForm({ slug }: { slug: string }) {
             className={inputClass}
           />
         </label>
-        <label className="block text-sm font-semibold text-zinc-900">
+        <label className="block text-sm font-semibold text-foreground">
           Points
           <input
             name="points"
@@ -399,7 +399,7 @@ function CreateForm({ slug }: { slug: string }) {
             className={inputClass}
           />
         </label>
-        <label className="block text-sm font-semibold text-zinc-900">
+        <label className="block text-sm font-semibold text-foreground">
           Target
           <input
             name="target"
@@ -415,7 +415,7 @@ function CreateForm({ slug }: { slug: string }) {
             1 = plain unlock. Higher makes it a counter with a progress bar.
           </span>
         </label>
-        <label className="flex items-start gap-2 text-sm font-semibold text-zinc-900 sm:pt-9">
+        <label className="flex items-start gap-2 text-sm font-semibold text-foreground sm:pt-9">
           <input
             name="secret"
             type="checkbox"
