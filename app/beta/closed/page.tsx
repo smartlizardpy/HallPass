@@ -37,7 +37,7 @@ export default function BetaClosedPage() {
 
       <div className="w-full max-w-md rounded-xl border border-border bg-surface p-8 text-center">
         <Wordmark size="text-3xl" dotClass="h-2 w-2" tag="beta" />
-        <h1 className="mt-3 text-2xl font-black tracking-tight text-zinc-900">
+        <h1 className="mt-3 text-2xl font-black tracking-tight text-foreground">
           Invite only
         </h1>
         <p className="mt-3 text-sm font-semibold text-muted">

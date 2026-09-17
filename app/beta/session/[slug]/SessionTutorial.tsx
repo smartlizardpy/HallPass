@@ -206,14 +206,14 @@ export function SessionTutorial({
         aria-describedby="tutorial-body"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={onKeyDownTrap}
-        className="promo-panel relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl sm:p-8"
+        className="promo-panel relative w-full max-w-md rounded-3xl bg-surface p-6 shadow-2xl sm:p-8"
       >
         <button
           ref={closeRef}
           type="button"
           onClick={finish}
           aria-label="Close"
-          className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full text-muted transition hover:bg-surface-2 hover:text-zinc-900 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30"
+          className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full text-muted transition hover:bg-surface-2 hover:text-foreground focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30"
         >
           <svg
             width="16"
@@ -241,7 +241,7 @@ export function SessionTutorial({
 
         <h2
           id="tutorial-title"
-          className="mt-4 text-2xl font-black leading-tight tracking-tight text-zinc-900"
+          className="mt-4 text-2xl font-black leading-tight tracking-tight text-foreground"
         >
           {current.title}
         </h2>
@@ -256,7 +256,7 @@ export function SessionTutorial({
           {current.points.map((point) => (
             <li
               key={point.text}
-              className="flex items-center gap-2.5 text-[14px] font-bold text-zinc-700"
+              className="flex items-center gap-2.5 text-[14px] font-bold text-foreground-2"
             >
               <span aria-hidden className="text-base">
                 {point.icon}
@@ -291,7 +291,7 @@ export function SessionTutorial({
             <button
               type="button"
               onClick={() => setStep((s) => s - 1)}
-              className="text-sm font-bold text-muted transition hover:text-zinc-900"
+              className="text-sm font-bold text-muted transition hover:text-foreground"
             >
               Back
             </button>
@@ -300,7 +300,7 @@ export function SessionTutorial({
             <button
               type="button"
               onClick={finish}
-              className="ml-auto text-sm font-bold text-muted transition hover:text-zinc-900"
+              className="ml-auto text-sm font-bold text-muted transition hover:text-foreground"
             >
               Skip
             </button>

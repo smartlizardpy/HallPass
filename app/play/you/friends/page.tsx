@@ -47,7 +47,7 @@ export default function YouFriendsPage() {
   return (
     <div className="space-y-5">
       <section>
-        <h2 className="text-2xl font-black tracking-tight text-zinc-900">
+        <h2 className="text-2xl font-black tracking-tight text-foreground">
           Friends
         </h2>
         <p className="mt-2 text-[15px] font-semibold text-muted">

@@ -127,7 +127,7 @@ export default async function YouProfilePage() {
           </p>
           <Link
             href="/play/you/settings"
-            className="mt-4 inline-block rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 transition hover:bg-surface-2"
+            className="mt-4 inline-block rounded-full border border-border bg-surface px-5 py-2 text-sm font-bold text-foreground-2 transition hover:bg-surface-2"
           >
             Pick a username
           </Link>
@@ -137,7 +137,7 @@ export default async function YouProfilePage() {
       {/* BADGES ------------------------------------------------------------ */}
       {stats && (
         <section className="rounded-xl border border-border bg-surface p-6">
-          <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900">
+          <h2 className="text-sm font-black uppercase tracking-wide text-foreground">
             Badges
           </h2>
           <p className="mt-2 text-sm text-muted">

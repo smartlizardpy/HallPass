@@ -51,7 +51,7 @@ export default async function WhatsNewPage() {
       <ArcadeShell games={games} categories={categories}>
         <div className="px-3 pb-10 pt-2 sm:px-8">
           <header className="mb-5 max-w-3xl">
-            <h1 className="text-2xl font-black tracking-tight text-zinc-900 sm:text-3xl">
+            <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl">
               What&apos;s New in HALLPASS
             </h1>
             <p className="mt-2 text-[15px] font-semibold leading-relaxed text-zinc-600">

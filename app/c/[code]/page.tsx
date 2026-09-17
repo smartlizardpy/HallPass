@@ -67,9 +67,9 @@ export const dynamic = "force-dynamic";
 function NotAvailable({ reason }: { reason: "missing" | "revoked" }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-6 py-10">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center">
+      <div className="w-full max-w-md rounded-2xl bg-surface p-8 text-center">
         <Wordmark size="text-3xl" dotClass="h-2 w-2" />
-        <h1 className="mt-4 text-2xl font-black tracking-tight text-zinc-900">
+        <h1 className="mt-4 text-2xl font-black tracking-tight text-foreground">
           {reason === "revoked" ? "This challenge is closed" : "We can't find that challenge"}
         </h1>
         <p className="mt-2 text-sm font-semibold text-muted">

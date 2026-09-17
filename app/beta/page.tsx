@@ -90,7 +90,7 @@ export default async function BetaHomePage() {
 
         <div className="text-center">
           <Wordmark size="text-3xl" dotClass="h-2 w-2" tag="beta" />
-          <h1 className="mt-3 text-2xl font-black tracking-tight text-zinc-900">
+          <h1 className="mt-3 text-2xl font-black tracking-tight text-foreground">
             Beta testers
           </h1>
           <p className="mt-2 text-sm font-semibold text-muted">
@@ -111,7 +111,7 @@ export default async function BetaHomePage() {
 
         {/* ASSIGNED --------------------------------------------------------- */}
         <section className="rounded-xl border border-border bg-surface p-6">
-          <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900">
+          <h2 className="text-sm font-black uppercase tracking-wide text-foreground">
             Your queue
           </h2>
           {open.length === 0 ? (
@@ -136,7 +136,7 @@ export default async function BetaHomePage() {
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-2">
-                          <span className="truncate font-black text-zinc-900">
+                          <span className="truncate font-black text-foreground">
                             {game?.title ?? assignment.slug}
                           </span>
                           <AssignmentStatusChip status={assignment.status} />
@@ -184,7 +184,7 @@ export default async function BetaHomePage() {
 
         {/* YOUR REPORTS ----------------------------------------------------- */}
         <section className="rounded-xl border border-border bg-surface p-6">
-          <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900">
+          <h2 className="text-sm font-black uppercase tracking-wide text-foreground">
             Your reports
           </h2>
           {reports.length === 0 ? (
@@ -200,7 +200,7 @@ export default async function BetaHomePage() {
                   className="rounded-lg border border-border bg-surface-2 px-4 py-3"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <p className="min-w-0 flex-1 font-bold text-zinc-900">
+                    <p className="min-w-0 flex-1 font-bold text-foreground">
                       {report.title}
                     </p>
                     <ReportStatusChip status={report.status} />
@@ -223,7 +223,7 @@ export default async function BetaHomePage() {
 
         {/* HOW XP WORKS ----------------------------------------------------- */}
         <section className="rounded-xl border border-border bg-surface p-6">
-          <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900">
+          <h2 className="text-sm font-black uppercase tracking-wide text-foreground">
             How XP works
           </h2>
           <p className="mt-2 text-sm font-semibold text-muted">

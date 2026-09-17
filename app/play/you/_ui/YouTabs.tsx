@@ -91,7 +91,7 @@ export function YouTabs() {
             className={`flex-1 whitespace-nowrap rounded-full px-2 py-2 text-center text-sm font-extrabold transition focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30 sm:px-4 ${
               current
                 ? "bg-brand text-white"
-                : "text-zinc-700 hover:bg-surface-2 hover:text-zinc-900"
+                : "text-foreground-2 hover:bg-surface-2 hover:text-foreground"
             }`}
           >
             {/* Both rendered, one shown — rather than picking in JS off a

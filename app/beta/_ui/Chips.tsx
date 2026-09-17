@@ -40,7 +40,7 @@ function Pill({ tone, children }: { tone: string; children: React.ReactNode }) {
  * genuinely unplayable case with nothing louder to escalate to.
  */
 const SEVERITY_TONES: Record<BugSeverity, string> = {
-  cosmetic: "bg-surface-2 text-zinc-700",
+  cosmetic: "bg-surface-2 text-foreground-2",
   minor: "bg-sky-50 text-sky-900",
   major: "bg-amber-100 text-amber-900",
   blocker: "bg-red-100 text-red-900",

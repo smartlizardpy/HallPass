@@ -258,7 +258,7 @@ export default async function YouSettingsPage({
           >
             <button
               type="submit"
-              className="rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+              className="rounded-full border border-border bg-surface px-5 py-2 text-sm font-bold text-foreground-2 hover:bg-surface-2"
             >
               Sign out
             </button>
@@ -287,7 +287,7 @@ export default async function YouSettingsPage({
                 type="text"
                 autoComplete="off"
                 placeholder="DELETE"
-                className="mt-2 w-full rounded-lg border border-red-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500/30"
+                className="mt-2 w-full rounded-lg border border-red-300 bg-surface px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500/30"
               />
             </label>
             <button
