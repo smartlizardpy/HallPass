@@ -552,9 +552,9 @@ export const games: Game[] = [
     slug: "atlas-mangal-market-3d",
     author: "Sohan Kanti dolai",
     title: "Atlas Mangal & Market 3D",
-    tagline: "Shop the town, fire up the mangal.",
+    tagline: "Five minutes. One mangal. Feed the town.",
     description:
-      "A low-poly Turkish town run entirely on appetite. Buy cuts at the butcher, stock sides at the market, grill them over the barbecue, and lay the table — just watch the traffic on every trip across the road.",
+      "A low-poly Turkish town on a five-minute clock. Buy cuts at the butcher, stock sides at the market, grill them over the mangal and lay the table for as much as you can bank before the shutters come down — playable in English or Turkish, and mind the traffic on every crossing.",
     category: "Simulation",
     tags: ["Simulation", "3D", "Cooking", "Turkish"],
     gradient: ["#0c1222", "#f59e0b"],
