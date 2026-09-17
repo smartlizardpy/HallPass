@@ -120,14 +120,18 @@
                 🤠
             </div>
             <div>
-                <h1 class="text-xs sm:text-sm font-extrabold text-amber-400 leading-none tracking-wide">ATLAS ŞEHİR SİMÜLATÖRÜ</h1>
-                <p class="text-[10px] sm:text-[11px] text-slate-300">Karakter: <span class="text-amber-300 font-semibold">Atlas (Sen)</span></p>
+                <h1 data-i18n="hud.title" class="text-xs sm:text-sm font-extrabold text-amber-400 leading-none tracking-wide">ATLAS ŞEHİR SİMÜLATÖRÜ</h1>
+                <p data-i18n-html="hud.character" class="text-[10px] sm:text-[11px] text-slate-300">Karakter: <span class="text-amber-300 font-semibold">Atlas (Sen)</span></p>
             </div>
         </div>
 
 
         <!-- Money & Inventory Controls -->
         <div class="pointer-events-auto flex items-center space-x-3">
+            <button onclick="toggleLang()" title="Language / Dil" class="glass-panel px-3 py-2 rounded-2xl flex items-center gap-1.5 border-amber-500/40 hover:bg-amber-500/20 active:scale-95 transition">
+                <i class="fa-solid fa-language text-amber-400 text-sm"></i>
+                <span id="lang-label" class="font-black text-amber-300 text-xs">EN</span>
+            </button>
             <div class="glass-panel px-4 py-2 rounded-2xl flex items-center space-x-2 border-amber-500/40">
                 <i class="fa-solid fa-coins text-amber-400 text-sm"></i>
                 <span id="money-display" class="font-black text-amber-300 text-xs sm:text-sm">300 ₺</span>
@@ -136,7 +140,7 @@
 
             <button onclick="toggleInventoryModal()" class="glass-panel bg-amber-600/30 hover:bg-amber-500/40 active:scale-95 text-amber-300 px-4 py-2 rounded-2xl text-xs font-bold transition flex items-center gap-2 border border-amber-500/50">
                 <i class="fa-solid fa-bag-shopping text-sm"></i>
-                <span class="hidden sm:inline">Atlas</span> Çanta
+                <span class="hidden sm:inline">Atlas</span> <span data-i18n="hud.bag">Çanta</span>
             </button>
         </div>
     </header>
@@ -152,8 +156,8 @@
 
     <!-- Dynamic Context Interaction Prompt Banner -->
     <div id="interaction-prompt" class="hidden absolute bottom-28 left-1/2 transform -translate-x-1/2 z-20 pointer-events-auto glass-panel border-2 border-amber-400/80 text-amber-300 font-bold px-6 py-3 rounded-2xl shadow-2xl animate-bounce flex items-center gap-3">
-        <span class="bg-amber-500 text-slate-950 px-2.5 py-1 rounded-xl text-xs font-black shadow" id="interaction-key">E / TIKLA</span>
-        <span id="interaction-text" class="text-xs sm:text-sm">Atlas Mekanına Giriş Yap</span>
+        <span class="bg-amber-500 text-slate-950 px-2.5 py-1 rounded-xl text-xs font-black shadow" id="interaction-key" data-i18n="prompt.key">E / TIKLA</span>
+        <span id="interaction-text" data-i18n="prompt.enter" class="text-xs sm:text-sm">Atlas Mekanına Giriş Yap</span>
     </div>
 
 
@@ -172,7 +176,7 @@
         <!-- Action Button -->
         <button id="mobile-action-btn" onclick="triggerAction()" class="pointer-events-auto w-20 h-20 bg-gradient-to-tr from-amber-600 to-amber-400 active:scale-95 text-slate-950 font-black rounded-full shadow-2xl border-2 border-amber-200 flex flex-col items-center justify-center text-xs">
             <i class="fa-solid fa-hand-pointer text-xl mb-0.5"></i>
-            <span>GİR</span>
+            <span data-i18n="btn.enter">GİR</span>
         </button>
     </div>
 
@@ -185,14 +189,14 @@
                     <span class="text-4xl">🥩</span>
                     <div>
                         <h2 class="text-xl font-bold text-red-400">ATLAS KASAP</h2>
-                        <p class="text-xs text-slate-400">Kasap: <span class="text-amber-300 font-bold">Kasap Atlas</span> | Yardımcılar: <span class="text-amber-300">Atlas & Atlas</span></p>
+                        <p data-i18n-html="kasap.staff" class="text-xs text-slate-400">Kasap: <span class="text-amber-300 font-bold">Kasap Atlas</span> | Yardımcılar: <span class="text-amber-300">Atlas & Atlas</span></p>
                     </div>
                 </div>
                 <button onclick="closeModal('modal-kasap')" class="text-slate-400 hover:text-white text-2xl font-bold">&times;</button>
             </div>
 
 
-            <p class="text-xs text-slate-300 mb-4 bg-red-950/50 p-3 rounded-2xl border border-red-800/40">
+            <p data-i18n="kasap.intro" class="text-xs text-slate-300 mb-4 bg-red-950/50 p-3 rounded-2xl border border-red-800/40">
                 "Hoş geldin Atlas kanka! Atlas Kasap garantisiyle en taze lokum biftekler, sosisler ve kuzu pirzolalar senin için hazır!"
             </p>
 
@@ -203,8 +207,8 @@
 
 
             <div class="mt-4 pt-3 border-t border-slate-700/80 flex justify-between items-center">
-                <span class="text-[11px] text-slate-400">Kasap Atlas sana selam veriyor.</span>
-                <button onclick="closeModal('modal-kasap')" class="bg-slate-800 hover:bg-slate-700 px-5 py-2 rounded-xl text-xs font-bold border border-slate-600">Çıkış Yap</button>
+                <span data-i18n="kasap.footer" class="text-[11px] text-slate-400">Kasap Atlas sana selam veriyor.</span>
+                <button onclick="closeModal('modal-kasap')" data-i18n="btn.leave" class="bg-slate-800 hover:bg-slate-700 px-5 py-2 rounded-xl text-xs font-bold border border-slate-600">Çıkış Yap</button>
             </div>
         </div>
     </div>
@@ -218,14 +222,14 @@
                     <span class="text-4xl">🛒</span>
                     <div>
                         <h2 class="text-xl font-bold text-emerald-400">ATLAS BABA MARKET</h2>
-                        <p class="text-xs text-slate-400">Patron: <span class="text-amber-300 font-bold">Atlas Baba</span> | Kasiyer: <span class="text-amber-300">Kasiyer Atlas</span></p>
+                        <p data-i18n-html="market.staff" class="text-xs text-slate-400">Patron: <span class="text-amber-300 font-bold">Atlas Baba</span> | Kasiyer: <span class="text-amber-300">Kasiyer Atlas</span></p>
                     </div>
                 </div>
                 <button onclick="closeModal('modal-market')" class="text-slate-400 hover:text-white text-2xl font-bold">&times;</button>
             </div>
 
 
-            <p class="text-xs text-slate-300 mb-4 bg-emerald-950/50 p-3 rounded-2xl border border-emerald-800/40">
+            <p data-i18n="market.intro" class="text-xs text-slate-300 mb-4 bg-emerald-950/50 p-3 rounded-2xl border border-emerald-800/40">
                 "Atlas Baba Market'e hoş geldin kanka! Mangal BBQ sosları, özel acı soslar, buz gibi içecekler ve limonlar burada!"
             </p>
 
@@ -236,8 +240,8 @@
 
 
             <div class="mt-4 pt-3 border-t border-slate-700/80 flex justify-between items-center">
-                <span class="text-[11px] text-slate-400">Kasiyer Atlas poşetleri hazırlıyor.</span>
-                <button onclick="closeModal('modal-market')" class="bg-slate-800 hover:bg-slate-700 px-5 py-2 rounded-xl text-xs font-bold border border-slate-600">Çıkış Yap</button>
+                <span data-i18n="market.footer" class="text-[11px] text-slate-400">Kasiyer Atlas poşetleri hazırlıyor.</span>
+                <button onclick="closeModal('modal-market')" data-i18n="btn.leave" class="bg-slate-800 hover:bg-slate-700 px-5 py-2 rounded-xl text-xs font-bold border border-slate-600">Çıkış Yap</button>
             </div>
         </div>
     </div>
@@ -250,8 +254,8 @@
                 <div class="flex items-center gap-3">
                     <span class="text-4xl animate-pulse">🔥</span>
                     <div>
-                        <h2 class="text-xl font-bold text-orange-400">ATLAS BARBEKÜ & MANGAL İSTASYONU</h2>
-                        <p class="text-xs text-slate-400">Mangal Şefi: <span class="text-amber-300 font-bold">Şef Atlas</span> | Etleri zamanında çevir!</p>
+                        <h2 data-i18n="mangal.title" class="text-xl font-bold text-orange-400">ATLAS BARBEKÜ & MANGAL İSTASYONU</h2>
+                        <p data-i18n-html="mangal.chef" class="text-xs text-slate-400">Mangal Şefi: <span class="text-amber-300 font-bold">Şef Atlas</span> | Etleri zamanında çevir!</p>
                     </div>
                 </div>
                 <button onclick="closeModal('modal-mangal')" class="text-slate-400 hover:text-white text-2xl font-bold">&times;</button>
@@ -261,11 +265,11 @@
             <!-- Heat Controller Bar -->
             <div class="bg-slate-900/90 p-4 rounded-2xl mb-4 flex flex-wrap gap-4 items-center justify-between border border-orange-500/30">
                 <div class="flex items-center space-x-3">
-                    <label class="text-xs font-bold text-amber-300">Mangal Ateşi Seviyesi:</label>
+                    <label data-i18n="mangal.heatLabel" class="text-xs font-bold text-amber-300">Mangal Ateşi Seviyesi:</label>
                     <input type="range" id="grill-heat" min="1" max="3" value="2" class="accent-orange-500 cursor-pointer">
                     <span id="heat-label" class="text-xs font-bold text-orange-400 bg-orange-950/80 px-2.5 py-1 rounded-xl border border-orange-500/40">Orta Ateş</span>
                 </div>
-                <div class="text-[11px] text-slate-300">
+                <div data-i18n-html="mangal.tip" class="text-[11px] text-slate-300">
                     <i class="fa-solid fa-circle-info text-amber-400"></i> Etlerin üstüne basıp çevir, tam kıvamında tabağa al!
                 </div>
             </div>
@@ -281,7 +285,7 @@
 
             <!-- Inventory Meat Selection Row -->
             <div class="mt-4">
-                <h4 class="text-xs font-bold text-amber-300 mb-2">ÇANTANDAN MANGALA ET KOY:</h4>
+                <h4 data-i18n="mangal.bagHeading" class="text-xs font-bold text-amber-300 mb-2">ÇANTANDAN MANGALA ET KOY:</h4>
                 <div id="mangal-inventory-selector" class="flex gap-2 overflow-x-auto pb-2">
                     <!-- Injected via JS -->
                 </div>
@@ -289,7 +293,7 @@
 
 
             <div class="mt-4 pt-3 border-t border-slate-800 flex justify-end">
-                <button onclick="closeModal('modal-mangal')" class="bg-orange-600 hover:bg-orange-500 text-slate-950 font-black px-6 py-2 rounded-xl text-xs transition shadow-lg">Mangaldan Ayrıl</button>
+                <button onclick="closeModal('modal-mangal')" data-i18n="mangal.leave" class="bg-orange-600 hover:bg-orange-500 text-slate-950 font-black px-6 py-2 rounded-xl text-xs transition shadow-lg">Mangaldan Ayrıl</button>
             </div>
         </div>
     </div>
@@ -302,8 +306,8 @@
                 <div class="flex items-center gap-3">
                     <span class="text-4xl">🍹</span>
                     <div>
-                        <h2 class="text-xl font-bold text-cyan-400">ATLAS KOKTEYL & ZİYAFET SOFRASI</h2>
-                        <p class="text-xs text-slate-400">Ev Sahibi: <span class="text-amber-300 font-bold">Ev Sahibi Atlas</span> | Kokteyli çalkala, ziyafete başla!</p>
+                        <h2 data-i18n="sofra.title" class="text-xl font-bold text-cyan-400">ATLAS KOKTEYL & ZİYAFET SOFRASI</h2>
+                        <p data-i18n-html="sofra.host" class="text-xs text-slate-400">Ev Sahibi: <span class="text-amber-300 font-bold">Ev Sahibi Atlas</span> | Kokteyli çalkala, ziyafete başla!</p>
                     </div>
                 </div>
                 <button onclick="closeModal('modal-sofra')" class="text-slate-400 hover:text-white text-2xl font-bold">&times;</button>
@@ -312,31 +316,31 @@
 
             <!-- Cocktail Shaking Mixer -->
             <div class="bg-slate-900/90 p-4 rounded-2xl border border-cyan-500/30 mb-4">
-                <h3 class="text-xs font-bold text-cyan-300 mb-3 flex items-center gap-2">
+                <h3 data-i18n-html="sofra.mixer" class="text-xs font-bold text-cyan-300 mb-3 flex items-center gap-2">
                     <i class="fa-solid fa-glass-water text-sm"></i> Atlas Atom Kokteyl Mikseri
                 </h3>
                 <div class="grid grid-cols-2 gap-2 mb-3" id="cocktail-ingredients-list">
                     <!-- Ingredients toggles injected via JS -->
                 </div>
                 <button onclick="mixCocktail()" class="w-full bg-cyan-600 hover:bg-cyan-500 active:scale-95 text-slate-950 font-black py-2.5 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-2">
-                    <i class="fa-solid fa-wine-glass text-sm"></i> Kokteyli Çalkala & Karıştır!
+                    <span data-i18n-html="sofra.mixBtn"><i class="fa-solid fa-wine-glass text-sm"></i> Kokteyli Çalkala & Karıştır!</span>
                 </button>
             </div>
 
 
             <!-- Cooked Meats Table Platter -->
             <div class="bg-slate-950/90 p-4 rounded-2xl border border-amber-500/30">
-                <h4 class="text-xs font-bold text-amber-400 mb-2">SOFRADAKİ PİŞMİŞ LEZZETLER:</h4>
+                <h4 data-i18n="sofra.platterHeading" class="text-xs font-bold text-amber-400 mb-2">SOFRADAKİ PİŞMİŞ LEZZETLER:</h4>
                 <div id="table-cooked-meats" class="flex flex-wrap gap-2 mb-3 min-h-[40px]">
                     <span class="text-xs text-slate-500 italic">Henüz pişmiş et tabağa konulmadı.</span>
                 </div>
                 <div class="text-xs text-cyan-300 mb-3" id="prepared-cocktail-status">
-                    Kokteyl Durumu: <span class="text-slate-400">Hazırlanmadı</span>
+                    <span data-i18n-html="sofra.cocktailNone">Kokteyl Durumu: <span class="text-slate-400">Hazırlanmadı</span></span>
                 </div>
 
 
                 <button onclick="eatFeast()" id="btn-eat-feast" class="w-full bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 active:scale-95 text-slate-950 font-black py-3 rounded-2xl text-sm shadow-2xl transition">
-                    👑 ATLAS MANGAL ZİYAFETİNİ BAŞLAT!
+                    <span data-i18n="sofra.feastBtn">👑 ATLAS MANGAL ZİYAFETİNİ BAŞLAT!</span>
                 </button>
             </div>
         </div>
@@ -348,7 +352,7 @@
         <div class="glass-panel border-2 border-amber-500/80 rounded-3xl max-w-md w-full p-6 shadow-2xl">
             <div class="flex justify-between items-center border-b border-slate-700 pb-3 mb-4">
                 <h2 class="text-lg font-bold text-amber-400 flex items-center gap-2">
-                    <i class="fa-solid fa-bag-shopping"></i> Atlas Sırt Çantası
+                    <span data-i18n-html="inv.title"><i class="fa-solid fa-bag-shopping"></i> Atlas Sırt Çantası</span>
                 </h2>
                 <button onclick="toggleInventoryModal()" class="text-slate-400 hover:text-white text-2xl font-bold">&times;</button>
             </div>
@@ -366,15 +370,15 @@
         <div class="glass-panel border-4 border-red-500 rounded-3xl max-w-md w-full p-6 text-center shadow-2xl transform scale-100">
             <div class="text-6xl mb-3 animate-bounce">🚗💥</div>
             <h2 class="text-2xl font-black text-red-400 mb-2">GAME OVER!</h2>
-            <p class="text-xs text-slate-200 mb-4 leading-relaxed">
+            <p data-i18n="over.text" class="text-xs text-slate-200 mb-4 leading-relaxed">
                 Eyvah Atlas! Yoldan karşıya geçerken arabaya çarptın! Karşıya geçerken sağa ve sola bakmayı unutma kanka!
             </p>
             <div class="bg-red-900/40 border border-red-600/50 rounded-2xl p-4 mb-5">
-                <span class="text-xs text-slate-300 block mb-1">Hasar Durumu:</span>
-                <span class="text-lg font-extrabold text-amber-300">Atlas Hastanede İyileştirildi! ❤️‍🩹</span>
+                <span data-i18n="over.conditionLabel" class="text-xs text-slate-300 block mb-1">Hasar Durumu:</span>
+                <span data-i18n="over.healed" class="text-lg font-extrabold text-amber-300">Atlas Hastanede İyileştirildi! ❤️‍🩹</span>
             </div>
             <button onclick="restartGameAfterCrash()" class="w-full bg-gradient-to-r from-red-600 to-amber-500 hover:from-red-500 hover:to-amber-400 text-slate-950 font-black py-3 rounded-xl text-sm shadow-xl transition">
-                Yeniden Doğ & Oyuna Devam Et 🔥
+                <span data-i18n="over.btn">Yeniden Doğ & Oyuna Devam Et 🔥</span>
             </button>
         </div>
     </div>
@@ -384,16 +388,16 @@
     <div id="modal-feast-result" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4">
         <div class="glass-panel border-4 border-amber-400 rounded-3xl max-w-md w-full p-6 text-center shadow-2xl transform scale-100">
             <div class="text-6xl mb-3 animate-bounce">👑</div>
-            <h2 class="text-2xl font-black text-amber-400 mb-2">EFSANEVİ ATLAS ZİYAFETİ!</h2>
-            <p class="text-xs text-slate-200 mb-4 leading-relaxed">
+            <h2 data-i18n="feast.title" class="text-2xl font-black text-amber-400 mb-2">EFSANEVİ ATLAS ZİYAFETİ!</h2>
+            <p data-i18n="feast.text" class="text-xs text-slate-200 mb-4 leading-relaxed">
                 Atlas, Atlas Baba ve tüm Atlas'lar sofrada buluştu! Mangaldaki pişmiş lokum etler ve özel çalkalanmış Atlas Kokteyli afiyetle yenildi!
             </p>
             <div class="bg-amber-950/60 border border-amber-500/50 rounded-2xl p-4 mb-5">
-                <span class="text-xs text-slate-300 block mb-1">Kazanılan Ziyafet Ödülü:</span>
+                <span data-i18n="feast.payoutLabel" class="text-xs text-slate-300 block mb-1">Kazanılan Ziyafet Ödülü:</span>
                 <span id="feast-earned-coins" class="text-2xl font-extrabold text-amber-300">+350 ₺</span>
             </div>
             <button onclick="closeModal('modal-feast-result')" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3 rounded-xl text-sm shadow-xl transition">
-                Harika! Oyuna Devam Et 🔥
+                <span data-i18n="feast.btn">Harika! Oyuna Devam Et 🔥</span>
             </button>
         </div>
     </div>
@@ -403,12 +407,162 @@
     <div id="toast-notification" class="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 opacity-0 translate-y-[-20px]">
         <div class="glass-panel bg-amber-500/90 text-slate-950 font-black px-6 py-2.5 rounded-full shadow-2xl border-2 border-amber-200 text-xs sm:text-sm flex items-center gap-2">
             <span id="toast-icon">✨</span>
-            <span id="toast-msg">Atlas Bilgilendirme</span>
+            <span id="toast-msg" data-i18n="toast.default">Atlas Bilgilendirme</span>
         </div>
     </div>
 
 
     <script>
+        /* =======================================================
+           0. LANGUAGE (TR / EN)
+
+           The game was written in Turkish and that original is the point of
+           it, so nothing here overwrites it: every string sits in both
+           languages and the player picks. English is the default because the
+           arcade around it is English; the choice is remembered per browser.
+
+           Turkish that is FLAVOUR rather than interface is left alone in both
+           tables -- the shops keep their names, Kasap Atlas and Sef Atlas keep
+           theirs, and mangal, kokteyl, biftek and pirzola are glossed in the
+           English sentence around them rather than flattened into grill,
+           cocktail, steak and lamb chop.
+           ======================================================= */
+        const I18N = {
+            tr: {
+                'page.title': 'Atlas Mangal & Market Simülatörü 3D',
+                'hud.title': 'ATLAS ŞEHİR SİMÜLATÖRÜ',
+                'hud.character': 'Karakter: <span class="text-amber-300 font-semibold">Atlas (Sen)</span>',
+                'hud.bag': 'Çanta',
+                'prompt.key': 'E / TIKLA',
+                'prompt.enter': 'Atlas Mekanına Giriş Yap',
+                'btn.enter': 'GİR',
+                'btn.leave': 'Çıkış Yap',
+                'kasap.staff': 'Kasap: <span class="text-amber-300 font-bold">Kasap Atlas</span> | Yardımcılar: <span class="text-amber-300">Atlas & Atlas</span>',
+                'kasap.intro': '"Hoş geldin Atlas kanka! Atlas Kasap garantisiyle en taze lokum biftekler, sosisler ve kuzu pirzolalar senin için hazır!"',
+                'kasap.footer': 'Kasap Atlas sana selam veriyor.',
+                'market.staff': 'Patron: <span class="text-amber-300 font-bold">Atlas Baba</span> | Kasiyer: <span class="text-amber-300">Kasiyer Atlas</span>',
+                'market.intro': '"Atlas Baba Market\'e hoş geldin kanka! Mangal BBQ sosları, özel acı soslar, buz gibi içecekler ve limonlar burada!"',
+                'market.footer': 'Kasiyer Atlas poşetleri hazırlıyor.',
+                'mangal.title': 'ATLAS BARBEKÜ & MANGAL İSTASYONU',
+                'mangal.chef': 'Mangal Şefi: <span class="text-amber-300 font-bold">Şef Atlas</span> | Etleri zamanında çevir!',
+                'mangal.heatLabel': 'Mangal Ateşi Seviyesi:',
+                'mangal.tip': '<i class="fa-solid fa-circle-info text-amber-400"></i> Etlerin üstüne basıp çevir, tam kıvamında tabağa al!',
+                'mangal.bagHeading': 'ÇANTANDAN MANGALA ET KOY:',
+                'mangal.leave': 'Mangaldan Ayrıl',
+                'sofra.title': 'ATLAS KOKTEYL & ZİYAFET SOFRASI',
+                'sofra.host': 'Ev Sahibi: <span class="text-amber-300 font-bold">Ev Sahibi Atlas</span> | Kokteyli çalkala, ziyafete başla!',
+                'sofra.mixer': '<i class="fa-solid fa-glass-water text-sm"></i> Atlas Atom Kokteyl Mikseri',
+                'sofra.mixBtn': '<i class="fa-solid fa-wine-glass text-sm"></i> Kokteyli Çalkala & Karıştır!',
+                'sofra.platterHeading': 'SOFRADAKİ PİŞMİŞ LEZZETLER:',
+                'sofra.cocktailNone': 'Kokteyl Durumu: <span class="text-slate-400">Hazırlanmadı</span>',
+                'sofra.feastBtn': '👑 ATLAS MANGAL ZİYAFETİNİ BAŞLAT!',
+                'inv.title': '<i class="fa-solid fa-bag-shopping"></i> Atlas Sırt Çantası',
+                'over.text': 'Eyvah Atlas! Yoldan karşıya geçerken arabaya çarptın! Sen hastanedeyken vardiya saati işlemeye devam ediyor kanka.',
+                'over.conditionLabel': 'Hasar Durumu:',
+                'over.healed': 'Atlas Hastanede İyileştirildi! ❤️‍🩹',
+                'over.btn': 'Yeniden Doğ & Vardiyaya Dön 🔥',
+                'feast.title': 'EFSANEVİ ATLAS ZİYAFETİ!',
+                'feast.text': 'Atlas, Atlas Baba ve tüm Atlas\'lar sofrada buluştu! Mangaldaki pişmiş lokum etler ve özel çalkalanmış Atlas Kokteyli afiyetle yenildi!',
+                'feast.payoutLabel': 'Kazanılan Ziyafet Ödülü:',
+                'feast.btn': 'Harika! Vardiyaya Devam Et 🔥',
+                'toast.default': 'Atlas Bilgilendirme'
+            },
+            en: {
+                'page.title': 'Atlas Mangal & Market 3D',
+                'hud.title': 'ATLAS TOWN SIMULATOR',
+                'hud.character': 'Playing as <span class="text-amber-300 font-semibold">Atlas (you)</span>',
+                'hud.bag': 'Bag',
+                'prompt.key': 'E / TAP',
+                'prompt.enter': 'Step inside',
+                'btn.enter': 'ENTER',
+                'btn.leave': 'Leave',
+                'kasap.staff': 'Butcher: <span class="text-amber-300 font-bold">Kasap Atlas</span> | Apprentices: <span class="text-amber-300">Atlas & Atlas</span>',
+                'kasap.intro': '"Welcome in, mate! The freshest biftek, sosis and lamb pirzola in town, cut this morning and guaranteed by Atlas Kasap!"',
+                'kasap.footer': 'Kasap Atlas waves you off.',
+                'market.staff': 'Owner: <span class="text-amber-300 font-bold">Atlas Baba</span> | Cashier: <span class="text-amber-300">Kasiyer Atlas</span>',
+                'market.intro': '"Welcome to Atlas Baba Market, mate! BBQ sauces for the mangal, the house hot sauce, ice-cold drinks and lemons — all right here!"',
+                'market.footer': 'Kasiyer Atlas is bagging it up.',
+                'mangal.title': 'ATLAS BARBEKÜ & MANGAL STATION',
+                'mangal.chef': 'Grill chef: <span class="text-amber-300 font-bold">Şef Atlas</span> | Turn the meat before it burns!',
+                'mangal.heatLabel': 'Mangal heat level:',
+                'mangal.tip': '<i class="fa-solid fa-circle-info text-amber-400"></i> Tap a cut to turn it, then plate it up while it is just right!',
+                'mangal.bagHeading': 'LAY MEAT FROM YOUR BAG ON THE MANGAL:',
+                'mangal.leave': 'Leave the mangal',
+                'sofra.title': 'ATLAS KOKTEYL & FEAST TABLE',
+                'sofra.host': 'Host: <span class="text-amber-300 font-bold">Ev Sahibi Atlas</span> | Shake the kokteyl, then start the feast!',
+                'sofra.mixer': '<i class="fa-solid fa-glass-water text-sm"></i> Atlas Atom Kokteyl Mixer',
+                'sofra.mixBtn': '<i class="fa-solid fa-wine-glass text-sm"></i> Shake & mix the kokteyl!',
+                'sofra.platterHeading': 'ON THE TABLE:',
+                'sofra.cocktailNone': 'Kokteyl: <span class="text-slate-400">not mixed yet</span>',
+                'sofra.feastBtn': '👑 START THE ATLAS MANGAL FEAST!',
+                'inv.title': '<i class="fa-solid fa-bag-shopping"></i> Atlas Backpack',
+                'over.text': 'A car caught you crossing the road! Look both ways next time, mate — the shift clock keeps running while you are patched up.',
+                'over.conditionLabel': 'Condition:',
+                'over.healed': 'Patched up at the hospital ❤️‍🩹',
+                'over.btn': 'Back on my feet & into the shift 🔥',
+                'feast.title': 'A LEGENDARY ATLAS FEAST!',
+                'feast.text': 'Atlas, Atlas Baba and every Atlas in town pulled up a chair. The mangal-grilled meat and the freshly shaken Atlas Kokteyl went down a treat!',
+                'feast.payoutLabel': 'Feast payout:',
+                'feast.btn': 'Back to the shift 🔥',
+                'toast.default': 'Atlas notice'
+            }
+        };
+
+        let LANG = 'en';
+        try {
+            const savedLang = localStorage.getItem('atlas-lang');
+            if (savedLang === 'tr' || savedLang === 'en') LANG = savedLang;
+        } catch (err) {
+            /* Sandboxed iframe with storage blocked -- fall back to English. */
+        }
+
+        /**
+         * Look a string up in the active language.
+         *
+         * Falls through to English on a missing key rather than rendering the
+         * key itself, so a half-finished Turkish entry degrades to readable
+         * English instead of showing 'sofra.feastBtn' to a player.
+         */
+        function t(key, vars) {
+            const table = I18N[LANG] || I18N.en;
+            let out = table[key];
+            if (out === undefined) out = I18N.en[key];
+            if (out === undefined) return key;
+            if (vars) {
+                for (const name in vars) out = out.split('{' + name + '}').join(vars[name]);
+            }
+            return out;
+        }
+
+        function applyI18n() {
+            document.documentElement.lang = LANG;
+            document.title = t('page.title');
+            document.querySelectorAll('[data-i18n]').forEach(function (el) {
+                el.textContent = t(el.getAttribute('data-i18n'));
+            });
+            document.querySelectorAll('[data-i18n-html]').forEach(function (el) {
+                el.innerHTML = t(el.getAttribute('data-i18n-html'));
+            });
+            const label = document.getElementById('lang-label');
+            if (label) label.textContent = LANG.toUpperCase();
+        }
+
+        function setLang(lang) {
+            LANG = lang === 'tr' ? 'tr' : 'en';
+            try {
+                localStorage.setItem('atlas-lang', LANG);
+            } catch (err) {
+                /* Nothing to remember it with; the choice lasts this session. */
+            }
+            applyI18n();
+            // Hoisted: defined further down, once the render helpers exist.
+            if (typeof refreshDynamicUI === 'function') refreshDynamicUI();
+        }
+
+        function toggleLang() {
+            setLang(LANG === 'en' ? 'tr' : 'en');
+        }
+
         /* =======================================================
            1. WEB AUDIO SYNTHESIZER (Rich Sound FX Generator)
            ======================================================= */
@@ -1634,6 +1788,7 @@
 
 
         window.onload = function() {
+            applyI18n();
             animate3D();
         };
     </script>
