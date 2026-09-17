@@ -20,10 +20,13 @@
  * before the click's re-render is even visible — so the real preview is the site
  * itself, and the card only has to say which one is on.
  *
- * NOT rendered in `NotSignedInCard` the way the stealth row is. The sidebar
- * footer already carries a signed-out, phone-reachable theme switch (it is why
- * `ThemeMenuButton` lives there), so the gap that forced the stealth row to
- * appear twice does not exist here.
+ * RENDERED TWICE, ON PURPOSE — the same trap the stealth row documents. The
+ * sidebar footer's `ThemeMenuButton` covers a signed-out visitor on a DESKTOP,
+ * but `SiteHeader` drops the hamburger on a phone, so the drawer that carries it
+ * cannot be opened there at all, and this page sits behind an `auth()` check. So
+ * `NotSignedInCard` renders this card too; without it, a signed-out phone player
+ * has no way to turn dark mode on. Nothing here needs an account — the
+ * preference is per-device `localStorage`.
  */
 
 import { THEME_OPTIONS } from "@/app/lib/theme/config";

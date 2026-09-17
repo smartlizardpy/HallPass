@@ -5,11 +5,14 @@
  *
  * ONE BUTTON, THREE STATES, rather than a menu or a modal. It sits beside
  * `StealthMenuButton` in the rail's footer for the reason set out at length in
- * `Sidebar.tsx`: that footer is the only door on the site that every visitor can
- * reach — signed out, on a phone, in the drawer, in the collapsed rail — and a
- * theme switch behind a sign-in would be useless to most of the people who want
- * one. The Settings tab's `AppearanceCard` is the fuller control for the people
- * who have an account; this is the one everybody has.
+ * `Sidebar.tsx`: that footer is the door that does not need an account, in the
+ * expanded rail, the collapsed rail and the mobile drawer alike, and a theme
+ * switch behind a sign-in would be useless to most of the people who want one.
+ *
+ * It is not the LAST door, because it cannot be: `SiteHeader` drops the
+ * hamburger on a phone, so the drawer this sits in has no opener there. That
+ * gap is covered by `AppearanceCard`, which the Settings tab and
+ * `NotSignedInCard` both render — see the trace in the latter's docblock.
  *
  * WHY IT CYCLES. The rail collapses to 64px, where the label is zeroed out by
  * the container (`[&_button]:text-[0px]`) and the emoji is all that is left. A

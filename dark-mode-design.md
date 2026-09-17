@@ -173,13 +173,19 @@ ring-*-200/300   → dark:ring-*-900     text-*-950 → dark:text-*-100
 ### 2.5 Where the control lives
 
 - **`ThemeMenuButton`**, next to `StealthMenuButton` in the sidebar's footer —
-  the only auth-independent, phone-and-desktop door on the site (see the long
-  note in `Sidebar.tsx` about why the stealth hatch lives there). It cycles
-  System → Light → Dark and names the state it is in. It inherits the collapsed
-  rail's `[&_button]` treatment for free by sharing that container.
+  the door that needs no account (see the long note in `Sidebar.tsx` about why
+  the stealth hatch lives there). It cycles System → Light → Dark and names the
+  state it is in. It inherits the collapsed rail's `[&_button]` treatment for
+  free by sharing that container.
 - **An Appearance card** in `/play/you/settings`, in the Account group beside the
   stealth row: a proper three-way radio group, because that page has the room and
   is where a preference is looked for.
+- **The same card again in `NotSignedInCard`**, which is not belt and braces: the
+  phone header has no hamburger, so the sidebar drawer — and the button above —
+  cannot be opened on a phone at all, and the Settings tab is behind an `auth()`
+  check. Without this third mount a signed-out phone player, which is most of
+  this site's traffic, could not turn dark mode on. `StealthSettingsRow` is
+  double-mounted for precisely the same reason and documents the full trace.
 
 ---
 
@@ -194,7 +200,7 @@ ring-*-200/300   → dark:ring-*-900     text-*-950 → dark:text-*-100
    over `localStorage`, modelled on `lib/stealth/store.ts`.
 5. `app/components/theme/ThemeController.tsx` + wiring in `app/layout.tsx`.
 6. `app/components/theme/ThemeMenuButton.tsx` + `Sidebar.tsx` (rail and drawer).
-7. `app/play/you/_ui/AppearanceCard.tsx` + the Settings page.
+7. `app/play/you/_ui/AppearanceCard.tsx` + the Settings page + `NotSignedInCard`.
 8. — 11. The token sweep, by area: `app/components`, `app/play` + `app/u` +
    `app/c` + `app/embed`, `app/beta` + `app/oauth` + root pages, `app/dashboard`.
 12. The status-palette twins.
