@@ -442,6 +442,29 @@
     </div>
 
 
+    <!-- HallPass: the online board for a shift's takings. The inline stub installs
+         window.HallPass synchronously so a call made before the bundle lands is
+         queued, and settles those calls inert after 2s if it never lands at all.
+         Loaded from the site-absolute /sdk/v1/hallpass.js like every other
+         integrated game, so a preview deployment talks to itself, not to prod. -->
+    <script>
+    (function(w){if(w.HallPass&&w.HallPass.version!=="0")return;var q=[];
+    function e(n){return function(){var a=[].slice.call(arguments);
+    return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
+    w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
+    submitScore:e("submitScore"),getScores:e("getScores"),
+    getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
+    unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
+    getAchievements:e("getAchievements"),challenge:e("challenge"),
+    signIn:function(){},signOut:function(){},
+    getHandle:function(){return null},setHandle:function(v){return v},
+    on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
+    off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
+    setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
+    q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:{ok:false,reason:"inert"})})},2000)})(window);
+    </script>
+    <script src="/sdk/v1/hallpass.js" data-game="atlas-mangal-market-3d" defer></script>
+
     <script>
         /* =======================================================
            0. LANGUAGE (TR / EN)
@@ -866,7 +889,8 @@
             shiftActive: false,
             shiftOver: false,
             shiftEndsAt: 0,
-            shiftEarned: 0
+            shiftEarned: 0,
+            lastRank: null
         };
 
 
@@ -929,6 +953,90 @@
             document.getElementById('shift-earned-total').innerText = gameState.shiftEarned + ' ₺';
             document.getElementById('shift-rank').innerText = '';
             document.getElementById('modal-shift-over').classList.remove('hidden');
+            submitShiftScore();
+        }
+
+        /**
+         * A handle comes off the wire and lands in innerHTML, so it is escaped
+         * here rather than trusted. Every other field on the row is a number.
+         */
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        async function renderShiftLeaderboard() {
+            const list = document.getElementById('shift-leaderboard');
+            if (!list) return;
+            list.innerHTML = '<li class="text-slate-500 italic">' + escapeHtml(t('shiftover.boardLoading')) + '</li>';
+
+            let scores = [];
+            try {
+                scores = await window.HallPass.getScores({ limit: 10, period: 'all' });
+            } catch (err) {
+                scores = [];
+            }
+
+            if (!scores || !scores.length) {
+                // An empty board and an unreachable one read the same from here,
+                // so say which: "be the first" is a lie if the SDK went inert.
+                const inert = !window.HallPass || window.HallPass.mode === 'inert' || window.HallPass.version === '0';
+                list.innerHTML = '<li class="text-slate-500 italic">' +
+                    escapeHtml(t(inert ? 'shiftover.boardOffline' : 'shiftover.boardEmpty')) + '</li>';
+                return;
+            }
+
+            list.innerHTML = scores.map(function (row) {
+                return '<li class="flex justify-between gap-2">' +
+                    '<span class="text-slate-400">#' + Number(row.rank) + ' ' +
+                    '<span class="text-slate-200 font-bold">' + escapeHtml(row.handle) + '</span></span>' +
+                    '<span class="text-amber-400 font-black">' + Number(row.score) + ' ₺</span>' +
+                    '</li>';
+            }).join('');
+        }
+
+        async function submitShiftScore() {
+            const rankEl = document.getElementById('shift-rank');
+            gameState.lastRank = null;
+            if (rankEl) rankEl.innerText = '';
+
+            // A blank shift is not worth a row on the board.
+            if (gameState.shiftEarned > 0) {
+                try {
+                    const res = await window.HallPass.submitScore(gameState.shiftEarned);
+                    if (res && res.ok && typeof res.rank === 'number') {
+                        gameState.lastRank = res.rank;
+                        if (rankEl) rankEl.innerText = t('shiftover.rank', { n: res.rank });
+                    }
+                } catch (err) {
+                    /* The SDK's contract is that it never throws; this is belt and braces. */
+                }
+            }
+
+            renderShiftLeaderboard();
+            updateSignInButton();
+        }
+
+        async function updateSignInButton() {
+            const btn = document.getElementById('shift-signin-btn');
+            if (!btn) return;
+            let player = null;
+            try {
+                player = await window.HallPass.getPlayer();
+            } catch (err) {
+                player = null;
+            }
+            btn.classList.toggle('hidden', Boolean(player));
+        }
+
+        /** Must run from the click itself -- the popup is blocked otherwise. */
+        function hallpassSignIn() {
+            try {
+                window.HallPass.signIn();
+            } catch (err) {
+                /* Inert preview: nothing to sign in to. */
+            }
         }
 
         function startNewShift() {
@@ -2061,6 +2169,15 @@
             if (activeZoneNear) {
                 document.getElementById('interaction-text').innerText =
                     t('prompt.enterZone', { zone: activeZoneNear.name });
+            }
+            const shiftModal = document.getElementById('modal-shift-over');
+            if (shiftModal && !shiftModal.classList.contains('hidden')) {
+                const rankEl = document.getElementById('shift-rank');
+                if (rankEl) {
+                    rankEl.innerText = gameState.lastRank === null || gameState.lastRank === undefined
+                        ? '' : t('shiftover.rank', { n: gameState.lastRank });
+                }
+                renderShiftLeaderboard();
             }
         }
 
