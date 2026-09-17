@@ -405,8 +405,8 @@ function Notice({
 }) {
   const cls =
     tone === "amber"
-      ? "border-amber-300 bg-amber-50 text-amber-900"
-      : "border-rose-300 bg-rose-50 text-rose-900";
+      ? "border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200"
+      : "border-rose-300 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200";
   return (
     <div className={`mb-6 rounded-xl border px-4 py-3 text-sm ${cls}`}>{children}</div>
   );

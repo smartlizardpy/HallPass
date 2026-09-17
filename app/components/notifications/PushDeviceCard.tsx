@@ -174,7 +174,7 @@ export function PushDeviceCard() {
             You&rsquo;ll be asked for permission once.
           </p>
           {state === "failed" && (
-            <p className="mt-2 text-sm font-semibold text-red-900">
+            <p className="mt-2 text-sm font-semibold text-red-900 dark:text-red-200">
               That didn&rsquo;t work. Check notifications aren&rsquo;t blocked
               for this site in your browser settings, then try again.
             </p>

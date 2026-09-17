@@ -41,9 +41,9 @@ function Pill({ tone, children }: { tone: string; children: React.ReactNode }) {
  */
 const SEVERITY_TONES: Record<BugSeverity, string> = {
   cosmetic: "bg-surface-2 text-foreground-2",
-  minor: "bg-sky-50 text-sky-900",
-  major: "bg-amber-100 text-amber-900",
-  blocker: "bg-red-100 text-red-900",
+  minor: "bg-sky-50 dark:bg-sky-950/40 text-sky-900 dark:text-sky-200",
+  major: "bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200",
+  blocker: "bg-red-100 dark:bg-red-950/60 text-red-900 dark:text-red-200",
 };
 
 export function SeverityChip({ severity }: { severity: BugSeverity }) {
@@ -59,7 +59,7 @@ export function SeverityChip({ severity }: { severity: BugSeverity }) {
  */
 const REPORT_STATUS_TONES: Record<ReportStatus, string> = {
   open: "bg-brand-50 text-brand",
-  accepted: "bg-emerald-50 text-emerald-900",
+  accepted: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200",
   rejected: "bg-surface-2 text-zinc-600 dark:text-zinc-300",
   duplicate: "bg-surface-2 text-zinc-600 dark:text-zinc-300",
 };
@@ -71,7 +71,7 @@ export function ReportStatusChip({ status }: { status: ReportStatus }) {
 /** Bug vs feature request. Neutral on purpose — it is a category, not a state. */
 export function KindChip({ kind }: { kind: ReportKind }) {
   return (
-    <Pill tone={kind === "bug" ? "bg-red-50 text-red-900" : "bg-sky-50 text-sky-900"}>
+    <Pill tone={kind === "bug" ? "bg-red-50 dark:bg-red-950/40 text-red-900 dark:text-red-200" : "bg-sky-50 dark:bg-sky-950/40 text-sky-900 dark:text-sky-200"}>
       {kind === "bug" ? "Bug" : "Idea"}
     </Pill>
   );
@@ -79,8 +79,8 @@ export function KindChip({ kind }: { kind: ReportKind }) {
 
 const ASSIGNMENT_STATUS_TONES: Record<AssignmentStatus, string> = {
   assigned: "bg-brand-50 text-brand",
-  in_progress: "bg-amber-100 text-amber-900",
-  submitted: "bg-emerald-50 text-emerald-900",
+  in_progress: "bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200",
+  submitted: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200",
   closed: "bg-surface-2 text-zinc-600 dark:text-zinc-300",
 };
 
@@ -102,7 +102,7 @@ export function AssignmentStatusChip({ status }: { status: AssignmentStatus }) {
 
 const SHOT_STATUS_TONES: Record<ShotStatus, string> = {
   pending: "bg-brand-50 text-brand",
-  accepted: "bg-emerald-50 text-emerald-900",
+  accepted: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200",
   rejected: "bg-surface-2 text-zinc-600 dark:text-zinc-300",
 };
 
@@ -119,7 +119,7 @@ export function ShotStatusChip({ status }: { status: ShotStatus }) {
  */
 export function XpChip({ amount }: { amount: number }) {
   return (
-    <span className="inline-flex shrink-0 items-center rounded-full bg-accent-yellow/20 px-2.5 py-0.5 text-[11px] font-black tabular-nums text-amber-900">
+    <span className="inline-flex shrink-0 items-center rounded-full bg-accent-yellow/20 px-2.5 py-0.5 text-[11px] font-black tabular-nums text-amber-900 dark:text-amber-200">
       +{amount.toLocaleString("en-US")} XP
     </span>
   );

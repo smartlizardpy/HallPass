@@ -129,7 +129,7 @@ export function FriendsIsland() {
     // empty friends list, which would read as "you have no friends".
     return (
       <Panel>
-        <p className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+        <p className="rounded-2xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm font-semibold text-amber-900 dark:text-amber-200">
           Friends aren&rsquo;t switched on yet. Check back shortly.
         </p>
       </Panel>

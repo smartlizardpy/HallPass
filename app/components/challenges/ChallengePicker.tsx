@@ -207,7 +207,7 @@ export function ChallengePicker({
       </div>
 
       {phase.kind === "failed" ? (
-        <p role="alert" className="mt-3 text-[13px] font-semibold text-rose-700">
+        <p role="alert" className="mt-3 text-[13px] font-semibold text-rose-700 dark:text-rose-300">
           {phase.message}
         </p>
       ) : null}

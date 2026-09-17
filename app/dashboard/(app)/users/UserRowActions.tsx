@@ -308,7 +308,7 @@ export function UserRowActions({
                     <span
                       className={
                         isRoleFull(seats, value)
-                          ? "font-semibold text-amber-700"
+                          ? "font-semibold text-amber-700 dark:text-amber-300"
                           : undefined
                       }
                     >
@@ -341,7 +341,7 @@ export function UserRowActions({
               </p>
               <button
                 type="submit"
-                className="mt-3 w-full rounded-full border border-red-200 bg-red-50 px-5 py-2 text-sm font-bold text-red-700 transition hover:bg-red-100"
+                className="mt-3 w-full rounded-full border border-red-200 dark:border-red-900/70 bg-red-50 dark:bg-red-950/40 px-5 py-2 text-sm font-bold text-red-700 dark:text-red-300 transition hover:bg-red-100 dark:hover:bg-red-950/60"
               >
                 Remove from dashboard
               </button>

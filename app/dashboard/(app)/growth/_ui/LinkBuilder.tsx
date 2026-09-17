@@ -285,16 +285,16 @@ export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
               </div>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg border border-dashed border-amber-300 bg-amber-50">
-              <div className="flex aspect-[1.91/1] w-full items-center justify-center px-4 text-center text-xs font-semibold text-amber-900">
+            <div className="overflow-hidden rounded-lg border border-dashed border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40">
+              <div className="flex aspect-[1.91/1] w-full items-center justify-center px-4 text-center text-xs font-semibold text-amber-900 dark:text-amber-200">
                 No social image — this link renders as a bare card in chats,
                 Discord and search previews.
               </div>
-              <div className="border-t border-amber-200 p-3">
-                <div className="text-sm font-bold text-amber-900">
+              <div className="border-t border-amber-200 dark:border-amber-900/70 p-3">
+                <div className="text-sm font-bold text-amber-900 dark:text-amber-200">
                   {destination?.label}
                 </div>
-                <div className="truncate text-xs text-amber-800">{url}</div>
+                <div className="truncate text-xs text-amber-800 dark:text-amber-200">{url}</div>
               </div>
             </div>
           )}

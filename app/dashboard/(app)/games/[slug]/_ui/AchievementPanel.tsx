@@ -103,7 +103,7 @@ export async function AchievementPanel({ slug }: { slug: string }) {
       )}
 
       {full ? (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <p className="rounded-lg border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
           This game is at the maximum of {MAX_ACHIEVEMENTS_PER_GAME}{" "}
           achievements. Delete one to add another.
         </p>
@@ -307,7 +307,7 @@ function AchievementRow({
         <input type="hidden" name="id" value={idValue} />
         <button
           type="submit"
-          className="rounded-full border border-red-300 bg-red-50 px-4 py-2 text-sm font-bold text-red-900 hover:bg-red-100"
+          className="rounded-full border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-4 py-2 text-sm font-bold text-red-900 dark:text-red-200 hover:bg-red-100 dark:hover:bg-red-950/60"
         >
           Delete
         </button>

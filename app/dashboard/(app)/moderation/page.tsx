@@ -277,19 +277,19 @@ export default async function ModerationPage({
       />
 
       {ok && (
-        <div className="mb-6 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+        <div className="mb-6 rounded-xl border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200">
           {ok}
         </div>
       )}
 
       {error && (
-        <div className="mb-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+        <div className="mb-6 rounded-xl border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-900 dark:text-red-200">
           {error}
         </div>
       )}
 
       {unavailable === "unconfigured" && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="rounded-xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
           Database not configured. Set{" "}
           <code className="font-mono">DATABASE_URL</code> to work the report
           queue.
@@ -297,7 +297,7 @@ export default async function ModerationPage({
       )}
 
       {unavailable === "schema" && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="rounded-xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
           The reviews schema is not on this database yet. Apply{" "}
           <code className="font-mono">
             app/lib/scoreboard/migrations/008_game_reviews.sql
@@ -781,7 +781,7 @@ function ReviewVerbs({
             <button
               type="submit"
               title="Tombstone it: off the site for good, but the row and its text stay as evidence."
-              className="rounded-full border border-red-200 bg-red-50 px-4 py-1.5 text-xs font-extrabold text-red-700 transition hover:bg-red-100"
+              className="rounded-full border border-red-200 dark:border-red-900/70 bg-red-50 dark:bg-red-950/40 px-4 py-1.5 text-xs font-extrabold text-red-700 dark:text-red-300 transition hover:bg-red-100 dark:hover:bg-red-950/60"
             >
               Delete
             </button>
@@ -826,17 +826,17 @@ function ReviewVerbs({
  */
 function PurgePanel({ reviewId }: { reviewId: number }) {
   return (
-    <details className="group rounded-lg border border-red-200 bg-red-50/50">
-      <summary className="cursor-pointer list-none px-4 py-2 text-xs font-extrabold text-red-700 [&::-webkit-details-marker]:hidden">
+    <details className="group rounded-lg border border-red-200 dark:border-red-900/70 bg-red-50/50 dark:bg-red-950/40">
+      <summary className="cursor-pointer list-none px-4 py-2 text-xs font-extrabold text-red-700 dark:text-red-300 [&::-webkit-details-marker]:hidden">
         Purge… <span aria-hidden className="inline-block transition-transform group-open:rotate-90">▸</span>
       </summary>
       <form
         action={purgeReviewAction}
-        className="border-t border-red-200 px-4 py-3"
+        className="border-t border-red-200 dark:border-red-900/70 px-4 py-3"
       >
         <input type="hidden" name="reviewId" value={reviewId} />
         <input type="hidden" name="confirm" value="purge" />
-        <p className="text-xs leading-relaxed text-red-900/80">
+        <p className="text-xs leading-relaxed text-red-900/80 dark:text-red-200/80">
           Erases the row, its votes and its reports. There is no undo and no
           tombstone. Use it only when the text itself must not persist — a phone
           number, an address, another pupil&rsquo;s real name. For everything
@@ -849,7 +849,7 @@ function PurgePanel({ reviewId }: { reviewId: number }) {
           autoComplete="off"
           placeholder="Why (goes in the audit log)"
           aria-label="Reason for purging"
-          className="mt-3 w-full rounded-lg border border-red-200 bg-surface px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-red-300"
+          className="mt-3 w-full rounded-lg border border-red-200 dark:border-red-900/70 bg-surface px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-red-300 dark:focus:ring-red-900"
         />
         <button
           type="submit"
@@ -877,25 +877,25 @@ function BanPanel({
   displayName: string;
 }) {
   return (
-    <details className="group rounded-lg border border-red-200 bg-red-50/50">
-      <summary className="cursor-pointer list-none px-4 py-2 text-xs font-extrabold text-red-700 [&::-webkit-details-marker]:hidden">
+    <details className="group rounded-lg border border-red-200 dark:border-red-900/70 bg-red-50/50 dark:bg-red-950/40">
+      <summary className="cursor-pointer list-none px-4 py-2 text-xs font-extrabold text-red-700 dark:text-red-300 [&::-webkit-details-marker]:hidden">
         Ban from reviews… <span aria-hidden className="inline-block transition-transform group-open:rotate-90">▸</span>
       </summary>
       <form
         action={banAuthorAction}
-        className="space-y-3 border-t border-red-200 px-4 py-3"
+        className="space-y-3 border-t border-red-200 dark:border-red-900/70 px-4 py-3"
       >
         <input type="hidden" name="playerPublicId" value={publicId} />
         <input type="hidden" name="confirm" value="ban" />
 
-        <p className="text-xs leading-relaxed text-red-900/80">
+        <p className="text-xs leading-relaxed text-red-900/80 dark:text-red-200/80">
           Stops <span className="font-bold">{displayName}</span> writing or
           editing reviews anywhere on the site. Their scores, saves and games are
           untouched. The ban survives account deletion, so signing up again with
           the same Google account will not shake it off.
         </p>
 
-        <label className="block text-xs font-bold text-red-900">
+        <label className="block text-xs font-bold text-red-900 dark:text-red-200">
           Reason (optional)
           <input
             name="reason"
@@ -903,18 +903,18 @@ function BanPanel({
             maxLength={300}
             autoComplete="off"
             placeholder="What happened"
-            className="mt-1 w-full rounded-lg border border-red-200 bg-surface px-3 py-2 text-xs font-normal outline-none focus:ring-2 focus:ring-red-300"
+            className="mt-1 w-full rounded-lg border border-red-200 dark:border-red-900/70 bg-surface px-3 py-2 text-xs font-normal outline-none focus:ring-2 focus:ring-red-300 dark:focus:ring-red-900"
           />
         </label>
 
-        <label className="block text-xs font-bold text-red-900">
+        <label className="block text-xs font-bold text-red-900 dark:text-red-200">
           Until (leave blank for permanent)
           <input
             name="expiresAt"
             type="date"
-            className="mt-1 w-full rounded-lg border border-red-200 bg-surface px-3 py-2 text-xs font-normal outline-none focus:ring-2 focus:ring-red-300"
+            className="mt-1 w-full rounded-lg border border-red-200 dark:border-red-900/70 bg-surface px-3 py-2 text-xs font-normal outline-none focus:ring-2 focus:ring-red-300 dark:focus:ring-red-900"
           />
-          <span className="mt-1 block font-normal text-red-900/70">
+          <span className="mt-1 block font-normal text-red-900/70 dark:text-red-200/70">
             Ends at the close of that day (UTC).
           </span>
         </label>
@@ -929,16 +929,16 @@ function BanPanel({
           the one who opts in. (When it is on, the store deliberately leaves
           those reviews' reports OPEN — a bulk hide judged nothing anyone read.)
         */}
-        <label className="flex items-start gap-2 text-xs font-semibold text-red-900">
+        <label className="flex items-start gap-2 text-xs font-semibold text-red-900 dark:text-red-200">
           <input
             name="hideBacklog"
             type="checkbox"
             value="1"
-            className="mt-0.5 h-4 w-4 shrink-0 rounded border-red-300 accent-red-600"
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-red-300 dark:border-red-900 accent-red-600"
           />
           <span>
             Also hide their existing reviews
-            <span className="block font-normal text-red-900/70">
+            <span className="block font-normal text-red-900/70 dark:text-red-200/70">
               Hides every review of theirs that is still visible. Lifting the ban
               does not bring them back.
             </span>
@@ -1070,9 +1070,9 @@ function RecentActions({ log }: { log: ModerationLogEntry[] }) {
 type Tone = "red" | "amber" | "emerald" | "brand" | "zinc";
 
 const TONE_CLASS: Record<Tone, string> = {
-  red: "border-red-200 bg-red-50 text-red-700",
-  amber: "border-amber-300 bg-amber-50 text-amber-900",
-  emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  red: "border-red-200 dark:border-red-900/70 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300",
+  amber: "border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200",
+  emerald: "border-emerald-200 dark:border-emerald-900/70 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300",
   brand: "border-brand-100 bg-brand-50 text-brand",
   zinc: "border-border bg-surface-2 text-muted",
 };

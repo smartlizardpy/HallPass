@@ -95,13 +95,13 @@ export default async function UserSettingsPage({
       />
 
       {ok && (
-        <div className="mb-6 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+        <div className="mb-6 rounded-xl border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200">
           {ok}
         </div>
       )}
 
       {error && (
-        <div className="mb-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+        <div className="mb-6 rounded-xl border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-900 dark:text-red-200">
           {error}
         </div>
       )}
@@ -142,7 +142,7 @@ export default async function UserSettingsPage({
                     Default {DEFAULT_ROLE_SEATS[role]}.
                   </p>
                   {over && (
-                    <p className="mt-1 text-xs font-semibold text-amber-700">
+                    <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
                       More people hold this than the limit allows. Nobody has
                       lost access; the role cannot be granted again until it is
                       back within its seats.

@@ -263,8 +263,8 @@ export function ReviewRow({
           <span
             className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wide ${
               review.recommended
-                ? "bg-emerald-100 text-emerald-900"
-                : "bg-red-100 text-red-900"
+                ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200"
+                : "bg-red-100 dark:bg-red-950/60 text-red-900 dark:text-red-200"
             }`}
           >
             <ThumbIcon up={review.recommended} />
@@ -396,7 +396,7 @@ export function ReviewRow({
       {result && result.kind !== "done" && (
         <div
           role="status"
-          className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] font-bold text-amber-900"
+          className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-[13px] font-bold text-amber-900 dark:text-amber-200"
         >
           {result.kind === "signin" ? (
             <>
@@ -406,7 +406,7 @@ export function ReviewRow({
                   shape the composer uses for the same journey. */}
               <a
                 href={`/play/signin?callbackUrl=${encodeURIComponent(`/game/${slug}`)}`}
-                className="shrink-0 rounded-full border border-amber-300 bg-surface px-3 py-1 text-[13px] font-extrabold text-amber-900 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-200"
+                className="shrink-0 rounded-full border border-amber-300 dark:border-amber-900 bg-surface px-3 py-1 text-[13px] font-extrabold text-amber-900 dark:text-amber-200 transition hover:bg-amber-100 dark:hover:bg-amber-950/60 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-200 dark:focus-visible:ring-amber-900"
               >
                 Sign in
               </a>

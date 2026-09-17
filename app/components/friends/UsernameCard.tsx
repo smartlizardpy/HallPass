@@ -147,12 +147,12 @@ export function UsernameCard({ initialUsername }: { initialUsername: string | nu
       </label>
 
       {formatError && (
-        <p className="mt-2 text-xs font-bold text-red-700">{formatError}</p>
+        <p className="mt-2 text-xs font-bold text-red-700 dark:text-red-300">{formatError}</p>
       )}
       {!formatError && availability && !unchanged && (
         <p
           className={`mt-2 text-xs font-bold ${
-            availability.available ? "text-emerald-700" : "text-red-700"
+            availability.available ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"
           }`}
         >
           {availability.available ? "Available" : (availability.reason ?? "Not available")}

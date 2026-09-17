@@ -64,9 +64,9 @@ const JUST_NOW_MS = 45_000;
  * that is a race the design already handles.
  */
 const OUTCOME_TONES: Record<string, string> = {
-  ok: "bg-emerald-50 text-emerald-900",
-  refused: "bg-amber-100 text-amber-900",
-  failed: "bg-red-100 text-red-900",
+  ok: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200",
+  refused: "bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200",
+  failed: "bg-red-100 dark:bg-red-950/60 text-red-900 dark:text-red-200",
 };
 
 /**

@@ -91,7 +91,7 @@ export function ProfileHeader({
                 </span>
               )}
               {profile.friendship === "friends" && (
-                <span className={`${RELATIONSHIP_PILL} bg-emerald-50 text-emerald-900`}>
+                <span className={`${RELATIONSHIP_PILL} bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200`}>
                   Friends
                 </span>
               )}

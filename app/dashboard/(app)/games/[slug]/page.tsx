@@ -218,7 +218,7 @@ function GameReadOnlyView({ game, slug }: { game: Game; slug: string }) {
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-1.5">
               {game.externalUrl && (
-                <span className="inline-block rounded-full bg-sky-50 px-2 py-0.5 text-xs font-bold text-sky-700">
+                <span className="inline-block rounded-full bg-sky-50 dark:bg-sky-950/40 px-2 py-0.5 text-xs font-bold text-sky-700 dark:text-sky-300">
                   External ↗
                 </span>
               )}
@@ -228,7 +228,7 @@ function GameReadOnlyView({ game, slug }: { game: Game; slug: string }) {
                 </span>
               )}
               {game.isFeatured && (
-                <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">
+                <span className="inline-block rounded-full bg-amber-100 dark:bg-amber-950/60 px-2 py-0.5 text-xs font-bold text-amber-900 dark:text-amber-200">
                   Featured
                 </span>
               )}
@@ -366,12 +366,12 @@ export default async function GameControlPage({
         <DashHeader title={game.title} subtitle={game.tagline} />
 
         {ok && (
-          <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <div className="rounded-xl border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200">
             {ok}
           </div>
         )}
         {error && (
-          <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+          <div className="rounded-xl border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-900 dark:text-red-200">
             {error}
           </div>
         )}
@@ -383,7 +383,7 @@ export default async function GameControlPage({
               <CoverImage game={game} initialClass="text-3xl" />
             </div>
             <div className="min-w-0">
-              <span className="inline-block rounded-full bg-sky-50 px-2 py-0.5 text-xs font-bold text-sky-700">
+              <span className="inline-block rounded-full bg-sky-50 dark:bg-sky-950/40 px-2 py-0.5 text-xs font-bold text-sky-700 dark:text-sky-300">
                 External ↗
               </span>
               <h2 className="mt-1 text-xl font-black tracking-tight">{game.title}</h2>
@@ -685,12 +685,12 @@ export default async function GameControlPage({
       <DashHeader title={game.title} subtitle={game.tagline} />
 
       {ok && (
-        <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+        <div className="rounded-xl border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200">
           {ok}
         </div>
       )}
       {error && (
-        <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+        <div className="rounded-xl border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-900 dark:text-red-200">
           {error}
         </div>
       )}
@@ -1060,7 +1060,7 @@ export default async function GameControlPage({
                     <input type="hidden" name="id" value={item.id} />
                     <button
                       type="submit"
-                      className="rounded-full border border-red-300 bg-red-50 px-4 py-2 text-sm font-bold text-red-900 hover:bg-red-100"
+                      className="rounded-full border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-4 py-2 text-sm font-bold text-red-900 dark:text-red-200 hover:bg-red-100 dark:hover:bg-red-950/60"
                     >
                       Delete
                     </button>
@@ -1254,7 +1254,7 @@ export default async function GameControlPage({
       {/* LEADERBOARDS */}
       <Section title="Leaderboards" subtitle="Boards powering this game">
         {dbUnconfigured ? (
-          <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div className="rounded-xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
             Database not configured. Set{" "}
             <code className="font-mono">DATABASE_URL</code> to manage leaderboards.
           </div>

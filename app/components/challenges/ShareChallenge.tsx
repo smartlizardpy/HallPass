@@ -156,7 +156,7 @@ export function ShareChallenge({
         <span className="sr-only"> a challenge link for {title}</span>
       </button>
       {state.kind === "failed" ? (
-        <p role="alert" className="mt-1 text-xs font-semibold text-rose-700">
+        <p role="alert" className="mt-1 text-xs font-semibold text-rose-700 dark:text-rose-300">
           {state.message}
         </p>
       ) : null}

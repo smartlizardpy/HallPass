@@ -88,7 +88,7 @@ export function UsernameChooser({
         {/* Server verdict wins the space when there is one — it is the only
             message that reflects a real claim attempt. */}
         {error ? (
-          <p className="text-sm font-bold text-red-700">{error}</p>
+          <p className="text-sm font-bold text-red-700 dark:text-red-300">{error}</p>
         ) : localProblem ? (
           <p className="text-sm font-semibold text-muted">{localProblem}</p>
         ) : (

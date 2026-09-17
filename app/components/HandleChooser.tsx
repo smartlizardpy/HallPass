@@ -81,7 +81,7 @@ export function HandleChooser({
       </p>
 
       {(shapeError || error) && (
-        <p role="alert" className="mt-2 text-xs font-bold text-red-700">
+        <p role="alert" className="mt-2 text-xs font-bold text-red-700 dark:text-red-300">
           {shapeError ?? error}
         </p>
       )}

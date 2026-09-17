@@ -120,34 +120,34 @@ function ErrorList({ raw, count }: { raw: string | null; count: number }) {
   }
 
   return (
-    <details className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
-      <summary className="cursor-pointer text-xs font-black uppercase tracking-wide text-amber-900">
+    <details className="mt-2 rounded-lg border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-3 py-2">
+      <summary className="cursor-pointer text-xs font-black uppercase tracking-wide text-amber-900 dark:text-amber-200">
         ⚠️ {count} error{count === 1 ? "" : "s"} from the game
       </summary>
       {entries.length === 0 ? (
-        <p className="mt-2 text-xs font-semibold text-amber-900/80">
+        <p className="mt-2 text-xs font-semibold text-amber-900/80 dark:text-amber-200/80">
           Couldn&rsquo;t read the error details.
         </p>
       ) : (
         <ul className="mt-2 space-y-2">
           {entries.map((entry, i) => (
-            <li key={i} className="border-t border-amber-200 pt-2 first:border-0 first:pt-0">
-              <p className="text-xs font-bold text-amber-950">
+            <li key={i} className="border-t border-amber-200 dark:border-amber-900/70 pt-2 first:border-0 first:pt-0">
+              <p className="text-xs font-bold text-amber-950 dark:text-amber-100">
                 {entry.message ?? "(no message)"}
                 {typeof entry.count === "number" && entry.count > 1 && (
-                  <span className="ml-1.5 rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-black">
+                  <span className="ml-1.5 rounded-full bg-amber-200 dark:bg-amber-900/50 px-1.5 py-0.5 text-[10px] font-black">
                     ×{entry.count}
                   </span>
                 )}
               </p>
               {(entry.file || typeof entry.line === "number") && (
-                <p className="mt-0.5 font-mono text-[11px] text-amber-900/80">
+                <p className="mt-0.5 font-mono text-[11px] text-amber-900/80 dark:text-amber-200/80">
                   {entry.file}
                   {typeof entry.line === "number" ? `:${entry.line}` : ""}
                 </p>
               )}
               {entry.stack && (
-                <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-white/60 p-2 font-mono text-[10px] leading-snug text-amber-950">
+                <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-white/60 p-2 font-mono text-[10px] leading-snug text-amber-950 dark:text-amber-100">
                   {entry.stack}
                 </pre>
               )}
@@ -570,12 +570,12 @@ export default async function DashboardBetaPage({
       />
 
       {ok && (
-        <div className="mb-5 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+        <div className="mb-5 rounded-xl border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200">
           {ok}
         </div>
       )}
       {error && (
-        <div className="mb-5 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+        <div className="mb-5 rounded-xl border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-900 dark:text-red-200">
           {error}
         </div>
       )}
@@ -658,9 +658,9 @@ export default async function DashboardBetaPage({
           {unpublishedShots.length > 0 && (
             <form
               action={publishAcceptedShotsAction}
-              className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3"
+              className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3"
             >
-              <p className="flex-1 text-sm font-semibold text-amber-900">
+              <p className="flex-1 text-sm font-semibold text-amber-900 dark:text-amber-200">
                 {unpublishedShots.length} accepted image
                 {unpublishedShots.length === 1 ? " is" : "s are"} not on the game
                 page yet.

@@ -78,8 +78,8 @@ export function ResultBanner({
       role="status"
       className={
         isError
-          ? "rounded-lg bg-rose-100 px-3 py-2 text-sm font-bold text-rose-800"
-          : "rounded-lg bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-800"
+          ? "rounded-lg bg-rose-100 dark:bg-rose-950/60 px-3 py-2 text-sm font-bold text-rose-800 dark:text-rose-200"
+          : "rounded-lg bg-emerald-100 dark:bg-emerald-950/60 px-3 py-2 text-sm font-bold text-emerald-800 dark:text-emerald-200"
       }
     >
       {isError ? error : ok}

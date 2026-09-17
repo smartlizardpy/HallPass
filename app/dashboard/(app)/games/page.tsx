@@ -149,12 +149,12 @@ export default async function GamesPage({
       {!mayEdit && <ReadOnlyNotice what="the catalogue" />}
 
       {ok && (
-        <div className="mb-6 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+        <div className="mb-6 rounded-xl border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200">
           {ok}
         </div>
       )}
       {error && (
-        <div className="mb-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+        <div className="mb-6 rounded-xl border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-900 dark:text-red-200">
           {error}
         </div>
       )}
@@ -186,10 +186,10 @@ export default async function GamesPage({
 
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {game.externalUrl && (
-                  <Chip className="bg-sky-50 text-sky-700">External ↗</Chip>
+                  <Chip className="bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300">External ↗</Chip>
                 )}
                 {game.isNew && (
-                  <Chip className="bg-emerald-50 text-emerald-700">New</Chip>
+                  <Chip className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300">New</Chip>
                 )}
                 {game.isFeatured && (
                   <Chip className="bg-brand-50 text-brand">Featured</Chip>
@@ -209,7 +209,7 @@ export default async function GamesPage({
                     {game.platform === "both" ? "Desktop + mobile" : `${game.platform} only`}
                   </Chip>
                 ) : (
-                  <Chip className="bg-amber-50 text-amber-700">No platform</Chip>
+                  <Chip className="bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">No platform</Chip>
                 )}
                 <Chip
                   className={

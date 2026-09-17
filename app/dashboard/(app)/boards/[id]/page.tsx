@@ -123,7 +123,7 @@ export default async function BoardDetailPage({
         >
           ← All leaderboards
         </Link>
-        <div className="mt-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="mt-6 rounded-xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
           Database not configured. Set{" "}
           <code className="font-mono">DATABASE_URL</code> to manage leaderboards.
         </div>
@@ -170,13 +170,13 @@ export default async function BoardDetailPage({
       <DashHeader title={board.title} subtitle={board.slug} />
 
       {ok && (
-        <div className="mb-6 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+        <div className="mb-6 rounded-xl border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200">
           {ok}
         </div>
       )}
 
       {error && (
-        <div className="mb-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+        <div className="mb-6 rounded-xl border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-900 dark:text-red-200">
           {error}
         </div>
       )}
@@ -425,9 +425,9 @@ export default async function BoardDetailPage({
         </div>
       </section>
 
-      <section className="mt-6 rounded-xl border border-red-300 bg-red-50/40 p-5">
-        <h2 className="text-lg font-black text-red-700">Delete leaderboard</h2>
-        <p className="mt-1 text-sm text-red-900/80">
+      <section className="mt-6 rounded-xl border border-red-300 dark:border-red-900 bg-red-50/40 dark:bg-red-950/40 p-5">
+        <h2 className="text-lg font-black text-red-700 dark:text-red-300">Delete leaderboard</h2>
+        <p className="mt-1 text-sm text-red-900/80 dark:text-red-200/80">
           Permanently removes{" "}
           <span className="font-mono font-semibold">{board.slug}</span> and every
           score submitted to it. This cannot be undone. Type the board id to
@@ -445,7 +445,7 @@ export default async function BoardDetailPage({
             spellCheck={false}
             placeholder={board.slug}
             aria-label="Type the board id to confirm deletion"
-            className="rounded-lg border border-red-300 bg-surface px-3 py-2 font-mono text-xs text-foreground outline-none focus:ring-2 focus:ring-red-300"
+            className="rounded-lg border border-red-300 dark:border-red-900 bg-surface px-3 py-2 font-mono text-xs text-foreground outline-none focus:ring-2 focus:ring-red-300 dark:focus:ring-red-900"
           />
           <button
             type="submit"

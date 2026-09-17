@@ -133,7 +133,7 @@ export function GameReviews({ slug, title }: { slug: string; title: string }) {
       )}
 
       {data && !data.enabled && !failure && (
-        <p className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+        <p className="mt-4 rounded-2xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm font-semibold text-amber-900 dark:text-amber-200">
           Reviews aren&rsquo;t switched on yet.
         </p>
       )}
@@ -221,13 +221,13 @@ function FailureNotice({
   return (
     <div
       role="status"
-      className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900"
+      className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm font-semibold text-amber-900 dark:text-amber-200"
     >
       <p>{children}</p>
       <button
         type="button"
         onClick={onRetry}
-        className="shrink-0 rounded-full border border-amber-300 bg-surface px-3 py-1 text-[13px] font-extrabold text-amber-900 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-200"
+        className="shrink-0 rounded-full border border-amber-300 dark:border-amber-900 bg-surface px-3 py-1 text-[13px] font-extrabold text-amber-900 dark:text-amber-200 transition hover:bg-amber-100 dark:hover:bg-amber-950/60 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-200 dark:focus-visible:ring-amber-900"
       >
         Try again
       </button>

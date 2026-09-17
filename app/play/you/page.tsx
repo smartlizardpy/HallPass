@@ -51,7 +51,7 @@ export const metadata: Metadata = {
  */
 function rankBadgeClasses(rank: number): string {
   return rank === 1
-    ? "border border-amber-300 bg-amber-100 text-amber-800"
+    ? "border border-amber-300 dark:border-amber-900 bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200"
     : "border border-brand/20 bg-brand-50 text-brand";
 }
 

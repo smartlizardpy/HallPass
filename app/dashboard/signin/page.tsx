@@ -98,7 +98,7 @@ export default async function DashboardSignInPage({
               Sign in to manage games and leaderboards
             </p>
             {error === "AccessDenied" && (
-              <p className="mt-2 text-xs text-red-700">
+              <p className="mt-2 text-xs text-red-700 dark:text-red-300">
                 We couldn&apos;t sign you in. Please try again.
               </p>
             )}

@@ -30,8 +30,8 @@ const FILTERS: { key: Filter; label: string }[] = [
 ];
 
 const LEVEL_STYLE: Record<ConsoleLevel, string> = {
-  error: "bg-red-50 text-red-700 border-red-200",
-  warn: "bg-amber-50 text-amber-800 border-amber-200",
+  error: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-200 dark:border-red-900/70",
+  warn: "bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900/70",
   info: "bg-surface-2 text-muted border-border",
   log: "bg-surface-2 text-muted border-border",
   debug: "bg-surface-2 text-muted border-border",
@@ -148,10 +148,10 @@ export function ConsoleLogViewer() {
           captured
         </span>
         <span>
-          <span className="font-bold text-red-700">{counts.errors}</span> errors
+          <span className="font-bold text-red-700 dark:text-red-300">{counts.errors}</span> errors
         </span>
         <span>
-          <span className="font-bold text-amber-700">{counts.warnings}</span>{" "}
+          <span className="font-bold text-amber-700 dark:text-amber-300">{counts.warnings}</span>{" "}
           warnings
         </span>
         <span className="text-muted">Updates live · this device only</span>

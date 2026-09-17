@@ -114,7 +114,7 @@ export function GameAchievements({ slug }: { slug: string }) {
       </div>
 
       {!shelf.signedIn && (
-        <p className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+        <p className="mt-4 rounded-2xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm font-semibold text-amber-900 dark:text-amber-200">
           Sign in to earn these — progress isn&rsquo;t saved while you&rsquo;re
           signed out.
         </p>

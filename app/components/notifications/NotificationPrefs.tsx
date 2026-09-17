@@ -133,7 +133,7 @@ export function NotificationPrefs({
                         {def.description}
                       </p>
                       {failed === kind && (
-                        <p className="mt-1 text-xs font-bold text-red-900">
+                        <p className="mt-1 text-xs font-bold text-red-900 dark:text-red-200">
                           Couldn&rsquo;t save that — try again.
                         </p>
                       )}

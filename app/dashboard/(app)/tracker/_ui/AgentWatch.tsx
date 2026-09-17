@@ -177,7 +177,7 @@ export function AgentBadge({ itemId }: { itemId: number }) {
       // means right now. A tooltip rather than a line, because a card has to
       // stay one glance wide.
       title={`${line.summary}${now ? ` · ${since(line.createdAt, now)}` : ""}`}
-      className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-emerald-900"
+      className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-emerald-900 dark:text-emerald-200"
     >
       <span className="inline-block size-1.5 rounded-full bg-emerald-500 motion-safe:animate-pulse" />
       Agent working
@@ -200,15 +200,15 @@ export function AgentBanner({ itemId }: { itemId: number }) {
   const age = since(line.createdAt, now);
 
   return (
-    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-      <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-black uppercase tracking-wide text-emerald-900">
+    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-lg border border-emerald-200 dark:border-emerald-900/70 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-2">
+      <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-black uppercase tracking-wide text-emerald-900 dark:text-emerald-200">
         <span className="inline-block size-2 rounded-full bg-emerald-500 motion-safe:animate-pulse" />
         Agent working on this
       </span>
       {/* Written by a model and rendered as a plain string child, so React
           escapes it. */}
-      <span className="min-w-0 flex-1 text-sm text-emerald-900">{line.summary}</span>
-      <span className="shrink-0 text-[11px] font-semibold text-emerald-800">
+      <span className="min-w-0 flex-1 text-sm text-emerald-900 dark:text-emerald-200">{line.summary}</span>
+      <span className="shrink-0 text-[11px] font-semibold text-emerald-800 dark:text-emerald-200">
         {[line.actor, age].filter(Boolean).join(" · ")}
       </span>
     </div>

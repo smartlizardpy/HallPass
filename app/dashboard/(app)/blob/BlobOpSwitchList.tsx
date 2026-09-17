@@ -165,7 +165,7 @@ export function BlobOpSwitchList({
                       </h3>
                       <OpChip operation={op.operation} />
                       {!on && (
-                        <span className="inline-block rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800">
+                        <span className="inline-block rounded-full bg-red-100 dark:bg-red-950/60 px-2 py-0.5 text-xs font-bold text-red-800 dark:text-red-200">
                           off
                         </span>
                       )}

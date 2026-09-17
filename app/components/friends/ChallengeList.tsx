@@ -179,7 +179,7 @@ export function ChallengeList({
                   </p>
                 </div>
                 {challenge.resolvedAt !== null && (
-                  <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-black text-amber-900">
+                  <span className="shrink-0 rounded-full bg-amber-100 dark:bg-amber-950/60 px-2 py-0.5 text-[11px] font-black text-amber-900 dark:text-amber-200">
                     Beaten
                   </span>
                 )}

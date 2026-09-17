@@ -65,7 +65,7 @@ export const dynamic = "force-dynamic";
 /** An amber "this is switched off" strip, matching the users page's notices. */
 function Notice({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+    <div className="mb-6 rounded-xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
       <p className="font-bold">{title}</p>
       <p className="mt-1">{children}</p>
     </div>
@@ -75,14 +75,14 @@ function Notice({ title, children }: { title: string; children: React.ReactNode 
 function Banner({ ok, error }: { ok?: string; error?: string }) {
   if (ok) {
     return (
-      <div className="mb-6 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+      <div className="mb-6 rounded-xl border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200">
         {ok}
       </div>
     );
   }
   if (error) {
     return (
-      <div className="mb-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+      <div className="mb-6 rounded-xl border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-900 dark:text-red-200">
         {error}
       </div>
     );
@@ -266,20 +266,20 @@ function NewConnector({
   if (secret) rows.push(["Client Secret", secret]);
 
   return (
-    <div className="mb-8 rounded-xl border border-emerald-300 bg-emerald-50 p-5">
-      <p className="text-sm font-bold text-emerald-900">Connector created.</p>
-      <p className="mt-1 text-sm text-emerald-900">
+    <div className="mb-8 rounded-xl border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 p-5">
+      <p className="text-sm font-bold text-emerald-900 dark:text-emerald-200">Connector created.</p>
+      <p className="mt-1 text-sm text-emerald-900 dark:text-emerald-200">
         Paste these into the other service&apos;s form.
         {secret ? " The secret is shown once and is not stored — copy it now." : ""}
       </p>
       <dl className="mt-4 space-y-2">
         {rows.map(([label, value]) => (
           <div key={label} className="sm:flex sm:gap-3">
-            <dt className="text-xs font-semibold uppercase tracking-wide text-emerald-900 sm:w-40 sm:shrink-0 sm:pt-1">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-emerald-900 dark:text-emerald-200 sm:w-40 sm:shrink-0 sm:pt-1">
               {label}
             </dt>
             <dd className="min-w-0 flex-1">
-              <code className="block overflow-x-auto rounded-lg border border-emerald-300 bg-surface px-3 py-1.5 font-mono text-xs">
+              <code className="block overflow-x-auto rounded-lg border border-emerald-300 dark:border-emerald-900 bg-surface px-3 py-1.5 font-mono text-xs">
                 {value}
               </code>
             </dd>

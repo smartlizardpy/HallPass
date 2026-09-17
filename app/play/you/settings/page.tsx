@@ -79,7 +79,7 @@ function GroupHeading({ id, tone, children }: {
     <h2
       id={id}
       className={`px-1 text-xs font-black uppercase tracking-wider ${
-        tone === "danger" ? "text-red-900" : "text-muted"
+        tone === "danger" ? "text-red-900 dark:text-red-200" : "text-muted"
       }`}
     >
       {children}
@@ -121,12 +121,12 @@ export default async function YouSettingsPage({
   return (
     <div className="space-y-8">
       {params.ok && (
-        <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm text-emerald-900">
+        <div className="rounded-xl border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3 text-center text-sm text-emerald-900 dark:text-emerald-200">
           Display name saved.
         </div>
       )}
       {errorBanner && (
-        <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-center text-sm text-red-900">
+        <div className="rounded-xl border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-center text-sm text-red-900 dark:text-red-200">
           {errorBanner}
         </div>
       )}
@@ -272,22 +272,22 @@ export default async function YouSettingsPage({
           Danger zone
         </GroupHeading>
 
-        <div className="rounded-xl border border-red-300 bg-red-50 p-6">
-          <p className="text-sm text-red-900/80">
+        <div className="rounded-xl border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/40 p-6">
+          <p className="text-sm text-red-900/80 dark:text-red-200/80">
             Delete your account permanently. Your scores stay on the leaderboards
             but are <span className="font-bold">no longer tagged</span> to your
             account, and the name shown on them is replaced with
             &ldquo;Deleted&rdquo;.
           </p>
           <form action={deleteAccountAction} className="mt-4">
-            <label className="block text-sm font-semibold text-red-900">
+            <label className="block text-sm font-semibold text-red-900 dark:text-red-200">
               Type <span className="font-black">DELETE</span> to confirm
               <input
                 name="confirm"
                 type="text"
                 autoComplete="off"
                 placeholder="DELETE"
-                className="mt-2 w-full rounded-lg border border-red-300 bg-surface px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500/30"
+                className="mt-2 w-full rounded-lg border border-red-300 dark:border-red-900 bg-surface px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500/30"
               />
             </label>
             <button
