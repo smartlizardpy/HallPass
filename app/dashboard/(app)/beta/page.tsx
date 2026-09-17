@@ -147,7 +147,7 @@ function ErrorList({ raw, count }: { raw: string | null; count: number }) {
                 </p>
               )}
               {entry.stack && (
-                <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-white/60 p-2 font-mono text-[10px] leading-snug text-amber-950 dark:text-amber-100">
+                <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-surface/60 p-2 font-mono text-[10px] leading-snug text-amber-950 dark:text-amber-100">
                   {entry.stack}
                 </pre>
               )}

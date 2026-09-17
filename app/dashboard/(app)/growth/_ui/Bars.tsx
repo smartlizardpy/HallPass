@@ -45,7 +45,7 @@ export function Bars({ rows, empty = "No data yet." }: { rows: Bar[]; empty?: st
           </div>
           <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-2">
             <div
-              className={`h-full rounded-full ${row.subdued ? "bg-zinc-300" : "bg-brand"}`}
+              className={`h-full rounded-full ${row.subdued ? "bg-zinc-300 dark:bg-zinc-700" : "bg-brand"}`}
               style={{ width: `${Math.max(2, (row.value / peak) * 100)}%` }}
             />
           </div>

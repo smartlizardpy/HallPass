@@ -205,7 +205,7 @@ export function GameStore({
             <div
               role="group"
               aria-label={`${game.title} media`}
-              className="mb-2 inline-flex gap-1 rounded-full bg-white/70 p-1"
+              className="mb-2 inline-flex gap-1 rounded-full bg-surface/70 p-1"
             >
               <MediaSwitch pressed={showVideo} onClick={() => setShowVideo(true)}>
                 {video.label}
@@ -284,7 +284,7 @@ export function GameStore({
               the catalogue plays in the browser, so it never distinguished one
               from another. Nullable facts (`credit`, `testers`, `platform`)
               omit their row rather than render a placeholder. */}
-          <dl className="divide-y divide-border rounded-2xl bg-white/70 px-4 text-[13px]">
+          <dl className="divide-y divide-border rounded-2xl bg-surface/70 px-4 text-[13px]">
             <MetaRow label="Plays">{plays.toLocaleString()}</MetaRow>
             <MetaRow label="Genre">
               <Link href={categoryHref} className="font-bold text-brand hover:text-brand-600">
@@ -507,7 +507,7 @@ function MediaSwitch({
       className={`rounded-full px-3.5 py-1.5 text-[12px] font-black uppercase tracking-wider transition focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30 ${
         pressed
           ? "bg-brand text-white shadow-sm"
-          : "text-muted hover:bg-white hover:text-foreground"
+          : "text-muted hover:bg-surface hover:text-foreground"
       }`}
     >
       {children}

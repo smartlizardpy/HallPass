@@ -69,7 +69,7 @@ export function WelcomeToast() {
       className="pointer-events-none fixed inset-x-0 top-0 z-[100] flex justify-center px-4"
     >
       <div
-        className={`mt-3 flex items-center gap-3 rounded-full border border-border bg-white/95 py-1.5 pl-1.5 pr-5 shadow-xl backdrop-blur transition-all duration-500 ease-out ${
+        className={`mt-3 flex items-center gap-3 rounded-full border border-border bg-surface/95 py-1.5 pl-1.5 pr-5 shadow-xl backdrop-blur transition-all duration-500 ease-out ${
           shown ? "translate-y-0 opacity-100" : "-translate-y-20 opacity-0"
         }`}
       >
