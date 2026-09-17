@@ -95,13 +95,13 @@ export function GameAchievements({ slug }: { slug: string }) {
   const earned = shelf.achievements.filter((a) => a.unlocked).length;
 
   return (
-    <section className="mt-5 rounded-3xl bg-white p-5 sm:p-6">
+    <section className="mt-5 rounded-3xl bg-surface p-5 sm:p-6">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-lg font-black tracking-tight text-zinc-900">
+        <h2 className="text-lg font-black tracking-tight text-foreground">
           Achievements
         </h2>
         <p className="text-[13px] font-bold text-muted">
-          <span className="text-zinc-900">
+          <span className="text-foreground">
             {earned} of {shelf.achievements.length}
           </span>
           {shelf.totalPoints > 0 && (
@@ -178,7 +178,7 @@ function AchievementCard({
         <div className="flex items-baseline justify-between gap-2">
           <p
             className={`truncate text-[15px] font-extrabold ${
-              unlocked ? "text-zinc-900" : "text-zinc-600"
+              unlocked ? "text-foreground" : "text-zinc-600"
             }`}
           >
             {achievement.name}
@@ -206,7 +206,7 @@ function AchievementCard({
               aria-valuemax={target}
               aria-valuenow={progress}
               aria-label={`${achievement.name} progress`}
-              className="h-1.5 w-full overflow-hidden rounded-full bg-white"
+              className="h-1.5 w-full overflow-hidden rounded-full bg-surface"
             >
               {/* Inline width is the one thing Tailwind cannot express: the
                   value is per-player and continuous, so a utility class would

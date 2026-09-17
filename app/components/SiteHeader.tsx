@@ -96,12 +96,12 @@ import { Wordmark } from "./Wordmark";
  * THE BAR IS CHROME, SO IT IS WHITE. It used to fill with `bg-background/85` —
  * the same `#f4f4f7` as the page scrolling beneath it — which left a hairline
  * border doing all the work while the rail next door announced itself with
- * `bg-white` + `border-r`. It now fills with `bg-surface/85` and keeps the blur
+ * `bg-surface` + `border-r`. It now fills with `bg-surface/85` and keeps the blur
  * and the bottom border, so the two pieces of chrome read as one L around the
  * content canvas, and `--background` goes back to meaning "canvas" only.
  *
  * That white fill is why every control in here sits on `bg-surface-2` rather
- * than the `bg-white` they all used to wear: white-on-white would erase them.
+ * than the `bg-surface` they all used to wear: white-on-white would erase them.
  * Two knock-on rules for anything added to this bar later:
  *   - Text on `--surface-2` cannot use `--muted` — 4.45:1, just under AA — so
  *     the placeholder takes `text-zinc-600` (6.57:1). Icons may stay `--muted`,
@@ -184,7 +184,7 @@ export function SiteHeader({
           : {})}
         placeholder="Search games"
         aria-label="Search games"
-        className="h-11 w-full rounded-full bg-surface-2 pl-11 pr-4 text-base font-semibold text-zinc-900 placeholder:text-zinc-600 outline-none transition focus:ring-4 focus:ring-brand/20 sm:h-auto sm:py-3.5 sm:pl-12 sm:pr-5 sm:text-[15px]"
+        className="h-11 w-full rounded-full bg-surface-2 pl-11 pr-4 text-base font-semibold text-foreground placeholder:text-zinc-600 outline-none transition focus:ring-4 focus:ring-brand/20 sm:h-auto sm:py-3.5 sm:pl-12 sm:pr-5 sm:text-[15px]"
       />
     </div>
   );
@@ -271,7 +271,7 @@ export function SiteHeader({
           never reaches `lg`, so its `MobileTabBar` stays the only copy there.
 
           `h-11` matches every other pill in this bar (search, What's New,
-          account) so the row has one control height. Text is `text-zinc-700`,
+          account) so the row has one control height. Text is `text-foreground-2`,
           not `--muted`: these sit on the white bar, and an idle tab that hovers
           onto `--surface-2` would land on the 4.45:1 pair the docblock above
           rules out. */}
@@ -287,7 +287,7 @@ export function SiteHeader({
                   className={`flex h-11 items-center whitespace-nowrap rounded-full px-3 text-[15px] font-bold transition xl:px-4 ${
                     isActive
                       ? "bg-brand-50 text-brand"
-                      : "text-zinc-700 hover:bg-surface-2 hover:text-zinc-900"
+                      : "text-foreground-2 hover:bg-surface-2 hover:text-foreground"
                   }`}
                 >
                   {entry.label}

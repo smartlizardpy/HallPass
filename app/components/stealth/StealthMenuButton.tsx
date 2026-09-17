@@ -18,7 +18,7 @@ export function StealthMenuButton({ onNavigate }: { onNavigate?: () => void }) {
         openStealthSettings();
         onNavigate?.();
       }}
-      className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-extrabold text-zinc-700 transition hover:bg-brand-50 hover:text-brand"
+      className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-extrabold text-foreground-2 transition hover:bg-brand-50 hover:text-brand"
     >
       <span aria-hidden className="text-base">🕶️</span>
       Stealth mode

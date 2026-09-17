@@ -41,7 +41,7 @@ export function RecentPlays({ plays }: { plays: RecentPlayCard[] }) {
   if (plays.length === 0) return null;
 
   return (
-    <section className="rounded-3xl bg-white p-5 sm:p-6">
+    <section className="rounded-3xl bg-surface p-5 sm:p-6">
       <h2 className="text-[11px] font-black uppercase tracking-wider text-muted">
         Recently played
       </h2>
@@ -60,7 +60,7 @@ export function RecentPlays({ plays }: { plays: RecentPlayCard[] }) {
             <div className="relative aspect-square overflow-hidden rounded-3xl bg-zinc-900">
               <CoverImage game={game} className="card-art" />
             </div>
-            <h3 className="mt-2.5 truncate px-1 text-[14px] font-extrabold leading-tight text-zinc-900 group-hover:text-brand">
+            <h3 className="mt-2.5 truncate px-1 text-[14px] font-extrabold leading-tight text-foreground group-hover:text-brand">
               {game.title}
             </h3>
             {recency && (

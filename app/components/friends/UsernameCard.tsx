@@ -124,17 +124,17 @@ export function UsernameCard({ initialUsername }: { initialUsername: string | nu
 
   return (
     <section className="rounded-xl border border-border bg-surface p-6">
-      <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900">
+      <h2 className="text-sm font-black uppercase tracking-wide text-foreground">
         Username
       </h2>
       <p className="mt-2 text-sm text-muted">
-        Your <strong className="text-zinc-900">@username</strong> is your unique
+        Your <strong className="text-foreground">@username</strong> is your unique
         public address — other players use it to find you. Your{" "}
-        <strong className="text-zinc-900">display name</strong> above is what
+        <strong className="text-foreground">display name</strong> above is what
         shows on leaderboards, and can be anything.
       </p>
 
-      <label className="mt-4 block text-sm font-semibold text-zinc-900">
+      <label className="mt-4 block text-sm font-semibold text-foreground">
         @username
         <input
           value={username}
@@ -169,13 +169,13 @@ export function UsernameCard({ initialUsername }: { initialUsername: string | nu
       </button>
 
       {message && (
-        <p role="status" className="mt-3 text-sm font-bold text-zinc-700">
+        <p role="status" className="mt-3 text-sm font-bold text-foreground-2">
           {message}
         </p>
       )}
 
       <div className="mt-6 border-t border-border pt-6">
-        <h3 className="text-sm font-black uppercase tracking-wide text-zinc-900">
+        <h3 className="text-sm font-black uppercase tracking-wide text-foreground">
           Friend code
         </h3>
         <p className="mt-2 text-sm text-muted">
@@ -184,14 +184,14 @@ export function UsernameCard({ initialUsername }: { initialUsername: string | nu
           away.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <code className="select-all rounded-lg bg-surface-2 px-3 py-2 font-mono text-sm tracking-widest text-zinc-900">
+          <code className="select-all rounded-lg bg-surface-2 px-3 py-2 font-mono text-sm tracking-widest text-foreground">
             {code ? formatFriendCode(code) : "…"}
           </code>
           <button
             type="button"
             onClick={rotate}
             disabled={busy}
-            className="rounded-full border border-border bg-white px-4 py-2 text-sm font-bold text-zinc-700 transition hover:bg-surface-2 disabled:opacity-50"
+            className="rounded-full border border-border bg-surface px-4 py-2 text-sm font-bold text-foreground-2 transition hover:bg-surface-2 disabled:opacity-50"
           >
             New code
           </button>

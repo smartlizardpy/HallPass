@@ -238,7 +238,7 @@ export function ReviewRow({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 pr-8">
-            <span className="truncate text-[15px] font-extrabold text-zinc-900">
+            <span className="truncate text-[15px] font-extrabold text-foreground">
               {review.author.displayName}
             </span>
             {review.author.username && (
@@ -274,7 +274,7 @@ export function ReviewRow({
           {/* PLAIN TEXT still — a machine translation is as untrusted as the
               original body, so it is rendered as a text child (React escapes it),
               never via dangerouslySetInnerHTML. */}
-          <p className="mt-2 whitespace-pre-wrap break-words text-[15px] font-semibold leading-relaxed text-zinc-700">
+          <p className="mt-2 whitespace-pre-wrap break-words text-[15px] font-semibold leading-relaxed text-foreground-2">
             {showTranslated && translation ? translation : review.body}
           </p>
 
@@ -291,7 +291,7 @@ export function ReviewRow({
               disabled={busy}
               aria-pressed={voted}
               className={`text-[12px] font-bold transition disabled:opacity-50 ${
-                voted ? "text-brand" : "text-muted hover:text-zinc-900"
+                voted ? "text-brand" : "text-muted hover:text-foreground"
               }`}
             >
               Helpful{helpful > 0 && ` (${helpful})`}
@@ -310,7 +310,7 @@ export function ReviewRow({
                   onClick={translate}
                   disabled={translating}
                   aria-pressed={showTranslated}
-                  className="text-[12px] font-bold text-muted transition hover:text-zinc-900 disabled:opacity-50"
+                  className="text-[12px] font-bold text-muted transition hover:text-foreground disabled:opacity-50"
                 >
                   {translating
                     ? "Translating…"
@@ -350,7 +350,7 @@ export function ReviewRow({
           }}
           aria-label="Report this review"
           aria-expanded={reporting}
-          className="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full text-muted transition hover:bg-white hover:text-zinc-900"
+          className="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full text-muted transition hover:bg-white hover:text-foreground"
         >
           <svg
             width="14"
@@ -369,7 +369,7 @@ export function ReviewRow({
       )}
 
       {reporting && (
-        <div className="mt-3 rounded-xl border border-border bg-white p-3">
+        <div className="mt-3 rounded-xl border border-border bg-surface p-3">
           <p className="text-[12px] font-black uppercase tracking-wide text-muted">
             Why are you reporting this?
           </p>
@@ -380,7 +380,7 @@ export function ReviewRow({
                   type="button"
                   disabled={busy}
                   onClick={() => report(reason.value)}
-                  className="w-full rounded-lg px-2 py-1.5 text-left text-[13px] font-bold text-zinc-700 transition hover:bg-surface-2 disabled:opacity-50"
+                  className="w-full rounded-lg px-2 py-1.5 text-left text-[13px] font-bold text-foreground-2 transition hover:bg-surface-2 disabled:opacity-50"
                 >
                   {reason.label}
                 </button>
@@ -406,7 +406,7 @@ export function ReviewRow({
                   shape the composer uses for the same journey. */}
               <a
                 href={`/play/signin?callbackUrl=${encodeURIComponent(`/game/${slug}`)}`}
-                className="shrink-0 rounded-full border border-amber-300 bg-white px-3 py-1 text-[13px] font-extrabold text-amber-900 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-200"
+                className="shrink-0 rounded-full border border-amber-300 bg-surface px-3 py-1 text-[13px] font-extrabold text-amber-900 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-200"
               >
                 Sign in
               </a>

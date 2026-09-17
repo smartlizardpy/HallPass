@@ -81,7 +81,7 @@ export function UsernameChooser({
             spellCheck={false}
             maxLength={USERNAME_MAX_LENGTH}
             placeholder="yourname"
-            className="w-full bg-transparent text-base font-bold text-zinc-900 placeholder:text-muted outline-none"
+            className="w-full bg-transparent text-base font-bold text-foreground placeholder:text-muted outline-none"
           />
         </div>
 
@@ -112,7 +112,7 @@ export function UsernameChooser({
         <input type="hidden" name="next" value={next} />
         <button
           type="submit"
-          className="text-sm font-bold text-muted underline-offset-2 transition hover:text-zinc-900 hover:underline"
+          className="text-sm font-bold text-muted underline-offset-2 transition hover:text-foreground hover:underline"
         >
           Skip for now
         </button>

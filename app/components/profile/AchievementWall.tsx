@@ -42,7 +42,7 @@ export function AchievementWall({ groups }: { groups: AchievementGroup[] }) {
   if (groups.length === 0) return null;
 
   return (
-    <section className="rounded-3xl bg-white p-5 sm:p-6">
+    <section className="rounded-3xl bg-surface p-5 sm:p-6">
       <h2 className="text-[11px] font-black uppercase tracking-wider text-muted">
         Achievements
       </h2>
@@ -54,7 +54,7 @@ export function AchievementWall({ groups }: { groups: AchievementGroup[] }) {
               <Link
                 href={`/game/${group.slug}`}
                 prefetch={false}
-                className="text-[15px] font-black tracking-tight text-zinc-900 hover:text-brand"
+                className="text-[15px] font-black tracking-tight text-foreground hover:text-brand"
               >
                 {group.title}
               </Link>

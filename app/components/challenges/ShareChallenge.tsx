@@ -150,7 +150,7 @@ export function ShareChallenge({
         type="button"
         onClick={share}
         disabled={state.kind === "working"}
-        className="shrink-0 rounded-full border border-border bg-white px-3 py-1 text-xs font-bold text-zinc-700 transition hover:border-brand hover:text-brand disabled:opacity-50"
+        className="shrink-0 rounded-full border border-border bg-surface px-3 py-1 text-xs font-bold text-foreground-2 transition hover:border-brand hover:text-brand disabled:opacity-50"
       >
         {state.kind === "working" ? "…" : "Share"}
         <span className="sr-only"> a challenge link for {title}</span>

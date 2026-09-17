@@ -38,7 +38,7 @@ import { Avatar } from "./Avatar";
 const BTN_PRIMARY =
   "rounded-full bg-brand px-4 py-1.5 text-sm font-extrabold text-white transition hover:bg-brand-600 disabled:opacity-50";
 const BTN_SECONDARY =
-  "rounded-full border border-border bg-white px-3 py-1.5 text-sm font-bold text-zinc-700 transition hover:bg-surface-2 disabled:opacity-50";
+  "rounded-full border border-border bg-surface px-3 py-1.5 text-sm font-bold text-foreground-2 transition hover:bg-surface-2 disabled:opacity-50";
 
 /** "4,200" — grouped, because a bare 5-digit score is hard to read at a glance. */
 function fmt(score: number): string {
@@ -124,7 +124,7 @@ export function ChallengeList({
               >
                 <Avatar person={challenge.from} size={36} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-zinc-900">
+                  <p className="truncate text-sm font-bold text-foreground">
                     {challenge.from.displayName}
                   </p>
                   <p className="truncate text-[13px] font-semibold text-muted">
@@ -169,7 +169,7 @@ export function ChallengeList({
               >
                 <Avatar person={challenge.to} size={36} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-zinc-900">
+                  <p className="truncate text-sm font-bold text-foreground">
                     {challenge.to.displayName}
                   </p>
                   <p className="truncate text-[13px] font-semibold text-muted">

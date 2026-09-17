@@ -394,7 +394,7 @@ function ArcadeRows({
           }
         >
           {filtered.length === 0 ? (
-            <div className="rounded-3xl bg-white p-16 text-center">
+            <div className="rounded-3xl bg-surface p-16 text-center">
               <p className="text-base font-bold text-muted">
                 No games match. Try another search or category.
               </p>
@@ -523,7 +523,7 @@ function MobileCatalog({
 
       {games.length === 0 ? (
         <MobileSection title="Games">
-          <div className="rounded-3xl bg-white p-10 text-center">
+          <div className="rounded-3xl bg-surface p-10 text-center">
             <p className="text-[15px] font-bold text-muted">
               No phone games yet — more are on the way.
             </p>
@@ -549,7 +549,7 @@ function MobileSection({
 }) {
   return (
     <section className="px-3 pt-6">
-      <h2 className="mb-4 text-xl font-black tracking-tight text-zinc-900">
+      <h2 className="mb-4 text-xl font-black tracking-tight text-foreground">
         {title}
       </h2>
       {children}
@@ -681,6 +681,9 @@ function FeaturedBanner({
                 nothing. `py-3 text-[15px]` lands exactly ON the 44px floor, so
                 the tap target is unchanged and the pill still reads as the
                 chunky primary action. */}
+            {/* Literal white, not `bg-surface`: the pill sits on the
+                brand-purple banner, which is the same purple in either theme, so
+                a pill that followed the page would invert underneath it. */}
             <span className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-6 py-3 text-[15px] font-extrabold text-brand shadow-2xl transition group-hover:scale-105">
               View game
               <svg
@@ -782,7 +785,7 @@ function AdStrip({ ad }: { ad: Ad }) {
     "group flex items-center gap-3 rounded-2xl px-4 py-2.5 text-left transition";
   const skin = ad.placeholder
     ? "border-2 border-dashed border-border bg-transparent hover:border-brand hover:bg-brand-50"
-    : "border border-border bg-white hover:border-brand-100 hover:bg-brand-50";
+    : "border border-border bg-surface hover:border-brand-100 hover:bg-brand-50";
 
   return (
     <a
@@ -812,7 +815,7 @@ function AdStrip({ ad }: { ad: Ad }) {
       <span className="hidden h-4 w-px bg-border sm:block" />
       <span
         className={`flex-1 truncate text-sm font-bold ${
-          ad.placeholder ? "text-muted" : "text-zinc-900"
+          ad.placeholder ? "text-muted" : "text-foreground"
         }`}
       >
         {ad.text}
@@ -857,7 +860,7 @@ function Section({
 }) {
   return (
     <section className="px-3 pt-[clamp(20px,4svh,40px)] sm:px-8">
-      <h2 className="mb-[clamp(12px,2svh,20px)] text-2xl font-black tracking-tight text-zinc-900 sm:text-[28px]">
+      <h2 className="mb-[clamp(12px,2svh,20px)] text-2xl font-black tracking-tight text-foreground sm:text-[28px]">
         {title}
       </h2>
       {children}

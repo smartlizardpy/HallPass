@@ -166,7 +166,7 @@ export function AccountMenu() {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        // `bg-surface-2`, not `bg-white`: this trigger sits ON `SiteHeader`'s
+        // `bg-surface-2`, not `bg-surface`: this trigger sits ON `SiteHeader`'s
         // white bar (see its docblock), where white would erase it. The signed-
         // out `bg-brand` button above needs no such treatment, and the dropdown
         // below stays white — it floats over the page, not on the bar.
@@ -206,12 +206,12 @@ export function AccountMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-[3.25rem] z-50 w-56 overflow-hidden rounded-2xl border border-border bg-white p-1.5 shadow-xl"
+          className="absolute right-0 top-[3.25rem] z-50 w-56 overflow-hidden rounded-2xl border border-border bg-surface p-1.5 shadow-xl"
         >
           <div className="flex items-center gap-3 px-3 py-2">
             <Avatar src={player.image} initial={initial} size={40} />
             <div className="min-w-0">
-              <div className="truncate text-sm font-extrabold text-zinc-900">
+              <div className="truncate text-sm font-extrabold text-foreground">
                 {player.handle}
               </div>
               {roleLabel && (

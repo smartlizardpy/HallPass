@@ -59,7 +59,7 @@ export function HandleChooser({
   return (
     <form action={action} className={compact ? "mt-4 text-left" : "mt-6 text-left"}>
       {next !== undefined && <input type="hidden" name="next" value={next} />}
-      <label className="block text-sm font-extrabold text-zinc-900">
+      <label className="block text-sm font-extrabold text-foreground">
         What should we call you?
         <input
           name="handle"
@@ -71,7 +71,7 @@ export function HandleChooser({
           autoFocus
           placeholder="e.g. NeonRunner"
           aria-describedby="handle-help"
-          className="mt-2 w-full rounded-full border border-border bg-white px-4 py-3 text-base font-semibold text-zinc-900 placeholder:text-muted outline-none transition focus:ring-4 focus:ring-brand/20"
+          className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-3 text-base font-semibold text-foreground placeholder:text-muted outline-none transition focus:ring-4 focus:ring-brand/20"
         />
       </label>
 

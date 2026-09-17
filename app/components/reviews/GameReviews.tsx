@@ -108,12 +108,12 @@ export function GameReviews({ slug, title }: { slug: string; title: string }) {
     data && data.total > 0 ? Math.round((data.recommended / data.total) * 100) : null;
 
   return (
-    <section className="mt-5 rounded-3xl bg-white p-5 sm:p-6">
+    <section className="mt-5 rounded-3xl bg-surface p-5 sm:p-6">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-lg font-black tracking-tight text-zinc-900">Reviews</h2>
+        <h2 className="text-lg font-black tracking-tight text-foreground">Reviews</h2>
         {data && data.total > 0 && (
           <p className="text-[13px] font-bold text-muted">
-            <span className="text-zinc-900">{summaryLabel(ratio)}</span> ·{" "}
+            <span className="text-foreground">{summaryLabel(ratio)}</span> ·{" "}
             {data.total} review{data.total === 1 ? "" : "s"}
           </p>
         )}
@@ -227,7 +227,7 @@ function FailureNotice({
       <button
         type="button"
         onClick={onRetry}
-        className="shrink-0 rounded-full border border-amber-300 bg-white px-3 py-1 text-[13px] font-extrabold text-amber-900 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-200"
+        className="shrink-0 rounded-full border border-amber-300 bg-surface px-3 py-1 text-[13px] font-extrabold text-amber-900 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-200"
       >
         Try again
       </button>
@@ -286,7 +286,7 @@ function SortButton({
       aria-pressed={active}
       onClick={onClick}
       className={`rounded-full px-3 py-1 text-[13px] font-extrabold transition ${
-        active ? "bg-brand-50 text-brand" : "text-zinc-700 hover:bg-surface-2"
+        active ? "bg-brand-50 text-brand" : "text-foreground-2 hover:bg-surface-2"
       }`}
     >
       {children}

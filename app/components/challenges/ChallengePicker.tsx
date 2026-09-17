@@ -43,7 +43,7 @@ import {
 const BTN_PRIMARY =
   "rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white transition hover:bg-brand-600 disabled:opacity-50";
 const BTN_SECONDARY =
-  "rounded-full border border-border bg-white px-4 py-2 text-sm font-bold text-zinc-700 transition hover:bg-surface-2 disabled:opacity-50";
+  "rounded-full border border-border bg-surface px-4 py-2 text-sm font-bold text-foreground-2 transition hover:bg-surface-2 disabled:opacity-50";
 
 /** What was sent, in the shape `ChallengeResult` promises a game. */
 export type SentChallenge = {
@@ -133,9 +133,9 @@ export function ChallengePicker({
     return (
       <>
         <p className="mt-2 text-[13px] font-semibold text-muted">
-          Challenged <span className="text-zinc-900">{phase.to}</span>. They need
+          Challenged <span className="text-foreground">{phase.to}</span>. They need
           to beat{" "}
-          <span className="text-zinc-900">
+          <span className="text-foreground">
             {phase.targetScore.toLocaleString()}
           </span>
           .
@@ -199,7 +199,7 @@ export function ChallengePicker({
             }`}
           >
             <Avatar person={friend} size={28} />
-            <span className="truncate text-[13px] font-bold text-zinc-900">
+            <span className="truncate text-[13px] font-bold text-foreground">
               {friend.displayName}
             </span>
           </button>

@@ -201,7 +201,7 @@ function itemClass(isActive: boolean, collapsed: boolean): string {
   return `group flex w-full items-center rounded-2xl py-3 text-[15px] font-bold transition lg:py-2.5 ${shape} ${
     isActive
       ? "bg-brand-50 text-brand"
-      : "text-zinc-700 hover:bg-surface-2 hover:text-zinc-900"
+      : "text-foreground-2 hover:bg-surface-2 hover:text-foreground"
   }`;
 }
 
@@ -471,7 +471,7 @@ export function Sidebar({
           onBlur={(e) => {
             if (!e.currentTarget.contains(e.relatedTarget)) setFocusInside(false);
           }}
-          className={`absolute inset-y-0 left-0 flex flex-col overflow-hidden border-r border-border bg-white transition-[width] duration-200 motion-reduce:transition-none ${
+          className={`absolute inset-y-0 left-0 flex flex-col overflow-hidden border-r border-border bg-surface transition-[width] duration-200 motion-reduce:transition-none ${
             railExpanded ? "w-48" : "w-16"
           } ${railExpanded && !pinned ? "shadow-xl" : ""}`}
         >
@@ -514,7 +514,7 @@ export function Sidebar({
               className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${
                 pinned
                   ? "bg-brand-50 text-brand"
-                  : "text-zinc-500 hover:bg-surface-2 hover:text-zinc-900"
+                  : "text-zinc-500 hover:bg-surface-2 hover:text-foreground"
               }`}
             >
               {/* A double chevron pointing the way the rail will move: « to put
@@ -656,7 +656,7 @@ export function Sidebar({
           role="dialog"
           aria-label="Categories"
           aria-modal="true"
-          className={`absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-border bg-white shadow-2xl transition-transform duration-200 ${
+          className={`absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-border bg-surface shadow-2xl transition-transform duration-200 ${
             mobileOpen ? "translate-x-0" : "-translate-x-full"
           }`}
           style={{
@@ -672,7 +672,7 @@ export function Sidebar({
               type="button"
               onClick={onMobileClose}
               aria-label="Close categories"
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full text-zinc-700 transition hover:bg-surface-2"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full text-foreground-2 transition hover:bg-surface-2"
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
                 <path d="M6 6l12 12M18 6 6 18" />

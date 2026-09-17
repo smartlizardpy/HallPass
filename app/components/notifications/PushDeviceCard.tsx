@@ -160,7 +160,7 @@ export function PushDeviceCard() {
           <button
             type="button"
             onClick={enable}
-            className="mt-4 rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 transition hover:bg-surface-2"
+            className="mt-4 rounded-full border border-border bg-surface px-5 py-2 text-sm font-bold text-foreground-2 transition hover:bg-surface-2"
           >
             Re-register this device
           </button>

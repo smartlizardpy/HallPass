@@ -17,7 +17,7 @@ const BADGE_TONES: Record<Badge["tone"], string> = {
   play: "bg-brand-50 text-brand",
   review: "bg-emerald-50 text-emerald-900",
   social: "bg-sky-50 text-sky-900",
-  time: "bg-surface-2 text-zinc-700",
+  time: "bg-surface-2 text-foreground-2",
 };
 
 export function BadgeShelf({
@@ -61,7 +61,7 @@ export function BadgeShelf({
 
       {locked && locked.length > 0 && (
         <details className="group">
-          <summary className="cursor-pointer text-xs font-bold text-muted hover:text-zinc-900">
+          <summary className="cursor-pointer text-xs font-bold text-muted hover:text-foreground">
             {locked.length} still to earn
           </summary>
           <ul className="mt-2 flex flex-wrap gap-2">

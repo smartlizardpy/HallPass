@@ -88,7 +88,7 @@ export function WelcomeToast() {
             {toast.name[0]?.toUpperCase()}
           </span>
         )}
-        <span className="text-sm font-extrabold text-zinc-900">
+        <span className="text-sm font-extrabold text-foreground">
           {toast.returning ? "Welcome back" : "Welcome"}, {toast.name}!
         </span>
       </div>

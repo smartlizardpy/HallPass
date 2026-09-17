@@ -233,9 +233,9 @@ export function NotificationBell() {
         aria-expanded={open}
         // `h-11 w-11` matches every other pill in the header row, so the bar
         // keeps one control height. `bg-surface-2` because the bar is white and
-        // `bg-white` would leave it invisible — the same rule the streak chip
+        // `bg-surface` would leave it invisible — the same rule the streak chip
         // and the search field follow.
-        className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-2 text-zinc-700 transition hover:text-brand focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30"
+        className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-2 text-foreground-2 transition hover:text-brand focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30"
       >
         <svg
           width="20"
@@ -278,9 +278,9 @@ export function NotificationBell() {
         // it, this panel needs viewport-relative positioning (`fixed` plus a
         // measured `top`) rather than another width clamp — no width alone can
         // fix an anchor that is too far inboard.
-        <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-border bg-white shadow-2xl">
+        <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <span className="text-sm font-black text-zinc-900">Notifications</span>
+            <span className="text-sm font-black text-foreground">Notifications</span>
             <Link
               href="/play/you/notifications"
               onClick={() => setOpen(false)}
@@ -311,7 +311,7 @@ export function NotificationBell() {
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-baseline justify-between gap-2">
-                        <span className="truncate text-[13px] font-black text-zinc-900">
+                        <span className="truncate text-[13px] font-black text-foreground">
                           {item.title}
                         </span>
                         <span className="shrink-0 text-[11px] font-bold text-muted">

@@ -135,7 +135,7 @@ export function FriendsBoard({ slug }: { slug: string }) {
   const prompt = promptFor(groups, friends);
 
   return (
-    <section className="mt-5 max-w-3xl rounded-3xl bg-white p-5 sm:p-6">
+    <section className="mt-5 max-w-3xl rounded-3xl bg-surface p-5 sm:p-6">
       {/* THE SCORE LABEL IS A COLUMN HEADING, NOT A ROW FIELD. It is the same
           word on every row of a board — "Voltage", "Seconds" — and repeating it
           per row bought nothing except four crowded elements on a 320px phone,
@@ -143,7 +143,7 @@ export function FriendsBoard({ slug }: { slug: string }) {
           already read. With one board it belongs beside the section heading;
           with several it belongs beside each board's own. */}
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-lg font-black tracking-tight text-zinc-900">
+        <h2 className="text-lg font-black tracking-tight text-foreground">
           You and your friends
         </h2>
         {!named && (
@@ -206,7 +206,7 @@ function Prompt({ prompt }: { prompt: FriendBoardPrompt }) {
   return (
     <Link
       href="/play/you/friends"
-      className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-surface-2 px-4 py-3 text-[13px] font-bold text-zinc-700 transition hover:bg-brand-50"
+      className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-surface-2 px-4 py-3 text-[13px] font-bold text-foreground-2 transition hover:bg-brand-50"
     >
       <span className="min-w-0">
         {prompt === "add-friends"
@@ -235,7 +235,7 @@ function StandingRow({ row }: { row: FriendBoardRow }) {
         {row.position}
       </span>
       <Avatar person={row.player} size={28} />
-      <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-zinc-700">
+      <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-foreground-2">
         {row.player.displayName}
         {row.isYou && (
           <span className="ml-1.5 text-[11px] font-black uppercase tracking-wide text-brand">
@@ -248,12 +248,12 @@ function StandingRow({ row }: { row: FriendBoardRow }) {
           number whose heading is three elements away. */}
       <span
         aria-label={`${row.best.toLocaleString()} ${row.scoreLabel}`}
-        className="shrink-0 text-[13px] font-black tabular-nums text-zinc-900"
+        className="shrink-0 text-[13px] font-black tabular-nums text-foreground"
       >
         {row.best.toLocaleString()}
       </span>
       <span
-        className="shrink-0 rounded-full bg-white px-2 py-1 text-[11px] font-black tabular-nums text-zinc-700"
+        className="shrink-0 rounded-full bg-surface px-2 py-1 text-[11px] font-black tabular-nums text-foreground-2"
         title="Rank on the whole leaderboard"
       >
         #{row.rank.toLocaleString()}

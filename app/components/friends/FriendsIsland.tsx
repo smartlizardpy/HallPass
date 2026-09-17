@@ -54,9 +54,9 @@ type Tab = "friends" | "requests" | "challenges" | "add";
 const BTN_PRIMARY =
   "rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white transition hover:bg-brand-600 disabled:opacity-50";
 const BTN_SECONDARY =
-  "rounded-full border border-border bg-white px-4 py-2 text-sm font-bold text-zinc-700 transition hover:bg-surface-2 disabled:opacity-50";
+  "rounded-full border border-border bg-surface px-4 py-2 text-sm font-bold text-foreground-2 transition hover:bg-surface-2 disabled:opacity-50";
 const INPUT =
-  "w-full rounded-full border border-border bg-white px-4 py-3 text-base font-semibold text-zinc-900 placeholder:text-muted outline-none transition focus:ring-4 focus:ring-brand/20";
+  "w-full rounded-full border border-border bg-surface px-4 py-3 text-base font-semibold text-foreground placeholder:text-muted outline-none transition focus:ring-4 focus:ring-brand/20";
 
 export function FriendsIsland() {
   // Whatever the launch warm-up left behind — `null` on a cold arrival, which is
@@ -171,7 +171,7 @@ export function FriendsIsland() {
       {notice && (
         <p
           role="status"
-          className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-zinc-700"
+          className="rounded-2xl bg-surface px-4 py-3 text-sm font-bold text-foreground-2"
         >
           {notice}
         </p>
@@ -385,7 +385,7 @@ function AddFriend({ onChanged }: { onChanged: () => Promise<void> }) {
         {searched && results.length === 0 && (
           <p className="mt-3 text-sm font-semibold text-muted">
             Nobody found matching{" "}
-            <span className="font-bold text-zinc-900">{query.trim()}</span>. Check
+            <span className="font-bold text-foreground">{query.trim()}</span>. Check
             the spelling, or ask them for their friend code below — that works even
             if they haven&rsquo;t picked a username.
           </p>
@@ -432,7 +432,7 @@ function AddFriend({ onChanged }: { onChanged: () => Promise<void> }) {
         {myCode && (
           <p className="mt-4 text-sm font-bold text-muted">
             Your code:{" "}
-            <span className="select-all font-mono tracking-widest text-zinc-900">
+            <span className="select-all font-mono tracking-widest text-foreground">
               {myCode}
             </span>
           </p>
@@ -440,7 +440,7 @@ function AddFriend({ onChanged }: { onChanged: () => Promise<void> }) {
       </Panel>
 
       {message && (
-        <p role="status" className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-zinc-700">
+        <p role="status" className="rounded-2xl bg-surface px-4 py-3 text-sm font-bold text-foreground-2">
           {message}
         </p>
       )}
@@ -467,7 +467,7 @@ const STATE_MESSAGES: Record<string, string> = {
 
 function Panel({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-3xl bg-white p-5 sm:p-6">
+    <section className="rounded-3xl bg-surface p-5 sm:p-6">
       {title && (
         <h2 className="mb-3 text-[11px] font-black uppercase tracking-wider text-muted">
           {title}
@@ -498,7 +498,7 @@ function TabButton({
       aria-selected={active}
       onClick={onClick}
       className={`inline-flex items-center rounded-full px-4 py-2 text-sm font-extrabold transition ${
-        active ? "bg-brand text-white" : "bg-white text-zinc-700 hover:bg-surface-2"
+        active ? "bg-brand text-white" : "bg-surface text-foreground-2 hover:bg-surface-2"
       }`}
     >
       {children}
@@ -522,7 +522,7 @@ function PersonRow({
     <>
       <Avatar person={person} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-extrabold text-zinc-900">
+        <p className="truncate text-[15px] font-extrabold text-foreground">
           {person.displayName}
         </p>
         {/* The @username is shown alongside the display name on EVERY surface,
