@@ -200,7 +200,7 @@ export function ChallengeButton({
       <button
         type="button"
         onClick={openDialog}
-        className="shrink-0 rounded-full border border-border bg-white px-3 py-1 text-xs font-bold text-zinc-700 transition hover:border-brand hover:text-brand"
+        className="shrink-0 rounded-full border border-border bg-surface px-3 py-1 text-xs font-bold text-foreground-2 transition hover:border-brand hover:text-brand"
       >
         Challenge
         {/* The row's rank badge and title are adjacent, but a screen reader
@@ -226,11 +226,11 @@ export function ChallengeButton({
             // Focusable so the panel itself can take initial focus when there
             // is no Close button of ours to give it to — see the focus effect.
             tabIndex={-1}
-            className="relative z-10 max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-t-3xl bg-white p-6 shadow-2xl sm:rounded-3xl focus:outline-none"
+            className="relative z-10 max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-t-3xl bg-surface p-6 shadow-2xl sm:rounded-3xl focus:outline-none"
           >
             <h2
               id={headingId}
-              className="text-sm font-black tracking-tight text-zinc-900"
+              className="text-sm font-black tracking-tight text-foreground"
             >
               Challenge a friend
             </h2>
@@ -260,7 +260,7 @@ export function ChallengeButton({
                     ref={closeRef}
                     type="button"
                     onClick={close}
-                    className="rounded-full border border-border bg-white px-4 py-2 text-sm font-bold text-zinc-700 transition hover:bg-surface-2"
+                    className="rounded-full border border-border bg-surface px-4 py-2 text-sm font-bold text-foreground-2 transition hover:bg-surface-2"
                   >
                     Close
                   </button>

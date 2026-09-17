@@ -85,8 +85,8 @@ export default async function LogsPage() {
               <span
                 className={
                   check.set
-                    ? "shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700"
-                    : "shrink-0 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-bold text-red-700"
+                    ? "shrink-0 rounded-full border border-emerald-200 dark:border-emerald-900/70 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:text-emerald-300"
+                    : "shrink-0 rounded-full border border-red-200 dark:border-red-900/70 bg-red-50 dark:bg-red-950/40 px-2.5 py-0.5 text-xs font-bold text-red-700 dark:text-red-300"
                 }
               >
                 {check.set ? "Set" : "Not set"}

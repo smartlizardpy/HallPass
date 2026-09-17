@@ -13,11 +13,11 @@ import type { Badge } from "../lib/badges";
 
 /** Per-category tint. Keeps the shelf readable at a glance without a legend. */
 const BADGE_TONES: Record<Badge["tone"], string> = {
-  score: "bg-amber-50 text-amber-900",
+  score: "bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200",
   play: "bg-brand-50 text-brand",
-  review: "bg-emerald-50 text-emerald-900",
-  social: "bg-sky-50 text-sky-900",
-  time: "bg-surface-2 text-zinc-700",
+  review: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200",
+  social: "bg-sky-50 dark:bg-sky-950/40 text-sky-900 dark:text-sky-200",
+  time: "bg-surface-2 text-foreground-2",
 };
 
 export function BadgeShelf({
@@ -61,7 +61,7 @@ export function BadgeShelf({
 
       {locked && locked.length > 0 && (
         <details className="group">
-          <summary className="cursor-pointer text-xs font-bold text-muted hover:text-zinc-900">
+          <summary className="cursor-pointer text-xs font-bold text-muted hover:text-foreground">
             {locked.length} still to earn
           </summary>
           <ul className="mt-2 flex flex-wrap gap-2">

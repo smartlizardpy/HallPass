@@ -156,7 +156,7 @@ export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
   };
 
   const selectClass =
-    "w-full rounded-lg border border-border bg-white px-3 py-2 text-sm font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-brand/30";
+    "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-brand/30";
 
   return (
     <div className="space-y-4">
@@ -211,7 +211,7 @@ export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
           value={url}
           aria-label="Tagged marketing link"
           onFocus={(e) => e.currentTarget.select()}
-          className="min-w-0 flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs text-zinc-900 outline-none focus:ring-2 focus:ring-brand/30"
+          className="min-w-0 flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs text-foreground outline-none focus:ring-2 focus:ring-brand/30"
         />
         <button
           type="button"
@@ -240,7 +240,7 @@ export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
                 target={opensTab ? "_blank" : undefined}
                 rel={opensTab ? "noreferrer noopener" : undefined}
                 onClick={() => setChannel(target.channel)}
-                className="rounded-full border border-border bg-white px-3.5 py-1.5 text-xs font-bold text-zinc-700 transition hover:border-brand hover:text-brand"
+                className="rounded-full border border-border bg-surface px-3.5 py-1.5 text-xs font-bold text-foreground-2 transition hover:border-brand hover:text-brand"
               >
                 {target.label}
               </a>
@@ -250,7 +250,7 @@ export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
             <button
               type="button"
               onClick={() => void shareNatively()}
-              className="rounded-full border border-border bg-white px-3.5 py-1.5 text-xs font-bold text-zinc-700 transition hover:border-brand hover:text-brand"
+              className="rounded-full border border-border bg-surface px-3.5 py-1.5 text-xs font-bold text-foreground-2 transition hover:border-brand hover:text-brand"
             >
               Share sheet…
               <span className="sr-only"> — tags the link as {channel}</span>
@@ -272,7 +272,7 @@ export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
           </div>
 
           {destination?.socialImage ? (
-            <div className="overflow-hidden rounded-lg border border-border bg-white">
+            <div className="overflow-hidden rounded-lg border border-border bg-surface">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={destination.socialImage}
@@ -280,21 +280,21 @@ export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
                 className="aspect-[1.91/1] w-full bg-surface-2 object-cover"
               />
               <div className="p-3">
-                <div className="text-sm font-bold text-zinc-900">{destination.label}</div>
+                <div className="text-sm font-bold text-foreground">{destination.label}</div>
                 <div className="truncate text-xs text-muted">{url}</div>
               </div>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg border border-dashed border-amber-300 bg-amber-50">
-              <div className="flex aspect-[1.91/1] w-full items-center justify-center px-4 text-center text-xs font-semibold text-amber-900">
+            <div className="overflow-hidden rounded-lg border border-dashed border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40">
+              <div className="flex aspect-[1.91/1] w-full items-center justify-center px-4 text-center text-xs font-semibold text-amber-900 dark:text-amber-200">
                 No social image — this link renders as a bare card in chats,
                 Discord and search previews.
               </div>
-              <div className="border-t border-amber-200 p-3">
-                <div className="text-sm font-bold text-amber-900">
+              <div className="border-t border-amber-200 dark:border-amber-900/70 p-3">
+                <div className="text-sm font-bold text-amber-900 dark:text-amber-200">
                   {destination?.label}
                 </div>
-                <div className="truncate text-xs text-amber-800">{url}</div>
+                <div className="truncate text-xs text-amber-800 dark:text-amber-200">{url}</div>
               </div>
             </div>
           )}
@@ -305,7 +305,7 @@ export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
           <div className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">
             Scan or print
           </div>
-          <div className="inline-block rounded-lg border border-border bg-white p-2">
+          <div className="inline-block rounded-lg border border-border bg-surface p-2">
             <svg
               viewBox={`0 0 ${qr.size} ${qr.size}`}
               role="img"
@@ -321,7 +321,7 @@ export function LinkBuilder({ destinations }: { destinations: Destination[] }) {
           <button
             type="button"
             onClick={downloadQr}
-            className="mt-3 block w-full rounded-full border border-border bg-white px-3 py-1.5 text-xs font-bold text-zinc-700 transition hover:border-brand hover:text-brand"
+            className="mt-3 block w-full rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-bold text-foreground-2 transition hover:border-brand hover:text-brand"
           >
             Download SVG
           </button>

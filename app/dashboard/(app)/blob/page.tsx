@@ -122,19 +122,19 @@ export default async function BlobOpsPage({
       />
 
       {ok && (
-        <div className="mb-6 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+        <div className="mb-6 rounded-xl border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200">
           {ok}
         </div>
       )}
 
       {error && (
-        <div className="mb-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+        <div className="mb-6 rounded-xl border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-900 dark:text-red-200">
           {error}
         </div>
       )}
 
       {locked && (
-        <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="mb-6 rounded-xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
           <strong className="font-bold">Locked by the environment.</strong>{" "}
           {BLOB_READ_ONLY_NOTICE}
         </div>
@@ -224,7 +224,7 @@ export default async function BlobOpsPage({
             <button
               type="submit"
               disabled={locked || !switches.blob_reindex}
-              className="rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-full border border-border bg-surface px-5 py-2 text-sm font-bold text-foreground-2 hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Rebuild index
             </button>

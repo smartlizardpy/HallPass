@@ -31,10 +31,10 @@ import { Wordmark } from "@/app/components/Wordmark";
 export default function ProfileNotFound() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-6 py-10">
-      <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center">
+      <div className="w-full max-w-md rounded-3xl bg-surface p-8 text-center">
         <Wordmark size="text-3xl" dotClass="h-2 w-2" />
 
-        <h1 className="mt-4 text-2xl font-black tracking-tight text-zinc-900">
+        <h1 className="mt-4 text-2xl font-black tracking-tight text-foreground">
           No player here
         </h1>
         <p className="mt-3 text-[15px] font-semibold leading-relaxed text-muted">
@@ -52,7 +52,7 @@ export default function ProfileNotFound() {
           </Link>
           <Link
             href="/play/you/friends"
-            className="rounded-full border border-border bg-white px-5 py-2.5 text-sm font-bold text-zinc-700 transition hover:bg-surface-2"
+            className="rounded-full border border-border bg-surface px-5 py-2.5 text-sm font-bold text-foreground-2 transition hover:bg-surface-2"
           >
             Find a friend
           </Link>

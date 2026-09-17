@@ -32,7 +32,7 @@ export default function OfflinePage() {
     <main className="flex min-h-screen flex-1 flex-col items-center justify-center px-6 py-16 text-center">
       <Wordmark size="text-3xl" dotClass="h-2 w-2" />
 
-      <h1 className="mt-8 text-2xl font-black tracking-tight text-zinc-900 sm:text-3xl">
+      <h1 className="mt-8 text-2xl font-black tracking-tight text-foreground sm:text-3xl">
         You&rsquo;re offline
       </h1>
       <p className="mt-3 max-w-sm text-[15px] font-semibold leading-relaxed text-muted">

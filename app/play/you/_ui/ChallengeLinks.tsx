@@ -98,7 +98,7 @@ export function ChallengeLinks({ links }: { links: OwnedLink[] }) {
                     type="button"
                     onClick={() => revoke(link.code)}
                     disabled={state === "revoking"}
-                    className="shrink-0 rounded-full border border-border bg-white px-3 py-1 text-xs font-bold text-zinc-700 transition hover:border-rose-400 hover:text-rose-700 disabled:opacity-50"
+                    className="shrink-0 rounded-full border border-border bg-surface px-3 py-1 text-xs font-bold text-foreground-2 transition hover:border-rose-400 dark:hover:border-rose-800 hover:text-rose-700 dark:hover:text-rose-300 disabled:opacity-50"
                   >
                     {state === "revoking" ? "…" : "Take down"}
                     <span className="sr-only"> the link for {link.boardTitle}</span>
@@ -112,12 +112,12 @@ export function ChallengeLinks({ links }: { links: OwnedLink[] }) {
                   value={challengeLinkPath(link.code)}
                   onFocus={(e) => e.currentTarget.select()}
                   aria-label={`Link for ${link.boardTitle}`}
-                  className="mt-2 w-full rounded-lg border border-border bg-white px-2 py-1 text-xs text-muted"
+                  className="mt-2 w-full rounded-lg border border-border bg-surface px-2 py-1 text-xs text-muted"
                 />
               )}
 
               {state === "failed" ? (
-                <p role="alert" className="mt-2 text-xs font-semibold text-rose-700">
+                <p role="alert" className="mt-2 text-xs font-semibold text-rose-700 dark:text-rose-300">
                   We couldn&rsquo;t take that down — it may still be live. Try again.
                 </p>
               ) : null}

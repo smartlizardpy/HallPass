@@ -79,7 +79,7 @@ export function BackButton({
           // always a correct outcome rather than a broken one.
         }
       }}
-      className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-sm font-extrabold text-zinc-700 shadow-sm transition hover:bg-surface-2 hover:text-zinc-900 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30"
+      className="inline-flex items-center gap-1.5 rounded-full bg-surface px-4 py-2 text-sm font-extrabold text-foreground-2 shadow-sm transition hover:bg-surface-2 hover:text-foreground focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30"
     >
       <svg
         width="16"

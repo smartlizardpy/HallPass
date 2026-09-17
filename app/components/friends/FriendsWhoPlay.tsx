@@ -82,7 +82,7 @@ export function FriendsWhoPlay({ slug }: { slug: string }) {
   return (
     <Link
       href={href}
-      className="mt-4 flex items-center gap-3 rounded-2xl bg-white p-3 transition hover:bg-surface-2"
+      className="mt-4 flex items-center gap-3 rounded-2xl bg-surface p-3 transition hover:bg-surface-2"
     >
       {/* Stacked avatars, most-recent first. Negative margin overlaps them; the
           ring separates each from the one beneath. */}
@@ -93,7 +93,7 @@ export function FriendsWhoPlay({ slug }: { slug: string }) {
           </span>
         ))}
       </span>
-      <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-zinc-700">
+      <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-foreground-2">
         {summary}
       </span>
     </Link>

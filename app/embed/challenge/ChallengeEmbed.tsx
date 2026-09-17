@@ -125,8 +125,8 @@ export function ChallengeEmbed({
   }, []);
 
   return (
-    <div className="rounded-2xl border border-border bg-white p-4 shadow-sm">
-      <h1 className="text-sm font-black tracking-tight text-zinc-900">
+    <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+      <h1 className="text-sm font-black tracking-tight text-foreground">
         Challenge a friend
       </h1>
       <ChallengePicker

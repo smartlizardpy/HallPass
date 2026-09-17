@@ -63,7 +63,7 @@ type Stage =
 const BTN_PRIMARY =
   "rounded-full bg-brand px-7 py-3 text-base font-extrabold text-white transition hover:bg-brand-600 disabled:opacity-50";
 const BTN_SECONDARY =
-  "rounded-full border border-border bg-white px-5 py-2.5 text-sm font-bold text-zinc-700 transition hover:bg-surface-2";
+  "rounded-full border border-border bg-surface px-5 py-2.5 text-sm font-bold text-foreground-2 transition hover:bg-surface-2";
 
 /**
  * Open sign-in in a POPUP, never in this tab.
@@ -262,12 +262,12 @@ export function ChallengeLanding({
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-6 py-10">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center">
+      <div className="w-full max-w-md rounded-2xl bg-surface p-8 text-center">
         <Wordmark size="text-2xl" dotClass="h-1.5 w-1.5" />
 
         {stage.kind === "won" ? (
           <>
-            <h1 className="mt-4 text-2xl font-black tracking-tight text-zinc-900">
+            <h1 className="mt-4 text-2xl font-black tracking-tight text-foreground">
               You beat {link.owner.displayName}.
             </h1>
             <p className="mt-2 text-sm font-semibold text-muted">
@@ -286,7 +286,7 @@ export function ChallengeLanding({
           <p className="mt-6 text-sm font-semibold text-muted">Checking the board…</p>
         ) : stage.kind === "missed" ? (
           <>
-            <h1 className="mt-4 text-2xl font-black tracking-tight text-zinc-900">
+            <h1 className="mt-4 text-2xl font-black tracking-tight text-foreground">
               {signedIn ? "Not this time." : "Nice try."}
             </h1>
             <p className="mt-2 text-sm font-semibold text-muted">
@@ -335,7 +335,7 @@ export function ChallengeLanding({
           </>
         ) : (
           <>
-            <h1 className="mt-4 text-2xl font-black tracking-tight text-zinc-900">
+            <h1 className="mt-4 text-2xl font-black tracking-tight text-foreground">
               {/*
                 THE EXPLICIT `{" "}` IS LOAD-BEARING — do not "tidy" it away.
                 Written the obvious way, as `{name} says you can&rsquo;t…`,

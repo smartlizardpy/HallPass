@@ -166,11 +166,11 @@ export function AccountMenu() {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        // `bg-surface-2`, not `bg-white`: this trigger sits ON `SiteHeader`'s
+        // `bg-surface-2`, not `bg-surface`: this trigger sits ON `SiteHeader`'s
         // white bar (see its docblock), where white would erase it. The signed-
         // out `bg-brand` button above needs no such treatment, and the dropdown
         // below stays white — it floats over the page, not on the bar.
-        className="flex h-11 items-center gap-2 rounded-full bg-surface-2 pl-1.5 pr-2 text-sm font-bold text-zinc-800 transition hover:text-brand sm:pr-3"
+        className="flex h-11 items-center gap-2 rounded-full bg-surface-2 pl-1.5 pr-2 text-sm font-bold text-zinc-800 dark:text-zinc-200 transition hover:text-brand sm:pr-3"
       >
         <span className="relative">
           <Avatar src={player.image} initial={initial} size={32} />
@@ -206,12 +206,12 @@ export function AccountMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-[3.25rem] z-50 w-56 overflow-hidden rounded-2xl border border-border bg-white p-1.5 shadow-xl"
+          className="absolute right-0 top-[3.25rem] z-50 w-56 overflow-hidden rounded-2xl border border-border bg-surface p-1.5 shadow-xl"
         >
           <div className="flex items-center gap-3 px-3 py-2">
             <Avatar src={player.image} initial={initial} size={40} />
             <div className="min-w-0">
-              <div className="truncate text-sm font-extrabold text-zinc-900">
+              <div className="truncate text-sm font-extrabold text-foreground">
                 {player.handle}
               </div>
               {roleLabel && (
@@ -308,7 +308,7 @@ export function AccountMenu() {
               triggerRef.current?.focus();
               openStealthSettings();
             }}
-            className="block w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-zinc-800 transition hover:bg-surface-2"
+            className="block w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-zinc-800 dark:text-zinc-200 transition hover:bg-surface-2"
           >
             <span aria-hidden className="mr-1.5">
               🕶️
@@ -319,7 +319,7 @@ export function AccountMenu() {
           <form action={startSignOut}>
             <button
               type="submit"
-              className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-red-600 transition hover:bg-red-50"
+              className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-red-600 dark:text-red-400 transition hover:bg-red-50 dark:hover:bg-red-950/40"
             >
               Sign out
             </button>
@@ -356,7 +356,7 @@ function MenuLink({
       href={href}
       onNavigate={onNavigate}
       role="menuitem"
-      className="block rounded-lg px-3 py-2 text-sm font-semibold text-zinc-800 transition hover:bg-surface-2"
+      className="block rounded-lg px-3 py-2 text-sm font-semibold text-zinc-800 dark:text-zinc-200 transition hover:bg-surface-2"
     >
       {children}
     </Link>

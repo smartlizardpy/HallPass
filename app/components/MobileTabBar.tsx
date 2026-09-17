@@ -328,7 +328,7 @@ export function MobileTabBar() {
       <nav
         ref={barRef}
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border bg-white/95 backdrop-blur-xl lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border bg-surface/95 backdrop-blur-xl lg:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         {/* One tab per `PRIMARY_NAV` entry, in the table's order — never a
@@ -395,7 +395,7 @@ function TabInner({
   return (
     <span
       className={`flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-bold ${
-        active ? "text-brand" : "text-zinc-500"
+        active ? "text-brand" : "text-zinc-500 dark:text-zinc-400 dark:text-zinc-500"
       }`}
     >
       <svg

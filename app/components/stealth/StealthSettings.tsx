@@ -266,17 +266,17 @@ export function StealthSettings({
       <div
         ref={panelRef}
         onKeyDown={onKeyDownTrap}
-        className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-6 shadow-2xl sm:rounded-3xl"
+        className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-surface p-6 shadow-2xl sm:rounded-3xl"
       >
         <div className="mb-1 flex items-center gap-2">
           <span className="text-xl">🕶️</span>
-          <h2 className="text-xl font-black tracking-tight text-zinc-900">Stealth mode</h2>
+          <h2 className="text-xl font-black tracking-tight text-foreground">Stealth mode</h2>
           <button
             ref={closeRef}
             type="button"
             onClick={handleClose}
             aria-label="Close"
-            className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 transition hover:bg-surface-2 hover:text-zinc-900"
+            className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 dark:text-zinc-400 dark:text-zinc-500 transition hover:bg-surface-2 hover:text-foreground"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
               <path d="M6 6l12 12M18 6 6 18" />
@@ -304,7 +304,7 @@ export function StealthSettings({
                   className={`flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-left transition ${
                     active
                       ? "border-brand bg-brand-50"
-                      : "border-border bg-white hover:border-brand-100"
+                      : "border-border bg-surface hover:border-brand-100"
                   }`}
                 >
                   {cloak.favicon ? (
@@ -315,7 +315,7 @@ export function StealthSettings({
                       H
                     </span>
                   )}
-                  <span className="truncate text-[13px] font-bold text-zinc-900">
+                  <span className="truncate text-[13px] font-bold text-foreground">
                     {cloak.label}
                   </span>
                 </button>
@@ -344,7 +344,7 @@ export function StealthSettings({
             >
               {listening ? "Press any key…" : "Change key"}
             </button>
-            <span className="text-sm font-bold text-zinc-900">
+            <span className="text-sm font-bold text-foreground">
               Current: <kbd className="rounded-md bg-surface-2 px-2 py-1 font-mono text-[13px]">{keyLabel(prefs.panicKey)}</kbd>
             </span>
           </div>
@@ -374,13 +374,13 @@ export function StealthSettings({
                 className={`inline-flex min-h-11 items-center gap-2 rounded-full border-2 px-5 py-2.5 text-sm font-extrabold transition ${
                   prefs.shake
                     ? "border-brand bg-brand text-white hover:bg-brand-600"
-                    : "border-border bg-white text-zinc-700 hover:border-brand-100"
+                    : "border-border bg-surface text-foreground-2 hover:border-brand-100"
                 }`}
               >
                 <span aria-hidden>📳</span>
                 {prefs.shake ? "On" : "Off"}
               </button>
-              <span className="text-sm font-bold text-zinc-900">
+              <span className="text-sm font-bold text-foreground">
                 {prefs.shake
                   ? "Give your device a shake to hide the arcade."
                   : "No keyboard? Hide with a shake instead."}
@@ -409,13 +409,13 @@ export function StealthSettings({
               className={`inline-flex min-h-11 items-center gap-2 rounded-full border-2 px-5 py-2.5 text-sm font-extrabold transition ${
                 prefs.quietNotifications
                   ? "border-brand bg-brand text-white hover:bg-brand-600"
-                  : "border-border bg-white text-zinc-700 hover:border-brand-100"
+                  : "border-border bg-surface text-foreground-2 hover:border-brand-100"
               }`}
             >
               <span aria-hidden>🔕</span>
               {prefs.quietNotifications ? "On" : "Off"}
             </button>
-            <span className="text-sm font-bold text-zinc-900">
+            <span className="text-sm font-bold text-foreground">
               {prefs.quietNotifications
                 ? "Notifications just say “HallPass”."
                 : "Notifications show who challenged you."}
@@ -444,8 +444,8 @@ export function StealthSettings({
                   aria-pressed={active}
                   className={`rounded-xl border-2 px-3 py-2.5 text-[13px] font-bold transition ${
                     active
-                      ? "border-brand bg-brand-50 text-zinc-900"
-                      : "border-border bg-white text-zinc-700 hover:border-brand-100"
+                      ? "border-brand bg-brand-50 text-foreground"
+                      : "border-border bg-surface text-foreground-2 hover:border-brand-100"
                   }`}
                 >
                   {screen.label}
@@ -460,7 +460,7 @@ export function StealthSettings({
               setListening(false);
               triggerPanic();
             }}
-            className="mt-3 w-full rounded-xl border-2 border-dashed border-border py-2.5 text-[13px] font-extrabold text-zinc-700 transition hover:border-brand hover:text-brand"
+            className="mt-3 w-full rounded-xl border-2 border-dashed border-border py-2.5 text-[13px] font-extrabold text-foreground-2 transition hover:border-brand hover:text-brand"
           >
             Preview panic screen — press your key to return
           </button>

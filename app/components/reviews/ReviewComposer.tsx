@@ -89,7 +89,7 @@ export function ReviewComposer({
   if (!me?.player) {
     return (
       <div className="mt-4 rounded-2xl bg-brand-50 px-5 py-6 text-center">
-        <p className="text-[15px] font-bold text-zinc-900">
+        <p className="text-[15px] font-bold text-foreground">
           Sign in to review {title}
         </p>
         <a
@@ -106,7 +106,7 @@ export function ReviewComposer({
     return (
       <p
         role="status"
-        className="mt-4 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900"
+        className="mt-4 rounded-2xl border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3 text-sm font-semibold text-emerald-900 dark:text-emerald-200"
       >
         {message}
       </p>
@@ -117,7 +117,7 @@ export function ReviewComposer({
 
   return (
     <div className="mt-4 rounded-2xl bg-surface-2/60 p-4">
-      <p className="text-sm font-extrabold text-zinc-900">
+      <p className="text-sm font-extrabold text-foreground">
         Would you recommend {title}?
       </p>
 
@@ -146,7 +146,7 @@ export function ReviewComposer({
           rows={3}
           maxLength={MAX_REVIEW_LENGTH}
           placeholder="What did you think? No links or personal info."
-          className="w-full rounded-xl border border-border bg-white px-3 py-2 text-[15px] font-semibold text-zinc-900 placeholder:text-muted outline-none transition focus:ring-4 focus:ring-brand/20"
+          className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-[15px] font-semibold text-foreground placeholder:text-muted outline-none transition focus:ring-4 focus:ring-brand/20"
         />
       </label>
 
@@ -169,7 +169,7 @@ export function ReviewComposer({
       </button>
 
       {message && (
-        <p role="status" className="mt-3 text-sm font-bold text-red-700">
+        <p role="status" className="mt-3 text-sm font-bold text-red-700 dark:text-red-300">
           {message}
         </p>
       )}
@@ -194,9 +194,9 @@ function RecommendButton({
   // primary action, and the repo already uses emerald/red for exactly that.
   const skin = active
     ? tone === "yes"
-      ? "border-emerald-300 bg-emerald-100 text-emerald-900"
-      : "border-red-300 bg-red-100 text-red-900"
-    : "border-border bg-white text-zinc-700 hover:bg-surface-2";
+      ? "border-emerald-300 dark:border-emerald-900 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200"
+      : "border-red-300 dark:border-red-900 bg-red-100 dark:bg-red-950/60 text-red-900 dark:text-red-200"
+    : "border-border bg-surface text-foreground-2 hover:bg-surface-2";
 
   return (
     <button type="button" aria-pressed={active} onClick={onClick} className={`${base} ${skin}`}>

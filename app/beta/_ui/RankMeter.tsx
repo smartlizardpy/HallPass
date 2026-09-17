@@ -39,7 +39,7 @@ export function RankMeter({
           <h2 className="text-sm font-black uppercase tracking-wide text-muted">
             Your rank
           </h2>
-          <p className="mt-1 text-2xl font-black tracking-tight text-zinc-900">
+          <p className="mt-1 text-2xl font-black tracking-tight text-foreground">
             {rank.name}
           </p>
         </div>
@@ -74,7 +74,7 @@ export function RankMeter({
       <p className="mt-3 text-sm font-semibold text-muted">
         {rank.next ? (
           <>
-            <span className="font-black text-zinc-900">
+            <span className="font-black text-foreground">
               {rank.toNext.toLocaleString("en-US")} XP
             </span>{" "}
             to {rank.next.name}

@@ -851,7 +851,7 @@ export function TestSessionClient({
           // top of this file.
           <div className="absolute inset-x-0 bottom-0 z-20 max-h-[70dvh] w-full overflow-y-auto rounded-t-2xl border-t border-border bg-surface p-4 shadow-2xl sm:relative sm:inset-y-0 sm:left-auto sm:right-0 sm:max-h-none sm:max-w-sm sm:rounded-none sm:border-l sm:border-t-0 sm:shadow-none">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900">
+              <h2 className="text-sm font-black uppercase tracking-wide text-foreground">
                 Your review
               </h2>
               <button
@@ -882,7 +882,7 @@ export function TestSessionClient({
                   className={`flex-1 rounded-full border px-3 py-2 text-xs font-extrabold transition ${
                     recommended === option.value
                       ? "border-brand bg-brand-50 text-brand"
-                      : "border-border bg-white text-zinc-700 hover:bg-surface-2"
+                      : "border-border bg-surface text-foreground-2 hover:bg-surface-2"
                   }`}
                 >
                   {option.label}
@@ -918,7 +918,7 @@ export function TestSessionClient({
           // panel above.
           <div className="absolute inset-x-0 bottom-0 z-10 max-h-[70dvh] w-full overflow-y-auto rounded-t-2xl border-t border-border bg-surface p-4 shadow-2xl sm:relative sm:inset-y-0 sm:left-auto sm:right-0 sm:max-h-none sm:max-w-sm sm:rounded-none sm:border-l sm:border-t-0 sm:shadow-none">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-black uppercase tracking-wide text-zinc-900">
+              <h2 className="text-sm font-black uppercase tracking-wide text-foreground">
                 {kind === "bug" ? "Report a bug" : "Suggest an idea"}
               </h2>
               <button
@@ -937,7 +937,7 @@ export function TestSessionClient({
                 <select
                   value={severity}
                   onChange={(e) => setSeverity(e.target.value as BugSeverity)}
-                  className="mt-1 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-brand/30"
+                  className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-brand/30"
                 >
                   {BUG_SEVERITIES.map((s) => (
                     <option key={s} value={s}>
@@ -986,7 +986,7 @@ export function TestSessionClient({
               <p className="text-[11px] font-black uppercase tracking-wide text-muted">
                 Attached automatically
               </p>
-              <ul className="mt-1.5 space-y-1 text-xs font-semibold text-zinc-700">
+              <ul className="mt-1.5 space-y-1 text-xs font-semibold text-foreground-2">
                 <li>
                   {clipState === "flushing"
                     ? "📹 Saving the last few seconds…"
@@ -1031,7 +1031,7 @@ export function TestSessionClient({
                     e.target.value = "";
                     if (file) void attachFile(file);
                   }}
-                  className="mt-1 block w-full text-xs font-semibold text-zinc-700 file:mr-3 file:rounded-full file:border-0 file:bg-brand file:px-3 file:py-1.5 file:text-xs file:font-extrabold file:text-white"
+                  className="mt-1 block w-full text-xs font-semibold text-foreground-2 file:mr-3 file:rounded-full file:border-0 file:bg-brand file:px-3 file:py-1.5 file:text-xs file:font-extrabold file:text-white"
                 />
               </label>
               {/* Said out loud, not buried. Everything else attached here is

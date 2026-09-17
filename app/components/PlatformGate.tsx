@@ -144,11 +144,11 @@ export function PlatformConfirmSheet({
         // press would also hit the backdrop handler on its way up and cancel.
         onClick={(e) => e.stopPropagation()}
         tabIndex={-1}
-        className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl outline-none"
+        className="w-full max-w-sm rounded-3xl bg-surface p-6 shadow-2xl outline-none"
       >
         <h2
           id="platform-gate-title"
-          className="text-lg font-black tracking-tight text-zinc-900"
+          className="text-lg font-black tracking-tight text-foreground"
         >
           {wantsMobile ? "Built for a phone" : "Built for a keyboard"}
         </h2>
@@ -170,7 +170,7 @@ export function PlatformConfirmSheet({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-full border border-border px-5 py-2.5 text-sm font-extrabold text-zinc-900 hover:border-brand"
+            className="rounded-full border border-border px-5 py-2.5 text-sm font-extrabold text-foreground hover:border-brand"
           >
             Back
           </button>

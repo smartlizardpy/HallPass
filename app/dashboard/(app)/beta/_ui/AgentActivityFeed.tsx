@@ -64,9 +64,9 @@ const JUST_NOW_MS = 45_000;
  * that is a race the design already handles.
  */
 const OUTCOME_TONES: Record<string, string> = {
-  ok: "bg-emerald-50 text-emerald-900",
-  refused: "bg-amber-100 text-amber-900",
-  failed: "bg-red-100 text-red-900",
+  ok: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200",
+  refused: "bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200",
+  failed: "bg-red-100 dark:bg-red-950/60 text-red-900 dark:text-red-200",
 };
 
 /**
@@ -179,7 +179,7 @@ export function AgentActivityFeed({
           >
             <span
               className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${
-                OUTCOME_TONES[row.outcome] ?? "bg-surface-2 text-zinc-700"
+                OUTCOME_TONES[row.outcome] ?? "bg-surface-2 text-foreground-2"
               }`}
             >
               {row.outcome}
@@ -191,7 +191,7 @@ export function AgentActivityFeed({
                 than a column. */}
             <span
               title={row.tool}
-              className="min-w-0 flex-1 text-sm font-semibold text-zinc-900"
+              className="min-w-0 flex-1 text-sm font-semibold text-foreground"
             >
               {row.summary}
             </span>

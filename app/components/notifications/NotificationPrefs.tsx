@@ -133,7 +133,7 @@ export function NotificationPrefs({
                         {def.description}
                       </p>
                       {failed === kind && (
-                        <p className="mt-1 text-xs font-bold text-red-900">
+                        <p className="mt-1 text-xs font-bold text-red-900 dark:text-red-200">
                           Couldn&rsquo;t save that — try again.
                         </p>
                       )}
@@ -160,7 +160,7 @@ export function NotificationPrefs({
                             className={`rounded-full px-3 py-1.5 text-xs font-extrabold transition focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30 ${
                               active
                                 ? "bg-brand text-white"
-                                : "text-zinc-600 hover:text-zinc-900"
+                                : "text-zinc-600 dark:text-zinc-300 hover:text-foreground"
                             }`}
                           >
                             {CHANNEL_LABEL[channel]}

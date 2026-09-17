@@ -86,7 +86,7 @@ export default async function DashboardSignInPage({
             >
               <button
                 type="submit"
-                className="w-full rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                className="w-full rounded-full border border-border bg-surface px-5 py-2 text-sm font-bold text-foreground-2 hover:bg-surface-2"
               >
                 Sign out
               </button>
@@ -98,7 +98,7 @@ export default async function DashboardSignInPage({
               Sign in to manage games and leaderboards
             </p>
             {error === "AccessDenied" && (
-              <p className="mt-2 text-xs text-red-700">
+              <p className="mt-2 text-xs text-red-700 dark:text-red-300">
                 We couldn&apos;t sign you in. Please try again.
               </p>
             )}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { StealthMenuButton } from "./stealth/StealthMenuButton";
+import { ThemeMenuButton } from "./theme/ThemeMenuButton";
 import { Wordmark } from "./Wordmark";
 
 /**
@@ -200,7 +201,7 @@ function itemClass(isActive: boolean, collapsed: boolean): string {
   return `group flex w-full items-center rounded-2xl py-3 text-[15px] font-bold transition lg:py-2.5 ${shape} ${
     isActive
       ? "bg-brand-50 text-brand"
-      : "text-zinc-700 hover:bg-surface-2 hover:text-zinc-900"
+      : "text-foreground-2 hover:bg-surface-2 hover:text-foreground"
   }`;
 }
 
@@ -470,7 +471,7 @@ export function Sidebar({
           onBlur={(e) => {
             if (!e.currentTarget.contains(e.relatedTarget)) setFocusInside(false);
           }}
-          className={`absolute inset-y-0 left-0 flex flex-col overflow-hidden border-r border-border bg-white transition-[width] duration-200 motion-reduce:transition-none ${
+          className={`absolute inset-y-0 left-0 flex flex-col overflow-hidden border-r border-border bg-surface transition-[width] duration-200 motion-reduce:transition-none ${
             railExpanded ? "w-48" : "w-16"
           } ${railExpanded && !pinned ? "shadow-xl" : ""}`}
         >
@@ -513,7 +514,7 @@ export function Sidebar({
               className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${
                 pinned
                   ? "bg-brand-50 text-brand"
-                  : "text-zinc-500 hover:bg-surface-2 hover:text-zinc-900"
+                  : "text-zinc-500 dark:text-zinc-400 dark:text-zinc-500 hover:bg-surface-2 hover:text-foreground"
               }`}
             >
               {/* A double chevron pointing the way the rail will move: « to put
@@ -577,7 +578,18 @@ export function Sidebar({
               descendant combinator, so source order is not load-bearing.
 
               The tooltip follows the same pinned-not-collapsed rule as the rows
-              above, and for the same reason. */}
+              above, and for the same reason. It stays on the CONTAINER, and so
+              would describe both buttons — but `ThemeMenuButton` carries a title
+              of its own naming the mode it is in, and an element's own `title`
+              is what a browser shows, so the hatch below reads as "Stealth mode"
+              and the one under it does not.
+
+              ALL OF THE ABOVE APPLIES TWICE OVER. The theme switch sits here for
+              the same reason the stealth one does — signed out, on a phone, in a
+              collapsed rail, this footer is the only place either preference can
+              be reached — and it is built to the same shape (emoji at
+              `text-base`, bare text node beside it), so the collapse selectors
+              reach it without a word of change. */}
           <div
             title={pinned ? undefined : "Stealth mode"}
             className={`shrink-0 border-t border-border py-2 ${
@@ -587,6 +599,7 @@ export function Sidebar({
             }`}
           >
             <StealthMenuButton />
+            <ThemeMenuButton />
           </div>
         </div>
       </aside>
@@ -643,7 +656,7 @@ export function Sidebar({
           role="dialog"
           aria-label="Categories"
           aria-modal="true"
-          className={`absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-border bg-white shadow-2xl transition-transform duration-200 ${
+          className={`absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-border bg-surface shadow-2xl transition-transform duration-200 ${
             mobileOpen ? "translate-x-0" : "-translate-x-full"
           }`}
           style={{
@@ -659,7 +672,7 @@ export function Sidebar({
               type="button"
               onClick={onMobileClose}
               aria-label="Close categories"
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full text-zinc-700 transition hover:bg-surface-2"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full text-foreground-2 transition hover:bg-surface-2"
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
                 <path d="M6 6l12 12M18 6 6 18" />
@@ -673,6 +686,10 @@ export function Sidebar({
           </nav>
           <div className="border-t border-border px-3 py-3">
             <StealthMenuButton onNavigate={onMobileClose} />
+            {/* No `onNavigate`: closing the drawer is right for the stealth
+                button (it opens a modal over it) and wrong for this one, which
+                changes the page under you and leaves you to judge the result. */}
+            <ThemeMenuButton />
           </div>
         </aside>
       </div>

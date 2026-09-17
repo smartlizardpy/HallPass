@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BackButton } from "@/app/components/BackButton";
 import { Wordmark } from "@/app/components/Wordmark";
+import { AppearanceCard } from "./AppearanceCard";
 import { StealthSettingsRow } from "./StealthSettingsRow";
 
 /**
@@ -44,6 +45,13 @@ import { StealthSettingsRow } from "./StealthSettingsRow";
  * If a Stealth entry ever returns to the tab bar or the phone header, this can
  * go. Until then, deleting it silently removes the feature for most of the
  * people it was built for.
+ *
+ * ── AND SO IS APPEARANCE, FOR EXACTLY THE SAME REASON ───────────────────────
+ * `ThemeMenuButton` lives in the sidebar footer beside the stealth hatch, and
+ * that footer is unreachable on a phone by the trace above. Light/dark is a
+ * per-device `localStorage` preference like the stealth ones, so the card below
+ * works signed out; without it, a signed-out phone player — most of this site's
+ * traffic — could not turn dark mode on at all.
  */
 export function NotSignedInCard() {
   return (
@@ -66,8 +74,9 @@ export function NotSignedInCard() {
           </Link>
         </div>
 
-        {/* See the docblock: on a phone this is the only way in. */}
+        {/* See the docblock: on a phone these are the only way in. */}
         <StealthSettingsRow />
+        <AppearanceCard />
       </div>
     </main>
   );

@@ -85,7 +85,7 @@ export function GameCard({
 
         {/* meta */}
         <div className="px-1 pt-2.5">
-          <h3 className="truncate text-[14px] font-extrabold leading-tight text-zinc-900 group-hover:text-brand">
+          <h3 className="truncate text-[14px] font-extrabold leading-tight text-foreground group-hover:text-brand">
             {game.title}
           </h3>
           <p className="mt-0.5 truncate text-[12px] font-semibold text-muted">
@@ -119,6 +119,9 @@ export function GameCard({
       <div
         className={`pointer-events-none absolute inset-x-0 top-0 z-10 hidden items-center justify-center rounded-3xl bg-black/0 opacity-0 transition-all duration-200 group-hover:bg-black/20 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:hover)]:flex ${aspect}`}
       >
+        {/* Literal white, not `bg-surface`: the disc is chrome ON the cover
+            art, inside its own scrim, and the art is the same picture in either
+            theme. */}
         <button
           type="button"
           aria-label={`Play ${game.title} now`}

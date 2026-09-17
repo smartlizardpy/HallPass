@@ -394,7 +394,7 @@ function ArcadeRows({
           }
         >
           {filtered.length === 0 ? (
-            <div className="rounded-3xl bg-white p-16 text-center">
+            <div className="rounded-3xl bg-surface p-16 text-center">
               <p className="text-base font-bold text-muted">
                 No games match. Try another search or category.
               </p>
@@ -523,7 +523,7 @@ function MobileCatalog({
 
       {games.length === 0 ? (
         <MobileSection title="Games">
-          <div className="rounded-3xl bg-white p-10 text-center">
+          <div className="rounded-3xl bg-surface p-10 text-center">
             <p className="text-[15px] font-bold text-muted">
               No phone games yet — more are on the way.
             </p>
@@ -549,7 +549,7 @@ function MobileSection({
 }) {
   return (
     <section className="px-3 pt-6">
-      <h2 className="mb-4 text-xl font-black tracking-tight text-zinc-900">
+      <h2 className="mb-4 text-xl font-black tracking-tight text-foreground">
         {title}
       </h2>
       {children}
@@ -640,10 +640,20 @@ function FeaturedBanner({
             game_category: game.category,
           });
         }}
-        className="group relative grid w-full overflow-hidden rounded-3xl bg-brand text-left shadow-xl shadow-brand/20 sm:max-h-[38svh] sm:grid-cols-[1.1fr_1fr]"
+        /* THE DARK BANNER IS A DEEP PANEL, NOT A LIT ONE. `bg-brand` at full
+           strength is the right amount of shout against a white page; on a
+           near-black one the same fill is the brightest thing on screen by a
+           distance, and the `shadow-brand/20` under it becomes a halo. So the
+           dark theme drops to `--brand-100` (the deep violet the brand ramp
+           already carries there) and swaps the glow for a hairline ring, which
+           is what separates a panel from the page when the page is dark. The
+           white type, the yellow FEATURED chip and the pill are unchanged —
+           they all still read on it. */
+        className="group relative grid w-full overflow-hidden rounded-3xl bg-brand text-left shadow-xl shadow-brand/20 dark:bg-brand-100 dark:shadow-none dark:ring-1 dark:ring-brand/40 sm:max-h-[38svh] sm:grid-cols-[1.1fr_1fr]"
         style={{
+          // The alphas are theme tokens (`globals.css`); the geometry is not.
           backgroundImage:
-            "radial-gradient(circle at 85% 20%, rgba(255,199,0,0.25), transparent 50%), radial-gradient(circle at 15% 90%, rgba(255,79,139,0.35), transparent 55%)",
+            "radial-gradient(circle at 85% 20%, rgba(255,199,0,var(--banner-wash-warm)), transparent 50%), radial-gradient(circle at 15% 90%, rgba(255,79,139,var(--banner-wash-hot)), transparent 55%)",
         }}
       >
         {/* The `sm:` sizes are all viewport-height clamps — see the docblock.
@@ -681,6 +691,9 @@ function FeaturedBanner({
                 nothing. `py-3 text-[15px]` lands exactly ON the 44px floor, so
                 the tap target is unchanged and the pill still reads as the
                 chunky primary action. */}
+            {/* Literal white, not `bg-surface`: the pill sits on the
+                brand-purple banner, which is the same purple in either theme, so
+                a pill that followed the page would invert underneath it. */}
             <span className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-6 py-3 text-[15px] font-extrabold text-brand shadow-2xl transition group-hover:scale-105">
               View game
               <svg
@@ -782,7 +795,7 @@ function AdStrip({ ad }: { ad: Ad }) {
     "group flex items-center gap-3 rounded-2xl px-4 py-2.5 text-left transition";
   const skin = ad.placeholder
     ? "border-2 border-dashed border-border bg-transparent hover:border-brand hover:bg-brand-50"
-    : "border border-border bg-white hover:border-brand-100 hover:bg-brand-50";
+    : "border border-border bg-surface hover:border-brand-100 hover:bg-brand-50";
 
   return (
     <a
@@ -812,7 +825,7 @@ function AdStrip({ ad }: { ad: Ad }) {
       <span className="hidden h-4 w-px bg-border sm:block" />
       <span
         className={`flex-1 truncate text-sm font-bold ${
-          ad.placeholder ? "text-muted" : "text-zinc-900"
+          ad.placeholder ? "text-muted" : "text-foreground"
         }`}
       >
         {ad.text}
@@ -857,7 +870,7 @@ function Section({
 }) {
   return (
     <section className="px-3 pt-[clamp(20px,4svh,40px)] sm:px-8">
-      <h2 className="mb-[clamp(12px,2svh,20px)] text-2xl font-black tracking-tight text-zinc-900 sm:text-[28px]">
+      <h2 className="mb-[clamp(12px,2svh,20px)] text-2xl font-black tracking-tight text-foreground sm:text-[28px]">
         {title}
       </h2>
       {children}

@@ -134,6 +134,10 @@ export function GameTrailer({
               style={{ touchAction: "manipulation" }}
               className="group absolute inset-0 grid place-items-center bg-zinc-900/30 transition hover:bg-zinc-900/45 focus:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-brand"
             >
+              {/* Literal white, and a literal `text-zinc-900` triangle inside
+                  it: this disc sits on the POSTER, and artwork does not change
+                  colour with the theme, so neither may the chrome on top of it.
+                  Same rule as the gallery's arrows — see `dark-mode-design.md`. */}
               <span className="grid h-16 w-16 place-items-center rounded-full bg-white/95 shadow-xl transition group-hover:scale-105 group-active:scale-95 sm:h-20 sm:w-20">
                 <svg
                   width="26"
@@ -189,7 +193,7 @@ export function GameTrailer({
             <button
               type="button"
               onClick={onExit}
-              className="text-muted underline decoration-dotted hover:text-zinc-900"
+              className="text-muted underline decoration-dotted hover:text-foreground"
             >
               Back to screenshots
             </button>

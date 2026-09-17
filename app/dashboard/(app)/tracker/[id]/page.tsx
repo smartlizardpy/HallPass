@@ -366,7 +366,7 @@ export default async function TrackerItemPage({
                   key={update.id}
                   className={
                     byAgent
-                      ? "rounded-lg border border-emerald-200 bg-emerald-50/50 p-3"
+                      ? "rounded-lg border border-emerald-200 dark:border-emerald-900/70 bg-emerald-50/50 dark:bg-emerald-950/40 p-3"
                       : "rounded-lg border border-border bg-surface-2/40 p-3"
                   }
                 >
@@ -375,7 +375,7 @@ export default async function TrackerItemPage({
                   </p>
                   <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted">
                     {byAgent && (
-                      <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-emerald-900">
+                      <span className="inline-flex items-center rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-emerald-900 dark:text-emerald-200">
                         Agent
                       </span>
                     )}
@@ -433,7 +433,7 @@ export default async function TrackerItemPage({
       {mayDelete && (
         <Section title="Delete permanently">
           <details>
-            <summary className="cursor-pointer text-sm font-bold text-rose-700 hover:text-rose-800">
+            <summary className="cursor-pointer text-sm font-bold text-rose-700 dark:text-rose-300 hover:text-rose-800 dark:hover:text-rose-200">
               Delete this item for good
             </summary>
             {/* Says exactly what is lost, in the order it will be missed.
@@ -453,7 +453,7 @@ export default async function TrackerItemPage({
               <input type="hidden" name="id" value={item.id} />
               <button
                 type="submit"
-                className="rounded-full border border-rose-300 bg-rose-50 px-4 py-1.5 text-xs font-extrabold text-rose-800 transition hover:bg-rose-100"
+                className="rounded-full border border-rose-300 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40 px-4 py-1.5 text-xs font-extrabold text-rose-800 dark:text-rose-200 transition hover:bg-rose-100 dark:hover:bg-rose-950/60"
               >
                 Yes, delete “{item.title}” for good
               </button>

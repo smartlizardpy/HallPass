@@ -65,7 +65,7 @@ const inputClass =
 
 /** Read-only variant: visibly inert, still selectable so the key can be copied. */
 const readOnlyInputClass =
-  "mt-2 w-full cursor-not-allowed rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-sm text-zinc-600 outline-none";
+  "mt-2 w-full cursor-not-allowed rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-sm text-zinc-600 dark:text-zinc-300 outline-none";
 
 export async function AchievementPanel({ slug }: { slug: string }) {
   const list = await getAchievementCatalogue(slug);
@@ -73,7 +73,7 @@ export async function AchievementPanel({ slug }: { slug: string }) {
 
   return (
     <div className="space-y-6">
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400 dark:text-zinc-500">
         {list.length} / {MAX_ACHIEVEMENTS_PER_GAME} defined. A game earns one by
         calling{" "}
         <code className="font-mono">HallPass.unlock(&quot;key&quot;)</code> — or{" "}
@@ -103,7 +103,7 @@ export async function AchievementPanel({ slug }: { slug: string }) {
       )}
 
       {full ? (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <p className="rounded-lg border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
           This game is at the maximum of {MAX_ACHIEVEMENTS_PER_GAME}{" "}
           achievements. Delete one to add another.
         </p>
@@ -164,7 +164,7 @@ function AchievementRow({
               type="submit"
               disabled={index === 0}
               aria-label={`Move ${achievement.name} earlier`}
-              className="grid h-7 w-7 place-items-center rounded border border-border text-xs font-bold text-zinc-700 hover:bg-surface-2 disabled:opacity-30"
+              className="grid h-7 w-7 place-items-center rounded border border-border text-xs font-bold text-foreground-2 hover:bg-surface-2 disabled:opacity-30"
             >
               ↑
             </button>
@@ -177,7 +177,7 @@ function AchievementRow({
               type="submit"
               disabled={index === total - 1}
               aria-label={`Move ${achievement.name} later`}
-              className="grid h-7 w-7 place-items-center rounded border border-border text-xs font-bold text-zinc-700 hover:bg-surface-2 disabled:opacity-30"
+              className="grid h-7 w-7 place-items-center rounded border border-border text-xs font-bold text-foreground-2 hover:bg-surface-2 disabled:opacity-30"
             >
               ↓
             </button>
@@ -193,7 +193,7 @@ function AchievementRow({
         <input type="hidden" name="id" value={idValue} />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Key
             <input
               type="text"
@@ -215,7 +215,7 @@ function AchievementRow({
             </span>
           </label>
 
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Name
             <input
               name="name"
@@ -228,7 +228,7 @@ function AchievementRow({
           </label>
         </div>
 
-        <label className="mt-4 block text-sm font-semibold text-zinc-900">
+        <label className="mt-4 block text-sm font-semibold text-foreground">
           Description
           <textarea
             name="description"
@@ -241,7 +241,7 @@ function AchievementRow({
         </label>
 
         <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Icon
             <input
               name="icon"
@@ -252,7 +252,7 @@ function AchievementRow({
               className={inputClass}
             />
           </label>
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Points
             <input
               name="points"
@@ -265,7 +265,7 @@ function AchievementRow({
               className={inputClass}
             />
           </label>
-          <label className="block text-sm font-semibold text-zinc-900">
+          <label className="block text-sm font-semibold text-foreground">
             Target
             <input
               name="target"
@@ -278,7 +278,7 @@ function AchievementRow({
               className={inputClass}
             />
           </label>
-          <label className="flex items-end gap-2 pb-2.5 text-sm font-semibold text-zinc-900">
+          <label className="flex items-end gap-2 pb-2.5 text-sm font-semibold text-foreground">
             <input
               name="secret"
               type="checkbox"
@@ -307,7 +307,7 @@ function AchievementRow({
         <input type="hidden" name="id" value={idValue} />
         <button
           type="submit"
-          className="rounded-full border border-red-300 bg-red-50 px-4 py-2 text-sm font-bold text-red-900 hover:bg-red-100"
+          className="rounded-full border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-4 py-2 text-sm font-bold text-red-900 dark:text-red-200 hover:bg-red-100 dark:hover:bg-red-950/60"
         >
           Delete
         </button>
@@ -330,7 +330,7 @@ function CreateForm({ slug }: { slug: string }) {
       <input type="hidden" name="slug" value={slug} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <label className="block text-sm font-semibold text-zinc-900">
+        <label className="block text-sm font-semibold text-foreground">
           Key
           <input
             name="key"
@@ -351,7 +351,7 @@ function CreateForm({ slug }: { slug: string }) {
           </span>
         </label>
 
-        <label className="block text-sm font-semibold text-zinc-900">
+        <label className="block text-sm font-semibold text-foreground">
           Name
           <input
             name="name"
@@ -364,7 +364,7 @@ function CreateForm({ slug }: { slug: string }) {
         </label>
       </div>
 
-      <label className="block text-sm font-semibold text-zinc-900">
+      <label className="block text-sm font-semibold text-foreground">
         Description
         <textarea
           name="description"
@@ -376,7 +376,7 @@ function CreateForm({ slug }: { slug: string }) {
       </label>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <label className="block text-sm font-semibold text-zinc-900">
+        <label className="block text-sm font-semibold text-foreground">
           Icon
           <input
             name="icon"
@@ -386,7 +386,7 @@ function CreateForm({ slug }: { slug: string }) {
             className={inputClass}
           />
         </label>
-        <label className="block text-sm font-semibold text-zinc-900">
+        <label className="block text-sm font-semibold text-foreground">
           Points
           <input
             name="points"
@@ -399,7 +399,7 @@ function CreateForm({ slug }: { slug: string }) {
             className={inputClass}
           />
         </label>
-        <label className="block text-sm font-semibold text-zinc-900">
+        <label className="block text-sm font-semibold text-foreground">
           Target
           <input
             name="target"
@@ -415,7 +415,7 @@ function CreateForm({ slug }: { slug: string }) {
             1 = plain unlock. Higher makes it a counter with a progress bar.
           </span>
         </label>
-        <label className="flex items-start gap-2 text-sm font-semibold text-zinc-900 sm:pt-9">
+        <label className="flex items-start gap-2 text-sm font-semibold text-foreground sm:pt-9">
           <input
             name="secret"
             type="checkbox"

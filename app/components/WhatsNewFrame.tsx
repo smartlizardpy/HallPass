@@ -58,7 +58,7 @@ export function WhatsNewFrame() {
 
   return (
     <div>
-      <div className="relative h-[70svh] min-h-[420px] overflow-hidden rounded-3xl bg-white">
+      <div className="relative h-[70svh] min-h-[420px] overflow-hidden rounded-3xl bg-surface">
         <iframe
           src={WHATS_NEW_URL}
           title="HALLPASS changelog"
@@ -68,11 +68,11 @@ export function WhatsNewFrame() {
 
         {maybeBlocked && (
           <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 p-6 backdrop-blur-sm">
-            <div className="max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
-              <p className="text-sm font-bold text-zinc-900">
+            <div className="max-w-sm rounded-2xl bg-surface p-6 text-center shadow-2xl">
+              <p className="text-sm font-bold text-foreground">
                 The changelog is taking a while, or will not open here.
               </p>
-              <p className="mt-1 text-[13px] font-semibold text-zinc-600">
+              <p className="mt-1 text-[13px] font-semibold text-zinc-600 dark:text-zinc-300">
                 It lives on another site, so it needs a connection — and some
                 networks block it.
               </p>

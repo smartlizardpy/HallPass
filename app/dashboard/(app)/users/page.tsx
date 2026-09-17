@@ -207,13 +207,13 @@ export default async function UsersPage({
       />
 
       {ok && (
-        <div className="mb-6 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+        <div className="mb-6 rounded-xl border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200">
           {ok}
         </div>
       )}
 
       {error && (
-        <div className="mb-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+        <div className="mb-6 rounded-xl border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-900 dark:text-red-200">
           {error}
         </div>
       )}
@@ -247,7 +247,7 @@ export default async function UsersPage({
                 key={role}
                 className={`rounded-lg border px-4 py-3 ${
                   over
-                    ? "border-amber-300 bg-amber-50"
+                    ? "border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40"
                     : full
                       ? "border-border bg-surface-2"
                       : "border-border bg-surface"
@@ -282,7 +282,7 @@ export default async function UsersPage({
       </section>
 
       {overCapacity.length > 0 && (
-        <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="mb-6 rounded-xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
           <p className="font-bold">More holders than seats.</p>
           <ul className="mt-1 space-y-0.5">
             {overCapacity.map((role) => (
@@ -385,7 +385,7 @@ export default async function UsersPage({
               <span
                 className={
                   isRoleFull(seats, role)
-                    ? "font-semibold text-amber-700"
+                    ? "font-semibold text-amber-700 dark:text-amber-300"
                     : undefined
                 }
               >
@@ -396,7 +396,7 @@ export default async function UsersPage({
           ))}
         </ul>
         {defaultRole === null && (
-          <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <p className="mt-3 rounded-lg border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
             Every seat is taken ({totalSeats(seats.limits)} in total). Remove
             somebody below before inviting anyone else, or raise a limit in{" "}
             <Link href="/dashboard/users/settings" className="underline">
@@ -408,7 +408,7 @@ export default async function UsersPage({
       </section>
 
       {dbError ? (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="rounded-xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
           Database not configured. Set{" "}
           <code className="font-mono">DATABASE_URL</code> to manage users.
         </div>

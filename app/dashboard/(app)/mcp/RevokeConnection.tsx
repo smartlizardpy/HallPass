@@ -51,7 +51,7 @@ export function RevokeConnection({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-full border border-border px-3 py-1 text-xs font-bold text-zinc-700 hover:bg-surface-2"
+        className="rounded-full border border-border px-3 py-1 text-xs font-bold text-foreground-2 hover:bg-surface-2"
       >
         Revoke
       </button>
@@ -99,7 +99,7 @@ export function RevokeConnection({
                 ref={closeRef}
                 type="button"
                 onClick={() => setOpen(false)}
-                className="flex-1 rounded-full border border-border bg-white px-4 py-2 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                className="flex-1 rounded-full border border-border bg-surface px-4 py-2 text-sm font-bold text-foreground-2 hover:bg-surface-2"
               >
                 Cancel
               </button>

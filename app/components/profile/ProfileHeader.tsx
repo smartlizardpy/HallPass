@@ -47,14 +47,14 @@ export function ProfileHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <section className="rounded-3xl bg-white p-5 sm:p-8">
+    <section className="rounded-3xl bg-surface p-5 sm:p-8">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
         <div className="shrink-0">
           <Avatar person={profile} size={96} />
         </div>
 
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-2xl font-black tracking-tight text-zinc-900 sm:text-3xl">
+          <h1 className="truncate text-2xl font-black tracking-tight text-foreground sm:text-3xl">
             {profile.displayName}
           </h1>
           {/* The @username is shown even when it IS the display name (a player
@@ -86,12 +86,12 @@ export function ProfileHeader({
           {profile.visibility === "full" && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {profile.friendship === "self" && (
-                <span className={`${RELATIONSHIP_PILL} bg-surface-2 text-zinc-700`}>
+                <span className={`${RELATIONSHIP_PILL} bg-surface-2 text-foreground-2`}>
                   This is you
                 </span>
               )}
               {profile.friendship === "friends" && (
-                <span className={`${RELATIONSHIP_PILL} bg-emerald-50 text-emerald-900`}>
+                <span className={`${RELATIONSHIP_PILL} bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200`}>
                   Friends
                 </span>
               )}

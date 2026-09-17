@@ -87,12 +87,12 @@ export default async function CurationPage({
       />
 
       {ok && (
-        <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+        <div className="rounded-xl border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200">
           {ok}
         </div>
       )}
       {error && (
-        <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+        <div className="rounded-xl border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-900 dark:text-red-200">
           {error}
         </div>
       )}
@@ -180,7 +180,7 @@ export default async function CurationPage({
                       className={
                         isNew
                           ? "rounded-full bg-brand-50 px-4 py-1.5 text-sm font-bold text-brand hover:bg-brand-50/70"
-                          : "rounded-full border border-border bg-white px-4 py-1.5 text-sm font-bold text-zinc-700 hover:bg-surface-2"
+                          : "rounded-full border border-border bg-surface px-4 py-1.5 text-sm font-bold text-foreground-2 hover:bg-surface-2"
                       }
                     >
                       {isNew ? "New ✓" : "Mark new"}
@@ -271,7 +271,7 @@ export default async function CurationPage({
                       <input type="hidden" name="from" value={tag} />
                       <button
                         type="submit"
-                        className="rounded-full border border-red-300 bg-white px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-50"
+                        className="rounded-full border border-red-300 dark:border-red-900 bg-surface px-4 py-2 text-sm font-bold text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/40"
                       >
                         Delete
                       </button>

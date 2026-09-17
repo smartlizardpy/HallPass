@@ -43,9 +43,9 @@ export function FooterCredits() {
   if (showReal) {
     return (
       <p>
-        Games by <span className="text-zinc-900">Ateş Demir</span> · Site by{" "}
-        <span className="text-zinc-900">Ozan Kaygusuz</span> · Marketing by{" "}
-        <span className="text-zinc-900">Sohan Kanti Dolai</span>
+        Games by <span className="text-foreground">Ateş Demir</span> · Site by{" "}
+        <span className="text-foreground">Ozan Kaygusuz</span> · Marketing by{" "}
+        <span className="text-foreground">Sohan Kanti Dolai</span>
       </p>
     );
   }
@@ -56,7 +56,7 @@ export function FooterCredits() {
       <button
         type="button"
         onClick={() => setShowReal(true)}
-        className="text-zinc-900 underline underline-offset-2 transition hover:text-brand"
+        className="text-foreground underline underline-offset-2 transition hover:text-brand"
       >
         {CREDIT_PLACEHOLDER}
       </button>

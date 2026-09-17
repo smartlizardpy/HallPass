@@ -42,7 +42,7 @@ export function AchievementWall({ groups }: { groups: AchievementGroup[] }) {
   if (groups.length === 0) return null;
 
   return (
-    <section className="rounded-3xl bg-white p-5 sm:p-6">
+    <section className="rounded-3xl bg-surface p-5 sm:p-6">
       <h2 className="text-[11px] font-black uppercase tracking-wider text-muted">
         Achievements
       </h2>
@@ -54,7 +54,7 @@ export function AchievementWall({ groups }: { groups: AchievementGroup[] }) {
               <Link
                 href={`/game/${group.slug}`}
                 prefetch={false}
-                className="text-[15px] font-black tracking-tight text-zinc-900 hover:text-brand"
+                className="text-[15px] font-black tracking-tight text-foreground hover:text-brand"
               >
                 {group.title}
               </Link>
@@ -73,7 +73,7 @@ export function AchievementWall({ groups }: { groups: AchievementGroup[] }) {
                     // in an sr-only span, because a tooltip alone is unreachable
                     // by keyboard.
                     title={item.description || undefined}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-3 py-1.5 text-[12px] font-black text-zinc-800"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-3 py-1.5 text-[12px] font-black text-zinc-800 dark:text-zinc-200"
                   >
                     <span aria-hidden>{item.icon}</span>
                     {item.name}

@@ -86,7 +86,7 @@ export function DashShell({
           aria-label="Open menu"
           aria-controls="dash-mobile-nav"
           aria-expanded={open}
-          className="inline-flex h-11 w-11 items-center justify-center rounded-full text-zinc-700 transition hover:bg-surface-2"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-full text-foreground-2 transition hover:bg-surface-2"
         >
           <svg
             width="22"
@@ -145,7 +145,7 @@ export function DashShell({
               type="button"
               onClick={() => setOpen(false)}
               aria-label="Close menu"
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full text-zinc-700 transition hover:bg-surface-2"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full text-foreground-2 transition hover:bg-surface-2"
             >
               <svg
                 width="22"

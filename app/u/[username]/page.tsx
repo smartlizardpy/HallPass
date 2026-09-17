@@ -252,7 +252,7 @@ export default async function ProfilePage({
       <>
         {/* EARNED ONLY — no `locked` prop, ever. See the docblock. */}
         {full.badges.length > 0 && (
-          <section className="rounded-3xl bg-white p-5 sm:p-6">
+          <section className="rounded-3xl bg-surface p-5 sm:p-6">
             <h2 className="text-[11px] font-black uppercase tracking-wider text-muted">
               Badges
             </h2>

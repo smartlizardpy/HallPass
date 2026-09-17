@@ -18,7 +18,7 @@
  * The two variants sit on different surfaces and must not be unified. The
  * dashboard rail is white, so `sidebar` is a bare row that only fills on hover.
  * `SiteHeader`'s bar is ALSO white now, so `header` fills with `bg-surface-2` —
- * it was `bg-white` + a shadow back when the bar was `--background`, and both of
+ * it was `bg-surface` + a shadow back when the bar was `--background`, and both of
  * those were doing the job `--surface-2` now does properly.
  *
  * The paths themselves live in `lib/whats-new`, which both entry points and the
@@ -67,7 +67,7 @@ export function WhatsNewLink({
       href={WHATS_NEW_PATH}
       title="What's New"
       aria-label="What's New"
-      className="flex h-11 items-center gap-1.5 rounded-full bg-surface-2 px-3 text-sm font-bold text-zinc-700 transition hover:text-brand sm:px-4"
+      className="flex h-11 items-center gap-1.5 rounded-full bg-surface-2 px-3 text-sm font-bold text-foreground-2 transition hover:text-brand sm:px-4"
     >
       <Sparkle className="h-[18px] w-[18px] text-brand" />
       <span className="hidden sm:inline">What&apos;s New</span>

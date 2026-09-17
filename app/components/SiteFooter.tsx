@@ -27,7 +27,7 @@ export function SiteFooter() {
       className="mt-16 px-3 py-10 sm:px-8"
       style={{ paddingBottom: "calc(2.5rem + env(safe-area-inset-bottom))" }}
     >
-      <div className="flex flex-col items-start justify-between gap-4 rounded-3xl bg-white p-6 sm:flex-row sm:items-center sm:p-8">
+      <div className="flex flex-col items-start justify-between gap-4 rounded-3xl bg-surface p-6 sm:flex-row sm:items-center sm:p-8">
         <Wordmark />
         <div className="text-[13px] font-bold text-muted sm:text-right">
           <FooterCredits />

@@ -183,8 +183,8 @@ export function GameStore({
           appears as a thick left rule (see `.game-title-tab`), which is a use
           `--g-accent` is safe for — unlike text, where 8 of 28 catalogue values
           fall below 3:1 on white. */}
-      <div className="game-title-tab mb-3 inline-block max-w-full rounded-2xl bg-white py-3 pl-4 pr-5 shadow-sm">
-        <h1 className="truncate text-xl font-black leading-tight tracking-tight text-zinc-900 sm:text-2xl">
+      <div className="game-title-tab mb-3 inline-block max-w-full rounded-2xl bg-surface py-3 pl-4 pr-5 shadow-sm">
+        <h1 className="truncate text-xl font-black leading-tight tracking-tight text-foreground sm:text-2xl">
           {game.title}
         </h1>
       </div>
@@ -205,7 +205,7 @@ export function GameStore({
             <div
               role="group"
               aria-label={`${game.title} media`}
-              className="mb-2 inline-flex gap-1 rounded-full bg-white/70 p-1"
+              className="mb-2 inline-flex gap-1 rounded-full bg-surface/70 p-1"
             >
               <MediaSwitch pressed={showVideo} onClick={() => setShowVideo(true)}>
                 {video.label}
@@ -273,7 +273,7 @@ export function GameStore({
 
         {/* RAIL */}
         <aside className="flex min-w-0 flex-col gap-4">
-          <p className="text-[15px] font-bold leading-snug text-zinc-700">
+          <p className="text-[15px] font-bold leading-snug text-foreground-2">
             {game.tagline}
           </p>
 
@@ -284,7 +284,7 @@ export function GameStore({
               the catalogue plays in the browser, so it never distinguished one
               from another. Nullable facts (`credit`, `testers`, `platform`)
               omit their row rather than render a placeholder. */}
-          <dl className="divide-y divide-border rounded-2xl bg-white/70 px-4 text-[13px]">
+          <dl className="divide-y divide-border rounded-2xl bg-surface/70 px-4 text-[13px]">
             <MetaRow label="Plays">{plays.toLocaleString()}</MetaRow>
             <MetaRow label="Genre">
               <Link href={categoryHref} className="font-bold text-brand hover:text-brand-600">
@@ -319,7 +319,7 @@ export function GameStore({
             )}
             {credit && (
               <MetaRow label="By">
-                <span className="font-bold text-zinc-900">{credit}</span>
+                <span className="font-bold text-foreground">{credit}</span>
               </MetaRow>
             )}
             {/* Who playtested this before it shipped. A fact about the game, the
@@ -330,7 +330,7 @@ export function GameStore({
                 browser. */}
             {testers.length > 0 && (
               <MetaRow label="Tested by">
-                <span className="font-bold text-zinc-900">
+                <span className="font-bold text-foreground">
                   {testers.join(", ")}
                 </span>
               </MetaRow>
@@ -369,8 +369,8 @@ export function GameStore({
               aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
               onClick={() => handleToggleFavorite(game.slug)}
               style={{ touchAction: "manipulation" }}
-              className={`grid h-14 w-14 shrink-0 place-items-center rounded-full border border-border bg-white transition hover:bg-surface-2 active:scale-90 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30 ${
-                favorited ? "text-accent-pink" : "text-zinc-400"
+              className={`grid h-14 w-14 shrink-0 place-items-center rounded-full border border-border bg-surface transition hover:bg-surface-2 active:scale-90 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30 ${
+                favorited ? "text-accent-pink" : "text-zinc-400 dark:text-zinc-500"
               }`}
             >
               <svg
@@ -400,11 +400,11 @@ export function GameStore({
       {/* ABOUT — its own card, narrower than the hero, as in the reference.
           `whitespace-pre-line` because the copy is plain text with real line
           breaks; there is no markdown dependency in this repo. */}
-      <section className="mt-5 max-w-3xl rounded-3xl bg-white p-5 sm:p-6">
+      <section className="mt-5 max-w-3xl rounded-3xl bg-surface p-5 sm:p-6">
         <h2 className="text-[11px] font-black uppercase tracking-wider text-muted">
           About this game
         </h2>
-        <p className="mt-3 whitespace-pre-line text-[15px] font-semibold leading-relaxed text-zinc-700">
+        <p className="mt-3 whitespace-pre-line text-[15px] font-semibold leading-relaxed text-foreground-2">
           {game.description}
         </p>
       </section>
@@ -448,17 +448,17 @@ export function GameStore({
           the exact array the page marks up, just not in front of the thing
           people came for. Nothing about the markup depends on where this sits;
           only that it is on the page at all. */}
-      <section className="mt-5 max-w-3xl rounded-3xl bg-white p-5 sm:p-6">
+      <section className="mt-5 max-w-3xl rounded-3xl bg-surface p-5 sm:p-6">
         <h2 className="text-[11px] font-black uppercase tracking-wider text-muted">
           Questions
         </h2>
         <dl className="mt-3">
           {gameFaq(game).map(({ question, answer }) => (
             <div key={question} className="mt-4 first:mt-0">
-              <dt className="text-[15px] font-black tracking-tight text-zinc-900">
+              <dt className="text-[15px] font-black tracking-tight text-foreground">
                 {question}
               </dt>
-              <dd className="mt-1 text-[15px] font-semibold leading-relaxed text-zinc-700">
+              <dd className="mt-1 text-[15px] font-semibold leading-relaxed text-foreground-2">
                 {answer}
               </dd>
             </div>
@@ -468,7 +468,7 @@ export function GameStore({
 
       {related.length > 0 && (
         <section className="mt-10">
-          <h2 className="mb-5 text-lg font-black tracking-tight text-zinc-900">
+          <h2 className="mb-5 text-lg font-black tracking-tight text-foreground">
             More like this
           </h2>
           <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
@@ -507,7 +507,7 @@ function MediaSwitch({
       className={`rounded-full px-3.5 py-1.5 text-[12px] font-black uppercase tracking-wider transition focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30 ${
         pressed
           ? "bg-brand text-white shadow-sm"
-          : "text-muted hover:bg-white hover:text-zinc-900"
+          : "text-muted hover:bg-surface hover:text-foreground"
       }`}
     >
       {children}
@@ -528,7 +528,7 @@ function MetaRow({
       <dt className="shrink-0 text-[11px] font-black uppercase tracking-wider text-muted">
         {label}
       </dt>
-      <dd className="min-w-0 truncate text-right font-bold text-zinc-900">
+      <dd className="min-w-0 truncate text-right font-bold text-foreground">
         {children}
       </dd>
     </div>

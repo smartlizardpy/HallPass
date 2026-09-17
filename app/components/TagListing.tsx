@@ -86,7 +86,7 @@ export function TagListing({
             </Link>
           </li>
           <li aria-hidden>/</li>
-          <li className="text-zinc-700">{tag} games</li>
+          <li className="text-foreground-2">{tag} games</li>
         </ol>
       </nav>
 
@@ -95,10 +95,10 @@ export function TagListing({
           page arrives cold from a search result, and the first line has to
           confirm to a stranger that they landed on the right shelf. */}
       <header className="mb-6 max-w-3xl">
-        <h1 className="text-2xl font-black tracking-tight text-zinc-900 sm:text-3xl">
+        <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl">
           {tag} Games — Unblocked
         </h1>
-        <p className="mt-2 text-[15px] font-semibold leading-relaxed text-zinc-600">
+        <p className="mt-2 text-[15px] font-semibold leading-relaxed text-zinc-600 dark:text-zinc-300">
           {games.length === 1
             ? `One ${tag.toLowerCase()} game, free in your browser.`
             : `${games.length} ${tag.toLowerCase()} games, free in your browser.`}{" "}
@@ -121,7 +121,7 @@ export function TagListing({
 
       {related.length > 0 && (
         <section className="mt-10">
-          <h2 className="mb-4 text-lg font-black tracking-tight text-zinc-900">
+          <h2 className="mb-4 text-lg font-black tracking-tight text-foreground">
             More tags
           </h2>
           <ul className="flex flex-wrap gap-2">
@@ -129,7 +129,7 @@ export function TagListing({
               <li key={t.tag}>
                 <Link
                   href={tagPath(t.tag)}
-                  className="flex items-center gap-1.5 rounded-full bg-surface-2 px-3 py-2 text-sm font-bold text-zinc-700 transition hover:text-brand"
+                  className="flex items-center gap-1.5 rounded-full bg-surface-2 px-3 py-2 text-sm font-bold text-foreground-2 transition hover:text-brand"
                 >
                   {t.tag}
                   <span className="text-muted">{t.count}</span>

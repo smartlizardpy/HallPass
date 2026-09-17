@@ -82,12 +82,12 @@ export function ChallengedHere({ slug }: { slug: string }) {
   return (
     <Link
       href={href}
-      className="mt-4 flex items-center gap-3 rounded-2xl bg-amber-50 p-3 transition hover:bg-amber-100"
+      className="mt-4 flex items-center gap-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 p-3 transition hover:bg-amber-100 dark:hover:bg-amber-950/60"
     >
       <span className="shrink-0 rounded-full ring-2 ring-white">
         <Avatar person={first.from} size={28} />
       </span>
-      <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-amber-900">
+      <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-amber-900 dark:text-amber-200">
         {others > 0
           ? `${first.from.displayName} and ${others} more challenged you here`
           : `${first.from.displayName} challenged you — get ${goal.toLocaleString()} to win`}

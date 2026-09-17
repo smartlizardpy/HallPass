@@ -223,12 +223,12 @@ export function PlayerOverlay({
       {/* Top bar */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex shrink-0 items-center justify-between gap-3 bg-white px-3 sm:h-14 sm:px-5"
+        className="flex shrink-0 items-center justify-between gap-3 bg-surface px-3 sm:h-14 sm:px-5"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
         <h2
           id="player-title"
-          className="min-w-0 flex-1 truncate py-3 text-sm font-extrabold text-zinc-900 sm:py-0 sm:text-base"
+          className="min-w-0 flex-1 truncate py-3 text-sm font-extrabold text-foreground sm:py-0 sm:text-base"
         >
           {game.title}
           <span className="ml-2 hidden text-sm font-semibold text-muted sm:inline">
@@ -248,7 +248,7 @@ export function PlayerOverlay({
               href={game.externalUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="hidden rounded-full bg-surface-2 px-4 py-2 text-xs font-extrabold text-zinc-700 transition hover:bg-brand-50 hover:text-brand sm:inline-flex sm:items-center"
+              className="hidden rounded-full bg-surface-2 px-4 py-2 text-xs font-extrabold text-foreground-2 transition hover:bg-brand-50 hover:text-brand sm:inline-flex sm:items-center"
               title="Open in new tab"
             >
               Open in new tab ↗
@@ -261,7 +261,7 @@ export function PlayerOverlay({
               rel="noopener noreferrer"
               aria-label="Open in new tab"
               title="Open in new tab"
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-surface-2 text-base font-extrabold text-zinc-700 transition hover:bg-brand-50 hover:text-brand sm:hidden"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-surface-2 text-base font-extrabold text-foreground-2 transition hover:bg-brand-50 hover:text-brand sm:hidden"
             >
               ↗
             </a>
@@ -269,7 +269,7 @@ export function PlayerOverlay({
           <button
             type="button"
             onClick={handleFullscreen}
-            className="hidden rounded-full bg-surface-2 px-4 py-2 text-xs font-extrabold text-zinc-700 transition hover:bg-brand-50 hover:text-brand sm:inline-flex sm:items-center"
+            className="hidden rounded-full bg-surface-2 px-4 py-2 text-xs font-extrabold text-foreground-2 transition hover:bg-brand-50 hover:text-brand sm:inline-flex sm:items-center"
             title="Fullscreen"
           >
             ⛶ Fullscreen
@@ -278,7 +278,7 @@ export function PlayerOverlay({
             type="button"
             onClick={handleFullscreen}
             aria-label="Toggle fullscreen"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-surface-2 text-base font-extrabold text-zinc-700 transition hover:bg-brand-50 hover:text-brand sm:hidden"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-surface-2 text-base font-extrabold text-foreground-2 transition hover:bg-brand-50 hover:text-brand sm:hidden"
           >
             ⛶
           </button>
@@ -318,8 +318,8 @@ export function PlayerOverlay({
             refusing to embed. Offer a centred CTA to open the game directly. */}
         {maybeBlocked && game.externalUrl && (
           <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 p-6 backdrop-blur-sm">
-            <div className="max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
-              <p className="text-sm font-bold text-zinc-900">
+            <div className="max-w-sm rounded-2xl bg-surface p-6 text-center shadow-2xl">
+              <p className="text-sm font-bold text-foreground">
                 This game may not embed here.
               </p>
               <a
