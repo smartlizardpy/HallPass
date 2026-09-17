@@ -267,7 +267,7 @@
                 <div class="flex items-center space-x-3">
                     <label data-i18n="mangal.heatLabel" class="text-xs font-bold text-amber-300">Mangal Ateşi Seviyesi:</label>
                     <input type="range" id="grill-heat" min="1" max="3" value="2" class="accent-orange-500 cursor-pointer">
-                    <span id="heat-label" class="text-xs font-bold text-orange-400 bg-orange-950/80 px-2.5 py-1 rounded-xl border border-orange-500/40">Orta Ateş</span>
+                    <span id="heat-label" data-i18n="heat.2" class="text-xs font-bold text-orange-400 bg-orange-950/80 px-2.5 py-1 rounded-xl border border-orange-500/40">Orta Ateş</span>
                 </div>
                 <div data-i18n-html="mangal.tip" class="text-[11px] text-slate-300">
                     <i class="fa-solid fa-circle-info text-amber-400"></i> Etlerin üstüne basıp çevir, tam kıvamında tabağa al!
@@ -332,7 +332,7 @@
             <div class="bg-slate-950/90 p-4 rounded-2xl border border-amber-500/30">
                 <h4 data-i18n="sofra.platterHeading" class="text-xs font-bold text-amber-400 mb-2">SOFRADAKİ PİŞMİŞ LEZZETLER:</h4>
                 <div id="table-cooked-meats" class="flex flex-wrap gap-2 mb-3 min-h-[40px]">
-                    <span class="text-xs text-slate-500 italic">Henüz pişmiş et tabağa konulmadı.</span>
+                    <span data-i18n="sofra.empty" class="text-xs text-slate-500 italic">Henüz pişmiş et tabağa konulmadı.</span>
                 </div>
                 <div class="text-xs text-cyan-300 mb-3" id="prepared-cocktail-status">
                     <span data-i18n-html="sofra.cocktailNone">Kokteyl Durumu: <span class="text-slate-400">Hazırlanmadı</span></span>
@@ -455,6 +455,7 @@
                 'sofra.mixBtn': '<i class="fa-solid fa-wine-glass text-sm"></i> Kokteyli Çalkala & Karıştır!',
                 'sofra.platterHeading': 'SOFRADAKİ PİŞMİŞ LEZZETLER:',
                 'sofra.cocktailNone': 'Kokteyl Durumu: <span class="text-slate-400">Hazırlanmadı</span>',
+                'sofra.empty': 'Henüz pişmiş et tabağa konulmadı.',
                 'sofra.feastBtn': '👑 ATLAS MANGAL ZİYAFETİNİ BAŞLAT!',
                 'inv.title': '<i class="fa-solid fa-bag-shopping"></i> Atlas Sırt Çantası',
                 'over.text': 'Eyvah Atlas! Yoldan karşıya geçerken arabaya çarptın! Sen hastanedeyken vardiya saati işlemeye devam ediyor kanka.',
@@ -465,7 +466,69 @@
                 'feast.text': 'Atlas, Atlas Baba ve tüm Atlas\'lar sofrada buluştu! Mangaldaki pişmiş lokum etler ve özel çalkalanmış Atlas Kokteyli afiyetle yenildi!',
                 'feast.payoutLabel': 'Kazanılan Ziyafet Ödülü:',
                 'feast.btn': 'Harika! Vardiyaya Devam Et 🔥',
-                'toast.default': 'Atlas Bilgilendirme'
+                'toast.default': 'Atlas Bilgilendirme',
+                'item.biftek.name': 'Atlas Lokum Biftek',
+                'item.biftek.desc': 'Atlas Kasap özel dinlendirilmiş biftek.',
+                'item.sosis.name': 'Atlas Sosisi',
+                'item.sosis.desc': 'Atlas yapımı baharatlı leziz sosis.',
+                'item.pirzola.name': 'Atlas Kuzu Pirzola',
+                'item.pirzola.desc': 'Kekikli Atlas kuzu pirzolası.',
+                'item.bbq_sos.name': 'Atlas BBQ Sos',
+                'item.bbq_sos.desc': 'Duman aromalı Atlas barbekü sosu.',
+                'item.aci_sos.name': 'Atlas Özel Acı Sos',
+                'item.aci_sos.desc': 'Ekstra acı Atlas sosu.',
+                'item.meyve_suyu.name': 'Tropikal Meyve Suyu',
+                'item.meyve_suyu.desc': 'Taze sıkılmış kokteyl bazı.',
+                'item.soda.name': 'Maden Suyu (Soda)',
+                'item.soda.desc': 'Kabarcıklı serinletici soda.',
+                'item.buz.name': 'Atlas Kristal Buz',
+                'item.buz.desc': 'Buz gibi soğuk küpler.',
+                'item.limon.name': 'Taze Limon',
+                'item.limon.desc': 'Ekşi lezzet dokunuşu.',
+                'ing.meyve_suyu': 'Meyve Suyu',
+                'ing.soda': 'Soda',
+                'ing.buz': 'Kristal Buz',
+                'ing.limon': 'Limon Dilimi',
+                'shop.buy': 'Satın Al',
+                'inv.count': 'Adet: {n}',
+                'prompt.enterZone': '{zone} - Giriş Yap',
+                'heat.1': 'Kısık Ateş',
+                'heat.2': 'Orta Ateş',
+                'heat.3': 'Yüksek Ateş 🔥',
+                'grill.empty': 'Izgara Boş',
+                'grill.raw': 'Çiğ (Pişiyor...)',
+                'grill.perfect': 'Tam Kıvamında! 👌',
+                'grill.burnt': 'Yandı! 💥',
+                'grill.flip': 'Çevir (Yüz: {n})',
+                'grill.plate': 'Tabağa Al',
+                'quality.perfect': 'Mükemmel Atlas Eti',
+                'quality.raw': 'Az Pişmiş Çiğ Et',
+                'quality.burnt': 'Yanmış Kömür Et',
+                'cocktail.name': 'Atlas Atom Kokteyli 🍹',
+                'sofra.cocktailReady': 'Kokteyl Durumu: <span class="text-cyan-400 font-bold">Efsanevi Atlas Kokteyli Hazır! 🍹</span>',
+                'toast.nearby': '⚡ Yakındaki bir Atlas mekanına yaklaşın!',
+                'toast.hospital': '🩹 Atlas hastaneden çıktı! Şimdi güvenle karşıya geç kanka!',
+                'toast.bought': '🛒 {item} alındı!',
+                'toast.noMoney': '❌ Paranız yetersiz, Atlas Bey!',
+                'toast.grillFull': '⚠️ Mangal dolu! Yer açmak için pişmiş etleri tabağa al.',
+                'toast.placed': '🔥 {item} mangala koyuldu!',
+                'toast.flipped': '🔄 Et çevrildi! Diğer yüzü ({n}. Yüz) pişiyor.',
+                'toast.plated': '🍽️ Et tabağa alındı! ({quality})',
+                'toast.needBase': '⚠️ Kokteyl için en az bir içecek bazı seçin!',
+                'toast.cocktailDone': '🍹 Kokteyl başarıyla çalkalandı ve hazırlandı!',
+                'toast.noMeat': '⚠️ Masada henüz et yok! Önce mangalda et pişirin.',
+                'npc.kasap.0': 'Kanka en taze pirzolalar burada!',
+                'npc.kasap.1': 'Atlas Kasap gururla sunar!',
+                'npc.kasap.2': 'Lokum biftekler hazır kanka!',
+                'npc.market.0': 'Buz gibi sodalar ve soslar geldi!',
+                'npc.market.1': 'Atlas Baba Market\'e hoş geldin!',
+                'npc.market.2': 'BBQ sossuz mangal olmaz!',
+                'npc.mangal.0': 'Mangal ateşi harlanıyor!',
+                'npc.mangal.1': 'Etleri yakmadan çevir kanka!',
+                'npc.mangal.2': 'Dumanı üstünde lezzet!',
+                'npc.sofra.0': 'Kokteyl çalkalama vakti!',
+                'npc.sofra.1': 'Atlas ziyafeti başlasın!',
+                'npc.sofra.2': 'Sofrada senin için yer hazır!'
             },
             en: {
                 'page.title': 'Atlas Mangal & Market 3D',
@@ -494,6 +557,7 @@
                 'sofra.mixBtn': '<i class="fa-solid fa-wine-glass text-sm"></i> Shake & mix the kokteyl!',
                 'sofra.platterHeading': 'ON THE TABLE:',
                 'sofra.cocktailNone': 'Kokteyl: <span class="text-slate-400">not mixed yet</span>',
+                'sofra.empty': 'Nothing plated up yet.',
                 'sofra.feastBtn': '👑 START THE ATLAS MANGAL FEAST!',
                 'inv.title': '<i class="fa-solid fa-bag-shopping"></i> Atlas Backpack',
                 'over.text': 'A car caught you crossing the road! Look both ways next time, mate — the shift clock keeps running while you are patched up.',
@@ -504,7 +568,69 @@
                 'feast.text': 'Atlas, Atlas Baba and every Atlas in town pulled up a chair. The mangal-grilled meat and the freshly shaken Atlas Kokteyl went down a treat!',
                 'feast.payoutLabel': 'Feast payout:',
                 'feast.btn': 'Back to the shift 🔥',
-                'toast.default': 'Atlas notice'
+                'toast.default': 'Atlas notice',
+                'item.biftek.name': 'Atlas Biftek (steak)',
+                'item.biftek.desc': 'Dry-aged house steak from Atlas Kasap.',
+                'item.sosis.name': 'Atlas Sosis (sausage)',
+                'item.sosis.desc': 'Spiced sausage, made on the premises.',
+                'item.pirzola.name': 'Atlas Pirzola (lamb chop)',
+                'item.pirzola.desc': 'Lamb chops rubbed with oregano.',
+                'item.bbq_sos.name': 'Atlas BBQ Sauce',
+                'item.bbq_sos.desc': 'Smoky barbecue sauce for the mangal.',
+                'item.aci_sos.name': 'Atlas House Hot Sauce',
+                'item.aci_sos.desc': 'Extra hot, handle with respect.',
+                'item.meyve_suyu.name': 'Tropical Fruit Juice',
+                'item.meyve_suyu.desc': 'Freshly squeezed kokteyl base.',
+                'item.soda.name': 'Sparkling Water (Soda)',
+                'item.soda.desc': 'Fizzy and cooling.',
+                'item.buz.name': 'Atlas Crystal Ice',
+                'item.buz.desc': 'Ice-cold cubes.',
+                'item.limon.name': 'Fresh Lemon',
+                'item.limon.desc': 'A sharp twist of flavour.',
+                'ing.meyve_suyu': 'Fruit Juice',
+                'ing.soda': 'Soda',
+                'ing.buz': 'Crystal Ice',
+                'ing.limon': 'Lemon Slice',
+                'shop.buy': 'Buy',
+                'inv.count': 'Qty: {n}',
+                'prompt.enterZone': 'Enter {zone}',
+                'heat.1': 'Low heat',
+                'heat.2': 'Medium heat',
+                'heat.3': 'High heat 🔥',
+                'grill.empty': 'Grill empty',
+                'grill.raw': 'Raw (cooking...)',
+                'grill.perfect': 'Just right! 👌',
+                'grill.burnt': 'Burnt! 💥',
+                'grill.flip': 'Turn it (side {n})',
+                'grill.plate': 'Plate it up',
+                'quality.perfect': 'Perfect Atlas cut',
+                'quality.raw': 'Undercooked',
+                'quality.burnt': 'Burnt to charcoal',
+                'cocktail.name': 'Atlas Atom Kokteyl 🍹',
+                'sofra.cocktailReady': 'Kokteyl: <span class="text-cyan-400 font-bold">the legendary Atlas Kokteyl is ready! 🍹</span>',
+                'toast.nearby': '⚡ Get closer to one of the Atlas spots!',
+                'toast.hospital': '🩹 Atlas is out of hospital! Cross carefully this time, mate!',
+                'toast.bought': '🛒 {item} bought!',
+                'toast.noMoney': '❌ Not enough money, Atlas Bey!',
+                'toast.grillFull': '⚠️ The mangal is full! Plate something up to make room.',
+                'toast.placed': '🔥 {item} is on the mangal!',
+                'toast.flipped': '🔄 Turned! Side {n} is cooking now.',
+                'toast.plated': '🍽️ Plated up! ({quality})',
+                'toast.needBase': '⚠️ Pick at least one drink base for the kokteyl!',
+                'toast.cocktailDone': '🍹 The kokteyl is shaken and ready!',
+                'toast.noMeat': '⚠️ Nothing on the table yet! Grill some meat first.',
+                'npc.kasap.0': 'Freshest pirzola in town, mate!',
+                'npc.kasap.1': 'Atlas Kasap, proudly serving!',
+                'npc.kasap.2': 'The biftek is ready, mate!',
+                'npc.market.0': 'Ice-cold sodas and sauces, just in!',
+                'npc.market.1': 'Welcome to Atlas Baba Market!',
+                'npc.market.2': 'No mangal is complete without BBQ sauce!',
+                'npc.mangal.0': 'The mangal is roaring!',
+                'npc.mangal.1': 'Turn the meat before it burns, mate!',
+                'npc.mangal.2': 'Flavour, straight off the smoke!',
+                'npc.sofra.0': 'Time to shake a kokteyl!',
+                'npc.sofra.1': 'Let the Atlas feast begin!',
+                'npc.sofra.2': 'There is a seat at the table for you!'
             }
         };
 
@@ -687,19 +813,19 @@
 
 
         const SHOP_KASAP = [
-            { id: 'biftek', name: 'Atlas Lokum Biftek', price: 40, icon: '🥩', desc: 'Atlas Kasap özel dinlendirilmiş biftek.' },
-            { id: 'sosis', name: 'Atlas Sosisi', price: 25, icon: '🌭', desc: 'Atlas yapımı baharatlı leziz sosis.' },
-            { id: 'pirzola', name: 'Atlas Kuzu Pirzola', price: 55, icon: '🍖', desc: 'Kekikli Atlas kuzu pirzolası.' }
+            { id: 'biftek', price: 40, icon: '🥩' },
+            { id: 'sosis', price: 25, icon: '🌭' },
+            { id: 'pirzola', price: 55, icon: '🍖' }
         ];
 
 
         const SHOP_MARKET = [
-            { id: 'bbq_sos', name: 'Atlas BBQ Sos', price: 15, icon: '🫙', desc: 'Duman aromalı Atlas barbekü sosu.' },
-            { id: 'aci_sos', name: 'Atlas Özel Acı Sos', price: 15, icon: '🌶️', desc: 'Ekstra acı Atlas sosu.' },
-            { id: 'meyve_suyu', name: 'Tropikal Meyve Suyu', price: 20, icon: '🧃', desc: 'Taze sıkılmış kokteyl bazı.' },
-            { id: 'soda', name: 'Maden Suyu (Soda)', price: 10, icon: '🍾', desc: 'Kabarcıklı serinletici soda.' },
-            { id: 'buz', name: 'Atlas Kristal Buz', price: 5, icon: '🧊', desc: 'Buz gibi soğuk küpler.' },
-            { id: 'limon', name: 'Taze Limon', price: 5, icon: '🍋', desc: 'Ekşi lezzet dokunuşu.' }
+            { id: 'bbq_sos', price: 15, icon: '🫙' },
+            { id: 'aci_sos', price: 15, icon: '🌶️' },
+            { id: 'meyve_suyu', price: 20, icon: '🧃' },
+            { id: 'soda', price: 10, icon: '🍾' },
+            { id: 'buz', price: 5, icon: '🧊' },
+            { id: 'limon', price: 5, icon: '🍋' }
         ];
 
 
@@ -1063,19 +1189,13 @@
         /* =======================================================
            6. NPC SPEECH / DIALOGUE SYSTEM
            ======================================================= */
-        const npcQuotes = {
-            kasap: ["Kanka en taze pirzolalar burada!", "Atlas Kasap gururla sunar!", "Lokum biftekler hazır kanka!"],
-            market: ["Buz gibi sodalar ve soslar geldi!", "Atlas Baba Market'e hoş geldin!", "BBQ sossuz mangal olmaz!"],
-            mangal: ["Mangal ateşi harlanıyor!", "Etleri yakmadan çevir kanka!", "Dumanı üstünde lezzet!"],
-            sofra: ["Kokteyl çalkalama vakti!", "Atlas ziyafeti başlasın!", "Sofrada senin için yer hazır!"]
-        };
+        const NPC_QUOTE_COUNT = 3;
 
 
         function triggerRandomNPCDialogue() {
             if (gameState.isGameOver) return;
             const zone = zones3D[Math.floor(Math.random() * zones3D.length)];
-            const quotes = npcQuotes[zone.id];
-            const quote = quotes[Math.floor(Math.random() * quotes.length)];
+            const quote = t('npc.' + zone.id + '.' + Math.floor(Math.random() * NPC_QUOTE_COUNT));
 
 
             showSpeechBubble(zone.npcName, quote, zone.meshGroup.position.x, zone.meshGroup.position.z + 5.5);
@@ -1223,7 +1343,7 @@
             if (activeZoneNear && !gameState.isGameOver) {
                 openZoneModal(activeZoneNear.id);
             } else {
-                showToast("⚡ Yakındaki bir Atlas mekanına yaklaşın!");
+                showToast(t('toast.nearby'));
             }
         }
 
@@ -1291,7 +1411,7 @@
                 const prompt = document.getElementById('interaction-prompt');
                 if (activeZoneNear) {
                     prompt.classList.remove('hidden');
-                    document.getElementById('interaction-text').innerText = `${activeZoneNear.name} - Giriş Yap`;
+                    document.getElementById('interaction-text').innerText = t('prompt.enterZone', { zone: activeZoneNear.name });
                 } else {
                     prompt.classList.add('hidden');
                 }
@@ -1351,7 +1471,7 @@
 
 
             document.getElementById('modal-gameover').classList.add('hidden');
-            showToast("🩹 Atlas hastaneden çıktı! Şimdi güvenle karşıya geç kanka!");
+            showToast(t('toast.hospital'));
         }
 
 
@@ -1376,44 +1496,33 @@
         }
 
 
-        function renderKasapModal() {
-            const list = document.getElementById('kasap-items-list');
-            list.innerHTML = SHOP_KASAP.map(item => `
+        function fillShopList(containerId, items, buyButtonClass) {
+            const list = document.getElementById(containerId);
+            list.innerHTML = items.map(item => `
                 <div class="bg-slate-800/80 p-3 rounded-2xl flex items-center justify-between border border-slate-700">
                     <div class="flex items-center gap-3">
                         <span class="text-3xl">${item.icon}</span>
                         <div>
-                            <h4 class="font-bold text-white text-xs sm:text-sm">${item.name}</h4>
-                            <p class="text-[11px] text-slate-300">${item.desc}</p>
+                            <h4 class="font-bold text-white text-xs sm:text-sm">${t('item.' + item.id + '.name')}</h4>
+                            <p class="text-[11px] text-slate-300">${t('item.' + item.id + '.desc')}</p>
                             <span class="text-xs font-bold text-amber-400">${item.price} ₺</span>
                         </div>
                     </div>
-                    <button onclick="buyItem('${item.id}', ${item.price})" class="bg-red-600 hover:bg-red-500 active:scale-95 text-white font-bold px-4 py-2 rounded-xl text-xs shadow transition">
-                        Satın Al
+                    <button onclick="buyItem('${item.id}', ${item.price})" class="${buyButtonClass} active:scale-95 text-white font-bold px-4 py-2 rounded-xl text-xs shadow transition">
+                        ${t('shop.buy')}
                     </button>
                 </div>
             `).join('');
+        }
+
+        function renderKasapModal() {
+            fillShopList('kasap-items-list', SHOP_KASAP, 'bg-red-600 hover:bg-red-500');
             document.getElementById('modal-kasap').classList.remove('hidden');
         }
 
 
         function renderMarketModal() {
-            const list = document.getElementById('market-items-list');
-            list.innerHTML = SHOP_MARKET.map(item => `
-                <div class="bg-slate-800/80 p-3 rounded-2xl flex items-center justify-between border border-slate-700">
-                    <div class="flex items-center gap-3">
-                        <span class="text-3xl">${item.icon}</span>
-                        <div>
-                            <h4 class="font-bold text-white text-xs sm:text-sm">${item.name}</h4>
-                            <p class="text-[11px] text-slate-300">${item.desc}</p>
-                            <span class="text-xs font-bold text-amber-400">${item.price} ₺</span>
-                        </div>
-                    </div>
-                    <button onclick="buyItem('${item.id}', ${item.price})" class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold px-4 py-2 rounded-xl text-xs shadow transition">
-                        Satın Al
-                    </button>
-                </div>
-            `).join('');
+            fillShopList('market-items-list', SHOP_MARKET, 'bg-emerald-600 hover:bg-emerald-500');
             document.getElementById('modal-market').classList.remove('hidden');
         }
 
@@ -1424,17 +1533,15 @@
                 gameState.inventory[itemId] = (gameState.inventory[itemId] || 0) + 1;
                 updateMoneyDisplay();
                 playSound('buy');
-                showToast(`🛒 ${getItemName(itemId)} alındı!`);
+                showToast(t('toast.bought', { item: getItemName(itemId) }));
             } else {
-                showToast('❌ Paranız yetersiz, Atlas Bey!');
+                showToast(t('toast.noMoney'));
             }
         }
 
 
         function getItemName(id) {
-            const all = [...SHOP_KASAP, ...SHOP_MARKET];
-            const found = all.find(x => x.id === id);
-            return found ? found.name : id;
+            return t('item.' + id + '.name');
         }
 
 
@@ -1455,10 +1562,13 @@
         }
 
 
+        function updateHeatLabel() {
+            document.getElementById('heat-label').innerText = t('heat.' + gameState.grillHeat);
+        }
+
         document.getElementById('grill-heat').addEventListener('input', (e) => {
             gameState.grillHeat = parseInt(e.target.value);
-            const labels = { 1: 'Kısık Ateş', 2: 'Orta Ateş', 3: 'Yüksek Ateş 🔥' };
-            document.getElementById('heat-label').innerText = labels[gameState.grillHeat];
+            updateHeatLabel();
         });
 
 
@@ -1469,22 +1579,22 @@
                     return `
                         <div class="bg-stone-900/90 border-2 border-dashed border-stone-700 rounded-2xl h-36 flex flex-col items-center justify-center text-slate-500">
                             <span class="text-2xl mb-1">🔥</span>
-                            <span class="text-[11px] font-bold">Izgara Boş</span>
+                            <span class="text-[11px] font-bold">${t('grill.empty')}</span>
                         </div>
                     `;
                 }
 
 
                 let color = '#ef4444';
-                let statusText = 'Çiğ (Pişiyor...)';
+                let statusText = t('grill.raw');
 
 
                 if (slot.cookProgress > 30 && slot.cookProgress <= 80) {
                     color = '#f97316';
-                    statusText = 'Tam Kıvamında! 👌';
+                    statusText = t('grill.perfect');
                 } else if (slot.cookProgress > 80) {
                     color = '#1e293b';
-                    statusText = 'Yandı! 💥';
+                    statusText = t('grill.burnt');
                 }
 
 
@@ -1498,11 +1608,11 @@
 
 
                         <span id="slot-status-${index}" class="text-[10px] font-bold text-amber-200">${statusText}</span>
-                        <span id="slot-side-${index}" class="text-[9px] bg-slate-950 px-2 py-0.5 rounded-full text-amber-400">Çevir (Yüz: ${slot.side})</span>
+                        <span id="slot-side-${index}" class="text-[9px] bg-slate-950 px-2 py-0.5 rounded-full text-amber-400">${t('grill.flip', { n: slot.side })}</span>
 
 
                         <button onclick="event.stopPropagation(); collectCookedMeat(${index})" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-1 rounded-xl text-[11px] active:scale-90 transition">
-                            Tabağa Al
+                            ${t('grill.plate')}
                         </button>
                     </div>
                 `;
@@ -1537,7 +1647,7 @@
 
             const emptySlot = gameState.grillSlots.find(s => s.state === 'empty');
             if (!emptySlot) {
-                showToast("⚠️ Mangal dolu! Yer açmak için pişmiş etleri tabağa al.");
+                showToast(t('toast.grillFull'));
                 return;
             }
 
@@ -1552,7 +1662,7 @@
             playSound('sizzle');
             renderGrillSlots();
             renderMangalInventorySelector();
-            showToast(`🔥 ${getItemName(itemKey)} mangala koyuldu!`);
+            showToast(t('toast.placed', { item: getItemName(itemKey) }));
         }
 
 
@@ -1563,10 +1673,10 @@
 
             slot.side = slot.side === 1 ? 2 : 1;
             playSound('sizzle');
-            showToast(`🔄 Et çevrildi! Diğer yüzü (${slot.side}. Yüz) pişiyor.`);
+            showToast(t('toast.flipped', { n: slot.side }));
             
             const sideLabel = document.getElementById(`slot-side-${index}`);
-            if (sideLabel) sideLabel.innerText = `Çevir (Yüz: ${slot.side})`;
+            if (sideLabel) sideLabel.innerText = t('grill.flip', { n: slot.side });
         }
 
 
@@ -1575,9 +1685,9 @@
             if (!slot || slot.state === 'empty') return;
 
 
-            let quality = 'Mükemmel Atlas Eti';
-            if (slot.cookProgress < 30) quality = 'Az Pişmiş Çiğ Et';
-            if (slot.cookProgress > 80) quality = 'Yanmış Kömür Et';
+            let quality = t('quality.perfect');
+            if (slot.cookProgress < 30) quality = t('quality.raw');
+            if (slot.cookProgress > 80) quality = t('quality.burnt');
 
 
             gameState.cookedPlatter.push({
@@ -1594,7 +1704,7 @@
 
             renderGrillSlots();
             renderMangalInventorySelector();
-            showToast(`🍽️ Et tabağa alındı! (${quality})`);
+            showToast(t('toast.plated', { quality: quality }));
         }
 
 
@@ -1611,13 +1721,13 @@
                         bar.style.width = `${Math.min(100, slot.cookProgress)}%`;
                         if (slot.cookProgress <= 30) {
                             bar.style.backgroundColor = '#ef4444';
-                            status.innerText = 'Çiğ (Pişiyor...)';
+                            status.innerText = t('grill.raw');
                         } else if (slot.cookProgress <= 80) {
                             bar.style.backgroundColor = '#f97316';
-                            status.innerText = 'Tam Kıvamında! 👌';
+                            status.innerText = t('grill.perfect');
                         } else {
                             bar.style.backgroundColor = '#1e293b';
-                            status.innerText = 'Yandı! 💥';
+                            status.innerText = t('grill.burnt');
                         }
                     }
                 }
@@ -1637,10 +1747,10 @@
 
         function renderCocktailIngredients() {
             const ingredients = [
-                { id: 'meyve_suyu', name: 'Meyve Suyu', icon: '🧃' },
-                { id: 'soda', name: 'Soda', icon: '🍾' },
-                { id: 'buz', name: 'Kristal Buz', icon: '🧊' },
-                { id: 'limon', name: 'Limon Dilimi', icon: '🍋' }
+                { id: 'meyve_suyu', icon: '🧃' },
+                { id: 'soda', icon: '🍾' },
+                { id: 'buz', icon: '🧊' },
+                { id: 'limon', icon: '🍋' }
             ];
 
 
@@ -1649,7 +1759,7 @@
                 const count = gameState.inventory[ing.id] || 0;
                 return `
                     <div class="bg-slate-800/80 p-2 rounded-xl flex items-center justify-between border border-slate-700">
-                        <span class="text-xs text-slate-200 font-bold">${ing.icon} ${ing.name} (${count})</span>
+                        <span class="text-xs text-slate-200 font-bold">${ing.icon} ${t('ing.' + ing.id)} (${count})</span>
                         <input type="checkbox" id="chk-${ing.id}" ${count <= 0 ? 'disabled' : ''} class="w-4 h-4 accent-cyan-500">
                     </div>
                 `;
@@ -1665,7 +1775,7 @@
 
 
             if (!ingMeyve && !ingSoda) {
-                showToast("⚠️ Kokteyl için en az bir içecek bazı seçin!");
+                showToast(t('toast.needBase'));
                 return;
             }
 
@@ -1677,23 +1787,33 @@
 
 
             playSound('shake');
-            gameState.preparedCocktail = 'Atlas Atom Kokteyli 🍹';
+            gameState.preparedCocktail = t('cocktail.name');
 
 
-            document.getElementById('prepared-cocktail-status').innerHTML = `
-                Kokteyl Durumu: <span class="text-cyan-400 font-bold">Efsanevi Atlas Kokteyli Hazır! 🍹</span>
-            `;
+            updateCocktailStatus();
 
 
             renderCocktailIngredients();
-            showToast("🍹 Kokteyl başarıyla çalkalandı ve hazırlandı!");
+            showToast(t('toast.cocktailDone'));
+        }
+
+
+        /**
+         * The cocktail line reads from state rather than being written once at
+         * mix time, so switching language re-renders it correctly instead of
+         * stranding the previous language's sentence on screen.
+         */
+        function updateCocktailStatus() {
+            const el = document.getElementById('prepared-cocktail-status');
+            if (!el) return;
+            el.innerHTML = gameState.preparedCocktail ? t('sofra.cocktailReady') : t('sofra.cocktailNone');
         }
 
 
         function renderTablePlatter() {
             const container = document.getElementById('table-cooked-meats');
             if (gameState.cookedPlatter.length === 0) {
-                container.innerHTML = `<span class="text-xs text-slate-500 italic">Henüz pişmiş et tabağa konulmadı.</span>`;
+                container.innerHTML = `<span class="text-xs text-slate-500 italic">${t('sofra.empty')}</span>`;
                 return;
             }
 
@@ -1709,7 +1829,7 @@
 
         function eatFeast() {
             if (gameState.cookedPlatter.length === 0) {
-                showToast("⚠️ Masada henüz et yok! Önce mangalda et pişirin.");
+                showToast(t('toast.noMeat'));
                 return;
             }
 
@@ -1758,10 +1878,35 @@
                     <span class="text-2xl">${getItemIcon(key)}</span>
                     <div>
                         <div class="text-xs font-bold text-white">${getItemName(key)}</div>
-                        <div class="text-xs text-amber-400 font-semibold">Adet: ${count}</div>
+                        <div class="text-xs text-amber-400 font-semibold">${t('inv.count', { n: count })}</div>
                     </div>
                 </div>
             `).join('');
+        }
+
+
+        /**
+         * Redraw every list the string table feeds.
+         *
+         * applyI18n only reaches static markup; these containers are written by
+         * JS from the item, grill and inventory data, so without this the
+         * player would switch language and still be looking at the old one
+         * anywhere a template literal had already run.
+         */
+        function refreshDynamicUI() {
+            fillShopList('kasap-items-list', SHOP_KASAP, 'bg-red-600 hover:bg-red-500');
+            fillShopList('market-items-list', SHOP_MARKET, 'bg-emerald-600 hover:bg-emerald-500');
+            renderGrillSlots();
+            renderMangalInventorySelector();
+            renderCocktailIngredients();
+            renderTablePlatter();
+            renderInventoryGrid();
+            updateHeatLabel();
+            updateCocktailStatus();
+            if (activeZoneNear) {
+                document.getElementById('interaction-text').innerText =
+                    t('prompt.enterZone', { zone: activeZoneNear.name });
+            }
         }
 
 
