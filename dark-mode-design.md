@@ -47,6 +47,12 @@ the OS while it is on System, and never flashes the wrong theme on a cold load.
   and they work as well on a dark background as on a light one.
 - Recharts series colours in the dashboard's analytics widgets (they are data
   colours on their own plotted surface, and sit behind an admin login).
+- The `<meta name="theme-color">` in `app/layout.tsx`. It paints the mobile
+  address bar and the installed PWA's status bar, and it is the BRAND purple in
+  both themes on purpose — that strip is chrome belonging to HALLPASS, not a
+  continuation of the page, and the stealth panic screens already override it
+  per disguise. `color-scheme` on `:root` is what makes the UA's own widgets
+  follow the theme, and that is in scope (§2.2).
 
 **Assumptions** (stated, not verified with anyone): System is the default, so a
 player who has never opened the control gets whatever their Chromebook already
@@ -216,3 +222,29 @@ ring-*-200/300   → dark:ring-*-900     text-*-950 → dark:text-*-100
   script's emitted source (same shape as `lib/stealth/*.test.ts`).
 - A grep gate at the end: no `bg-white`, `text-zinc-900` or `text-zinc-700` left
   outside the documented exclusions.
+
+## 5. What was actually checked
+
+- `npm run lint` — 0 errors, 11 warnings, all of them pre-existing (unused
+  `eslint-disable` directives and two hook-deps warnings in files this work does
+  not touch). `npm test` — 1977 passing, including the 15 new ones.
+  `npm run build` — clean; the service-worker manifest is regenerated and
+  committed as usual.
+- Driven in a real Chromium against `next start`, the four states of §2.1 all
+  resolve correctly (`data-theme` and the computed `<body>` background), with no
+  console or hydration errors: OS-dark with no choice → dark; OS-dark with
+  Light chosen → light; OS-light with Dark chosen → dark; and a second tab
+  writing the key moves the first one.
+- The sidebar cycle button advances System → Light → Dark → System, persists,
+  and repaints. NOTE for anyone scripting it: the desktop rail expands on hover,
+  so a synthetic click delivered in the same tick as the pointer move lands on a
+  moving target and is lost — hover, let the width transition finish, then
+  click. A human's pointer has already settled; this is a test artefact, and the
+  stealth hatch beside it behaves the same way.
+- Eyeballed in both themes: the catalogue, a store page (per-game hero tint) and
+  the mobile drawer.
+- NOT rendered here, and honestly so: every page that needs the database — the
+  Settings tab, the signed-out `/play/you` card and the whole dashboard — has no
+  `DATABASE_URL` in this container and 500s before it paints. They are covered
+  by the type-check and the build, and their classes come from the same sweep as
+  everything else, but nobody has looked at them in the dark yet.
