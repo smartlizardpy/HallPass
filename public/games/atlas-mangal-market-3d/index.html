@@ -1,0 +1,1641 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Atlas Mangal & Market Simülatörü 3D - Full Detaylı Edition</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <!-- Three.js 3D Engine -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+
+    <style>
+        body {
+            font-family: 'Fredoka', cursive, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            overflow: hidden;
+            background-color: #090d16;
+            color: #ffffff;
+        }
+
+
+        /* Modern Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #f97316;
+            border-radius: 9999px;
+        }
+
+
+        /* Glassmorphism Panel Style */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.88);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+        }
+
+
+        /* Grill Fire Emissive Glow Effect */
+        @keyframes fireGlow {
+            0%, 100% { box-shadow: 0 0 15px rgba(249, 115, 22, 0.4); }
+            50% { box-shadow: 0 0 35px rgba(239, 68, 68, 0.8); }
+        }
+        .fire-glow {
+            animation: fireGlow 1.5s infinite ease-in-out;
+        }
+
+
+        /* Floating Badge Animation */
+        @keyframes floatBadge {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-5px); }
+        }
+        .animate-float {
+            animation: floatBadge 2s infinite ease-in-out;
+        }
+
+
+        /* Speech Bubble Style */
+        .speech-bubble {
+            position: absolute;
+            background: #ffffff;
+            color: #0f172a;
+            border-radius: 16px;
+            padding: 8px 14px;
+            font-size: 11px;
+            font-weight: 800;
+            white-space: nowrap;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            pointer-events: none;
+            transform: translate(-50%, -100%);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            z-index: 25;
+            border: 2px solid #f59e0b;
+        }
+        .speech-bubble::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 8px 8px 0;
+            border-style: solid;
+            border-color: #ffffff transparent;
+            display: block;
+            width: 0;
+        }
+
+
+        /* Screen Crash Red Flash */
+        @keyframes crashFlash {
+            0% { background-color: rgba(239, 68, 68, 0.6); }
+            100% { background-color: rgba(0, 0, 0, 0.85); }
+        }
+        .crash-screen {
+            animation: crashFlash 0.4s forwards;
+        }
+    </style>
+</head>
+<body class="relative w-screen h-screen overflow-hidden">
+
+
+    <!-- Top HUD Navigation Bar -->
+    <header class="fixed top-0 left-0 right-0 z-30 px-4 py-3 flex items-center justify-between pointer-events-none">
+        <!-- Player Info -->
+        <div class="pointer-events-auto glass-panel px-4 py-2 rounded-2xl flex items-center space-x-3 border-amber-500/40">
+            <div class="w-10 h-10 bg-gradient-to-tr from-amber-600 to-amber-400 rounded-full flex items-center justify-center font-black text-slate-950 text-xl shadow-lg border-2 border-amber-200 animate-float">
+                🤠
+            </div>
+            <div>
+                <h1 class="text-xs sm:text-sm font-extrabold text-amber-400 leading-none tracking-wide">ATLAS ŞEHİR SİMÜLATÖRÜ</h1>
+                <p class="text-[10px] sm:text-[11px] text-slate-300">Karakter: <span class="text-amber-300 font-semibold">Atlas (Sen)</span></p>
+            </div>
+        </div>
+
+
+        <!-- Money & Inventory Controls -->
+        <div class="pointer-events-auto flex items-center space-x-3">
+            <div class="glass-panel px-4 py-2 rounded-2xl flex items-center space-x-2 border-amber-500/40">
+                <i class="fa-solid fa-coins text-amber-400 text-sm"></i>
+                <span id="money-display" class="font-black text-amber-300 text-xs sm:text-sm">300 ₺</span>
+            </div>
+
+
+            <button onclick="toggleInventoryModal()" class="glass-panel bg-amber-600/30 hover:bg-amber-500/40 active:scale-95 text-amber-300 px-4 py-2 rounded-2xl text-xs font-bold transition flex items-center gap-2 border border-amber-500/50">
+                <i class="fa-solid fa-bag-shopping text-sm"></i>
+                <span class="hidden sm:inline">Atlas</span> Çanta
+            </button>
+        </div>
+    </header>
+
+
+    <!-- 3D Canvas WebGL Container -->
+    <div id="canvas-container" class="w-full h-full absolute inset-0 cursor-grab active:cursor-grabbing"></div>
+
+
+    <!-- NPC Floating Dialogue Speech Bubbles Layer -->
+    <div id="npc-dialogues-container" class="absolute inset-0 pointer-events-none overflow-hidden z-20"></div>
+
+
+    <!-- Dynamic Context Interaction Prompt Banner -->
+    <div id="interaction-prompt" class="hidden absolute bottom-28 left-1/2 transform -translate-x-1/2 z-20 pointer-events-auto glass-panel border-2 border-amber-400/80 text-amber-300 font-bold px-6 py-3 rounded-2xl shadow-2xl animate-bounce flex items-center gap-3">
+        <span class="bg-amber-500 text-slate-950 px-2.5 py-1 rounded-xl text-xs font-black shadow" id="interaction-key">E / TIKLA</span>
+        <span id="interaction-text" class="text-xs sm:text-sm">Atlas Mekanına Giriş Yap</span>
+    </div>
+
+
+    <!-- Mobile Touch Joystick Controls Overlay (Auto-hidden on keyboard interaction) -->
+    <div id="mobile-controls" class="absolute inset-x-0 bottom-4 px-6 py-2 flex justify-between items-end pointer-events-none transition-opacity duration-300 opacity-100 z-20">
+        <!-- Virtual Joystick Area -->
+        <div id="dpad-container" class="pointer-events-auto relative w-36 h-36 bg-slate-900/80 rounded-full border-2 border-amber-500/50 flex items-center justify-center backdrop-blur shadow-2xl">
+            <div id="dpad-stick" class="w-14 h-14 bg-amber-500 border-2 border-amber-200 rounded-full shadow-inner transform transition-transform"></div>
+            <i class="fa-solid fa-caret-up absolute top-2 text-amber-300/60 text-xs"></i>
+            <i class="fa-solid fa-caret-down absolute bottom-2 text-amber-300/60 text-xs"></i>
+            <i class="fa-solid fa-caret-left absolute left-2 text-amber-300/60 text-xs"></i>
+            <i class="fa-solid fa-caret-right absolute right-2 text-amber-300/60 text-xs"></i>
+        </div>
+
+
+        <!-- Action Button -->
+        <button id="mobile-action-btn" onclick="triggerAction()" class="pointer-events-auto w-20 h-20 bg-gradient-to-tr from-amber-600 to-amber-400 active:scale-95 text-slate-950 font-black rounded-full shadow-2xl border-2 border-amber-200 flex flex-col items-center justify-center text-xs">
+            <i class="fa-solid fa-hand-pointer text-xl mb-0.5"></i>
+            <span>GİR</span>
+        </button>
+    </div>
+
+
+    <!-- 1. ATLAS KASAP MODAL -->
+    <div id="modal-kasap" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="glass-panel border-2 border-red-500/80 rounded-3xl max-w-lg w-full p-6 shadow-2xl flex flex-col max-h-[90vh]">
+            <div class="flex justify-between items-center border-b border-slate-700/80 pb-3 mb-4">
+                <div class="flex items-center gap-3">
+                    <span class="text-4xl">🥩</span>
+                    <div>
+                        <h2 class="text-xl font-bold text-red-400">ATLAS KASAP</h2>
+                        <p class="text-xs text-slate-400">Kasap: <span class="text-amber-300 font-bold">Kasap Atlas</span> | Yardımcılar: <span class="text-amber-300">Atlas & Atlas</span></p>
+                    </div>
+                </div>
+                <button onclick="closeModal('modal-kasap')" class="text-slate-400 hover:text-white text-2xl font-bold">&times;</button>
+            </div>
+
+
+            <p class="text-xs text-slate-300 mb-4 bg-red-950/50 p-3 rounded-2xl border border-red-800/40">
+                "Hoş geldin Atlas kanka! Atlas Kasap garantisiyle en taze lokum biftekler, sosisler ve kuzu pirzolalar senin için hazır!"
+            </p>
+
+
+            <div class="space-y-3 overflow-y-auto pr-1 flex-1" id="kasap-items-list">
+                <!-- Injected via JS -->
+            </div>
+
+
+            <div class="mt-4 pt-3 border-t border-slate-700/80 flex justify-between items-center">
+                <span class="text-[11px] text-slate-400">Kasap Atlas sana selam veriyor.</span>
+                <button onclick="closeModal('modal-kasap')" class="bg-slate-800 hover:bg-slate-700 px-5 py-2 rounded-xl text-xs font-bold border border-slate-600">Çıkış Yap</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- 2. ATLAS BABA MARKET MODAL -->
+    <div id="modal-market" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="glass-panel border-2 border-emerald-500/80 rounded-3xl max-w-lg w-full p-6 shadow-2xl flex flex-col max-h-[90vh]">
+            <div class="flex justify-between items-center border-b border-slate-700/80 pb-3 mb-4">
+                <div class="flex items-center gap-3">
+                    <span class="text-4xl">🛒</span>
+                    <div>
+                        <h2 class="text-xl font-bold text-emerald-400">ATLAS BABA MARKET</h2>
+                        <p class="text-xs text-slate-400">Patron: <span class="text-amber-300 font-bold">Atlas Baba</span> | Kasiyer: <span class="text-amber-300">Kasiyer Atlas</span></p>
+                    </div>
+                </div>
+                <button onclick="closeModal('modal-market')" class="text-slate-400 hover:text-white text-2xl font-bold">&times;</button>
+            </div>
+
+
+            <p class="text-xs text-slate-300 mb-4 bg-emerald-950/50 p-3 rounded-2xl border border-emerald-800/40">
+                "Atlas Baba Market'e hoş geldin kanka! Mangal BBQ sosları, özel acı soslar, buz gibi içecekler ve limonlar burada!"
+            </p>
+
+
+            <div class="space-y-3 overflow-y-auto pr-1 flex-1" id="market-items-list">
+                <!-- Injected via JS -->
+            </div>
+
+
+            <div class="mt-4 pt-3 border-t border-slate-700/80 flex justify-between items-center">
+                <span class="text-[11px] text-slate-400">Kasiyer Atlas poşetleri hazırlıyor.</span>
+                <button onclick="closeModal('modal-market')" class="bg-slate-800 hover:bg-slate-700 px-5 py-2 rounded-xl text-xs font-bold border border-slate-600">Çıkış Yap</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- 3. ATLAS BARBEKÜ / MANGAL MİNİ OYUN MODAL -->
+    <div id="modal-mangal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="glass-panel border-2 border-orange-500/80 rounded-3xl max-w-2xl w-full p-6 shadow-2xl flex flex-col">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3 mb-4">
+                <div class="flex items-center gap-3">
+                    <span class="text-4xl animate-pulse">🔥</span>
+                    <div>
+                        <h2 class="text-xl font-bold text-orange-400">ATLAS BARBEKÜ & MANGAL İSTASYONU</h2>
+                        <p class="text-xs text-slate-400">Mangal Şefi: <span class="text-amber-300 font-bold">Şef Atlas</span> | Etleri zamanında çevir!</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('modal-mangal')" class="text-slate-400 hover:text-white text-2xl font-bold">&times;</button>
+            </div>
+
+
+            <!-- Heat Controller Bar -->
+            <div class="bg-slate-900/90 p-4 rounded-2xl mb-4 flex flex-wrap gap-4 items-center justify-between border border-orange-500/30">
+                <div class="flex items-center space-x-3">
+                    <label class="text-xs font-bold text-amber-300">Mangal Ateşi Seviyesi:</label>
+                    <input type="range" id="grill-heat" min="1" max="3" value="2" class="accent-orange-500 cursor-pointer">
+                    <span id="heat-label" class="text-xs font-bold text-orange-400 bg-orange-950/80 px-2.5 py-1 rounded-xl border border-orange-500/40">Orta Ateş</span>
+                </div>
+                <div class="text-[11px] text-slate-300">
+                    <i class="fa-solid fa-circle-info text-amber-400"></i> Etlerin üstüne basıp çevir, tam kıvamında tabağa al!
+                </div>
+            </div>
+
+
+            <!-- 3D Style Mangal Slots -->
+            <div class="relative bg-stone-950 border-4 border-amber-900/80 rounded-2xl p-6 min-h-[220px] flex items-center justify-center fire-glow overflow-hidden">
+                <div class="grid grid-cols-3 gap-4 w-full relative z-10" id="grill-slots-container">
+                    <!-- Injected via JS -->
+                </div>
+            </div>
+
+
+            <!-- Inventory Meat Selection Row -->
+            <div class="mt-4">
+                <h4 class="text-xs font-bold text-amber-300 mb-2">ÇANTANDAN MANGALA ET KOY:</h4>
+                <div id="mangal-inventory-selector" class="flex gap-2 overflow-x-auto pb-2">
+                    <!-- Injected via JS -->
+                </div>
+            </div>
+
+
+            <div class="mt-4 pt-3 border-t border-slate-800 flex justify-end">
+                <button onclick="closeModal('modal-mangal')" class="bg-orange-600 hover:bg-orange-500 text-slate-950 font-black px-6 py-2 rounded-xl text-xs transition shadow-lg">Mangaldan Ayrıl</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- 4. ATLAS SOFRASI & KOKTEYL BARİ MODAL -->
+    <div id="modal-sofra" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="glass-panel border-2 border-cyan-500/80 rounded-3xl max-w-xl w-full p-6 shadow-2xl flex flex-col">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3 mb-4">
+                <div class="flex items-center gap-3">
+                    <span class="text-4xl">🍹</span>
+                    <div>
+                        <h2 class="text-xl font-bold text-cyan-400">ATLAS KOKTEYL & ZİYAFET SOFRASI</h2>
+                        <p class="text-xs text-slate-400">Ev Sahibi: <span class="text-amber-300 font-bold">Ev Sahibi Atlas</span> | Kokteyli çalkala, ziyafete başla!</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('modal-sofra')" class="text-slate-400 hover:text-white text-2xl font-bold">&times;</button>
+            </div>
+
+
+            <!-- Cocktail Shaking Mixer -->
+            <div class="bg-slate-900/90 p-4 rounded-2xl border border-cyan-500/30 mb-4">
+                <h3 class="text-xs font-bold text-cyan-300 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-glass-water text-sm"></i> Atlas Atom Kokteyl Mikseri
+                </h3>
+                <div class="grid grid-cols-2 gap-2 mb-3" id="cocktail-ingredients-list">
+                    <!-- Ingredients toggles injected via JS -->
+                </div>
+                <button onclick="mixCocktail()" class="w-full bg-cyan-600 hover:bg-cyan-500 active:scale-95 text-slate-950 font-black py-2.5 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-wine-glass text-sm"></i> Kokteyli Çalkala & Karıştır!
+                </button>
+            </div>
+
+
+            <!-- Cooked Meats Table Platter -->
+            <div class="bg-slate-950/90 p-4 rounded-2xl border border-amber-500/30">
+                <h4 class="text-xs font-bold text-amber-400 mb-2">SOFRADAKİ PİŞMİŞ LEZZETLER:</h4>
+                <div id="table-cooked-meats" class="flex flex-wrap gap-2 mb-3 min-h-[40px]">
+                    <span class="text-xs text-slate-500 italic">Henüz pişmiş et tabağa konulmadı.</span>
+                </div>
+                <div class="text-xs text-cyan-300 mb-3" id="prepared-cocktail-status">
+                    Kokteyl Durumu: <span class="text-slate-400">Hazırlanmadı</span>
+                </div>
+
+
+                <button onclick="eatFeast()" id="btn-eat-feast" class="w-full bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 active:scale-95 text-slate-950 font-black py-3 rounded-2xl text-sm shadow-2xl transition">
+                    👑 ATLAS MANGAL ZİYAFETİNİ BAŞLAT!
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- INVENTORY MODAL -->
+    <div id="modal-inventory" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="glass-panel border-2 border-amber-500/80 rounded-3xl max-w-md w-full p-6 shadow-2xl">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-3 mb-4">
+                <h2 class="text-lg font-bold text-amber-400 flex items-center gap-2">
+                    <i class="fa-solid fa-bag-shopping"></i> Atlas Sırt Çantası
+                </h2>
+                <button onclick="toggleInventoryModal()" class="text-slate-400 hover:text-white text-2xl font-bold">&times;</button>
+            </div>
+
+
+            <div id="inventory-items-grid" class="grid grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto">
+                <!-- Injected via JS -->
+            </div>
+        </div>
+    </div>
+
+
+    <!-- GAME OVER ACCIDENT MODAL -->
+    <div id="modal-gameover" class="hidden fixed inset-0 z-50 bg-red-950/90 backdrop-blur-xl flex items-center justify-center p-4">
+        <div class="glass-panel border-4 border-red-500 rounded-3xl max-w-md w-full p-6 text-center shadow-2xl transform scale-100">
+            <div class="text-6xl mb-3 animate-bounce">🚗💥</div>
+            <h2 class="text-2xl font-black text-red-400 mb-2">GAME OVER!</h2>
+            <p class="text-xs text-slate-200 mb-4 leading-relaxed">
+                Eyvah Atlas! Yoldan karşıya geçerken arabaya çarptın! Karşıya geçerken sağa ve sola bakmayı unutma kanka!
+            </p>
+            <div class="bg-red-900/40 border border-red-600/50 rounded-2xl p-4 mb-5">
+                <span class="text-xs text-slate-300 block mb-1">Hasar Durumu:</span>
+                <span class="text-lg font-extrabold text-amber-300">Atlas Hastanede İyileştirildi! ❤️‍🩹</span>
+            </div>
+            <button onclick="restartGameAfterCrash()" class="w-full bg-gradient-to-r from-red-600 to-amber-500 hover:from-red-500 hover:to-amber-400 text-slate-950 font-black py-3 rounded-xl text-sm shadow-xl transition">
+                Yeniden Doğ & Oyuna Devam Et 🔥
+            </button>
+        </div>
+    </div>
+
+
+    <!-- FEAST CELEBRATION MODAL -->
+    <div id="modal-feast-result" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4">
+        <div class="glass-panel border-4 border-amber-400 rounded-3xl max-w-md w-full p-6 text-center shadow-2xl transform scale-100">
+            <div class="text-6xl mb-3 animate-bounce">👑</div>
+            <h2 class="text-2xl font-black text-amber-400 mb-2">EFSANEVİ ATLAS ZİYAFETİ!</h2>
+            <p class="text-xs text-slate-200 mb-4 leading-relaxed">
+                Atlas, Atlas Baba ve tüm Atlas'lar sofrada buluştu! Mangaldaki pişmiş lokum etler ve özel çalkalanmış Atlas Kokteyli afiyetle yenildi!
+            </p>
+            <div class="bg-amber-950/60 border border-amber-500/50 rounded-2xl p-4 mb-5">
+                <span class="text-xs text-slate-300 block mb-1">Kazanılan Ziyafet Ödülü:</span>
+                <span id="feast-earned-coins" class="text-2xl font-extrabold text-amber-300">+350 ₺</span>
+            </div>
+            <button onclick="closeModal('modal-feast-result')" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3 rounded-xl text-sm shadow-xl transition">
+                Harika! Oyuna Devam Et 🔥
+            </button>
+        </div>
+    </div>
+
+
+    <!-- GAME NOTIFICATION TOAST -->
+    <div id="toast-notification" class="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 opacity-0 translate-y-[-20px]">
+        <div class="glass-panel bg-amber-500/90 text-slate-950 font-black px-6 py-2.5 rounded-full shadow-2xl border-2 border-amber-200 text-xs sm:text-sm flex items-center gap-2">
+            <span id="toast-icon">✨</span>
+            <span id="toast-msg">Atlas Bilgilendirme</span>
+        </div>
+    </div>
+
+
+    <script>
+        /* =======================================================
+           1. WEB AUDIO SYNTHESIZER (Rich Sound FX Generator)
+           ======================================================= */
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx = null;
+
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new AudioContext();
+            }
+        }
+
+
+        function playSound(type) {
+            if (!audioCtx) return;
+            try {
+                const now = audioCtx.currentTime;
+
+
+                if (type === 'buy') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(523, now);
+                    osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+                    osc.start(now);
+                    osc.stop(now + 0.15);
+                } else if (type === 'sizzle') {
+                    const bufferSize = audioCtx.sampleRate * 0.25;
+                    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                    const data = buffer.getChannelData(0);
+                    for (let i = 0; i < bufferSize; i++) {
+                        data[i] = Math.random() * 2 - 1;
+                    }
+                    const noise = audioCtx.createBufferSource();
+                    noise.buffer = buffer;
+                    const filter = audioCtx.createBiquadFilter();
+                    filter.type = 'bandpass';
+                    filter.frequency.value = 2800;
+                    const gain = audioCtx.createGain();
+                    noise.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    gain.gain.setValueAtTime(0.12, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.25);
+                    noise.start(now);
+                } else if (type === 'shake') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(120, now);
+                    osc.frequency.linearRampToValueAtTime(320, now + 0.12);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+                    osc.start(now);
+                    osc.stop(now + 0.12);
+                } else if (type === 'crash') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(160, now);
+                    osc.frequency.exponentialRampToValueAtTime(40, now + 0.5);
+                    gain.gain.setValueAtTime(0.4, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.5);
+                    osc.start(now);
+                    osc.stop(now + 0.5);
+                } else if (type === 'victory') {
+                    const notes = [440, 554.37, 659.25, 880];
+                    notes.forEach((freq, idx) => {
+                        const o = audioCtx.createOscillator();
+                        const g = audioCtx.createGain();
+                        o.connect(g);
+                        g.connect(audioCtx.destination);
+                        o.frequency.value = freq;
+                        g.gain.setValueAtTime(0.2, now + idx * 0.12);
+                        g.gain.linearRampToValueAtTime(0.01, now + idx * 0.12 + 0.3);
+                        o.start(now + idx * 0.12);
+                        o.stop(now + idx * 0.12 + 0.3);
+                    });
+                }
+            } catch (e) {
+                console.log('Audio gesture required');
+            }
+        }
+
+
+        /* =======================================================
+           2. GAME STATE & ITEM CATALOG
+           ======================================================= */
+        const gameState = {
+            money: 300,
+            inventory: {
+                biftek: 0,
+                sosis: 0,
+                pirzola: 0,
+                bbq_sos: 0,
+                aci_sos: 0,
+                meyve_suyu: 0,
+                soda: 0,
+                buz: 0,
+                limon: 0
+            },
+            cookedPlatter: [],
+            preparedCocktail: null,
+            grillSlots: [
+                { id: 0, item: null, cookProgress: 0, side: 1, state: 'empty' },
+                { id: 1, item: null, cookProgress: 0, side: 1, state: 'empty' },
+                { id: 2, item: null, cookProgress: 0, side: 1, state: 'empty' }
+            ],
+            grillHeat: 2,
+            isGameOver: false
+        };
+
+
+        const SHOP_KASAP = [
+            { id: 'biftek', name: 'Atlas Lokum Biftek', price: 40, icon: '🥩', desc: 'Atlas Kasap özel dinlendirilmiş biftek.' },
+            { id: 'sosis', name: 'Atlas Sosisi', price: 25, icon: '🌭', desc: 'Atlas yapımı baharatlı leziz sosis.' },
+            { id: 'pirzola', name: 'Atlas Kuzu Pirzola', price: 55, icon: '🍖', desc: 'Kekikli Atlas kuzu pirzolası.' }
+        ];
+
+
+        const SHOP_MARKET = [
+            { id: 'bbq_sos', name: 'Atlas BBQ Sos', price: 15, icon: '🫙', desc: 'Duman aromalı Atlas barbekü sosu.' },
+            { id: 'aci_sos', name: 'Atlas Özel Acı Sos', price: 15, icon: '🌶️', desc: 'Ekstra acı Atlas sosu.' },
+            { id: 'meyve_suyu', name: 'Tropikal Meyve Suyu', price: 20, icon: '🧃', desc: 'Taze sıkılmış kokteyl bazı.' },
+            { id: 'soda', name: 'Maden Suyu (Soda)', price: 10, icon: '🍾', desc: 'Kabarcıklı serinletici soda.' },
+            { id: 'buz', name: 'Atlas Kristal Buz', price: 5, icon: '🧊', desc: 'Buz gibi soğuk küpler.' },
+            { id: 'limon', name: 'Taze Limon', price: 5, icon: '🍋', desc: 'Ekşi lezzet dokunuşu.' }
+        ];
+
+
+        /* =======================================================
+           3. THREE.JS 3D SCENE SETUP & ENVIRONMENT
+           ======================================================= */
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0c1222);
+        scene.fog = new THREE.FogExp2(0x0c1222, 0.014);
+
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 24, 25.5);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xfff5ea, 0.75);
+        scene.add(ambientLight);
+
+
+        const dirLight = new THREE.DirectionalLight(0xffeedd, 0.9);
+        dirLight.position.set(35, 55, 25);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 160;
+        dirLight.shadow.camera.left = -45;
+        dirLight.shadow.camera.right = 45;
+        dirLight.shadow.camera.top = 45;
+        dirLight.shadow.camera.bottom = -45;
+        scene.add(dirLight);
+
+
+        // Grass Terrain
+        const groundGeo = new THREE.PlaneGeometry(120, 120);
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.95 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+
+        // Asphalt Main Road (Center Z = 0, Width = 12, Length = 100)
+        const roadGeo = new THREE.PlaneGeometry(100, 12);
+        const roadMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 });
+        const road = new THREE.Mesh(roadGeo, roadMat);
+        road.rotation.x = -Math.PI / 2;
+        road.position.set(0, 0.02, 0);
+        road.receiveShadow = true;
+        scene.add(road);
+
+
+        // Sidewalks (North & South)
+        const sidewalkGeo = new THREE.BoxGeometry(100, 0.2, 3);
+        const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.6 });
+
+
+        const sidewalkNorth = new THREE.Mesh(sidewalkGeo, sidewalkMat);
+        sidewalkNorth.position.set(0, 0.1, -7.5);
+        sidewalkNorth.receiveShadow = true;
+        scene.add(sidewalkNorth);
+
+
+        const sidewalkSouth = new THREE.Mesh(sidewalkGeo, sidewalkMat);
+        sidewalkSouth.position.set(0, 0.1, 7.5);
+        sidewalkSouth.receiveShadow = true;
+        scene.add(sidewalkSouth);
+
+
+        // Road Yellow Center Dash Line
+        for (let x = -45; x <= 45; x += 6) {
+            const lineGeo = new THREE.PlaneGeometry(3.5, 0.4);
+            const lineMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+            const line = new THREE.Mesh(lineGeo, lineMat);
+            line.rotation.x = -Math.PI / 2;
+            line.position.set(x, 0.03, 0);
+            scene.add(line);
+        }
+
+
+        // Zebra Pedestrian Crossing
+        for (let z = -5; z <= 5; z += 1.6) {
+            const zebraGeo = new THREE.PlaneGeometry(4, 0.8);
+            const zebraMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const zebra = new THREE.Mesh(zebraGeo, zebraMat);
+            zebra.rotation.x = -Math.PI / 2;
+            zebra.position.set(0, 0.03, z);
+            scene.add(zebra);
+        }
+
+
+        // Environment Props Generator (Trees, Street Lamps, Benches)
+        function createTree(x, z) {
+            const group = new THREE.Group();
+            group.position.set(x, 0, z);
+
+
+            const trunkGeo = new THREE.CylinderGeometry(0.3, 0.45, 2.5, 8);
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f });
+            const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+            trunk.position.y = 1.25;
+            trunk.castShadow = true;
+            group.add(trunk);
+
+
+            const leavesGeo = new THREE.ConeGeometry(2.2, 4.5, 8);
+            const leavesMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.6 });
+            const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+            leaves.position.y = 4;
+            leaves.castShadow = true;
+            group.add(leaves);
+
+
+            scene.add(group);
+        }
+
+
+        function createLampPost(x, z) {
+            const group = new THREE.Group();
+            group.position.set(x, 0, z);
+
+
+            const postGeo = new THREE.CylinderGeometry(0.12, 0.16, 5, 8);
+            const postMat = new THREE.MeshStandardMaterial({ color: 0x334155 });
+            const post = new THREE.Mesh(postGeo, postMat);
+            post.position.y = 2.5;
+            group.add(post);
+
+
+            const bulbGeo = new THREE.SphereGeometry(0.35, 16, 16);
+            const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+            const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+            bulb.position.set(0, 5, 0);
+            group.add(bulb);
+
+
+            const pLight = new THREE.PointLight(0xfef08a, 0.8, 14);
+            pLight.position.set(0, 4.8, 0);
+            group.add(pLight);
+
+
+            scene.add(group);
+        }
+
+
+        // Scatter Trees and Street Lights
+        const treePositions = [
+            [-32, -18], [-8, -18], [8, -18], [32, -18],
+            [-32, 18], [-8, 18], [8, 18], [32, 18],
+            [-42, -5], [-42, 5], [42, -5], [42, 5]
+        ];
+        treePositions.forEach(pos => createTree(pos[0], pos[1]));
+
+
+        createLampPost(-18, -6);
+        createLampPost(18, -6);
+        createLampPost(-18, 6);
+        createLampPost(18, 6);
+
+
+        /* =======================================================
+           4. PROCEDURAL 3D ATLAS BUILDINGS & CHARACTERS
+           ======================================================= */
+        function createCanvasTexture(text, bgColor, textColor) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = bgColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = textColor;
+            ctx.font = 'bold 36px Fredoka, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+
+        function createAtlasCharacter(shirtColorHex) {
+            const group = new THREE.Group();
+
+
+            const bodyGeo = new THREE.CylinderGeometry(0.5, 0.6, 1.2, 16);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: shirtColorHex });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.6;
+            body.castShadow = true;
+            group.add(body);
+
+
+            const headGeo = new THREE.SphereGeometry(0.45, 16, 16);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0xfde047 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 1.5;
+            head.castShadow = true;
+            group.add(head);
+
+
+            const hatBaseGeo = new THREE.CylinderGeometry(0.7, 0.7, 0.08, 16);
+            const hatTopGeo = new THREE.CylinderGeometry(0.4, 0.45, 0.4, 16);
+            const hatMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+            const hatBase = new THREE.Mesh(hatBaseGeo, hatMat);
+            hatBase.position.y = 1.85;
+            const hatTop = new THREE.Mesh(hatTopGeo, hatMat);
+            hatTop.position.y = 2.05;
+            group.add(hatBase);
+            group.add(hatTop);
+
+
+            return group;
+        }
+
+
+        // Interactive 3D Zones / Buildings
+        const zones3D = [
+            { id: 'kasap', name: 'ATLAS KASAP', x: -18, z: -16, color: 0x991b1b, accent: 0xef4444, signText: 'ATLAS KASAP 🥩', npcName: 'Kasap Atlas' },
+            { id: 'market', name: 'ATLAS BABA MARKET', x: 18, z: -16, color: 0x065f46, accent: 0x10b981, signText: 'ATLAS BABA MARKET 🛒', npcName: 'Atlas Baba' },
+            { id: 'mangal', name: 'ATLAS BARBEKÜ', x: -18, z: 16, color: 0xc2410c, accent: 0xf97316, signText: 'ATLAS BARBEKÜ 🔥', npcName: 'Şef Atlas' },
+            { id: 'sofra', name: 'ATLAS SOFRASI', x: 18, z: 16, color: 0x0891b2, accent: 0x06b6d4, signText: 'ATLAS SOFRASI 🍹', npcName: 'Ev Sahibi Atlas' }
+        ];
+
+
+        zones3D.forEach(z => {
+            const bGroup = new THREE.Group();
+            bGroup.position.set(z.x, 0, z.z);
+
+
+            const bGeo = new THREE.BoxGeometry(11, 6.5, 8.5);
+            const bMat = new THREE.MeshStandardMaterial({ color: z.color, roughness: 0.5 });
+            const bMesh = new THREE.Mesh(bGeo, bMat);
+            bMesh.position.y = 3.25;
+            bMesh.castShadow = true;
+            bMesh.receiveShadow = true;
+            bGroup.add(bMesh);
+
+
+            const roofGeo = new THREE.ConeGeometry(8.5, 3.2, 4);
+            const roofMat = new THREE.MeshStandardMaterial({ color: z.accent, roughness: 0.3 });
+            const roof = new THREE.Mesh(roofGeo, roofMat);
+            roof.position.y = 8;
+            roof.rotation.y = Math.PI / 4;
+            roof.castShadow = true;
+            bGroup.add(roof);
+
+
+            const signGeo = new THREE.BoxGeometry(8.5, 2, 0.4);
+            const signTex = createCanvasTexture(z.signText, '#0f172a', '#fbbf24');
+            const signMat = new THREE.MeshStandardMaterial({ map: signTex });
+            const sign = new THREE.Mesh(signGeo, signMat);
+            sign.position.set(0, 5.2, 4.4);
+            bGroup.add(sign);
+
+
+            // NPC Character
+            const npcMesh = createAtlasCharacter(z.accent);
+            npcMesh.position.set(0, 0, 5.5);
+            bGroup.add(npcMesh);
+            z.npcMesh = npcMesh;
+
+
+            scene.add(bGroup);
+            z.meshGroup = bGroup;
+        });
+
+
+        // Player Atlas
+        const playerGroup = createAtlasCharacter(0xea580c);
+        playerGroup.position.set(0, 0, 7.5);
+        scene.add(playerGroup);
+
+
+        const player3D = {
+            mesh: playerGroup,
+            x: 0,
+            z: 7.5,
+            speed: 0.22,
+            vx: 0,
+            vz: 0
+        };
+
+
+        /* =======================================================
+           5. CAR TRAFFIC SYSTEM & CAR COLLISIONS
+           ======================================================= */
+        const cars = [];
+        const carColors = [0xef4444, 0x3b82f6, 0x10b981, 0xf59e0b, 0x8b5cf6];
+
+
+        function createCarMesh(colorHex) {
+            const carGroup = new THREE.Group();
+
+
+            const bodyGeo = new THREE.BoxGeometry(3.6, 1.1, 1.8);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.3 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.7;
+            body.castShadow = true;
+            carGroup.add(body);
+
+
+            const cabinGeo = new THREE.BoxGeometry(1.8, 0.8, 1.5);
+            const cabinMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.2 });
+            const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+            cabin.position.set(-0.2, 1.55, 0);
+            carGroup.add(cabin);
+
+
+            // Wheels
+            const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.3, 12);
+            const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a });
+            const wheelPositions = [
+                [-1, 0.35, 0.95], [1, 0.35, 0.95],
+                [-1, 0.35, -0.95], [1, 0.35, -0.95]
+            ];
+            wheelPositions.forEach(pos => {
+                const w = new THREE.Mesh(wheelGeo, wheelMat);
+                w.rotation.x = Math.PI / 2;
+                w.position.set(pos[0], pos[1], pos[2]);
+                carGroup.add(w);
+            });
+
+
+            return carGroup;
+        }
+
+
+        function spawnCar(dir) {
+            const color = carColors[Math.floor(Math.random() * carColors.length)];
+            const mesh = createCarMesh(color);
+
+
+            const speed = (0.28 + Math.random() * 0.18) * dir;
+            const zPos = dir > 0 ? -2.5 : 2.5;
+            const startX = dir > 0 ? -48 : 48;
+
+
+            mesh.position.set(startX, 0, zPos);
+            if (dir < 0) mesh.rotation.y = Math.PI;
+
+
+            scene.add(mesh);
+            cars.push({ mesh, speed, dir });
+        }
+
+
+        setInterval(() => {
+            if (cars.length < 5 && !gameState.isGameOver) {
+                spawnCar(Math.random() > 0.5 ? 1 : -1);
+            }
+        }, 2200);
+
+
+        /* =======================================================
+           6. NPC SPEECH / DIALOGUE SYSTEM
+           ======================================================= */
+        const npcQuotes = {
+            kasap: ["Kanka en taze pirzolalar burada!", "Atlas Kasap gururla sunar!", "Lokum biftekler hazır kanka!"],
+            market: ["Buz gibi sodalar ve soslar geldi!", "Atlas Baba Market'e hoş geldin!", "BBQ sossuz mangal olmaz!"],
+            mangal: ["Mangal ateşi harlanıyor!", "Etleri yakmadan çevir kanka!", "Dumanı üstünde lezzet!"],
+            sofra: ["Kokteyl çalkalama vakti!", "Atlas ziyafeti başlasın!", "Sofrada senin için yer hazır!"]
+        };
+
+
+        function triggerRandomNPCDialogue() {
+            if (gameState.isGameOver) return;
+            const zone = zones3D[Math.floor(Math.random() * zones3D.length)];
+            const quotes = npcQuotes[zone.id];
+            const quote = quotes[Math.floor(Math.random() * quotes.length)];
+
+
+            showSpeechBubble(zone.npcName, quote, zone.meshGroup.position.x, zone.meshGroup.position.z + 5.5);
+        }
+
+
+        function showSpeechBubble(speakerName, text, worldX, worldZ) {
+            const container = document.getElementById('npc-dialogues-container');
+            const bubble = document.createElement('div');
+            bubble.className = 'speech-bubble opacity-0 scale-95';
+            bubble.innerHTML = `<span class="text-amber-600 font-black">${speakerName}:</span> "${text}"`;
+            container.appendChild(bubble);
+
+
+            function updateBubblePos() {
+                const vec = new THREE.Vector3(worldX, 3.2, worldZ);
+                vec.project(camera);
+                const x = (vec.x * 0.5 + 0.5) * window.innerWidth;
+                const y = (-(vec.y * 0.5) + 0.5) * window.innerHeight;
+                bubble.style.left = `${x}px`;
+                bubble.style.top = `${y}px`;
+            }
+
+
+            updateBubblePos();
+            setTimeout(() => {
+                bubble.classList.remove('opacity-0', 'scale-95');
+                bubble.classList.add('opacity-100', 'scale-100');
+            }, 50);
+
+
+            const interval = setInterval(updateBubblePos, 30);
+
+
+            setTimeout(() => {
+                bubble.classList.remove('opacity-100', 'scale-100');
+                bubble.classList.add('opacity-0', 'scale-95');
+                setTimeout(() => {
+                    clearInterval(interval);
+                    bubble.remove();
+                }, 300);
+            }, 3500);
+        }
+
+
+        setInterval(triggerRandomNPCDialogue, 4500);
+
+
+        /* =======================================================
+           7. CONTROLS & DYNAMIC TOUCH/KEYBOARD DETECTION
+           ======================================================= */
+        const keys = {};
+        let activeZoneNear = null;
+
+
+        function setMobileUI(visible) {
+            const mobileControls = document.getElementById('mobile-controls');
+            if (visible) {
+                mobileControls.classList.remove('opacity-0', 'pointer-events-none');
+                mobileControls.classList.add('opacity-100');
+            } else {
+                mobileControls.classList.add('opacity-0', 'pointer-events-none');
+                mobileControls.classList.remove('opacity-100');
+            }
+        }
+
+
+        window.addEventListener('keydown', (e) => {
+            initAudio();
+            keys[e.key.toLowerCase()] = true;
+
+
+            if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'e'].includes(e.key.toLowerCase())) {
+                setMobileUI(false);
+            }
+
+
+            if (e.key.toLowerCase() === 'e' && activeZoneNear && !gameState.isGameOver) {
+                openZoneModal(activeZoneNear.id);
+            }
+        });
+
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+
+
+        window.addEventListener('touchstart', () => {
+            initAudio();
+            setMobileUI(true);
+        }, { passive: true });
+
+
+        // Virtual Joystick Controller
+        const dpadContainer = document.getElementById('dpad-container');
+        const dpadStick = document.getElementById('dpad-stick');
+        let dpadActive = false;
+        let dpadCenter = { x: 0, y: 0 };
+
+
+        function handleTouchMove(e) {
+            if (!dpadActive) return;
+            const touch = e.touches[0];
+            const dx = touch.clientX - dpadCenter.x;
+            const dy = touch.clientY - dpadCenter.y;
+            const dist = Math.min(Math.hypot(dx, dy), 50);
+            const angle = Math.atan2(dy, dx);
+
+
+            const moveX = Math.cos(angle) * dist;
+            const moveY = Math.sin(angle) * dist;
+
+
+            dpadStick.style.transform = `translate(${moveX}px, ${moveY}px)`;
+
+
+            player3D.vx = (moveX / 50) * player3D.speed;
+            player3D.vz = (moveY / 50) * player3D.speed;
+        }
+
+
+        dpadContainer.addEventListener('touchstart', (e) => {
+            dpadActive = true;
+            const rect = dpadContainer.getBoundingClientRect();
+            dpadCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+            handleTouchMove(e);
+        });
+
+
+        window.addEventListener('touchmove', handleTouchMove);
+
+
+        window.addEventListener('touchend', () => {
+            if (dpadActive) {
+                dpadActive = false;
+                dpadStick.style.transform = `translate(0px, 0px)`;
+                player3D.vx = 0;
+                player3D.vz = 0;
+            }
+        });
+
+
+        function triggerAction() {
+            if (activeZoneNear && !gameState.isGameOver) {
+                openZoneModal(activeZoneNear.id);
+            } else {
+                showToast("⚡ Yakındaki bir Atlas mekanına yaklaşın!");
+            }
+        }
+
+
+        /* =======================================================
+           8. MAIN 3D GAME LOOP & COLLISION SIMULATION
+           ======================================================= */
+        function animate3D() {
+            requestAnimationFrame(animate3D);
+
+
+            if (!gameState.isGameOver) {
+                // Keyboard Movement
+                if (!dpadActive) {
+                    player3D.vx = 0;
+                    player3D.vz = 0;
+
+
+                    if (keys['w'] || keys['arrowup']) player3D.vz = -player3D.speed;
+                    if (keys['s'] || keys['arrowdown']) player3D.vz = player3D.speed;
+                    if (keys['a'] || keys['arrowleft']) player3D.vx = -player3D.speed;
+                    if (keys['d'] || keys['arrowright']) player3D.vx = player3D.speed;
+                }
+
+
+                player3D.x += player3D.vx;
+                player3D.z += player3D.vz;
+
+
+                // Bounds
+                player3D.x = Math.max(-38, Math.min(38, player3D.x));
+                player3D.z = Math.max(-24, Math.min(24, player3D.z));
+
+
+                player3D.mesh.position.x = player3D.x;
+                player3D.mesh.position.z = player3D.z;
+
+
+                if (player3D.vx !== 0 || player3D.vz !== 0) {
+                    player3D.mesh.rotation.y = Math.atan2(player3D.vx, player3D.vz);
+                }
+
+
+                // Elevated Isometric-Style Camera Follow
+                const targetCamY = 24;
+                const targetCamZ = player3D.z + 18;
+
+
+                camera.position.x += (player3D.x - camera.position.x) * 0.08;
+                camera.position.y += (targetCamY - camera.position.y) * 0.08;
+                camera.position.z += (targetCamZ - camera.position.z) * 0.08;
+                camera.lookAt(player3D.x, 0.8, player3D.z);
+
+
+                // Proximity Check
+                activeZoneNear = null;
+                zones3D.forEach(z => {
+                    const dist = Math.hypot(player3D.x - z.x, player3D.z - z.z);
+                    if (dist < 7.5) {
+                        activeZoneNear = z;
+                    }
+                });
+
+
+                const prompt = document.getElementById('interaction-prompt');
+                if (activeZoneNear) {
+                    prompt.classList.remove('hidden');
+                    document.getElementById('interaction-text').innerText = `${activeZoneNear.name} - Giriş Yap`;
+                } else {
+                    prompt.classList.add('hidden');
+                }
+
+
+                // Update Cars & Collision Check
+                for (let i = cars.length - 1; i >= 0; i--) {
+                    const c = cars[i];
+                    c.mesh.position.x += c.speed;
+
+
+                    // Check Player Hit
+                    const dx = Math.abs(player3D.x - c.mesh.position.x);
+                    const dz = Math.abs(player3D.z - c.mesh.position.z);
+
+
+                    if (dx < 2.2 && dz < 1.4) {
+                        triggerGameOverAccident();
+                    }
+
+
+                    // Remove Out-of-bounds Cars
+                    if (Math.abs(c.mesh.position.x) > 52) {
+                        scene.remove(c.mesh);
+                        cars.splice(i, 1);
+                    }
+                }
+            }
+
+
+            // Realtime Grill Update
+            updateGrillSimulation();
+
+
+            renderer.render(scene, camera);
+        }
+
+
+        function triggerGameOverAccident() {
+            gameState.isGameOver = true;
+            playSound('crash');
+
+
+            document.body.classList.add('crash-screen');
+            setTimeout(() => {
+                document.body.classList.remove('crash-screen');
+                document.getElementById('modal-gameover').classList.remove('hidden');
+            }, 300);
+        }
+
+
+        function restartGameAfterCrash() {
+            gameState.isGameOver = false;
+            player3D.x = 0;
+            player3D.z = 7.5;
+            player3D.mesh.position.set(0, 0, 7.5);
+
+
+            document.getElementById('modal-gameover').classList.add('hidden');
+            showToast("🩹 Atlas hastaneden çıktı! Şimdi güvenle karşıya geç kanka!");
+        }
+
+
+        /* =======================================================
+           9. SHOPPING & MODALS LOGIC
+           ======================================================= */
+        function openZoneModal(zoneId) {
+            if (zoneId === 'kasap') renderKasapModal();
+            else if (zoneId === 'market') renderMarketModal();
+            else if (zoneId === 'mangal') renderMangalModal();
+            else if (zoneId === 'sofra') renderSofraModal();
+        }
+
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        }
+
+
+        function updateMoneyDisplay() {
+            document.getElementById('money-display').innerText = `${gameState.money} ₺`;
+        }
+
+
+        function renderKasapModal() {
+            const list = document.getElementById('kasap-items-list');
+            list.innerHTML = SHOP_KASAP.map(item => `
+                <div class="bg-slate-800/80 p-3 rounded-2xl flex items-center justify-between border border-slate-700">
+                    <div class="flex items-center gap-3">
+                        <span class="text-3xl">${item.icon}</span>
+                        <div>
+                            <h4 class="font-bold text-white text-xs sm:text-sm">${item.name}</h4>
+                            <p class="text-[11px] text-slate-300">${item.desc}</p>
+                            <span class="text-xs font-bold text-amber-400">${item.price} ₺</span>
+                        </div>
+                    </div>
+                    <button onclick="buyItem('${item.id}', ${item.price})" class="bg-red-600 hover:bg-red-500 active:scale-95 text-white font-bold px-4 py-2 rounded-xl text-xs shadow transition">
+                        Satın Al
+                    </button>
+                </div>
+            `).join('');
+            document.getElementById('modal-kasap').classList.remove('hidden');
+        }
+
+
+        function renderMarketModal() {
+            const list = document.getElementById('market-items-list');
+            list.innerHTML = SHOP_MARKET.map(item => `
+                <div class="bg-slate-800/80 p-3 rounded-2xl flex items-center justify-between border border-slate-700">
+                    <div class="flex items-center gap-3">
+                        <span class="text-3xl">${item.icon}</span>
+                        <div>
+                            <h4 class="font-bold text-white text-xs sm:text-sm">${item.name}</h4>
+                            <p class="text-[11px] text-slate-300">${item.desc}</p>
+                            <span class="text-xs font-bold text-amber-400">${item.price} ₺</span>
+                        </div>
+                    </div>
+                    <button onclick="buyItem('${item.id}', ${item.price})" class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold px-4 py-2 rounded-xl text-xs shadow transition">
+                        Satın Al
+                    </button>
+                </div>
+            `).join('');
+            document.getElementById('modal-market').classList.remove('hidden');
+        }
+
+
+        function buyItem(itemId, price) {
+            if (gameState.money >= price) {
+                gameState.money -= price;
+                gameState.inventory[itemId] = (gameState.inventory[itemId] || 0) + 1;
+                updateMoneyDisplay();
+                playSound('buy');
+                showToast(`🛒 ${getItemName(itemId)} alındı!`);
+            } else {
+                showToast('❌ Paranız yetersiz, Atlas Bey!');
+            }
+        }
+
+
+        function getItemName(id) {
+            const all = [...SHOP_KASAP, ...SHOP_MARKET];
+            const found = all.find(x => x.id === id);
+            return found ? found.name : id;
+        }
+
+
+        function getItemIcon(id) {
+            const all = [...SHOP_KASAP, ...SHOP_MARKET];
+            const found = all.find(x => x.id === id);
+            return found ? found.icon : '🥩';
+        }
+
+
+        /* =======================================================
+           10. MANGAL / BARBEKÜ COOKING MINI-GAME (Fixed UI)
+           ======================================================= */
+        function renderMangalModal() {
+            renderGrillSlots();
+            renderMangalInventorySelector();
+            document.getElementById('modal-mangal').classList.remove('hidden');
+        }
+
+
+        document.getElementById('grill-heat').addEventListener('input', (e) => {
+            gameState.grillHeat = parseInt(e.target.value);
+            const labels = { 1: 'Kısık Ateş', 2: 'Orta Ateş', 3: 'Yüksek Ateş 🔥' };
+            document.getElementById('heat-label').innerText = labels[gameState.grillHeat];
+        });
+
+
+        function renderGrillSlots() {
+            const container = document.getElementById('grill-slots-container');
+            container.innerHTML = gameState.grillSlots.map((slot, index) => {
+                if (slot.state === 'empty') {
+                    return `
+                        <div class="bg-stone-900/90 border-2 border-dashed border-stone-700 rounded-2xl h-36 flex flex-col items-center justify-center text-slate-500">
+                            <span class="text-2xl mb-1">🔥</span>
+                            <span class="text-[11px] font-bold">Izgara Boş</span>
+                        </div>
+                    `;
+                }
+
+
+                let color = '#ef4444';
+                let statusText = 'Çiğ (Pişiyor...)';
+
+
+                if (slot.cookProgress > 30 && slot.cookProgress <= 80) {
+                    color = '#f97316';
+                    statusText = 'Tam Kıvamında! 👌';
+                } else if (slot.cookProgress > 80) {
+                    color = '#1e293b';
+                    statusText = 'Yandı! 💥';
+                }
+
+
+                return `
+                    <div id="slot-card-${index}" onclick="flipMeatOnGrill(${index})" class="cursor-pointer bg-stone-900 border-2 border-amber-500/50 rounded-2xl p-3 h-36 flex flex-col items-center justify-between relative shadow-lg transform active:scale-95 transition">
+                        <div class="text-3xl animate-pulse">${getItemIcon(slot.item)}</div>
+                        
+                        <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
+                            <div id="slot-bar-${index}" class="h-full transition-all duration-200" style="width: ${Math.min(100, slot.cookProgress)}%; background-color: ${color}"></div>
+                        </div>
+
+
+                        <span id="slot-status-${index}" class="text-[10px] font-bold text-amber-200">${statusText}</span>
+                        <span id="slot-side-${index}" class="text-[9px] bg-slate-950 px-2 py-0.5 rounded-full text-amber-400">Çevir (Yüz: ${slot.side})</span>
+
+
+                        <button onclick="event.stopPropagation(); collectCookedMeat(${index})" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-1 rounded-xl text-[11px] active:scale-90 transition">
+                            Tabağa Al
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+
+        function renderMangalInventorySelector() {
+            const container = document.getElementById('mangal-inventory-selector');
+            const meats = ['biftek', 'sosis', 'pirzola'];
+            let html = '';
+
+
+            meats.forEach(m => {
+                const count = gameState.inventory[m] || 0;
+                html += `
+                    <button onclick="placeMeatOnGrill('${m}')" ${count <= 0 ? 'disabled' : ''} class="${count > 0 ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-slate-800 text-slate-500'} px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 whitespace-nowrap border border-amber-500/30">
+                        <span>${getItemIcon(m)} ${getItemName(m)}</span>
+                        <span class="bg-slate-950 px-1.5 py-0.5 rounded-md text-amber-300">${count}</span>
+                    </button>
+                `;
+            });
+
+
+            container.innerHTML = html;
+        }
+
+
+        function placeMeatOnGrill(itemKey) {
+            if ((gameState.inventory[itemKey] || 0) <= 0) return;
+
+
+            const emptySlot = gameState.grillSlots.find(s => s.state === 'empty');
+            if (!emptySlot) {
+                showToast("⚠️ Mangal dolu! Yer açmak için pişmiş etleri tabağa al.");
+                return;
+            }
+
+
+            gameState.inventory[itemKey]--;
+            emptySlot.item = itemKey;
+            emptySlot.cookProgress = 0;
+            emptySlot.side = 1;
+            emptySlot.state = 'cooking';
+
+
+            playSound('sizzle');
+            renderGrillSlots();
+            renderMangalInventorySelector();
+            showToast(`🔥 ${getItemName(itemKey)} mangala koyuldu!`);
+        }
+
+
+        function flipMeatOnGrill(index) {
+            const slot = gameState.grillSlots[index];
+            if (!slot || slot.state === 'empty') return;
+
+
+            slot.side = slot.side === 1 ? 2 : 1;
+            playSound('sizzle');
+            showToast(`🔄 Et çevrildi! Diğer yüzü (${slot.side}. Yüz) pişiyor.`);
+            
+            const sideLabel = document.getElementById(`slot-side-${index}`);
+            if (sideLabel) sideLabel.innerText = `Çevir (Yüz: ${slot.side})`;
+        }
+
+
+        function collectCookedMeat(index) {
+            const slot = gameState.grillSlots[index];
+            if (!slot || slot.state === 'empty') return;
+
+
+            let quality = 'Mükemmel Atlas Eti';
+            if (slot.cookProgress < 30) quality = 'Az Pişmiş Çiğ Et';
+            if (slot.cookProgress > 80) quality = 'Yanmış Kömür Et';
+
+
+            gameState.cookedPlatter.push({
+                item: slot.item,
+                quality: quality,
+                progress: slot.cookProgress
+            });
+
+
+            slot.state = 'empty';
+            slot.item = null;
+            slot.cookProgress = 0;
+
+
+            renderGrillSlots();
+            renderMangalInventorySelector();
+            showToast(`🍽️ Et tabağa alındı! (${quality})`);
+        }
+
+
+        function updateGrillSimulation() {
+            gameState.grillSlots.forEach((slot, index) => {
+                if (slot.state !== 'empty') {
+                    slot.cookProgress += 0.08 * gameState.grillHeat;
+                    if (slot.cookProgress > 100) slot.cookProgress = 100;
+
+
+                    const bar = document.getElementById(`slot-bar-${index}`);
+                    const status = document.getElementById(`slot-status-${index}`);
+                    if (bar && status) {
+                        bar.style.width = `${Math.min(100, slot.cookProgress)}%`;
+                        if (slot.cookProgress <= 30) {
+                            bar.style.backgroundColor = '#ef4444';
+                            status.innerText = 'Çiğ (Pişiyor...)';
+                        } else if (slot.cookProgress <= 80) {
+                            bar.style.backgroundColor = '#f97316';
+                            status.innerText = 'Tam Kıvamında! 👌';
+                        } else {
+                            bar.style.backgroundColor = '#1e293b';
+                            status.innerText = 'Yandı! 💥';
+                        }
+                    }
+                }
+            });
+        }
+
+
+        /* =======================================================
+           11. COCKTAIL & FEAST LOGIC
+           ======================================================= */
+        function renderSofraModal() {
+            renderCocktailIngredients();
+            renderTablePlatter();
+            document.getElementById('modal-sofra').classList.remove('hidden');
+        }
+
+
+        function renderCocktailIngredients() {
+            const ingredients = [
+                { id: 'meyve_suyu', name: 'Meyve Suyu', icon: '🧃' },
+                { id: 'soda', name: 'Soda', icon: '🍾' },
+                { id: 'buz', name: 'Kristal Buz', icon: '🧊' },
+                { id: 'limon', name: 'Limon Dilimi', icon: '🍋' }
+            ];
+
+
+            const container = document.getElementById('cocktail-ingredients-list');
+            container.innerHTML = ingredients.map(ing => {
+                const count = gameState.inventory[ing.id] || 0;
+                return `
+                    <div class="bg-slate-800/80 p-2 rounded-xl flex items-center justify-between border border-slate-700">
+                        <span class="text-xs text-slate-200 font-bold">${ing.icon} ${ing.name} (${count})</span>
+                        <input type="checkbox" id="chk-${ing.id}" ${count <= 0 ? 'disabled' : ''} class="w-4 h-4 accent-cyan-500">
+                    </div>
+                `;
+            }).join('');
+        }
+
+
+        function mixCocktail() {
+            const ingMeyve = document.getElementById('chk-meyve_suyu')?.checked;
+            const ingSoda = document.getElementById('chk-soda')?.checked;
+            const ingBuz = document.getElementById('chk-buz')?.checked;
+            const ingLimon = document.getElementById('chk-limon')?.checked;
+
+
+            if (!ingMeyve && !ingSoda) {
+                showToast("⚠️ Kokteyl için en az bir içecek bazı seçin!");
+                return;
+            }
+
+
+            if (ingMeyve) gameState.inventory.meyve_suyu--;
+            if (ingSoda) gameState.inventory.soda--;
+            if (ingBuz) gameState.inventory.buz--;
+            if (ingLimon) gameState.inventory.limon--;
+
+
+            playSound('shake');
+            gameState.preparedCocktail = 'Atlas Atom Kokteyli 🍹';
+
+
+            document.getElementById('prepared-cocktail-status').innerHTML = `
+                Kokteyl Durumu: <span class="text-cyan-400 font-bold">Efsanevi Atlas Kokteyli Hazır! 🍹</span>
+            `;
+
+
+            renderCocktailIngredients();
+            showToast("🍹 Kokteyl başarıyla çalkalandı ve hazırlandı!");
+        }
+
+
+        function renderTablePlatter() {
+            const container = document.getElementById('table-cooked-meats');
+            if (gameState.cookedPlatter.length === 0) {
+                container.innerHTML = `<span class="text-xs text-slate-500 italic">Henüz pişmiş et tabağa konulmadı.</span>`;
+                return;
+            }
+
+
+            container.innerHTML = gameState.cookedPlatter.map(meat => `
+                <div class="bg-amber-950/80 border border-amber-600/50 px-3 py-1.5 rounded-xl text-xs flex items-center gap-2">
+                    <span>${getItemIcon(meat.item)}</span>
+                    <span class="font-bold text-amber-200">${meat.quality}</span>
+                </div>
+            `).join('');
+        }
+
+
+        function eatFeast() {
+            if (gameState.cookedPlatter.length === 0) {
+                showToast("⚠️ Masada henüz et yok! Önce mangalda et pişirin.");
+                return;
+            }
+
+
+            playSound('victory');
+
+
+            let points = gameState.cookedPlatter.length * 60;
+            if (gameState.preparedCocktail) points += 120;
+
+
+            gameState.money += points;
+            updateMoneyDisplay();
+
+
+            gameState.cookedPlatter = [];
+            gameState.preparedCocktail = null;
+
+
+            closeModal('modal-sofra');
+
+
+            document.getElementById('feast-earned-coins').innerText = `+${points} ₺`;
+            document.getElementById('modal-feast-result').classList.remove('hidden');
+        }
+
+
+        function toggleInventoryModal() {
+            const modal = document.getElementById('modal-inventory');
+            if (modal.classList.contains('hidden')) {
+                renderInventoryGrid();
+                modal.classList.remove('hidden');
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+
+        function renderInventoryGrid() {
+            const grid = document.getElementById('inventory-items-grid');
+            const items = Object.entries(gameState.inventory);
+
+
+            grid.innerHTML = items.map(([key, count]) => `
+                <div class="bg-slate-800/80 border border-slate-700 p-3 rounded-2xl flex items-center space-x-3">
+                    <span class="text-2xl">${getItemIcon(key)}</span>
+                    <div>
+                        <div class="text-xs font-bold text-white">${getItemName(key)}</div>
+                        <div class="text-xs text-amber-400 font-semibold">Adet: ${count}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast-notification');
+            document.getElementById('toast-msg').innerText = msg;
+            toast.classList.remove('opacity-0', 'translate-y-[-20px]');
+            toast.classList.add('opacity-100', 'translate-y-0');
+
+
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-[-20px]');
+            }, 2500);
+        }
+
+
+        // Window Resize Listener
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+
+        window.onload = function() {
+            animate3D();
+        };
+    </script>
+</body>
+</html>
