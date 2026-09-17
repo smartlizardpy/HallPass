@@ -128,6 +128,11 @@
 
         <!-- Money & Inventory Controls -->
         <div class="pointer-events-auto flex items-center space-x-3">
+            <div id="shift-pill" class="glass-panel px-4 py-2 rounded-2xl flex items-center space-x-2 border-amber-500/40">
+                <i class="fa-solid fa-stopwatch text-amber-400 text-sm"></i>
+                <span id="shift-clock" class="font-black text-amber-300 text-xs sm:text-sm">5:00</span>
+            </div>
+
             <button onclick="toggleLang()" title="Language / Dil" class="glass-panel px-3 py-2 rounded-2xl flex items-center gap-1.5 border-amber-500/40 hover:bg-amber-500/20 active:scale-95 transition">
                 <i class="fa-solid fa-language text-amber-400 text-sm"></i>
                 <span id="lang-label" class="font-black text-amber-300 text-xs">EN</span>
@@ -403,6 +408,31 @@
     </div>
 
 
+    <!-- END OF SHIFT: SCORE + LEADERBOARD -->
+    <div id="modal-shift-over" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
+        <div class="glass-panel border-4 border-amber-400 rounded-3xl max-w-md w-full p-6 text-center shadow-2xl flex flex-col max-h-[92vh]">
+            <div class="text-5xl mb-2">⏱️</div>
+            <h2 data-i18n="shiftover.title" class="text-2xl font-black text-amber-400 mb-2">VARDİYA BİTTİ!</h2>
+            <p data-i18n="shiftover.text" class="text-xs text-slate-200 mb-4 leading-relaxed">Mangal söndü, kepenkler indi.</p>
+
+            <div class="bg-amber-950/60 border border-amber-500/50 rounded-2xl p-4 mb-3">
+                <span data-i18n="shiftover.earnedLabel" class="text-xs text-slate-300 block mb-1">Bu vardiyada kazanılan:</span>
+                <span id="shift-earned-total" class="text-3xl font-extrabold text-amber-300">0 ₺</span>
+                <div id="shift-rank" class="text-[11px] text-amber-200 mt-1"></div>
+            </div>
+
+            <div class="bg-slate-950/80 border border-amber-500/30 rounded-2xl p-3 mb-4 text-left flex-1 overflow-y-auto">
+                <h3 data-i18n="shiftover.boardTitle" class="text-[11px] font-black text-amber-400 mb-2 tracking-wide">EN İYİ VARDİYALAR</h3>
+                <ol id="shift-leaderboard" class="space-y-1 text-[11px] text-slate-300"></ol>
+            </div>
+
+            <button id="shift-signin-btn" onclick="hallpassSignIn()" data-i18n="shiftover.signIn" class="hidden w-full bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold py-2 rounded-xl text-xs border border-amber-500/40 mb-2 transition">Skorunu adınla kaydet</button>
+
+            <button onclick="startNewShift()" data-i18n="shiftover.newShift" class="w-full bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black py-3 rounded-2xl text-sm shadow-xl transition">Yeni Vardiya Başlat 🔥</button>
+        </div>
+    </div>
+
+
     <!-- GAME NOTIFICATION TOAST -->
     <div id="toast-notification" class="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 opacity-0 translate-y-[-20px]">
         <div class="glass-panel bg-amber-500/90 text-slate-950 font-black px-6 py-2.5 rounded-full shadow-2xl border-2 border-amber-200 text-xs sm:text-sm flex items-center gap-2">
@@ -467,6 +497,18 @@
                 'feast.payoutLabel': 'Kazanılan Ziyafet Ödülü:',
                 'feast.btn': 'Harika! Vardiyaya Devam Et 🔥',
                 'toast.default': 'Atlas Bilgilendirme',
+                'hud.shiftTitle': 'Vardiya süresi',
+                'toast.shiftStart': '⏱️ Vardiya başladı! 5 dakikan var, kanka.',
+                'shiftover.title': 'VARDİYA BİTTİ!',
+                'shiftover.text': 'Mangal söndü, kepenkler indi. Bu vardiyada ziyafetlerden kazandığın para aşağıda.',
+                'shiftover.earnedLabel': 'Bu vardiyada kazanılan:',
+                'shiftover.newShift': 'Yeni Vardiya Başlat 🔥',
+                'shiftover.boardTitle': 'EN İYİ VARDİYALAR',
+                'shiftover.boardEmpty': 'Henüz skor yok. İlk sen ol!',
+                'shiftover.boardOffline': 'Skor tablosuna şu an ulaşılamıyor.',
+                'shiftover.boardLoading': 'Skor tablosu yükleniyor...',
+                'shiftover.rank': 'Sıralaman: #{n}',
+                'shiftover.signIn': 'Skorunu adınla kaydet',
                 'item.biftek.name': 'Atlas Lokum Biftek',
                 'item.biftek.desc': 'Atlas Kasap özel dinlendirilmiş biftek.',
                 'item.sosis.name': 'Atlas Sosisi',
@@ -569,6 +611,18 @@
                 'feast.payoutLabel': 'Feast payout:',
                 'feast.btn': 'Back to the shift 🔥',
                 'toast.default': 'Atlas notice',
+                'hud.shiftTitle': 'Shift time left',
+                'toast.shiftStart': '⏱️ Shift started! You have five minutes, mate.',
+                'shiftover.title': 'SHIFT OVER!',
+                'shiftover.text': 'The mangal is out and the shutters are down. Here is what you took from the feasts this shift.',
+                'shiftover.earnedLabel': 'Earned this shift:',
+                'shiftover.newShift': 'Start a new shift 🔥',
+                'shiftover.boardTitle': 'TOP SHIFTS',
+                'shiftover.boardEmpty': 'No scores yet. Be the first!',
+                'shiftover.boardOffline': 'The leaderboard is out of reach right now.',
+                'shiftover.boardLoading': 'Loading the leaderboard...',
+                'shiftover.rank': 'You ranked #{n}',
+                'shiftover.signIn': 'Save your score under your name',
                 'item.biftek.name': 'Atlas Biftek (steak)',
                 'item.biftek.desc': 'Dry-aged house steak from Atlas Kasap.',
                 'item.sosis.name': 'Atlas Sosis (sausage)',
@@ -808,8 +862,101 @@
                 { id: 2, item: null, cookProgress: 0, side: 1, state: 'empty' }
             ],
             grillHeat: 2,
-            isGameOver: false
+            isGameOver: false,
+            shiftActive: false,
+            shiftOver: false,
+            shiftEndsAt: 0,
+            shiftEarned: 0
         };
+
+
+        /* =======================================================
+           8b. THE SHIFT
+
+           The game as written never ended and never reset, so "money" only
+           ever measured how long a tab had been open -- nothing a leaderboard
+           can rank fairly. A shift gives every player the same five minutes
+           and scores what they earn inside it.
+
+           The clock is wall-clock (an end timestamp), not a frame or interval
+           counter, so it cannot be slowed by a backgrounded tab throttling
+           rAF, and being run over costs real seconds rather than being a free
+           teleport home.
+           ======================================================= */
+        const SHIFT_MS = 5 * 60 * 1000;
+        const CRASH_RECOVERY_MS = 4000;
+
+        function formatClock(ms) {
+            const total = Math.max(0, Math.ceil(ms / 1000));
+            return Math.floor(total / 60) + ':' + String(total % 60).padStart(2, '0');
+        }
+
+        /** Begins on the player's first input, so reading the HUD is free. */
+        function startShift() {
+            if (gameState.shiftActive || gameState.shiftOver) return;
+            gameState.shiftActive = true;
+            gameState.shiftEndsAt = Date.now() + SHIFT_MS;
+            showToast(t('toast.shiftStart'));
+        }
+
+        function updateShiftClock() {
+            const el = document.getElementById('shift-clock');
+            if (!el) return;
+            if (!gameState.shiftActive) {
+                el.textContent = formatClock(gameState.shiftOver ? 0 : SHIFT_MS);
+                return;
+            }
+            const left = gameState.shiftEndsAt - Date.now();
+            el.textContent = formatClock(left);
+            el.classList.toggle('text-red-400', left <= 30000);
+            el.classList.toggle('text-amber-300', left > 30000);
+            if (left <= 0) endShift();
+        }
+
+        function endShift() {
+            if (gameState.shiftOver) return;
+            gameState.shiftActive = false;
+            gameState.shiftOver = true;
+            gameState.isGameOver = false;
+            playSound('victory');
+
+            ['modal-kasap', 'modal-market', 'modal-mangal', 'modal-sofra',
+             'modal-inventory', 'modal-gameover', 'modal-feast-result'].forEach(function (id) {
+                const m = document.getElementById(id);
+                if (m) m.classList.add('hidden');
+            });
+
+            document.getElementById('shift-earned-total').innerText = gameState.shiftEarned + ' ₺';
+            document.getElementById('shift-rank').innerText = '';
+            document.getElementById('modal-shift-over').classList.remove('hidden');
+        }
+
+        function startNewShift() {
+            gameState.money = 300;
+            Object.keys(gameState.inventory).forEach(function (k) { gameState.inventory[k] = 0; });
+            gameState.cookedPlatter = [];
+            gameState.preparedCocktail = null;
+            gameState.grillSlots.forEach(function (slot) {
+                slot.item = null; slot.cookProgress = 0; slot.side = 1; slot.state = 'empty';
+            });
+            gameState.shiftEarned = 0;
+            gameState.shiftOver = false;
+            gameState.shiftActive = false;
+            gameState.isGameOver = false;
+            gameState.shiftEndsAt = 0;
+
+            player3D.x = 0;
+            player3D.z = 7.5;
+            player3D.mesh.position.set(0, 0, 7.5);
+
+            document.getElementById('modal-shift-over').classList.add('hidden');
+            updateMoneyDisplay();
+            refreshDynamicUI();
+            updateShiftClock();
+            startShift();
+        }
+
+        setInterval(updateShiftClock, 250);
 
 
         const SHOP_KASAP = [
@@ -1265,6 +1412,7 @@
 
         window.addEventListener('keydown', (e) => {
             initAudio();
+            startShift();
             keys[e.key.toLowerCase()] = true;
 
 
@@ -1273,7 +1421,7 @@
             }
 
 
-            if (e.key.toLowerCase() === 'e' && activeZoneNear && !gameState.isGameOver) {
+            if (e.key.toLowerCase() === 'e' && activeZoneNear && !gameState.isGameOver && !gameState.shiftOver) {
                 openZoneModal(activeZoneNear.id);
             }
         });
@@ -1287,6 +1435,7 @@
         window.addEventListener('touchstart', () => {
             initAudio();
             setMobileUI(true);
+            startShift();
         }, { passive: true });
 
 
@@ -1340,7 +1489,7 @@
 
 
         function triggerAction() {
-            if (activeZoneNear && !gameState.isGameOver) {
+            if (activeZoneNear && !gameState.isGameOver && !gameState.shiftOver) {
                 openZoneModal(activeZoneNear.id);
             } else {
                 showToast(t('toast.nearby'));
@@ -1355,7 +1504,7 @@
             requestAnimationFrame(animate3D);
 
 
-            if (!gameState.isGameOver) {
+            if (!gameState.isGameOver && !gameState.shiftOver) {
                 // Keyboard Movement
                 if (!dpadActive) {
                     player3D.vx = 0;
@@ -1458,7 +1607,12 @@
             document.body.classList.add('crash-screen');
             setTimeout(() => {
                 document.body.classList.remove('crash-screen');
+                if (gameState.shiftOver) return;
                 document.getElementById('modal-gameover').classList.remove('hidden');
+                // The clock is still running: the hospital IS the punishment.
+                setTimeout(function () {
+                    if (gameState.isGameOver) restartGameAfterCrash();
+                }, CRASH_RECOVERY_MS);
             }, 300);
         }
 
@@ -1842,6 +1996,7 @@
 
 
             gameState.money += points;
+            gameState.shiftEarned += points;
             updateMoneyDisplay();
 
 
