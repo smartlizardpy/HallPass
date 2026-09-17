@@ -40,6 +40,7 @@ import {
   deleteAccountAction,
 } from "@/app/play/account/actions";
 import { readOwnSocial, readPlayer, readPlayerId } from "../_data";
+import { AppearanceCard } from "../_ui/AppearanceCard";
 import { StealthSettingsRow } from "../_ui/StealthSettingsRow";
 
 export const metadata: Metadata = {
@@ -188,6 +189,10 @@ export default async function YouSettingsPage({
         {/* The mobile tab bar is losing its Stealth tab — the bar is for things
             every visitor uses, and this is a preference. This is its home now. */}
         <StealthSettingsRow />
+
+        {/* The other per-device preference, and the fuller version of the
+            sidebar footer's one-button cycle. */}
+        <AppearanceCard />
 
         {/* BETA — the mobile way into the programme, mirroring the admin card
             below. `MobileTabBar` has no beta tab and should not grow one: the

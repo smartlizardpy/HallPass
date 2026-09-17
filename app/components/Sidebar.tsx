@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { StealthMenuButton } from "./stealth/StealthMenuButton";
+import { ThemeMenuButton } from "./theme/ThemeMenuButton";
 import { Wordmark } from "./Wordmark";
 
 /**
@@ -577,7 +578,18 @@ export function Sidebar({
               descendant combinator, so source order is not load-bearing.
 
               The tooltip follows the same pinned-not-collapsed rule as the rows
-              above, and for the same reason. */}
+              above, and for the same reason. It stays on the CONTAINER, and so
+              would describe both buttons — but `ThemeMenuButton` carries a title
+              of its own naming the mode it is in, and an element's own `title`
+              is what a browser shows, so the hatch below reads as "Stealth mode"
+              and the one under it does not.
+
+              ALL OF THE ABOVE APPLIES TWICE OVER. The theme switch sits here for
+              the same reason the stealth one does — signed out, on a phone, in a
+              collapsed rail, this footer is the only place either preference can
+              be reached — and it is built to the same shape (emoji at
+              `text-base`, bare text node beside it), so the collapse selectors
+              reach it without a word of change. */}
           <div
             title={pinned ? undefined : "Stealth mode"}
             className={`shrink-0 border-t border-border py-2 ${
@@ -587,6 +599,7 @@ export function Sidebar({
             }`}
           >
             <StealthMenuButton />
+            <ThemeMenuButton />
           </div>
         </div>
       </aside>
@@ -673,6 +686,10 @@ export function Sidebar({
           </nav>
           <div className="border-t border-border px-3 py-3">
             <StealthMenuButton onNavigate={onMobileClose} />
+            {/* No `onNavigate`: closing the drawer is right for the stealth
+                button (it opens a modal over it) and wrong for this one, which
+                changes the page under you and leaves you to judge the result. */}
+            <ThemeMenuButton />
           </div>
         </aside>
       </div>
