@@ -1,6 +1,43 @@
 @import "tailwindcss";
 
+/* ============================================================
+   The `dark:` variant.
+
+   Tailwind's stock `dark:` is `prefers-color-scheme` alone, which cannot be
+   overridden by a player who wants the arcade dark on a light laptop (or light
+   on a dark one). This replaces it with the two states the app actually has, in
+   the same order the token blocks below use:
+
+   1. `[data-theme="dark"]` — the RESOLVED theme, written to `<html>` before
+      first paint by `themeBootScript()` and kept current by `ThemeController`.
+      It is only ever `light` or `dark`; the word "system" never reaches the DOM
+      (see `app/lib/theme/config.ts`).
+   2. The OS preference, but ONLY while no attribute is set — i.e. no-JS, and the
+      sliver of time before the boot script runs. Once the attribute exists it
+      wins, which is what makes an explicit Light choice stick on a dark OS.
+
+   Written as a two-rule variant rather than one selector because a media query
+   cannot be a member of a selector list. `@slot` is Tailwind v4's expansion
+   point; each rule gets its own copy of the declarations.
+   ============================================================ */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme]), :root:not([data-theme]) *) {
+      @slot;
+    }
+  }
+}
+
 :root {
+  /* The light theme is the default, and says so: `color-scheme` is what the UA
+     paints its own widgets with, and leaving it unset makes a dark-OS browser
+     render form controls dark inside a light page. The dark block below flips
+     it; `[data-theme="light"]` is covered by this very rule. */
+  color-scheme: light;
+
   /* Poki-inspired palette */
   --background: #f4f4f7;
   --foreground: #1c1c28;
@@ -8,6 +45,17 @@
   --surface-2: #ececf3;
   --border: #e4e4ec;
   --muted: #6b6b7b;
+
+  /* The ink tier BETWEEN --foreground and --muted: body copy on a card, the
+     label of a secondary button, the text of a neutral chip.
+
+     It is not a new colour. The value is `zinc-700` to the byte, because that is
+     what ~100 call sites across the app were spelling out by hand where the rest
+     of the codebase used tokens — close enough to --foreground to look
+     deliberate, far enough from --muted (which is two steps lighter) that
+     collapsing the two would have flattened a real distinction in the design.
+     Naming it is what lets the dark palette move it. */
+  --foreground-2: #3f3f46;
 
   --brand: #7c2eef;        /* poki purple */
   --brand-600: #6920d6;
@@ -44,11 +92,122 @@
      is the no-bar answer: clear the device's own safe-area strip and nothing
      more. See `app/lib/bottom-chrome.ts` for the full contract. */
   --hp-bottom-chrome: env(safe-area-inset-bottom, 0px);
+
+  /* Painted chrome that names a colour directly rather than through a utility:
+     the webkit scrollbar and the selection highlight, both at the bottom of this
+     file. Tokens rather than literals purely so the dark block can move them. */
+  --scrollbar-thumb: #d4d4dc;
+  --selection-bg: rgba(124, 46, 239, 0.25);
+  --selection-fg: #1c1c28;
+
+  /* How far the store hero pulls a game's own gradient into the page surface.
+     See the long note above `.game-hero`. Dark mode raises both, because the
+     catalogue's stops were authored for dark card art: the same 18% that reads
+     as a tint over white is nearly invisible mixed into a #17171f card. */
+  --g-mix-from: 18%;
+  --g-mix-to: 12%;
+
+  /* ----------------------------------------------------------
+     THE DARK PALETTE, as constants.
+
+     Declared here — in the light block, where they do nothing — so the two
+     places that switch the theme on (the attribute rule and the no-attribute
+     media query, immediately below) can only ever assign the SAME values. The
+     alternative is writing the palette out twice, which is one edit away from
+     a site whose no-JS dark differs from its JS dark.
+
+     Contrast ratios and the reasoning behind each value are tabulated in
+     `dark-mode-design.md` §2.2. The one to know: --brand is a compromise, not an
+     oversight. `bg-brand` under white text wants it dark and `text-brand` on a
+     dark card wants it light; the curves cross at 4.2:1 either way, which is
+     this value, and no purple does better on both sides at once.
+     ---------------------------------------------------------- */
+  --hp-dark-background: #0f0f16;
+  --hp-dark-foreground: #ededf2;
+  --hp-dark-foreground-2: #c6c6d4;
+  --hp-dark-surface: #17171f;
+  --hp-dark-surface-2: #21212c;
+  --hp-dark-border: #2e2e3b;
+  --hp-dark-muted: #9c9cb0;
+  --hp-dark-brand: #8b5cf6;
+  --hp-dark-brand-600: #9a74f8;
+  --hp-dark-brand-50: #1e1633;
+  --hp-dark-brand-100: #2a1f47;
+  --hp-dark-scrollbar-thumb: #3a3a4a;
+  --hp-dark-selection-bg: rgba(155, 110, 255, 0.35);
+  --hp-dark-selection-fg: #ededf2;
+}
+
+/* ============================================================
+   Dark mode.
+
+   Two blocks, one assignment list, for the two states described on the `dark:`
+   variant above: the attribute (always present once the boot script has run) and
+   the OS preference while no attribute is set (no-JS, and the instant before
+   that script runs). The attribute wins wherever both could apply — it is one
+   specificity step heavier AND the media block excludes the attribute outright —
+   which is what makes "Light on a dark laptop" a choice the site honours rather
+   than a preference the OS overrides a frame later.
+
+   `color-scheme` is not decoration: it is what puts the UA's own dark paint on
+   form controls, the caret, and the inertial scrollbars this stylesheet's webkit
+   rules do not reach. It belongs with the tokens, not with the `<meta>` tag,
+   because an explicit choice has to be able to contradict the OS.
+
+   The accents are deliberately absent from both blocks. --accent-yellow, -pink,
+   -cyan and -pink-ink are signal colours read against their OWN ink (yellow is
+   only ever given `text-zinc-900`, pink-ink only ever white), so they are as
+   legible on a dark page as on a light one and moving them would only break the
+   pairings documented above.
+   ============================================================ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: var(--hp-dark-background);
+  --foreground: var(--hp-dark-foreground);
+  --foreground-2: var(--hp-dark-foreground-2);
+  --surface: var(--hp-dark-surface);
+  --surface-2: var(--hp-dark-surface-2);
+  --border: var(--hp-dark-border);
+  --muted: var(--hp-dark-muted);
+  --brand: var(--hp-dark-brand);
+  --brand-600: var(--hp-dark-brand-600);
+  --brand-50: var(--hp-dark-brand-50);
+  --brand-100: var(--hp-dark-brand-100);
+  --scrollbar-thumb: var(--hp-dark-scrollbar-thumb);
+  --selection-bg: var(--hp-dark-selection-bg);
+  --selection-fg: var(--hp-dark-selection-fg);
+  --g-mix-from: 30%;
+  --g-mix-to: 22%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+
+    --background: var(--hp-dark-background);
+    --foreground: var(--hp-dark-foreground);
+    --foreground-2: var(--hp-dark-foreground-2);
+    --surface: var(--hp-dark-surface);
+    --surface-2: var(--hp-dark-surface-2);
+    --border: var(--hp-dark-border);
+    --muted: var(--hp-dark-muted);
+    --brand: var(--hp-dark-brand);
+    --brand-600: var(--hp-dark-brand-600);
+    --brand-50: var(--hp-dark-brand-50);
+    --brand-100: var(--hp-dark-brand-100);
+    --scrollbar-thumb: var(--hp-dark-scrollbar-thumb);
+    --selection-bg: var(--hp-dark-selection-bg);
+    --selection-fg: var(--hp-dark-selection-fg);
+    --g-mix-from: 30%;
+    --g-mix-to: 22%;
+  }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-foreground-2: var(--foreground-2);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-border: var(--border);
@@ -136,23 +295,29 @@ body {
    and friends. Adding 28 games' worth of colours to the theme would be the wrong
    shape entirely.
 
-   WHY THE GRADIENT IS MIXED TOWARD WHITE RATHER THAN PAINTED DIRECTLY.
+   WHY THE GRADIENT IS MIXED INTO THE PAGE SURFACE RATHER THAN PAINTED DIRECTLY.
    The gradient stops were authored for dark card ART: 20 of the 28 second stops
    are near-black (#0f172a, #020617, #0a0a0a, #050505, #0c0a09, #1c1917 …). A
    plain `linear-gradient(135deg, from, to)` hero would therefore be a dark island
-   on a #f4f4f7 page that has no `dark:` variant anywhere in the codebase. Mixing
-   each stop to ~12-18% of white keeps the hero unmistakably tinted to ITS game
-   while staying light enough that normal `text-zinc-900` / `text-muted` keep
-   their contrast, with no per-game auditing.
+   on a #f4f4f7 page. Mixing each stop into --surface keeps the hero unmistakably
+   tinted to ITS game while staying close enough to the card it sits on that
+   normal `text-foreground` / `text-muted` keep their contrast, with no per-game
+   auditing.
+
+   The mix target was the literal `#fff` until dark mode arrived; it is
+   --surface now, which IS `#fff` in the light theme and the dark card colour in
+   the dark one, so one expression serves both. The PROPORTIONS move with the
+   theme (--g-mix-from / --g-mix-to at the top of this file) because the same 18%
+   that reads as a tint over white barely registers mixed into #17171f.
 
    WHY TEXT NEVER USES --g-accent DIRECTLY.
    `accent` is card-art accent data. Eight of the 28 catalogue values (#fde047,
    #facc15, #fde68a, #33ff33, #4ade80, #84cc16, #ffb347, #22d3ee) fall below 3:1
    against white, and an admin can type any hex for an external game — so it can
    never be made safe by editing the static list. Raw --g-accent is allowed ONLY
-   for washes, shadows and thick rules. Anything textual uses --g-ink, which mixes
-   in 55% of the foreground colour and therefore clears 4.5:1 on white whatever
-   the source hue.
+   for washes, shadows and thick rules. Anything textual mixes in 55% of
+   --foreground first (see `.game-tinted` below), which pulls it back toward the
+   page's own ink — and therefore toward legibility — in either theme.
 
    `color-mix` needs no browser-support note: Tailwind v4 compiles its own opacity
    modifiers to it, so it is already a hard requirement of this stylesheet.
@@ -161,12 +326,12 @@ body {
   background:
     radial-gradient(
       120% 100% at 100% 0%,
-      color-mix(in oklab, var(--g-from) 18%, #fff) 0%,
+      color-mix(in oklab, var(--g-from) var(--g-mix-from), var(--surface)) 0%,
       transparent 62%
     ),
     radial-gradient(
       100% 100% at 0% 100%,
-      color-mix(in oklab, var(--g-to) 12%, #fff) 0%,
+      color-mix(in oklab, var(--g-to) var(--g-mix-to), var(--surface)) 0%,
       transparent 58%
     ),
     var(--surface);
@@ -186,7 +351,7 @@ body {
 
 /* Chips and small tinted surfaces inside a tinted section. */
 .game-tinted {
-  background: color-mix(in oklab, var(--g-accent) 14%, #fff);
+  background: color-mix(in oklab, var(--g-accent) 14%, var(--surface));
   color: color-mix(in oklab, var(--g-accent) 45%, var(--foreground));
 }
 
@@ -340,7 +505,7 @@ body {
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: #d4d4dc;
+  background: var(--scrollbar-thumb);
   border-radius: 999px;
   border: 2px solid var(--background);
 }
@@ -348,6 +513,6 @@ body {
 
 /* Selection */
 ::selection {
-  background: rgba(124, 46, 239, 0.25);
-  color: #1c1c28;
+  background: var(--selection-bg);
+  color: var(--selection-fg);
 }
