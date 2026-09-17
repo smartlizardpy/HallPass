@@ -640,10 +640,20 @@ function FeaturedBanner({
             game_category: game.category,
           });
         }}
-        className="group relative grid w-full overflow-hidden rounded-3xl bg-brand text-left shadow-xl shadow-brand/20 sm:max-h-[38svh] sm:grid-cols-[1.1fr_1fr]"
+        /* THE DARK BANNER IS A DEEP PANEL, NOT A LIT ONE. `bg-brand` at full
+           strength is the right amount of shout against a white page; on a
+           near-black one the same fill is the brightest thing on screen by a
+           distance, and the `shadow-brand/20` under it becomes a halo. So the
+           dark theme drops to `--brand-100` (the deep violet the brand ramp
+           already carries there) and swaps the glow for a hairline ring, which
+           is what separates a panel from the page when the page is dark. The
+           white type, the yellow FEATURED chip and the pill are unchanged —
+           they all still read on it. */
+        className="group relative grid w-full overflow-hidden rounded-3xl bg-brand text-left shadow-xl shadow-brand/20 dark:bg-brand-100 dark:shadow-none dark:ring-1 dark:ring-brand/40 sm:max-h-[38svh] sm:grid-cols-[1.1fr_1fr]"
         style={{
+          // The alphas are theme tokens (`globals.css`); the geometry is not.
           backgroundImage:
-            "radial-gradient(circle at 85% 20%, rgba(255,199,0,0.25), transparent 50%), radial-gradient(circle at 15% 90%, rgba(255,79,139,0.35), transparent 55%)",
+            "radial-gradient(circle at 85% 20%, rgba(255,199,0,var(--banner-wash-warm)), transparent 50%), radial-gradient(circle at 15% 90%, rgba(255,79,139,var(--banner-wash-hot)), transparent 55%)",
         }}
       >
         {/* The `sm:` sizes are all viewport-height clamps — see the docblock.

@@ -100,6 +100,14 @@
   --selection-bg: rgba(124, 46, 239, 0.25);
   --selection-fg: #1c1c28;
 
+  /* How strong the featured banner's two accent washes are over its own fill
+     (`FeaturedBanner` in `Arcade.tsx` names them inline, because the gradient
+     geometry is the component's business and only the strength is the theme's).
+     Dark takes roughly 40% of the light values: the same yellow that reads as a
+     warm corner over a saturated purple turns the deep dark fill olive. */
+  --banner-wash-warm: 0.25;
+  --banner-wash-hot: 0.35;
+
   /* How far the store hero pulls a game's own gradient into the page surface.
      See the long note above `.game-hero`. Dark mode raises both, because the
      catalogue's stops were authored for dark card art: the same 18% that reads
@@ -179,6 +187,8 @@
   --selection-fg: var(--hp-dark-selection-fg);
   --g-mix-from: 30%;
   --g-mix-to: 22%;
+  --banner-wash-warm: 0.1;
+  --banner-wash-hot: 0.16;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -201,6 +211,8 @@
     --selection-fg: var(--hp-dark-selection-fg);
     --g-mix-from: 30%;
     --g-mix-to: 22%;
+    --banner-wash-warm: 0.1;
+    --banner-wash-hot: 0.16;
   }
 }
 
