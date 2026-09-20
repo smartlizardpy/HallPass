@@ -20,34 +20,7 @@ import { ArcadeShell, useOpenGame } from "./ArcadeShell";
 import { GameCard } from "./GameCard";
 import { PlatformConfirmSheet, usePlayGuard } from "./PlatformGate";
 import { useSearchCapture } from "../lib/use-search-capture";
-
-/* ===================== Play counts ===================== */
-/**
- * The catalogue's ONE play-count resolution: the live count from
- * `app/lib/stats.ts` first, the static seed in `app/lib/games.ts` second, zero
- * last.
- *
- * Shared rather than written out at each call site so the Trending ranking and
- * the featured banner can never disagree. They used to: the banner read
- * `game.plays` directly, so a game with no seed — the featured one, as it
- * happens — was advertised as "0 plays" while the row beside it ranked on the
- * live number. `app/game/[slug]/page.tsx` resolves its own copy the same way.
- */
-function playsFor(game: Game, playCounts: Record<string, number>): number {
-  return playCounts[game.slug] ?? game.plays ?? 0;
-}
-
-/**
- * Below this many plays the featured banner prints no play count at all.
- *
- * The hero is the first copy a new visitor reads, and a genuinely small number
- * there is worse than silence: "3 plays" on the page whose job is to make the
- * arcade look worth staying on tells everyone the arcade is dead. A newly
- * promoted game, or one whose live count has not accumulated yet, therefore
- * drops the line entirely — no placeholder, no "New" substitute, since either
- * would only point at the number that is missing.
- */
-const MIN_PLAYS_SHOWN = 50;
+import { MIN_PLAYS_SHOWN, playsFor } from "../lib/plays";
 
 /* ===================== Catalogue grid ===================== */
 /**
