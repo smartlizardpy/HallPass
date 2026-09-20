@@ -87,11 +87,13 @@ export function CatalogToolbar({
 /**
  * One cell of a segmented control.
  *
- * The ACTIVE cell is a raised `--surface` chip on the `--surface-2` track, which
- * is the one styling decision here worth writing down: colour alone would carry
- * it in light mode and lose it in dark, where the two greys sit much closer
- * together. The chip also picks up `--brand` for its text, so the selected cell
- * is doing it twice — a lift and a hue — and survives either theme.
+ * The ACTIVE cell is a `--surface` chip on the `--surface-2` track, which is the
+ * one styling decision here worth writing down. The chip reads as RAISED in
+ * light mode (white on grey) and RECESSED in dark (the dark surface is darker
+ * than the track); either way it is a step away from the track rather than a
+ * brighter version of it. It also takes `--brand` for its text, so the selected
+ * cell is saying it twice — a step and a hue — and neither theme has to carry it
+ * alone.
  *
  * `label` names the cell for a screen reader when its content is an icon; a
  * text cell is its own label and passes nothing.

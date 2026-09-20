@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import type { Game } from "../lib/games";
-import { MIN_PLAYS_SHOWN } from "../lib/plays";
 import { playsOn, useDevicePlatform } from "../lib/use-device-platform";
 import { CoverImage } from "./CoverImage";
 
@@ -22,9 +21,10 @@ import { CoverImage } from "./CoverImage";
  *
  * ── WHAT THE ROW SAYS THAT A CARD CANNOT ───────────────────────────────────
  * The list is not a denser grid, it is a more INFORMATIVE one: a card has room
- * for a title and a category, and the row adds the tagline and the play count.
- * That is the reason to offer the layout at all, and it is why the row is worth
- * ~72px of height rather than being squeezed to a bare title.
+ * for a title and a category, and the row adds the tagline and a play button that
+ * is always there rather than only on hover. That is the reason to offer the
+ * layout at all, and it is why the row is worth ~72px of height rather than being
+ * squeezed to a bare title.
  *
  * ── THE WHOLE ROW IS THE LINK ──────────────────────────────────────────────
  * The title is a real `<Link>` whose `::after` is stretched over the row, so the
@@ -35,14 +35,11 @@ import { CoverImage } from "./CoverImage";
  */
 export function GameListRow({
   game,
-  plays,
   onPlay,
   isFavorite = false,
   onToggleFavorite,
 }: {
   game: Game;
-  /** Already resolved by the caller through `playsFor`. */
-  plays: number;
   onPlay: (slug: string) => void;
   isFavorite?: boolean;
   onToggleFavorite?: (slug: string) => void;
@@ -92,18 +89,19 @@ export function GameListRow({
         </p>
       </div>
 
-      {/* The two columns that only appear when there is room for them. They are
-          the row's reason to exist, so they go before the controls in the source
-          and drop off the narrow end of the layout rather than being stacked. */}
+      {/* Shown only where there is room for it, and dropped rather than stacked
+          on the narrow end of the layout.
+
+          THERE IS NO PLAY-COUNT COLUMN, and the reason is worth keeping: this
+          site does not print a play count below `MIN_PLAYS_SHOWN` (50), and no
+          game has cleared 50 plays in a 30-day window — the busiest was 30 when
+          this was written. A column that is empty on every row for every visitor
+          is worse than no column, so the row says the things it can actually
+          fill in. If the arcade grows into that threshold, this is where the
+          count goes. */}
       <span className="hidden w-32 shrink-0 truncate text-[13px] font-bold text-muted lg:block">
         {game.category}
       </span>
-      <span className="hidden w-28 shrink-0 text-right text-[13px] font-bold text-muted xl:block">
-        {/* Below the threshold the cell is EMPTY, not "0 plays" — the same
-            silence the featured banner keeps, and for the same reason. */}
-        {plays >= MIN_PLAYS_SHOWN ? `${plays.toLocaleString()} plays` : ""}
-      </span>
-
       {onToggleFavorite && (
         <button
           type="button"

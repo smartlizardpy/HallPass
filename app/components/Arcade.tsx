@@ -430,7 +430,6 @@ function ArcadeRows({
                 <GameListRow
                   key={g.slug}
                   game={g}
-                  plays={playsFor(g, playCounts)}
                   onPlay={requestPlay}
                   isFavorite={isFavorite(g.slug)}
                   onToggleFavorite={handleToggleFavorite}

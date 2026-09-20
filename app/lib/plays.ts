@@ -41,10 +41,14 @@ export function playsFor(
  * drops the line entirely — no placeholder, no "New" substitute, since either
  * would only point at the number that is missing.
  *
- * The list layout holds itself to the same threshold, for the same reason and so
- * that a game cannot read as popular in one layout and dead in the other. It is
- * NOT applied to the "Most played" ordering: ranking on a number is a different
- * act from advertising it, and a game with four plays still has to sort
- * somewhere.
+ * It is NOT applied to the "Most played" ordering: ranking on a number is a
+ * different act from advertising it, and a game with four plays still has to
+ * sort somewhere.
+ *
+ * WORTH KNOWING: nothing on the site currently clears this. The busiest game in
+ * the last 30 days had 30 plays when the catalogue toolbar was built, so the
+ * banner's play line does not render for any game today. That is the threshold
+ * working as intended rather than a bug — but it is also why the list layout
+ * carries no play-count column: it would be empty on every row.
  */
 export const MIN_PLAYS_SHOWN = 50;
