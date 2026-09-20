@@ -21,6 +21,16 @@ import { GameCard } from "./GameCard";
 import { PlatformConfirmSheet, usePlayGuard } from "./PlatformGate";
 import { useSearchCapture } from "../lib/use-search-capture";
 import { MIN_PLAYS_SHOWN, playsFor } from "../lib/plays";
+import { type CatalogSort, sortCatalog } from "../lib/catalog-order";
+import {
+  type CatalogView,
+  setCatalogSort,
+  setCatalogView,
+  useCatalogSort,
+  useCatalogView,
+} from "../lib/catalog-prefs";
+import { CatalogToolbar } from "./CatalogToolbar";
+import { GameListRow } from "./GameListRow";
 
 /* ===================== Catalogue grid ===================== */
 /**
@@ -214,30 +224,55 @@ function ArcadeRows({
     });
   }, [category, query, trending, games]);
 
+  // How the filtered grid is ordered and drawn. Both are per-device preferences
+  // that read as their defaults until the render after hydration, so the
+  // prerendered HTML — the copy in the service-worker precache, shared by every
+  // visitor and every crawler — is always the grid as it ships. See
+  // `catalog-prefs.ts` for why this is not in the URL.
+  const sort = useCatalogSort();
+  const view = useCatalogView();
+
+  const handleSortChange = (next: CatalogSort) => {
+    posthog.capture("catalog_sorted", {
+      sort: next,
+      category,
+      searching: query.trim().length > 0,
+    });
+    setCatalogSort(next);
+  };
+
+  const handleViewChange = (next: CatalogView) => {
+    posthog.capture("catalog_view_changed", { view: next, category });
+    setCatalogView(next);
+  };
+
   // Device-aware ORDER, never device-aware membership. Every game the filter
   // matched is still in this list on every device — search crawlers are mobile
   // clients, so dropping desktop games on a phone would drop them from the index.
   //
-  // Three buckets, STABLE within each so the existing ranking survives: plays
-  // here → not checked yet → known not to work here. While `device` is null (the
-  // server render and the first client paint) the list is returned untouched,
-  // which is what keeps this hydration-safe and keeps the prerendered HTML — the
-  // copy sitting in the service-worker precache — device-neutral.
+  // Three buckets: plays here → not checked yet → known not to work here. While
+  // `device` is null (the server render and the first client paint) NO ranking is
+  // passed at all, which is what keeps this hydration-safe and keeps the
+  // prerendered HTML device-neutral.
+  //
+  // Where that ranking sits among the keys — outer under the default order, a
+  // tiebreak under a chosen one — is `sortCatalog`'s decision and is argued out
+  // there, next to the comparators it applies.
   const device = useDevicePlatform();
-  const ordered = useMemo(() => {
-    if (!device) return filtered;
-    const rank = (g: Game) => {
-      const ok = playsOn(g, device);
-      return ok === true ? 0 : ok === null ? 1 : 2;
-    };
-    // `map`+`sort` on index keeps ties in their original order. Array.prototype
-    // .sort is specified as stable, but the explicit tiebreak documents that the
-    // ordering inside a bucket is load-bearing rather than incidental.
-    return filtered
-      .map((g, i) => ({ g, i }))
-      .sort((a, b) => rank(a.g) - rank(b.g) || a.i - b.i)
-      .map(({ g }) => g);
-  }, [filtered, device]);
+  const ordered = useMemo(
+    () =>
+      sortCatalog(filtered, {
+        sort,
+        playCounts,
+        rank: device
+          ? (g: Game) => {
+              const ok = playsOn(g, device);
+              return ok === true ? 0 : ok === null ? 1 : 2;
+            }
+          : undefined,
+      }),
+    [filtered, device, sort, playCounts],
+  );
 
   // Report the search from HERE rather than from the header: this is the only
   // component that knows BOTH what was typed and how many games it matched, and
@@ -356,7 +391,9 @@ function ArcadeRows({
           </Section>
         )}
 
-        {/* All games / filtered */}
+        {/* All games / filtered — the one row whose order is the visitor's to
+            choose. The toolbar is withheld when nothing matched: controls for
+            ordering an empty list are noise on top of a dead end. */}
         <Section
           title={
             query
@@ -365,6 +402,17 @@ function ArcadeRows({
               ? "All games"
               : category
           }
+          actions={
+            ordered.length > 0 ? (
+              <CatalogToolbar
+                count={ordered.length}
+                sort={sort}
+                onSortChange={handleSortChange}
+                view={view}
+                onViewChange={handleViewChange}
+              />
+            ) : null
+          }
         >
           {filtered.length === 0 ? (
             <div className="rounded-3xl bg-surface p-16 text-center">
@@ -372,6 +420,23 @@ function ArcadeRows({
                 No games match. Try another search or category.
               </p>
             </div>
+          ) : view === "list" ? (
+            // A real <ul>: the list layout is a list, and the rows are its
+            // items. The grid stays a div because a grid of cards is a layout,
+            // not an enumeration — the same distinction the store page's rails
+            // make.
+            <ul className="flex flex-col gap-0.5">
+              {ordered.map((g) => (
+                <GameListRow
+                  key={g.slug}
+                  game={g}
+                  plays={playsFor(g, playCounts)}
+                  onPlay={requestPlay}
+                  isFavorite={isFavorite(g.slug)}
+                  onToggleFavorite={handleToggleFavorite}
+                />
+              ))}
+            </ul>
           ) : (
             <div className={CATALOG_GRID}>
               {ordered.map((g) => (
@@ -836,16 +901,30 @@ function FrenchlyAd() {
  */
 function Section({
   title,
+  actions,
   children,
 }: {
   title: string;
+  /**
+   * Controls for this row, laid out opposite the heading. Only the filtered
+   * grid passes any: the curated rows each mean one specific thing, and their
+   * order IS that meaning, so there is nothing for a visitor to decide on them.
+   */
+  actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="px-3 pt-[clamp(20px,4svh,40px)] sm:px-8">
-      <h2 className="mb-[clamp(12px,2svh,20px)] text-2xl font-black tracking-tight text-foreground sm:text-[28px]">
-        {title}
-      </h2>
+      {/* The clamped bottom margin moved from the <h2> to this row so that a
+          section WITHOUT actions is spaced to the pixel as it was before the
+          row existed. `flex-wrap` is what makes the toolbar drop to its own
+          line rather than squeeze the heading on a narrow desktop window. */}
+      <div className="mb-[clamp(12px,2svh,20px)] flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <h2 className="text-2xl font-black tracking-tight text-foreground sm:text-[28px]">
+          {title}
+        </h2>
+        {actions}
+      </div>
       {children}
     </section>
   );
