@@ -10,8 +10,6 @@
  * matches the static files that actually ship.
  */
 export const STATIC_GAME_FILES: ReadonlySet<string> = new Set([
-  "atlas-mangal-market-3d/cover.png",
-  "atlas-mangal-market-3d/index.html",
   "chroma-orbit/cover.png",
   "chroma-orbit/index.html",
   "color-clash-3d/cover.png",
