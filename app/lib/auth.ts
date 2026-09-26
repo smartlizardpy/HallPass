@@ -41,6 +41,7 @@ import {
   isSuperAdminEmail,
   type Role,
 } from "@/app/lib/dashboard-users";
+import { detectSignupCountry } from "@/app/lib/geo";
 import { atLeast, DASHBOARD_HOME } from "@/app/lib/permissions";
 import { upsertPlayerOnLogin } from "@/app/lib/players";
 
@@ -85,7 +86,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
      *   - if the email carries a dashboard role, refresh their `dashboard_users`
      *     row (never downgrading role — see `upsertUserOnLogin`);
      *   - always upsert the `players` row, keyed by the Google subject id
-     *     (`user.id`), so every signed-in person has a verified identity.
+     *     (`user.id`), so every signed-in person has a verified identity. The
+     *     country detected for THIS request rides along, but only takes effect
+     *     on a brand-new row (see `upsertPlayerOnLogin`) — for the audience
+     *     analytics this feeds, not for tracking where a player currently is.
      */
     async signIn({ user, account, profile }) {
       const email = user.email?.toLowerCase();
@@ -117,6 +121,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email,
         name: user.name,
         image: user.image,
+        // Only stamped on a brand-new player row (see upsertPlayerOnLogin) — a
+        // returning player's account keeps wherever it was FIRST detected.
+        country: await detectSignupCountry(),
       });
       return true;
     },

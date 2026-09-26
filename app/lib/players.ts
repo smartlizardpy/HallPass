@@ -155,19 +155,26 @@ function mapPlayer(row: Row): Player {
  * `image`) and `last_login` are refreshed from the verified Google identity; the
  * player-chosen `handle` is NEVER touched — a login must not clobber a player's
  * deliberate display choice. Email is lowercased to keep the UNIQUE key canonical.
+ *
+ * `country` (ISO 3166-1 alpha-2, or `null` if undetermined) is written ONLY on
+ * the INSERT branch — left out of `ON CONFLICT ... DO UPDATE SET` the same way
+ * `handle` is — so it records where the account was FIRST detected rather than
+ * being overwritten every time a returning player signs in from somewhere else.
  */
 export async function upsertPlayerOnLogin(p: {
   id: string;
   email: string;
   name?: string | null;
   image?: string | null;
+  country?: string | null;
 }): Promise<void> {
   const email = normalizeEmail(p.email);
   const name = p.name ?? null;
   const image = p.image ?? null;
+  const country = p.country ?? null;
   await sql`
-    INSERT INTO players (id, email, name, image, last_login)
-    VALUES (${p.id}, ${email}, ${name}, ${image}, now())
+    INSERT INTO players (id, email, name, image, country, last_login)
+    VALUES (${p.id}, ${email}, ${name}, ${image}, ${country}, now())
     ON CONFLICT (id) DO UPDATE SET
       email = EXCLUDED.email,
       name = EXCLUDED.name,

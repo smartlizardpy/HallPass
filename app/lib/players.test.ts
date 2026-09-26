@@ -23,7 +23,7 @@ vi.mock("@/app/lib/db", () => ({
   isUnconfiguredDbError: () => false,
 }));
 
-import { getPlayerByUsername } from "./players";
+import { getPlayerByUsername, upsertPlayerOnLogin } from "./players";
 
 const ROW = {
   id: "sub-alice",
@@ -67,5 +67,50 @@ describe("getPlayerByUsername", () => {
     expect(values).toEqual(["alice' OR '1'='1"]);
     expect(strings.join("?")).toContain("WHERE username =");
     expect(strings.join("?")).not.toContain("OR '1'='1");
+  });
+});
+
+describe("upsertPlayerOnLogin", () => {
+  it("binds the detected country as a VALUE on insert", async () => {
+    query.mockResolvedValue([]);
+
+    await upsertPlayerOnLogin({
+      id: "sub-alice",
+      email: "Alice@Example.com",
+      country: "gb",
+    });
+
+    const [strings, ...values] = query.mock.calls[0] as [string[], ...unknown[]];
+    expect(strings.join("?")).toContain("INSERT INTO players");
+    expect(values).toContain("gb");
+  });
+
+  it("never overwrites country on a returning login", async () => {
+    // The load-bearing privacy behaviour: a login must record where the
+    // account was FIRST detected, not where it is signing in from now — so
+    // `country` must be absent from the ON CONFLICT ... DO UPDATE SET clause,
+    // the same way the player's chosen `handle` already is.
+    query.mockResolvedValue([]);
+
+    await upsertPlayerOnLogin({
+      id: "sub-alice",
+      email: "alice@example.com",
+      country: "US",
+    });
+
+    const [strings] = query.mock.calls[0] as [string[], ...unknown[]];
+    const sql = strings.join("?");
+    const conflictClause = sql.slice(sql.indexOf("ON CONFLICT"));
+    expect(conflictClause).not.toContain("country");
+  });
+
+  it("defaults to null when no country was detected", async () => {
+    query.mockResolvedValue([]);
+
+    await upsertPlayerOnLogin({ id: "sub-bob", email: "bob@example.com" });
+
+    // VALUES order is (id, email, name, image, country) — country is last.
+    const [, ...values] = query.mock.calls[0] as [string[], ...unknown[]];
+    expect(values[4]).toBeNull();
   });
 });
