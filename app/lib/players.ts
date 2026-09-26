@@ -191,6 +191,32 @@ export async function upsertPlayerOnLogin(p: {
   `;
 }
 
+/**
+ * Backfill a player's country if — and only if — the row still has none.
+ *
+ * `upsertPlayerOnLogin`'s own COALESCE only runs on an actual sign-in, which
+ * for an already-authenticated player can be weeks away (Auth.js v5's default
+ * JWT lifetime is 30 days) — so a player who signed up before this column
+ * existed would otherwise sit at "Unknown" for the rest of that session no
+ * matter how many pages they open. The `jwt` callback in `auth.ts` calls this
+ * on an ordinary page visit instead, giving every request a chance to fill
+ * the gap rather than only a fresh OAuth round-trip.
+ *
+ * `country` null is a no-op — nothing here is worth writing over "unknown" —
+ * and the `WHERE country IS NULL` is the same one-way door as the INSERT
+ * path's COALESCE: a player who already has a country never has it touched.
+ */
+export async function backfillCountryIfMissing(
+  id: string,
+  country: string | null,
+): Promise<void> {
+  if (!country) return;
+  await sql`
+    UPDATE players SET country = ${country}
+    WHERE id = ${id} AND country IS NULL
+  `;
+}
+
 /** A single player by Google subject id, or `null` if unknown. */
 export async function getPlayerById(id: string): Promise<Player | null> {
   const rows = await sql`

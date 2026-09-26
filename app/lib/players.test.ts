@@ -23,7 +23,11 @@ vi.mock("@/app/lib/db", () => ({
   isUnconfiguredDbError: () => false,
 }));
 
-import { getPlayerByUsername, upsertPlayerOnLogin } from "./players";
+import {
+  backfillCountryIfMissing,
+  getPlayerByUsername,
+  upsertPlayerOnLogin,
+} from "./players";
 
 const ROW = {
   id: "sub-alice",
@@ -117,5 +121,25 @@ describe("upsertPlayerOnLogin", () => {
     // VALUES order is (id, email, name, image, country) — country is last.
     const [, ...values] = query.mock.calls[0] as [string[], ...unknown[]];
     expect(values[4]).toBeNull();
+  });
+});
+
+describe("backfillCountryIfMissing", () => {
+  it("does nothing when no country was detected — never queries the driver", async () => {
+    await backfillCountryIfMissing("sub-alice", null);
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it("writes the country, guarded by WHERE country IS NULL", async () => {
+    query.mockResolvedValue([]);
+
+    await backfillCountryIfMissing("sub-alice", "gb");
+
+    const [strings, ...values] = query.mock.calls[0] as [string[], ...unknown[]];
+    const sql = strings.join("?");
+    expect(sql).toContain("UPDATE players SET country =");
+    expect(sql).toContain("WHERE id =");
+    expect(sql).toContain("AND country IS NULL");
+    expect(values).toEqual(["gb", "sub-alice"]);
   });
 });
