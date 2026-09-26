@@ -85,11 +85,15 @@ describe("upsertPlayerOnLogin", () => {
     expect(values).toContain("gb");
   });
 
-  it("never overwrites country on a returning login", async () => {
+  it("only backfills country when the existing row has none", async () => {
     // The load-bearing privacy behaviour: a login must record where the
-    // account was FIRST detected, not where it is signing in from now — so
-    // `country` must be absent from the ON CONFLICT ... DO UPDATE SET clause,
-    // the same way the player's chosen `handle` already is.
+    // account was FIRST detected, not where it is signing in from now. Unlike
+    // `handle` (absent from the SET list entirely — a NULL handle is a
+    // deliberate choice), `country` DOES appear here, guarded by COALESCE, so
+    // a pre-existing row with no country yet (every player who signed up
+    // before this column existed) gets one on its next login — but a row that
+    // already has a country is never touched again, real driver semantics
+    // this mock can't itself exercise (see the module docblock on that split).
     query.mockResolvedValue([]);
 
     await upsertPlayerOnLogin({
@@ -101,7 +105,8 @@ describe("upsertPlayerOnLogin", () => {
     const [strings] = query.mock.calls[0] as [string[], ...unknown[]];
     const sql = strings.join("?");
     const conflictClause = sql.slice(sql.indexOf("ON CONFLICT"));
-    expect(conflictClause).not.toContain("country");
+    expect(conflictClause).toContain("COALESCE(players.country, EXCLUDED.country)");
+    expect(conflictClause).not.toContain("handle");
   });
 
   it("defaults to null when no country was detected", async () => {

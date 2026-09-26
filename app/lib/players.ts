@@ -156,10 +156,17 @@ function mapPlayer(row: Row): Player {
  * player-chosen `handle` is NEVER touched — a login must not clobber a player's
  * deliberate display choice. Email is lowercased to keep the UNIQUE key canonical.
  *
- * `country` (ISO 3166-1 alpha-2, or `null` if undetermined) is written ONLY on
- * the INSERT branch — left out of `ON CONFLICT ... DO UPDATE SET` the same way
- * `handle` is — so it records where the account was FIRST detected rather than
- * being overwritten every time a returning player signs in from somewhere else.
+ * `country` (ISO 3166-1 alpha-2, or `null` if undetermined) is FIRST-DETECTED,
+ * not continuously tracked — but that is not quite the same rule as `handle`.
+ * `COALESCE(players.country, EXCLUDED.country)` only ever fills a NULL: once a
+ * row has a country, no later login can change it, so a returning player who
+ * signs in from somewhere else never has it overwritten. But a row that
+ * predates this column (every player who signed up before it existed) starts
+ * out NULL with no way to recover where they actually first signed up — so
+ * their FIRST login after this shipped is the earliest true opportunity to
+ * record it, and this backfills it then rather than leaving them "Unknown"
+ * forever. `handle` has no equivalent case: NULL there is a deliberate choice
+ * (no override set), not a gap this column has to catch up on.
  */
 export async function upsertPlayerOnLogin(p: {
   id: string;
@@ -179,6 +186,7 @@ export async function upsertPlayerOnLogin(p: {
       email = EXCLUDED.email,
       name = EXCLUDED.name,
       image = EXCLUDED.image,
+      country = COALESCE(players.country, EXCLUDED.country),
       last_login = now()
   `;
 }

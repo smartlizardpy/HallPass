@@ -38,10 +38,12 @@
 --
 -- `country` is the ISO 3166-1 alpha-2 code (e.g. `GB`, `US`) of where the
 -- account was FIRST detected, for broad "where is the community from" dashboard
--- analytics — never city, region, postcode or coordinates. Set once on insert
--- (see `upsertPlayerOnLogin`) and never overwritten on a later login, so it
--- reflects first-detected location rather than continuously tracking the
--- player. NULL means undetermined and reads as "Unknown" on the dashboard.
+-- analytics — never city, region, postcode or coordinates. Set on insert and
+-- backfilled ONCE on a later login if still NULL (a row from before this
+-- column existed) — see `upsertPlayerOnLogin`'s `COALESCE` — but never
+-- overwritten once set, so it reflects first-detected location rather than
+-- continuously tracking the player. NULL means undetermined and reads as
+-- "Unknown" on the dashboard.
 --
 -- `profile_visibility` defaults to 'friends' deliberately: a brand-new player's
 -- profile leaks nothing until they choose to connect, while a link they share
