@@ -43,6 +43,16 @@ export type ActiveBoard = {
   players: number;
 };
 
+/**
+ * Signed-in players from one ISO 3166-1 alpha-2 country, most first.
+ * `code` is `null` for players whose country could not be determined — the
+ * dashboard renders that row as "Unknown", it is never dropped from the list.
+ */
+export type CountryCount = {
+  code: string | null;
+  count: number;
+};
+
 /** One day of first-party community activity. `date` is a UTC `YYYY-MM-DD`. */
 export type CommunityDay = {
   date: string;
@@ -105,6 +115,10 @@ export type CommunityStats = {
   /** Games with the most visible comments, most first. */
   topCommented: CommentedGame[];
   recentPlayers: RecentPlayer[];
+  /** Every signed-in player, most-represented country first. */
+  topCountriesAll: CountryCount[];
+  /** Players who signed in within the last 30 days, most-represented country first. */
+  topCountriesActive: CountryCount[];
   /** False when the database is unconfigured/unreachable (panel shows a notice). */
   available: boolean;
 };
@@ -131,6 +145,8 @@ const EMPTY: CommunityStats = {
   flaggedComments: 0,
   topCommented: [],
   recentPlayers: [],
+  topCountriesAll: [],
+  topCountriesActive: [],
   available: false,
 };
 
@@ -226,6 +242,59 @@ async function getCommentStats(): Promise<{
   }
 }
 
+/**
+ * Signed-in players by country, for both cohorts the dashboard toggle needs:
+ * every player, and only those active in the last {@link WINDOW_DAYS} days.
+ *
+ * Its own try/catch, same reason as {@link getCommentStats}: `players.country`
+ * is a schema addition applied by hand (`034_player_country.sql`), so there is
+ * a deploy window where this query's own table is present but the column is
+ * not. Degrading only THIS panel to empty lists keeps the rest of the
+ * community stats — none of which read `country` — working through that
+ * window instead of taking the whole panel down with it.
+ *
+ * `GROUP BY country` folds every NULL row (undetermined) into one group, which
+ * is exactly the "Unknown" bucket the dashboard wants — Postgres treats NULL
+ * as a single group for `GROUP BY`, not as "no group".
+ */
+async function getTopCountries(): Promise<{
+  topCountriesAll: CountryCount[];
+  topCountriesActive: CountryCount[];
+}> {
+  try {
+    const toCounts = (rows: Record<string, unknown>[]): CountryCount[] =>
+      rows.map((r) => ({
+        code: r.country == null ? null : String(r.country),
+        count: Number(r.n ?? 0) || 0,
+      }));
+
+    const [all, active] = await Promise.all([
+      sql`
+        SELECT country, count(*)::int AS n
+        FROM players
+        GROUP BY country
+        ORDER BY n DESC, country ASC
+        LIMIT 10
+      `,
+      sql`
+        SELECT country, count(*)::int AS n
+        FROM players
+        WHERE last_login >= now() - INTERVAL '30 days'
+        GROUP BY country
+        ORDER BY n DESC, country ASC
+        LIMIT 10
+      `,
+    ]);
+
+    return { topCountriesAll: toCounts(all), topCountriesActive: toCounts(active) };
+  } catch (error) {
+    if (isMissingColumnError(error)) {
+      return { topCountriesAll: [], topCountriesActive: [] };
+    }
+    throw error;
+  }
+}
+
 /** A `GROUP BY day` row, in the shape `mergeDays` folds together. */
 type DayCount = { date: string; value: number };
 
@@ -263,7 +332,7 @@ const DAILY_KEYS = ["players", "scores", "comments"] as const;
  */
 export async function getCommunityStats(): Promise<CommunityStats> {
   try {
-    const [totals, recent, commentStats, dailyActivity, boardRows] = await Promise.all([
+    const [totals, recent, commentStats, dailyActivity, boardRows, countryStats] = await Promise.all([
       sql`
         SELECT
           (SELECT count(*) FROM players)::int AS players,
@@ -344,6 +413,7 @@ export async function getCommunityStats(): Promise<CommunityStats> {
         ORDER BY scores DESC, b.title ASC
         LIMIT 6
       `,
+      getTopCountries(),
     ]);
 
     const row = totals[0] ?? {};
@@ -385,6 +455,8 @@ export async function getCommunityStats(): Promise<CommunityStats> {
         image: r.image == null ? null : String(r.image),
         joinedAt: new Date(r.created_at as string).toISOString(),
       })),
+      topCountriesAll: countryStats.topCountriesAll,
+      topCountriesActive: countryStats.topCountriesActive,
       available: true,
     };
   } catch (error) {
