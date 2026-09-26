@@ -44,6 +44,7 @@ import {
 import { agoLabel, hourLabel, peak, share } from "@/app/lib/insights";
 import { DashHeader } from "./_ui/DashHeader";
 import { Section } from "./_ui/Section";
+import { TopCountries } from "./_ui/TopCountries";
 import { CommunityTrend } from "./_charts/CommunityTrend";
 import { HourlyBars } from "./_charts/HourlyBars";
 import { PlaysVisitorsArea } from "./_charts/PlaysVisitorsArea";
@@ -280,6 +281,28 @@ export default async function DashboardPage() {
                 note={pctNote(community.identifiedScores, community.scores, "of all scores")}
               />
             </div>
+          )}
+        </Section>
+      </div>
+
+      {/*
+        WHERE the community is signing in from — first-party account country,
+        not PostHog's anonymous visitor geo (that stays in "Top countries"
+        below, under the traffic breakdown). Full width: a flag, name, share
+        bar and count per row reads better with room than squeezed into a
+        one-of-three column.
+      */}
+      <div className="mt-6">
+        <Section title="Top Countries" subtitle="signed-in users">
+          {!community.available ? (
+            <Empty hint="Database not configured." />
+          ) : (
+            <TopCountries
+              all={community.topCountriesAll}
+              active={community.topCountriesActive}
+              allTotal={community.players}
+              activeTotal={community.activePlayers30}
+            />
           )}
         </Section>
       </div>
