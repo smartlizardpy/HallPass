@@ -202,7 +202,7 @@ of those off from **Dashboard → Blob ops** when the allowance runs out — or,
 migration 026 has not been applied yet, by setting `BLOB_READ_ONLY=1` and
 redeploying, which forces everything off with no database involved. Full
 reasoning, the per-feature table and the reindex recovery path are in
-[`blob-operations-design.md`](blob-operations-design.md).
+[`blob-operations-design.md`](docs/blob-operations-design.md).
 
 ## Player features: stealth mode & daily streak
 
