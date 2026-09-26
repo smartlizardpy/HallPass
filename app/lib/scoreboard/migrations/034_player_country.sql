@@ -11,12 +11,15 @@
 -- 2-letter code (or nothing), so there is nothing finer-grained to strip.
 --
 -- ── FIRST DETECTED, NOT CONTINUOUSLY TRACKED ────────────────────────────────
--- The write path (`upsertPlayerOnLogin`) sets this column ONLY on the initial
--- INSERT, the same way it already leaves `handle` out of its `ON CONFLICT ...
--- DO UPDATE SET` list — a returning player signing in from a different
--- network (a new school, a VPN, a holiday) must not overwrite where their
--- account was first seen. NULL means "could not be determined" and reads as
--- "Unknown" on the dashboard, not as a guess.
+-- The write path (`upsertPlayerOnLogin`) sets this column on INSERT, and
+-- backfills it on a later login ONLY while it is still NULL — every player
+-- who signed up before this migration ran has no way to recover their true
+-- signup location, so their first login afterwards is the earliest honest
+-- opportunity to record one. Once a row has a country, no later login can
+-- change it: a returning player signing in from a different network (a new
+-- school, a VPN, a holiday) must not overwrite where their account was first
+-- seen. NULL means "could not be determined" and reads as "Unknown" on the
+-- dashboard, not as a guess.
 --
 -- Idempotent: additive column, guarded constraint, safe to re-run.
 

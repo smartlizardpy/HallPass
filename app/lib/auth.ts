@@ -43,7 +43,7 @@ import {
 } from "@/app/lib/dashboard-users";
 import { detectSignupCountry } from "@/app/lib/geo";
 import { atLeast, DASHBOARD_HOME } from "@/app/lib/permissions";
-import { upsertPlayerOnLogin } from "@/app/lib/players";
+import { backfillCountryIfMissing, upsertPlayerOnLogin } from "@/app/lib/players";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
@@ -145,6 +145,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
      * despite that value riding the token and needing no database at all. The
      * role now fails closed on its own and the rest of the token survives; see
      * `getSessionRole` for why the previous role is not reused instead.
+     *
+     * COUNTRY BACKFILL rides here too, for the same reason `role` is
+     * re-resolved every request rather than only at login: a player who
+     * signed up before `players.country` existed has NO fresh sign-in coming
+     * — their JWT can be weeks old (30-day default) and every page they open
+     * just re-validates it — so waiting for `signIn` to fire again would leave
+     * them "Unknown" for the rest of that session. `token.countryChecked`
+     * throttles this to ONE attempt per token: once set, no later request on
+     * this same session re-queries the database, so the cost only exists for
+     * players still missing a country and only once each. Same non-throwing
+     * discipline as the role read — a failed backfill must never cost a
+     * player their session — so it is caught and logged, never awaited into
+     * the callback's own rejection path.
      */
     async jwt({ token, user, account, profile }) {
       const email = (user?.email ?? token.email)?.toLowerCase();
@@ -160,6 +173,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const subjectId = account?.providerAccountId ?? profile?.sub;
       if (subjectId) {
         token.playerId = subjectId;
+        // The signIn callback already resolved country for this pass (INSERT
+        // or its own COALESCE) — skip the redundant backfill attempt below.
+        token.countryChecked = true;
+      } else if (token.playerId && !token.countryChecked) {
+        try {
+          await backfillCountryIfMissing(token.playerId, await detectSignupCountry());
+        } catch (error) {
+          console.error("Country backfill failed:", error);
+        }
+        token.countryChecked = true;
       }
       return token;
     },
@@ -237,5 +260,7 @@ declare module "next-auth/jwt" {
     role?: Role | null;
     email?: string;
     playerId?: string;
+    /** Whether the one-time country-backfill attempt has run for this token. */
+    countryChecked?: boolean;
   }
 }

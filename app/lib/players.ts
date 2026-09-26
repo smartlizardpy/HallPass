@@ -156,10 +156,17 @@ function mapPlayer(row: Row): Player {
  * player-chosen `handle` is NEVER touched — a login must not clobber a player's
  * deliberate display choice. Email is lowercased to keep the UNIQUE key canonical.
  *
- * `country` (ISO 3166-1 alpha-2, or `null` if undetermined) is written ONLY on
- * the INSERT branch — left out of `ON CONFLICT ... DO UPDATE SET` the same way
- * `handle` is — so it records where the account was FIRST detected rather than
- * being overwritten every time a returning player signs in from somewhere else.
+ * `country` (ISO 3166-1 alpha-2, or `null` if undetermined) is FIRST-DETECTED,
+ * not continuously tracked — but that is not quite the same rule as `handle`.
+ * `COALESCE(players.country, EXCLUDED.country)` only ever fills a NULL: once a
+ * row has a country, no later login can change it, so a returning player who
+ * signs in from somewhere else never has it overwritten. But a row that
+ * predates this column (every player who signed up before it existed) starts
+ * out NULL with no way to recover where they actually first signed up — so
+ * their FIRST login after this shipped is the earliest true opportunity to
+ * record it, and this backfills it then rather than leaving them "Unknown"
+ * forever. `handle` has no equivalent case: NULL there is a deliberate choice
+ * (no override set), not a gap this column has to catch up on.
  */
 export async function upsertPlayerOnLogin(p: {
   id: string;
@@ -179,7 +186,34 @@ export async function upsertPlayerOnLogin(p: {
       email = EXCLUDED.email,
       name = EXCLUDED.name,
       image = EXCLUDED.image,
+      country = COALESCE(players.country, EXCLUDED.country),
       last_login = now()
+  `;
+}
+
+/**
+ * Backfill a player's country if — and only if — the row still has none.
+ *
+ * `upsertPlayerOnLogin`'s own COALESCE only runs on an actual sign-in, which
+ * for an already-authenticated player can be weeks away (Auth.js v5's default
+ * JWT lifetime is 30 days) — so a player who signed up before this column
+ * existed would otherwise sit at "Unknown" for the rest of that session no
+ * matter how many pages they open. The `jwt` callback in `auth.ts` calls this
+ * on an ordinary page visit instead, giving every request a chance to fill
+ * the gap rather than only a fresh OAuth round-trip.
+ *
+ * `country` null is a no-op — nothing here is worth writing over "unknown" —
+ * and the `WHERE country IS NULL` is the same one-way door as the INSERT
+ * path's COALESCE: a player who already has a country never has it touched.
+ */
+export async function backfillCountryIfMissing(
+  id: string,
+  country: string | null,
+): Promise<void> {
+  if (!country) return;
+  await sql`
+    UPDATE players SET country = ${country}
+    WHERE id = ${id} AND country IS NULL
   `;
 }
 
