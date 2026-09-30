@@ -86,6 +86,9 @@ export async function GET(
   if (!game) return NOT_FOUND_NO_STORE();
   const staged = game.staged === true;
   if (staged && !(await canViewStaged())) return NOT_FOUND_NO_STORE();
+  // Past the gate, a staged game's misses are per-viewer answers too, so they
+  // stay uncacheable like its 200s; a public game's misses keep today's headers.
+  const miss = staged ? NOT_FOUND_NO_STORE : NOT_FOUND;
 
   const blobPath = `${mediaBlobPrefix(slug)}${segments[0]}`;
 
@@ -100,9 +103,9 @@ export async function GET(
   } catch {
     // Database unreachable: fail closed. Serving unverified bytes from a
     // user-supplied path is not a safe degradation.
-    return NOT_FOUND();
+    return miss();
   }
-  if (!media) return NOT_FOUND();
+  if (!media) return miss();
 
   // The row normally carries the URL `put()` returned at upload time, so the
   // common path spends NO Blob operation at all. `head()` is only for rows that
@@ -113,7 +116,7 @@ export async function GET(
     try {
       blobUrl = (await head(blobPath)).url;
     } catch {
-      return NOT_FOUND();
+      return miss();
     }
     // Best-effort self-heal; the response does not depend on it.
     void setMediaBlobUrl(blobPath, blobUrl).catch(() => {
@@ -128,7 +131,7 @@ export async function GET(
   // false), which is what already justifies the `immutable` response header
   // below, so reusing a cached copy is always correct.
   const upstream = await fetch(blobUrl);
-  if (!upstream.ok || !upstream.body) return NOT_FOUND();
+  if (!upstream.ok || !upstream.body) return miss();
 
   return new Response(upstream.body, {
     status: 200,

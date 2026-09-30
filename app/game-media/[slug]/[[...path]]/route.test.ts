@@ -70,4 +70,16 @@ describe("/game-media staged gate", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("private, no-store");
   });
+
+  it("keeps a tester's miss on a staged game uncacheable, and a public miss as before", async () => {
+    mocks.canViewStaged.mockResolvedValue(true);
+    mocks.getMediaByBlobPath.mockResolvedValue(null);
+    const stagedMiss = await call("beta");
+    expect(stagedMiss.status).toBe(404);
+    expect(stagedMiss.headers.get("cache-control")).toBe("no-store");
+
+    const publicMiss = await call("pub");
+    expect(publicMiss.status).toBe(404);
+    expect(publicMiss.headers.get("cache-control")).toBeNull();
+  });
 });
