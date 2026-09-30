@@ -171,6 +171,16 @@ function PlatformSection({
 type Params = Promise<{ slug: string }>;
 type SearchParams = Promise<{ ok?: string | string[]; error?: string | string[] }>;
 
+/**
+ * Where "open the game" should point. `/game/<slug>` is public-only and static, so
+ * it 404s for everyone while the game is staged, admins included; the tester
+ * session page is the one place a staged game can be opened. Once published the
+ * link goes back to the store page.
+ */
+function openPath(game: Pick<Game, "slug" | "staged">): string {
+  return game.staged ? `/beta/session/${game.slug}` : `/game/${game.slug}`;
+}
+
 function asString(value: string | string[] | undefined): string | null {
   if (!value) return null;
   return Array.isArray(value) ? value[0] : value;
@@ -199,7 +209,7 @@ async function countCustomFiles(slug: string): Promise<number> {
  * keeps this branch cheap — no blob listing, no media, no achievements, no
  * boards — because none of that is what the reader came for.
  */
-function GameReadOnlyView({ game, slug }: { game: Game; slug: string }) {
+function GameReadOnlyView({ game }: { game: Game }) {
   return (
     <div className="space-y-6">
       <Link
@@ -255,7 +265,7 @@ function GameReadOnlyView({ game, slug }: { game: Game; slug: string }) {
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
-                href={`/game/${slug}`}
+                href={openPath(game)}
                 target="_blank"
                 className="inline-block rounded-full border border-border bg-surface px-4 py-1.5 text-sm font-bold text-foreground-2 hover:bg-surface-2"
               >
@@ -338,7 +348,7 @@ export default async function GameControlPage({
   // answer one question — "what is this game, before I send someone to test
   // it?" — so they get exactly that, and the editor is not built at all.
   if (!canEditSite(role)) {
-    return <GameReadOnlyView game={game} slug={slug} />;
+    return <GameReadOnlyView game={game} />;
   }
 
   const sp = await searchParams;
@@ -409,7 +419,7 @@ export default async function GameControlPage({
               <p className="mt-1 text-sm text-muted">{game.category}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Link
-                  href={`/game/${slug}`}
+                  href={openPath(game)}
                   target="_blank"
                   className="inline-block rounded-full border border-border bg-surface px-4 py-1.5 text-sm font-bold text-foreground-2 hover:bg-surface-2"
                 >
@@ -735,7 +745,7 @@ export default async function GameControlPage({
             <h2 className="mt-1 text-xl font-black tracking-tight">{game.title}</h2>
             <p className="mt-1 text-sm text-muted">{game.category}</p>
             <Link
-              href={`/game/${slug}`}
+              href={openPath(game)}
               target="_blank"
               className="mt-3 inline-block rounded-full border border-border bg-surface px-4 py-1.5 text-sm font-bold text-foreground-2 hover:bg-surface-2"
             >
@@ -1273,7 +1283,7 @@ export default async function GameControlPage({
               </button>
             </form>
             <Link
-              href={`/game/${slug}`}
+              href={openPath(game)}
               target="_blank"
               className="text-sm font-semibold text-brand hover:text-brand-600"
             >

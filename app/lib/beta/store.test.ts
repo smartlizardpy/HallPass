@@ -889,3 +889,15 @@ describe("agent activity", () => {
     expect(text).not.toContain("WHERE");
   });
 });
+
+describe("acceptedCoverShots", () => {
+  it("selects only accepted cover shots for the slug, newest first, bounded", async () => {
+    const { sql, calls } = makeFakeSql(() => []);
+    await createBetaStore(sql).acceptedCoverShots("my-game", 1000);
+    const text = flat(calls[0].text);
+    expect(text).toContain("FROM beta_shots");
+    expect(text).toContain("WHERE slug = ? AND kind = 'cover' AND status = 'accepted'");
+    expect(text).toContain("ORDER BY created_at DESC");
+    expect(calls[0].values).toEqual(["my-game", 100]);
+  });
+});
