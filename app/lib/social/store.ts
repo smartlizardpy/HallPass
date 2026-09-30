@@ -776,7 +776,10 @@ export function createSocialStore(sql: Sql) {
      * each board's best row and the outer filter keeps the ones that are this
      * player's.
      */
-    async badgeStats(playerId: string): Promise<{
+    async badgeStats(
+      playerId: string,
+      excludeSlugs: readonly string[] = [],
+    ): Promise<{
       gamesPlayed: number;
       totalPlays: number;
       firstPlaces: number;
@@ -792,16 +795,28 @@ export function createSocialStore(sql: Sql) {
           (SELECT count(*)::int FROM player_plays WHERE player_id = ${playerId})            AS games_played,
           (SELECT COALESCE(sum(play_count), 0)::int FROM player_plays
             WHERE player_id = ${playerId})                                                  AS total_plays,
-          (SELECT count(DISTINCT board_id)::int FROM scores WHERE player_id = ${playerId})   AS boards_entered,
+          -- STAGED GAMES are excluded from the board, review and achievement inputs
+          -- below (a board counts as staged through its linked game_slug): a badge
+          -- is public, and a tester's activity on a beta-only game must not show
+          -- on a profile before that game is published. A board with no linked
+          -- game is never excluded.
+          (SELECT count(DISTINCT s.board_id)::int FROM scores s
+            WHERE s.player_id = ${playerId}
+              AND NOT EXISTS (SELECT 1 FROM boards b WHERE b.id = s.board_id
+                              AND b.game_slug = ANY(${[...excludeSlugs]}::text[])))                                 AS boards_entered,
           (SELECT count(*)::int FROM (
-             SELECT DISTINCT ON (board_id) board_id, player_id
-             FROM scores
-             ORDER BY board_id, score DESC, created_at ASC, id ASC
+             SELECT DISTINCT ON (s.board_id) s.board_id, s.player_id
+             FROM scores s
+             WHERE NOT EXISTS (SELECT 1 FROM boards b WHERE b.id = s.board_id
+                               AND b.game_slug = ANY(${[...excludeSlugs]}::text[]))
+             ORDER BY s.board_id, s.score DESC, s.created_at ASC, s.id ASC
            ) best WHERE best.player_id = ${playerId})                                       AS first_places,
           (SELECT count(*)::int FROM game_reviews
-            WHERE player_id = ${playerId} AND status = 'visible')                           AS reviews_written,
+            WHERE player_id = ${playerId} AND status = 'visible'
+              AND slug <> ALL(${[...excludeSlugs]}::text[]))                                                      AS reviews_written,
           (SELECT COALESCE(max(helpful_count), 0)::int FROM game_reviews
-            WHERE player_id = ${playerId} AND status = 'visible')                           AS best_review_helpful,
+            WHERE player_id = ${playerId} AND status = 'visible'
+              AND slug <> ALL(${[...excludeSlugs]}::text[]))                                                      AS best_review_helpful,
           (SELECT count(*)::int FROM friendships
             WHERE status = 'accepted' AND (player_a = ${playerId} OR player_b = ${playerId})) AS friends,
           (SELECT GREATEST(0, EXTRACT(DAY FROM now() - created_at))::int FROM players
@@ -809,11 +824,15 @@ export function createSocialStore(sql: Sql) {
           -- Game achievements are the ONE badge input that cannot be derived from
           -- rows the platform already has: only the game knows the player beat
           -- level 10. Summed here rather than counted so a hard achievement can
-          -- be worth more than an easy one.
+          -- be worth more than an easy one. The exclude list drops STAGED games: a
+          -- badge is public, and points a tester earned on a beta-only game must
+          -- not show on a profile before that game is published (they count from
+          -- the moment it is). The store takes the list; the barrel supplies it.
           (SELECT COALESCE(sum(a.points), 0)::int
              FROM player_achievements pa
              JOIN achievements a ON a.id = pa.achievement_id
-            WHERE pa.player_id = ${playerId} AND pa.unlocked_at IS NOT NULL)                 AS achievement_points
+            WHERE pa.player_id = ${playerId} AND pa.unlocked_at IS NOT NULL
+              AND a.slug <> ALL(${[...excludeSlugs]}::text[]))                               AS achievement_points
       `;
       const row = rows[0] ?? {};
       return {

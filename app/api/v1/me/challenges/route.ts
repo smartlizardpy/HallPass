@@ -32,7 +32,7 @@ import type { CreateOutcome } from "@/app/lib/challenges";
 import { isMissingColumnError } from "@/app/lib/db";
 import { challengeCopy } from "@/app/lib/notifications/copy";
 import { notifyPlayer } from "@/app/lib/notifications/deliver";
-import { findGame } from "@/app/lib/games";
+import { resolveGame } from "@/app/lib/games-store";
 import { social } from "@/app/lib/social";
 import {
   NO_STORE,
@@ -160,10 +160,12 @@ export async function POST(req: Request): Promise<Response> {
         from: outcome.fromDisplayName,
         // The DISPLAY TITLE, not the slug — a notification reading "Beat their
         // score on neon-velocity-hyperdrive" is not something to put on a lock
-        // screen. `findGame` is the static catalogue, so this is a lookup rather
-        // than a round trip; an external game is not in it and falls back to the
-        // board title.
-        game: outcome.gameSlug ? (findGame(outcome.gameSlug)?.title ?? null) : null,
+        // screen. The PUBLIC resolver (cached), not the static `findGame`, which
+        // also knows staged games: a staged title must never reach a
+        // notification, and an unknown game falls back to the board title.
+        game: outcome.gameSlug
+          ? ((await resolveGame(outcome.gameSlug))?.title ?? null)
+          : null,
         boardTitle: outcome.boardTitle,
       }),
       // NO DEDUPE KEY, deliberately. A challenge row is upserted per

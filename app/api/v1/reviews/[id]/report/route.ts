@@ -30,6 +30,7 @@ import { isMissingColumnError } from "@/app/lib/db";
 import { findGame } from "@/app/lib/games";
 import { reviewReportedCopy } from "@/app/lib/notifications/copy";
 import { notifyAdmins } from "@/app/lib/notifications/deliver";
+import { isReviewHiddenFromViewer } from "@/app/lib/beta/staged-review";
 import { reviews } from "@/app/lib/reviews";
 import { isReportReason } from "@/app/lib/reviews/config";
 import { clientKeyFromHeaders, hashIp } from "@/app/lib/scoreboard/guard";
@@ -68,6 +69,12 @@ export async function POST(
 
   try {
     const id = Math.trunc(reviewId);
+    // A review of a STAGED game the viewer cannot see is treated as one that no
+    // longer exists: answered `ok`, nothing filed (see the docblock — ids are
+    // sequential, so a 404 here would be an existence oracle for staged games).
+    if (await isReviewHiddenFromViewer(id)) {
+      return Response.json({ ok: true }, { headers: NO_STORE });
+    }
     const outcome = await reviews.reportReview(
       id,
       playerId,

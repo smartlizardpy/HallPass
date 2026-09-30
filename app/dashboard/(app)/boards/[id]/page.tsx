@@ -29,7 +29,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
-import { findGame, games } from "@/app/lib/games";
+import { resolveGamesIncludingStaged } from "@/app/lib/games-store";
 import { store } from "@/app/lib/scoreboard";
 import { buildIntegrationPrompt } from "@/app/lib/integration-prompt";
 import {
@@ -151,7 +151,12 @@ export default async function BoardDetailPage({
 
   // A linked game whose slug no longer resolves is "missing": we keep the link
   // visible and round-trippable rather than treating the board as standalone.
-  const linkedGame = board.gameSlug ? findGame(board.gameSlug) : undefined;
+  // Staged (beta-only) games included, so a board can be linked to a game before
+  // it is published. Role-gated above.
+  const games = await resolveGamesIncludingStaged();
+  const linkedGame = board.gameSlug
+    ? games.find((g) => g.slug === board.gameSlug)
+    : undefined;
   const gameMissing = Boolean(board.gameSlug) && !linkedGame;
   const gameLabel = linkedGame
     ? linkedGame.title

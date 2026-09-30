@@ -22,7 +22,8 @@
 --
 -- For an EXISTING database, run the one-time
 -- `scoreboard/migrations/005_external_games.sql` instead, plus
--- `014_game_platform.sql` for the `platform` column.
+-- `014_game_platform.sql` for the `platform` column and `035_game_staging.sql`
+-- for the `staged` column.
 
 CREATE TABLE IF NOT EXISTS external_games (
   slug          TEXT PRIMARY KEY CHECK (slug ~ '^[a-z0-9][a-z0-9-]*$'),
@@ -47,6 +48,11 @@ CREATE TABLE IF NOT EXISTS external_games (
   platform      TEXT
                   CONSTRAINT external_games_platform_valid
                   CHECK (platform IS NULL OR platform IN ('desktop', 'mobile', 'both')),
+
+  -- Staged = visible only to beta testers and dashboard roles until published.
+  -- NOT NULL DEFAULT false: there is no static entry to inherit from, and every
+  -- existing row is public. See `035_game_staging.sql`.
+  staged        BOOLEAN NOT NULL DEFAULT false,
 
   plays         INTEGER NOT NULL DEFAULT 0,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),

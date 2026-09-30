@@ -34,11 +34,19 @@
  * requires a `basic`/`default` response type, so a raw Blob URL can never enter
  * the service-worker cache. Same-origin puts these in the `cacheFirst` branch,
  * which is what makes a game's screenshots survive going offline.
+ *
+ * STAGED GAMES. A staged game's media is gated exactly like its files in
+ * `/game-html`: `canViewStaged()` is called ONLY when the game is staged (public
+ * games never touch `auth()`), a denied request gets the same 404 as an unknown
+ * slug plus `no-store`, and a permitted one is `private, no-store` rather than
+ * `immutable` — otherwise the CDN or the service worker would keep, and later
+ * replay, a private image. The blob URL never leaves the server.
  */
 
 import { head } from "@vercel/blob";
 import { isSafeSegment } from "@/app/lib/game-html-blob";
-import { isResolvedSlug } from "@/app/lib/games-store";
+import { resolveGameIncludingStaged } from "@/app/lib/games-store";
+import { canViewStaged } from "@/app/lib/beta/staged-access";
 import {
   getMediaByBlobPath,
   mediaBlobPrefix,
@@ -49,6 +57,13 @@ import {
 const MAX_PATH_SEGMENTS = 1;
 
 const NOT_FOUND = () => new Response("Not found", { status: 404 });
+
+/** The 404 for a staged game the viewer may not see: identical, but uncacheable. */
+const NOT_FOUND_NO_STORE = () =>
+  new Response("Not found", {
+    status: 404,
+    headers: { "cache-control": "no-store" },
+  });
 
 export async function GET(
   _req: Request,
@@ -67,7 +82,13 @@ export async function GET(
 
   // Catalogue membership is checked before any I/O so an unknown slug costs one
   // cache hit rather than a Blob round trip.
-  if (!(await isResolvedSlug(slug))) return NOT_FOUND();
+  const game = await resolveGameIncludingStaged(slug);
+  if (!game) return NOT_FOUND_NO_STORE();
+  const staged = game.staged === true;
+  if (staged && !(await canViewStaged())) return NOT_FOUND_NO_STORE();
+  // Past the gate, a staged game's misses are per-viewer answers too, so they
+  // stay uncacheable like its 200s; a public game's misses keep today's headers.
+  const miss = staged ? NOT_FOUND_NO_STORE : NOT_FOUND;
 
   const blobPath = `${mediaBlobPrefix(slug)}${segments[0]}`;
 
@@ -82,9 +103,9 @@ export async function GET(
   } catch {
     // Database unreachable: fail closed. Serving unverified bytes from a
     // user-supplied path is not a safe degradation.
-    return NOT_FOUND();
+    return miss();
   }
-  if (!media) return NOT_FOUND();
+  if (!media) return miss();
 
   // The row normally carries the URL `put()` returned at upload time, so the
   // common path spends NO Blob operation at all. `head()` is only for rows that
@@ -95,7 +116,7 @@ export async function GET(
     try {
       blobUrl = (await head(blobPath)).url;
     } catch {
-      return NOT_FOUND();
+      return miss();
     }
     // Best-effort self-heal; the response does not depend on it.
     void setMediaBlobUrl(blobPath, blobUrl).catch(() => {
@@ -110,7 +131,7 @@ export async function GET(
   // false), which is what already justifies the `immutable` response header
   // below, so reusing a cached copy is always correct.
   const upstream = await fetch(blobUrl);
-  if (!upstream.ok || !upstream.body) return NOT_FOUND();
+  if (!upstream.ok || !upstream.body) return miss();
 
   return new Response(upstream.body, {
     status: 200,
@@ -118,7 +139,9 @@ export async function GET(
       // The stored, sniffed-at-upload type — never derived from the URL.
       "content-type": media.contentType,
       "content-disposition": "inline",
-      "cache-control": "public, max-age=31536000, immutable",
+      "cache-control": staged
+        ? "private, no-store"
+        : "public, max-age=31536000, immutable",
       "x-content-type-options": "nosniff",
     },
   });

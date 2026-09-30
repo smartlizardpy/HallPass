@@ -15,7 +15,7 @@
 
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { resolveGame } from "@/app/lib/games-store";
+import { resolveGameIncludingStaged } from "@/app/lib/games-store";
 import { getAssignments, requireBetaTester } from "@/app/lib/beta";
 import { reviews } from "@/app/lib/reviews";
 import { TestSessionClient } from "./TestSessionClient";
@@ -33,9 +33,13 @@ export default async function BetaSessionPage({
   const { slug } = await params;
   const { playerId } = await requireBetaTester(`/beta/session/${slug}`);
 
-  const game = await resolveGame(slug);
-  // `resolveGame` covers the static catalogue, overrides AND external games —
-  // an off-site game is exactly the kind that most needs testing.
+  // The INCLUDING-STAGED resolver: a staged game is exactly what testers are here
+  // for. `requireBetaTester` above is the gate (every tester, plus dashboard
+  // roles), so no separate `canViewStaged()` is needed. It covers the static
+  // catalogue, overrides AND external games — an off-site game is exactly the
+  // kind that most needs testing. A staged game loads in the iframe through the
+  // gated `/game-html` route, which re-checks access on every request.
+  const game = await resolveGameIncludingStaged(slug);
   if (!game) notFound();
 
   const [assignments, ownReview] = await Promise.all([

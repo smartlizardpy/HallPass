@@ -392,3 +392,32 @@ describe("recordPlay", () => {
     expect(calls[0].text).toContain("play_count  = player_plays.play_count + 1");
   });
 });
+
+describe("badgeStats excludes staged games' achievement points", () => {
+  it("binds the exclusion list on the achievements subquery", async () => {
+    const { sql, calls } = makeFakeSql(() => [{ achievement_points: 7 }]);
+    const store = createSocialStore(sql);
+    const stats = await store.badgeStats("me", ["beta-game"]);
+    expect(stats.achievementPoints).toBe(7);
+    expect(calls[0].text).toContain("a.slug <> ALL(");
+    expect(calls[0].values).toContainEqual(["beta-game"]);
+  });
+
+  it("excludes staged games from boards entered, first places and reviews too", async () => {
+    const { sql, calls } = makeFakeSql(() => [{}]);
+    await createSocialStore(sql).badgeStats("me", ["beta-game"]);
+    const text = calls[0].text;
+    // Boards/first places go through boards.game_slug; reviews carry their own slug.
+    expect(text.match(/b\.game_slug = ANY\(/g)).toHaveLength(2);
+    expect(text).toMatch(/slug <> ALL\([^)]*\)\)\s+AS reviews_written/);
+    expect(text).toMatch(/slug <> ALL\([^)]*\)\)\s+AS best_review_helpful/);
+    // The list is bound (never spliced) once per use: 2 board + 2 review + 1 achievement.
+    expect(calls[0].values.filter((v) => Array.isArray(v))).toHaveLength(5);
+  });
+
+  it("defaults to excluding nothing", async () => {
+    const { sql, calls } = makeFakeSql(() => [{}]);
+    await createSocialStore(sql).badgeStats("me");
+    expect(calls[0].values).toContainEqual([]);
+  });
+});

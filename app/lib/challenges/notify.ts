@@ -30,7 +30,7 @@ import "server-only";
  * broken.
  */
 
-import { findGame } from "@/app/lib/games";
+import { resolveGame } from "@/app/lib/games-store";
 import { challengeBeatenCopy } from "@/app/lib/notifications/copy";
 import { notifyPlayer } from "@/app/lib/notifications/deliver";
 import type { ResolvedChallenge } from "./store";
@@ -51,11 +51,12 @@ export async function notifyChallengesBeaten(
         kind: "challenge_beaten",
         copy: challengeBeatenCopy({
           by: winnerName,
-          // The DISPLAY TITLE, never the slug — `findGame` is the static
-          // catalogue, so this is a lookup and not a round trip. An external
-          // game is not in it and falls back to the board title.
+          // The DISPLAY TITLE, never the slug. Resolved through the PUBLIC
+          // resolver (cached, never throws) — not the static `findGame`, which
+          // also knows staged games — so a staged title can never reach a
+          // notification. An unknown game falls back to the board title.
           game: challenge.gameSlug
-            ? (findGame(challenge.gameSlug)?.title ?? null)
+            ? ((await resolveGame(challenge.gameSlug))?.title ?? null)
             : null,
           boardTitle: challenge.boardTitle,
           targetScore: challenge.targetScore,

@@ -32,9 +32,19 @@
  * row. So a second query resolves it — but ONLY in that case. Once a single
  * friend row exists the panel is a race and no prompt is rendered, which makes
  * the count unreadable, and the common path stays at one round trip.
+ *
+ * ── STAGED GAMES ───────────────────────────────────────────────────────────
+ * A board on a staged (beta-only) game shows a tester's score and the board's
+ * title. A non-tester with a tester friend must not see either, so for a staged
+ * slug the standings read is SKIPPED unless `canViewStaged()` — the response is
+ * then exactly the one a slug with no scores gets (empty standings, the real
+ * `friends` count), `no-store` as always. `canViewStaged()` runs only when the
+ * slug is staged.
  */
 
 import { isMissingColumnError, isUnconfiguredDbError } from "@/app/lib/db";
+import { canViewStaged } from "@/app/lib/beta/staged-access";
+import { isStagedOrUnverifiable } from "@/app/lib/games-store";
 import { store } from "@/app/lib/scoreboard";
 import type { FriendStanding } from "@/app/lib/scoreboard/store";
 import { social } from "@/app/lib/social";
@@ -67,7 +77,8 @@ export async function GET(req: Request): Promise<Response> {
   let standings: FriendStanding[] = [];
   let friends = 0;
   try {
-    standings = await store.getFriendStandingsForGame(playerId, slug);
+    const withheld = (await isStagedOrUnverifiable(slug)) && !(await canViewStaged());
+    standings = withheld ? [] : await store.getFriendStandingsForGame(playerId, slug);
     if (!standings.some((row) => !row.isYou)) {
       friends = (await social.counts(playerId)).friends;
     }

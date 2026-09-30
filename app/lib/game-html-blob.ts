@@ -96,7 +96,8 @@ export type ServingBlob = { url: string; uploadedAt: number };
 /** What the game-serving route should do with one requested asset. */
 export type GameSource =
   | { kind: "static" }
-  | { kind: "proxy"; url: string };
+  | { kind: "proxy"; url: string }
+  | { kind: "missing" };
 
 /**
  * Decide whether a requested game asset should be served from the free
@@ -120,13 +121,22 @@ export type GameSource =
  * mirror yet has no static twin, so it must still be proxied. When neither a blob
  * nor a static twin exists we redirect to the static path anyway and let the CDN
  * answer 404 — exactly what the old `head()`-fails branch did.
+ *
+ * STAGED GAMES NEVER GET THE STATIC ANSWER. A staged game is private to testers
+ * (see `game-staging.ts`); a 307 to `/games/<slug>/…` would hand a stranger a
+ * public CDN URL, and the route's gate cannot protect a file the CDN serves
+ * directly. So `staged` ignores `staticExists` and `mirrorSyncedAt` entirely: the
+ * blob is proxied whatever its age, and no blob means `missing` (the route's 404)
+ * rather than a redirect to a path that might exist and must not be revealed.
  */
 export function chooseGameSource(args: {
   staticExists: boolean;
   blob: ServingBlob | null;
   mirrorSyncedAt: number;
+  staged?: boolean;
 }): GameSource {
-  const { staticExists, blob, mirrorSyncedAt } = args;
+  const { staticExists, blob, mirrorSyncedAt, staged } = args;
+  if (staged) return blob ? { kind: "proxy", url: blob.url } : { kind: "missing" };
   if (blob && blob.uploadedAt > mirrorSyncedAt) return { kind: "proxy", url: blob.url };
   if (staticExists) return { kind: "static" };
   if (blob) return { kind: "proxy", url: blob.url };

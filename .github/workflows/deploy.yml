@@ -50,10 +50,17 @@ jobs:
       # proxying live games from Blob as before). NON-FATAL: a sync hiccup must not
       # block a deploy — the route still proxies any un-mirrored game from Blob, so
       # nothing is lost, it just isn't free that round.
+      #
+      # DATABASE_URL is how the sync learns which games are STAGED (beta-only) so
+      # it never mirrors them into the public static directory, and which
+      # published-later games need a directory created. It is a read-only use and
+      # OPTIONAL: if the secret is unset or the read fails, the sync falls back to
+      # the games.ts flags and creates no new directories.
       - name: Sync games from Blob into the static mirror
         if: env.HAS_BLOB_TOKEN == 'true'
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           npm run sync-games || echo "sync-games failed; deploying with the committed mirror"
           node scripts/build-games-manifest.mjs

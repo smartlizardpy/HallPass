@@ -58,3 +58,6 @@ capture-sample.json
 
 # Personal permission overrides for this checkout — never committed.
 /.claude/settings.local.json
+
+# Staged (beta-only) games awaiting publish. Served from Blob; must never enter public/.
+/.staging/

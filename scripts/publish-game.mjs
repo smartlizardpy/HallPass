@@ -27,14 +27,36 @@
 // reason: it used to be a `games/version.txt` blob costing one advanced write
 // per publish and a simple read per poll window.
 //
-// SINGLE-FILE GAMES ONLY, deliberately. A bundle's publish also has to delete
-// the files a new upload orphans (`writeGameHtml` in the dashboard does that
-// with the same index), and getting that wrong deletes a live game's assets.
-// Bundles keep going through the dashboard; this refuses them loudly.
+// BUNDLES ARE FIRST-PUBLISH ONLY, deliberately. A bundle's REpublish also has
+// to delete the files a new upload orphans (`writeGameHtml` in the dashboard
+// does that with the same index), and getting that wrong deletes a live game's
+// assets. So a multi-file game is accepted only when `game_blobs` has no
+// `index.html` row for the slug yet — a first upload (or the retry of one that
+// died part-way) has no live game to orphan — and is refused
+// loudly otherwise; republishing a bundle keeps going through the dashboard.
+// This is what lets the add-game skill use one code path for single-file and
+// folder games instead of each growing its own `put()` loop.
+//
+// STAGED PUBLISHES (`--staged`). A staged game is visible only to beta testers
+// until an admin presses Publish in the dashboard, so its files must never be
+// anywhere the public can fetch them:
+//   - the source is a folder OUTSIDE `public/` (`.staging/<slug>/`, gitignored),
+//     and the script refuses a source under `public/` or a `public/games/<slug>/`
+//     that already exists, because `public/` is served as static files at
+//     guessable URLs and `sync-games` would carry the game out to it;
+//   - the game's entry in games.ts carries `staged: true` (the add-game skill
+//     writes it), which is what makes every public surface treat the slug as
+//     unknown;
+//   - `games_version` is NOT bumped, because nothing installed should refresh
+//     for a game it cannot see. Publishing from the dashboard is what bumps it.
+// `--cover <png>` uploads a tester-visible cover as a `hero` row in `game_media`
+// and prints the `/game-media/...` path to put in the game's `coverUrl`. It is
+// content-addressed (see `heroIdentity`), so re-running converges.
 //
 // Usage:
-//   npm run publish-game -- <slug>          # dry run: says what it would do
-//   npm run publish-game -- <slug> --yes    # actually writes
+//   npm run publish-game -- <slug>                       # dry run: says what it would do
+//   npm run publish-game -- <slug> --yes                 # actually writes
+//   npm run publish-game -- <slug> --staged --from .staging/<slug> --cover cover.png [--yes]
 //
 // Needs BLOB_READ_WRITE_TOKEN and DATABASE_URL, or a .env.local providing them.
 
@@ -45,11 +67,27 @@ import { existsSync, statSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  classifyPublish,
+  heroIdentity,
+  isInsidePublic,
+  parsePublishArgs,
+  planUploads,
+  readPngSize,
+} from "./lib/publish-plan.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Files allowed to sit beside index.html in a "single-file" game. */
-const REPO_ONLY_FILES = new Set(["cover.png"]);
+const args = parsePublishArgs(process.argv.slice(2));
+const USAGE =
+  "usage: npm run publish-game -- <slug> [--yes]\n" +
+  "       npm run publish-game -- <slug> --staged --from .staging/<slug> [--cover <png>] [--yes]";
+if (args.error) {
+  console.error(`error: ${args.error}\n${USAGE}`);
+  process.exit(1);
+}
+const { slug, staged } = args;
+const confirmed = args.yes;
 
 if (!process.env.BLOB_READ_WRITE_TOKEN || !process.env.DATABASE_URL) {
   try {
@@ -76,120 +114,250 @@ if (!process.env.DATABASE_URL) {
 }
 const sql = neon(process.env.DATABASE_URL);
 
-const args = process.argv.slice(2);
-const slug = args.find((a) => !a.startsWith("-"));
-const confirmed = args.includes("--yes");
+const publicDir = path.join(rootDir, "public");
+const liveDir = path.join(publicDir, "games", slug);
 
-if (!slug || !/^[a-z0-9][a-z0-9-]*$/.test(slug)) {
-  console.error("usage: npm run publish-game -- <slug> [--yes]");
-  process.exit(1);
+// Where the game's files come from. Staged: the folder the caller named, which
+// must be outside `public/`. Live: the mirror directory, as always.
+let slugDir;
+let displayDir;
+if (staged) {
+  slugDir = path.resolve(rootDir, args.from);
+  displayDir = args.from;
+  if (isInsidePublic(slugDir, publicDir)) {
+    console.error(
+      "error: a staged game's source must be OUTSIDE public/ — that directory is\n" +
+        "       served as static files at guessable URLs, so a staged game there is\n" +
+        "       public. Use .staging/<slug>/ (gitignored).",
+    );
+    process.exit(1);
+  }
+  // A leftover mirror directory is the same leak by another route, and a sign
+  // the slug was published before: refuse rather than stage over a live game.
+  if (existsSync(liveDir)) {
+    console.error(
+      `error: public/games/${slug}/ exists, so ${slug} is already (or was once) a\n` +
+        "       live game and cannot be staged. Pick a different slug, or remove\n" +
+        "       that directory if it is a leftover.",
+    );
+    process.exit(1);
+  }
+} else {
+  slugDir = liveDir;
+  displayDir = `public/games/${slug}`;
 }
-
-const slugDir = path.join(rootDir, "public", "games", slug);
 if (!existsSync(slugDir) || !statSync(slugDir).isDirectory()) {
-  console.error(`error: no public/games/${slug}/ to publish`);
+  console.error(`error: no ${displayDir}/ to publish`);
   process.exit(1);
 }
 
-const localFiles = (await readdir(slugDir)).sort();
-const extras = localFiles.filter(
-  (f) => f !== "index.html" && !REPO_ONLY_FILES.has(f),
-);
-if (!localFiles.includes("index.html")) {
-  console.error(`error: public/games/${slug}/index.html does not exist`);
+/** Every file under `dir`, as forward-slash paths relative to it. */
+async function walk(dir, prefix = "") {
+  const found = [];
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) found.push(...(await walk(path.join(dir, entry.name), rel)));
+    else found.push(rel);
+  }
+  return found;
+}
+
+const plan = planUploads(await walk(slugDir));
+if (plan.errors.length > 0) {
+  console.error(`error: ${displayDir}/ cannot be published:`);
+  for (const e of plan.errors) console.error(`       - ${e}`);
   process.exit(1);
 }
-if (extras.length > 0) {
+
+// Whether the game's index.html is already recorded decides whether a multi-file
+// game is a safe (re)try of a first upload or a republish this script must
+// refuse. Keyed on index.html, not on any row, so a half-finished first attempt
+// does not block its own retry — see `classifyPublish`.
+const indexRows = await sql`
+  SELECT 1 FROM game_blobs WHERE pathname = ${`games/${slug}/index.html`} LIMIT 1
+`;
+const mode = classifyPublish(plan.uploads.length, indexRows.length > 0);
+if (mode === "refuse-bundle") {
+  const extras = plan.uploads.map((u) => u.rel).filter((r) => r !== "index.html");
   console.error(
-    `error: ${slug} is a multi-file bundle (${extras.join(", ")}).\n` +
-      "       Publish it through the dashboard, which also removes the files a\n" +
-      "       new upload orphans. This script only handles a lone index.html.",
+    `error: ${slug} is a multi-file bundle (${extras.join(", ")}) and already\n` +
+      "       published. Republish it through the dashboard,\n" +
+      "       which also removes the files a new upload orphans. This script only\n" +
+      "       handles a lone index.html, or a bundle's FIRST upload (a retry of a\n" +
+      "       half-finished first upload is fine).",
   );
   process.exit(1);
 }
 
-const html = await readFile(path.join(slugDir, "index.html"), "utf8");
-const localHash = createHash("sha256").update(html).digest("hex").slice(0, 12);
+const files = [];
+for (const u of plan.uploads) {
+  const body = await readFile(path.join(slugDir, ...u.rel.split("/")));
+  files.push({
+    ...u,
+    body,
+    blobPath: `games/${slug}/${u.rel}`,
+    hash: createHash("sha256").update(body).digest("hex").slice(0, 12),
+  });
+}
+
+// The staged flow's cover: validated up front like everything else, so a bad
+// PNG fails the dry run rather than half-way through the uploads.
+let hero = null;
+if (args.cover) {
+  const coverPath = path.resolve(rootDir, args.cover);
+  if (!existsSync(coverPath)) {
+    console.error(`error: --cover ${args.cover} does not exist`);
+    process.exit(1);
+  }
+  const bytes = await readFile(coverPath);
+  const size = readPngSize(bytes);
+  if (!size) {
+    console.error(`error: --cover ${args.cover} is not a PNG`);
+    process.exit(1);
+  }
+  hero = { bytes, ...size, ...heroIdentity(slug, bytes) };
+}
 
 // What is live right now, so the operator can see what they are replacing.
 // `head()` on the one path we care about rather than a `list()` of the prefix:
 // head is a SIMPLE Blob operation (10,000/month) and list is an ADVANCED one
 // (2,000/month), and this only ever wants a single known key. A miss means
-// nothing is published yet, which is not an error.
-const blobPath = `games/${slug}/index.html`;
+// nothing is published yet, which is not an error. Only a lone index.html has
+// anything to compare with; a bundle's first upload has no published copy.
+const htmlFile = files.find((f) => f.rel === "index.html");
 let live = null;
-try {
-  live = await head(blobPath);
-} catch {
-  live = null;
-}
-
 let liveHash = null;
-if (live) {
+if (mode === "single") {
   try {
-    const res = await fetch(live.url, { cache: "no-store" });
-    const body = await res.text();
-    liveHash = createHash("sha256").update(body).digest("hex").slice(0, 12);
+    live = await head(htmlFile.blobPath);
   } catch {
-    // Non-fatal: the comparison is a courtesy, not a gate.
+    live = null;
+  }
+  if (live) {
+    try {
+      const res = await fetch(live.url, { cache: "no-store" });
+      const body = Buffer.from(await res.arrayBuffer());
+      liveHash = createHash("sha256").update(body).digest("hex").slice(0, 12);
+    } catch {
+      // Non-fatal: the comparison is a courtesy, not a gate.
+    }
   }
 }
 
-console.log(`game:        ${slug}`);
-console.log(`local:       ${html.length} bytes  sha256:${localHash}`);
-console.log(
-  live
-    ? `published:   ${live.size} bytes  sha256:${liveHash ?? "unreadable"}  uploaded ${live.uploadedAt.toISOString()}`
-    : "published:   (nothing yet — this would be the first upload)",
-);
+console.log(`game:        ${slug}${staged ? "  (STAGED — beta testers only)" : ""}`);
+console.log(`source:      ${displayDir}/`);
+if (mode === "single") {
+  console.log(`local:       ${htmlFile.body.length} bytes  sha256:${htmlFile.hash}`);
+  console.log(
+    live
+      ? `published:   ${live.size} bytes  sha256:${liveHash ?? "unreadable"}  uploaded ${live.uploadedAt.toISOString()}`
+      : "published:   (nothing yet — this would be the first upload)",
+  );
+} else {
+  console.log(`local:       ${files.length} files (first upload of a multi-file game)`);
+  for (const f of files) console.log(`             ${f.rel}  ${f.body.length} bytes`);
+}
+if (hero) {
+  console.log(`cover:       ${hero.width}x${hero.height} PNG → ${hero.publicPath}`);
+}
 
-if (liveHash && liveHash === localHash) {
+// A lone index.html identical to what is live needs no write. A cover still
+// does, which is why this only drops the HTML rather than exiting.
+const identical = mode === "single" && liveHash && liveHash === htmlFile.hash;
+const toWrite = identical ? [] : files;
+if (toWrite.length === 0 && !hero) {
   console.log("\nidentical — nothing to publish.");
   process.exit(0);
 }
+if (identical) console.log("\nindex.html is identical to what is live; only the cover is written.");
 
 if (!confirmed) {
+  const steps = [];
+  if (toWrite.length > 0) {
+    steps.push(
+      toWrite.length === 1
+        ? `overwrite ${toWrite[0].blobPath}`
+        : `upload ${toWrite.length} files under games/${slug}/`,
+    );
+    steps.push("record it in game_blobs so the serving route can see it");
+  }
+  if (hero) steps.push(`upload the cover to ${hero.blobPath} and add its hero row to game_media`);
+  steps.push(
+    staged
+      ? "NOT bump games_version (staged: nothing installed should refresh)"
+      : "bump games_version so installed clients refresh their cached copy",
+  );
   console.log(
     "\nDRY RUN. Nothing was written. Re-run with --yes to publish, which will:\n" +
-      `  1. overwrite ${blobPath}\n` +
-      "  2. record it in game_blobs so the serving route can see it\n" +
-      "  3. bump games_version so installed clients refresh their cached copy",
+      steps.map((s, i) => `  ${i + 1}. ${s}`).join("\n"),
   );
   process.exit(0);
 }
 
-// The same three writes, with the same options, the dashboard's publish performs.
-const uploaded = await put(blobPath, html, {
-  access: "public",
-  contentType: "text/html; charset=utf-8",
-  addRandomSuffix: false,
-  allowOverwrite: true,
-  cacheControlMaxAge: 60,
-});
-console.log(`\npublished ${blobPath}`);
+// The same writes, with the same options, the dashboard's publish performs.
+for (const f of toWrite) {
+  const uploaded = await put(f.blobPath, f.body, {
+    access: "public",
+    contentType: f.contentType,
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    cacheControlMaxAge: 60,
+  });
+  console.log(`\npublished ${f.blobPath}`);
 
-// NOT best-effort, unlike the bump below: without this row the serving route
-// does not know the blob exists. Mirrors `recordGameBlobs()`.
-await sql`
-  INSERT INTO game_blobs (pathname, slug, url, size, uploaded_at)
-  VALUES (${blobPath}, ${slug}, ${uploaded.url}, ${Buffer.byteLength(html)}, now())
-  ON CONFLICT (pathname) DO UPDATE
-    SET url = EXCLUDED.url, size = EXCLUDED.size, uploaded_at = EXCLUDED.uploaded_at
-`;
-console.log("recorded in game_blobs");
-
-// Best-effort, exactly as `bumpGamesVersion()` treats it: the game is already
-// live, and a missed bump only means installed clients lag until the next one.
-try {
+  // NOT best-effort, unlike the bump below: without this row the serving route
+  // does not know the blob exists. Mirrors `recordGameBlobs()`.
   await sql`
-    INSERT INTO app_settings (key, value, updated_by)
-    VALUES ('games_version', ${String(Date.now())}, 'publish-game.mjs')
-    ON CONFLICT (key) DO UPDATE
-      SET value = EXCLUDED.value, updated_at = now(), updated_by = EXCLUDED.updated_by
+    INSERT INTO game_blobs (pathname, slug, url, size, uploaded_at)
+    VALUES (${f.blobPath}, ${slug}, ${uploaded.url}, ${f.body.length}, now())
+    ON CONFLICT (pathname) DO UPDATE
+      SET url = EXCLUDED.url, size = EXCLUDED.size, uploaded_at = EXCLUDED.uploaded_at
   `;
-  console.log("bumped games_version");
-} catch (error) {
-  console.warn(`warning: could not bump the games version: ${error.message}`);
+  console.log("recorded in game_blobs");
+}
+
+// The hero row. Under `game-media/`, never `games/` — see `game-media.sql` for
+// the seven behaviours that sweep `games/` and would delete, mirror or precache
+// a cover stored there. `kind = 'hero'` keeps it out of the gallery and its cap.
+if (hero) {
+  const uploaded = await put(hero.blobPath, hero.bytes, {
+    access: "public",
+    contentType: "image/png",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    cacheControlMaxAge: 31536000,
+  });
+  await sql`
+    INSERT INTO game_media
+      (id, slug, kind, blob_path, blob_url, content_type, width, height, bytes, alt)
+    VALUES
+      (${hero.id}, ${slug}, 'hero', ${hero.blobPath}, ${uploaded.url}, 'image/png',
+       ${hero.width}, ${hero.height}, ${hero.bytes.length}, '')
+    ON CONFLICT (id) DO UPDATE
+      SET blob_url = EXCLUDED.blob_url, updated_at = now()
+  `;
+  console.log(`\ncover recorded in game_media: ${hero.publicPath}`);
+  console.log(`put this in the game's games.ts entry:  coverUrl: "${hero.publicPath}",`);
+}
+
+if (staged) {
+  // Deliberately skipped, not best-effort: a bump makes every online client
+  // re-download the corpus for a game they cannot even see.
+  console.log("\nskipped the games_version bump (staged game).");
+} else {
+  // Best-effort, exactly as `bumpGamesVersion()` treats it: the game is already
+  // live, and a missed bump only means installed clients lag until the next one.
+  try {
+    await sql`
+      INSERT INTO app_settings (key, value, updated_by)
+      VALUES ('games_version', ${String(Date.now())}, 'publish-game.mjs')
+      ON CONFLICT (key) DO UPDATE
+        SET value = EXCLUDED.value, updated_at = now(), updated_by = EXCLUDED.updated_by
+    `;
+    console.log("bumped games_version");
+  } catch (error) {
+    console.warn(`warning: could not bump the games version: ${error.message}`);
+  }
 }
 
 // NOT REVALIDATED FROM HERE, and this is the one caveat worth knowing. The

@@ -37,7 +37,7 @@ import {
   toBugSeverity,
   toReportKind,
 } from "@/app/lib/beta/config";
-import { isResolvedSlug } from "@/app/lib/games-store";
+import { isKnownSlug } from "@/app/lib/games-store";
 import { findGame } from "@/app/lib/games";
 import { bugReportCopy } from "@/app/lib/notifications/copy";
 import { notifyAdmins } from "@/app/lib/notifications/deliver";
@@ -138,7 +138,9 @@ export async function submitReportAction(
 ): Promise<ActionResult> {
   const { playerId } = await requireBetaTester();
 
-  if (!(await isResolvedSlug(input.slug))) {
+  // `isKnownSlug`, not the public-only resolver: testers exist to play STAGED
+  // games, and `requireBetaTester` above is the gate.
+  if (!(await isKnownSlug(input.slug))) {
     return { ok: false, error: "Unknown game" };
   }
 
@@ -394,7 +396,8 @@ export async function submitShotAction(formData: FormData): Promise<ActionResult
   const { playerId } = await requireBetaTester();
 
   const slug = String(formData.get("slug") ?? "");
-  if (!(await isResolvedSlug(slug))) return { ok: false, error: "Unknown game" };
+  // Includes staged games; `requireBetaTester` above is the gate.
+  if (!(await isKnownSlug(slug))) return { ok: false, error: "Unknown game" };
 
   const file = formData.get("file");
   if (!(file instanceof File)) return { ok: false, error: "No image" };

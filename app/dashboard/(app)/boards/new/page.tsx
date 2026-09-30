@@ -11,7 +11,7 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
-import { games } from "@/app/lib/games";
+import { resolveGamesIncludingStaged } from "@/app/lib/games-store";
 import { createBoardAction } from "../actions";
 import { requireRole } from "@/app/lib/auth";
 import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
@@ -36,6 +36,9 @@ export default async function NewBoardPage({
 }) {
   await requireRole(SITE_WRITE_ROLE);
   const error = asString((await searchParams).error);
+  // Staged (beta-only) games included, so a board can be provisioned before the
+  // game is published. Role-gated above.
+  const games = await resolveGamesIncludingStaged();
 
   return (
     <div className="mx-auto w-full max-w-3xl">

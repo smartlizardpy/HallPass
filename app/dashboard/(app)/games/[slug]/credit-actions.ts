@@ -27,7 +27,7 @@ import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { CREDITS_CACHE_TAG, clearCredit, setCredit } from "@/app/lib/game-credits";
-import { isResolvedSlug } from "@/app/lib/games-store";
+import { isKnownSlug } from "@/app/lib/games-store";
 
 /** Longest credit we will store; mirrors the CHECK in `010_game_credits.sql`. */
 const MAX_NAME = 60;
@@ -42,10 +42,10 @@ export async function setGameCreditAction(formData: FormData): Promise<void> {
   const slug = String(formData.get("slug") ?? "").trim();
   const name = String(formData.get("creditName") ?? "").trim();
 
-  // `isResolvedSlug`, never the static `games` array — the static array silently
+  // `isKnownSlug`, never the static `games` array — the static array silently
   // excludes every external game, and an external game is exactly the kind that
   // most needs a credit.
-  if (!slug || !(await isResolvedSlug(slug))) {
+  if (!slug || !(await isKnownSlug(slug))) {
     redirect("/dashboard/games?error=Unknown+game.");
   }
 

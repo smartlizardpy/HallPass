@@ -65,10 +65,26 @@
  * admin-provisioned, so the worst a hostile game can do with the player's cookie
  * is grant that same player an achievement in the game they are already
  * playing — which is a thing the game gets to decide anyway.
+ *
+ * ── STAGED GAMES ────────────────────────────────────────────────────────────
+ *
+ * A staged (beta-only) game's shelf is visible only to `canViewStaged()` viewers
+ * (testers and dashboard roles), and they can earn achievements on it. The
+ * gate is reached ONLY when the slug is staged, so an ordinary game keeps the
+ * headers and cost described above:
+ *
+ *   GET, viewer may not see it → the empty shelf, `no-store`. An UNKNOWN slug gets
+ *                                exactly the same response (same helper, same
+ *                                headers): a public cache header on one and not
+ *                                the other would be an oracle for staged slugs.
+ *   GET, viewer may see it     → the normal body, `private, no-store` (it is a
+ *                                per-viewer view of a private game).
+ *   POST, viewer may not       → the same 404 `no-game` as an unknown slug.
  */
 
 import { isMissingColumnError } from "@/app/lib/db";
-import { isResolvedSlug } from "@/app/lib/games-store";
+import { canViewStaged } from "@/app/lib/beta/staged-access";
+import { isKnownSlug, isStagedSlug } from "@/app/lib/games-store";
 import {
   getAchievementCatalogue,
   getAchievementRarity,
@@ -202,7 +218,9 @@ type PostBody = {
 /**
  * The shelf for one game, plus this player's progress if there is a player.
  *
- * DOES NOT VALIDATE THE SLUG. An unprovisioned game and a nonexistent game both
+ * DOES NOT REJECT AN UNKNOWN SLUG (it answers an empty, `no-store` shelf — see the
+ * STAGED GAMES section above for why that must match a withheld staged game).
+ * It used to not look at the slug at all. An unprovisioned game and a nonexistent game both
  * answer `200` with an empty list, and that is the right call for a read: the
  * only way to tell them apart is `isResolvedSlug()`, which resolves the entire
  * catalogue, and paying that on a public cacheable read to turn one empty
@@ -215,6 +233,25 @@ export async function GET(
 ): Promise<Response> {
   const { slug } = await params;
   const playerId = await currentPlayerId();
+
+  // STAGED: gated, and never publicly cacheable. `isStagedSlug` is the cached
+  // catalogue read, so this adds no query to an ordinary game's GET.
+  // An UNKNOWN slug takes the same branch as a staged one the viewer may not see,
+  // through the same response, so the two are byte-identical (headers included).
+  const known = await isKnownSlug(slug);
+  const staged = known && (await isStagedSlug(slug));
+  if (!known || (staged && !(await canViewStaged()))) {
+    return Response.json(
+      {
+        slug,
+        signedIn: playerId !== null,
+        achievements: [],
+        earnedPoints: 0,
+        totalPoints: 0,
+      } satisfies GetBody,
+      { headers: PRIVATE_CACHE },
+    );
+  }
 
   // Opt-in, not default: rarity is a second query and the common caller (the SDK
   // asking "what should I show on the pause screen") does not need it. The store
@@ -242,7 +279,7 @@ export async function GET(
     // one header set caches one child's progress onto a CDN edge and serves it
     // to everyone who opens the same game.
     return Response.json(body, {
-      headers: playerId ? PRIVATE_CACHE : PUBLIC_CACHE,
+      headers: playerId || staged ? PRIVATE_CACHE : PUBLIC_CACHE,
     });
   } catch (error) {
     // Both reads are already fail-soft (they degrade to an empty shelf), so this
@@ -401,15 +438,18 @@ export async function POST(
   }
 
   try {
-    // `isResolvedSlug`, NOT the static `games` array: an external game is a real
+    // `isKnownSlug`, NOT the static `games` array: an external game is a real
     // game a real player really played, and validating against the static list
-    // is the bug that makes `favorites.ts` silently drop them.
-    if (!(await isResolvedSlug(slug))) {
-      return Response.json(
+    // is the bug that makes `favorites.ts` silently drop them. It includes
+    // STAGED games so a tester can earn on one; a viewer who cannot see a staged
+    // game is told it does not exist, like any other unknown slug.
+    const noGame = () =>
+      Response.json(
         { ok: false, reason: "no-game", results: [] } satisfies PostBody,
         { status: 404, headers: NO_STORE },
       );
-    }
+    if (!(await isKnownSlug(slug))) return noGame();
+    if ((await isStagedSlug(slug)) && !(await canViewStaged())) return noGame();
 
     const outcome = await recordAchievements({
       slug,

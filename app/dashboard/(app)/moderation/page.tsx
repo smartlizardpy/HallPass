@@ -67,7 +67,7 @@ import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
 import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { isMissingColumnError, isUnconfiguredDbError, sql } from "@/app/lib/db";
-import { resolveGames } from "@/app/lib/games-store";
+import { resolveGamesIncludingStaged } from "@/app/lib/games-store";
 import {
   REPORT_REASONS,
   REVIEW_AUTO_HIDE_REPORTS,
@@ -253,7 +253,13 @@ export default async function ModerationPage({
   // `isResolvedSlug()` — same resolved catalogue (static + external), read once
   // instead of once per card — so a slug that has since been removed renders as
   // plain text and never becomes a link to a 404. `resolveGames()` never throws.
-  const titleBySlug = new Map((await resolveGames()).map((g) => [g.slug, g.title]));
+  //
+  // STAGED INCLUDED: testers review staged games, and an admin moderating those
+  // needs the title, not a bare slug. A staged game has no public page, so it is
+  // linked to its dashboard page instead (see `ReviewHeader`).
+  const games = await resolveGamesIncludingStaged();
+  const titleBySlug = new Map(games.map((g) => [g.slug, g.title]));
+  const stagedSlugs = new Set(games.filter((g) => g.staged === true).map((g) => g.slug));
 
   return (
     <>
@@ -344,6 +350,7 @@ export default async function ModerationPage({
               key={entry.review.id}
               entry={entry}
               gameTitle={titleBySlug.get(entry.review.slug) ?? null}
+              gameStaged={stagedSlugs.has(entry.review.slug)}
             />
           ))}
         </div>
@@ -391,6 +398,7 @@ export default async function ModerationPage({
                   key={entry.review.id}
                   entry={entry}
                   gameTitle={titleBySlug.get(entry.review.slug) ?? null}
+                  gameStaged={stagedSlugs.has(entry.review.slug)}
                 />
               ))}
             </div>
@@ -436,9 +444,11 @@ function ListHeading({ title, subtitle }: { title: string; subtitle: string }) {
 function QueueCard({
   entry,
   gameTitle,
+  gameStaged,
 }: {
   entry: QueueEntry;
   gameTitle: string | null;
+  gameStaged: boolean;
 }) {
   const { review, author, reports } = entry;
   const people = distinctReporters(reports);
@@ -446,7 +456,7 @@ function QueueCard({
 
   return (
     <article className="rounded-xl border border-border bg-surface p-5">
-      <ReviewHeader entry={entry} gameTitle={gameTitle} />
+      <ReviewHeader entry={entry} gameTitle={gameTitle} gameStaged={gameStaged} />
 
       {/* The open-report count is spelled out in the heading below, so the chip
           version of it would be the same fact twice on one card. */}
@@ -556,13 +566,15 @@ function QueueCard({
 function ReviewCard({
   entry,
   gameTitle,
+  gameStaged,
 }: {
   entry: ReviewEntry;
   gameTitle: string | null;
+  gameStaged: boolean;
 }) {
   return (
     <article className="rounded-xl border border-border bg-surface p-5">
-      <ReviewHeader entry={entry} gameTitle={gameTitle} />
+      <ReviewHeader entry={entry} gameTitle={gameTitle} gameStaged={gameStaged} />
       <StateChips entry={entry} showOpenReports />
       <ReviewBody body={entry.review.body} />
       <ReviewVerbs review={entry.review} author={entry.author} />
@@ -579,9 +591,11 @@ function ReviewCard({
 function ReviewHeader({
   entry,
   gameTitle,
+  gameStaged,
 }: {
   entry: ReviewEntry;
   gameTitle: string | null;
+  gameStaged: boolean;
 }) {
   const { review, author } = entry;
 
@@ -634,7 +648,11 @@ function ReviewHeader({
           <div className="font-semibold text-foreground">
             {gameTitle ? (
               <Link
-                href={`/game/${review.slug}`}
+                href={
+                  gameStaged
+                    ? `/dashboard/games/${review.slug}`
+                    : `/game/${review.slug}`
+                }
                 className="text-brand hover:text-brand-600"
               >
                 {gameTitle}
