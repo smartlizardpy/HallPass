@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-// @ts-expect-error — plain .mjs build helper, no type declarations.
 import { publicStaticSlugs } from "../../scripts/lib/static-game-slugs.mjs";
 import { games, publicGames } from "./games";
 
