@@ -10,7 +10,7 @@ const h = vi.hoisted(() => ({
   playerId: vi.fn(),
   standings: vi.fn(),
   counts: vi.fn(),
-  isStagedSlug: vi.fn(),
+  isStagedOrUnverifiable: vi.fn(),
   canViewStaged: vi.fn(),
 }));
 
@@ -23,7 +23,7 @@ vi.mock("@/app/lib/scoreboard", () => ({
   store: { getFriendStandingsForGame: h.standings },
 }));
 vi.mock("@/app/lib/social", () => ({ social: { counts: h.counts } }));
-vi.mock("@/app/lib/games-store", () => ({ isStagedSlug: h.isStagedSlug }));
+vi.mock("@/app/lib/games-store", () => ({ isStagedOrUnverifiable: h.isStagedOrUnverifiable }));
 vi.mock("@/app/lib/beta/staged-access", () => ({ canViewStaged: h.canViewStaged }));
 vi.mock("@/app/lib/social/request-guard", () => ({
   NO_STORE: { "Cache-Control": "private, no-store" },
@@ -48,7 +48,7 @@ beforeEach(() => {
     slug === "beta" ? FRIEND_ROW : [],
   );
   h.counts.mockResolvedValue({ friends: 3 });
-  h.isStagedSlug.mockImplementation(async (s: string) => s === "beta");
+  h.isStagedOrUnverifiable.mockImplementation(async (s: string) => s === "beta");
   h.canViewStaged.mockResolvedValue(false);
 });
 
@@ -66,6 +66,13 @@ describe("GET /me/friends/scores on a staged game", () => {
     const res = await call("beta");
     expect((await res.json()).standings).toEqual(FRIEND_ROW);
     expect(res.headers.get("Cache-Control")).toBe("private, no-store");
+  });
+
+  it("fails closed for a slug the catalogue lost to a degraded read", async () => {
+    h.isStagedOrUnverifiable.mockResolvedValue(true);
+    const res = await call("vanished-external");
+    expect((await res.json()).standings).toEqual([]);
+    expect(h.standings).not.toHaveBeenCalled();
   });
 
   it("does not consult the gate for a live game", async () => {

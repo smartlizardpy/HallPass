@@ -44,7 +44,7 @@ import {
 } from "@/app/lib/scoreboard";
 import { auth } from "@/app/lib/auth";
 import { canViewStaged } from "@/app/lib/beta/staged-access";
-import { isStagedSlug } from "@/app/lib/games-store";
+import { isStagedOrUnverifiable } from "@/app/lib/games-store";
 import { resolveChallengesForScore } from "@/app/lib/challenges";
 import { notifyChallengesBeaten } from "@/app/lib/challenges/notify";
 import { getPublicIdentity, upsertPlayerOnLogin } from "@/app/lib/players";
@@ -81,11 +81,19 @@ const NO_STORE_HEADERS: Record<string, string> = {
  *
  * Only a board with a `gameSlug` reaches the catalogue lookup, and only a staged
  * one reaches `canViewStaged()`.
+ *
+ * FAILS CLOSED WHEN THE CATALOGUE IS BLIND. The external-games read swallows an
+ * outage into `[]`, so during one a linked EXTERNAL game is absent and would read
+ * as "not staged". A linked slug the catalogue does not contain is therefore
+ * treated as possibly staged — gated like a staged one — but ONLY while that read
+ * is degraded. When it is healthy an absent slug is a long-removed game and its
+ * board stays public, as before.
  */
 async function stagedAccess(
   gameSlug: string | null | undefined,
 ): Promise<"public" | "allowed" | "denied"> {
-  if (!gameSlug || !(await isStagedSlug(gameSlug))) return "public";
+  if (!gameSlug) return "public";
+  if (!(await isStagedOrUnverifiable(gameSlug))) return "public";
   return (await canViewStaged()) ? "allowed" : "denied";
 }
 

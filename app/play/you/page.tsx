@@ -34,7 +34,7 @@ import { ShareChallenge } from "@/app/components/challenges/ShareChallenge";
 import { earnedBadges, lockedBadges } from "@/app/lib/badges";
 import { getOwnedLinks } from "@/app/lib/challenges";
 import { canViewStaged } from "@/app/lib/beta/staged-access";
-import { isStagedSlug, resolveGames } from "@/app/lib/games-store";
+import { isStagedOrUnverifiable, resolveGames } from "@/app/lib/games-store";
 import { store } from "@/app/lib/scoreboard";
 import { readBadgeStats, readOwnSocial, readPlayerId } from "./_data";
 
@@ -91,7 +91,7 @@ export default async function YouProfilePage() {
   const gameSlugs = [
     ...new Set(allStandings.flatMap((s) => (s.gameSlug ? [s.gameSlug] : []))),
   ];
-  const stagedFlags = await Promise.all(gameSlugs.map((slug) => isStagedSlug(slug)));
+  const stagedFlags = await Promise.all(gameSlugs.map((slug) => isStagedOrUnverifiable(slug)));
   const stagedSlugs = new Set(gameSlugs.filter((_, i) => stagedFlags[i]));
   const standings =
     stagedSlugs.size === 0 || (await canViewStaged())

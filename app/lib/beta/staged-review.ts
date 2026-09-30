@@ -19,11 +19,11 @@
 
 import "server-only";
 import { canViewStaged } from "@/app/lib/beta/staged-access";
-import { isStagedSlug } from "@/app/lib/games-store";
+import { isStagedOrUnverifiable } from "@/app/lib/games-store";
 import { reviews } from "@/app/lib/reviews";
 
 export async function isReviewHiddenFromViewer(reviewId: number): Promise<boolean> {
   const slug = await reviews.slugForReview(reviewId);
-  if (slug === null || !(await isStagedSlug(slug))) return false;
+  if (slug === null || !(await isStagedOrUnverifiable(slug))) return false;
   return !(await canViewStaged());
 }

@@ -44,7 +44,7 @@
 
 import { isMissingColumnError, isUnconfiguredDbError } from "@/app/lib/db";
 import { canViewStaged } from "@/app/lib/beta/staged-access";
-import { isStagedSlug } from "@/app/lib/games-store";
+import { isStagedOrUnverifiable } from "@/app/lib/games-store";
 import { store } from "@/app/lib/scoreboard";
 import type { FriendStanding } from "@/app/lib/scoreboard/store";
 import { social } from "@/app/lib/social";
@@ -77,7 +77,7 @@ export async function GET(req: Request): Promise<Response> {
   let standings: FriendStanding[] = [];
   let friends = 0;
   try {
-    const withheld = (await isStagedSlug(slug)) && !(await canViewStaged());
+    const withheld = (await isStagedOrUnverifiable(slug)) && !(await canViewStaged());
     standings = withheld ? [] : await store.getFriendStandingsForGame(playerId, slug);
     if (!standings.some((row) => !row.isYou)) {
       friends = (await social.counts(playerId)).friends;

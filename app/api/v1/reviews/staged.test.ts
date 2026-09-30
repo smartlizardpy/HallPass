@@ -32,6 +32,7 @@ vi.mock("@/app/lib/db", () => ({ isMissingColumnError: () => false }));
 vi.mock("@/app/lib/games-store", () => ({
   isKnownSlug: h.isKnownSlug,
   isStagedSlug: h.isStagedSlug,
+  isStagedOrUnverifiable: h.isStagedSlug,
 }));
 vi.mock("@/app/lib/beta/staged-access", () => ({ canViewStaged: h.canViewStaged }));
 vi.mock("@/app/lib/reviews", () => ({

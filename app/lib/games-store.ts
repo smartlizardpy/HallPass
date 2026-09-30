@@ -54,7 +54,10 @@ import {
   type Game,
   type GamePlatform,
 } from "@/app/lib/games";
-import { readExternalGames } from "@/app/lib/external-games-store";
+import {
+  readExternalGames,
+  readExternalGamesStatus,
+} from "@/app/lib/external-games-store";
 import {
   categoriesOf,
   genreCounts,
@@ -253,6 +256,33 @@ export async function isResolvedSlug(slug: string): Promise<boolean> {
  */
 export async function isKnownSlug(slug: string): Promise<boolean> {
   return (await resolveGamesIncludingStaged()).some((g) => g.slug === slug);
+}
+
+/**
+ * Whether the external-games half of the catalogue could not be read right now.
+ *
+ * {@link readExternalGames} swallows a failure into `[]`, so during an outage an
+ * external game — staged or not — is simply ABSENT, and {@link isStagedSlug}
+ * answers `false` for it. A gate that must not fail open on that (the per-board
+ * leaderboard route) asks this only for a slug the catalogue does not contain: if
+ * the read is degraded, "absent" cannot be trusted to mean "not staged". Cheap
+ * when healthy (the read is cached); only a failing read touches the database.
+ */
+export async function isExternalReadDegraded(): Promise<boolean> {
+  return (await readExternalGamesStatus()).degraded;
+}
+
+/**
+ * {@link isStagedSlug}, but FAIL-CLOSED for gates that hide data from the public:
+ * `true` when the slug is staged, AND when the catalogue does not contain it while
+ * the external-games read is degraded (see {@link isExternalReadDegraded}) — an
+ * external staged game that has vanished in an outage must not read as public.
+ * With a healthy read an absent slug is simply unknown/removed and answers
+ * `false`, so long-removed games keep behaving as before.
+ */
+export async function isStagedOrUnverifiable(slug: string): Promise<boolean> {
+  const game = await resolveGameIncludingStaged(slug);
+  return game ? isStaged(game) : isExternalReadDegraded();
 }
 
 /**

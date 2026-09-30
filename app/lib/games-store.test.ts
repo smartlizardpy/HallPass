@@ -19,6 +19,7 @@ const h = vi.hoisted(() => ({
   overrideRows: [] as Record<string, unknown>[],
   external: [] as unknown[],
   failReads: false,
+  externalDegraded: false,
 }));
 
 vi.mock("server-only", () => ({}));
@@ -41,6 +42,7 @@ vi.mock("@/app/lib/db", () => ({
 }));
 vi.mock("@/app/lib/external-games-store", () => ({
   readExternalGames: async () => h.external,
+  readExternalGamesStatus: async () => ({ games: h.external, degraded: h.externalDegraded }),
 }));
 vi.mock("@/app/lib/games", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/app/lib/games")>();
@@ -68,6 +70,7 @@ vi.mock("@/app/lib/games", async (importOriginal) => {
 
 import {
   clearOverride,
+  isExternalReadDegraded,
   isKnownSlug,
   isResolvedSlug,
   isStagedSlug,
@@ -172,6 +175,16 @@ describe("upsertOverride's patch type", () => {
     const [c] = writes();
     expect(c.text).not.toContain("staged");
     expect([withStaged, withCover]).toHaveLength(2);
+  });
+});
+
+describe("isExternalReadDegraded", () => {
+  it("reports the external read's degraded flag", async () => {
+    h.externalDegraded = false;
+    expect(await isExternalReadDegraded()).toBe(false);
+    h.externalDegraded = true;
+    expect(await isExternalReadDegraded()).toBe(true);
+    h.externalDegraded = false;
   });
 });
 

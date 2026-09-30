@@ -65,6 +65,8 @@ const GUARDED = [
   "resolveGameIncludingStaged",
   "isKnownSlug",
   "isStagedSlug",
+  "isStagedOrUnverifiable",
+  "isExternalReadDegraded",
 ];
 
 const ALLOWED_PREFIXES = [

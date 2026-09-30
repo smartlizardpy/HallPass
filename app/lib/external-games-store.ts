@@ -143,10 +143,24 @@ const readExternalGamesCached = unstable_cache(
  * and the next render retries the read.
  */
 export async function readExternalGames(): Promise<Game[]> {
+  return (await readExternalGamesStatus()).games;
+}
+
+/**
+ * {@link readExternalGames} plus whether the read FAILED. `degraded: true` means
+ * the `[]` is "could not read", not "there are none" — the signal a gate needs to
+ * tell a genuinely removed game from an external (possibly STAGED) one that has
+ * merely vanished from the catalogue during an outage. A healthy read is served
+ * from the data cache; only a failing one touches the database again.
+ */
+export async function readExternalGamesStatus(): Promise<{
+  games: Game[];
+  degraded: boolean;
+}> {
   try {
-    return await readExternalGamesCached();
+    return { games: await readExternalGamesCached(), degraded: false };
   } catch {
-    return [];
+    return { games: [], degraded: true };
   }
 }
 

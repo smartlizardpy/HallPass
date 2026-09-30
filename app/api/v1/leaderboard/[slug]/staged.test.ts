@@ -11,7 +11,8 @@ const h = vi.hoisted(() => ({
   getBoard: vi.fn(),
   getTopScores: vi.fn(),
   appendScore: vi.fn(),
-  isStagedSlug: vi.fn(),
+  resolveGame: vi.fn(),
+  degraded: vi.fn(),
   canViewStaged: vi.fn(),
   auth: vi.fn(),
 }));
@@ -39,7 +40,13 @@ vi.mock("@/app/lib/players", () => ({
   getPublicIdentity: async () => null,
   upsertPlayerOnLogin: async () => {},
 }));
-vi.mock("@/app/lib/games-store", () => ({ isStagedSlug: h.isStagedSlug }));
+vi.mock("@/app/lib/games-store", () => ({
+  // Mirrors the real helper: staged, or absent while the external read is degraded.
+  isStagedOrUnverifiable: async (slug: string) => {
+    const game = await h.resolveGame(slug);
+    return game ? game.staged === true : h.degraded();
+  },
+}));
 vi.mock("@/app/lib/beta/staged-access", () => ({ canViewStaged: h.canViewStaged }));
 
 import { GET, POST } from "@/app/api/v1/leaderboard/[slug]/route";
@@ -67,7 +74,8 @@ beforeEach(() => {
   h.getTopScores.mockResolvedValue([]);
   h.appendScore.mockResolvedValue({ ok: true, rank: 1, id: 1 });
   h.auth.mockResolvedValue(null);
-  h.isStagedSlug.mockResolvedValue(false);
+  h.resolveGame.mockResolvedValue({ slug: "pub-game", staged: false });
+  h.degraded.mockResolvedValue(false);
   h.canViewStaged.mockResolvedValue(false);
 });
 
@@ -86,7 +94,7 @@ describe("public boards are unchanged", () => {
     h.getBoard.mockResolvedValue(board(null));
     const res = await get("b1");
     expect(res.status).toBe(200);
-    expect(h.isStagedSlug).not.toHaveBeenCalled();
+    expect(h.resolveGame).not.toHaveBeenCalled();
     expect(h.canViewStaged).not.toHaveBeenCalled();
   });
 
@@ -101,7 +109,7 @@ describe("public boards are unchanged", () => {
 describe("a staged board", () => {
   beforeEach(() => {
     h.getBoard.mockResolvedValue(board("beta-game"));
-    h.isStagedSlug.mockResolvedValue(true);
+    h.resolveGame.mockResolvedValue({ slug: "beta-game", staged: true });
   });
 
   it("is indistinguishable from a missing board to the public, and no-store", async () => {
@@ -145,5 +153,39 @@ describe("a staged board", () => {
     const res = await post("b1");
     expect(res.status).toBe(200);
     expect(h.appendScore).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("fail-closed when the external-games read is degraded", () => {
+  beforeEach(() => {
+    // A linked slug the catalogue does not contain: an external game gone blind,
+    // or a long-removed one.
+    h.getBoard.mockResolvedValue(board("external-game"));
+    h.resolveGame.mockResolvedValue(undefined);
+  });
+
+  it("denies the public (same 409, no-store) while the read is degraded", async () => {
+    h.degraded.mockResolvedValue(true);
+    const res = await get("b1");
+    expect(res.status).toBe(409);
+    expect(res.headers.get("Cache-Control")).toBe("private, no-store");
+    expect((await post("b1")).status).toBe(409);
+    expect(h.appendScore).not.toHaveBeenCalled();
+  });
+
+  it("still lets a tester through while degraded, uncached", async () => {
+    h.degraded.mockResolvedValue(true);
+    h.canViewStaged.mockResolvedValue(true);
+    const res = await get("b1");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toBe("private, no-store");
+  });
+
+  it("keeps a long-removed game's board public when the read is healthy", async () => {
+    h.degraded.mockResolvedValue(false);
+    const res = await get("b1");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toContain("s-maxage=15");
+    expect(h.canViewStaged).not.toHaveBeenCalled();
   });
 });
