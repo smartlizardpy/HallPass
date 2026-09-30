@@ -5,6 +5,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
+import { publicStaticSlugs } from "./lib/static-game-slugs.mjs";
 
 const root = resolve(process.cwd());
 const nextDir = resolve(root, ".next");
@@ -189,8 +190,8 @@ if (existsSync(prerenderManifestPath)) {
 let tsSlugs = [];
 if (prerenderRoutes.length === 0 && existsSync(gamesTsPath)) {
   const gamesTs = await readFile(gamesTsPath, "utf8");
-  const slugMatches = gamesTs.matchAll(/slug:\s*["']([^"']+)["']/g);
-  for (const m of slugMatches) tsSlugs.push(m[1]);
+  // Public entries only — a staged game's routes must never be precached.
+  tsSlugs = publicStaticSlugs(gamesTs);
   for (const slug of tsSlugs) {
     pageRoutes.add(`/game/${slug}`);
     // Trailing slash — must byte-match the PlayerOverlay iframe URL, since
