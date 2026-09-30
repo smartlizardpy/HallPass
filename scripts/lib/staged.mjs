@@ -44,11 +44,16 @@
  * The static catalogue entries in `games.ts` source text.
  *
  * Reads the array between `export const games: Game[] = [` and the closing
- * `];`, then each top-level object in it. The 4-space anchors matter: they tie
- * both matches to the entry's own keys, so a `staged: true` that appears in a
- * nested object or inside a description string is not mistaken for the flag.
- * The entries are Prettier-formatted, which is what makes a line-anchored match
- * safe; `staged-sync.test.ts` fails if that stops being true.
+ * `\n];`, so text outside it (docblocks, `publicGames`) is never read. Within
+ * it, an entry is the text from one `slug:` to the next (or the end of the
+ * array), which works because `slug` is the first field of every entry. That
+ * segmentation does not depend on line layout, so inline entries and
+ * single-quoted slugs parse as well as the Prettier-formatted ones.
+ *
+ * String literals are blanked before the `staged: true` test, so the flag named
+ * in a description ("staged: true inside prose") is not mistaken for the real
+ * one. This is the ONE parser of `games.ts` for the deploy scripts:
+ * `sync-games.mjs` and `build-sw-manifest.mjs` both use it.
  *
  * @param {string} source contents of app/lib/games.ts
  * @returns {StaticGame[]}
@@ -59,13 +64,17 @@ export function parseStaticGames(source) {
   const end = source.indexOf("\n];", start);
   const body = source.slice(start, end === -1 ? undefined : end);
 
+  const matches = [...body.matchAll(/\bslug:\s*(["'])([^"']+)\1/g)];
   /** @type {StaticGame[]} */
   const found = [];
-  for (const entry of body.matchAll(/^ {2}\{\n([\s\S]*?)^ {2}\},?$/gm)) {
-    const slug = /^ {4}slug:\s*"([^"]+)"/m.exec(entry[1])?.[1];
-    if (!slug) continue;
-    found.push({ slug, staged: /^ {4}staged:\s*true\b/m.test(entry[1]) });
-  }
+  matches.forEach((m, i) => {
+    const rest = body.slice(
+      m.index + m[0].length,
+      matches[i + 1]?.index ?? body.length,
+    );
+    const code = rest.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""');
+    found.push({ slug: m[2], staged: /\bstaged:\s*true\b/.test(code) });
+  });
   return found;
 }
 

@@ -53,6 +53,18 @@ describe("parseStaticGames", () => {
     ]);
   });
 
+  it("handles inline entries, single quotes, and prose naming the flag", () => {
+    const src = `export const games: Game[] = [
+  { slug: "a", description: "says staged: true", title: "it's A" },
+  { slug: 'b', staged: true, title: "B" },
+];
+/** docs: slug: "x", staged: true */`;
+    expect(parseStaticGames(src)).toEqual([
+      { slug: "a", staged: false },
+      { slug: "b", staged: true },
+    ]);
+  });
+
   it("returns nothing when there is no games array", () => {
     expect(parseStaticGames("export const x = 1;")).toEqual([]);
   });
