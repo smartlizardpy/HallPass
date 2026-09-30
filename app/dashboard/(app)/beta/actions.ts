@@ -38,7 +38,7 @@
  */
 
 import { revalidatePath, updateTag } from "next/cache";
-import { copy, del } from "@vercel/blob";
+import { del } from "@vercel/blob";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import type { Role } from "@/app/lib/dashboard-users";
@@ -63,9 +63,8 @@ import {
   REASON_FIXED,
 } from "@/app/lib/beta/config";
 import { xpForFix, xpForReport, xpForShot } from "@/app/lib/beta/xp";
-import { MEDIA_CACHE_TAG, insertMedia } from "@/app/lib/game-media";
-import { mediaBlobPath } from "@/app/lib/game-media-blob";
-import { toImageType } from "@/app/lib/image-meta";
+import { MEDIA_CACHE_TAG } from "@/app/lib/game-media";
+import { publishShotToGallery } from "@/app/lib/beta/publish-shot";
 import { isResolvedSlug } from "@/app/lib/games-store";
 import { findGame } from "@/app/lib/games";
 import { betaAssignmentCopy } from "@/app/lib/notifications/copy";
@@ -669,6 +668,12 @@ export async function duplicateReportAction(formData: FormData): Promise<void> {
   back("ok", `Duplicate — ${DUPLICATE_XP} XP awarded, report removed`);
 }
 
+/** Drop every cache that could still be serving the old gallery. */
+function revalidateGallery(slug: string): void {
+  updateTag(MEDIA_CACHE_TAG);
+  revalidatePath(`/game/${slug}`);
+}
+
 /**
  * Review a submitted image.
  *
@@ -676,68 +681,6 @@ export async function duplicateReportAction(formData: FormData): Promise<void> {
  * later decision that pays again under a different reason, which is why the
  * store's dedupe index is keyed on `(shot_id, reason)` rather than `shot_id`.
  */
-/**
- * Copy an approved shot into the public gallery.
- *
- * ── WHY A COPY AND NOT A POINTER ────────────────────────────────────────────
- * `mediaPublicPath()` derives a media row's URL straight from its `blob_path`,
- * and the only route that serves those is `/game-media/`. A `game_media` row
- * left pointing at `beta-shots/…` would therefore resolve to a URL nothing
- * answers — the image would be in the gallery and still invisible. So the object
- * moves under the `game-media/` prefix, which is what `mediaBlobPath()` builds.
- *
- * `copy()` is one ADVANCED Blob operation, and the Hobby allowance is 2,000 a
- * month. At a handful of accepted shots that is noise, but it is why this
- * happens once on acceptance rather than on every gallery read.
- *
- * ── THE MEDIA ID IS THE SHOT ID, DELIBERATELY ───────────────────────────────
- * That makes the whole sequence idempotent: `copy()` overwrites the same key,
- * `insertMedia()` now conflicts away on the primary key, and `markShotPromoted`
- * is guarded on the pointer still being null. A retry after a half-finished
- * publish converges instead of creating a second gallery entry.
- *
- * Never touches the `games/` prefix — see `game-media.sql` for the seven
- * behaviours that sweep it — and never calls `bumpGamesVersion()`, which would
- * force every online client to re-download the whole corpus over one screenshot.
- */
-async function publishShotToGallery(shot: {
-  id: string;
-  slug: string;
-  blobPath: string;
-  blobUrl: string | null;
-  contentType: string;
-  width: number;
-  height: number;
-  bytes: number;
-}): Promise<string> {
-  const contentType = toImageType(shot.contentType);
-  const blobPath = mediaBlobPath(shot.slug, shot.id, contentType);
-  // `copy` takes the source URL when there is one; the stored path is the
-  // fallback for a row written before `blob_url` existed.
-  const copied = await copy(shot.blobUrl ?? shot.blobPath, blobPath, {
-    access: "public",
-    addRandomSuffix: false,
-  });
-  await insertMedia({
-    id: shot.id,
-    slug: shot.slug,
-    kind: "screenshot",
-    blobPath,
-    blobUrl: copied.url,
-    contentType,
-    width: shot.width,
-    height: shot.height,
-    bytes: shot.bytes,
-  });
-  return shot.id;
-}
-
-/** Drop every cache that could still be serving the old gallery. */
-function revalidateGallery(slug: string): void {
-  updateTag(MEDIA_CACHE_TAG);
-  revalidatePath(`/game/${slug}`);
-}
-
 export async function reviewShotAction(formData: FormData): Promise<void> {
   const { email: actor, role, playerId } = await requireRole(BETA_MIN_ROLE);
 

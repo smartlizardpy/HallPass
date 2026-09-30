@@ -105,8 +105,8 @@ const readAllMediaCached = unstable_cache(
   { tags: [MEDIA_CACHE_TAG], revalidate: 3600 },
 );
 
-/** Every media row, keyed by slug. Fail-soft to an empty map. */
-export async function getAllGameMedia(): Promise<Map<string, GameMedia[]>> {
+/** Every row including heroes, keyed by slug. Fail-soft to an empty map. */
+async function getEveryMedia(): Promise<Map<string, GameMedia[]>> {
   let all: GameMedia[];
   try {
     all = await readAllMediaCached();
@@ -122,9 +122,41 @@ export async function getAllGameMedia(): Promise<Map<string, GameMedia[]>> {
   return bySlug;
 }
 
-/** A single game's media in display order. Fail-soft to `[]`. */
+/**
+ * Every GALLERY row, keyed by slug. Fail-soft to an empty map.
+ *
+ * A `hero` row is a game's cover art, promoted from a tester's shot at publish
+ * time (see {@link setMediaKind}). It lives in this table so the same
+ * `/game-media/` route serves it, but it is not a gallery image: it would
+ * otherwise appear twice on the store page, once as the cover and once as a
+ * screenshot, and spend one of the eight gallery slots. Every gallery read
+ * therefore drops it; {@link getGameCoverMedia} is the one reader that wants it.
+ */
+export async function getAllGameMedia(): Promise<Map<string, GameMedia[]>> {
+  const everything = await getEveryMedia();
+  const gallery = new Map<string, GameMedia[]>();
+  for (const [slug, list] of everything) {
+    const shots = list.filter((media) => media.kind !== "hero");
+    if (shots.length > 0) gallery.set(slug, shots);
+  }
+  return gallery;
+}
+
+/** A single game's gallery in display order. Fail-soft to `[]`. */
 export async function getGameMedia(slug: string): Promise<GameMedia[]> {
   return (await getAllGameMedia()).get(slug) ?? [];
+}
+
+/**
+ * A game's cover row (`kind = 'hero'`), or `null` when it has none. Fail-soft to
+ * `null`, like the other cached reads.
+ *
+ * If a game somehow has several heroes the lowest position wins, which is the
+ * oldest: rows arrive ordered by `position, created_at`.
+ */
+export async function getGameCoverMedia(slug: string): Promise<GameMedia | null> {
+  const list = (await getEveryMedia()).get(slug) ?? [];
+  return list.find((media) => media.kind === "hero") ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -186,6 +218,27 @@ export async function setMediaBlobUrl(
     UPDATE game_media SET blob_url = ${blobUrl}
     WHERE blob_path = ${blobPath} AND blob_url IS NULL
   `;
+}
+
+/**
+ * Change a row's kind, scoped to its slug. Returns whether a row matched.
+ *
+ * Publish uses it to turn a promoted tester shot into the game's cover
+ * (`'hero'`), which takes it out of the gallery and out of the 8-image cap.
+ * Idempotent: setting a kind a row already has still matches.
+ *
+ * Uncached like every mutation here; the caller must `updateTag(MEDIA_CACHE_TAG)`.
+ */
+export async function setMediaKind(
+  id: string,
+  kind: GameMediaKind,
+): Promise<boolean> {
+  const rows = await sql`
+    UPDATE game_media SET kind = ${kind}, updated_at = now()
+    WHERE id = ${id}
+    RETURNING id
+  `;
+  return rows.length > 0;
 }
 
 /**
@@ -274,7 +327,7 @@ export async function reorderMedia(slug: string, ids: string[]): Promise<void> {
 }
 
 /**
- * The ordered media ids for a slug, read UNCACHED.
+ * The ordered GALLERY media ids for a slug (heroes excluded), read UNCACHED.
  *
  * Deliberately not `getGameMedia`: that read is `unstable_cache`d, and a reorder
  * must compute the new sequence from what is actually in the table right now. A
@@ -284,16 +337,20 @@ export async function reorderMedia(slug: string, ids: string[]): Promise<void> {
 export async function listMediaIdsForSlug(slug: string): Promise<string[]> {
   const rows = await sql`
     SELECT id FROM game_media
-    WHERE slug = ${slug}
+    WHERE slug = ${slug} AND kind <> 'hero'
     ORDER BY position ASC, created_at ASC
   `;
   return rows.map((row) => String(row.id));
 }
 
-/** How many images a slug already has — used to enforce the per-game cap. */
+/**
+ * How many GALLERY images a slug already has — used to enforce the per-game cap.
+ * A `hero` cover does not count; see {@link getAllGameMedia}.
+ */
 export async function countMediaForSlug(slug: string): Promise<number> {
   const rows = await sql`
-    SELECT count(*)::int AS n FROM game_media WHERE slug = ${slug}
+    SELECT count(*)::int AS n FROM game_media
+    WHERE slug = ${slug} AND kind <> 'hero'
   `;
   return rows.length > 0 ? toInt(rows[0].n) : 0;
 }
