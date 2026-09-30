@@ -38,7 +38,7 @@ import {
   mustRequestTesters,
   SITE_WRITE_ROLE,
 } from "@/app/lib/permissions";
-import { resolveGames } from "@/app/lib/games-store";
+import { resolveGamesIncludingStaged } from "@/app/lib/games-store";
 import {
   getAgentActivity,
   getAllAssignments,
@@ -475,7 +475,7 @@ export default async function DashboardBetaPage({
       getShotQueue(),
       getAllAssignments(),
       getInviteRequests(),
-      resolveGames(),
+      resolveGamesIncludingStaged(),
       // Seeds the feed panel so it is right before any JavaScript runs. The
       // island polls from there; this read is what makes it correct without JS.
       getAgentActivity({

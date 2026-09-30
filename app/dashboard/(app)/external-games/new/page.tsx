@@ -148,6 +148,17 @@ export default async function NewExternalGamePage({
             </select>
           </label>
 
+          <label className="flex items-start gap-2 text-sm text-foreground">
+            <input type="checkbox" name="staged" className="mt-0.5" />
+            <span>
+              <span className="font-semibold">Stage for beta testers first</span>
+              <span className="block text-xs text-muted">
+                Only beta testers and the dashboard can see a staged game. Publish
+                it from its page here when it is ready.
+              </span>
+            </span>
+          </label>
+
           <div className="block text-sm font-semibold text-foreground">
             Tags
             <div className="mt-2">

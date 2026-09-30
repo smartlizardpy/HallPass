@@ -67,7 +67,7 @@ import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
 import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { isMissingColumnError, isUnconfiguredDbError, sql } from "@/app/lib/db";
-import { resolveGames } from "@/app/lib/games-store";
+import { resolveGamesIncludingStaged } from "@/app/lib/games-store";
 import {
   REPORT_REASONS,
   REVIEW_AUTO_HIDE_REPORTS,
@@ -252,8 +252,8 @@ export default async function ModerationPage({
   // Slug → title for the "which game" link. Membership in this map IS
   // `isResolvedSlug()` — same resolved catalogue (static + external), read once
   // instead of once per card — so a slug that has since been removed renders as
-  // plain text and never becomes a link to a 404. `resolveGames()` never throws.
-  const titleBySlug = new Map((await resolveGames()).map((g) => [g.slug, g.title]));
+  // plain text and never becomes a link to a 404. `resolveGamesIncludingStaged()` never throws.
+  const titleBySlug = new Map((await resolveGamesIncludingStaged()).map((g) => [g.slug, g.title]));
 
   return (
     <>

@@ -57,7 +57,7 @@ import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { sql } from "@/app/lib/db";
-import { isResolvedSlug } from "@/app/lib/games-store";
+import { isKnownSlug } from "@/app/lib/games-store";
 import {
   MAX_ACHIEVEMENTS_PER_GAME,
   isAchievementKey,
@@ -255,10 +255,10 @@ export async function createAchievementAction(formData: FormData): Promise<void>
 
   const slug = String(formData.get("slug") ?? "").trim();
   if (!slug) redirect("/dashboard/games?error=Unknown+game");
-  // `isResolvedSlug`, NOT the static `games` array: an external game is exactly
+  // `isKnownSlug`, NOT the static `games` array: an external game is exactly
   // the kind of game an admin provisions achievements for, and validating
   // against the static list is the bug that makes `favorites.ts` drop them.
-  if (!(await isResolvedSlug(slug))) redirect("/dashboard/games?error=Unknown+game");
+  if (!(await isKnownSlug(slug))) redirect("/dashboard/games?error=Unknown+game");
 
   const key = String(formData.get("key") ?? "")
     .trim()

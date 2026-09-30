@@ -65,7 +65,7 @@ import {
 import { xpForFix, xpForReport, xpForShot } from "@/app/lib/beta/xp";
 import { MEDIA_CACHE_TAG } from "@/app/lib/game-media";
 import { publishShotToGallery } from "@/app/lib/beta/publish-shot";
-import { isResolvedSlug } from "@/app/lib/games-store";
+import { isKnownSlug } from "@/app/lib/games-store";
 import { findGame } from "@/app/lib/games";
 import { betaAssignmentCopy } from "@/app/lib/notifications/copy";
 import { notifyPlayer } from "@/app/lib/notifications/deliver";
@@ -351,7 +351,7 @@ export async function assignGameAction(formData: FormData): Promise<void> {
 
   if (!playerId) back("error", "Pick a tester");
   if (!slug) back("error", "Pick a game");
-  if (!(await isResolvedSlug(slug))) back("error", `No game with the slug "${slug}"`);
+  if (!(await isKnownSlug(slug))) back("error", `No game with the slug "${slug}"`);
 
   try {
     await beta.assign({ playerId, slug, assignedBy: actor, brief });

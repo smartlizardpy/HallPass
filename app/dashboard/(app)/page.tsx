@@ -34,7 +34,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
 import { DASHBOARD_MIN_ROLE } from "@/app/lib/permissions";
-import { resolveGames } from "@/app/lib/games-store";
+import { resolveGamesIncludingStaged } from "@/app/lib/games-store";
 import { getDashboardStats, type Delta } from "@/app/lib/stats";
 import {
   getCommunityStats,
@@ -83,7 +83,7 @@ export default async function DashboardPage() {
   const [stats, community, games] = await Promise.all([
     getDashboardStats(),
     getCommunityStats(),
-    resolveGames(),
+    resolveGamesIncludingStaged(),
   ]);
 
   // One clock for the whole render, so two chips a millisecond apart cannot
