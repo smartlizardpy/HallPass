@@ -5,24 +5,33 @@ description: Add a new game to the unblockedgames project from a single HTML fil
 
 # Add a new game to unblockedgames
 
-The user has provided a game — either a single self-contained HTML file (usually via `@new-game.html`) or a folder containing `index.html` plus its own JS/CSS/asset files. Your job is to fully onboard it: place files, generate a cover screenshot, and register metadata. Work autonomously — do not ask the user to confirm each step.
+The user has provided a game — either a single self-contained HTML file (usually via `@new-game.html`) or a folder containing `index.html` plus its own JS/CSS/asset files. Your job is to fully onboard it: place files, generate a cover screenshot, and register metadata. Work autonomously — do not ask the user to confirm each step. The only two questions are who made the game and whether to stage it (both in Step 3b).
 
 ## Project assumptions
 
-- Repo root: `/home/ozi/Projects/unblockedgames`
-- Games live under `public/games/<slug>/` — always `index.html` and `cover.png`, plus (for multi-file games) the game's own JS/CSS/asset files with subdirectories preserved
+- Repo root: the git checkout you are running in (`git rev-parse --show-toplevel`). Every path below is relative to it — never hard-code an absolute path, the skill runs on more than one machine.
+- A **live** game lives under `public/games/<slug>/` — always `index.html` and `cover.png`, plus (for multi-file games) the game's own JS/CSS/asset files with subdirectories preserved
+- A **staged** game (beta testers only until an admin presses Publish in the dashboard) lives under `.staging/<slug>/` and **never** under `public/` — `public/` is served as static files at guessable URLs, so a staged game there would be public. `.staging/` is gitignored.
 - Metadata is appended to the `games` array in `app/lib/games.ts`
-- The route at `app/game-html/[slug]/[[...path]]/route.ts` serves every game file blob-first (from `games/<slug>/<relPath>` in Vercel Blob) and falls back with a 307 to the static copy at `/games/<slug>/<relPath>` if the blob is missing. Upload to blob as part of this flow (see Step 5 / Folder Step 7) — this is the default, not optional.
+- The route at `app/game-html/[slug]/[[...path]]/route.ts` serves every game file blob-first (from `games/<slug>/<relPath>` in Vercel Blob) and falls back with a 307 to the static copy at `/games/<slug>/<relPath>` if the blob is missing. Upload to blob as part of this flow with `npm run publish-game` (see Step 5 / Folder Step 7) — this is the default, not optional. Never write your own `put()` loop: the script applies the same content types, path rules and `game_blobs` bookkeeping as the dashboard, and a hand-rolled upload that skips the `game_blobs` row is invisible to the serving route.
 - The player iframe loads games at `/game-html/<slug>/` (trailing slash — load-bearing: the game's relative asset URLs resolve against it)
 
 ## Step 0: Detect the intake type
 
 Before anything else, look at what the user actually provided:
 
-- **A single `.html` file** (attached in chat or dropped in the repo) → run the **Single-file flow** (Steps 1–8 below), exactly as written.
+- **A single `.html` file** (attached in chat or dropped in the repo) → run the **Single-file flow** (Steps 1–8 below).
 - **A directory**, or **multiple game files** (an HTML file plus separate `.js`/`.css`/asset files that belong together) → run the **Folder flow** (see the "Folder flow (multi-file games)" section after Step 8).
 
 If it's ambiguous (e.g. one HTML file plus files that look unrelated to it), ask the user which files belong to the game before proceeding.
+
+Both flows branch on the stage answer from Step 3b. **Live** means the steps as written. **Staged** means the same steps with three substitutions, which the steps call out again where they apply:
+
+1. The game's files go to `.staging/<slug>/`, not `public/games/<slug>/` (Step 2, Folder Step 4).
+2. The cover is generated from that folder, served from `.staging/` (Step 3).
+3. The upload is `npm run publish-game -- <slug> --staged --from .staging/<slug> --cover .staging/<slug>/cover.png`, which also records the cover as a tester-visible hero image, and the `games.ts` entry gets `staged: true` plus the `coverUrl` the script prints (Step 4, Step 5).
+
+Because the order matters for a staged game (the cover URL comes out of the upload, and the entry needs it), the staged flow does the upload **before** writing the `games.ts` entry. The live flow keeps the order as written.
 
 ## Single-file flow
 
@@ -55,10 +64,10 @@ repl = {'“':'\"','”':'\"','„':'\"','‟':'\"',
         ' ':' ','​':'','‌':'','‍':'','﻿':''}
 for k,v in repl.items(): s = s.replace(k,v)
 open(sys.argv[1],'w').write(s)
-" public/games/<slug>/index.html
+" <game-dir>/<slug>/index.html
 ```
 
-Then create `public/games/<slug>/index.html` with the cleaned content. If you made any replacements, mention the count in the final summary so the user knows.
+Then create `public/games/<slug>/index.html` with the cleaned content — or `.staging/<slug>/index.html` if the game is staged. If you made any replacements, mention the count in the final summary so the user knows.
 
 ### 3. Generate the cover (Playwright MCP)
 Cover spec: **659×613 PNG**.
@@ -66,19 +75,19 @@ Cover spec: **659×613 PNG**.
 Playwright MCP **blocks `file://` URLs**, so serve the file over HTTP first:
 
 ```bash
-cd /home/ozi/Projects/unblockedgames/public && python3 -m http.server 9876 >/dev/null 2>&1 &
+cd <public-or-.staging> && python3 -m http.server 9876 >/dev/null 2>&1 &
 echo $! > /tmp/addgame-httpsrv.pid
 sleep 1
 ```
 
-Port `8765` is taken by motionEye on this machine — use `9876` (or anything else free). Verify with `curl -sI http://localhost:9876/games/<slug>/index.html | head -1`.
+Serve `public/` for a live game and `.staging/` for a staged one (the URL path differs accordingly, below). Use port `9876` or anything else free — some machines already run something on `8765`. Verify with `curl -sI http://localhost:9876/games/<slug>/index.html | head -1` (live) or `.../<slug>/index.html` (staged).
 
 - `mcp__playwright__browser_resize` to **1318×1226** (2× cover, same aspect).
-- `mcp__playwright__browser_navigate` → `http://localhost:9876/games/<slug>/index.html`.
+- `mcp__playwright__browser_navigate` → `http://localhost:9876/games/<slug>/index.html` (live) or `http://localhost:9876/<slug>/index.html` (staged).
 - `mcp__playwright__browser_wait_for` with `time: 2`.
 - Goal is to capture the **start/title screen** — that's what looks good as a card. Don't try to click into gameplay; if the snapshot is empty (canvas-only game), that's fine, screenshot anyway.
 - `mcp__playwright__browser_take_screenshot` — Playwright MCP only writes inside the project, so use `filename: ".playwright-mcp/<slug>-cover.png"` (NOT `/tmp/...`, which is rejected as outside allowed roots). `fullPage: false`.
-- Resize to exact dimensions: `magick .playwright-mcp/<slug>-cover.png -resize 659x613! public/games/<slug>/cover.png`. The `!` forces exact size.
+- Resize to exact dimensions: `magick .playwright-mcp/<slug>-cover.png -resize 659x613! <game-dir>/<slug>/cover.png` where `<game-dir>` is `public/games` (live) or `.staging` (staged). The `!` forces exact size.
 - **Now do the platform check below, while the server and the browser are still up.**
 - `mcp__playwright__browser_close`.
 - Kill the temp server: `kill $(cat /tmp/addgame-httpsrv.pid) 2>/dev/null`.
@@ -113,13 +122,26 @@ Omitting is a real, correct outcome — it means "unknown", which renders exactl
 like the site did before the field existed. A wrong guess is worse than no guess:
 it badges the game and re-sorts it on every visitor's phone.
 
-If Playwright MCP isn't available, fall back to a solid-color placeholder using the chosen accent color: `magick -size 659x613 xc:'<accent-hex>' public/games/<slug>/cover.png`, and warn the user in the final summary.
+If Playwright MCP isn't available, fall back to a solid-color placeholder using the chosen accent color: `magick -size 659x613 xc:'<accent-hex>' <game-dir>/<slug>/cover.png`, and warn the user in the final summary.
 
-### 3b. Ask who made the game
+### 3b. Ask who made the game, and whether to stage it
 
-**This is the ONE question to ask the user.** Everything else in this skill is
-inferred; attribution cannot be, and guessing publishes a false claim about a
-named person.
+**These are the ONLY two questions to ask the user** — ask them together in one
+`AskUserQuestion` call. Everything else in this skill is inferred; attribution
+and release timing cannot be, and guessing either is worse than asking.
+
+**Stage this game for beta testers first?** Options: *No — publish it now*
+(default) and *Yes — stage it*. A staged game is visible and playable only to
+beta testers and dashboard roles; for everyone else every public surface (home
+page, `/game/<slug>`, sitemap, llms, OG images, offline cache) acts as if it does
+not exist. Testers' screenshots, cover shot, credits and reviews pile up while it
+is staged, and an admin presses **Publish** in the dashboard to take it live with
+no code change. If the user's message already says "stage it" / "beta first" (or
+"just ship it"), take that as the answer and do not ask again.
+
+The rest of this step is the authorship question.
+
+**Authorship.**
 
 One name — the person who MADE the game. It renders on the store page as
 "By <name>".
@@ -127,7 +149,6 @@ One name — the person who MADE the game. It renders on the store page as
 Get the admin list to offer as suggestions:
 
 ```bash
-cd /home/ozi/Projects/unblockedgames
 node --input-type=module -e '
 import { neon } from "@neondatabase/serverless";
 import { readFileSync } from "node:fs";
@@ -153,7 +174,7 @@ The `Game` type requires:
   slug, title, tagline, description, category,
   tags: string[], gradient: [string, string], accent, art,
   isNew?, isFeatured?, plays?,
-  author?, platform?
+  author?, platform?, staged?, coverUrl?
 }
 ```
 
@@ -190,38 +211,49 @@ Fill every field by inferring from the HTML and screenshot:
   dashboard has a "Plays on" control on every game's page, so a correction costs
   one click, but only if the user knows a guess was made.
 
+- **staged**: `true` if (and only if) the user chose to stage the game; otherwise
+  omit it. Never write `staged: false`. This is the floor the deploy reads: the
+  dashboard's Publish button overrides it in the database, so the flag can stay
+  `true` in this file after the game is live. If the `Game` type in `app/lib/games.ts`
+  has no `staged` field, the staging support is not on this branch — stop and say so
+  rather than adding the field yourself.
+- **coverUrl**: staged games only — the `/game-media/<slug>/hero-<hash>.png` path
+  that `publish-game` prints (Step 5). A staged game has no `public/games/<slug>/cover.png`
+  for the `/games/<slug>/cover.png` convention to find, so it needs this. Omit it
+  for live games.
+
 Insert the new entry as the **last** element of the `games` array (just before the closing `];`). Match the formatting style of nearby entries exactly (2-space indent, trailing commas, multi-line description if it would exceed line length).
 
 ### 5. Upload the HTML to Vercel Blob
 
-The runtime route at `app/game-html/[slug]/[[...path]]/route.ts` reads from blob first. Upload the same HTML there so the game loads identically in production (and so the admin page can later overwrite it).
+The runtime route at `app/game-html/[slug]/[[...path]]/route.ts` reads from blob first. Publish through the repo's script so the game loads identically in production and a later dashboard upload overwrites it cleanly. It writes the blob with the same options as the dashboard (`addRandomSuffix: false`, `allowOverwrite: true`) **and** records it in `game_blobs`, which the serving route needs in order to see it.
 
-The token lives in `.env.local` as `BLOB_READ_WRITE_TOKEN`. Run from the project root:
+It needs `BLOB_READ_WRITE_TOKEN` and `DATABASE_URL` (both from `.env.local`). Always dry-run first, read what it says it will do, then run it with `--yes`.
+
+**Live game:**
 
 ```bash
-set -a && . .env.local && set +a && node -e "
-const { put } = require('@vercel/blob');
-const fs = require('fs');
-const slug = '<slug>';
-const html = fs.readFileSync('public/games/'+slug+'/index.html','utf8');
-put('games/'+slug+'/index.html', html, {
-  access: 'public',
-  contentType: 'text/html; charset=utf-8',
-  addRandomSuffix: false,
-  allowOverwrite: true,
-  cacheControlMaxAge: 60,
-}).then(r => console.log('OK', r.url)).catch(e => { console.error(e); process.exit(1); });
-"
+npm run publish-game -- <slug>          # dry run
+npm run publish-game -- <slug> --yes    # writes; also bumps games_version
 ```
 
-Mirror the exact options used by `app/admin/html/page.tsx` (`addRandomSuffix: false`, `allowOverwrite: true`) so a later admin upload cleanly overwrites this one. If `BLOB_READ_WRITE_TOKEN` is missing, skip this step and tell the user.
+**Staged game** — do this step BEFORE Step 4's `games.ts` entry is written, because it prints the cover URL the entry needs:
+
+```bash
+npm run publish-game -- <slug> --staged --from .staging/<slug> --cover .staging/<slug>/cover.png
+npm run publish-game -- <slug> --staged --from .staging/<slug> --cover .staging/<slug>/cover.png --yes
+```
+
+The script refuses a staged source under `public/` and a `public/games/<slug>/` that already exists, and it skips the `games_version` bump (nothing installed should refresh for a game it cannot see). Copy the `coverUrl: "/game-media/..."` line it prints into the entry, together with `staged: true`.
+
+If `BLOB_READ_WRITE_TOKEN` or `DATABASE_URL` is missing the script stops with an error. Skip the upload and tell the user — and for a staged game, also tell them the `games.ts` entry must NOT be committed without the upload, since a staged game that exists only in the repo is unplayable.
 
 ### 6. Remove the source file
 
-The HTML now lives at `public/games/<slug>/index.html` (and in blob). Delete the original drop file so the repo root stays clean:
+The HTML now lives at `public/games/<slug>/index.html` — or `.staging/<slug>/index.html` for a staged game — and in blob. Delete the original drop file so the repo root stays clean:
 
 ```bash
-rm /home/ozi/Projects/unblockedgames/new-game.html
+rm new-game.html
 ```
 
 If the user attached it under a different name, use that path instead.
@@ -230,11 +262,10 @@ If the user attached it under a different name, use that path instead.
 
 - Run `npx tsc --noEmit` (or whatever the project uses) only if you suspect a type issue. Otherwise skip — TypeScript will catch it on the next build.
 - Confirm the artifacts:
-  - `public/games/<slug>/index.html`
-  - `public/games/<slug>/cover.png` (659×613)
-  - new entry in `app/lib/games.ts`
-  - blob upload returned a `https://*.public.blob.vercel-storage.com/games/<slug>/index.html` URL
-- If the dev server is already running, `curl -sI http://localhost:3000/game-html/<slug>/ | head -1` should return 200. Note the trailing slash — `/game-html/<slug>/` is the exact URL the player iframe loads. Don't start a dev server just for this; skip and move on if it isn't up.
+  - live: `public/games/<slug>/index.html` and `public/games/<slug>/cover.png` (659×613); staged: `.staging/<slug>/index.html` and `cover.png`, and **no** `public/games/<slug>/` directory
+  - new entry in `app/lib/games.ts` (staged: with `staged: true` and `coverUrl`)
+  - `publish-game --yes` reported `published games/<slug>/index.html` and `recorded in game_blobs`
+- If the dev server is already running, `curl -sI http://localhost:3000/game-html/<slug>/ | head -1` should return 200 for a live game, and **404 for a staged one** when signed out (that 404 is the proof the staging gate works; testers see it signed in). Note the trailing slash — `/game-html/<slug>/` is the exact URL the player iframe loads. Don't start a dev server just for this; skip and move on if it isn't up.
 
 ### 8. Report
 
@@ -243,20 +274,21 @@ Single short summary to the user:
 - category and art style chosen
 - gradient/accent picked
 - whether the cover is a real screenshot or a placeholder
-- whether the blob upload succeeded (and the URL)
+- whether the `publish-game` upload succeeded
+- live or staged. If staged: that it is invisible to the public, where testers find it (`/beta`), the `coverUrl` written, and that an admin takes it live with **Publish** in the dashboard — no code change, but the next deploy mirrors the files into `public/games/`
 - the `platform` tag, WHAT YOU SAW that justified it, and that it can be changed
   on the game's dashboard page — or that you left it unknown, and why
 - the dev URL: `http://localhost:3000/game/<slug>`
 
-Do NOT commit. The user reviews and commits themselves.
+Do NOT commit. The user reviews and commits themselves. (`.staging/` is gitignored, so a staged game's files never appear in the diff — only the `games.ts` entry does.)
 
 ## Folder flow (multi-file games)
 
-Run this flow when the intake is a directory (or a set of files that form one game). It mirrors the single-file flow — same slug rules, same cover, same `games.ts` entry — but validates the file tree first and uploads *every* file to blob, not just `index.html`.
+Run this flow when the intake is a directory (or a set of files that form one game). It mirrors the single-file flow — same slug rules, same cover, same `games.ts` entry, same live/staged choice — but validates the file tree first and uploads *every* file to blob, not just `index.html`.
 
 ### Folder Step 1: Validate the folder — before touching the repo
 
-Do all of this against the drop folder, before copying anything into `public/`:
+Do all of this against the drop folder, before copying anything into `public/` or `.staging/`:
 
 1. **`index.html` must exist at the folder root** — not nested. If the drop folder wraps everything in a single inner directory (e.g. `my-game/dist/index.html`), treat that inner directory as the game root for every step below.
 2. **Every relative asset reference must resolve to a real file inside the folder.** Scan `index.html` and all `.js`/`.css` files for references:
@@ -280,11 +312,11 @@ Apply the unicode-corruption Python pass from single-file Step 2 to every `.html
 
 ### Folder Step 4: Copy the whole tree
 
-Copy the entire game tree — subdirectories preserved — to `public/games/<slug>/`:
+Copy the entire game tree — subdirectories preserved — to `public/games/<slug>/` (live) or `.staging/<slug>/` (staged):
 
 ```bash
-mkdir -p public/games/<slug>
-cp -r <game-root>/. public/games/<slug>/
+mkdir -p <game-dir>/<slug>
+cp -r <game-root>/. <game-dir>/<slug>/
 ```
 
 ### Folder Step 5: Generate the cover
@@ -295,67 +327,44 @@ which reuses the same server and browser session. The `python3 -m http.server` f
 ### Folder Step 6: Append metadata to `app/lib/games.ts`
 
 Unchanged from single-file Step 4, including **Step 3b** — a folder game needs its
-`author` credit exactly as much as a single-file one, and the question must still
-be asked rather than guessed.
+`author` credit exactly as much as a single-file one, and both questions (author,
+stage) must still be asked rather than guessed. For a staged game, do Folder Step 7
+first: the `coverUrl` comes out of it.
 
 ### Folder Step 7: Upload EVERY file to Vercel Blob
 
-Instead of one `put`, loop over every file under `public/games/<slug>/` (the cleaned copies; skip the generated `cover.png` — it's site metadata, not a game asset) and upload each to `games/<slug>/<relPath>`. Content type is picked by extension — the mapping must mirror `contentTypeForPath` in `app/lib/game-html-blob.ts` (source of truth; the map below is a copy, re-check that file if it may have changed). Token from `.env.local` (`BLOB_READ_WRITE_TOKEN`) exactly as single-file Step 5 documents; if it's missing, skip this step and tell the user.
+Use the same script as single-file Step 5. It walks the folder, uploads each file to `games/<slug>/<relPath>` with the content type the serving route expects, records each in `game_blobs`, and skips `cover.png` (site metadata, not a game asset). It re-checks the rules from Folder Step 1 (safe segments, ≤10 deep, ≤300 files, `index.html` at the root) and stops before uploading anything if one fails.
 
 ```bash
-set -a && . .env.local && set +a && node -e "
-const { put } = require('@vercel/blob');
-const fs = require('fs');
-const path = require('path');
-const slug = '<slug>';
-const root = path.join('public/games', slug);
-// Mirror of CONTENT_TYPES in app/lib/game-html-blob.ts
-const types = {
-  html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8',
-  mjs: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8',
-  json: 'application/json; charset=utf-8', txt: 'text/plain; charset=utf-8',
-  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
-  gif: 'image/gif', svg: 'image/svg+xml', ico: 'image/x-icon',
-  mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav',
-  wasm: 'application/wasm', woff: 'font/woff', woff2: 'font/woff2',
-};
-const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-  e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]);
-(async () => {
-  for (const file of walk(root)) {
-    const rel = path.relative(root, file).split(path.sep).join('/');
-    if (rel === 'cover.png') continue;
-    const ext = path.extname(file).slice(1).toLowerCase();
-    const r = await put('games/' + slug + '/' + rel, fs.readFileSync(file), {
-      access: 'public',
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      cacheControlMaxAge: 60,
-      contentType: types[ext] || 'application/octet-stream',
-    });
-    console.log('OK', r.pathname);
-  }
-})().catch((e) => { console.error(e); process.exit(1); });
-"
+# live
+npm run publish-game -- <slug>
+npm run publish-game -- <slug> --yes
+
+# staged
+npm run publish-game -- <slug> --staged --from .staging/<slug> --cover .staging/<slug>/cover.png
+npm run publish-game -- <slug> --staged --from .staging/<slug> --cover .staging/<slug>/cover.png --yes
 ```
 
-Confirm the loop printed one `OK` line per file, including `games/<slug>/index.html`.
+A multi-file game is accepted only as a **first** upload. The slug was just deduped against `games.ts` in Folder Step 2, so that is what this always is; if the script refuses with "already has published file(s)", the slug is in use — stop and pick another rather than working around it, because a bundle republish has to delete the files it orphans and only the dashboard does that safely.
+
+Confirm the dry run listed every file and the `--yes` run printed `published games/<slug>/<file>` for each, including `games/<slug>/index.html`.
 
 ### Folder Step 8: Cleanup, verify, report
 
-- Remove the drop folder: `rm -rf /home/ozi/Projects/unblockedgames/<drop-folder>` (use the actual path the user dropped it at).
+- Remove the drop folder: `rm -rf <drop-folder>` (use the actual path the user dropped it at).
 - Verify:
-  - `public/games/<slug>/index.html` exists locally AND `games/<slug>/index.html` appeared as an `OK` line in Folder Step 7's output (present in blob).
-  - Pick at least one sub-asset (a `.js` file or an image) and confirm it returns 200 at BOTH `http://localhost:3000/game-html/<slug>/<file>` (blob-first route the player uses) and `http://localhost:3000/games/<slug>/<file>` (static fallback target) via `curl -sI ... | head -1`. Remember the player iframe itself loads `/game-html/<slug>/` — WITH the trailing slash; that slash is what makes the game's relative asset URLs resolve. If the dev server isn't running, skip these curls and say so in the report — do not start one.
-  - `public/games/<slug>/cover.png` is 659×613.
+  - The game's folder (`public/games/<slug>/` live, `.staging/<slug>/` staged — and for a staged game, no `public/games/<slug>/` at all) has `index.html`, AND `games/<slug>/index.html` appeared as a `published` line in Folder Step 7's output (present in blob).
+  - Live games: pick at least one sub-asset (a `.js` file or an image) and confirm it returns 200 at BOTH `http://localhost:3000/game-html/<slug>/<file>` (blob-first route the player uses) and `http://localhost:3000/games/<slug>/<file>` (static fallback target) via `curl -sI ... | head -1`. Staged games have no static twin and answer 404 to a signed-out request — check only that. Remember the player iframe itself loads `/game-html/<slug>/` — WITH the trailing slash; that slash is what makes the game's relative asset URLs resolve. If the dev server isn't running, skip these curls and say so in the report — do not start one.
+  - `cover.png` in the game's folder is 659×613.
   - The new entry is appended to `app/lib/games.ts`.
-- Report as in single-file Step 8, plus: number of files uploaded to blob, any renames made in validation, and any size or unverifiable-reference warnings.
+- Report as in single-file Step 8, plus: number of files published to blob, any renames made in validation, and any size or unverifiable-reference warnings.
 
 ## Notes
 
 - Don't run the dev server. The user already has it running or will start it.
 - Don't open a PR or push.
-- Don't touch `app/admin/` or `app/api/` — those are separate. The blob upload (Step 5, or Folder Step 7) is the *only* blob action that belongs in this flow.
+- Don't touch `app/admin/` or `app/api/` — those are separate. `npm run publish-game` (Step 5, or Folder Step 7) is the *only* blob action that belongs in this flow; do not call `put()` yourself, and never run `sync-games`.
+- Never place a staged game's files anywhere under `public/`.
 - Games are no longer required to be single-file — multi-file games (index.html + JS + assets) are fully supported via the Folder flow.
 - Single-file intake: if the @-mentioned HTML isn't actually a complete game (no `<canvas>`, no `<script>`, just a snippet), stop and ask the user. But an HTML that references sibling `.js`/asset files is not a reason to bail — it means you should be running the Folder flow instead.
 - Folder intake: if there's no `index.html` at the game root, or it's clearly not a playable game, stop and ask the user.
