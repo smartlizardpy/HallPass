@@ -95,14 +95,30 @@ function privateOfflineDoc(pathname) {
 // A response is safe to cache.put only if it's a non-redirected,
 // same-origin (basic/default) success. Avoids redirect-poisoning the cache —
 // some browsers refuse to serve redirected responses for iframe src.
+//
+// It also refuses anything the server marked `no-store` or `private`. Those
+// directives are the origin saying "this body is for one viewer, don't keep a
+// copy": a staged game's files, or a tester's view of a gated route. Every
+// `cache.put` of a fetched response in this file goes through here (install
+// precache, the runtime strategies, the games refresh), so this is the one place
+// that keeps such a response out of every device cache. Public responses carry
+// neither directive, so they behave exactly as before.
+/* @pure-start isCacheable */
 function isCacheable(res) {
-  return !!(
-    res &&
-    res.ok &&
-    !res.redirected &&
-    (res.type === "basic" || res.type === "default")
-  );
+  if (
+    !(
+      res &&
+      res.ok &&
+      !res.redirected &&
+      (res.type === "basic" || res.type === "default")
+    )
+  ) {
+    return false;
+  }
+  const cc = (res.headers && res.headers.get("cache-control")) || "";
+  return !/(^|[\s,])(no-store|private)(?=$|[\s,=])/i.test(cc);
 }
+/* @pure-end */
 
 // ---------- install: precache everything we can. ----------
 self.addEventListener("install", (event) => {
