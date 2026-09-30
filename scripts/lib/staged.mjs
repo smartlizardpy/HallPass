@@ -100,9 +100,12 @@ export function resolveStaged({ staticGames, overrides, externals }) {
     else if (o.staged === false) staged.delete(o.slug);
   }
 
+  // REGISTERED MEANS "in games.ts", and only that. An external game is hosted
+  // off-site and has no mirrored files, so a blob under its slug is stray and
+  // must not cause a directory to be created. Externals still feed the STAGED
+  // set, so a staged one is skipped wherever it turns up.
   const registered = new Set(staticGames.map((g) => g.slug));
   for (const e of externals) {
-    registered.add(e.slug);
     // An external game has no static entry, so its column IS the answer.
     if (e.staged) staged.add(e.slug);
     else staged.delete(e.slug);
@@ -114,7 +117,7 @@ export function resolveStaged({ staticGames, overrides, externals }) {
  * What the sync should do with the blobs of one slug.
  *
  *  - `skip-staged`   staged; never mirrored, whether or not a directory exists
- *  - `mirror`        a local directory exists, or the slug is registered and
+ *  - `mirror`        a local directory exists, or the slug is in games.ts and
  *                    not staged (its directory is created on write)
  *  - `skip-no-dir`   no directory and no proof the game is published — today's
  *                    "deleted game?" skip, and the only outcome when the

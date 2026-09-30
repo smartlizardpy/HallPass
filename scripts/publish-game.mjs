@@ -30,8 +30,9 @@
 // BUNDLES ARE FIRST-PUBLISH ONLY, deliberately. A bundle's REpublish also has
 // to delete the files a new upload orphans (`writeGameHtml` in the dashboard
 // does that with the same index), and getting that wrong deletes a live game's
-// assets. So a multi-file game is accepted only when `game_blobs` has no rows
-// for the slug yet — a first upload has nothing to orphan — and is refused
+// assets. So a multi-file game is accepted only when `game_blobs` has no
+// `index.html` row for the slug yet — a first upload (or the retry of one that
+// died part-way) has no live game to orphan — and is refused
 // loudly otherwise; republishing a bundle keeps going through the dashboard.
 // This is what lets the add-game skill use one code path for single-file and
 // folder games instead of each growing its own `put()` loop.
@@ -168,19 +169,22 @@ if (plan.errors.length > 0) {
   process.exit(1);
 }
 
-// How many blobs this slug already has recorded decides whether a multi-file
-// game is a safe first upload or a republish this script must refuse.
-const [{ n: existingBlobs }] = await sql`
-  SELECT count(*)::int AS n FROM game_blobs WHERE slug = ${slug}
+// Whether the game's index.html is already recorded decides whether a multi-file
+// game is a safe (re)try of a first upload or a republish this script must
+// refuse. Keyed on index.html, not on any row, so a half-finished first attempt
+// does not block its own retry — see `classifyPublish`.
+const indexRows = await sql`
+  SELECT 1 FROM game_blobs WHERE pathname = ${`games/${slug}/index.html`} LIMIT 1
 `;
-const mode = classifyPublish(plan.uploads.length, existingBlobs);
+const mode = classifyPublish(plan.uploads.length, indexRows.length > 0);
 if (mode === "refuse-bundle") {
   const extras = plan.uploads.map((u) => u.rel).filter((r) => r !== "index.html");
   console.error(
-    `error: ${slug} is a multi-file bundle (${extras.join(", ")}) and already has\n` +
-      `       ${existingBlobs} published file(s). Republish it through the dashboard,\n` +
+    `error: ${slug} is a multi-file bundle (${extras.join(", ")}) and already\n` +
+      "       published. Republish it through the dashboard,\n" +
       "       which also removes the files a new upload orphans. This script only\n" +
-      "       handles a lone index.html, or a bundle's FIRST upload.",
+      "       handles a lone index.html, or a bundle's FIRST upload (a retry of a\n" +
+      "       half-finished first upload is fine).",
   );
   process.exit(1);
 }

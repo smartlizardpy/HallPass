@@ -110,7 +110,7 @@ describe("resolveStaged", () => {
     expect(r.staged.has("beta")).toBe(true);
   });
 
-  it("registers external games and honours their own flag", () => {
+  it("honours an external game's flag but does not register it", () => {
     const r = resolveStaged({
       staticGames: STATIC,
       overrides: [],
@@ -119,7 +119,9 @@ describe("resolveStaged", () => {
         { slug: "ext-beta", staged: true },
       ],
     });
-    expect(r.registered?.has("ext-live")).toBe(true);
+    // No mirrored files: a stray blob under an external slug must not get a dir.
+    expect(r.registered?.has("ext-live")).toBe(false);
+    expect(r.registered?.has("ext-beta")).toBe(false);
     expect(r.staged.has("ext-beta")).toBe(true);
     expect(r.staged.has("ext-live")).toBe(false);
   });

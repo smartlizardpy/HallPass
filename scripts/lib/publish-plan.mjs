@@ -182,23 +182,30 @@ export function planUploads(relPaths) {
 }
 
 /**
- * How to treat a folder, given how many `game_blobs` rows the slug already has.
+ * How to treat a folder, given whether the slug is already published.
+ *
+ * "Published" means its `games/<slug>/index.html` row exists in `game_blobs`,
+ * NOT that the slug has any row at all. Uploads write index.html in sorted
+ * order after other files, so a first attempt that died half-way leaves rows for
+ * its assets but none for index.html; counting those would wedge the retry
+ * behind a refusal it could never clear. A game with no index.html blob was
+ * never live, so there is nothing a retry can orphan and overwriting is safe.
  *
  *  - `single`        only index.html: the long-standing publish
- *  - `bundle-first`  several files and nothing published yet: safe, because a
- *                    first upload has no older files to orphan
- *  - `refuse-bundle` several files over an existing publish: a republish must
+ *  - `bundle-first`  several files and no published index.html: safe, because
+ *                    there is no live game whose files a retry could orphan
+ *  - `refuse-bundle` several files over a published game: a republish must
  *                    also delete the files the new upload orphans, which only
  *                    the dashboard does (see `writeGameHtml`); getting it wrong
  *                    deletes a live game's assets
  *
  * @param {number} fileCount uploads, excluding repo-only files
- * @param {number} existingBlobCount rows in game_blobs for this slug
+ * @param {boolean} indexPublished a `games/<slug>/index.html` row exists
  * @returns {"single" | "bundle-first" | "refuse-bundle"}
  */
-export function classifyPublish(fileCount, existingBlobCount) {
+export function classifyPublish(fileCount, indexPublished) {
   if (fileCount <= 1) return "single";
-  return existingBlobCount === 0 ? "bundle-first" : "refuse-bundle";
+  return indexPublished ? "refuse-bundle" : "bundle-first";
 }
 
 /**

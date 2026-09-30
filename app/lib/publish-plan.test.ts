@@ -115,12 +115,16 @@ describe("contentTypeForPath", () => {
 
 describe("classifyPublish", () => {
   it("treats a lone file as single regardless of history", () => {
-    expect(classifyPublish(1, 0)).toBe("single");
-    expect(classifyPublish(1, 4)).toBe("single");
+    expect(classifyPublish(1, false)).toBe("single");
+    expect(classifyPublish(1, true)).toBe("single");
   });
-  it("allows a bundle only as a first upload", () => {
-    expect(classifyPublish(5, 0)).toBe("bundle-first");
-    expect(classifyPublish(5, 1)).toBe("refuse-bundle");
+  it("allows a bundle while index.html is unpublished, refuses it after", () => {
+    expect(classifyPublish(5, false)).toBe("bundle-first");
+    expect(classifyPublish(5, true)).toBe("refuse-bundle");
+  });
+  it("lets a half-finished first upload be retried", () => {
+    // Asset rows exist but index.html's does not, so the caller passes false.
+    expect(classifyPublish(5, false)).toBe("bundle-first");
   });
 });
 
