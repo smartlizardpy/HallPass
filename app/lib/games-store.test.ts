@@ -162,6 +162,19 @@ describe("including-staged resolvers", () => {
   });
 });
 
+describe("upsertOverride's patch type", () => {
+  it("rejects staged and coverUrl at compile time (checked by tsc, not at runtime)", async () => {
+    // @ts-expect-error staged moves only through setGameStaged
+    const withStaged: Parameters<typeof upsertOverride>[1] = { staged: true };
+    // @ts-expect-error coverUrl moves only through setGameCover
+    const withCover: Parameters<typeof upsertOverride>[1] = { coverUrl: "/x.png" };
+    await upsertOverride("hidden", { title: "T" });
+    const [c] = writes();
+    expect(c.text).not.toContain("staged");
+    expect([withStaged, withCover]).toHaveLength(2);
+  });
+});
+
 describe("column writes", () => {
   it("setGameStaged writes only staged", async () => {
     await setGameStaged("hidden", false);

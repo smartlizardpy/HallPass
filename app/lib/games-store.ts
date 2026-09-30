@@ -313,6 +313,14 @@ export async function getOverride(slug: string): Promise<GameOverride | null> {
 }
 
 /**
+ * The copy fields {@link upsertOverride} writes. `staged` and `coverUrl` are
+ * EXCLUDED at the type level: the statement never touches those columns, so
+ * accepting them would make passing one a silent no-op. They move only through
+ * {@link setGameStaged} and {@link setGameCover}.
+ */
+export type UpsertOverridePatch = Partial<Omit<GameOverride, "slug" | "staged" | "coverUrl">>;
+
+/**
  * Insert or replace the override row for `slug`. Every overridable column is
  * written from `patch`, defaulting a MISSING (or explicitly-undefined) key to
  * `null` — i.e. "inherit the static value" — so a partial patch fully defines
@@ -327,7 +335,7 @@ export async function getOverride(slug: string): Promise<GameOverride | null> {
  */
 export async function upsertOverride(
   slug: string,
-  patch: Partial<Omit<GameOverride, "slug">>,
+  patch: UpsertOverridePatch,
 ): Promise<void> {
   const title = patch.title ?? null;
   const tagline = patch.tagline ?? null;
