@@ -15,11 +15,20 @@
  * The cost is that a freshly-posted review may not appear on a cold reload for up
  * to 30s, which optimistic client-side insertion covers. Converting this to
  * `no-store` to "fix" that would put every review read on the origin.
+ *
+ * STAGED GAMES. A staged (beta-only) game's reviews never appear on GET: it
+ * answers the empty page with `no-store`, so nothing is cached at the edge and
+ * nothing is revealed — the reviews surface on publish, when their rows are
+ * already `visible`. POST is open to `canViewStaged()` (testers and dashboard
+ * roles) and answers a staged game to anyone else exactly as an unknown slug:
+ * the same 404 "Unknown game". `auth()` is reached only on that staged branch, so
+ * an ordinary game keeps this route's headers and cost.
  */
 
 import { isMissingColumnError } from "@/app/lib/db";
 import { findGame } from "@/app/lib/games";
-import { isResolvedSlug } from "@/app/lib/games-store";
+import { canViewStaged } from "@/app/lib/beta/staged-access";
+import { isKnownSlug, isStagedSlug } from "@/app/lib/games-store";
 import { reviewPostedCopy } from "@/app/lib/notifications/copy";
 import { notifyAdmins } from "@/app/lib/notifications/deliver";
 import { authorTagSalt, hashBody, reviews } from "@/app/lib/reviews";
@@ -63,6 +72,14 @@ export async function GET(
     rawBefore && Number.isFinite(beforeNum) && beforeNum > 0 ? Math.trunc(beforeNum) : null;
 
   try {
+    // Identity-free on purpose: a staged game is not looked up "for this viewer",
+    // it is simply withheld, and `no-store` keeps that empty answer out of the CDN.
+    if (await isStagedSlug(slug)) {
+      return Response.json(
+        { ...EMPTY, pageSize: REVIEWS_PAGE_SIZE },
+        { headers: { ...NO_STORE, "Access-Control-Allow-Origin": "*" } },
+      );
+    }
     const [page, summary] = await Promise.all([
       reviews.listReviews(slug, { sort, before, salt: authorTagSalt() }),
       reviews.summary(slug),
@@ -137,9 +154,11 @@ export async function POST(
   }
 
   try {
-    if (!(await isResolvedSlug(slug))) {
-      return Response.json({ ok: false, reason: "Unknown game" }, { status: 404, headers: NO_STORE });
-    }
+    const unknownGame = () =>
+      Response.json({ ok: false, reason: "Unknown game" }, { status: 404, headers: NO_STORE });
+    if (!(await isKnownSlug(slug))) return unknownGame();
+    // A staged game answers like an unknown one unless the viewer may see it.
+    if ((await isStagedSlug(slug)) && !(await canViewStaged())) return unknownGame();
 
     const outcome = await reviews.upsertReview({
       slug,
