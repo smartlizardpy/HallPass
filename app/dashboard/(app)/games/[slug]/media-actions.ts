@@ -22,7 +22,7 @@
  *    service worker picks new media up through ordinary `cacheFirst` runtime
  *    caching on the next online visit.
  *
- * 2. THE SLUG IS VALIDATED WITH `isResolvedSlug`, NOT AGAINST THE STATIC ARRAY.
+ * 2. THE SLUG IS VALIDATED WITH `isKnownSlug`, NOT AGAINST THE STATIC ARRAY. It is the including-staged check on purpose: an admin prepares a staged game's gallery before it goes public.
  *    An external (off-site) game has no bundled `cover.png`, so it is precisely
  *    the kind of game that needs uploaded screenshots. `app/lib/favorites.ts`
  *    validates against the static array and therefore silently drops external
@@ -34,7 +34,7 @@ import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { blobOpDisabledMessage, isBlobOpEnabled } from "@/app/lib/blob-ops";
-import { isResolvedSlug } from "@/app/lib/games-store";
+import { isKnownSlug } from "@/app/lib/games-store";
 import {
   MEDIA_CACHE_TAG,
   countMediaForSlug,
@@ -106,7 +106,7 @@ export async function uploadMediaAction(formData: FormData): Promise<void> {
 
   const slug = String(formData.get("slug") ?? "").trim();
   if (!slug) redirect("/dashboard/games?error=Unknown+game");
-  if (!(await isResolvedSlug(slug))) redirect("/dashboard/games?error=Unknown+game");
+  if (!(await isKnownSlug(slug))) redirect("/dashboard/games?error=Unknown+game");
 
   const files = formData
     .getAll("files")

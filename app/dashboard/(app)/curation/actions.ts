@@ -24,7 +24,12 @@ import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { games } from "@/app/lib/games";
-import { CACHE_TAG, setFeaturedGame, setGameNew } from "@/app/lib/games-store";
+import {
+  CACHE_TAG,
+  isStagedSlug,
+  setFeaturedGame,
+  setGameNew,
+} from "@/app/lib/games-store";
 import { gameDropCopy } from "@/app/lib/notifications/copy";
 import { notifyEveryone } from "@/app/lib/notifications/deliver";
 
@@ -61,6 +66,12 @@ export async function setFeaturedAction(formData: FormData): Promise<void> {
 
   const slug = String(formData.get("slug") ?? "").trim();
   if (!slug || !isKnownSlug(slug)) redirect(target("error", "Unknown game."));
+  // A staged game must not become the homepage hero: it would feature a game the
+  // public cannot open. The picker already lists only public games, so this is
+  // the server-side half for a forged or stale form.
+  if (await isStagedSlug(slug)) {
+    redirect(target("error", "That game is staged — publish it before featuring it."));
+  }
 
   let saveFailed = false;
   try {
@@ -86,6 +97,11 @@ export async function toggleNewAction(formData: FormData): Promise<void> {
   const slug = String(formData.get("slug") ?? "").trim();
   const value = formData.get("value") === "true";
   if (!slug || !isKnownSlug(slug)) redirect(target("error", "Unknown game."));
+  // Marking NEW announces the game to everyone (below), so a staged game is
+  // refused here for the same reason it cannot be featured.
+  if (await isStagedSlug(slug)) {
+    redirect(target("error", "That game is staged — publish it before marking it new."));
+  }
 
   let saveFailed = false;
   try {

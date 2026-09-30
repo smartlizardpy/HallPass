@@ -1170,6 +1170,25 @@ export function createBetaStore(sql: Sql) {
       return rows.length > 0;
     },
 
+    /**
+     * Accepted cover shots for one game, newest first: the choices the Publish
+     * panel offers for the game's cover. Only `kind = 'cover'` — a screenshot is
+     * gallery material, not cover art — and only accepted, because an admin has
+     * not yet judged a pending one and a rejected one was judged unfit.
+     */
+    async acceptedCoverShots(slug: string, limit = 24): Promise<BetaShot[]> {
+      const rows = await sql`
+        SELECT id, player_id, slug, blob_path, blob_url, content_type,
+               width, height, bytes, kind, status, created_at, reviewed_by, reviewed_at,
+               promoted_media_id
+        FROM beta_shots
+        WHERE slug = ${slug} AND kind = 'cover' AND status = 'accepted'
+        ORDER BY created_at DESC
+        LIMIT ${Math.max(1, Math.min(100, limit))}
+      `;
+      return rows.map(mapShot);
+    },
+
     /** Accepted shots that never reached the gallery. The repair queue. */
     async unpublishedShots(limit = 100): Promise<BetaShot[]> {
       const rows = await sql`

@@ -9,7 +9,7 @@
  *
  * Three reads feed the cards, every one of them FAIL-SOFT so the grid renders
  * even when a dependency is down:
- *   - `resolveGames()` — the override-applied catalogue (already fails soft to
+ *   - `resolveGamesIncludingStaged()` — the override-applied catalogue, staged games marked (already fails soft to
  *     the static list on a Neon outage).
  *   - `store.listBoards()` — grouped by `gameSlug` into a per-game board count;
  *     `.catch(() => [])` so an unconfigured/unreachable database simply shows
@@ -32,7 +32,7 @@ import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
 import { canEditSite, DASHBOARD_MIN_ROLE } from "@/app/lib/permissions";
 import { getServingBlobMap } from "@/app/lib/game-serving-blobs";
-import { resolveGames } from "@/app/lib/games-store";
+import { resolveGamesIncludingStaged } from "@/app/lib/games-store";
 import { store } from "@/app/lib/scoreboard";
 import { CoverImage } from "@/app/components/CoverImage";
 import type { BoardConfig } from "@/sdk/src/contract";
@@ -109,10 +109,10 @@ export default async function GamesPage({
   const ok = asString(sp.ok);
   const error = asString(sp.error);
 
-  // resolveGames already fails soft; the board list is guarded so an
+  // The resolver already fails soft; the board list is guarded so an
   // unconfigured/unreachable Neon shows "0 boards" instead of throwing.
   const [games, boards, customSlugs] = await Promise.all([
-    resolveGames(),
+    resolveGamesIncludingStaged(),
     store.listBoards().catch(() => [] as BoardConfig[]),
     customHtmlSlugs(),
   ]);
@@ -187,6 +187,9 @@ export default async function GamesPage({
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {game.externalUrl && (
                   <Chip className="bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300">External ↗</Chip>
+                )}
+                {game.staged && (
+                  <Chip className="bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">Staged</Chip>
                 )}
                 {game.isNew && (
                   <Chip className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300">New</Chip>

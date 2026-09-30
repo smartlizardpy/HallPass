@@ -39,7 +39,9 @@ import { buildEmbedSnippet, buildExampleCalls } from "@/app/lib/integration-prom
 import { SITE_URL } from "@/app/lib/site";
 import type { Game } from "@/app/lib/games";
 import { CopyBox } from "./_ui/CopyBox";
-import { resolveCategories, resolveGame, resolveTags } from "@/app/lib/games-store";
+import { PublishPanel } from "./_ui/PublishPanel";
+import { resolveCategories, resolveGameIncludingStaged, resolveTags } from "@/app/lib/games-store";
+import { beta } from "@/app/lib/beta";
 import { store } from "@/app/lib/scoreboard";
 import { getGameMedia, mediaPublicPath } from "@/app/lib/game-media";
 import {
@@ -232,6 +234,11 @@ function GameReadOnlyView({ game, slug }: { game: Game; slug: string }) {
                   Featured
                 </span>
               )}
+              {game.staged && (
+                <span className="inline-block rounded-full bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-300">
+                  Staged
+                </span>
+              )}
             </div>
             <h2 className="mt-1 text-xl font-black tracking-tight">
               {game.title}
@@ -318,7 +325,8 @@ export default async function GameControlPage({
   const { role } = await requireRole(DASHBOARD_MIN_ROLE);
 
   const { slug } = await params;
-  const game = await resolveGame(slug);
+  // Including staged: this is the dashboard, where a staged game must open.
+  const game = await resolveGameIncludingStaged(slug);
   if (!game) notFound();
 
   // ── A ROLE THAT CANNOT EDIT GETS A DIFFERENT PAGE, NOT A DISABLED ONE ─────
@@ -336,6 +344,12 @@ export default async function GameControlPage({
   const sp = await searchParams;
   const ok = asString(sp.ok);
   const error = asString(sp.error);
+
+  // Only a staged game has a Publish panel, so only a staged game pays for the
+  // read. Fail-soft: a Neon blip costs the picker, not the page.
+  const covers = game.staged
+    ? await beta.acceptedCoverShots(slug).catch(() => [])
+    : [];
 
   const inputClass =
     "mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30";
@@ -386,6 +400,11 @@ export default async function GameControlPage({
               <span className="inline-block rounded-full bg-sky-50 dark:bg-sky-950/40 px-2 py-0.5 text-xs font-bold text-sky-700 dark:text-sky-300">
                 External ↗
               </span>
+              {game.staged && (
+                <span className="inline-block rounded-full bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-300">
+                Staged
+              </span>
+              )}
               <h2 className="mt-1 text-xl font-black tracking-tight">{game.title}</h2>
               <p className="mt-1 text-sm text-muted">{game.category}</p>
               <div className="mt-3 flex flex-wrap gap-2">
@@ -410,6 +429,10 @@ export default async function GameControlPage({
             </div>
           </div>
         </Section>
+
+        {game.staged && (
+          <PublishPanel slug={slug} title={game.title} covers={covers} />
+        )}
 
         {/* DETAILS — one write covering every descriptive field + colours + an
             optional cover-URL override. */}
@@ -704,7 +727,12 @@ export default async function GameControlPage({
             <CoverImage game={game} initialClass="text-3xl" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-xl font-black tracking-tight">{game.title}</h2>
+            {game.staged && (
+              <span className="inline-block rounded-full bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-300">
+                Staged
+              </span>
+            )}
+            <h2 className="mt-1 text-xl font-black tracking-tight">{game.title}</h2>
             <p className="mt-1 text-sm text-muted">{game.category}</p>
             <Link
               href={`/game/${slug}`}
@@ -716,6 +744,10 @@ export default async function GameControlPage({
           </div>
         </div>
       </Section>
+
+      {game.staged && (
+        <PublishPanel slug={slug} title={game.title} covers={covers} />
+      )}
 
       {/* DETAILS */}
       <Section title="Details" subtitle="Overrides the static catalogue">

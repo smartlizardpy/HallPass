@@ -245,6 +245,8 @@ export async function createExternalGameAction(formData: FormData): Promise<void
   // Not defaulted to "both": an untested claim of mobile support is the one thing
   // this tag exists to stop the site from making.
   const platform = toGamePlatform(formData.get("platform"));
+  // An unticked checkbox posts nothing, so absence means public, as before.
+  const staged = formData.get("staged") === "on";
 
   // Tags arrive one field per chip from the TagEditor (getAll), trimmed + deduped
   // case-insensitively (first spelling wins) to mirror the editor's own hygiene.
@@ -306,6 +308,7 @@ export async function createExternalGameAction(formData: FormData): Promise<void
       isNew: true,
       isFeatured: false,
       platform,
+      staged,
     });
   } catch {
     saveFailed = true;

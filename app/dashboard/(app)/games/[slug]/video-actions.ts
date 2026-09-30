@@ -18,7 +18,7 @@
  *    `catch` around it swallows the redirect and leaves the admin staring at a form
  *    that appears to have done nothing.
  *
- * 3. `isResolvedSlug`, NEVER the static `games` array — the static array silently
+ * 3. `isKnownSlug`, NEVER the static `games` array — the static array silently
  *    excludes every external game, and an external game (no bundled source, often
  *    no screenshots of its own) is exactly the kind that most needs a video.
  *
@@ -39,7 +39,7 @@ import {
   clearGameVideo,
   setGameVideo,
 } from "@/app/lib/game-videos";
-import { isResolvedSlug } from "@/app/lib/games-store";
+import { isKnownSlug } from "@/app/lib/games-store";
 import { parseYouTubeId } from "@/app/lib/youtube";
 
 function target(slug: string, status: "ok" | "error", message: string): string {
@@ -53,7 +53,7 @@ export async function setGameVideoAction(formData: FormData): Promise<void> {
   const url = String(formData.get("videoUrl") ?? "").trim();
   const rawLabel = String(formData.get("videoLabel") ?? "").trim();
 
-  if (!slug || !(await isResolvedSlug(slug))) {
+  if (!slug || !(await isKnownSlug(slug))) {
     redirect("/dashboard/games?error=Unknown+game.");
   }
 
