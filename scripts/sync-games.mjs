@@ -10,12 +10,32 @@
 // Never deletes local files (cover.png exists only in the repo) and never
 // writes blob paths that fail validation.
 //
-// Usage: npm run sync-games   (needs BLOB_READ_WRITE_TOKEN, or .env.local)
+// STAGED GAMES ARE NEVER MIRRORED. `public/games/` is served as free static files
+// at predictable, unauthenticated URLs, so a staged (beta-only) game copied in
+// here would be public no matter what the serving route gates. The staged set is
+// `override ?? static ?? false` (see scripts/lib/staged.mjs); the static half is
+// read from games.ts, the override half from the database when DATABASE_URL is
+// set. The same read lets a game that was STAGED and has since been published
+// get its directory created — until now a blob with no local directory was
+// skipped as a "deleted game", which is exactly what a freshly published game
+// looks like. If the database cannot be read, this falls back to the old
+// behaviour (existing directories only, never a new one) plus skipping the games
+// the repo itself marks staged.
+//
+// Usage: npm run sync-games   (needs BLOB_READ_WRITE_TOKEN, or .env.local;
+//                              DATABASE_URL is optional, read-only use)
 
+import { neon } from "@neondatabase/serverless";
 import { list } from "@vercel/blob";
 import { existsSync, statSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import {
+  decideSlug,
+  fetchStagedRows,
+  parseStaticGames,
+  resolveStaged,
+} from "./lib/staged.mjs";
 
 const rootDir = path.resolve(import.meta.dirname, "..");
 const gamesDir = path.join(rootDir, "public", "games");
@@ -27,7 +47,7 @@ const mirrorStampPath = path.join(rootDir, "app", "lib", "mirror-synced-at.ts");
 // possibly 404 if this run didn't capture it).
 const syncStartedAt = Date.now();
 
-if (!process.env.BLOB_READ_WRITE_TOKEN) {
+if (!process.env.BLOB_READ_WRITE_TOKEN || !process.env.DATABASE_URL) {
   try {
     process.loadEnvFile(path.join(rootDir, ".env.local"));
   } catch {
@@ -57,6 +77,51 @@ const BLOB_PREFIX = "games/";
 const VERSION_SENTINEL = "games/version.txt";
 // Matches the segment cap in app/game-html/[slug]/[[...path]]/route.ts.
 const MAX_PATH_SEGMENTS = 10;
+
+// Resolve which games are staged BEFORE touching the store. The static flag is
+// always available; the override layer needs the database, which is optional
+// here and never allowed to fail the sync.
+const gamesSource = await readFile(
+  path.join(rootDir, "app", "lib", "games.ts"),
+  "utf8",
+);
+const staticGames = parseStaticGames(gamesSource);
+if (staticGames.length === 0) {
+  console.log("warn: parsed no entries from games.ts; staged check is DB-only");
+}
+
+let rows = { overrides: null, externals: null, error: "DATABASE_URL is not set" };
+if (process.env.DATABASE_URL) {
+  // A hung connection must not hold up a deploy: give the read 10s, then fall
+  // back. `fetchStagedRows` turns a rejection into the same fallback.
+  const timeout = new Promise((resolve) =>
+    setTimeout(
+      () =>
+        resolve({
+          overrides: null,
+          externals: null,
+          error: "timed out after 10s",
+        }),
+      10_000,
+    ).unref(),
+  );
+  rows = await Promise.race([
+    fetchStagedRows(neon(process.env.DATABASE_URL)),
+    timeout,
+  ]);
+}
+const { staged: stagedSlugs, registered: registeredSlugs } = resolveStaged({
+  staticGames,
+  overrides: rows.overrides,
+  externals: rows.externals,
+});
+if (registeredSlugs === null) {
+  console.log(
+    `warn: staging overrides unavailable (${rows.error}); using games.ts flags only,\n` +
+      "      mirroring existing directories and creating none",
+  );
+}
+console.log(`staged (never mirrored): ${[...stagedSlugs].join(", ") || "(none)"}`);
 
 let synced = 0;
 let skipped = 0;
@@ -100,7 +165,18 @@ for (const blob of blobs) {
   }
 
   const slugDir = path.join(gamesDir, slug);
-  if (!existsSync(slugDir) || !statSync(slugDir).isDirectory()) {
+  const decision = decideSlug({
+    slug,
+    hasLocalDir: existsSync(slugDir) && statSync(slugDir).isDirectory(),
+    staged: stagedSlugs,
+    registered: registeredSlugs,
+  });
+  if (decision === "skip-staged") {
+    logItem(pathname, "skip (staged: beta-only, never mirrored)");
+    skipped += 1;
+    continue;
+  }
+  if (decision === "skip-no-dir") {
     logItem(pathname, `skip (warn: no local public/games/${slug}/ — deleted game?)`);
     skipped += 1;
     continue;
