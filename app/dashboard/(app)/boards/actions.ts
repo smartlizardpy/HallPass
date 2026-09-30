@@ -36,7 +36,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
-import { games } from "@/app/lib/games";
+import { isKnownSlug } from "@/app/lib/games-store";
 import { store } from "@/app/lib/scoreboard";
 import {
   parseCreateBoardInput,
@@ -44,8 +44,15 @@ import {
   type RawBoardInput,
 } from "@/app/lib/scoreboard/board-input";
 
-/** Games-list membership test injected into the shared board validator. */
-const isKnownGame = (s: string): boolean => games.some((g) => g.slug === s);
+/**
+ * Games-list membership test injected into the shared board validator.
+ *
+ * The RESOLVED catalogue with STAGED games included (`isKnownSlug`): an admin
+ * provisions a board for a beta-only game before it is published, and the game
+ * picker on the board pages lists the same set. These are role-gated actions, so
+ * naming a staged slug here reveals nothing to anyone who should not know it.
+ */
+const isKnownGame = (s: string): Promise<boolean> => isKnownSlug(s);
 
 /**
  * Lift a submitted `FormData` into the validator's `RawBoardInput` shape and run
@@ -53,7 +60,7 @@ const isKnownGame = (s: string): boolean => games.some((g) => g.slug === s);
  * at the top of the file; everything else (slug/title/sort/scoreLabel rules) is
  * left to `parseCreateBoardInput`.
  */
-function parseBoardForm(
+async function parseBoardForm(
   formData: FormData,
   // A board may already be LINKED to a game that has since been removed from the
   // catalogue. When editing such a board we must still accept its existing link
@@ -61,7 +68,7 @@ function parseBoardForm(
   // "Unknown game" and the board becomes uneditable. `allowGameSlug` grandfathers
   // that one slug into the membership test.
   allowGameSlug?: string,
-): ParseBoardInputResult {
+): Promise<ParseBoardInputResult> {
   const maxScoreField = String(formData.get("maxScore") ?? "").trim();
   const gameSlugField = String(formData.get("gameSlug") ?? "");
 
@@ -76,8 +83,13 @@ function parseBoardForm(
     gameSlug: gameSlugField === "" ? null : gameSlugField,
   };
 
+  // The validator's membership test is synchronous, so resolve the one slug it
+  // could ask about up front.
+  const requested = gameSlugField === "" ? null : gameSlugField;
+  const requestedKnown = requested ? await isKnownGame(requested) : false;
   const known = (s: string): boolean =>
-    isKnownGame(s) || (Boolean(allowGameSlug) && s === allowGameSlug);
+    (s === requested && requestedKnown) ||
+    (Boolean(allowGameSlug) && s === allowGameSlug);
   return parseCreateBoardInput(raw, { isKnownGame: known });
 }
 
@@ -106,7 +118,7 @@ export async function createBoardAction(formData: FormData): Promise<void> {
     returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "";
   const errorBase = safeReturn || "/dashboard/boards/new";
 
-  const parsed = parseBoardForm(formData);
+  const parsed = await parseBoardForm(formData);
   if (!parsed.ok) {
     redirect(`${errorBase}?error=${encodeURIComponent(parsed.error.message)}`);
   }
@@ -152,7 +164,7 @@ export async function updateBoardAction(formData: FormData): Promise<void> {
   // Accept the board's existing (possibly now-removed) game link so it survives
   // the save rather than being rejected as unknown — see parseBoardForm.
   const originalGameSlug = String(formData.get("originalGameSlug") ?? "").trim();
-  const parsed = parseBoardForm(formData, originalGameSlug || undefined);
+  const parsed = await parseBoardForm(formData, originalGameSlug || undefined);
   if (!parsed.ok) {
     redirect(
       `/dashboard/boards/${encodeURIComponent(slug)}?error=${encodeURIComponent(parsed.error.message)}`,
@@ -200,7 +212,7 @@ export async function linkBoardAction(formData: FormData): Promise<void> {
 
   // Reject a target that doesn't name a real game, so a typo or stale form can't
   // point a board at a slug with no game behind it (mirrors parseBoardForm).
-  if (!isKnownGame(gameSlug)) redirect("/dashboard/games?error=Unknown+game");
+  if (!(await isKnownGame(gameSlug))) redirect("/dashboard/games?error=Unknown+game");
 
   let linkFailed = false;
   try {

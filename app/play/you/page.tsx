@@ -33,7 +33,8 @@ import { ChallengeLinks } from "./_ui/ChallengeLinks";
 import { ShareChallenge } from "@/app/components/challenges/ShareChallenge";
 import { earnedBadges, lockedBadges } from "@/app/lib/badges";
 import { getOwnedLinks } from "@/app/lib/challenges";
-import { resolveGames } from "@/app/lib/games-store";
+import { canViewStaged } from "@/app/lib/beta/staged-access";
+import { isStagedSlug, resolveGames } from "@/app/lib/games-store";
 import { store } from "@/app/lib/scoreboard";
 import { readBadgeStats, readOwnSocial, readPlayerId } from "./_data";
 
@@ -62,7 +63,7 @@ export default async function YouProfilePage() {
   // page that quietly assumed identity would be the wrong kind of shortcut.
   if (!playerId) return null;
 
-  const [stats, own, standings, catalogue, links] = await Promise.all([
+  const [stats, own, allStandings, catalogue, links] = await Promise.all([
     // Both `cache`d and already resolved by the layout's header — free here.
     readBadgeStats(),
     readOwnSocial(),
@@ -80,6 +81,22 @@ export default async function YouProfilePage() {
     // nothing rather than costing the page.
     getOwnedLinks(playerId),
   ]);
+
+  // STAGED BOARDS. A board linked to a staged (beta-only) game is a standing the
+  // public must not see, and an owner who posted to one as a tester can lose the
+  // right to see it (a beta tester who has since left). Those rows are dropped
+  // unless the viewer can still see staged games. `canViewStaged()` — and so its
+  // `auth()` — runs only when a staged row actually exists; most players never
+  // post to one. A fixed list of slugs, not a per-row call, keeps it to one check.
+  const gameSlugs = [
+    ...new Set(allStandings.flatMap((s) => (s.gameSlug ? [s.gameSlug] : []))),
+  ];
+  const stagedFlags = await Promise.all(gameSlugs.map((slug) => isStagedSlug(slug)));
+  const stagedSlugs = new Set(gameSlugs.filter((_, i) => stagedFlags[i]));
+  const standings =
+    stagedSlugs.size === 0 || (await canViewStaged())
+      ? allStandings
+      : allStandings.filter((s) => !(s.gameSlug && stagedSlugs.has(s.gameSlug)));
 
   /**
    * Boards whose game can carry a share link.
