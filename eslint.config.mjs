@@ -15,6 +15,9 @@ const eslintConfig = defineConfig([
     // Generated Scoreboard SDK build output + test coverage.
     "public/sdk/**",
     "coverage/**",
+    // Agent-harness git worktrees checked out inside the repo (see .gitignore):
+    // each is a full second copy of the source tree and lints on its own.
+    ".claude/worktrees/**",
   ]),
   // The browser SDK source must stay free of server / Next / Neon imports so it
   // can be lifted into a standalone published npm package with zero churn. The
