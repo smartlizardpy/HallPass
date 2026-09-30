@@ -41,7 +41,7 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { auth } from "@/app/lib/auth";
 import { isBlobOpEnabled } from "@/app/lib/blob-ops";
 import { beta } from "@/app/lib/beta";
-import { isResolvedSlug } from "@/app/lib/games-store";
+import { isKnownSlug } from "@/app/lib/games-store";
 
 const NO_STORE: Record<string, string> = { "Cache-Control": "private, no-store" };
 
@@ -76,8 +76,10 @@ export async function POST(request: Request): Promise<Response> {
 
         // The slug is the second path segment: beta-clips/<slug>/<id>.webm.
         // Validating it stops a token being minted for a path that no game owns.
+        // `isKnownSlug` includes STAGED games: the tester/role check above is the
+        // gate, and a staged game is precisely what testers record clips of.
         const slug = pathname.split("/")[1] ?? "";
-        if (!pathname.startsWith("beta-clips/") || !(await isResolvedSlug(slug))) {
+        if (!pathname.startsWith("beta-clips/") || !(await isKnownSlug(slug))) {
           throw new Error("Bad path");
         }
 

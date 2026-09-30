@@ -27,7 +27,7 @@ import Link from "next/link";
 import { BackButton } from "@/app/components/BackButton";
 import { CoverImage } from "@/app/components/CoverImage";
 import { Wordmark } from "@/app/components/Wordmark";
-import { resolveGames } from "@/app/lib/games-store";
+import { resolveGamesIncludingStaged } from "@/app/lib/games-store";
 import {
   getAssignments,
   getBetaStanding,
@@ -46,6 +46,7 @@ import {
   KindChip,
   ReportStatusChip,
   SeverityChip,
+  StagedChip,
 } from "./_ui/Chips";
 import { RankMeter } from "./_ui/RankMeter";
 
@@ -64,17 +65,20 @@ function formatDay(iso: string): string {
 export default async function BetaHomePage() {
   const { playerId, viaAdmin } = await requireBetaTester();
 
-  // Resolved together to avoid a request waterfall. `resolveGames()` is cached
-  // and already fails soft to the static catalogue on a Neon outage.
+  // Resolved together to avoid a request waterfall. The resolver is cached and
+  // already fails soft to the static catalogue on a Neon outage. It is the
+  // INCLUDING-STAGED view: `requireBetaTester` above is the gate, and testers
+  // must see staged games here (and titles for assignments on them).
   const [standing, assignments, reports, games] = await Promise.all([
     getBetaStanding(playerId),
     getAssignments(playerId),
     getOwnReports(playerId),
-    resolveGames(),
+    resolveGamesIncludingStaged(),
   ]);
 
   // One lookup for the whole page rather than a find() per assignment row.
   const bySlug = new Map(games.map((game) => [game.slug, game]));
+  const stagedGames = games.filter((game) => game.staged === true);
 
   // The same question the admin's assign panel asks, answered from the same
   // vocabulary rather than by repeating the status names here — this page is
@@ -181,6 +185,52 @@ export default async function BetaHomePage() {
             </>
           )}
         </section>
+
+        {/* STAGED GAMES ----------------------------------------------------- */}
+        {/* Every staged game, for any tester: staged games are open to all
+            testers, not only the assigned. The session page is the same gated
+            route the queue links to. Hidden entirely when there are none. */}
+        {stagedGames.length > 0 && (
+          <section className="rounded-xl border border-border bg-surface p-6">
+            <h2 className="text-sm font-black uppercase tracking-wide text-foreground">
+              Staged games
+            </h2>
+            <p className="mt-2 text-sm font-semibold text-muted">
+              Not public yet. Only testers can play these.
+            </p>
+            <ul className="mt-4 space-y-2">
+              {stagedGames.map((game) => (
+                <li key={game.slug}>
+                  <Link
+                    href={`/beta/session/${game.slug}`}
+                    className="card flex items-center gap-4 rounded-lg border border-border bg-surface-2 p-3 transition hover:border-brand"
+                  >
+                    <span className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-zinc-900">
+                      <CoverImage game={game} initialClass="text-xl" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <span className="truncate font-black text-foreground">
+                          {game.title}
+                        </span>
+                        <StagedChip />
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs font-semibold text-muted">
+                        {game.tagline}
+                      </span>
+                    </span>
+                    <span
+                      aria-hidden
+                      className="shrink-0 text-lg font-black text-brand"
+                    >
+                      →
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {/* YOUR REPORTS ----------------------------------------------------- */}
         <section className="rounded-xl border border-border bg-surface p-6">

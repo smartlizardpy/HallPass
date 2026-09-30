@@ -189,4 +189,50 @@ describe("chooseGameSource", () => {
       }),
     ).toEqual({ kind: "proxy", url });
   });
+
+  it("never returns the static twin for a staged game", () => {
+    // Old blob, static twin present: a public game would 307 here. Staged must
+    // proxy, because the CDN path is reachable by anyone.
+    expect(
+      chooseGameSource({
+        staticExists: true,
+        blob: { url, uploadedAt: 1 },
+        mirrorSyncedAt: STAMP,
+        staged: true,
+      }),
+    ).toEqual({ kind: "proxy", url });
+    expect(
+      chooseGameSource({
+        staticExists: true,
+        blob: { url, uploadedAt: STAMP + 1 },
+        mirrorSyncedAt: STAMP,
+        staged: true,
+      }),
+    ).toEqual({ kind: "proxy", url });
+  });
+
+  it("reports a staged game with no blob as missing, never static", () => {
+    expect(
+      chooseGameSource({
+        staticExists: true,
+        blob: null,
+        mirrorSyncedAt: STAMP,
+        staged: true,
+      }),
+    ).toEqual({ kind: "missing" });
+    expect(
+      chooseGameSource({ staticExists: false, blob: null, mirrorSyncedAt: STAMP, staged: true }),
+    ).toEqual({ kind: "missing" });
+  });
+
+  it("leaves a game that is not staged on today's rules", () => {
+    expect(
+      chooseGameSource({
+        staticExists: true,
+        blob: { url, uploadedAt: 1 },
+        mirrorSyncedAt: STAMP,
+        staged: false,
+      }),
+    ).toEqual({ kind: "static" });
+  });
 });

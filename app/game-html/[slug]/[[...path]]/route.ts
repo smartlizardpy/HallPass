@@ -1,4 +1,3 @@
-import { notFound } from "next/navigation";
 import {
   blobPathForAsset,
   chooseGameSource,
@@ -9,8 +8,22 @@ import { getServingBlobMap } from "@/app/lib/game-serving-blobs";
 import { STATIC_GAME_FILES } from "@/app/lib/static-games-manifest";
 import { MIRROR_SYNCED_AT } from "@/app/lib/mirror-synced-at";
 import { games } from "@/app/lib/games";
+import { isStagedSlug } from "@/app/lib/games-store";
+import { canViewStaged } from "@/app/lib/beta/staged-access";
 
 const MAX_PATH_SEGMENTS = 10;
+
+/**
+ * The one 404 for "no such game" AND "staged and you may not see it". They must be
+ * indistinguishable, so both come from here: a denied request that differed from
+ * an unknown slug by so much as a header would confirm the staged game exists.
+ * `no-store` keeps a shared cache from replaying the answer to someone allowed.
+ */
+const NOT_FOUND = () =>
+  new Response("Not found", {
+    status: 404,
+    headers: { "cache-control": "no-store" },
+  });
 
 /**
  * Serves any game file, preferring the FREE static twin over Vercel Blob.
@@ -31,13 +44,26 @@ const MAX_PATH_SEGMENTS = 10;
  * The 307-to-static branch is the exact path the service worker already handles
  * for reset/absent games (opaqueredirect → serve the precached twin), so offline
  * play is unaffected.
+ *
+ * STAGED GAMES (beta-only, see `game-staging.ts`) take a stricter path. The static
+ * `games.some` gate below still answers "does this game exist natively", then
+ * `isStagedSlug` (a cache hit) decides whether the game is staged. Only then is
+ * `canViewStaged()` — and so `auth()` — called, so a public slug keeps its exact
+ * cost and cache headers. A denied request is the same 404 as an unknown slug. A
+ * permitted one is served from Blob only (never the 307 to `/games/<slug>/…`,
+ * which anyone could open) with `private, no-store`, so neither the CDN nor the
+ * service worker keeps a copy. The blob URL itself is never sent to the client.
  */
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ slug: string; path?: string[] }> },
 ) {
   const { slug, path } = await params;
-  if (!games.some((g) => g.slug === slug)) notFound();
+  if (!games.some((g) => g.slug === slug)) return NOT_FOUND();
+
+  // Only a staged slug pays for auth(); see the docblock.
+  const staged = await isStagedSlug(slug);
+  if (staged && !(await canViewStaged())) return NOT_FOUND();
 
   const segments = path ?? [];
   if (segments.length > MAX_PATH_SEGMENTS || !segments.every(isSafeSegment)) {
@@ -59,7 +85,10 @@ export async function GET(
     staticExists: STATIC_GAME_FILES.has(`${slug}/${relPath}`),
     blob,
     mirrorSyncedAt: MIRROR_SYNCED_AT,
+    staged,
   });
+
+  if (source.kind === "missing") return NOT_FOUND();
 
   if (source.kind === "static") {
     return Response.redirect(staticUrl, 307);
@@ -67,7 +96,8 @@ export async function GET(
 
   const upstream = await fetch(source.url, { cache: "no-store" });
   if (!upstream.ok || !upstream.body) {
-    return Response.redirect(staticUrl, 307);
+    // A staged game has no public twin to fall back to.
+    return staged ? NOT_FOUND() : Response.redirect(staticUrl, 307);
   }
 
   return new Response(upstream.body, {
@@ -78,7 +108,9 @@ export async function GET(
           ? "text/html; charset=utf-8"
           : contentTypeForPath(relPath),
       "content-disposition": "inline",
-      "cache-control": "public, max-age=60, s-maxage=60",
+      "cache-control": staged
+        ? "private, no-store"
+        : "public, max-age=60, s-maxage=60",
       "x-content-type-options": "nosniff",
     },
   });

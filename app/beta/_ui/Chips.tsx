@@ -111,6 +111,15 @@ export function ShotStatusChip({ status }: { status: ShotStatus }) {
 }
 
 /**
+ * Marks a game that only testers and dashboard roles can see (see
+ * `app/lib/game-staging.ts`). Brand-toned like an open item, because it is the
+ * thing a tester is here to look at and the public cannot.
+ */
+export function StagedChip() {
+  return <Pill tone="bg-brand-50 text-brand">Staged</Pill>;
+}
+
+/**
  * An XP amount, always signed with a `+`.
  *
  * Only ever renders a positive number: awards are append-only and the amount
