@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { publicStaticSlugs } from "../../scripts/lib/static-game-slugs.mjs";
+import { parseStaticGames } from "../../scripts/lib/staged.mjs";
 import { games, publicGames } from "./games";
 
 const sample = `
@@ -16,7 +16,13 @@ export const games: Game[] = [
 /** docs mention slug: "x" and staged: true */
 `;
 
-describe("publicStaticSlugs (sw-manifest fallback)", () => {
+// The sw-manifest fallback's view: the slugs of the non-staged entries.
+const publicStaticSlugs = (src: string): string[] =>
+  parseStaticGames(src)
+    .filter((g: { staged: boolean }) => !g.staged)
+    .map((g: { slug: string }) => g.slug);
+
+describe("parseStaticGames as the sw-manifest fallback", () => {
   it("skips staged entries and ignores text outside the array", () => {
     expect(publicStaticSlugs(sample)).toEqual(["a", "c", "e"]);
   });
