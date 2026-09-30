@@ -64,6 +64,8 @@ export type ExternalGameRow = {
   is_new: boolean;
   is_featured: boolean;
   platform: GamePlatform | null;
+  /** Staged = beta-testers/dashboard only until published. NOT NULL, default false. */
+  staged: boolean;
   plays: number;
 };
 
@@ -104,6 +106,10 @@ function mapRow(row: Row): Game {
     // `null`) so an untagged external game is indistinguishable from an untagged
     // static one to everything downstream.
     platform: toGamePlatform(row.platform) ?? undefined,
+    // Always a real boolean here (the column is NOT NULL DEFAULT false). Unlike
+    // the override layer there is no static entry to inherit from — the row is
+    // the whole truth. `games-store` filters on it for the public view.
+    staged: Boolean(row.staged),
   };
 }
 
@@ -119,7 +125,7 @@ const readExternalGamesCached = unstable_cache(
   async (): Promise<Game[]> => {
     const rows = await sql`
       SELECT slug, title, tagline, description, category, tags, external_url,
-             cover_url, accent, gradient_from, gradient_to, is_new, is_featured, platform, plays
+             cover_url, accent, gradient_from, gradient_to, is_new, is_featured, platform, staged, plays
       FROM external_games
       ORDER BY created_at DESC
     `;
@@ -155,7 +161,7 @@ export async function readExternalGames(): Promise<Game[]> {
 export async function listExternalGames(): Promise<Game[]> {
   const rows = await sql`
     SELECT slug, title, tagline, description, category, tags, external_url,
-           cover_url, accent, gradient_from, gradient_to, is_new, is_featured, platform, plays
+           cover_url, accent, gradient_from, gradient_to, is_new, is_featured, platform, staged, plays
     FROM external_games
     ORDER BY created_at DESC
   `;
@@ -166,7 +172,7 @@ export async function listExternalGames(): Promise<Game[]> {
 export async function getExternalGame(slug: string): Promise<Game | null> {
   const rows = await sql`
     SELECT slug, title, tagline, description, category, tags, external_url,
-           cover_url, accent, gradient_from, gradient_to, is_new, is_featured, platform, plays
+           cover_url, accent, gradient_from, gradient_to, is_new, is_featured, platform, staged, plays
     FROM external_games
     WHERE slug = ${slug}
   `;
@@ -194,6 +200,8 @@ export type CreateExternalGameInput = {
   isNew: boolean;
   isFeatured: boolean;
   platform: GamePlatform | null;
+  /** Create the game staged (beta-only). Omitted means public, as before. */
+  staged?: boolean;
 };
 
 /**
@@ -208,13 +216,13 @@ export async function createExternalGame(
   await sql`
     INSERT INTO external_games (
       slug, title, tagline, description, category, tags, external_url,
-      cover_url, accent, gradient_from, gradient_to, is_new, is_featured, platform
+      cover_url, accent, gradient_from, gradient_to, is_new, is_featured, platform, staged
     )
     VALUES (
       ${input.slug}, ${input.title}, ${input.tagline}, ${input.description},
       ${input.category}, ${input.tags}, ${input.externalUrl}, ${input.coverUrl},
       ${input.accent}, ${input.gradientFrom}, ${input.gradientTo},
-      ${input.isNew}, ${input.isFeatured}, ${input.platform}
+      ${input.isNew}, ${input.isFeatured}, ${input.platform}, ${input.staged ?? false}
     )
   `;
 }
@@ -302,6 +310,23 @@ export async function setExternalGamePlatform(
   await sql`
     UPDATE external_games
     SET platform = ${platform}, updated_at = now()
+    WHERE slug = ${slug}
+  `;
+}
+
+/**
+ * Overwrite ONLY the `staged` flag of an existing external game. `false`
+ * publishes it. A single-column write, like {@link setExternalGamePlatform}, so
+ * publishing never has to carry the rest of the row. Caller must
+ * `updateTag(EXTERNAL_CACHE_TAG)` + revalidate after.
+ */
+export async function setExternalGameStaged(
+  slug: string,
+  staged: boolean,
+): Promise<void> {
+  await sql`
+    UPDATE external_games
+    SET staged = ${staged}, updated_at = now()
     WHERE slug = ${slug}
   `;
 }
