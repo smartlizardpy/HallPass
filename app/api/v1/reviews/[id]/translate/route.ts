@@ -19,9 +19,15 @@
  * translation that simply did not come back (upstream timeout, rate-limit, or shape
  * change) answers `{ ok: false, reason: "unavailable" }` with a short cache — the
  * client keeps showing the original text rather than erroring in front of a pupil.
+ *
+ * STAGED GAMES. A review of a staged (beta-only) game is 404 "not-found" to
+ * anyone who cannot view staged games — the same answer as a review that does not
+ * exist, since ids are sequential and would otherwise leak it. Only that branch
+ * reads the session; every other review keeps the public CDN cache.
  */
 
 import { isMissingColumnError } from "@/app/lib/db";
+import { isReviewHiddenFromViewer } from "@/app/lib/beta/staged-review";
 import { reviews } from "@/app/lib/reviews";
 import { normalizeTargetLang, translateReviewBody } from "@/app/lib/reviews/translate";
 import { NO_STORE } from "@/app/lib/social/request-guard";
@@ -67,8 +73,16 @@ export async function GET(
     return Response.json({ ok: false, reason: "unavailable" }, { status: 503, headers: NO_STORE });
   }
 
-  if (body === null) {
-    return Response.json({ ok: false, reason: "not-found" }, { status: 404, headers: NO_STORE });
+  const notFound = () =>
+    Response.json({ ok: false, reason: "not-found" }, { status: 404, headers: NO_STORE });
+  if (body === null) return notFound();
+  try {
+    if (await isReviewHiddenFromViewer(Math.trunc(reviewId))) return notFound();
+  } catch (error) {
+    if (!isMissingColumnError(error)) {
+      console.error("review translate staged check failed:", error);
+    }
+    return Response.json({ ok: false, reason: "unavailable" }, { status: 503, headers: NO_STORE });
   }
 
   const result = await translateReviewBody(body, target);

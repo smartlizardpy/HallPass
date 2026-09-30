@@ -12,6 +12,23 @@
  * CDN can absorb bursty reads while a board still feels live. Route handlers are
  * NOT cached by default in this Next.js, and we deliberately do not opt into
  * `force-static` — each request reads the database at request time.
+ *
+ * STAGED GAMES. A board is STAGED when the game it is linked to (`game_slug`) is
+ * — see `app/lib/game-staging.ts`. The board id carries no game, so the link is
+ * read off the board row the route already fetches, and only a board that HAS a
+ * link pays for the cached catalogue lookup. For a staged board:
+ *
+ *   - a viewer who cannot see staged games (`canViewStaged()`) gets EXACTLY the
+ *     "Board not initialized" answer of a board that does not exist, plus
+ *     `no-store` — a 404 here would be an oracle that tells a stranger which ids
+ *     are staged boards;
+ *   - a tester's GET carries `private, no-store`, NEVER the public `s-maxage=15`
+ *     above, which would let the CDN hand a tester's view to everyone. POST
+ *     already has no cache header. The game's iframe is same-origin, so the
+ *     session cookie reaches both.
+ *
+ * `canViewStaged()` (and so `auth()` for the gate) runs only on that staged
+ * branch. A public board keeps today's code path, cost and headers.
  */
 
 import {
@@ -26,6 +43,8 @@ import {
   DEFAULT_LIMIT,
 } from "@/app/lib/scoreboard";
 import { auth } from "@/app/lib/auth";
+import { canViewStaged } from "@/app/lib/beta/staged-access";
+import { isStagedSlug } from "@/app/lib/games-store";
 import { resolveChallengesForScore } from "@/app/lib/challenges";
 import { notifyChallengesBeaten } from "@/app/lib/challenges/notify";
 import { getPublicIdentity, upsertPlayerOnLogin } from "@/app/lib/players";
@@ -48,6 +67,33 @@ const CACHE_HEADERS: Record<string, string> = {
 
 const UNAVAILABLE_HEADERS: Record<string, string> = { "Retry-After": "10" };
 
+/** A staged board's responses are per-viewer: never shared, never stored. */
+const NO_STORE_HEADERS: Record<string, string> = {
+  "Cache-Control": "private, no-store",
+};
+
+/**
+ * How a board relates to staging, for THIS viewer.
+ *
+ *   `public`  — not linked to a game, or its game is live: today's behaviour.
+ *   `allowed` — staged, and the viewer may see it: serve it, uncached.
+ *   `denied`  — staged, and the viewer may not: answer as if it did not exist.
+ *
+ * Only a board with a `gameSlug` reaches the catalogue lookup, and only a staged
+ * one reaches `canViewStaged()`.
+ */
+async function stagedAccess(
+  gameSlug: string | null | undefined,
+): Promise<"public" | "allowed" | "denied"> {
+  if (!gameSlug || !(await isStagedSlug(gameSlug))) return "public";
+  return (await canViewStaged()) ? "allowed" : "denied";
+}
+
+/** The answer for a board that is not provisioned — and for a staged one the viewer may not see. */
+function boardNotInitialized(extra?: Record<string, string>): Response {
+  return jsonResponse({ error: "Board not initialized" } satisfies ApiError, 409, extra);
+}
+
 function jsonResponse(
   body: unknown,
   status: number,
@@ -69,9 +115,9 @@ export async function GET(
 
   try {
     const board = await store.getBoard(slug);
-    if (!board) {
-      return jsonResponse({ error: "Board not initialized" } satisfies ApiError, 409);
-    }
+    if (!board) return boardNotInitialized();
+    const access = await stagedAccess(board.gameSlug);
+    if (access === "denied") return boardNotInitialized(NO_STORE_HEADERS);
     const scores = await store.getTopScores(slug, { limit, period, sort: board.sort });
     const body: LeaderboardResponse = {
       game: board.slug,
@@ -81,7 +127,7 @@ export async function GET(
       period,
       scores,
     };
-    return jsonResponse(body, 200, CACHE_HEADERS);
+    return jsonResponse(body, 200, access === "allowed" ? NO_STORE_HEADERS : CACHE_HEADERS);
   } catch (error) {
     console.error(`leaderboard GET failed for ${slug}:`, error);
     return jsonResponse(
@@ -117,8 +163,9 @@ export async function POST(
       UNAVAILABLE_HEADERS,
     );
   }
-  if (!board) {
-    return jsonResponse({ error: "Board not initialized" } satisfies ApiError, 409);
+  if (!board) return boardNotInitialized();
+  if ((await stagedAccess(board.gameSlug)) === "denied") {
+    return boardNotInitialized(NO_STORE_HEADERS);
   }
 
   if (!isValidScore(score, board.maxScore)) {

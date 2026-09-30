@@ -43,6 +43,14 @@
  * game with no board both answer `{ boards: [] }`, and resolving the whole
  * catalogue to turn one empty response into a different empty response buys
  * nothing on a public cacheable read.
+ *
+ * ── STAGED GAMES ARE WITHHELD, WITHOUT BREAKING THE RULE ABOVE ─────────────
+ *
+ * A staged (beta-only) game answers `{ boards: [] }` with `no-store`, exactly
+ * what an unknown slug answers but uncached. This does NOT add `auth()` — the
+ * body must stay identity-free — so testers are not served scores here at all;
+ * they read them from the per-board route, which is gated. The staged lookup is
+ * the cached catalogue read, so an ordinary game keeps its header and its cost.
  */
 
 import {
@@ -50,6 +58,7 @@ import {
   GAME_BOARD_MAX_BOARDS,
   GAME_BOARD_ROWS,
 } from "@/app/lib/scoreboard";
+import { isStagedSlug } from "@/app/lib/games-store";
 import type { GameBoardPayload } from "@/app/lib/scoreboard/game-board";
 import type { ApiError } from "@/sdk/src/contract";
 
@@ -90,6 +99,13 @@ export async function GET(
   const { slug } = await params;
 
   try {
+    if (await isStagedSlug(slug)) {
+      const empty: GameLeaderboardResponse = { slug, period: "all", boards: [] };
+      return Response.json(empty, {
+        headers: { ...CORS_HEADERS, "Cache-Control": "private, no-store" },
+      });
+    }
+
     // Capped BEFORE the per-board reads, so a game that has somehow accumulated
     // a dozen boards costs three queries rather than twelve.
     const boards = (await store.listBoardsForGame(slug)).slice(0, GAME_BOARD_MAX_BOARDS);
