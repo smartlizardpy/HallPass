@@ -548,21 +548,6 @@ export const games: Game[] = [
     isNew: true,
     platform: "both",
   },
-  {
-    slug: "cyber-pulse-3d-neon-dash",
-    author: "Sohan",
-    title: "Cyber Pulse 3D: Neon Dash",
-    tagline: "Dash the synthwave grid at full throttle.",
-    description:
-      "A high-octane 3D synthwave runner. Race down a neon highway, dodge obstacles, and chase your best score as the pace keeps climbing.",
-    category: "Arcade",
-    tags: ["Arcade", "Runner", "Synthwave", "Neon"],
-    gradient: ["#1a0533", "#00f3ff"],
-    accent: "#00f3ff",
-    art: "speed",
-    isNew: true,
-    platform: "both",
-  },
 ];
 
 export const categories = Array.from(
