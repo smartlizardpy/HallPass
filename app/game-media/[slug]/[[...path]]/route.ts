@@ -34,11 +34,19 @@
  * requires a `basic`/`default` response type, so a raw Blob URL can never enter
  * the service-worker cache. Same-origin puts these in the `cacheFirst` branch,
  * which is what makes a game's screenshots survive going offline.
+ *
+ * STAGED GAMES. A staged game's media is gated exactly like its files in
+ * `/game-html`: `canViewStaged()` is called ONLY when the game is staged (public
+ * games never touch `auth()`), a denied request gets the same 404 as an unknown
+ * slug plus `no-store`, and a permitted one is `private, no-store` rather than
+ * `immutable` — otherwise the CDN or the service worker would keep, and later
+ * replay, a private image. The blob URL never leaves the server.
  */
 
 import { head } from "@vercel/blob";
 import { isSafeSegment } from "@/app/lib/game-html-blob";
-import { isResolvedSlug } from "@/app/lib/games-store";
+import { resolveGameIncludingStaged } from "@/app/lib/games-store";
+import { canViewStaged } from "@/app/lib/beta/staged-access";
 import {
   getMediaByBlobPath,
   mediaBlobPrefix,
@@ -49,6 +57,13 @@ import {
 const MAX_PATH_SEGMENTS = 1;
 
 const NOT_FOUND = () => new Response("Not found", { status: 404 });
+
+/** The 404 for a staged game the viewer may not see: identical, but uncacheable. */
+const NOT_FOUND_NO_STORE = () =>
+  new Response("Not found", {
+    status: 404,
+    headers: { "cache-control": "no-store" },
+  });
 
 export async function GET(
   _req: Request,
@@ -67,7 +82,10 @@ export async function GET(
 
   // Catalogue membership is checked before any I/O so an unknown slug costs one
   // cache hit rather than a Blob round trip.
-  if (!(await isResolvedSlug(slug))) return NOT_FOUND();
+  const game = await resolveGameIncludingStaged(slug);
+  if (!game) return NOT_FOUND_NO_STORE();
+  const staged = game.staged === true;
+  if (staged && !(await canViewStaged())) return NOT_FOUND_NO_STORE();
 
   const blobPath = `${mediaBlobPrefix(slug)}${segments[0]}`;
 
@@ -118,7 +136,9 @@ export async function GET(
       // The stored, sniffed-at-upload type — never derived from the URL.
       "content-type": media.contentType,
       "content-disposition": "inline",
-      "cache-control": "public, max-age=31536000, immutable",
+      "cache-control": staged
+        ? "private, no-store"
+        : "public, max-age=31536000, immutable",
       "x-content-type-options": "nosniff",
     },
   });
