@@ -40,6 +40,9 @@
  *                                           testers.
  *   app/play/you/                           Drops standings rows for staged
  *                                           boards unless the viewer can see them.
+ *   app/api/v1/me/friends/scores/           Skips the friends' standings on a
+ *                                           staged game unless the viewer can
+ *                                           see it.
  *   app/lib/games-store.ts                  Defines the APIs (and uses them).
  *   app/lib/beta/                           Beta helpers: staged-access, publish
  *                                           and shot handling.
@@ -76,6 +79,7 @@ const ALLOWED_PREFIXES = [
   "app/api/v1/games/[slug]/achievements/",
   "app/api/v1/beta/",
   "app/play/you/",
+  "app/api/v1/me/friends/scores/",
   "app/lib/games-store.ts",
   "app/lib/beta/",
   "app/lib/game-media.ts",
