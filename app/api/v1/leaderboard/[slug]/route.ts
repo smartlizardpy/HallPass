@@ -89,9 +89,13 @@ async function stagedAccess(
   return (await canViewStaged()) ? "allowed" : "denied";
 }
 
-/** The answer for a board that is not provisioned — and for a staged one the viewer may not see. */
-function boardNotInitialized(extra?: Record<string, string>): Response {
-  return jsonResponse({ error: "Board not initialized" } satisfies ApiError, 409, extra);
+/**
+ * The answer for a board that is not provisioned — and for a staged one the
+ * viewer may not see. ONE function and ONE header set for both, so a stranger
+ * cannot tell them apart by any header.
+ */
+function boardNotInitialized(): Response {
+  return jsonResponse({ error: "Board not initialized" } satisfies ApiError, 409, NO_STORE_HEADERS);
 }
 
 function jsonResponse(
@@ -117,7 +121,7 @@ export async function GET(
     const board = await store.getBoard(slug);
     if (!board) return boardNotInitialized();
     const access = await stagedAccess(board.gameSlug);
-    if (access === "denied") return boardNotInitialized(NO_STORE_HEADERS);
+    if (access === "denied") return boardNotInitialized();
     const scores = await store.getTopScores(slug, { limit, period, sort: board.sort });
     const body: LeaderboardResponse = {
       game: board.slug,
@@ -165,7 +169,7 @@ export async function POST(
   }
   if (!board) return boardNotInitialized();
   if ((await stagedAccess(board.gameSlug)) === "denied") {
-    return boardNotInitialized(NO_STORE_HEADERS);
+    return boardNotInitialized();
   }
 
   if (!isValidScore(score, board.maxScore)) {

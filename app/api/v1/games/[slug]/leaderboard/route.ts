@@ -46,8 +46,9 @@
  *
  * ── STAGED GAMES ARE WITHHELD, WITHOUT BREAKING THE RULE ABOVE ─────────────
  *
- * A staged (beta-only) game answers `{ boards: [] }` with `no-store`, exactly
- * what an unknown slug answers but uncached. This does NOT add `auth()` — the
+ * A staged (beta-only) game answers `{ boards: [] }` with `no-store`, and so
+ * does an unknown slug, byte for byte — otherwise the cache header would tell a
+ * stranger which slugs are staged. Only a known, live game is publicly cached. This does NOT add `auth()` — the
  * body must stay identity-free — so testers are not served scores here at all;
  * they read them from the per-board route, which is gated. The staged lookup is
  * the cached catalogue read, so an ordinary game keeps its header and its cost.
@@ -58,7 +59,7 @@ import {
   GAME_BOARD_MAX_BOARDS,
   GAME_BOARD_ROWS,
 } from "@/app/lib/scoreboard";
-import { isStagedSlug } from "@/app/lib/games-store";
+import { isKnownSlug, isStagedSlug } from "@/app/lib/games-store";
 import type { GameBoardPayload } from "@/app/lib/scoreboard/game-board";
 import type { ApiError } from "@/sdk/src/contract";
 
@@ -99,7 +100,10 @@ export async function GET(
   const { slug } = await params;
 
   try {
-    if (await isStagedSlug(slug)) {
+    // An UNKNOWN slug takes the same branch as a staged one, so the two are
+    // byte-identical (headers included) and the cache header cannot tell a
+    // stranger which slugs are staged. Only a known, live game is cached.
+    if (!(await isKnownSlug(slug)) || (await isStagedSlug(slug))) {
       const empty: GameLeaderboardResponse = { slug, period: "all", boards: [] };
       return Response.json(empty, {
         headers: { ...CORS_HEADERS, "Cache-Control": "private, no-store" },

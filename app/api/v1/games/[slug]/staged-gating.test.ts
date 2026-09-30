@@ -51,6 +51,14 @@ vi.mock("@/app/lib/social/request-guard", () => ({
   credentialedOptions: () => new Response(null, { status: 204 }),
 }));
 
+/** Status, raw body and every header, so key order and cache-control both count. */
+async function snapshot(res: Response, slug: string) {
+  // The body echoes the REQUESTED slug by design (true of any slug), so it is
+  // swapped for a placeholder; everything else must match exactly.
+  const body = (await res.text()).replace(`"slug":"${slug}"`, '"slug":"<slug>"');
+  return { status: res.status, body, headers: [...res.headers].sort() };
+}
+
 import * as leaderboard from "@/app/api/v1/games/[slug]/leaderboard/route";
 import * as achievements from "@/app/api/v1/games/[slug]/achievements/route";
 
@@ -90,6 +98,21 @@ describe("GET /games/[slug]/leaderboard", () => {
     expect(await res.json()).toEqual({ slug: "beta", period: "all", boards: [] });
     expect(h.listBoardsForGame).not.toHaveBeenCalled();
     expect(h.canViewStaged).not.toHaveBeenCalled();
+  });
+});
+
+describe("staged-denied is byte-identical to unknown, per route", () => {
+  const cases: [string, (slug: string) => Promise<Response>][] = [
+    ["leaderboard", (slug) => leaderboard.GET(new Request("http://x/"), params(slug))],
+    ["achievements", (slug) => achievements.GET(new Request("http://x/"), params(slug))],
+  ];
+  it.each(cases)("%s GET", async (_name, call) => {
+    h.isStagedSlug.mockImplementation(async (s: string) => s === "beta");
+    h.isKnownSlug.mockImplementation(async (s: string) => s !== "nope");
+    const staged = await snapshot(await call("beta"), "beta");
+    const unknown = await snapshot(await call("nope"), "nope");
+    expect(staged).toEqual(unknown);
+    expect(new Headers(staged.headers).get("cache-control")).toBe("private, no-store");
   });
 });
 

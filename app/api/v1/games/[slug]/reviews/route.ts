@@ -58,6 +58,14 @@ const PUBLIC_CACHE: Record<string, string> = {
 
 const EMPTY = { reviews: [], total: 0, recommended: 0, enabled: true };
 
+/** The one answer for a slug that is unknown OR staged: empty, and never cached. */
+function withheldReviews(): Response {
+  return Response.json(
+    { reviews: [], total: 0, recommended: 0, pageSize: REVIEWS_PAGE_SIZE, enabled: true },
+    { headers: { ...NO_STORE, "Access-Control-Allow-Origin": "*" } },
+  );
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ slug: string }> },
@@ -74,11 +82,13 @@ export async function GET(
   try {
     // Identity-free on purpose: a staged game is not looked up "for this viewer",
     // it is simply withheld, and `no-store` keeps that empty answer out of the CDN.
-    if (await isStagedSlug(slug)) {
-      return Response.json(
-        { ...EMPTY, pageSize: REVIEWS_PAGE_SIZE },
-        { headers: { ...NO_STORE, "Access-Control-Allow-Origin": "*" } },
-      );
+    //
+    // AN UNKNOWN SLUG TAKES THIS SAME BRANCH. The two must be byte-identical —
+    // body, key order and headers — or the difference is an oracle that tells a
+    // stranger which slugs are staged. So the cached-and-cheap public answer is
+    // kept for KNOWN live games only, and "withheld" is one helper for both.
+    if (!(await isKnownSlug(slug)) || (await isStagedSlug(slug))) {
+      return withheldReviews();
     }
     const [page, summary] = await Promise.all([
       reviews.listReviews(slug, { sort, before, salt: authorTagSalt() }),

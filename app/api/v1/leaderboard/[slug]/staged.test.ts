@@ -114,6 +114,16 @@ describe("a staged board", () => {
     expect(h.getTopScores).not.toHaveBeenCalled();
   });
 
+  it("is byte-identical to an unprovisioned board: status, body and every header", async () => {
+    const staged = await get("b1");
+    h.getBoard.mockResolvedValue(null);
+    const unknown = await get("nope");
+    expect(staged.status).toBe(unknown.status);
+    expect(await staged.text()).toBe(await unknown.text());
+    expect([...staged.headers].sort()).toEqual([...unknown.headers].sort());
+    expect(unknown.headers.get("Cache-Control")).toBe("private, no-store");
+  });
+
   it("refuses a public POST and records nothing", async () => {
     const res = await post("b1");
     expect(res.status).toBe(409);

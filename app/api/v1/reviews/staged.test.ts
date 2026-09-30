@@ -109,6 +109,22 @@ describe("GET /games/[slug]/reviews", () => {
   });
 });
 
+describe("GET reviews: staged-denied is byte-identical to unknown", () => {
+  it("matches in status, body (key order) and every header", async () => {
+    h.isStagedSlug.mockImplementation(async (s: string) => s === "beta");
+    h.isKnownSlug.mockImplementation(async (s: string) => s !== "nope");
+    const snap = async (slug: string) => {
+      const res = await gameReviews.GET(new Request("http://x/"), slugParams(slug));
+      return { status: res.status, body: await res.text(), headers: [...res.headers].sort() };
+    };
+    const staged = await snap("beta");
+    const unknown = await snap("nope");
+    expect(staged).toEqual(unknown);
+    expect(new Headers(staged.headers).get("cache-control")).toBe("private, no-store");
+    expect(h.reviews.listReviews).not.toHaveBeenCalled();
+  });
+});
+
 describe("POST /games/[slug]/reviews", () => {
   it("accepts a review on an ordinary game without asking canViewStaged", async () => {
     const res = await postReview("pub");

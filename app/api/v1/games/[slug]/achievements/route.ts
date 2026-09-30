@@ -73,7 +73,10 @@
  * gate is reached ONLY when the slug is staged, so an ordinary game keeps the
  * headers and cost described above:
  *
- *   GET, viewer may not see it → the empty shelf an unknown slug gets, `no-store`.
+ *   GET, viewer may not see it → the empty shelf, `no-store`. An UNKNOWN slug gets
+ *                                exactly the same response (same helper, same
+ *                                headers): a public cache header on one and not
+ *                                the other would be an oracle for staged slugs.
  *   GET, viewer may see it     → the normal body, `private, no-store` (it is a
  *                                per-viewer view of a private game).
  *   POST, viewer may not       → the same 404 `no-game` as an unknown slug.
@@ -215,7 +218,9 @@ type PostBody = {
 /**
  * The shelf for one game, plus this player's progress if there is a player.
  *
- * DOES NOT VALIDATE THE SLUG. An unprovisioned game and a nonexistent game both
+ * DOES NOT REJECT AN UNKNOWN SLUG (it answers an empty, `no-store` shelf — see the
+ * STAGED GAMES section above for why that must match a withheld staged game).
+ * It used to not look at the slug at all. An unprovisioned game and a nonexistent game both
  * answer `200` with an empty list, and that is the right call for a read: the
  * only way to tell them apart is `isResolvedSlug()`, which resolves the entire
  * catalogue, and paying that on a public cacheable read to turn one empty
@@ -231,8 +236,11 @@ export async function GET(
 
   // STAGED: gated, and never publicly cacheable. `isStagedSlug` is the cached
   // catalogue read, so this adds no query to an ordinary game's GET.
-  const staged = await isStagedSlug(slug);
-  if (staged && !(await canViewStaged())) {
+  // An UNKNOWN slug takes the same branch as a staged one the viewer may not see,
+  // through the same response, so the two are byte-identical (headers included).
+  const known = await isKnownSlug(slug);
+  const staged = known && (await isStagedSlug(slug));
+  if (!known || (staged && !(await canViewStaged()))) {
     return Response.json(
       {
         slug,
