@@ -259,6 +259,16 @@ export async function isKnownSlug(slug: string): Promise<boolean> {
 }
 
 /**
+ * The slugs of every currently staged game, for SQL that must EXCLUDE them
+ * (public badge totals). Fail-soft like the resolvers: with the external read
+ * degraded an external staged game is missing from the list, so this is a
+ * best-effort exclusion, not a gate — use {@link isStagedOrUnverifiable} to gate.
+ */
+export async function stagedSlugs(): Promise<string[]> {
+  return (await resolveGamesIncludingStaged()).filter(isStaged).map((g) => g.slug);
+}
+
+/**
  * Whether the external-games half of the catalogue could not be read right now.
  *
  * {@link readExternalGames} swallows a failure into `[]`, so during an outage an

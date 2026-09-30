@@ -392,3 +392,20 @@ describe("recordPlay", () => {
     expect(calls[0].text).toContain("play_count  = player_plays.play_count + 1");
   });
 });
+
+describe("badgeStats excludes staged games' achievement points", () => {
+  it("binds the exclusion list on the achievements subquery", async () => {
+    const { sql, calls } = makeFakeSql(() => [{ achievement_points: 7 }]);
+    const store = createSocialStore(sql);
+    const stats = await store.badgeStats("me", ["beta-game"]);
+    expect(stats.achievementPoints).toBe(7);
+    expect(calls[0].text).toContain("a.slug <> ALL(");
+    expect(calls[0].values).toContainEqual(["beta-game"]);
+  });
+
+  it("defaults to excluding nothing", async () => {
+    const { sql, calls } = makeFakeSql(() => [{}]);
+    await createSocialStore(sql).badgeStats("me");
+    expect(calls[0].values).toContainEqual([]);
+  });
+});

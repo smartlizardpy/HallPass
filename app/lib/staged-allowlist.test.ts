@@ -44,6 +44,8 @@
  *                                           staged game unless the viewer can
  *                                           see it.
  *   app/lib/games-store.ts                  Defines the APIs (and uses them).
+ *   app/lib/social/index.ts                 Binds badgeStats to exclude staged
+ *                                           games' achievement points.
  *   app/lib/beta/                           Beta helpers: staged-access, publish
  *                                           and shot handling.
  *   app/lib/game-media.ts                   Hero/cover media knows which games
@@ -66,6 +68,7 @@ const GUARDED = [
   "isKnownSlug",
   "isStagedSlug",
   "isStagedOrUnverifiable",
+  "stagedSlugs",
   "isExternalReadDegraded",
 ];
 
@@ -83,6 +86,7 @@ const ALLOWED_PREFIXES = [
   "app/play/you/",
   "app/api/v1/me/friends/scores/",
   "app/lib/games-store.ts",
+  "app/lib/social/index.ts",
   "app/lib/beta/",
   "app/lib/game-media.ts",
 ];
