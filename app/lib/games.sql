@@ -18,7 +18,8 @@
 --
 -- For an EXISTING database, run the one-time
 -- `scoreboard/migrations/003_game_overrides.sql` instead, plus
--- `014_game_platform.sql` for the `platform` column.
+-- `014_game_platform.sql` for the `platform` column and `035_game_staging.sql`
+-- for `staged` and `cover_url`.
 
 CREATE TABLE IF NOT EXISTS game_overrides (
   slug         TEXT PRIMARY KEY CHECK (slug ~ '^[a-z0-9][a-z0-9-]*$'),
@@ -38,6 +39,17 @@ CREATE TABLE IF NOT EXISTS game_overrides (
   platform     TEXT
                  CONSTRAINT game_overrides_platform_valid
                  CHECK (platform IS NULL OR platform IN ('desktop', 'mobile', 'both')),
+
+  -- Staged = visible only to beta testers and dashboard roles until published.
+  -- Tri-state like every other column: NULL inherits the static `staged?` flag in
+  -- `games.ts`, a non-NULL value wins (publishing writes `false`). See
+  -- `035_game_staging.sql`.
+  staged       BOOLEAN,
+
+  -- The catalogue cover, typically a promoted tester shot served from
+  -- `/game-media/...`. NULL inherits the static `coverUrl`, then the conventional
+  -- `/games/<slug>/cover.png`.
+  cover_url    TEXT,
 
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
