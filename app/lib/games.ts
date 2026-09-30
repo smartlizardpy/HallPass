@@ -107,6 +107,16 @@ export type Game = {
    * clients: hiding desktop games on small screens hides them from the index.
    */
   platform?: GamePlatform;
+  /**
+   * STAGED = visible and playable only to beta testers and dashboard roles until
+   * an admin publishes it. The `add-game` skill writes `staged: true` here; it is
+   * the FLOOR, and `game_overrides.staged` (tri-state, NULL inherits) wins over it
+   * so publishing needs no code change. See `app/lib/game-staging.ts`.
+   *
+   * Absent means public. That is the safe default for the existing catalogue, and
+   * every consumer treats anything other than an explicit `true` as public.
+   */
+  staged?: boolean;
 };
 
 export const games: Game[] = [
@@ -550,14 +560,29 @@ export const games: Game[] = [
   },
 ];
 
+/**
+ * The catalogue as the PUBLIC sees it: every game that is not staged. Static-only
+ * readers (sitemap fallbacks, manifests, `categories`/`allTags` below) must use
+ * this rather than `games`, which still contains staged entries. It reflects only
+ * the static flag — a dashboard publish or re-stage lives in `game_overrides` and
+ * is applied by the resolvers in `games-store.ts`.
+ */
+export const publicGames: Game[] = games.filter((g) => g.staged !== true);
+
 export const categories = Array.from(
-  new Set(games.map((g) => g.category))
+  new Set(publicGames.map((g) => g.category))
 ).sort();
 
 export const allTags = Array.from(
-  new Set(games.flatMap((g) => g.tags))
+  new Set(publicGames.flatMap((g) => g.tags))
 ).sort();
 
+/**
+ * Look a game up by slug in the WHOLE static array, staged games included. A
+ * title/metadata lookup only — it is NOT a visibility check, so never use it to
+ * decide whether a visitor may see a game. Gate on `resolveGame` (public-only) or
+ * `canViewStaged()` instead.
+ */
 export function findGame(slug: string) {
   return games.find((g) => g.slug === slug);
 }
