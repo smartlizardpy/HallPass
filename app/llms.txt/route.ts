@@ -10,17 +10,19 @@
  *  - The base URL is derived from the request (`new URL(req.url).origin`) rather
  *    than hard-coded, so every example resolves correctly on localhost, on a
  *    preview deployment, and on production (hallpass.gg).
- *  - This module imports ONLY the static `games` list — no Neon, no server-only
- *    code — so it stays a cheap, dependency-free text response.
+ *  - This module imports ONLY the static `publicGames` list — no Neon, no
+ *    server-only code — so it stays a cheap, dependency-free text response. It is
+ *    `publicGames`, not `games`, so the advertised count excludes staged games; a
+ *    pre-release game must not be counted in public copy.
  *  - Route handlers are not cached by default; we set `Cache-Control` explicitly
  *    (5 minutes) on the Response. Reading `req.url` makes this request-time.
  */
 
-import { games } from "@/app/lib/games";
+import { publicGames } from "@/app/lib/games";
 
 export async function GET(req: Request) {
   const base = new URL(req.url).origin;
-  const gameCount = games.length;
+  const gameCount = publicGames.length;
 
   const body = `# HallPass
 
