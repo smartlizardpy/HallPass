@@ -72,6 +72,7 @@ app/
     challenges/         friend challenges and challenge links (see below)
     notifications/      bell inbox, kinds and copy; push/ is the Web Push layer
     alerts/             site alerts: thresholds, rules, PostHog snapshot (see below)
+    deploys/            parsing a deploy request for the deploy notification (see below)
     tracker/            admin project tracker: config, store, schema (see below)
     mcp/                the bug MCP: guard, tools, and the beta_reports operations
     achievements/  beta/  reviews/  growth/  capture/  stealth/  streak/
@@ -92,8 +93,9 @@ scripts/
   publish-game.mjs      publishes a repo-authored single-file game to Blob
   provision-boards.mjs  creates leaderboard boards; backfill-media-urls.mjs is a one-off repair
   check-alerts.mjs      the alerts cron's runner: probe the live site, notify if anything fired
+  notify-deploy.mjs     deploy.yml's last step: tell the admins a new version is live (never fails the deploy)
   check-build-env.mjs   fails the deploy when a build-time-inlined env var is missing
-.github/workflows/      deploy.yml (build env check + deploy), alerts.yml (half-hourly cron)
+.github/workflows/      deploy.yml (build env check + deploy + admin notification), alerts.yml (half-hourly cron)
 AGENTS.md               how to work in this repo; also the Next 16 breaking-changes warning
 CLAUDE.md               points at AGENTS.md
 ```
@@ -615,6 +617,31 @@ Server-side reads need `POSTHOG_PERSONAL_API_KEY` — without it the probe answe
 An admin only receives these if they have signed into the arcade itself (the
 dashboard and the arcade are separate sign-ins) — notifications are owned by a
 player row. See `app/lib/notifications/admins.ts`.
+
+
+## Deploy notifications
+
+When a new production version goes live, every admin gets a bell row and — if
+they opted in to push on a device — a Web Push saying what shipped, e.g. "Add
+streak flames (#130) · b2f3113". Players get nothing. It is the notification kind
+`deploy_shipped` (Settings → Notifications → Deploys, default push).
+
+The last step of `.github/workflows/deploy.yml` runs `scripts/notify-deploy.mjs`,
+which posts the deployed sha and the raw commit message to
+**`POST /api/v1/admin/deploy/notify`** with the same `ALERTS_SECRET` as the
+alerts. The server works out the title and PR number (`app/lib/deploys/parse.ts`)
+and files it for every admin. Full argument: `docs/deploy-notify-design.md`.
+
+- **Never fails the deploy.** The site is already live; every problem is a
+  warning and the step is `continue-on-error`. Without `ALERTS_SECRET` it is
+  skipped with a note.
+- **One notification per commit** — deduped on the sha, so a re-run or a
+  `workflow_dispatch` redeploy of the same commit is silent.
+- **Commit text appears in the full copy only**; the discreet push says "The site
+  was updated." The link is `/dashboard`.
+- **Two merges close together announce only the newer one**: `deploy.yml` uses
+  `cancel-in-progress`, so the first deploy is cancelled before it notifies and
+  the newer notification carries only its own merge's title.
 
 ## MCP
 
