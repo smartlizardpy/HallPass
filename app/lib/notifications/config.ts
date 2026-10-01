@@ -111,6 +111,13 @@ export const NOTIFICATION_GROUPS = [
     label: "Agent runs",
     blurb: "When a coding agent starts and finishes working on the site, for admins.",
   },
+  {
+    // Separate from `ops` for the same reason `agent` is: a deploy is not
+    // something the site noticed about itself, it is somebody shipping.
+    id: "deploys",
+    label: "Deploys",
+    blurb: "When a new version of the site goes live, for admins.",
+  },
 ] as const;
 
 export type NotificationGroup = (typeof NOTIFICATION_GROUPS)[number]["id"];
@@ -413,6 +420,27 @@ export const NOTIFICATION_KINDS = {
     // same volume, and it is the one that says the queue is worth looking at.
     defaultChannel: "push",
     discreet: "Something is happening on the site.",
+  },
+
+  // ── Deploys ──────────────────────────────────────────────────────────────
+  // Emitted by CI: the last step of `.github/workflows/deploy.yml` posts the
+  // commit that just went live (see `app/lib/deploys/`).
+  deploy_shipped: {
+    audience: "admin",
+    scope: "personal",
+    group: "deploys",
+    label: "New version deployed",
+    icon: "🚀",
+    description: "A new version of the site goes live in production.",
+    // PUSH, for the operator who is not at the dashboard: a deploy is the one
+    // moment production changes under you, and "did my merge go out?" or "what
+    // just changed?" is a question with a deadline when something then breaks.
+    // It is a handful of events a day at most, and deduped per commit, so it is
+    // nowhere near the volume `challenge_beaten` refuses to push.
+    defaultChannel: "push",
+    // Names nothing — in particular NOT the commit text, which only the full
+    // copy carries.
+    discreet: "The site was updated.",
   },
 } as const satisfies Record<string, NotificationKindDef>;
 

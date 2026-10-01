@@ -26,6 +26,7 @@ import {
   challengeBeatenCopy,
   challengeCopy,
   contentGapCopy,
+  deployCopy,
   errorSpikeCopy,
   friendAcceptedCopy,
   friendPassedCopy,
@@ -76,6 +77,11 @@ const EVERY_KIND: Record<string, NotificationCopy> = {
   content_gap: contentGapCopy({ term: "geometry dash", people: 9 }),
   agent_started: agentStartedCopy({ note: "reading the open queue" }),
   agent_finished: agentFinishedCopy({ steps: 53 }),
+  deploy_shipped: deployCopy({
+    title: "Add streak flames",
+    sha: "b2f3113a8c0d4e5f60718293a4b5c6d7e8f90123",
+    pr: 130,
+  }),
 };
 
 describe("challengeBeatenCopy", () => {
@@ -400,5 +406,37 @@ describe("every kind", () => {
         expect(discreet, kind).not.toContain(leak);
       }
     }
+  });
+});
+
+describe("deployCopy", () => {
+  const sha = "b2f3113a8c0d4e5f60718293a4b5c6d7e8f90123";
+
+  it("says what shipped, with the PR number and the short sha", () => {
+    const copy = deployCopy({ title: "Add streak flames", sha, pr: 130 });
+    expect(copy.title).toBe("New version deployed");
+    expect(copy.body).toBe("Add streak flames (#130) · b2f3113");
+    expect(copy.url).toBe("/dashboard");
+  });
+
+  it("omits the PR when the commit was not one", () => {
+    const copy = deployCopy({ title: "Fix typo", sha, pr: null });
+    expect(copy.body).toBe("Fix typo · b2f3113");
+  });
+
+  it("falls back rather than printing an empty subject", () => {
+    expect(deployCopy({ title: "   ", sha, pr: null }).body).toBe("A new commit · b2f3113");
+  });
+
+  it("bounds a huge title and keeps the sha", () => {
+    const copy = deployCopy({ title: "z".repeat(900), sha, pr: 1 });
+    expect(copy.body.length).toBeLessThanOrEqual(NOTIFICATION_BODY_MAX);
+    expect(copy.body).toContain("b2f3113");
+  });
+
+  it("keeps the commit text out of the discreet counterpart", () => {
+    const discreet = NOTIFICATION_KINDS.deploy_shipped.discreet;
+    expect(discreet).toBe("The site was updated.");
+    expect(discreet).not.toContain("b2f3113");
   });
 });
