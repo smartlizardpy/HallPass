@@ -10,6 +10,7 @@ import { MIRROR_SYNCED_AT } from "@/app/lib/mirror-synced-at";
 import { games } from "@/app/lib/games";
 import { isStagedSlug } from "@/app/lib/games-store";
 import { canViewStaged } from "@/app/lib/beta/staged-access";
+import { injectShim } from "@/app/lib/capture/record-shim";
 
 const MAX_PATH_SEGMENTS = 10;
 
@@ -53,6 +54,22 @@ const NOT_FOUND = () =>
  * permitted one is served from Blob only (never the 307 to `/games/<slug>/…`,
  * which anyone could open) with `private, no-store`, so neither the CDN nor the
  * service worker keeps a copy. The blob URL itself is never sent to the client.
+ *
+ * RECORD MODE (`?hp-rec=1`, the game DOCUMENT only). The beta session's gameplay
+ * recorder has to tap a game's Web Audio graph before the game builds it, which
+ * means a script running first — and until now this route never rewrote anything,
+ * because it hands the document to the static twin with a 307. In record mode the
+ * route instead fetches the document (the static twin, or the blob when that is
+ * what would have been served), puts the shim from `record-shim.ts` straight
+ * after `<head>`, and answers 200. Every game is a single self-contained HTML
+ * file, so nothing else needs routing. It runs AFTER the staged gate above, so a
+ * denied request is still the one indistinguishable 404, and the injected
+ * document is always `no-store` (public games included): a shared cache must never
+ * hand a shimmed document to somebody who did not ask for it. Assets, and any
+ * request without the query, behave exactly as before. Offline, the service
+ * worker has no cached copy of the query URL and falls back to the plain static
+ * twin — the game still plays and the recorder still records, minus audio and
+ * SDK events.
  */
 export async function GET(
   req: Request,
@@ -89,6 +106,24 @@ export async function GET(
   });
 
   if (source.kind === "missing") return NOT_FOUND();
+
+  const recordMode =
+    segments.length === 0 && new URL(req.url).searchParams.get("hp-rec") === "1";
+
+  if (recordMode) {
+    const upstreamUrl = source.kind === "static" ? staticUrl : source.url;
+    const doc = await fetch(upstreamUrl, { cache: "no-store" });
+    if (!doc.ok) return staged ? NOT_FOUND() : Response.redirect(staticUrl, 307);
+    return new Response(injectShim(await doc.text()), {
+      status: 200,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "content-disposition": "inline",
+        "cache-control": staged ? "private, no-store" : "no-store",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  }
 
   if (source.kind === "static") {
     return Response.redirect(staticUrl, 307);

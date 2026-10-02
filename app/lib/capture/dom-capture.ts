@@ -22,9 +22,11 @@
  *     workaround; this is the same-origin policy doing its job. → `cross-origin`
  *   * WEBGL READS BACK BLANK unless the game created its context with
  *     `preserveDrawingBuffer: true`, which is the game's choice and not ours. We
- *     cannot inject a shim to force it either: most games 307 to the static
- *     mirror under `/games/`, so the HTML we serve is never rewritten on the way
- *     past. Recognised by {@link isEmptyFrame} — a cleared buffer reads back
+ *     do not force it: the shim in `record-shim.ts` is only injected in record
+ *     mode (`?hp-rec=1`, see the `/game-html` route), which the game recorder
+ *     uses, and it leaves the game's contexts alone — `captureStream` does not
+ *     need the buffer preserved. This grabber reads pixels back, which does.
+ *     Recognised by {@link isEmptyFrame} — a cleared buffer reads back
  *     fully TRANSPARENT, which is a fact about the readback rather than an
  *     opinion about the picture. → `blank`
  *   * A CANVAS TAINTED by a cross-origin texture throws `SecurityError` on
