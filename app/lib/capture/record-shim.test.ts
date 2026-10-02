@@ -6,11 +6,13 @@ type Listener = () => void;
 /** A fake window with just enough Web Audio to exercise the shim. */
 function makeWindow() {
   const connections: Array<[unknown, unknown]> = [];
+  const connectArgs: unknown[][] = [];
   class AudioDestinationNode {
     constructor(public context: FakeContext) {}
   }
   class AudioNode {
-    connect(target: unknown) {
+    connect(target: unknown, ...rest: unknown[]) {
+      connectArgs.push([target, ...rest]);
       connections.push([this, target]);
       return target;
     }
@@ -49,7 +51,7 @@ function makeWindow() {
     },
   };
   const queued: Array<() => void> = [];
-  return { win, connections, AudioNode, FakeContext, listeners, queued, HTMLCanvasElement, getContextCalls };
+  return { win, connections, AudioNode, FakeContext, listeners, queued, HTMLCanvasElement, getContextCalls, connectArgs };
 }
 
 function run(win: Record<string, unknown>) {
@@ -101,6 +103,24 @@ describe("shim audio tap", () => {
       "TapNode",
       "AudioDestinationNode",
     ]);
+  });
+
+  it("taps the same output index the game connected, and not its input index", () => {
+    const { win, connectArgs, AudioNode, FakeContext } = makeWindow();
+    run(win);
+    const ctx = new FakeContext();
+    new AudioNode().connect(ctx.destination, 1, 0);
+    // [tap, output] first, then the game's own untouched call.
+    expect(connectArgs).toHaveLength(2);
+    expect(connectArgs[0].slice(1)).toEqual([1]);
+    expect(connectArgs[1].slice(1)).toEqual([1, 0]);
+  });
+
+  it("taps output 0 by default when the game gave no index", () => {
+    const { win, connectArgs, AudioNode, FakeContext } = makeWindow();
+    run(win);
+    new AudioNode().connect(new FakeContext().destination);
+    expect(connectArgs[0].slice(1)).toEqual([]);
   });
 
   it("leaves connections to other nodes alone", () => {

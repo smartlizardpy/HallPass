@@ -68,7 +68,15 @@ export const RECORD_SHIM_SOURCE = `(function (w) {
                 hp.streams.push(tap.stream);
                 if (typeof hp.onStream === "function") hp.onStream(tap.stream);
               }
-              if (tap) origConnect.call(this, tap);
+              // Same OUTPUT index as the game's own connection — a splitter or a
+              // multi-output node connects output 1 to the destination on purpose,
+              // and tapping output 0 instead would record the wrong signal. The
+              // input index is for the destination (always 0) and does not carry
+              // over to the tap.
+              if (tap) {
+                if (arguments.length > 1 && arguments[1] !== undefined) origConnect.call(this, tap, arguments[1]);
+                else origConnect.call(this, tap);
+              }
             }
           } catch (e) {}
           return origConnect.apply(this, arguments);
