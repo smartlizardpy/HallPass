@@ -9,11 +9,14 @@
  * "ready with no take" are states the UI would otherwise have to rule out by
  * hand.
  *
- * The capability probe uses `useSyncExternalStore` with a `() => null` server
- * snapshot for the reason documented at `canRecord` in the session client: reading
- * `MediaRecorder` during render makes the control absent from the SSR HTML and
- * present on hydration, and React recovers from that mismatch by REMOUNTING THE
- * GAME IFRAME.
+ * The capability probe uses `useSyncExternalStore`, whose SERVER snapshot is
+ * `"unsupported"` (there is no MediaRecorder on the server) and whose client
+ * snapshot is the real answer. React renders the server snapshot during hydration
+ * and then switches, so reading `MediaRecorder` directly during render — which
+ * would differ between the two — never happens. That matters because a hydration
+ * mismatch is recovered from by REMOUNTING THE GAME IFRAME. The session client goes
+ * one step further: it renders the Record control only once `errorWatch` is set,
+ * and that is client-only state, so the control is never in the server HTML at all.
  */
 
 import {
