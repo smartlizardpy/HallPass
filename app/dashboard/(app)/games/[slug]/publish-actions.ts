@@ -18,8 +18,9 @@
  *      game) its index blob exists. Publishing a game with no playable file
  *      would make a public page that 404s in the iframe.
  *   2. COVER. Promote the chosen tester shot into `game_media` if it was not
- *      already (`publishShotToGallery`), flip that row to kind `hero` so it
- *      leaves the gallery, then point the game's cover at it. A failure here
+ *      already, flip that row to kind `hero` so it leaves the gallery, then point
+ *      the game's cover at it — all in `setCoverFromShot` (`game-cover.ts`),
+ *      shared with the dashboard's Change-cover panel. A failure here
  *      leaves the game staged, so nobody has seen a half-set cover.
  *   3. LEADERBOARD RESET (default ON). Testers' scores on a staged board are
  *      playtest noise; clearing them means the public board starts honest. Done
@@ -45,26 +46,18 @@ import { requireRole } from "@/app/lib/auth";
 import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { blobOpDisabledMessage, isBlobOpEnabled } from "@/app/lib/blob-ops";
 import { beta, BETA_CREDITS_CACHE_TAG } from "@/app/lib/beta";
-import { publishShotToGallery } from "@/app/lib/beta/publish-shot";
+import { setCoverFromShot } from "@/app/lib/game-cover";
 import { readGameBlobsForSlug } from "@/app/lib/game-blob-index";
 import { blobPathForSlug } from "@/app/lib/game-html-blob";
-import {
-  MEDIA_CACHE_TAG,
-  mediaBlobPath,
-  mediaPublicPath,
-  setMediaKind,
-} from "@/app/lib/game-media";
-import { toImageType } from "@/app/lib/image-meta";
+import { MEDIA_CACHE_TAG } from "@/app/lib/game-media";
 import {
   CACHE_TAG,
   resolveGameIncludingStaged,
-  setGameCover,
   setGameStaged,
 } from "@/app/lib/games-store";
 import {
   EXTERNAL_CACHE_TAG,
   setExternalGameStaged,
-  updateExternalGameCover,
 } from "@/app/lib/external-games-store";
 import { store } from "@/app/lib/scoreboard";
 
@@ -148,16 +141,7 @@ export async function publishGameAction(formData: FormData): Promise<void> {
     }
 
     try {
-      const mediaId = shot.promotedMediaId ?? (await publishShotToGallery(shot));
-      if (!shot.promotedMediaId) await beta.markShotPromoted(shot.id, mediaId);
-      await setMediaKind(mediaId, "hero");
-      // Derived the same way `publishShotToGallery` derives the key, so no extra
-      // read is needed to learn the row's path.
-      const coverPath = mediaPublicPath({
-        blobPath: mediaBlobPath(slug, mediaId, toImageType(shot.contentType)),
-      });
-      if (external) await updateExternalGameCover(slug, coverPath);
-      else await setGameCover(slug, coverPath);
+      await setCoverFromShot(shot, external);
     } catch (error) {
       console.error(`publish ${slug}: cover step failed:`, error);
       redirect(gamePage(slug, "error", "Could not set the cover — nothing was published"));
