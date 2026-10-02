@@ -84,6 +84,21 @@
             text-shadow: 0 0 10px var(--neon-blue);
         }
 
+        #ability-badge {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 3px 14px;
+            font-weight: 700;
+            font-size: 16px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            transform: skewX(-15deg);
+            border: 1px solid #555;
+            color: #888;
+        }
+        #ability-badge.ready { border-color: var(--neon-gold); color: var(--neon-gold); text-shadow: 0 0 10px var(--neon-gold); box-shadow: 0 0 15px rgba(255, 204, 0, 0.3); }
+        #ability-badge.active { border-color: #fff; color: #000; background: #fff; box-shadow: 0 0 25px #fff; }
+
         .integrity-container {
             width: 350px;
             text-align: right;
@@ -110,7 +125,11 @@
         }
 
         #hp-bar { height: 100%; width: 100%; background: #fff; box-shadow: 0 0 20px white; transition: width 0.1s; }
-        #shield-bar { position: absolute; top: 0; left: 0; height: 100%; width: 50%; background: var(--neon-blue); opacity: 0.8; box-shadow: 0 0 15px var(--neon-blue); mix-blend-mode: screen; transition: width 0.1s; }
+        /* The shield has its own thin bar under the hull bar. It used to be
+           laid over the hull bar, so a hit the shield absorbed changed nothing
+           the player could see and read as "I touched it and lost no health". */
+        .bar-outer.shield-outer { height: 6px; }
+        #shield-bar { height: 100%; width: 50%; background: var(--neon-blue); box-shadow: 0 0 15px var(--neon-blue); transition: width 0.1s; }
         
         #boss-hud {
             position: absolute;
@@ -328,12 +347,15 @@
         <div class="hud-top">
             <div>
                 <div id="score-label">0</div>
-                <div id="multiplier-badge">1.0X FLOW</div>
+                <div id="multiplier-badge">1.0X FLOW</div><br>
+                <div id="ability-badge">ABILITY</div>
             </div>
             <div class="integrity-container">
                 <div class="bar-label">HULL INTEGRITY</div>
                 <div class="bar-outer">
                     <div id="hp-bar"></div>
+                </div>
+                <div class="bar-outer shield-outer">
                     <div id="shield-bar"></div>
                 </div>
             </div>
@@ -365,6 +387,7 @@
         </div>
 
         <button class="btn-primary" id="btn-start">Initiate</button>
+        <p style="color:#888; letter-spacing:3px; font-weight:700; font-size:14px; margin:18px 0 0;">ABILITY: E / SHIFT / RIGHT-CLICK / SECOND FINGER</p>
 
         <!-- Identity belongs here, where signing in interrupts nothing. There
              is deliberately NO challenge button on this screen: challenge()
@@ -400,6 +423,7 @@
         const ui = {
             score: document.getElementById('score-label'),
             mult: document.getElementById('multiplier-badge'),
+            ability: document.getElementById('ability-badge'),
             hp: document.getElementById('hp-bar'),
             shield: document.getElementById('shield-bar'),
             boss: document.getElementById('boss-hud'),
@@ -435,6 +459,18 @@
 
         const mouse = { x: 0, y: 0, down: false };
         const keys = { space: false };
+
+        /* Each ship's advertised ability, now an active one. Frames at 60fps:
+           it lasts `dur`, and `cd` counts from the moment it is triggered.
+           Overdrive doubles the fire rate, Ramming makes the hull immune to
+           contact and bullets and pulverises whatever it touches, Evasion makes
+           the ship untouchable. Triggered with E / Shift / right-click, or a
+           second finger on touch. */
+        const ABILITIES = {
+            striker: { name: 'Overdrive', dur: 240, cd: 720 },
+            heavy:   { name: 'Ramming',   dur: 180, cd: 720 },
+            stealth: { name: 'Evasion',   dur: 180, cd: 600 }
+        };
         let bullets = [], enemies = [], particles = [], items = [], floatingTexts = [];
 
         const COLORS = { vanta: '#050508', player: '#ffffff', blue: '#00f2ff', pink: '#ff0055', gold: '#ffcc00', green: '#00ff66', purp: '#bc13fe', red: '#ff3333' };
@@ -503,6 +539,7 @@
                 this.radius = 18;
                 this.vx = 0; this.vy = 0;
                 this.fireTimer = 0;
+                this.abilityActive = 0; this.abilityCooldown = 0;
                 this.upgrades = [];
                 this.orbitals = [];
                 this.drones = [];
@@ -556,7 +593,10 @@
                 this.trail = this.trail.filter(t => t.alpha > 0);
 
                 this.fireTimer++;
-                let fireRate = Math.max(3, (8 / this.stats.overdrive) - (multiplier * 0.5));
+                if (this.abilityActive > 0) this.abilityActive--;
+                if (this.abilityCooldown > 0) this.abilityCooldown--;
+                let boost = this.type === 'striker' && this.abilityActive > 0 ? 2 : 1;
+                let fireRate = Math.max(2, (8 / (this.stats.overdrive * boost)) - (multiplier * 0.5));
                 if ((mouse.down || keys.space) && this.fireTimer >= fireRate) {
                     this.shoot();
                     this.fireTimer = 0;
@@ -591,6 +631,15 @@
                 });
 
                 this.orbitals.forEach(o => o.a += o.s);
+            }
+
+            activateAbility() {
+                const a = ABILITIES[this.type];
+                if (!a || this.abilityCooldown > 0) return;
+                this.abilityActive = a.dur;
+                this.abilityCooldown = a.cd;
+                shake = 8;
+                floatingTexts.push({text: a.name.toUpperCase(), x: this.x, y: this.y-40, life: 1.5, color: '#fff'});
             }
 
             shoot() {
@@ -721,6 +770,16 @@
 
                 this.upgrades.filter(u => u.layer === 'top').forEach(u => { ctx.save(); u.draw(ctx, frame, this); ctx.restore(); });
 
+                if (this.abilityActive > 0) {
+                    ctx.beginPath();
+                    ctx.strokeStyle = this.type === 'striker' ? COLORS.gold : '#fff';
+                    ctx.lineWidth = 3;
+                    ctx.globalAlpha = 0.5 + 0.5 * Math.sin(frame * 0.5);
+                    ctx.arc(0, 0, 45, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
+
                 // Shield
                 if (this.shield > 1) {
                     ctx.beginPath();
@@ -733,10 +792,19 @@
             }
 
             takeDamage(amt) {
+                // Ramming and Evasion make the ship untouchable while they run.
+                if (this.abilityActive > 0 && this.type !== 'striker') {
+                    floatingTexts.push({text: this.type === 'heavy' ? "RAM" : "EVADE", x:this.x, y:this.y-30, life:1, color:'#fff'});
+                    return;
+                }
                 if (this.stats.dodge > Math.random()) { floatingTexts.push({text:"DODGE", x:this.x, y:this.y-30, life:1}); return; }
                 if (this.stats.phase && Math.random() > 0.8) { floatingTexts.push({text:"PHASE", x:this.x, y:this.y-30, life:1}); return; }
                 
-                if (this.shield > 0) { this.shield -= amt; if (this.shield < 0) { this.hp += this.shield; this.shield = 0; } }
+                if (this.shield > 0) {
+                    this.shield -= amt;
+                    if (this.shield < 0) { this.hp += this.shield; this.shield = 0; }
+                    else floatingTexts.push({text:"SHIELD", x:this.x, y:this.y-30, life:1, color:COLORS.blue});
+                }
                 else { this.hp -= amt; }
                 
                 shake = 15;
@@ -947,7 +1015,7 @@
                     if (this.boss) {
                         bossSpawned = false;
                         ui.boss.style.opacity = 0;
-                        multiplier += 2;
+                        multiplier = Math.min(10, multiplier + 2);
                         nextBossThreshold += 20000; 
                         bossCount++; 
                         
@@ -1120,7 +1188,11 @@
                     enemies.push(new Enemy(bossTypes[bossCount % bossTypes.length]));
                     bossSpawned = true;
                 }
-                else if (frame % (40 - Math.min(30, multiplier)) === 0) {
+                // The interval must be a whole number of frames: `frame % x === 0`
+                // is never true for a fractional x, and flow is fractional as soon
+                // as the first kill lands (1.1X, 1.2X...), which used to dry up
+                // the spawns almost completely.
+                else if (frame % Math.round(40 - Math.min(30, multiplier)) === 0) {
                     let r = Math.random();
                     let t = r > 0.9 ? 'tank' : (r > 0.7 ? 'rusher' : 'scout');
                     enemies.push(new Enemy(t));
@@ -1170,6 +1242,17 @@
             });
 
             multiplier = Math.max(1, multiplier - 0.0005);
+            const ab = ABILITIES[player.type];
+            if (player.abilityActive > 0) {
+                ui.ability.className = 'active';
+                ui.ability.innerText = `${ab.name} ${(player.abilityActive / 60).toFixed(1)}s`;
+            } else if (player.abilityCooldown > 0) {
+                ui.ability.className = '';
+                ui.ability.innerText = `${ab.name} ${Math.ceil(player.abilityCooldown / 60)}s`;
+            } else {
+                ui.ability.className = 'ready';
+                ui.ability.innerText = `${ab.name} [E]`;
+            }
             ui.score.innerText = Math.floor(score).toLocaleString();
             ui.mult.innerText = `${multiplier.toFixed(1)}X FLOW`;
             ui.hp.style.width = `${Math.min(100, player.hp/player.maxHp*100)}%`;
@@ -1298,7 +1381,11 @@
         });
         window.addEventListener('mousedown', () => mouse.down = true);
         window.addEventListener('mouseup', () => mouse.down = false);
-        window.addEventListener('keydown', e => { if(e.code === 'Space') keys.space = true; });
+        window.addEventListener('contextmenu', e => { if (gameActive && player) { e.preventDefault(); player.activateAbility(); } });
+        window.addEventListener('keydown', e => {
+            if(e.code === 'Space') keys.space = true;
+            if(gameActive && player && !e.repeat && (e.code === 'KeyE' || e.code === 'ShiftLeft' || e.code === 'ShiftRight')) player.activateAbility();
+        });
         window.addEventListener('keyup', e => { if(e.code === 'Space') keys.space = false; });
         // A touch that lands on an overlay is aimed at that overlay's controls,
         // not at the ship, so it must not be swallowed here. This matters for
@@ -1310,7 +1397,7 @@
         // lets the tap become a real click. Gameplay is untouched: startGame()
         // hides every .screen, so mid-run every touch reaches the canvas and
         // takes the original path.
-        window.addEventListener('touchstart', e => { if (e.target.closest('.screen')) return; e.preventDefault(); mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; mouse.down = true; }, {passive: false});
+        window.addEventListener('touchstart', e => { if (e.target.closest('.screen')) return; e.preventDefault(); mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; mouse.down = true; if (e.touches.length > 1 && gameActive && player) player.activateAbility(); }, {passive: false});
         window.addEventListener('touchmove', e => { e.preventDefault(); mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; }, {passive: false});
         window.addEventListener('touchend', e => { mouse.down = false; });
 

@@ -322,6 +322,8 @@
             musicTimer: null,
             musicStep: 0,
             currentTrack: null, // 'menu' or 'game'
+            currentLevel: 0,
+            currentKey: null,
             musicStyle: 'lofi', // 'lofi', 'ambient', 'jazz'
             styleList: ['lofi', 'ambient', 'jazz'],
 
@@ -354,7 +356,7 @@
                 if (this.isMuted) {
                     this.stopMusic();
                 } else {
-                    this.playTrack(this.currentTrack || 'menu');
+                    this.playTrack(this.currentTrack || 'menu', this.currentLevel || 0, true);
                 }
                 return this.isMuted;
             },
@@ -363,7 +365,7 @@
                 const nextIdx = (this.styleList.indexOf(this.musicStyle) + 1) % this.styleList.length;
                 this.musicStyle = this.styleList[nextIdx];
                 if (!this.isMuted && this.currentTrack) {
-                    this.playTrack(this.currentTrack);
+                    this.playTrack(this.currentTrack, this.currentLevel || 0, true);
                 }
                 return this.musicStyle;
             },
@@ -591,16 +593,30 @@
                 } catch(e) {}
             },
 
-            playTrack(trackName) {
+            // Each level gets its own key, tempo nudge and chord order so the
+            // song audibly changes level to level; the menu keeps the base key.
+            // Re-requesting the same track (e.g. resuming from pause) is a no-op
+            // unless `force` is set (style change / unmute).
+            playTrack(trackName, level = 0, force = false) {
+                const trackKey = trackName + ':' + (trackName === 'game' ? level : 0);
+                if (!force && trackKey === this.currentKey && this.musicTimer) return;
                 this.currentTrack = trackName;
+                this.currentLevel = level;
+                this.currentKey = trackKey;
                 if (this.isMuted) return;
                 this.init();
                 this.stopMusic();
 
                 this.musicStep = 0;
-                
+
+                const lv = trackName === 'game' ? Math.max(1, level) : 0;
+                const keyShifts = [1, 1.1225, 0.8909, 1.2599, 0.9439, 1.0595];  // semitones: 0,+2,-2,+4,-1,+1
+                const shift = lv ? keyShifts[(lv - 1) % keyShifts.length] : 1;
+                const barOffset = lv ? (lv - 1) % 4 : 0;
+                const tempoNudge = lv ? [0, 4, -3, 6, 2][(lv - 1) % 5] : 0;
+
                 // Relaxed, cozy tempos
-                const bpm = this.musicStyle === 'ambient' ? 64 : (this.musicStyle === 'jazz' ? 76 : 80);
+                const bpm = (this.musicStyle === 'ambient' ? 64 : (this.musicStyle === 'jazz' ? 76 : 80)) + tempoNudge;
                 const intervalMs = (60 / bpm / 4) * 1000;
 
                 // Rich Lofi / Jazz Chords
@@ -629,7 +645,7 @@
                     const beatInBar = s % 16;
 
                     const chords = this.musicStyle === 'ambient' ? ambientChords : lofiChords;
-                    const currentChord = chords[bar % chords.length];
+                    const currentChord = chords[(bar + barOffset) % chords.length].map(f => f * shift);
 
                     // Pad Chord Swell at the start of each bar
                     if (beatInBar === 0) {
@@ -645,7 +661,7 @@
                         }
                         if ([2, 6, 9, 13].includes(beatInBar) && Math.random() > 0.35) {
                             const noteIdx = Math.floor(Math.random() * lofiMelodyNotes.length);
-                            const noteFreq = lofiMelodyNotes[noteIdx];
+                            const noteFreq = lofiMelodyNotes[noteIdx] * shift;
                             if (noteFreq) {
                                 this.playSoftPianoNote(noteFreq, 1.2, 0.05);
                             }
@@ -718,7 +734,7 @@
         const unlockAudio = () => {
             SoundFX.init();
             if (gameState === 'PLAYING') {
-                SoundFX.playTrack('game');
+                SoundFX.playTrack('game', currentLevel);
             } else {
                 SoundFX.playTrack('menu');
             }
@@ -821,7 +837,7 @@
                 document.getElementById('hud-level').innerText = currentLevel;
                 updateSoulsHUD();
                 lastTime = performance.now();
-                SoundFX.playTrack('game');
+                SoundFX.playTrack('game', currentLevel);
             } else if (newState === 'PAUSED') {
                 document.getElementById('ui-main').classList.remove('hidden');
                 document.getElementById('screen-pause').classList.remove('hidden');
@@ -1030,6 +1046,9 @@
             player.isDead = false;
 
             const rand = createSeededRandom(levelIdx * 9999 + 4321);
+            // Separate stream for the newer obstacles so adding them never
+            // reshuffles the platform layout the main stream produces.
+            const orand = createSeededRandom(levelIdx * 7919 + 1234);
             levelLength = 8500 + (levelIdx * 600);
 
             // Background fog nodes
@@ -1053,6 +1072,12 @@
             player.y = curY - player.h - 10;
             player.vx = 0;
             player.vy = 0;
+            player.coyoteTime = 0;
+            player.jumpBuffer = 0;
+            // Start the camera on the player; a stale camera from the previous
+            // run could otherwise trip the fall-death check on the first frame.
+            camera.x = 0;
+            camera.y = player.y - canvas.height / 1.6;
 
             let soulPlaced = 0;
             const soulMilestones = [levelLength * 0.25, levelLength * 0.55, levelLength * 0.82];
@@ -1101,6 +1126,7 @@
                 };
                 platforms.push(pObj);
 
+                const hazardsBefore = hazards.length;
                 let hasSpring = false;
                 let springX = 0;
                 if (levelIdx >= 3 && rand() < 0.3 && platType === 'normal' && platW >= 150) {
@@ -1160,6 +1186,32 @@
                         w: 56, h: 56,
                         angle: 0
                     });
+                }
+
+                // Newer obstacles: only on bare normal platforms, so they never
+                // overlap a spring, spikes or the static sawblade.
+                const oRoll = orand();
+                const oPhase = orand() * 6.28;
+                if (platType === 'normal' && !hasSpring && hazards.length === hazardsBefore) {
+                    if (levelIdx >= 3 && platW >= 170 && oRoll < 0.22) {
+                        // Retracting spikes: sink, flash red as a warning, then pop up
+                        const cx = curX + platW / 2;
+                        for (let i = 0; i < 2; i++) {
+                            hazards.push({
+                                type: 'popspike',
+                                x: cx - 32 + i * 32, y: curY - 32, w: 32, h: 32,
+                                ext: 0, offset: oPhase
+                            });
+                        }
+                    } else if (levelIdx >= 10 && platW >= 220 && oRoll > 0.75) {
+                        // Low patrolling sawblade: jump over it, mind the timing
+                        hazards.push({
+                            type: 'saw', patrol: true,
+                            x: curX + platW / 2, y: curY - 22, r: 22, w: 44, h: 44,
+                            cx: curX + platW / 2, range: platW / 2 - 40,
+                            speed: 1.5 + orand() * 0.8, phase: oPhase, angle: 0
+                        });
+                    }
                 }
 
                 // Collectible Pumpkin Souls placement
@@ -1320,6 +1372,11 @@
         function pauseGame() {
             if (gameState === 'PLAYING') changeState('PAUSED');
         }
+        function resumeGame() {
+            if (gameState !== 'PAUSED') return;
+            changeState('PLAYING'); // keeps the level as-is and resets lastTime so no time jump
+            keys.left = keys.right = keys.jump = false;
+        }
         function triggerDeath(reason = 'void') {
             if (player.isDead) return;
             player.isDead = true;
@@ -1353,6 +1410,23 @@
                    r1.x + r1.w > r2.x &&
                    r1.y < r2.y + r2.h &&
                    r1.y + r1.h > r2.y;
+        }
+
+        // Hazards are drawn as a triangle (spike) or a round blade centred on
+        // (x, y) (saw), so test against those shapes, not their bounding squares.
+        function hazardHit(box, h) {
+            if (h.type === 'saw') {
+                const cx = h.x, cy = h.y, r = h.r * 0.8; // forgiving: blade teeth are thin
+                const nx = Math.max(box.x, Math.min(cx, box.x + box.w));
+                const ny = Math.max(box.y, Math.min(cy, box.y + box.h));
+                const dx = cx - nx, dy = cy - ny;
+                return dx * dx + dy * dy < r * r;
+            }
+            if (h.type === 'popspike') {
+                if (h.ext <= 0.5) return false; // retracted or still warning
+            }
+            // Spike: narrower, shorter box hugging the triangle's body
+            return checkAABB(box, { x: h.x + h.w * 0.25, y: h.y + h.h * 0.35, w: h.w * 0.5, h: h.h * 0.65 });
         }
 
         function update(dt) {
@@ -1390,6 +1464,11 @@
             for (let h of hazards) {
                 if (h.type === 'saw') {
                     h.angle += dt * 8;
+                    if (h.patrol) h.x = h.cx + Math.sin(gameTime * h.speed + h.phase) * h.range;
+                } else if (h.type === 'popspike') {
+                    // 2.4s cycle: down 0-1.2s, warning 1.2-1.6s, up 1.6-2.4s
+                    const t = (gameTime + h.offset) % 2.4;
+                    h.ext = t < 1.2 ? 0 : (t < 1.6 ? 0.4 * (t - 1.2) / 0.4 : 1);
                 }
             }
 
@@ -1496,10 +1575,10 @@
                 return;
             }
 
-            // Hazard collisions
+            // Hazard collisions (hitboxes match what is drawn, see hazardHit)
             const pBox = { x: player.x + 6, y: player.y + 6, w: player.w - 12, h: player.h - 12 };
             for (let h of hazards) {
-                if (checkAABB(pBox, h)) {
+                if (hazardHit(pBox, h)) {
                     triggerDeath(h.type === 'saw' ? 'saw' : 'spike');
                     return;
                 }
@@ -1650,7 +1729,22 @@
 
             // Draw Triangular Ground Spikes (Original dark silhouettes without glow)
             for (let h of hazards) {
-                if (h.type === 'spike') {
+                if (h.type === 'popspike') {
+                    targetCtx.save();
+                    const warn = h.ext > 0 && h.ext < 1;
+                    // base stub always visible, triangle grows with ext
+                    targetCtx.fillStyle = '#07070A';
+                    targetCtx.fillRect(h.x, h.y + h.h - 5, h.w, 5);
+                    const th = Math.max(0.15, h.ext) * (h.h - 5);
+                    targetCtx.fillStyle = warn ? '#F43F5E' : '#07070A';
+                    targetCtx.beginPath();
+                    targetCtx.moveTo(h.x + h.w / 2, h.y + h.h - 5 - th);
+                    targetCtx.lineTo(h.x + h.w, h.y + h.h - 5);
+                    targetCtx.lineTo(h.x, h.y + h.h - 5);
+                    targetCtx.closePath();
+                    targetCtx.fill();
+                    targetCtx.restore();
+                } else if (h.type === 'spike') {
                     targetCtx.save();
                     targetCtx.fillStyle = '#07070A';
                     targetCtx.beginPath();

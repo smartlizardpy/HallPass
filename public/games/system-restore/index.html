@@ -76,7 +76,8 @@
         body.theme-3000 #execute-btn { color: #d4af37; border: 1px solid #d4af37; }
 
         /* --- LAYOUT --- */
-        #game-container { width: 90%; max-width: var(--container-width); height: 90vh; border: var(--border-style); padding: 20px; background: var(--panel-bg); display: grid; grid-template-rows: auto auto 1fr auto; gap: 15px; position: relative; z-index: 10; transition: all 0.5s ease; }
+        #game-container { width: 90%; max-width: var(--container-width); height: 90vh; border: var(--border-style); padding: 20px; background: var(--panel-bg); display: flex; flex-direction: column; gap: 15px; box-sizing: border-box; position: relative; z-index: 10; transition: all 0.5s ease; }
+        #game-container > * { flex-shrink: 0; }
         #header-bar { border-bottom: var(--border-style); padding-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-end; }
         h1 { margin: 0; font-size: 28px; font-weight: bold; }
         #stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
@@ -113,7 +114,7 @@
         @keyframes glitch { 0% { transform: translate(0,0); } 20% { transform: translate(-2px,2px); } 40% { transform: translate(-2px,-2px); } 60% { transform: translate(2px,2px); } 80% { transform: translate(2px,-2px); } 100% { transform: translate(0,0); } }
         #execute-btn:active { transform: scale(0.98); }
 
-        #upgrades-container { border-top: var(--border-style); overflow-y: auto; padding-top: 15px; }
+        #game-container > #upgrades-container { flex: 1 1 0; min-height: 0; border-top: var(--border-style); overflow-y: auto; padding-top: 15px; }
         #upgrades-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
         
         .upgrade-card { border: var(--border-style); padding: 12px; background: rgba(128,128,128,0.1); border-radius: var(--btn-radius); cursor: pointer; text-align: left; transition: all 0.2s; display: flex; flex-direction: column; justify-content: space-between; min-height: 80px; position: relative; }
@@ -142,7 +143,7 @@
         }
         @keyframes floatUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-30px); } }
 
-        #inline-img-artifact { display: none; width: 50px; height: 50px; background: #ddd; border: 1px solid #000; margin-left: 10px; vertical-align: middle; text-align: center; line-height: 50px; font-size: 10px; color: #555; }
+        #inline-img-artifact { display: none; width: 50px; height: 50px; margin-left: 10px; vertical-align: middle; border: 1px solid #000; background: #cfe8ff; }
         #gif-artifact { display: none; margin: 10px auto; width: 200px; text-align: center; border: 2px dashed orange; background: yellow; color: red; font-weight: bold; padding: 5px; animation: blink 1s infinite; }
         @keyframes blink { 0% {opacity:1;} 50% {opacity:0.5;} 100% {opacity:1;} }
 
@@ -172,7 +173,12 @@
                     <div id="site-subtitle" style="font-size: 0.9em;">Under Construction...</div>
                 </div>
                 <!-- Inline Image Artifact -->
-                <div id="inline-img-artifact">[IMG]</div>
+                <svg id="inline-img-artifact" viewBox="0 0 50 50" role="img" aria-label="Photo of a sunny hill">
+                    <rect width="50" height="50" fill="#9ed0ff"/>
+                    <circle cx="36" cy="14" r="6" fill="#ffd93b"/>
+                    <path d="M0 50 L0 34 L14 20 L26 34 L34 28 L50 42 L50 50 Z" fill="#3c9a4a"/>
+                    <path d="M0 50 L0 42 L12 36 L24 44 L38 38 L50 46 L50 50 Z" fill="#2a7a38"/>
+                </svg>
             </div>
             <div style="text-align: right; width: 200px;">
                 <div style="font-size: 0.7em; margin-bottom: 5px;">WEB EVOLUTION</div>

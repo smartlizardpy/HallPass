@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Terraria Lite: Stable Edition</title>
     <style>
         body {
@@ -12,6 +12,9 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             user-select: none;
             -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            touch-action: none;
+            overscroll-behavior: none;
         }
 
         canvas {
@@ -241,6 +244,36 @@
             z-index: 100;
             transition: opacity 0.5s;
         }
+
+        /* Touch controls. Hidden until body.touch is set from JS (a coarse pointer,
+           or the first touch), so desktop never sees them. */
+        #touch-controls { display: none; position: absolute; left: 0; right: 0; bottom: 0; height: 0; z-index: 20; pointer-events: none; }
+        body.touch #touch-controls { display: block; }
+        .tbtn {
+            position: absolute; bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+            width: 68px; height: 68px; border-radius: 50%;
+            background: rgba(255,255,255,0.16); border: 2px solid rgba(255,255,255,0.5);
+            color: #fff; font-size: 28px; font-weight: bold; line-height: 64px; text-align: center;
+            pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent;
+            text-shadow: 1px 1px 0 #000;
+        }
+        .tbtn.down { background: rgba(255,215,0,0.45); border-color: #ffd700; }
+        #tb-left { left: calc(14px + env(safe-area-inset-left, 0px)); }
+        #tb-right { left: calc(96px + env(safe-area-inset-left, 0px)); }
+        #tb-jump { right: calc(18px + env(safe-area-inset-right, 0px)); width: 78px; height: 78px; line-height: 74px; font-size: 32px; }
+        body.touch #ui-layer { padding: 8px; }
+        body.touch #hud-top { flex-wrap: wrap; gap: 6px; }
+        body.touch #hotbar { gap: 3px; padding: 4px; border-width: 2px; }
+        body.touch .slot { width: 30px; height: 30px; border-width: 1px; }
+        body.touch .slot-key { display: none; }
+        body.touch .slot-count { font-size: 10px; right: 2px; bottom: 0; }
+        body.touch .slot .icon-block { transform: scale(0.75); }
+        body.touch #craft-btn { width: 38px; height: 38px; font-size: 18px; margin-left: 6px; box-shadow: 0 2px 0 #e65100; }
+        body.touch .heart { transform: rotate(45deg) scale(0.7); margin: 0 3px; }
+        body.touch #crafting-menu { top: 56px; left: 8px; right: 8px; min-width: 0; max-height: 45vh; }
+        body.touch #boss-bar-container { bottom: auto; top: 8px; width: 40%; height: 14px; }
+        body.touch #boss-name { top: auto; bottom: -22px; font-size: 12px; }
+        body.touch #save-msg { bottom: auto; top: 60px; right: 8px; padding: 6px 12px; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -249,6 +282,12 @@
     <div id="save-msg">Game Saved</div>
     <div id="boss-bar-container"><div id="boss-name">Eye of Doom</div><div id="boss-bar-fill"></div></div>
     <canvas id="gameCanvas"></canvas>
+
+    <div id="touch-controls">
+        <div class="tbtn" id="tb-left" data-key="ArrowLeft">◀</div>
+        <div class="tbtn" id="tb-right" data-key="ArrowRight">▶</div>
+        <div class="tbtn" id="tb-jump" data-key="ArrowUp">▲</div>
+    </div>
 
     <div id="ui-layer">
         <div id="hud-top">
@@ -1184,6 +1223,58 @@
         window.addEventListener('mouseup', e => { if (e.button === 0) mouse.leftDown = false; });
         window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
         window.addEventListener('keyup', e => keys[e.code] = false);
+
+        // --- Touch controls ---
+        // Pointer events, so several fingers work at once (hold a direction while
+        // tapping to mine). Touch/pen only: a mouse still goes through the mouse
+        // handlers above. preventDefault on pointerdown also stops the browser
+        // synthesising a second mouse click from the same tap.
+        const touchMQ = window.matchMedia('(pointer: coarse)');
+        function enableTouch() {
+            document.body.classList.add('touch');
+            window.dispatchEvent(new Event('resize'));
+        }
+        if (touchMQ.matches) enableTouch();
+
+        document.querySelectorAll('.tbtn').forEach(btn => {
+            const code = btn.dataset.key;
+            const press = e => { e.preventDefault(); resumeAudio(); keys[code] = true; btn.classList.add('down'); try { btn.setPointerCapture(e.pointerId); } catch (_) {} };
+            const release = e => { e.preventDefault(); keys[code] = false; btn.classList.remove('down'); };
+            btn.addEventListener('pointerdown', press);
+            btn.addEventListener('pointerup', release);
+            btn.addEventListener('pointercancel', release);
+            btn.addEventListener('lostpointercapture', release);
+        });
+
+        // Anywhere else on the canvas acts like the mouse: touch aims the cursor and
+        // holds "left button" (mine / place / swing / shoot) until the finger lifts.
+        // The release is held back a moment so a quick tap still lasts a game tick.
+        let aimPointer = null, aimRelease = 0;
+        const isTouchy = e => e.pointerType === 'touch' || e.pointerType === 'pen';
+        canvas.addEventListener('pointerdown', e => {
+            if (!isTouchy(e)) return;
+            e.preventDefault(); resumeAudio();
+            if (!document.body.classList.contains('touch')) enableTouch();
+            clearTimeout(aimRelease);
+            aimPointer = e.pointerId;
+            mouse.x = e.clientX; mouse.y = e.clientY; mouse.leftDown = true;
+        });
+        canvas.addEventListener('pointermove', e => {
+            if (!isTouchy(e) || e.pointerId !== aimPointer) return;
+            mouse.x = e.clientX; mouse.y = e.clientY;
+        });
+        const endAim = e => {
+            if (!isTouchy(e) || e.pointerId !== aimPointer) return;
+            aimPointer = null;
+            aimRelease = setTimeout(() => { if (aimPointer === null) mouse.leftDown = false; }, 90);
+        };
+        canvas.addEventListener('pointerup', endAim);
+        canvas.addEventListener('pointercancel', endAim);
+        // A touch that lands on the HUD first (hotbar / craft button) also turns touch mode on.
+        document.getElementById('ui-layer').addEventListener('pointerdown', e => {
+            if (isTouchy(e) && !document.body.classList.contains('touch')) enableTouch();
+        });
+        document.addEventListener('contextmenu', e => { if (document.body.classList.contains('touch')) e.preventDefault(); });
 
         generateWorld();
         requestAnimationFrame(loop);

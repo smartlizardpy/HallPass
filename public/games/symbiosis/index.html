@@ -102,6 +102,12 @@
                 </div>
             </div>
             
+            <!-- Blight Status -->
+            <div id="blight-display" class="hidden flex items-center gap-2 px-4 py-2 bg-red-500/10 rounded-full border border-red-500/30 animate-pulse">
+                <i class="fas fa-biohazard text-red-400"></i>
+                <span id="blight-text" class="text-xs font-bold text-red-300 tracking-wider">BLIGHT</span>
+            </div>
+
             <!-- Weather Status -->
             <div id="weather-display" class="hidden flex items-center gap-2 px-4 py-2 bg-white/5 rounded-full border border-white/10 animate-pulse">
                 <i id="weather-icon" class="fas fa-cloud-rain text-cyan-400"></i>
@@ -220,7 +226,7 @@
                     </div>
                     <div>
                         <div class="text-amber-400 font-bold mb-1">Weather</div>
-                        <div class="text-xs text-gray-500">Adapt to Rain and Spore Storms for big gains.</div>
+                        <div class="text-xs text-gray-500">Adapt to Rain and Spore Storms. Tap red Blight to purge it before it spreads.</div>
                     </div>
                     <div>
                         <div class="text-white font-bold mb-1">Wisps</div>
@@ -344,6 +350,7 @@
             mouse: { x: 0, y: 0, down: false, lx: 0, ly: 0 },
             tick: 0,
             time: 0,
+            blightTimer: 20,
             tut: { nav: false, res: false, tree: false, trade: false, wisp: false, active: true }
         };
 
@@ -408,6 +415,7 @@
                 this.seed = Math.random()*100;
                 this.tradeCount = 0;
                 this.fruit = 0; this.hasFruit = false;
+                this.blight = 0; // seconds infected; 0 = healthy
                 
                 if(type === 'relic') {
                     // Assign random unpicked relic
@@ -473,6 +481,15 @@
                     ctx.arc(this.x, this.y, size*0.4, 0, Math.PI*2);
                 }
                 ctx.fill();
+
+                if(this.blight > 0) {
+                    ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 2;
+                    ctx.globalAlpha = 0.5 + Math.sin(t*0.15)*0.3;
+                    ctx.beginPath(); ctx.arc(this.x, this.y, size + 8 + Math.sin(t*0.1)*3, 0, Math.PI*2); ctx.stroke();
+                    ctx.fillStyle = '#ef4444';
+                    ctx.beginPath(); ctx.arc(this.x, this.y, size*0.4, 0, Math.PI*2); ctx.fill();
+                    ctx.globalAlpha = 1;
+                }
 
                 if(this.type === 'tree' && this.connected) {
                     ctx.strokeStyle = c.hex; ctx.lineWidth = 1; ctx.globalAlpha = 0.3;
@@ -704,6 +721,21 @@
             // 2. Node?
             const n = state.nodes.find(n => n.discovered && Math.hypot(n.x-wx, n.y-wy) < n.baseSize+20);
             
+            // Purge Blight
+            if(n && n.connected && n.blight > 0) {
+                const cost = purgeCost();
+                if(state.res.c >= cost) {
+                    state.res.c -= cost; n.blight = 0;
+                    particles.spawn(n.x, n.y, '#34d399', 'text', `PURGED -${cost} C`);
+                    state.shockwaves.push(new Shockwave(n.x, n.y));
+                    audio.playUpgrade();
+                    updateUI();
+                } else {
+                    particles.spawn(n.x, n.y, '#ef4444', 'text', `Need ${cost} C`);
+                }
+                return;
+            }
+
             // Fruit Collection
             if(n && n.type === 'tree' && n.connected && n.hasFruit) {
                 n.hasFruit = false; n.fruit = 0;
@@ -726,14 +758,7 @@
                     if(min > state.stats.reach) {
                         particles.spawn(n.x, n.y, '#ef4444', 'text', 'Too Far');
                     } else {
-                        let cost = Math.floor(min/10);
-                        
-                        // Modifiers
-                        if(hasRelic('cost_red')) cost = Math.floor(cost * 0.7);
-                        if(state.weather.type === 'storm') cost = Math.floor(cost * 0.5);
-
-                        const existingType = state.nodes.some(node => (node.connected || node.linking) && node.type === n.type);
-                        if (!existingType && ['tree','mineral','water'].includes(n.type)) cost = 0;
+                        const cost = linkCost(n, min);
 
                         if(state.res.c >= cost) {
                             state.res.c -= cost;
@@ -752,6 +777,68 @@
         }
 
         // --- Logic ---
+        // Linking gets pricier as the network sprawls (the ramp starts after the first few nodes,
+        // so the opening minutes stay as gentle as before).
+        function linkCost(n, dist) {
+            const grown = state.nodes.filter(x => x.connected || x.linking).length;
+            let cost = Math.floor(dist/10);
+            cost = Math.floor(cost * (1 + Math.max(0, grown - 6) * 0.03));
+            if(hasRelic('cost_red')) cost = Math.floor(cost * 0.7);
+            if(state.weather.type === 'storm') cost = Math.floor(cost * 0.5);
+            const existingType = state.nodes.some(node => (node.connected || node.linking) && node.type === n.type);
+            if(!existingType && ['tree','mineral','water'].includes(n.type)) cost = 0;
+            return cost;
+        }
+
+        // --- Blight: a spreading infection. Infected nodes stop producing and bleed carbon until purged. ---
+        const BLIGHT_GRACE = 90;      // seconds of peace before the first outbreak
+        const BLIGHT_MIN_NODES = 5;   // network size needed before blight can strike
+        function blightable(n) { return n.connected && ['tree','mineral','water'].includes(n.type); }
+        function purgeCost() { return 4 + Math.min(16, Math.floor(state.tick / 60 / 90)); }
+        function infect(n) {
+            if(!n || n.blight > 0 || !blightable(n)) return false;
+            n.blight = 1;
+            particles.spawn(n.x, n.y, '#ef4444', 'text', 'BLIGHT!');
+            return true;
+        }
+        function updateBlight() {
+            const secs = state.tick / 60;
+            const live = state.nodes.filter(blightable);
+            const sick = live.filter(n => n.blight > 0);
+            sick.forEach(n => {
+                n.blight++;
+                // spread along an intact thread to a healthy neighbour
+                if(n.blight % 8 === 0 && Math.random() < 0.6) {
+                    const nb = [];
+                    state.conns.forEach(c => {
+                        if(c.prog < 1) return;
+                        if(c.a === n) nb.push(c.b); else if(c.b === n) nb.push(c.a);
+                    });
+                    const t = nb.filter(x => blightable(x) && x.blight === 0);
+                    if(t.length) infect(t[Math.floor(Math.random()*t.length)]);
+                }
+            });
+            // The infection saps carbon from the whole network
+            if(sick.length) state.res.c = Math.max(0, state.res.c - sick.length);
+
+            if(secs < BLIGHT_GRACE || live.length < BLIGHT_MIN_NODES) return;
+            state.blightTimer--;
+            if(state.blightTimer > 0) return;
+            // outbreaks come faster and bigger the longer you survive
+            const t = secs - BLIGHT_GRACE;
+            state.blightTimer = Math.max(14, 45 - t / 15) + Math.random()*8;
+            const cap = 1 + Math.floor(live.length / 6);
+            if(sick.length >= cap) return;
+            const burst = Math.min(3, 1 + Math.floor(t / 240));
+            const healthy = live.filter(n => n.blight === 0);
+            let hit = 0;
+            for(let i = 0; i < burst && healthy.length; i++) {
+                const n = healthy.splice(Math.floor(Math.random()*healthy.length), 1)[0];
+                if(infect(n)) hit++;
+            }
+            if(hit) log(hit > 1 ? "Blight surge! Several nodes are infected." : "Blight detected. Tap the red node to purge it.");
+        }
+
         function hasRelic(id) { return state.relicsFound.includes(id); }
         
         function activateRelic(r) {
@@ -837,7 +924,7 @@
             const hov = state.nodes.find(n => n.discovered && Math.hypot(n.x-wx, n.y-wy) < n.baseSize+15);
             
             if(hov) {
-                if(hov.connected && hov.hasFruit) canvas.style.cursor = 'pointer';
+                if(hov.connected && (hov.hasFruit || hov.blight > 0)) canvas.style.cursor = 'pointer';
                 else if (!hov.connected && !hov.linking) {
                     canvas.style.cursor = 'grab';
                     let src=null, min=Infinity;
@@ -848,12 +935,7 @@
                     
                     if(src) {
                         ctx.beginPath(); ctx.moveTo(src.x, src.y); ctx.lineTo(hov.x, hov.y); ctx.setLineDash([5,5]);
-                        let dist = Math.floor(min/10);
-                        if(hasRelic('cost_red')) dist = Math.floor(dist*0.7);
-                        if(state.weather.type==='storm') dist = Math.floor(dist*0.5);
-
-                        const existingType = state.nodes.some(node => (node.connected || node.linking) && node.type === hov.type);
-                        if (!existingType && ['tree','mineral','water'].includes(hov.type)) dist = 0;
+                        const dist = linkCost(hov, min);
 
                         const valid = min <= state.stats.reach; const afford = state.res.c >= dist;
                         ctx.strokeStyle = valid ? (afford?'rgba(255,255,255,0.5)':'rgba(251,191,36,0.5)') : 'rgba(239,68,68,0.5)';
@@ -878,8 +960,9 @@
         // --- Logic (Tick) ---
         function runTick() {
             let addM = 0, addW = 0;
+            updateBlight();
             state.nodes.forEach(n => {
-                if(!n.connected) return;
+                if(!n.connected || n.blight > 0) return;
                 
                 // Base speed + Enzyemes + Relics
                 let speed = state.stats.speed;
@@ -909,7 +992,7 @@
             }
 
             state.nodes.forEach(n => {
-                if(n.connected && n.type==='tree') {
+                if(n.connected && n.blight === 0 && n.type==='tree') {
                     const cost = 5;
                     if(state.res.m >= cost && state.res.w >= cost) {
                         state.res.m -= cost; state.res.w -= cost;
@@ -949,6 +1032,14 @@
             chk('btn-grow-range', state.costs.reach);
             chk('btn-absorption', state.costs.speed);
             chk('btn-trade', state.costs.trade);
+
+            // Blight UI
+            const nSick = state.nodes.filter(n => n.blight > 0).length;
+            const bEl = document.getElementById('blight-display');
+            if(nSick) {
+                bEl.classList.remove('hidden');
+                document.getElementById('blight-text').innerText = 'BLIGHT x' + nSick + ' (' + purgeCost() + ' C)';
+            } else bEl.classList.add('hidden');
 
             // Weather UI
             const wEl = document.getElementById('weather-display');
@@ -1009,19 +1100,19 @@
             };
             btn('btn-grow-range', 'reach', () => {
                 state.stats.reach += 60; state.stats.levels.reach++;
-                state.costs.reach = Math.floor(state.costs.reach * 1.5);
+                state.costs.reach = Math.floor(state.costs.reach * 1.7);
                 document.getElementById('cost-range').innerText = state.costs.reach + ' C';
                 log("Mycelial threads lengthened.");
             });
             btn('btn-absorption', 'speed', () => {
                 state.stats.speed += 1; state.stats.levels.speed++;
-                state.costs.speed = Math.floor(state.costs.speed * 1.6);
+                state.costs.speed = Math.floor(state.costs.speed * 1.8);
                 document.getElementById('cost-absorption').innerText = state.costs.speed + ' C';
                 log("Enzyme secretion amplified.");
             });
             btn('btn-trade', 'trade', () => {
                 state.stats.trade += 0.3; state.stats.levels.trade++;
-                state.costs.trade = Math.floor(state.costs.trade * 2);
+                state.costs.trade = Math.floor(state.costs.trade * 2.2);
                 document.getElementById('cost-trade').innerText = state.costs.trade + ' C';
                 log("Symbiotic bond strengthened.");
             });

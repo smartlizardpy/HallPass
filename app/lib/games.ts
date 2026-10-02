@@ -239,7 +239,7 @@ export const games: Game[] = [
     accent: "#4ade80",
     art: "serpent",
     plays: 96214,
-    platform: "desktop",
+    platform: "both",
   },
   {
     slug: "system-restore",
@@ -314,7 +314,7 @@ export const games: Game[] = [
     accent: "#84cc16",
     art: "terrain",
     plays: 142001,
-    platform: "desktop",
+    platform: "both",
   },
   {
     slug: "snag",
@@ -526,7 +526,7 @@ export const games: Game[] = [
     art: "swarm",
     isNew: true,
     isFeatured: true,
-    platform: "desktop",
+    platform: "both",
   },
   {
     slug: "neon-well",
