@@ -526,7 +526,7 @@ export const games: Game[] = [
     art: "swarm",
     isNew: true,
     isFeatured: true,
-    platform: "desktop",
+    platform: "both",
   },
   {
     slug: "neon-well",

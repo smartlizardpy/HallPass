@@ -15,6 +15,11 @@
     1 / 2 / wheel .. switch weapon   R .............. reload
     M .............. mute audio      Esc / P ........ pause
 
+  TOUCH (phones / tablets, landscape)
+    Left thumb drag ... move (push to the edge to sprint)
+    Right side drag ... look          FIRE button ..... fire (drag it to aim)
+    JUMP / ADS / R / swap / pause buttons sit around the FIRE button
+
   Log in with a handle on the main menu, pick a loadout of 2 weapons, and
   survive endless waves. Scores persist to localStorage (leaderboard seam
   ready for a remote backend later).
@@ -23,7 +28,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>DUSKFALL - Zombie Wave Survival</title>
 <style>
   /* ============================== BASE ============================== */
@@ -172,6 +177,90 @@
   #overStats .cell .val{font-family:var(--display);font-size:30px;color:#fff}
   #overStats .cell .val.acc{color:var(--accent)}
   #overTitle{color:var(--health) !important;text-shadow:0 4px 0 #000,0 0 30px rgba(255,59,59,.4)}
+
+  /* ============================== TOUCH ==============================
+     Everything below is inert on desktop: #touchUI and #rotateHint stay
+     display:none until Input sets body.touch (a coarse pointer, or the first
+     touch), and the responsive menu rules only bite on small screens. */
+  #touchUI,#rotateHint{display:none}
+  body.touch.playing #touchUI{display:block}
+  #touchUI{position:fixed;inset:0;z-index:12;pointer-events:none;touch-action:none;
+    -webkit-tap-highlight-color:transparent}
+  #stickZone{position:absolute;left:0;bottom:0;width:42%;height:78%;pointer-events:auto;touch-action:none}
+  #lookZone{position:absolute;right:0;top:0;width:58%;height:100%;pointer-events:auto;touch-action:none}
+  #stickBase{position:absolute;width:112px;height:112px;margin:-56px 0 0 -56px;border-radius:50%;
+    border:2px solid rgba(255,255,255,.35);background:rgba(255,255,255,.08);opacity:0;transition:opacity .12s;pointer-events:none}
+  #stickBase.on{opacity:1}
+  #stickKnob{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px 0 0 -25px;border-radius:50%;
+    background:rgba(255,179,71,.55);border:2px solid rgba(255,255,255,.7)}
+  .tbtn{position:absolute;pointer-events:auto;touch-action:none;display:flex;align-items:center;justify-content:center;
+    border-radius:50%;background:rgba(18,20,26,.55);border:3px solid rgba(255,255,255,.4);color:#fff;
+    font-family:var(--display);font-size:12px;letter-spacing:1px;text-align:center;line-height:1.1}
+  .tbtn.down,.tbtn.on{background:rgba(255,179,71,.6);border-color:var(--accent);color:#1a1408}
+  #tFire{right:calc(28px + env(safe-area-inset-right,0px));bottom:26px;width:94px;height:94px;font-size:15px;
+    background:rgba(255,59,59,.45);border-color:rgba(255,255,255,.7)}
+  #tJump{right:calc(138px + env(safe-area-inset-right,0px));bottom:22px;width:68px;height:68px}
+  #tAds{right:calc(36px + env(safe-area-inset-right,0px));bottom:136px;width:58px;height:58px}
+  #tReload{right:calc(108px + env(safe-area-inset-right,0px));bottom:116px;width:54px;height:54px}
+  #tSwap{right:calc(176px + env(safe-area-inset-right,0px));bottom:100px;width:54px;height:54px}
+  #tPause{right:calc(10px + env(safe-area-inset-right,0px));top:10px;width:40px;height:40px;font-size:15px}
+
+  body.touch #hudTop{top:6px;gap:14px;padding:4px 10px}
+  body.touch #hudTop .val{font-size:16px}
+  body.touch #hudTop .lbl{font-size:8px}
+  body.touch #hudHealth{left:14px;bottom:10px;width:150px;padding:5px 9px}
+  body.touch #hudAmmo{right:60px;bottom:auto;top:6px;min-width:0;padding:4px 10px}
+  body.touch #ammoBig{font-size:22px}
+  body.touch #ammoReserve{font-size:12px}
+  body.touch #hudAmmo .slot{margin-top:2px;padding:1px 6px;font-size:9px}
+  body.touch #banner{top:18%;font-size:24px}
+  body.touch #powerHud{bottom:auto;top:62px}
+
+  #rotateHint{position:fixed;inset:0;z-index:50;background:#15131a;flex-direction:column;align-items:center;
+    justify-content:center;gap:10px;text-align:center;font-family:var(--display);color:#fff;letter-spacing:3px;padding:24px}
+  #rotateHint .ico{font-size:54px;color:var(--accent)}
+  #rotateHint small{font-family:var(--body);font-size:13px;letter-spacing:1px;color:var(--dim)}
+  @media (orientation:portrait){ body.touch.inrun #rotateHint{display:flex} }
+
+  /* ------- small screens: menus must fit a phone (portrait and landscape) ------- */
+  .screen{overflow-y:auto;touch-action:pan-y}
+  @media (max-width:640px){
+    h1.title{font-size:42px;letter-spacing:3px}
+    .panel{padding:22px 20px;min-width:0;width:min(92vw,340px)}
+    .btn{min-width:0;width:100%;padding:12px 16px}
+    .btn.small{width:auto}
+    #hpAuthRow{flex-direction:column;text-align:center}
+    table.board{min-width:0;width:100%}
+    #overStats{gap:14px}
+    #overStats .cell .val{font-size:22px}
+    h2.head{font-size:24px}
+  }
+  @media (max-height:520px){
+    .screen{gap:8px;justify-content:flex-start;padding:8px 0}
+    .screen > :first-child{margin-top:auto}
+    .screen > :last-child{margin-bottom:auto}
+    h1.title{font-size:38px}
+    .subtitle{margin-top:-4px}
+    .panel{padding:12px 22px;gap:8px}
+    .btn{padding:8px 20px;font-size:15px;min-width:0}
+    h2.head{font-size:22px}
+    #overStats .cell .val{font-size:22px}
+    #overHpBoard{max-height:84px;overflow:auto}
+    #versionTag{display:none}
+  }
+  @media (max-width:900px){
+    #loadoutTop{top:10px}
+    #loadoutBar{flex-wrap:wrap;justify-content:center;width:min(100vw - 16px,560px);bottom:70px;gap:8px}
+    .wcard{width:calc(50% - 4px);padding:8px 10px}
+    .wcard .stats{font-size:10px;line-height:1.4}
+    #loadoutBtns{flex-direction:row;right:auto;left:50%;transform:translateX(-50%);bottom:14px}
+    #loadoutBtns .btn{width:auto;padding:8px 22px}
+  }
+  @media (max-width:900px) and (min-aspect-ratio:1/1){
+    #loadoutBar{width:min(100vw - 16px,780px);bottom:62px}
+    .wcard{width:calc(25% - 6px)}
+    .wcard h3{font-size:14px}
+  }
 </style>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js" } }
@@ -205,6 +294,20 @@
   <div id="powerHud" class="hidden">DOUBLE DAMAGE <span id="powerSecs">10</span>s</div>
 </div>
 <div id="fade"></div>
+
+<!-- ============================== TOUCH CONTROLS (shown only on touch devices) ============================== -->
+<div id="touchUI">
+  <div id="lookZone"></div>
+  <div id="stickZone"></div>
+  <div id="stickBase"><div id="stickKnob"></div></div>
+  <div class="tbtn" id="tFire">FIRE</div>
+  <div class="tbtn" id="tJump">JUMP</div>
+  <div class="tbtn" id="tAds">ADS</div>
+  <div class="tbtn" id="tReload">R</div>
+  <div class="tbtn" id="tSwap">SWAP</div>
+  <div class="tbtn" id="tPause">II</div>
+</div>
+<div id="rotateHint"><div class="ico">&#10227;</div>ROTATE YOUR DEVICE<small>Duskfall is played in landscape</small></div>
 
 <!-- ============================== SCREENS ============================== -->
 <div id="scrMain" class="screen">
@@ -496,6 +599,8 @@ const Input = {
   mouseDown: false,       // held (full-auto)
   clicked: false,         // consumed once per press (semi-auto)
   locked: false,
+  touch: false,           // touch mode: no pointer lock, on-screen controls
+  stick: { x: 0, y: 0, mag: 0 },   // virtual joystick, y>0 = backward (like S)
 
   init(canvas) {
     window.addEventListener('keydown', e => {
@@ -509,6 +614,7 @@ const Input = {
 
     document.addEventListener('mousedown', e => {
       AudioMan.unlock();
+      if (this.touch) return;                     // touch has its own buttons
       if (e.button === 2) {                       // hold right click to aim
         if (Game.state === 'PLAYING' && this.locked && !player.dead) weapons.aiming = true;
         return;
@@ -533,9 +639,134 @@ const Input = {
     }, { passive: true });
 
     document.addEventListener('pointerlockchange', () => {
+      if (this.touch) return;
       this.locked = document.pointerLockElement === canvas;
       if (!this.locked && Game.state === 'PLAYING' && !player.dead) Game.pause();
     });
+
+    this.initTouch();
+  },
+
+  /* Give up the cursor: real pointer lock on desktop, just a flag on touch
+     (iOS has no pointer lock, so `locked` is simply "the run is live"). */
+  unlock() {
+    if (!this.locked) return;
+    this.locked = false;
+    if (!this.touch && document.exitPointerLock) document.exitPointerLock();
+  },
+
+  /* Zero everything a finger could be holding; called whenever play stops. */
+  releaseTouch() {
+    this.stick.x = this.stick.y = this.stick.mag = 0;
+    this.mouseDown = false;
+    this.keys['Space'] = false;
+    for (const id of ['stickBase']) document.getElementById(id).classList.remove('on');
+    for (const b of document.querySelectorAll('.tbtn')) b.classList.remove('down');
+    this.syncTouch();
+  },
+  syncTouch() {
+    document.getElementById('tAds').classList.toggle('on', !!(weapons && weapons.aiming));
+  },
+
+  initTouch() {
+    const $ = id => document.getElementById(id);
+    const enable = () => {
+      if (this.touch) return;
+      this.touch = true;
+      document.body.classList.add('touch');
+      if (Game.state === 'PLAYING') this.locked = true;
+    };
+    if (window.matchMedia('(pointer: coarse)').matches) enable();
+    // Hybrids / iPads with a mouse report a fine primary pointer: switch on the
+    // first real touch instead.
+    window.addEventListener('pointerdown', e => { if (e.pointerType === 'touch') enable(); }, { capture: true, passive: true });
+
+    const live = () => Game.state === 'PLAYING' && this.locked && !player.dead;
+    const LOOK = 1.7;     // touch pixels are worth more than mouse counts
+
+    /* Look: drag on the right half, or while holding FIRE. */
+    const bindLook = (el, { down, up }) => {
+      let id = null, lx = 0, ly = 0;
+      el.addEventListener('pointerdown', e => {
+        e.preventDefault(); AudioMan.unlock();
+        if (id !== null) return;
+        id = e.pointerId; lx = e.clientX; ly = e.clientY;
+        try { el.setPointerCapture(id); } catch (_) {}
+        if (down) down(e);
+      });
+      el.addEventListener('pointermove', e => {
+        if (e.pointerId !== id) return;
+        if (live()) player.look((e.clientX - lx) * LOOK, (e.clientY - ly) * LOOK);
+        lx = e.clientX; ly = e.clientY;
+      });
+      const end = e => {
+        if (e.pointerId !== id) return;
+        id = null;
+        if (up) up(e);
+      };
+      el.addEventListener('pointerup', end);
+      el.addEventListener('pointercancel', end);
+      el.addEventListener('lostpointercapture', end);
+    };
+    bindLook($('lookZone'), {});
+    bindLook($('tFire'), {
+      down: () => { $('tFire').classList.add('down'); if (live()) { this.mouseDown = true; this.clicked = true; } },
+      up: () => { $('tFire').classList.remove('down'); this.mouseDown = false; },
+    });
+
+    /* Floating joystick: appears where the left thumb lands. */
+    const zone = $('stickZone'), base = $('stickBase'), knob = $('stickKnob');
+    const R = 56;
+    let sid = null, ox = 0, oy = 0;
+    const steer = e => {
+      const dx = e.clientX - ox, dy = e.clientY - oy;
+      const d = Math.hypot(dx, dy), k = d > R ? R / d : 1;
+      knob.style.transform = `translate(${dx * k}px,${dy * k}px)`;
+      const mag = Math.min(1, d / R);
+      if (mag < 0.18) { this.stick.x = this.stick.y = this.stick.mag = 0; return; }
+      this.stick.x = dx * k / R; this.stick.y = dy * k / R; this.stick.mag = mag;
+    };
+    zone.addEventListener('pointerdown', e => {
+      e.preventDefault(); AudioMan.unlock();
+      if (sid !== null) return;
+      sid = e.pointerId; ox = e.clientX; oy = e.clientY;
+      try { zone.setPointerCapture(sid); } catch (_) {}
+      base.style.left = ox + 'px'; base.style.top = oy + 'px';
+      knob.style.transform = 'translate(0,0)';
+      base.classList.add('on');
+    });
+    zone.addEventListener('pointermove', e => { if (e.pointerId === sid) steer(e); });
+    const stickEnd = e => {
+      if (e.pointerId !== sid) return;
+      sid = null; base.classList.remove('on');
+      this.stick.x = this.stick.y = this.stick.mag = 0;
+    };
+    zone.addEventListener('pointerup', stickEnd);
+    zone.addEventListener('pointercancel', stickEnd);
+    zone.addEventListener('lostpointercapture', stickEnd);
+
+    /* Plain buttons. */
+    const button = (id, onDown, onUp) => {
+      const el = $(id);
+      el.addEventListener('pointerdown', e => {
+        e.preventDefault(); AudioMan.unlock();
+        try { el.setPointerCapture(e.pointerId); } catch (_) {}
+        el.classList.add('down');
+        if (live()) onDown();
+      });
+      const end = () => { el.classList.remove('down'); if (onUp) onUp(); };
+      el.addEventListener('pointerup', end);
+      el.addEventListener('pointercancel', end);
+    };
+    button('tJump', () => { this.keys['Space'] = true; }, () => { this.keys['Space'] = false; });
+    button('tReload', () => Game.onKey('KeyR'));
+    button('tSwap', () => Game.onKey(weapons.active === 0 ? 'Digit2' : 'Digit1'));
+    button('tAds', () => { weapons.aiming = !weapons.aiming; this.syncTouch(); });
+    button('tPause', () => Game.pause());
+
+    document.addEventListener('contextmenu', e => e.preventDefault());
+    // Backgrounded tab = pause (there is no Esc to lean on).
+    document.addEventListener('visibilitychange', () => { if (document.hidden && this.touch) Game.pause(); });
   },
 };
 
@@ -836,14 +1067,18 @@ class Player {
     this.time += dt;
 
     // --- desired move direction from keys, relative to yaw ---
-    let ix = 0, iz = 0;
+    let ix = 0, iz = 0, mag = 1;
     if (Input.keys['KeyW']) iz -= 1;
     if (Input.keys['KeyS']) iz += 1;
     if (Input.keys['KeyA']) ix -= 1;
     if (Input.keys['KeyD']) ix += 1;
+    // Virtual joystick: analog, so a gentle push walks slower. Keys win if both.
+    const stick = ix === 0 && iz === 0 && Input.stick.mag > 0;
+    if (stick) { ix = Input.stick.x; iz = Input.stick.y; mag = Input.stick.mag; }
     const moving = (ix !== 0 || iz !== 0) && !this.dead;
-    const sprint = (Input.keys['ShiftLeft'] || Input.keys['ShiftRight']) && iz < 0;
-    const targetSpeed = moving ? (sprint ? 9 : 6) : 0;
+    const sprint = ((Input.keys['ShiftLeft'] || Input.keys['ShiftRight']) && iz < 0) ||
+                   (stick && mag > 0.92 && iz < -0.5);       // joystick pinned forward
+    const targetSpeed = moving ? (sprint ? 9 : 6) * mag : 0;
 
     // rotate input into world space
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
@@ -1967,7 +2202,9 @@ const Game = {
   setState(s) {
     this.state = s;
     // Any screen with buttons needs a free cursor.
-    if (s !== 'PLAYING' && Input.locked) document.exitPointerLock();
+    if (s !== 'PLAYING') { Input.unlock(); Input.releaseTouch(); }
+    document.body.classList.toggle('playing', s === 'PLAYING');
+    document.body.classList.toggle('inrun', s === 'PLAYING' || s === 'PAUSED');
     for (const [key, el] of Object.entries(Menu.screens))
       el.classList.toggle('hidden', key !== s);
     HUD.show(s === 'PLAYING' || s === 'PAUSED');
@@ -1976,6 +2213,7 @@ const Game = {
   },
 
   lockPointer() {
+    if (Input.touch) { Input.locked = true; return; }     // no pointer lock on touch
     try {
       const p = canvas.requestPointerLock();
       if (p && p.catch) p.catch(() => {});
@@ -1998,6 +2236,7 @@ const Game = {
     HUD.update(0);
     this.setState('PLAYING');
     this.lockPointer();
+    Input.syncTouch();
   },
 
   quitToMenu() {
@@ -2014,7 +2253,7 @@ const Game = {
     if (this.state !== 'PLAYING' || player.dead) return;
     weapons.aiming = false;
     this.setState('PAUSED');
-    if (Input.locked) document.exitPointerLock();
+    Input.unlock();
   },
 
   resume() {
@@ -2041,7 +2280,7 @@ const Game = {
   onPlayerDeath() {
     this.deathT = 0.0001;             // arms the slow-mo → game-over sequence
     Input.mouseDown = false;
-    if (Input.locked) document.exitPointerLock();
+    Input.unlock();
     document.getElementById('fade').style.transition = 'opacity 1.6s';
     document.getElementById('fade').style.opacity = 0.72;
   },
@@ -2067,6 +2306,10 @@ const Game = {
   frame() {
     const dt = clamp(this.clock.getDelta(), 0, 0.05);   // lost-tab safety clamp
     FX.update(dt);
+
+    // A phone held upright can't play (the HUD and thumbs need landscape): hold
+    // the run on the pause screen until it is turned. The overlay covers it.
+    if (this.state === 'PLAYING' && Input.touch && !player.dead && window.innerHeight > window.innerWidth) this.pause();
 
     if (this.state === 'PLAYING') {
       // death slow-mo ramp
@@ -2097,7 +2340,8 @@ const Game = {
       this.menuT += dt;
       zombies.update(dt);
       if (this.state === 'WEAPON_SELECT') {
-        camera.position.set(0, 2.7, 8.6);
+        // Back the camera off on narrow (portrait) screens so all four pedestals fit.
+        camera.position.set(0, 2.7, Math.max(8.6, 9.4 / camera.aspect));
         camera.lookAt(0, 1.8, 0);
         Menu.updateShowcase(dt);
       } else {
