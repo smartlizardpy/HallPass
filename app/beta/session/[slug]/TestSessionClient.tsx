@@ -72,8 +72,10 @@ import {
   ReplayBuffer,
   type ReplayClip,
 } from "@/app/lib/capture/replay-buffer";
+import { formatClock, type RecordFailure } from "@/app/lib/capture/record-policy";
 import { upload } from "@vercel/blob/client";
 import { SessionTutorial, tutorialSeen } from "./SessionTutorial";
+import { useGameRecorder } from "./useGameRecorder";
 import {
   finishAssignmentAction,
   submitReportAction,
@@ -133,6 +135,33 @@ const GRAB_COPY: Record<GrabFailure, string> = {
     "This game's picture is locked to it. Take a screenshot and attach it to your report.",
   failed: "Couldn't grab that one. Take a screenshot and attach it instead.",
 };
+
+/**
+ * Human copy for each reason the game recorder cannot start.
+ *
+ * Same rule as `GRAB_COPY`: every refusal says what is true and what to do
+ * instead, never a bare "failed". The recorder is not the only way to show a bug
+ * — the report composer's screenshot and the replay buffer still work.
+ */
+const RECORD_COPY: Record<RecordFailure, string> = {
+  "cross-origin":
+    "This game runs on another site, so it can't be recorded from here. Use your device's own screen recorder instead.",
+  "no-canvas":
+    "Couldn't find this game's picture to record — it may not have started yet. Start the game, then try again.",
+  unsupported:
+    "This browser can't record a game's picture. Your device's own screen recorder will still work.",
+  "no-container":
+    "This browser has no video format we can record in. Your device's own screen recorder will still work.",
+  failed: "Couldn't start recording that one. Try again?",
+};
+
+/** Human copy for each way a recording can end without the tester pressing Stop. */
+const ENDED_COPY = {
+  time: "Recording stopped — it reached the length limit.",
+  size: "Recording stopped — it reached the size limit.",
+  navigated: "Recording stopped — the game reloaded.",
+  error: "Recording stopped — the browser stopped it. What was recorded is below.",
+} as const;
 
 /** Human copy for a file the tester picked that we cannot use. */
 const ATTACH_COPY: Record<AttachFailure, string> = {
@@ -265,6 +294,23 @@ export function TestSessionClient({
 
   /** Whether the game's own errors can be seen — false for cross-origin games. */
   const [errorWatch, setErrorWatch] = useState<FrameAttachResult | null>(null);
+  /**
+   * Recording the game itself (canvas + Web Audio), as opposed to the tab capture
+   * above. The two are independent and can run together. See `game-recorder.ts`.
+   */
+  const rec = useGameRecorder({
+    iframeRef,
+    slug: game.slug,
+    title: game.title,
+  });
+  const { addEvent: recAddEvent } = rec;
+  /** Brief confirmation after ⭐ Mark, so a tester knows the tap registered. */
+  const [markedAt, setMarkedAt] = useState<string | null>(null);
+  useEffect(() => {
+    if (!markedAt) return;
+    const t = setTimeout(() => setMarkedAt(null), 1500);
+    return () => clearTimeout(t);
+  }, [markedAt]);
   /** Snapshotted at the moment the shortcut fires, so it cannot drift. */
   const [pendingErrors, setPendingErrors] = useState<CapturedError[]>([]);
   /** The replay flushed for the report being written. */
@@ -454,6 +500,10 @@ export function TestSessionClient({
     setComposerOpen(true);
     setReviewOpen(false);
 
+    // A tester stopping to report is the strongest "something happened here" signal
+    // a recording can carry. No-op when nothing is recording.
+    recAddEvent("report", "tester", { kind: "bug" });
+
     // Snapshot the errors as they are right now.
     setPendingErrors(errorLogRef.current?.snapshot() ?? []);
 
@@ -510,7 +560,7 @@ export function TestSessionClient({
     } catch {
       setClipState("idle");
     }
-  }, [shots, capturing, grabFromGame]);
+  }, [shots, capturing, grabFromGame, recAddEvent]);
 
   // The shortcut. Capture phase on `window` so it beats the page's own
   // handlers; it cannot reach inside a cross-origin iframe, which is why the
@@ -738,6 +788,66 @@ export function TestSessionClient({
           </>
         )}
 
+        {/* The game recorder. Independent of the tab capture above — it works
+            on a phone, where that cannot exist — and shown once the frame has
+            been probed (`errorWatch` is only set on the client, so this is
+            SSR-safe). When it cannot work it says why rather than vanishing. */}
+        {rec.state.phase === "recording" || rec.state.phase === "stopping" ? (
+          <>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/20 px-3 py-1.5 text-xs font-black uppercase tracking-wide text-red-300">
+              <span className="pip h-2 w-2 rounded-full bg-red-500" />
+              {rec.state.phase === "recording"
+                ? `REC ${formatClock(rec.state.elapsedMs)}`
+                : "Saving…"}
+            </span>
+            <button
+              type="button"
+              disabled={rec.state.phase !== "recording"}
+              onClick={() => {
+                rec.addEvent("mark", "tester");
+                setMarkedAt(
+                  rec.state.phase === "recording" ? formatClock(rec.state.elapsedMs) : "",
+                );
+              }}
+              title="Mark this moment — it's flagged in the events file"
+              className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-extrabold text-white transition hover:bg-white/20 disabled:opacity-50"
+            >
+              {markedAt ? `⭐ Marked ${markedAt}` : "⭐ Mark"}
+            </button>
+            <button
+              type="button"
+              disabled={rec.state.phase !== "recording"}
+              onClick={() => void rec.stop()}
+              className="rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-zinc-900 transition hover:bg-white/90 disabled:opacity-50"
+            >
+              ■ Stop
+            </button>
+          </>
+        ) : (
+          errorWatch !== null &&
+          errorWatch !== "unavailable" && (
+            <button
+              type="button"
+              onClick={() => void rec.start()}
+              disabled={
+                errorWatch === "cross-origin" ||
+                rec.unsupported !== null ||
+                rec.state.phase === "starting"
+              }
+              title={
+                errorWatch === "cross-origin"
+                  ? RECORD_COPY["cross-origin"]
+                  : rec.unsupported
+                    ? RECORD_COPY[rec.unsupported]
+                    : "Record the game's picture and sound to a file on this device"
+              }
+              className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-extrabold text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              🎥 Record gameplay
+            </button>
+          )
+        )}
+
         <button
           type="button"
           onClick={() => void openBugReport()}
@@ -798,6 +908,59 @@ export function TestSessionClient({
         </p>
       )}
 
+      {/* Recorder notes and the download step. Above the game, never over it, so
+          none of this is inside the crop target of the tab capture. */}
+      {rec.state.phase === "refused" && (
+        <p className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-amber-500/20 px-4 py-2 text-xs font-bold text-amber-100">
+          <span>{RECORD_COPY[rec.state.reason]}</span>
+          <button type="button" onClick={rec.discard} className="shrink-0 underline">
+            Dismiss
+          </button>
+        </p>
+      )}
+      {rec.state.phase === "recording" && (rec.state.layered || rec.state.silent) && (
+        <p className="shrink-0 border-b border-white/10 bg-amber-500/20 px-4 py-2 text-xs font-bold text-amber-100">
+          {rec.state.layered && "This game draws in layers, so the recording may be missing some of them. "}
+          {rec.state.silent && "This game's sound can't be recorded — the video will be silent."}
+        </p>
+      )}
+      {rec.state.phase === "ready" && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 bg-emerald-500/15 px-4 py-2 text-xs font-bold text-emerald-100">
+          <span className="min-w-0 flex-1">
+            🎥 Recording ready — {formatClock(rec.state.take.durationMs)},{" "}
+            {(rec.state.take.bytes / (1024 * 1024)).toFixed(1)} MB. It&rsquo;s the game&rsquo;s
+            picture{rec.state.take.sidecar.recording.hasAudio ? " and sound" : " only (no sound)"}
+            ; it stays on this device until you save it.
+            {rec.state.take.endedBy === "cap" && rec.state.take.cap
+              ? ` ${ENDED_COPY[rec.state.take.cap]}`
+              : rec.state.take.endedBy !== "user" && rec.state.take.endedBy !== "cap"
+                ? ` ${ENDED_COPY[rec.state.take.endedBy]}`
+                : ""}
+          </span>
+          <button
+            type="button"
+            onClick={rec.saveVideo}
+            className="rounded-full bg-white px-3 py-1.5 font-extrabold text-zinc-900 hover:bg-white/90"
+          >
+            Save video
+          </button>
+          <button
+            type="button"
+            onClick={rec.saveEvents}
+            className="rounded-full bg-white/15 px-3 py-1.5 font-extrabold text-white hover:bg-white/25"
+          >
+            Save events
+          </button>
+          <button
+            type="button"
+            onClick={rec.discard}
+            className="rounded-full px-3 py-1.5 font-extrabold text-white/80 underline hover:text-white"
+          >
+            Discard
+          </button>
+        </div>
+      )}
+
       {/* GAME + COMPOSER ------------------------------------------------ */}
       <div className="relative flex min-h-0 flex-1">
         {/* The crop target. Everything outside this box — the bar above, the
@@ -808,7 +971,12 @@ export function TestSessionClient({
             key={game.slug}
             // Trailing slash is load-bearing for bundled games: it makes their
             // relative asset URLs (./main.js) resolve under the folder.
-            src={game.externalUrl ?? `/game-html/${game.slug}/`}
+            //
+            // `?hp-rec=1` asks the route to inject the recording shim ahead of the
+            // game's own scripts — the only way to hear its Web Audio output. The
+            // price is a 200 instead of the usual 307 to the static mirror; see the
+            // route's docblock. Only this beta screen asks for it.
+            src={game.externalUrl ?? `/game-html/${game.slug}/?hp-rec=1`}
             title={game.title}
             className="absolute inset-0 h-full w-full border-0"
             allow="autoplay; fullscreen; gamepad; pointer-lock"
@@ -1001,6 +1169,12 @@ export function TestSessionClient({
                             // because the API behind it does not exist there.
                             "📹 No replay — this device can't record the screen"}
                 </li>
+                {rec.state.phase === "ready" && (
+                  <li>
+                    🎥 Your gameplay recording is not attached — save it from the bar above
+                    if you want to keep it
+                  </li>
+                )}
                 <li>
                   {pendingErrors.length > 0
                     ? `⚠️ ${pendingErrors.length} error${pendingErrors.length === 1 ? "" : "s"} from the game`
