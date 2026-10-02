@@ -118,6 +118,12 @@ export const RECORD_SHIM_SOURCE = `(function (w) {
       var wrapSdk = function (v) {
         try {
           if (!v || typeof v !== "object" || v.__hpWrapped) return;
+          // ONLY the SDK. window.HP is a very common game variable (hit points, a
+          // helper namespace) and window.HallPass could be anything a game put
+          // there; wrapping methods on, or attaching listeners to, somebody else's
+          // object would be interference. The SDK, stub or real, is the one thing
+          // with a string-ish version and a submitScore function.
+          if (typeof v.submitScore !== "function" || !("version" in v)) return;
           Object.defineProperty(v, "__hpWrapped", { value: true });
           var real = v.version !== "0";
           if (real) {

@@ -171,9 +171,9 @@ describe("shim SDK events", () => {
   it("subscribes to achievements on the real client only", () => {
     const { win, events } = setup();
     const handlers: Array<(p: unknown) => void> = [];
-    win.HallPass = { version: "0", on: () => handlers.push(() => {}) };
+    win.HallPass = { version: "0", submitScore: () => 0, on: () => handlers.push(() => {}) };
     expect(handlers).toHaveLength(0);
-    const real = { version: "1", on: (_: string, cb: (p: unknown) => void) => handlers.push(cb) };
+    const real = { version: "1", submitScore: () => 0, on: (_: string, cb: (p: unknown) => void) => handlers.push(cb) };
     win.HallPass = real;
     win.HP = real;
     expect(handlers).toHaveLength(1);
@@ -225,5 +225,41 @@ describe("shim canvas context types", () => {
     run(win);
     new HTMLCanvasElement();
     expect(getContextCalls).toHaveLength(0);
+  });
+});
+
+describe("shim leaves non-SDK objects alone", () => {
+  it("does not wrap or subscribe on a game's own window.HP", () => {
+    const { win } = makeWindow();
+    run(win);
+    const events: unknown[] = [];
+    (win.__hpRec as { onEvent: unknown }).onEvent = (e: unknown) => events.push(e);
+    const on = () => {
+      throw new Error("must not be called");
+    };
+    const submitScore = () => "mine";
+    const hp = { hp: 100, version: "9", submitScore: undefined as unknown, on };
+    win.HP = hp;
+    expect(Object.getOwnPropertyDescriptor(hp, "__hpWrapped")).toBeUndefined();
+    win.HP = { hp: 3, on, progress: submitScore };
+    expect(events).toEqual([]);
+  });
+
+  it("ignores an object with submitScore but no version", () => {
+    const { win } = makeWindow();
+    run(win);
+    const foreign = { submitScore: () => 1 };
+    const original = foreign.submitScore;
+    win.HallPass = foreign;
+    expect(foreign.submitScore).toBe(original);
+  });
+
+  it("still wraps the real SDK and its stub", () => {
+    const { win } = makeWindow();
+    run(win);
+    const stub = { version: "0", submitScore: () => Promise.resolve({ ok: true }) };
+    const original = stub.submitScore;
+    win.HallPass = stub;
+    expect(stub.submitScore).not.toBe(original);
   });
 });
