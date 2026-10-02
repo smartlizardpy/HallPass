@@ -322,6 +322,8 @@
             musicTimer: null,
             musicStep: 0,
             currentTrack: null, // 'menu' or 'game'
+            currentLevel: 0,
+            currentKey: null,
             musicStyle: 'lofi', // 'lofi', 'ambient', 'jazz'
             styleList: ['lofi', 'ambient', 'jazz'],
 
@@ -354,7 +356,7 @@
                 if (this.isMuted) {
                     this.stopMusic();
                 } else {
-                    this.playTrack(this.currentTrack || 'menu');
+                    this.playTrack(this.currentTrack || 'menu', this.currentLevel || 0, true);
                 }
                 return this.isMuted;
             },
@@ -363,7 +365,7 @@
                 const nextIdx = (this.styleList.indexOf(this.musicStyle) + 1) % this.styleList.length;
                 this.musicStyle = this.styleList[nextIdx];
                 if (!this.isMuted && this.currentTrack) {
-                    this.playTrack(this.currentTrack);
+                    this.playTrack(this.currentTrack, this.currentLevel || 0, true);
                 }
                 return this.musicStyle;
             },
@@ -591,16 +593,30 @@
                 } catch(e) {}
             },
 
-            playTrack(trackName) {
+            // Each level gets its own key, tempo nudge and chord order so the
+            // song audibly changes level to level; the menu keeps the base key.
+            // Re-requesting the same track (e.g. resuming from pause) is a no-op
+            // unless `force` is set (style change / unmute).
+            playTrack(trackName, level = 0, force = false) {
+                const trackKey = trackName + ':' + (trackName === 'game' ? level : 0);
+                if (!force && trackKey === this.currentKey && this.musicTimer) return;
                 this.currentTrack = trackName;
+                this.currentLevel = level;
+                this.currentKey = trackKey;
                 if (this.isMuted) return;
                 this.init();
                 this.stopMusic();
 
                 this.musicStep = 0;
-                
+
+                const lv = trackName === 'game' ? Math.max(1, level) : 0;
+                const keyShifts = [1, 1.1225, 0.8909, 1.2599, 0.9439, 1.0595];  // semitones: 0,+2,-2,+4,-1,+1
+                const shift = lv ? keyShifts[(lv - 1) % keyShifts.length] : 1;
+                const barOffset = lv ? (lv - 1) % 4 : 0;
+                const tempoNudge = lv ? [0, 4, -3, 6, 2][(lv - 1) % 5] : 0;
+
                 // Relaxed, cozy tempos
-                const bpm = this.musicStyle === 'ambient' ? 64 : (this.musicStyle === 'jazz' ? 76 : 80);
+                const bpm = (this.musicStyle === 'ambient' ? 64 : (this.musicStyle === 'jazz' ? 76 : 80)) + tempoNudge;
                 const intervalMs = (60 / bpm / 4) * 1000;
 
                 // Rich Lofi / Jazz Chords
@@ -629,7 +645,7 @@
                     const beatInBar = s % 16;
 
                     const chords = this.musicStyle === 'ambient' ? ambientChords : lofiChords;
-                    const currentChord = chords[bar % chords.length];
+                    const currentChord = chords[(bar + barOffset) % chords.length].map(f => f * shift);
 
                     // Pad Chord Swell at the start of each bar
                     if (beatInBar === 0) {
@@ -645,7 +661,7 @@
                         }
                         if ([2, 6, 9, 13].includes(beatInBar) && Math.random() > 0.35) {
                             const noteIdx = Math.floor(Math.random() * lofiMelodyNotes.length);
-                            const noteFreq = lofiMelodyNotes[noteIdx];
+                            const noteFreq = lofiMelodyNotes[noteIdx] * shift;
                             if (noteFreq) {
                                 this.playSoftPianoNote(noteFreq, 1.2, 0.05);
                             }
@@ -718,7 +734,7 @@
         const unlockAudio = () => {
             SoundFX.init();
             if (gameState === 'PLAYING') {
-                SoundFX.playTrack('game');
+                SoundFX.playTrack('game', currentLevel);
             } else {
                 SoundFX.playTrack('menu');
             }
@@ -821,7 +837,7 @@
                 document.getElementById('hud-level').innerText = currentLevel;
                 updateSoulsHUD();
                 lastTime = performance.now();
-                SoundFX.playTrack('game');
+                SoundFX.playTrack('game', currentLevel);
             } else if (newState === 'PAUSED') {
                 document.getElementById('ui-main').classList.remove('hidden');
                 document.getElementById('screen-pause').classList.remove('hidden');
