@@ -1069,6 +1069,12 @@
             player.y = curY - player.h - 10;
             player.vx = 0;
             player.vy = 0;
+            player.coyoteTime = 0;
+            player.jumpBuffer = 0;
+            // Start the camera on the player; a stale camera from the previous
+            // run could otherwise trip the fall-death check on the first frame.
+            camera.x = 0;
+            camera.y = player.y - canvas.height / 1.6;
 
             let soulPlaced = 0;
             const soulMilestones = [levelLength * 0.25, levelLength * 0.55, levelLength * 0.82];
@@ -1376,6 +1382,20 @@
                    r1.y + r1.h > r2.y;
         }
 
+        // Hazards are drawn as a triangle (spike) or a round blade centred on
+        // (x, y) (saw), so test against those shapes, not their bounding squares.
+        function hazardHit(box, h) {
+            if (h.type === 'saw') {
+                const cx = h.x, cy = h.y, r = h.r * 0.8; // forgiving: blade teeth are thin
+                const nx = Math.max(box.x, Math.min(cx, box.x + box.w));
+                const ny = Math.max(box.y, Math.min(cy, box.y + box.h));
+                const dx = cx - nx, dy = cy - ny;
+                return dx * dx + dy * dy < r * r;
+            }
+            // Spike: narrower, shorter box hugging the triangle's body
+            return checkAABB(box, { x: h.x + h.w * 0.25, y: h.y + h.h * 0.35, w: h.w * 0.5, h: h.h * 0.65 });
+        }
+
         function update(dt) {
             gameTime += dt;
             player.coyoteTime -= dt;
@@ -1517,10 +1537,10 @@
                 return;
             }
 
-            // Hazard collisions
+            // Hazard collisions (hitboxes match what is drawn, see hazardHit)
             const pBox = { x: player.x + 6, y: player.y + 6, w: player.w - 12, h: player.h - 12 };
             for (let h of hazards) {
-                if (checkAABB(pBox, h)) {
+                if (hazardHit(pBox, h)) {
                     triggerDeath(h.type === 'saw' ? 'saw' : 'spike');
                     return;
                 }
