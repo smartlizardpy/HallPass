@@ -94,16 +94,27 @@ export function CoverPanel({
   previous: CoverMediaChoice[];
   gallery: CoverMediaChoice[];
 }) {
-  const isCurrent = (url: string) => currentSrc === url;
+  // Compare by path: the cover pointer may arrive absolute or with a query
+  // string, while a media row's URL is always the bare `/game-media/...` path.
+  const pathOf = (url: string) => {
+    try {
+      return new URL(url, "http://x").pathname;
+    } catch {
+      return url;
+    }
+  };
+  const isCurrent = (url: string) =>
+    currentSrc !== null && pathOf(currentSrc) === pathOf(url);
   const shotIsCurrent = (shot: CoverShotChoice) =>
     shot.promotedMediaId !== null &&
     currentSrc !== null &&
-    currentSrc.startsWith(`/game-media/${slug}/${shot.promotedMediaId}.`);
+    pathOf(currentSrc).startsWith(`/game-media/${slug}/${shot.promotedMediaId}.`);
 
   const tester = shots.filter((s) => !shotIsCurrent(s));
   const earlier = previous.filter((m) => !isCurrent(m.url));
+  const galleryOffer = gallery.filter((m) => !isCurrent(m.url));
   const nothingToOffer =
-    tester.length === 0 && earlier.length === 0 && gallery.length === 0;
+    tester.length === 0 && earlier.length === 0 && galleryOffer.length === 0;
 
   return (
     <Section
@@ -168,14 +179,14 @@ export function CoverPanel({
           </div>
         )}
 
-        {gallery.length > 0 && (
+        {galleryOffer.length > 0 && (
           <div>
             <h3 className="text-sm font-semibold text-foreground">Gallery screenshots</h3>
             <p className="text-xs text-muted">
               Choosing one moves it out of the gallery.
             </p>
             <ul className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {gallery.map((m) => (
+              {galleryOffer.map((m) => (
                 <Candidate
                   key={m.id}
                   slug={slug}
