@@ -239,7 +239,7 @@ export const games: Game[] = [
     accent: "#4ade80",
     art: "serpent",
     plays: 96214,
-    platform: "desktop",
+    platform: "both",
   },
   {
     slug: "system-restore",

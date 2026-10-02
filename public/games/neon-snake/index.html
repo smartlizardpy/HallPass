@@ -134,17 +134,58 @@
             pointer-events: none; /* Let clicks pass through empty space */
         }
         .interactive { pointer-events: auto; }
+
+        /* Touch layout. `body.touch` is set from JS (pointer: coarse, or the first
+           touchstart) so desktop never sees any of this. The controls are hidden
+           until then; the page is locked to the viewport so nothing scrolls. */
+        #touchControls { display: none; }
+        body.touch { height: 100vh; height: 100dvh; min-height: 0; padding: 8px; justify-content: flex-start; overscroll-behavior: none; }
+        body.touch #touchControls { display: flex; }
+        body.touch .cyber-grid { display: none; }
+        body.touch #topBar { margin-bottom: 6px; }
+        body.touch #topBar h1 { font-size: 1.5rem; }
+        body.touch #topBar .tagline { display: none; }
+        body.touch #topBar .glass-panel { padding: 6px 14px; }
+        body.touch #hudContainer { height: 2rem; margin-bottom: 4px; }
+        body.touch #overlay { padding: 20px; }
+        body.touch #overlayTitle { font-size: 2.75rem; }
+        body.touch .desktop-hint { display: none; }
+        .touch-hint { display: none; }
+        body.touch .touch-hint { display: block; }
+        #touchControls { width: 100%; max-width: 460px; margin-top: 10px; align-items: center; justify-content: space-between; gap: 12px; position: relative; z-index: 50; }
+        #dpad { display: grid; grid-template-columns: repeat(3, 56px); grid-template-rows: repeat(2, 56px); gap: 6px; }
+        #dpad .control-btn { width: 56px; height: 56px; border-radius: 16px; font-size: 1.4rem; touch-action: none; }
+        #dpad #upBtn { grid-column: 2; grid-row: 1; }
+        #dpad #leftBtn { grid-column: 1; grid-row: 2; }
+        #dpad #downBtn { grid-column: 2; grid-row: 2; }
+        #dpad #rightBtn { grid-column: 3; grid-row: 2; }
+        #turboBtn { flex: 1; max-width: 190px; height: 74px; touch-action: none; }
+        #turboBtn.active { background: #ef4444; color: #fff; }
+
+        /* Landscape phone: not enough height for a column, so go three-wide —
+           HUD and d-pad left, the board in the middle, overdrive on the right. */
+        @media (orientation: landscape) {
+            body.touch { display: grid; grid-template-columns: 1fr auto 1fr; grid-template-rows: auto auto 1fr; column-gap: 12px; align-items: start; justify-items: stretch; }
+            body.touch #topBar { grid-column: 1; grid-row: 1; margin: 0; }
+            body.touch #topBar h1, body.touch #topBar .tagline { display: none; }
+            body.touch #topBar .glass-panel { width: 100%; }
+            body.touch #hudContainer { grid-column: 1; grid-row: 2; }
+            body.touch #game-wrapper-3d { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
+            body.touch #touchControls { display: contents; }
+            body.touch #dpad { grid-column: 1; grid-row: 3; align-self: end; justify-self: start; }
+            body.touch #turboBtn { grid-column: 3; grid-row: 3; align-self: end; justify-self: end; width: 150px; }
+        }
     </style>
 </head>
 <body class="flex flex-col items-center justify-center min-h-screen p-4">
 
     <!-- Top Bar -->
-    <div class="w-full max-w-[460px] flex justify-between items-end mb-4 z-50 relative">
+    <div id="topBar" class="w-full max-w-[460px] flex justify-between items-end mb-4 z-50 relative">
         <div>
             <h1 class="text-4xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-cyan-400 to-purple-500 filter drop-shadow-[0_0_15px_rgba(34,211,238,0.3)]">
                 NEON SNAKE
             </h1>
-            <div class="flex items-center gap-2">
+            <div class="tagline flex items-center gap-2">
                 <div class="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_#22c55e]"></div>
                 <p class="text-[10px] text-green-400/80 font-bold uppercase tracking-[0.3em]">Cyber-Ascension v14.1</p>
             </div>
@@ -216,7 +257,8 @@
             
             <p class="text-slate-300 mb-6 text-sm font-medium text-center">
                 Bits Collected: <span id="savedBitsDisplay" class="text-yellow-400 font-bold">0</span><br>
-                <span class="text-[10px] text-slate-500 mt-1 block tracking-wide">DOUBLE TAP TO DASH // AVOID VIRUSES</span>
+                <span class="desktop-hint text-[10px] text-slate-500 mt-1 block tracking-wide">DOUBLE TAP TO DASH // AVOID VIRUSES</span>
+                <span class="touch-hint text-[10px] text-slate-500 mt-1 tracking-wide">SWIPE OR USE THE PAD // DOUBLE TAP TO DASH</span>
             </p>
             
             <!-- SHOP BUTTON -->
@@ -253,19 +295,15 @@
         </div>
     </div>
 
-    <!-- Mobile Controls -->
-    <div class="mt-6 w-full max-w-[440px] md:hidden relative z-50">
-        <div class="grid grid-cols-3 gap-3 mb-3">
-             <div class="col-start-2">
-                <button id="upBtn" class="control-btn w-full h-16 rounded-2xl text-2xl text-slate-400 active:text-white">▲</button>
-            </div>
+    <!-- Touch Controls (shown only when body.touch is set) -->
+    <div id="touchControls">
+        <div id="dpad">
+            <button id="upBtn" class="control-btn text-slate-400 active:text-white">▲</button>
+            <button id="leftBtn" class="control-btn text-slate-400 active:text-white">◀</button>
+            <button id="downBtn" class="control-btn text-slate-400 active:text-white">▼</button>
+            <button id="rightBtn" class="control-btn text-slate-400 active:text-white">▶</button>
         </div>
-        <div class="grid grid-cols-3 gap-3">
-            <button id="leftBtn" class="control-btn h-16 rounded-2xl text-2xl text-slate-400 active:text-white">◀</button>
-            <button id="downBtn" class="control-btn h-16 rounded-2xl text-2xl text-slate-400 active:text-white">▼</button>
-            <button id="rightBtn" class="control-btn h-16 rounded-2xl text-2xl text-slate-400 active:text-white">▶</button>
-        </div>
-        <button id="turboBtn" class="w-full mt-4 h-14 bg-red-500/5 border border-red-500/20 rounded-2xl text-red-400 font-black active:bg-red-500 active:text-white transition-all uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-2 backdrop-blur-sm shadow-lg">
+        <button id="turboBtn" class="bg-red-500/5 border border-red-500/20 rounded-2xl text-red-400 font-black transition-all uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-2 backdrop-blur-sm shadow-lg">
             <span>⚡ OVERDRIVE</span>
         </button>
     </div>
@@ -406,13 +444,38 @@
         }
         const warpGrid = new WarpGrid();
 
+        // Touch mode: set from (pointer: coarse) up front, or the first touchstart
+        // on hybrids. Desktop never gets the class, so none of the touch UI shows.
+        const coarse = window.matchMedia('(pointer: coarse)');
+        function enableTouch() {
+            if (document.body.classList.contains('touch')) return;
+            document.body.classList.add('touch');
+            resize();
+        }
+        if (coarse.matches) document.body.classList.add('touch');
+        window.addEventListener('touchstart', enableTouch, { passive: true, once: true });
+
         function resize() {
-            const size = Math.min(window.innerWidth - 32, 460);
+            let size = Math.min(window.innerWidth - 32, 460);
+            if (document.body.classList.contains('touch')) {
+                const landscape = window.innerWidth > window.innerHeight;
+                if (landscape) {
+                    // Board sits between two side columns of at least ~150px each.
+                    size = Math.min(window.innerHeight - 16, window.innerWidth - 340);
+                } else {
+                    const used = ['topBar', 'hudContainer', 'touchControls']
+                        .reduce((n, id) => n + document.getElementById(id).offsetHeight, 0);
+                    // 16 body padding + 10 controls margin + 6 + 4 gaps + a little slack
+                    size = Math.min(size, window.innerHeight - used - 48);
+                }
+            }
+            size = Math.max(Math.floor(size), GRID_SIZE * 9);
             canvas.width = size; canvas.height = size;
             TILE_COUNT = Math.floor(size / GRID_SIZE);
             warpGrid.init();
         }
         window.addEventListener('resize', resize);
+        window.addEventListener('orientationchange', () => setTimeout(resize, 200));
         resize();
 
         function updateUI() {
@@ -430,7 +493,11 @@
         function initGame() {
             const startLen = 3 + playerData.upgrades.startLen.level;
             snake = [];
-            for(let i=0; i<startLen; i++) snake.push({x: 10-i, y: 10});
+            // Start from the middle of the board, not a fixed (10, 10): on a phone the
+            // board is only 9-12 tiles wide, so a fixed start put the head on or past
+            // the right wall and the snake died before the player could react.
+            const startX = Math.max(startLen - 1, Math.floor(TILE_COUNT / 2)), startY = Math.floor(TILE_COUNT / 2);
+            for(let i=0; i<startLen; i++) snake.push({x: startX-i, y: startY});
             prevSnake = JSON.parse(JSON.stringify(snake));
             foods = []; enemies = [];
             dx = 1; dy = 0; inputQueue = [];
@@ -746,10 +813,33 @@
 
         const tb = document.getElementById('turboBtn');
         if(tb) {
-            const st = (e) => { e.preventDefault(); isTurbo = true; tb.classList.add('bg-red-500'); };
-            const et = (e) => { e.preventDefault(); isTurbo = false; tb.classList.remove('bg-red-500'); };
-            tb.addEventListener('touchstart', st, {passive:false}); tb.addEventListener('touchend', et); tb.addEventListener('mousedown', st); tb.addEventListener('mouseup', et);
+            const st = (e) => { e.preventDefault(); isTurbo = true; tb.classList.add('active'); };
+            const et = (e) => { e.preventDefault(); isTurbo = false; tb.classList.remove('active'); };
+            tb.addEventListener('touchstart', st, {passive:false}); tb.addEventListener('touchend', et); tb.addEventListener('touchcancel', et);
+            tb.addEventListener('mousedown', st); tb.addEventListener('mouseup', et);
         }
+
+        // Swipe anywhere on the page (menus excepted) to steer. The anchor resets
+        // after each recognised swipe, so one long drag can chain turns.
+        let swipe = null;
+        const SWIPE_MIN = 22;
+        const onUI = (t) => t.closest && t.closest('.interactive, #touchControls, select, button');
+        window.addEventListener('touchstart', (e) => {
+            if (isPaused || onUI(e.target) || e.touches.length !== 1) { swipe = null; return; }
+            swipe = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        }, { passive: true });
+        window.addEventListener('touchmove', (e) => {
+            if (!swipe) return;
+            e.preventDefault();
+            const t = e.touches[0];
+            const ddx = t.clientX - swipe.x, ddy = t.clientY - swipe.y;
+            if (Math.max(Math.abs(ddx), Math.abs(ddy)) < SWIPE_MIN) return;
+            if (Math.abs(ddx) > Math.abs(ddy)) queueMove(ddx > 0 ? 1 : -1, 0);
+            else queueMove(0, ddy > 0 ? 1 : -1);
+            swipe = { x: t.clientX, y: t.clientY };
+        }, { passive: false });
+        window.addEventListener('touchend', () => { swipe = null; });
+        window.addEventListener('touchcancel', () => { swipe = null; });
 
         function toggleCheat() {
             isBotMode = !isBotMode;
