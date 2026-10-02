@@ -51,9 +51,13 @@ This design adds the product layer and leaves the transport almost untouched.
 
 Every one is load-bearing and came out of reading the code:
 
-- **No cron.** `007_social_graph.sql` says so outright, and `push/store.ts`
-  relies on it. Nothing here may need a sweeper — which decides retention (§6)
-  and rules out spike detection (§7).
+- **No cron INSIDE the deployment.** `007_social_graph.sql` says so outright,
+  and `push/store.ts` relies on it. Nothing in the notification store may need a
+  sweeper — which decides retention (§6). *Update:* a scheduler now exists
+  OUTSIDE the deployment — GitHub Actions workflows (`alerts.yml` every half
+  hour, `streak-reminders.yml` hourly) that knock on authenticated endpoints.
+  That is what carries the site-health alerts and the streak reminder; the
+  store itself is still sweeper-free.
 - **No cross-statement transactions** on the Neon HTTP driver. Every mutation is
   a single statement, following `push/store.ts`'s subscribe-and-cap CTE.
 - **A service worker cannot read `localStorage`.** The stealth preferences live
@@ -198,7 +202,8 @@ never opened is still old.
 
 - **Spike alerts on users/plays.** Asked for, and left out on purpose. Detecting
   a spike means comparing a rolling window on a schedule, and there is no
-  scheduler. The two ways to fake one both cost more than the feature is worth
+  scheduler (*at the time; the alerts workflow has since added one — see §3*).
+  The two ways to fake one both cost more than the feature is worth
   right now: evaluating on the hot play/signup write paths taxes the busiest
   queries in the app, and evaluating when an admin happens to look means the
   alert cannot fire a push and is really just a dashboard panel wearing a bell.
@@ -207,7 +212,8 @@ never opened is still old.
   belong with a scheduler, and this document is where that decision is recorded
   rather than rediscovered.
 - **Per-item dismissal.** See §4.
-- **Digests and quiet hours.** Both need a scheduler.
+- **Digests and quiet hours.** Both need a scheduler, and would also need
+  per-player state the store does not hold.
 - **Email.** No transport, and a school arcade emailing pupils is a different
   consent conversation entirely.
 
@@ -225,3 +231,13 @@ never opened is still old.
 - Notification bodies are stored in plain text and name games and players. That
   is the same exposure the leaderboards already carry, and the discreet copy —
   not the storage — is what answers the shoulder-surfing threat.
+
+---
+
+## 9. Streak and friend kinds
+
+Added with `streaks-design.md`: `streak_at_risk` (push, sent by the hourly
+workflow), `streak_milestone` (bell) and `friend_passed` (bell, a friend passes
+your best with no challenge involved). The same rules apply — discreet copy,
+defaults chosen by whether it needs you now, and the loud ones are the ones that
+reach you outside the site.
