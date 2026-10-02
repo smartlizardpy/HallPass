@@ -116,7 +116,7 @@ export function pickGameCanvas<T extends CanvasCandidate>(
  * the security check, TOUCHING a property on it does, so the probe has to do the
  * latter inside the `try`.
  */
-function reachInto(
+export function reachInto(
   frame: HTMLIFrameElement,
 ): { ok: true; doc: Document } | { ok: false; reason: GrabFailure } {
   try {
