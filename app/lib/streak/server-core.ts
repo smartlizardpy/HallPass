@@ -145,3 +145,15 @@ export function isNudgeDue(c: NudgeCandidate, nowMs: number): boolean {
   if (diffDays(c.lastDay, day) !== 1) return false;
   return c.lastNudgedDay !== day;
 }
+
+/**
+ * The first day of the run that ends on `day` and is `current` days long.
+ *
+ * Used to give a milestone an identity: "the 7-day streak that began on the 3rd"
+ * is one event, whereas a bare "7" would also swallow the NEXT time the same
+ * player builds a seven-day run after losing this one.
+ */
+export function runStartDay(day: string, current: number): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return utcDayKey(Date.UTC(y, m - 1, d - Math.max(0, current - 1)));
+}

@@ -6,6 +6,7 @@ import {
   isNudgeDue,
   localParts,
   parseTzOffset,
+  runStartDay,
   utcDayKey,
   type ServerStreak,
 } from "./server-core";
@@ -143,5 +144,16 @@ describe("isNudgeDue", () => {
   it("uses the player's offset, not the server's", () => {
     // The same instant is 11:30 in New York: not due there.
     expect(isNudgeDue({ ...base, tzOffsetMin: -300 }, now)).toBe(false);
+  });
+});
+
+describe("runStartDay", () => {
+  it("finds the first day of a run", () => {
+    expect(runStartDay("2026-10-07", 7)).toBe("2026-10-01");
+    expect(runStartDay("2026-10-07", 1)).toBe("2026-10-07");
+  });
+
+  it("crosses a month boundary", () => {
+    expect(runStartDay("2026-11-02", 5)).toBe("2026-10-29");
   });
 });
