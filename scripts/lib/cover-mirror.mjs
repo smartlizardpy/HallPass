@@ -21,9 +21,44 @@
 //     on the downloaded bytes (`isPng`) in the caller.
 //   - Only slugs `decideSlug` would mirror (a directory exists, or the slug is
 //     in games.ts) — never create a directory for an unknown slug.
+//   - The slug must be a safe path segment and the destination must resolve
+//     inside `public/games/<slug>/` (`isSafeSlug`, `coverDest`).
 //   - If the database could not be read, mirror nothing.
 
+import path from "node:path";
 import { decideSlug } from "./staged.mjs";
+
+// Duplicated from isSafeSegment in app/lib/game-html-blob.ts and sync-games.mjs
+// (an .mjs script cannot import the TS module). Keep in sync. The slug comes from
+// a database row and becomes a filesystem path, so it gets the same guard the
+// blob loop applies to blob paths.
+const SAFE_SEGMENT_RE = /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/;
+
+/**
+ * Whether `slug` is a single safe path segment.
+ *
+ * @param {string} slug
+ */
+export function isSafeSlug(slug) {
+  return typeof slug === "string" && slug.length <= 128 && SAFE_SEGMENT_RE.test(slug);
+}
+
+/**
+ * Where a slug's cover is written, or `null` if that path would not sit inside
+ * `<gamesDir>/<slug>/` (belt and braces on top of {@link isSafeSlug}).
+ *
+ * @param {string} gamesDir
+ * @param {string} slug
+ * @returns {string | null}
+ */
+export function coverDest(gamesDir, slug) {
+  if (!isSafeSlug(slug)) return null;
+  const slugDir = path.resolve(gamesDir, slug);
+  const dest = path.resolve(slugDir, "cover.png");
+  if (path.dirname(dest) !== slugDir) return null;
+  if (path.dirname(slugDir) !== path.resolve(gamesDir)) return null;
+  return dest;
+}
 
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -83,6 +118,10 @@ export function planCoverMirror({ coverRows, staged, registered, hasLocalDir }) 
   for (const row of coverRows) {
     if (seen.has(row.slug)) continue;
     seen.add(row.slug);
+    if (!isSafeSlug(row.slug)) {
+      skipped.push({ slug: row.slug, reason: "unsafe slug" });
+      continue;
+    }
     const decision = decideSlug({
       slug: row.slug,
       hasLocalDir: hasLocalDir(row.slug),

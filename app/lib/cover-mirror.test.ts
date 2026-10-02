@@ -6,7 +6,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { fetchCoverRows, isPng, planCoverMirror } from "../../scripts/lib/cover-mirror.mjs";
+import path from "node:path";
+import { coverDest, fetchCoverRows, isPng, isSafeSlug, planCoverMirror } from "../../scripts/lib/cover-mirror.mjs";
 
 const row = (slug: string, over: Record<string, unknown> = {}) => ({
   slug,
@@ -71,5 +72,25 @@ describe("isPng / fetchCoverRows", () => {
       throw new Error("no table");
     }) as never);
     expect(bad).toEqual({ rows: null, error: "no table" });
+  });
+});
+
+describe("slug safety", () => {
+  it.each(["..", "../x", "a/b", "a\\b", ".hidden", "", "x".repeat(129)])("rejects %j", (slug) => {
+    expect(isSafeSlug(slug)).toBe(false);
+    expect(coverDest("/repo/public/games", slug)).toBeNull();
+  });
+
+  it("accepts a normal slug and resolves inside gamesDir/<slug>/", () => {
+    expect(isSafeSlug("neon-velocity")).toBe(true);
+    expect(coverDest("/repo/public/games", "neon-velocity")).toBe(
+      path.join("/repo/public/games", "neon-velocity", "cover.png"),
+    );
+  });
+
+  it("the planner skips an unsafe slug even when it looks registered", () => {
+    const out = plan([row("../etc")], { registered: ["../etc"], dirs: ["../etc"] });
+    expect(out.mirror).toEqual([]);
+    expect(out.skipped[0]).toMatchObject({ reason: "unsafe slug" });
   });
 });

@@ -42,7 +42,7 @@ import { list } from "@vercel/blob";
 import { existsSync, statSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fetchCoverRows, isPng, planCoverMirror } from "./lib/cover-mirror.mjs";
+import { coverDest, fetchCoverRows, isPng, planCoverMirror } from "./lib/cover-mirror.mjs";
 import {
   decideSlug,
   fetchStagedRows,
@@ -263,7 +263,11 @@ if (dbSql && registeredSlugs !== null) {
       logItem(`games/${slug}/cover.png`, `skip (cover: ${reason})`);
     }
     for (const { slug, url } of plan.mirror) {
-      const dest = path.join(gamesDir, slug, "cover.png");
+      const dest = coverDest(gamesDir, slug);
+      if (!dest) {
+        logItem(`games/${slug}/cover.png`, "skip (cover: unsafe path)");
+        continue;
+      }
       const tmp = `${dest}.tmp`;
       try {
         const res = await fetch(url);
