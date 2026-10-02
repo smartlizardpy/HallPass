@@ -114,7 +114,13 @@ describe("/game-html record mode (?hp-rec=1)", () => {
   beforeEach(() => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response("<html><head></head></html>", { status: 200 })),
+      vi.fn(
+        async () =>
+          new Response("<html><head></head></html>", {
+            status: 200,
+            headers: { "content-type": "text/html; charset=utf-8" },
+          }),
+      ),
     );
   });
 
@@ -131,6 +137,7 @@ describe("/game-html record mode (?hp-rec=1)", () => {
     );
     expect(fetch).toHaveBeenCalledWith("https://hp.test/games/pub/index.html", {
       cache: "no-store",
+      redirect: "manual",
     });
   });
 
@@ -145,7 +152,7 @@ describe("/game-html record mode (?hp-rec=1)", () => {
     expect(res.status).toBe(200);
     expect(fetch).toHaveBeenCalledWith(
       "https://hallpass-rouge.vercel.app/games/pub/index.html",
-      { cache: "no-store" },
+      { cache: "no-store", redirect: "manual" },
     );
     expect(fetch).not.toHaveBeenCalledWith(
       expect.stringContaining("evil.example"),
@@ -164,6 +171,7 @@ describe("/game-html record mode (?hp-rec=1)", () => {
     expect(body).not.toContain("<base");
     expect(fetch).toHaveBeenCalledWith("https://blob.test/games/pub/index.html", {
       cache: "no-store",
+      redirect: "manual",
     });
   });
 
@@ -207,5 +215,50 @@ describe("/game-html record mode (?hp-rec=1)", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("x", { status: 500 })));
     const res = await call("pub", undefined, "?hp-rec=1");
     expect(res.status).toBe(307);
+  });
+
+  it("does not inject into a 302 (Deployment Protection's login redirect)", async () => {
+    mocks.getServingBlobMap.mockResolvedValue(blobMap("pub", 1));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(null, { status: 302, headers: { location: "https://vercel.com/login" } }),
+      ),
+    );
+    const res = await call("pub", undefined, "?hp-rec=1");
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("https://hp.test/games/pub/index.html");
+  });
+
+  it("does not inject into a 200 that is not HTML", async () => {
+    mocks.getServingBlobMap.mockResolvedValue(blobMap("pub", 1));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response('{"error":"nope"}', {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+    const res = await call("pub", undefined, "?hp-rec=1");
+    expect(res.status).toBe(307);
+  });
+
+  it("does not inject into a 200 with no content-type", async () => {
+    mocks.getServingBlobMap.mockResolvedValue(blobMap("pub", 1));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("<html></html>", { status: 200 })));
+    const res = await call("pub", undefined, "?hp-rec=1");
+    expect(res.status).toBe(307);
+  });
+
+  it("a staged game whose fetch is a redirect is a 404, never a 307", async () => {
+    mocks.canViewStaged.mockResolvedValue(true);
+    mocks.getServingBlobMap.mockResolvedValue(blobMap("beta", 1));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 302 })));
+    const res = await call("beta", undefined, "?hp-rec=1");
+    expect(res.status).toBe(404);
   });
 });

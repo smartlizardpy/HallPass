@@ -15,6 +15,9 @@ import { trustedSelfOrigin } from "@/app/lib/site";
 
 const MAX_PATH_SEGMENTS = 10;
 
+/** Log an unusable record-mode fetch once per instance, not once per request. */
+let warnedRecordFetch = false;
+
 /**
  * The one 404 for "no such game" AND "staged and you may not see it". They must be
  * indistinguishable, so both come from here: a denied request that differed from
@@ -66,7 +69,9 @@ const NOT_FOUND = () =>
  * file, so nothing else needs routing. For the static twin it also adds a
  * `<base href="/games/<slug>/">`, so relative URLs resolve where production's 307
  * would have left them, and it fetches the twin from a trusted origin
- * (`trustedSelfOrigin`), never from the request's Host header. It runs AFTER the staged gate above, so a
+ * (`trustedSelfOrigin`), never from the request's Host header, and only injects
+ * when that fetch is a plain 200 text/html — a 302 (Deployment Protection's login
+ * redirect) or any other answer falls back to the 307. It runs AFTER the staged gate above, so a
  * denied request is still the one indistinguishable 404, and the injected
  * document is always `no-store` (public games included): a shared cache must never
  * hand a shimmed document to somebody who did not ask for it. Assets, and any
@@ -123,8 +128,22 @@ export async function GET(
       source.kind === "static"
         ? `${trustedSelfOrigin(req.url)}/games/${slug}/index.html`
         : source.url;
-    const doc = await fetch(upstreamUrl, { cache: "no-store" });
-    if (!doc.ok) return staged ? NOT_FOUND() : Response.redirect(staticUrl, 307);
+    // `redirect: "manual"` and a strict 200 + text/html check, both load-bearing: a
+    // protected deployment answers this fetch with a 302 to Vercel's login page,
+    // and following it would inject the shim into THAT page and serve it as the
+    // game. Anything other than the game's own HTML means "unavailable", which
+    // degrades to the plain 307 (the game still plays, minus audio and events).
+    const doc = await fetch(upstreamUrl, { cache: "no-store", redirect: "manual" });
+    const isHtml = (doc.headers.get("content-type") ?? "").toLowerCase().includes("text/html");
+    if (doc.status !== 200 || !isHtml) {
+      if (!warnedRecordFetch) {
+        warnedRecordFetch = true;
+        console.warn(
+          `[game-html] record mode: ${upstreamUrl} answered ${doc.status} ${doc.headers.get("content-type") ?? "(no content-type)"}; serving without the recording shim`,
+        );
+      }
+      return staged ? NOT_FOUND() : Response.redirect(staticUrl, 307);
+    }
     // A document that would have been reached through the 307 lives at
     // /games/<slug>/ in production, so its relative URLs resolve there. Served from
     // /game-html/<slug>/ they would resolve here instead, so say where they belong.

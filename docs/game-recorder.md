@@ -56,6 +56,15 @@ wraps `HallPass.submitScore`/`progress` in place (only on an object that has
 `submitScore` and a `version` — `window.HP` is often a game's own variable), listens for the `achievement`
 event, and reports tab visibility. It never throws and is idempotent.
 
+The route fetches the static twin from a **trusted origin** — `SELF_ORIGIN`, else in
+production the canonical site URL (or `VERCEL_PROJECT_PRODUCTION_URL`), and only
+on a preview the per-deployment `VERCEL_URL` — never from the request's Host
+header, and never `VERCEL_URL` in production: that host is behind Deployment
+Protection and answers a 302 to Vercel's login page. The fetch uses
+`redirect: "manual"` and injects only into a plain 200 `text/html`; anything else
+degrades to the normal 307 (logged once), so the game plays without audio or
+events instead of serving a login page with a shim in it.
+
 Known limits: a node the game later `disconnect()`s from the destination keeps
 feeding the recording; offline, the service worker falls back to the plain static
 twin (the game plays and records, with no audio or SDK events).
