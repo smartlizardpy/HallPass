@@ -153,6 +153,9 @@ function audioContextCtor(): AudioContextCtor | null {
   return w.AudioContext ?? w.webkitAudioContext ?? null;
 }
 
+/** How long to wait for the recorder's `start` event before carrying on without it. */
+const START_WAIT_MS = 1500;
+
 /** Same message arriving again within this window is one event, not a flood. */
 const ERROR_DEDUPE_MS = 1000;
 
@@ -171,6 +174,8 @@ export class GameRecorder {
   private videoStream: MediaStream | null = null;
   private detachErrors: () => void = () => {};
   private mimeType = "";
+  /** Push a frame on every tick — only for 2D canvases; see {@link pushFrame}. */
+  private heartbeat = false;
   private stopping: Promise<RecordedTake> | null = null;
   private pendingEnd: { endedBy: EndedBy; cap: "time" | "size" | null } = {
     endedBy: "user",
@@ -238,7 +243,14 @@ export class GameRecorder {
       // A timeslice keeps `dataavailable` flowing so the byte cap can act and an
       // interrupted take still has its data (same reasoning as ReplayBuffer).
       recorder.start(1000);
-      await started;
+      // BOUNDED, and that is a bug fix rather than caution: a captured canvas only
+      // produces frames when it CHANGES, and Chrome does not fire `start` until
+      // the first one. A game sitting on a still screen when Record is pressed
+      // (a title card, a pause menu) left this awaiting forever and the control
+      // stuck on "starting". Found by `scripts/verify-recorder.mjs`.
+      await Promise.race([started, new Promise<void>((r) => setTimeout(r, START_WAIT_MS))]);
+      this.heartbeat = this.is2dCanvas();
+      this.pushFrame();
 
       this.startEpochMs = Date.now();
       this.startedPerf = performance.now();
@@ -249,6 +261,7 @@ export class GameRecorder {
       this.timer = setInterval(() => {
         const elapsed = performance.now() - this.startedPerf;
         this.options.onTick?.(elapsed, this.bytes);
+        this.pushFrame();
         this.checkCaps();
       }, 250);
       return { ok: true };
@@ -277,6 +290,36 @@ export class GameRecorder {
   }
 
   // ── internals ─────────────────────────────────────────────────────────────
+
+  /** Whether the game's canvas is a plain 2D one (`getContext("2d")` is null for WebGL). */
+  private is2dCanvas(): boolean {
+    try {
+      return this.game.canvas.getContext("2d") !== null;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Ask the captured track for a frame of the canvas as it is right now.
+   *
+   * A canvas stream emits only on change, so a still screen would otherwise
+   * produce no frames at all and a take with a hole where the timeline should be.
+   * Only done for 2D canvases: a WebGL canvas without `preserveDrawingBuffer` can
+   * be cleared between presents, and pushing a frame at an arbitrary moment would
+   * put a black frame into the video. WebGL games animate, so they do not need it.
+   */
+  private pushFrame(): void {
+    if (!this.heartbeat) return;
+    try {
+      const track = this.videoStream?.getVideoTracks()[0] as
+        | (MediaStreamTrack & { requestFrame?: () => void })
+        | undefined;
+      track?.requestFrame?.();
+    } catch {
+      /* best effort */
+    }
+  }
 
   private checkCaps(): void {
     if (this.stopping) return;
@@ -315,6 +358,16 @@ export class GameRecorder {
       const mixer = new Ctor();
       void mixer.resume().catch(() => {});
       const dest = mixer.createMediaStreamDestination();
+      // A looping silent buffer, so the audio track delivers samples from the very
+      // first moment. WITHOUT IT a game that has not made a sound yet (or never
+      // does) leaves an audio track that never produces data, and MediaRecorder
+      // holds back the whole file waiting for it — the take comes back with a
+      // 0-byte video. Found by `scripts/verify-recorder.mjs` on 24 of 29 games.
+      const silence = mixer.createBufferSource();
+      silence.buffer = mixer.createBuffer(1, 1024, mixer.sampleRate);
+      silence.loop = true;
+      silence.connect(dest);
+      silence.start();
       const add = (stream: MediaStream) => {
         try {
           if (stream.getAudioTracks().length === 0) return;
