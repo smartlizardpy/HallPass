@@ -19,7 +19,8 @@
  * and a reminder twice is worse than none.
  *
  * ── A BROKEN SCHEMA IS LOUD HERE ───────────────────────────────────────────
- * Unlike the beacon, this answers 503 when `player_streaks` is missing: the
+ * Unlike the beacon, this answers 503 when a table it reads is missing
+ * (`player_streaks` or `push_subscriptions`, and the message says which): the
  * caller is a CI job whose whole purpose is to be seen failing, and "nothing to
  * send" every hour for ever is the failure `check-alerts.mjs` was written to
  * avoid.
@@ -39,6 +40,7 @@
 
 import { alertsAuthGate, alertsError } from "@/app/lib/alerts/http";
 import { isMissingStreakSchema, streaks } from "@/app/lib/streak";
+import { missingSchemaMessage } from "@/app/lib/streak/missing-schema";
 import { notifyStreakAtRisk } from "@/app/lib/streak/notify";
 import { REMINDER_RUN_CAP } from "@/app/lib/streak/server-core";
 
@@ -77,10 +79,9 @@ export async function POST(req: Request): Promise<Response> {
     due = await streaks.dueForReminder(new Date(), REMINDER_RUN_CAP + 1);
   } catch (error) {
     if (isMissingStreakSchema(error)) {
-      return alertsError(
-        "player_streaks is not available. Apply migration 036_player_streaks.sql.",
-        503,
-      );
+      // The query reads player_streaks (036) AND push_subscriptions (023), so say
+      // which one Postgres actually complained about.
+      return alertsError(missingSchemaMessage(error), 503);
     }
     console.error("streaks/remind dueForReminder failed:", error);
     return alertsError("Could not read who is due a reminder", 500);
