@@ -139,6 +139,33 @@ export function challengeBeatenCopy(input: {
   });
 }
 
+/**
+ * "Deniz passed your score."
+ *
+ * The passive sibling of {@link challengeBeatenCopy}, and held to the same rule:
+ * the number in the body is the RECIPIENT'S OWN score (already public on the
+ * board), and the passer's score is deliberately absent — a lock-screen banner
+ * is not the place to publish a third party's result.
+ */
+export function friendPassedCopy(input: {
+  by: string;
+  /** The DISPLAY TITLE, never the slug — see {@link challengeCopy}. */
+  game: string | null;
+  boardTitle: string;
+  /** The recipient's own score, the one that was passed. */
+  targetScore: number;
+}): NotificationCopy {
+  const by = shortName(input.by, "Someone");
+  const where = input.game ?? input.boardTitle;
+  return bound({
+    title: `${by} passed your score`,
+    body: where
+      ? `Your ${input.targetScore.toLocaleString("en-US")} on ${where} has been passed.`
+      : `Your ${input.targetScore.toLocaleString("en-US")} has been passed.`,
+    url: "/play/you/friends",
+  });
+}
+
 /** "Ayşe wants to be friends." */
 export function friendRequestCopy(input: { from: string }): NotificationCopy {
   return bound({
@@ -154,6 +181,35 @@ export function friendAcceptedCopy(input: { from: string }): NotificationCopy {
     title: `${shortName(input.from, "Someone")} accepted your request`,
     body: "You can challenge each other now.",
     url: "/play/you/friends",
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Streaks
+// ---------------------------------------------------------------------------
+
+/**
+ * "Your 5-day streak ends tonight."
+ *
+ * Carries the length, which is the point of the message and is the recipient's
+ * own number — it names nobody and no game, so a bystander learns nothing the
+ * player's own flame did not already say. The discreet counterpart in
+ * `config.ts` drops even that.
+ */
+export function streakAtRiskCopy(input: { current: number }): NotificationCopy {
+  return bound({
+    title: `Your ${input.current}-day streak ends tonight`,
+    body: "Play any game before midnight to keep it going.",
+    url: "/",
+  });
+}
+
+/** "7-day streak!" */
+export function streakMilestoneCopy(input: { current: number }): NotificationCopy {
+  return bound({
+    title: `${input.current}-day streak!`,
+    body: "You're on fire. Come back tomorrow to keep it going.",
+    url: "/",
   });
 }
 

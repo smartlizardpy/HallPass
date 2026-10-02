@@ -91,6 +91,7 @@ export function deliversToPush(channel: NotificationChannel): boolean {
 export const NOTIFICATION_GROUPS = [
   { id: "social", label: "Friends", blurb: "Challenges and friend requests." },
   { id: "games", label: "Games", blurb: "New games and what you unlock." },
+  { id: "streaks", label: "Streaks", blurb: "Keeping your daily flame alive." },
   { id: "beta", label: "Beta testing", blurb: "Games assigned to you to break." },
   {
     id: "moderation",
@@ -230,6 +231,47 @@ export const NOTIFICATION_KINDS = {
     // you look, not something that needs your attention now.
     defaultChannel: "bell",
     discreet: "One of your friend requests was accepted.",
+  },
+  friend_passed: {
+    audience: "player",
+    scope: "personal",
+    group: "social",
+    label: "Passed scores",
+    icon: "🚀",
+    description: "A friend passes your best score, with no challenge involved.",
+    // BELL, for the same reason as `challenge_beaten`: one popular board and one
+    // class can mean a dozen friends passing you in a lesson. It is also good
+    // news about something already finished, so it is for the bell you will be
+    // pleased to find rather than the buzz that needs you now.
+    defaultChannel: "bell",
+    discreet: "A friend passed one of your scores.",
+  },
+  streak_at_risk: {
+    audience: "player",
+    scope: "personal",
+    group: "streaks",
+    label: "Streak reminders",
+    icon: "🔥",
+    description: "Your streak ends tonight unless you play. One reminder a day, at 5pm.",
+    // PUSH, because a reminder is useful only if it reaches you OUTSIDE the site:
+    // a bell you have to open the site to see is the thing it exists to prompt.
+    // It is sent only to a player with a streak worth saving, only once a day,
+    // and only to devices that opted into push, so it is not the volume
+    // `challenge_beaten` refuses to push.
+    defaultChannel: "push",
+    discreet: "Don't forget to stop by today.",
+  },
+  streak_milestone: {
+    audience: "player",
+    scope: "personal",
+    group: "streaks",
+    label: "Streak milestones",
+    icon: "🎉",
+    description: "Your streak reaches a milestone like 7 or 30 days.",
+    // You were looking at the screen when it happened — the toast already told
+    // you — so this is a record to find later, never a buzz.
+    defaultChannel: "bell",
+    discreet: "You hit a streak milestone.",
   },
   game_drop: {
     audience: "player",

@@ -126,6 +126,17 @@ describe("the catalogue", () => {
     expect(NOTIFICATION_KINDS.friend_request.defaultChannel).toBe("push");
   });
 
+  it("keeps the passive overtake on the bell, like the challenge one", () => {
+    // One link or one class can mean a dozen overtakes in a lesson.
+    expect(NOTIFICATION_KINDS.friend_passed.defaultChannel).toBe("bell");
+    expect(NOTIFICATION_KINDS.challenge_beaten.defaultChannel).toBe("bell");
+  });
+
+  it("pushes the streak reminder but only belled the milestone", () => {
+    expect(NOTIFICATION_KINDS.streak_at_risk.defaultChannel).toBe("push");
+    expect(NOTIFICATION_KINDS.streak_milestone.defaultChannel).toBe("bell");
+  });
+
   it("never ships a kind defaulted to off", () => {
     // A kind nobody is told about by default is a producer written for nothing.
     // If it is not worth a bell it should not be emitted.

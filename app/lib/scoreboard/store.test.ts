@@ -653,3 +653,35 @@ describe("getFriendStandingsForGame", () => {
     expect(calls[0].values.slice(-2)).toEqual([3, 1]);
   });
 });
+
+describe("getFriendsNewlyPassed", () => {
+  it("decodes the friends passed, BIGINT-safe", async () => {
+    const { sql, calls } = makeFakeSql(() => [
+      { player_id: "friend-1", best: "110" },
+      { player_id: "friend-2", best: "100" },
+    ]);
+    const store = createStore(sql);
+    const passed = await store.getFriendsNewlyPassed("me", "board-a", 120, 55, "desc");
+    expect(passed).toEqual([
+      { playerId: "friend-1", best: 110 },
+      { playerId: "friend-2", best: 100 },
+    ]);
+    expect(calls).toHaveLength(1); // one statement
+  });
+
+  it("binds the player, board, new score, inserted row, direction and cap", async () => {
+    const { sql, calls } = makeFakeSql(() => []);
+    await createStore(sql).getFriendsNewlyPassed("me", "board-a", 120, 55, "asc", 3);
+    const values = calls[0].values;
+    for (const v of ["me", "board-a", 120, 55, "asc", 3]) expect(values).toContain(v);
+    // The direction is a bound value inside CASE, never a spliced fragment.
+    expect(calls[0].text).toMatch(/\?::text = 'asc'/);
+  });
+
+  it("excludes the row just written from the player's previous best", async () => {
+    const { sql, calls } = makeFakeSql(() => []);
+    await createStore(sql).getFriendsNewlyPassed("me", "board-a", 120, 55, "desc");
+    expect(calls[0].text).toMatch(/id <> \?/);
+    expect(calls[0].text).toMatch(/status = 'accepted'/);
+  });
+});

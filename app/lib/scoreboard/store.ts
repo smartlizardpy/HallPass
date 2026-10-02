@@ -751,6 +751,69 @@ export function createStore(sql: Sql) {
     });
   }
 
+  /**
+   * The accepted friends whose standing on `boardId` this score has NEWLY
+   * passed — the people to tell "somebody passed your score".
+   *
+   * "Newly" is the whole point: a friend is passed only if they were at least as
+   * good as the player's PREVIOUS best (every row except `insertedId`, the one
+   * just written) and are strictly worse than `newScore`. A player who improves
+   * from 100 to 120 passes the friend on 110 and not the friend on 90, who was
+   * already behind. With no previous row, every friend below the new score
+   * counts. A score that is NOT a new personal best passes nobody, which falls
+   * out of the arithmetic — no friend can sit strictly below `newScore` and at or
+   * above an `prev` that is itself at or above it — so the friends side of the
+   * statement is empty in the common case.
+   *
+   * ONE STATEMENT, bound values only. `sort` selects the direction inside `CASE`
+   * expressions; "better" is higher for `desc` boards and lower for `asc`.
+   * Blocking deletes the friendship row (see the social store), so a blocked
+   * pair never appears here. Closest-to-the-player first, capped, so one player
+   * with hundreds of friends cannot fan out hundreds of notifications.
+   */
+  async function getFriendsNewlyPassed(
+    playerId: string,
+    boardId: string,
+    newScore: number,
+    insertedId: number,
+    sort: SortDir,
+    limit: number = 10,
+  ): Promise<{ playerId: string; best: number }[]> {
+    const rows = await sql`
+      WITH me AS (
+        SELECT CASE WHEN ${sort}::text = 'asc' THEN min(score) ELSE max(score) END AS prev
+        FROM scores
+        WHERE board_id = ${boardId} AND player_id = ${playerId} AND id <> ${insertedId}
+      ),
+      friends AS (
+        SELECT CASE WHEN f.player_a = ${playerId} THEN f.player_b ELSE f.player_a END AS friend_id
+        FROM friendships f
+        WHERE f.status = 'accepted'
+          AND (f.player_a = ${playerId} OR f.player_b = ${playerId})
+      ),
+      bests AS (
+        SELECT s.player_id,
+          CASE WHEN ${sort}::text = 'asc' THEN min(s.score) ELSE max(s.score) END AS best
+        FROM scores s
+        JOIN friends ON friends.friend_id = s.player_id
+        WHERE s.board_id = ${boardId}
+        GROUP BY s.player_id
+      )
+      SELECT b.player_id, b.best
+      FROM bests b CROSS JOIN me
+      WHERE CASE WHEN ${sort}::text = 'asc'
+          THEN b.best > ${newScore}::bigint AND (me.prev IS NULL OR b.best <= me.prev)
+          ELSE b.best < ${newScore}::bigint AND (me.prev IS NULL OR b.best >= me.prev)
+        END
+      ORDER BY abs(b.best - ${newScore}::bigint) ASC, b.player_id ASC
+      LIMIT ${limit}
+    `;
+    return rows.map((row) => ({
+      playerId: String(row.player_id),
+      best: Number(row.best),
+    }));
+  }
+
   return {
     createBoard,
     getBoard,
@@ -769,6 +832,7 @@ export function createStore(sql: Sql) {
     setBoardGame,
     getPlayerStandings,
     getFriendStandingsForGame,
+    getFriendsNewlyPassed,
   };
 }
 

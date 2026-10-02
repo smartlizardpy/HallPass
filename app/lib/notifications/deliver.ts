@@ -94,6 +94,14 @@ function pushPayloadFor(kind: NotificationKind, copy: NotificationCopy) {
 /**
  * File one notification for one player, and push it if they asked for that.
  *
+ * RESOLVES TRUE ONLY WHEN A BELL ROW WAS ACTUALLY WRITTEN — and so, if they asked
+ * for push, a push was ATTEMPTED. False means nothing was filed: the kind is off
+ * for this player, the event was deduped, or something failed (already logged).
+ * It is never `reject`: the "nothing here may throw" contract above is unchanged,
+ * and existing callers that ignore the result are unaffected. It deliberately does
+ * NOT claim a device received anything — `push/send.ts` swallows per-device
+ * failures by design, so that is not knowable here.
+ *
  * A kind switched OFF writes nothing at all — not a hidden row, not a filtered
  * one. `index.ts` also filters the backlog on read, so "off" reads the same
  * looking backwards and forwards; this is what stops the table accruing rows
@@ -102,15 +110,15 @@ function pushPayloadFor(kind: NotificationKind, copy: NotificationCopy) {
 export async function notifyPlayer(
   playerId: string,
   input: DeliveryInput,
-): Promise<void> {
+): Promise<boolean> {
   try {
-    if (!kindDef(input.kind)) return;
+    if (!kindDef(input.kind)) return false;
 
     const stored = await notifications
       .prefsFor(playerId)
       .catch(() => ({}) as Record<string, string>);
     const channel = resolveChannel(input.kind, stored[input.kind]);
-    if (!deliversToBell(channel)) return;
+    if (!deliversToBell(channel)) return false;
 
     const written = await notifications.insertPersonal({
       playerId,
@@ -122,12 +130,14 @@ export async function notifyPlayer(
     });
 
     // Deduped: already filed once, so it has already been announced.
-    if (!written) return;
-    if (!deliversToPush(channel)) return;
-
-    await sendPushToPlayers([playerId], pushPayloadFor(input.kind, input.copy));
+    if (!written) return false;
+    if (deliversToPush(channel)) {
+      await sendPushToPlayers([playerId], pushPayloadFor(input.kind, input.copy));
+    }
+    return true;
   } catch (error) {
     console.error(`[notifications] notifyPlayer(${input.kind}) failed:`, error);
+    return false;
   }
 }
 

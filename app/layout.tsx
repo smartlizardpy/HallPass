@@ -7,6 +7,7 @@ import { MobileSplash } from "./components/MobileSplash";
 import { MobileTabBar } from "./components/MobileTabBar";
 import { PWA } from "./components/PWA";
 import { StealthController } from "./components/stealth/StealthController";
+import { StreakBeacon } from "./components/streak/StreakBeacon";
 import { StreakToast } from "./components/streak/StreakToast";
 import { ThemeController } from "./components/theme/ThemeController";
 import { WelcomeToast } from "./components/WelcomeToast";
@@ -109,6 +110,7 @@ export default function RootLayout({
         <MobileSplash />
         <StealthController />
         <StreakToast />
+        <StreakBeacon />
         {/* Renders nothing — keeps `data-theme` in step with the stored choice
             and with a device whose own preference changes mid-session. */}
         <ThemeController />
