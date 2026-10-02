@@ -926,6 +926,14 @@ export function TestSessionClient({
       )}
       {rec.state.phase === "ready" && (
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 bg-emerald-500/15 px-4 py-2 text-xs font-bold text-emerald-100">
+          {rec.state.take.bytes === 0 ? (
+            // Said, not saved: a 0-byte "video" the tester would only discover
+            // is empty after finding it in their downloads.
+            <span className="min-w-0 flex-1">
+              🎥 Nothing was recorded — the game&rsquo;s picture never changed while
+              recording (a still screen). Start the game and try again.
+            </span>
+          ) : (
           <span className="min-w-0 flex-1">
             🎥 Recording ready — {formatClock(rec.state.take.durationMs)},{" "}
             {(rec.state.take.bytes / (1024 * 1024)).toFixed(1)} MB. It&rsquo;s the game&rsquo;s
@@ -937,13 +945,16 @@ export function TestSessionClient({
                 ? ` ${ENDED_COPY[rec.state.take.endedBy]}`
                 : ""}
           </span>
-          <button
-            type="button"
-            onClick={rec.saveVideo}
-            className="rounded-full bg-white px-3 py-1.5 font-extrabold text-zinc-900 hover:bg-white/90"
-          >
-            Save video
-          </button>
+          )}
+          {rec.state.take.bytes > 0 && (
+            <button
+              type="button"
+              onClick={rec.saveVideo}
+              className="rounded-full bg-white px-3 py-1.5 font-extrabold text-zinc-900 hover:bg-white/90"
+            >
+              Save video
+            </button>
+          )}
           <button
             type="button"
             onClick={rec.saveEvents}

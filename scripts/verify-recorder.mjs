@@ -108,7 +108,7 @@ window.runTake = async (opts) => {
   take.sidecar.events.forEach((e) => { types[e.type] = (types[e.type] || 0) + 1; });
   const submit = take.sidecar.events.find((e) => e.type === 'score.submit');
   return {
-    layered: probe.layered, shimmed: probe.shimmed, canvasCount: probe.canvasCount,
+    layered: probe.layered, shimmed: probe.shimmed, is2d: (() => { try { return probe.canvas.getContext('2d') !== null; } catch { return false; } })(), canvasCount: probe.canvasCount,
     bytes: take.bytes, mimeType: take.mimeType, durationMs: Math.round(take.durationMs),
     endedBy: take.endedBy, cap: take.cap, audio: take.sidecar.recording.audio,
     hasOpus: /A_OPUS/.test(text), decode, types,
@@ -202,13 +202,20 @@ for (const slug of slugs) {
     if (t.refused) {
       row.status = t.refused === "no-canvas" ? "refused:no-canvas" : `refused:${t.refused}`;
     } else {
-      if (!t.shimmed) problems.push("shim not in page");
-      if (!(t.bytes > 1000)) problems.push("video empty");
-      if (!t.decode?.ok) problems.push("video does not decode");
+      if (!t.shimmed && !process.env.HP_NOSHIM) problems.push("shim not in page");
+      // A still WebGL game draws nothing, so a captured canvas has no frames to
+      // record. That is a stated limitation (docs/game-recorder.md), reported
+      // separately rather than hidden or counted as a pass.
+      const stillWebgl = t.bytes === 0 && !t.is2d;
+      if (stillWebgl) row.note = "still WebGL canvas: no frames (UI says nothing was recorded)";
+      else {
+        if (!(t.bytes > 1000)) problems.push("video empty");
+        if (!t.decode?.ok) problems.push("video does not decode");
+      }
       if (!t.sidecarOk) problems.push("sidecar invalid");
       if (t.types["recording.start"] !== 1 || t.types["recording.stop"] !== 1) problems.push("start/stop events");
       if (t.audio === "webaudio" && !t.hasOpus) problems.push("audio claimed but no opus track");
-      row.status = problems.length ? "FAIL" : "ok";
+      row.status = problems.length ? "FAIL" : row.note ? "still-webgl" : "ok";
     }
     if (row.shimErrors > row.controlErrors) {
       (row.problems ??= []).push(`shim adds page errors (${row.controlErrors} → ${row.shimErrors})`);
@@ -229,7 +236,7 @@ for (const slug of slugs) {
         (t.refused
           ? `refused (${t.refused})`
           : `${(t.bytes / 1024).toFixed(0)}KB ${t.mimeType ?? ""} audio=${t.audio} layered=${t.layered} events=${JSON.stringify(t.types)} skew=${t.submitSkewMs}`) +
-        (row.problems ? `  !! ${row.problems.join("; ")}` : ""),
+        (row.problems ? `  !! ${row.problems.join("; ")}` : "") + (row.note ? `  (${row.note})` : ""),
     );
   }
 }
@@ -281,7 +288,7 @@ fs.rmSync(tmp, { recursive: true, force: true });
 
 const fails = results.filter((r) => r.status === "FAIL").length + extra.filter((e) => !e.ok).length;
 const count = (p) => results.filter((r) => r.status.startsWith(p)).length;
-const summary = { games: results.length, ok: count("ok"), refused: count("refused"), failed: results.filter((r) => r.status === "FAIL").length, withAudio: results.filter((r) => r.take?.audio === "webaudio").length, checks: extra };
+const summary = { games: results.length, ok: count("ok"), stillWebgl: count("still-webgl"), refused: count("refused"), failed: results.filter((r) => r.status === "FAIL").length, withAudio: results.filter((r) => r.take?.audio === "webaudio").length, checks: extra };
 if (asJson) console.log(JSON.stringify({ summary, results }, null, 2));
 else console.log(`\n${JSON.stringify(summary)}`);
 process.exit(fails ? 1 : 0);

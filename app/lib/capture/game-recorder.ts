@@ -174,7 +174,7 @@ export class GameRecorder {
   private videoStream: MediaStream | null = null;
   private detachErrors: () => void = () => {};
   private mimeType = "";
-  /** Push a frame on every tick — only for 2D canvases; see {@link pushFrame}. */
+  /** Re-draw the canvas onto itself every tick — 2D only; see {@link pushFrame}. */
   private heartbeat = false;
   private stopping: Promise<RecordedTake> | null = null;
   private pendingEnd: { endedBy: EndedBy; cap: "time" | "size" | null } = {
@@ -244,10 +244,10 @@ export class GameRecorder {
       // interrupted take still has its data (same reasoning as ReplayBuffer).
       recorder.start(1000);
       // BOUNDED, and that is a bug fix rather than caution: a captured canvas only
-      // produces frames when it CHANGES, and Chrome does not fire `start` until
-      // the first one. A game sitting on a still screen when Record is pressed
-      // (a title card, a pause menu) left this awaiting forever and the control
-      // stuck on "starting". Found by `scripts/verify-recorder.mjs`.
+      // produces frames when something is drawn to it, and Chrome does not fire
+      // `start` until the first one. A game sitting on a still screen when Record
+      // is pressed (a title card, a pause menu) left this awaiting forever and the
+      // control stuck on "starting". Found by `scripts/verify-recorder.mjs`.
       await Promise.race([started, new Promise<void>((r) => setTimeout(r, START_WAIT_MS))]);
       this.heartbeat = this.is2dCanvas();
       this.pushFrame();
@@ -301,23 +301,39 @@ export class GameRecorder {
   }
 
   /**
-   * Ask the captured track for a frame of the canvas as it is right now.
+   * Make a still 2D canvas emit a frame, without changing a pixel of it.
    *
-   * A canvas stream emits only on change, so a still screen would otherwise
-   * produce no frames at all and a take with a hole where the timeline should be.
-   * Only done for 2D canvases: a WebGL canvas without `preserveDrawingBuffer` can
-   * be cleared between presents, and pushing a frame at an arbitrary moment would
-   * put a black frame into the video. WebGL games animate, so they do not need it.
+   * A captured canvas produces frames only when something is DRAWN to it, and
+   * Chrome does not fire `start` until the first. A game parked on a title card
+   * or a menu draws nothing, so the take came back with no video at all.
+   * `track.requestFrame()` does not help — it only forwards a frame the canvas
+   * has already produced — so the canvas is drawn onto itself with the `copy`
+   * composite operation, which is an exact identity. (The default `source-over`
+   * would double every semi-transparent pixel.) The game's own transform, alpha,
+   * filter and shadow are neutralised inside `save`/`restore`, so a game that
+   * leaves a scale or rotation set cannot make the copy land anywhere but on top
+   * of itself.
+   *
+   * 2D only. A WebGL canvas cannot be drawn on like this, and a game that is
+   * rendering through WebGL is animating anyway; a still WebGL game records
+   * nothing until it moves, which the UI reports instead of pretending.
    */
   private pushFrame(): void {
     if (!this.heartbeat) return;
     try {
-      const track = this.videoStream?.getVideoTracks()[0] as
-        | (MediaStreamTrack & { requestFrame?: () => void })
-        | undefined;
-      track?.requestFrame?.();
+      const canvas = this.game.canvas;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "copy";
+      ctx.shadowColor = "rgba(0,0,0,0)";
+      ctx.filter = "none";
+      ctx.drawImage(canvas, 0, 0);
+      ctx.restore();
     } catch {
-      /* best effort */
+      /* best effort: a tainted or lost context just records what it records */
     }
   }
 
