@@ -33,6 +33,8 @@ import {
   getAllGameMedia,
   getGameCoverMedia,
   getGameMedia,
+  getMediaForSlug,
+  listCoverMediaForSlug,
   listMediaIdsForSlug,
   setMediaKind,
 } from "@/app/lib/game-media";
@@ -87,5 +89,24 @@ describe("queries", () => {
     expect(h.calls[0].values).toEqual(["hero", "c"]);
     h.rows = [];
     expect(await setMediaKind("nope", "hero")).toBe(false);
+  });
+});
+
+describe("previous-cover reads", () => {
+  it("listCoverMediaForSlug selects only this slug's heroes, newest first, bound limit", async () => {
+    h.rows = [row("c", "g", "hero")];
+    expect((await listCoverMediaForSlug("g")).map((m) => m.id)).toEqual(["c"]);
+    expect(h.calls[0].text).toContain("kind = 'hero'");
+    expect(h.calls[0].text).toContain("ORDER BY created_at DESC");
+    expect(h.calls[0].values).toEqual(["g", 24]);
+  });
+
+  it("getMediaForSlug scopes by slug and returns null for no match", async () => {
+    h.rows = [row("a", "g", "screenshot")];
+    expect((await getMediaForSlug("g", "a"))?.id).toBe("a");
+    expect(h.calls[0].text).toContain("slug =");
+    expect(h.calls[0].values).toEqual(["a", "g"]);
+    h.rows = [];
+    expect(await getMediaForSlug("g", "zz")).toBeNull();
   });
 });
