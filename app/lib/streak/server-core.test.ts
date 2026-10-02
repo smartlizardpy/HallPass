@@ -5,7 +5,9 @@ import {
   clampDay,
   isNudgeDue,
   localParts,
+  parseSeed,
   parseTzOffset,
+  MAX_SEED_STREAK,
   runStartDay,
   utcDayKey,
   type ServerStreak,
@@ -155,5 +157,22 @@ describe("runStartDay", () => {
 
   it("crosses a month boundary", () => {
     expect(runStartDay("2026-11-02", 5)).toBe("2026-10-29");
+  });
+});
+
+describe("parseSeed", () => {
+  it("accepts a plausible local streak", () => {
+    expect(parseSeed(40)).toBe(40);
+    expect(parseSeed(7.9)).toBe(7);
+  });
+
+  it("clamps to the ceiling", () => {
+    expect(parseSeed(100000)).toBe(MAX_SEED_STREAK);
+  });
+
+  it("falls back to 1 for anything missing or malformed", () => {
+    for (const bad of [undefined, null, "40", NaN, Infinity, 0, -5]) {
+      expect(parseSeed(bad)).toBe(1);
+    }
   });
 });

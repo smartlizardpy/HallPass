@@ -7,11 +7,19 @@
  * on the first play of a local day, so this is at most one write per device per
  * day.
  *
- * Body: `{ day: "YYYY-MM-DD", tzOffsetMin: number }` — the device's own calendar
- * day and its UTC offset in minutes EAST of UTC (the negation of
- * `Date#getTimezoneOffset`). The day is clamped to within one day of the
+ * Body: `{ day: "YYYY-MM-DD", tzOffsetMin: number, current?: number }` — the
+ * device's own calendar day, its UTC offset in minutes EAST of UTC (the negation
+ * of `Date#getTimezoneOffset`), and its local streak. `current` SEEDS a brand-new
+ * row only (clamped by `parseSeed`) and never raises an existing one.
+ *
+ * It is sent on the first play of a day AND again on load until this answers
+ * `recorded: true` (see `StreakBeacon.tsx`), so a repeat of the same day is the
+ * ordinary case and is a no-op. The day is clamped to within one day of the
  * server's UTC date; see `server-core.ts` for why a claim that cannot move
  * anything but the claimant's own flame is acceptable.
+ *
+ * `recorded` is true for any signed-in success, including a repeat; `advanced`
+ * says whether the streak actually moved.
  *
  * A GUEST GETS `200 { recorded: false }`, NOT A 401 — the same rule as
  * `/api/v1/me/plays`: this is a fire-and-forget beacon and a 401 would put a red
@@ -22,7 +30,7 @@
 import { isMissingStreakSchema, streaks } from "@/app/lib/streak";
 import { isMilestone as isMilestoneLength } from "@/app/lib/streak/core";
 import { notifyStreakMilestone } from "@/app/lib/streak/notify";
-import { clampDay, parseTzOffset } from "@/app/lib/streak/server-core";
+import { clampDay, parseSeed, parseTzOffset } from "@/app/lib/streak/server-core";
 import {
   NO_STORE,
   credentialedOptions,
@@ -35,7 +43,7 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ ok: true, recorded: false }, { headers: NO_STORE });
   }
 
-  let body: { day?: unknown; tzOffsetMin?: unknown } = {};
+  let body: { day?: unknown; tzOffsetMin?: unknown; current?: unknown } = {};
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -52,12 +60,22 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   try {
-    const result = await streaks.recordDay(playerId, day, tzOffsetMin);
-    if (result.advanced && isMilestoneLength(result.current)) {
+    const result = await streaks.recordDay(
+      playerId,
+      day,
+      tzOffsetMin,
+      parseSeed(body?.current),
+    );
+    // Never a milestone for a SEEDED row: its length is the device's claim about
+    // history, not a run the server watched reach that number today.
+    if (result.advanced && !result.created && isMilestoneLength(result.current)) {
       await notifyStreakMilestone(playerId, result.current, day);
     }
+    // `recorded` means "the server now holds this day (or a later one) for this
+    // player" — true for an advance AND for a same-day repeat, which is what lets
+    // the client stop re-sending. `advanced` says whether THIS call moved it.
     return Response.json(
-      { ok: true, recorded: result.advanced },
+      { ok: true, recorded: true, advanced: result.advanced },
       { headers: NO_STORE },
     );
   } catch (error) {

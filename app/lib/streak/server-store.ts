@@ -24,7 +24,17 @@ const toInt = (value: unknown): number => {
 };
 
 export type RecordedDay =
-  | { advanced: true; current: number; longest: number }
+  | {
+      advanced: true;
+      current: number;
+      longest: number;
+      /**
+       * True when this call CREATED the row, so `current` is the device's seed
+       * rather than a run the server watched grow. Callers must not celebrate it
+       * as an achievement made today.
+       */
+      created: boolean;
+    }
   | { advanced: false };
 
 /** One player who is due a reminder, as the "who is due" query reports them. */
@@ -50,10 +60,11 @@ export function createStreakStore(sql: Sql) {
     playerId: string,
     day: string,
     tzOffsetMin: number,
+    seed: number = 1,
   ): Promise<RecordedDay> {
     const rows = await sql`
       INSERT INTO player_streaks (player_id, current_streak, longest_streak, last_day, tz_offset_min)
-      VALUES (${playerId}, 1, 1, ${day}::date, ${tzOffsetMin})
+      VALUES (${playerId}, ${seed}, ${seed}, ${day}::date, ${tzOffsetMin})
       ON CONFLICT (player_id) DO UPDATE SET
         current_streak = CASE
           WHEN ${day}::date = player_streaks.last_day + 1
@@ -65,7 +76,7 @@ export function createStreakStore(sql: Sql) {
         tz_offset_min = ${tzOffsetMin},
         updated_at = now()
       WHERE ${day}::date > player_streaks.last_day
-      RETURNING current_streak, longest_streak
+      RETURNING current_streak, longest_streak, (xmax = 0) AS created
     `;
     const row = rows[0] as Row | undefined;
     if (!row) return { advanced: false };
@@ -73,6 +84,7 @@ export function createStreakStore(sql: Sql) {
       advanced: true,
       current: toInt(row.current_streak),
       longest: toInt(row.longest_streak),
+      created: row.created === true,
     };
   }
 

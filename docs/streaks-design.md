@@ -39,6 +39,31 @@ The claimed day is clamped to within one day of server UTC: the only thing a
 liar can fake is their own flame and their own nudge timing; no score, rank or
 reward depends on it.
 
+### 3.1 The beacon retries, and seeds
+
+The device event fires once per local day and never retries. Left like that it
+broke the server's picture in two ways: a guest who played and THEN signed in the
+same day was never told to the server (so the 17:00 reminder warned them about a
+streak they had already kept), and one dropped request made the next day look
+like a gap and reset the run.
+
+So the beacon also fires on page load whenever the device's local streak already
+counts today and a `localStorage` marker (`hp:streak-synced`) does not say the
+server has it. The marker is written ONLY when the server answers
+`recorded: true` — a guest's `recorded: false` leaves it unset, so the first load
+after signing in sends. The server's same-day no-op makes a repeat harmless;
+`recorded` means "the server holds this day or later", `advanced` says whether
+this call moved it. The marker is per device, so on a shared device the second
+player to sign in the same day is not re-sent.
+
+The body also carries the device's local `current` streak. It SEEDS a brand-new
+row on INSERT only, clamped to 365, and the conflict arm never reads it, so it
+cannot raise a streak the server already tracks. Without it a 40-day local flame
+would be announced as "Your 2-day streak". A seeded row never fires a milestone
+notification: its length is a claim about history, not something that happened
+today. A dropped beacon is retried only until the day ends; a player who never
+loads the site again that day and then plays tomorrow still shows a gap.
+
 ## 4. The reminder
 
 `POST /api/v1/admin/streaks/remind`, behind the alerts secret, driven hourly by

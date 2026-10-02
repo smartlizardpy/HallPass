@@ -31,6 +31,13 @@ export const REMINDER_MIN_STREAK = 2;
 /** The most reminders one run will send, so a runaway cannot fan out unbounded. */
 export const REMINDER_RUN_CAP = 500;
 
+/**
+ * The longest streak the server will accept as a SEED from a device. A device's
+ * own flame can be older than the server's knowledge of it (see
+ * {@link parseSeed}); this bounds how much of that claim is believed.
+ */
+export const MAX_SEED_STREAK = 365;
+
 /** Offsets are minutes EAST of UTC, within the real world's range. */
 export const MAX_TZ_OFFSET_MIN = 840;
 
@@ -159,4 +166,21 @@ export function isNudgeDue(c: NudgeCandidate, nowMs: number): boolean {
 export function runStartDay(day: string, current: number): string {
   const [y, m, d] = day.split("-").map(Number);
   return utcDayKey(Date.UTC(y, m - 1, d - Math.max(0, current - 1)));
+}
+
+/**
+ * Narrow a device's reported local streak to a seed for a NEW server row.
+ *
+ * A device that has been playing for 40 days and signs in for the first time
+ * would otherwise start a server run at 1, and the reminder would then say "Your
+ * 2-day streak". The seed is used on first INSERT only and NEVER raises an
+ * existing row, so it cannot be used to inflate a streak the server already
+ * tracks. It is clamped to {@link MAX_SEED_STREAK}; anything missing or
+ * malformed falls back to 1, the honest minimum for a day that was just played.
+ */
+export function parseSeed(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 1;
+  const n = Math.floor(value);
+  if (n < 1) return 1;
+  return Math.min(n, MAX_SEED_STREAK);
 }
