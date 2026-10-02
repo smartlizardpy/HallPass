@@ -55,14 +55,15 @@ export async function notifyStreakAtRisk(
   playerId: string,
   current: number,
   localDay: string,
-): Promise<void> {
+): Promise<boolean> {
   try {
-    await notifyPlayer(playerId, {
+    return await notifyPlayer(playerId, {
       kind: "streak_at_risk",
       copy: streakAtRiskCopy({ current }),
       dedupeKey: `streak_at_risk:${localDay}`,
     });
   } catch (error) {
     console.error(`[streak] reminder for ${playerId} failed:`, error);
+    return false;
   }
 }

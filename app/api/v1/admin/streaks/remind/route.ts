@@ -27,6 +27,13 @@
  * `due` is the number processed this run, at most `cap`; `capped: true` means
  * MORE were due than the cap allowed (see the comment at the cap below).
  *
+ * `claimed` is how many players this run reserved a reminder for; `filed` is how
+ * many of those actually had a notification written (and, if they are on push, a
+ * push attempted). They differ when a player has switched the kind off, or the
+ * insert failed after the claim. Neither claims a device RECEIVED anything — the
+ * push transport swallows per-device failures by design, so that is not knowable
+ * here, and the field is named for what is.
+ *
  * `{ "dryRun": true }` reports who is due and claims and sends nothing.
  */
 
@@ -100,17 +107,21 @@ export async function POST(req: Request): Promise<Response> {
       cap: REMINDER_RUN_CAP,
       capped,
       claimed: 0,
+      filed: 0,
     });
   }
 
   let claimed = 0;
+  let filed = 0;
   for (let i = 0; i < due.length; i += BATCH) {
     await Promise.all(
       due.slice(i, i + BATCH).map(async (player) => {
         try {
           if (!(await streaks.claimNudge(player.playerId, player.localDay))) return;
           claimed += 1;
-          await notifyStreakAtRisk(player.playerId, player.current, player.localDay);
+          if (await notifyStreakAtRisk(player.playerId, player.current, player.localDay)) {
+            filed += 1;
+          }
         } catch (error) {
           console.error(`streaks/remind ${player.playerId} failed:`, error);
         }
@@ -125,5 +136,6 @@ export async function POST(req: Request): Promise<Response> {
     cap: REMINDER_RUN_CAP,
     capped,
     claimed,
+    filed,
   });
 }

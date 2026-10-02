@@ -101,11 +101,20 @@ if (!body) fail(`POST ${path} answered something that is not JSON.`);
 
 console.log(`HallPass streak reminders — ${siteUrl}`);
 console.log(`  due now   ${body.due}`);
-console.log(`  ${dryRun ? "would send" : "sent     "} ${dryRun ? body.due : body.claimed}`);
-if (!dryRun && body.claimed < body.due) {
-  console.log(
-    "  (the rest were claimed by an overlapping run, or failed and were logged by the site)",
-  );
+if (dryRun) {
+  console.log(`  would send ${body.due}`);
+} else {
+  // `claimed` = reserved for this run; `filed` = a notification actually written
+  // (and a push attempted for players on push). Not "delivered": the site cannot
+  // confirm a device received anything.
+  console.log(`  claimed   ${body.claimed}`);
+  console.log(`  filed     ${body.filed}  (notification written, push attempted)`);
+  if (body.claimed < body.due) {
+    console.log("  (the rest were claimed by an overlapping run, or failed and were logged by the site)");
+  }
+  if (body.filed < body.claimed) {
+    console.log("  (some claimed players had the kind switched off, or filing failed and was logged)");
+  }
 }
 if (body.capped) {
   // More players were due than one run will send to; the rest miss today's
@@ -120,5 +129,7 @@ if (dryRun) console.log("\n--dry-run: nobody was notified.");
 summarise([
   "### HallPass streak reminders",
   "",
-  `- ${body.due} due, ${dryRun ? "none sent (dry run)" : `${body.claimed} sent`}.`,
+  dryRun
+    ? `- ${body.due} due, nobody notified (dry run).`
+    : `- ${body.due} due, ${body.claimed} claimed, ${body.filed} filed.`,
 ]);

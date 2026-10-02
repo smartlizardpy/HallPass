@@ -162,7 +162,32 @@ describe("notifyPlayer", () => {
     insertPersonal.mockRejectedValue(new Error("neon is down"));
     await expect(
       notifyPlayer("p1", { kind: "challenge_received", copy: COPY }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(false);
+  });
+
+  it("resolves true only when a row was actually filed", async () => {
+    // What lets a batch caller report "filed" honestly rather than "attempted".
+    await expect(
+      notifyPlayer("p1", { kind: "challenge_received", copy: COPY }),
+    ).resolves.toBe(true);
+
+    insertPersonal.mockResolvedValue(false); // deduped
+    await expect(
+      notifyPlayer("p1", { kind: "challenge_received", copy: COPY }),
+    ).resolves.toBe(false);
+
+    insertPersonal.mockResolvedValue(true);
+    prefsFor.mockResolvedValue({ challenge_received: "off" });
+    await expect(
+      notifyPlayer("p1", { kind: "challenge_received", copy: COPY }),
+    ).resolves.toBe(false);
+  });
+
+  it("resolves true for a bell-only kind too — filed, no push attempted", async () => {
+    await expect(
+      notifyPlayer("p1", { kind: "achievement_unlocked", copy: COPY }),
+    ).resolves.toBe(true);
+    expect(sendPushToPlayers).not.toHaveBeenCalled();
   });
 
   it("still files the row when preferences cannot be read", async () => {
