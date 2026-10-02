@@ -202,6 +202,19 @@ that is an assumption to verify on a real device, not in a simulator.
 
 ---
 
+## Phase 3 — recording the game itself (built)
+
+A tester can now record the game's own canvas and Web Audio output with no
+`getDisplayMedia`, so it is available on a phone too — see `game-recorder.md`.
+It reads the same same-origin iframe the grabber above does, but uses
+`captureStream()` rather than `drawImage`, which means WebGL games need no
+`preserveDrawingBuffer`. The one change to the picture painted here: the beta
+session now loads the game with `?hp-rec=1`, so `/game-html` returns the HTML with
+a shim injected (and a 200 rather than the 307 this document describes) — only
+there, and only for the document. iOS behaviour is untested on a device.
+
+---
+
 ## Gotchas
 
 ### 1. "Blank" and "empty" are different questions
