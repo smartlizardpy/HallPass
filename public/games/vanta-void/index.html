@@ -110,7 +110,11 @@
         }
 
         #hp-bar { height: 100%; width: 100%; background: #fff; box-shadow: 0 0 20px white; transition: width 0.1s; }
-        #shield-bar { position: absolute; top: 0; left: 0; height: 100%; width: 50%; background: var(--neon-blue); opacity: 0.8; box-shadow: 0 0 15px var(--neon-blue); mix-blend-mode: screen; transition: width 0.1s; }
+        /* The shield has its own thin bar under the hull bar. It used to be
+           laid over the hull bar, so a hit the shield absorbed changed nothing
+           the player could see and read as "I touched it and lost no health". */
+        .bar-outer.shield-outer { height: 6px; }
+        #shield-bar { height: 100%; width: 50%; background: var(--neon-blue); box-shadow: 0 0 15px var(--neon-blue); transition: width 0.1s; }
         
         #boss-hud {
             position: absolute;
@@ -334,6 +338,8 @@
                 <div class="bar-label">HULL INTEGRITY</div>
                 <div class="bar-outer">
                     <div id="hp-bar"></div>
+                </div>
+                <div class="bar-outer shield-outer">
                     <div id="shield-bar"></div>
                 </div>
             </div>
@@ -736,7 +742,11 @@
                 if (this.stats.dodge > Math.random()) { floatingTexts.push({text:"DODGE", x:this.x, y:this.y-30, life:1}); return; }
                 if (this.stats.phase && Math.random() > 0.8) { floatingTexts.push({text:"PHASE", x:this.x, y:this.y-30, life:1}); return; }
                 
-                if (this.shield > 0) { this.shield -= amt; if (this.shield < 0) { this.hp += this.shield; this.shield = 0; } }
+                if (this.shield > 0) {
+                    this.shield -= amt;
+                    if (this.shield < 0) { this.hp += this.shield; this.shield = 0; }
+                    else floatingTexts.push({text:"SHIELD", x:this.x, y:this.y-30, life:1, color:COLORS.blue});
+                }
                 else { this.hp -= amt; }
                 
                 shake = 15;
