@@ -52,6 +52,7 @@ export type RecAction =
   | { type: "tick"; elapsedMs: number; bytes: number }
   | { type: "stopping" }
   | { type: "finished"; take: RecordedTake }
+  | { type: "aborted" }
   | { type: "discard" };
 
 export function recReducer(state: RecState, action: RecAction): RecState {
@@ -84,6 +85,12 @@ export function recReducer(state: RecState, action: RecAction): RecState {
       // the tester pressing anything.
       return state.phase === "recording" || state.phase === "stopping"
         ? { phase: "ready", take: action.take }
+        : state;
+    case "aborted":
+      // A take that was in progress could not be produced (the recorder threw while
+      // finishing). Without this the UI sat on "Saving…" forever.
+      return state.phase === "recording" || state.phase === "stopping"
+        ? { phase: "refused", reason: "failed" }
         : state;
     case "discard":
       return state.phase === "ready" || state.phase === "refused" ? { phase: "idle" } : state;
@@ -120,9 +127,13 @@ export function useGameRecorder({
   const recorderRef = useRef<GameRecorder | null>(null);
   const unsupported = useBrowserSupport();
 
-  const finishWith = useCallback((take: RecordedTake) => {
+  const finishWith = useCallback((take: RecordedTake | null) => {
     recorderRef.current = null;
-    dispatch({ type: "finished", take });
+    dispatch(take ? { type: "finished", take } : { type: "aborted" });
+  }, []);
+  const abort = useCallback(() => {
+    recorderRef.current = null;
+    dispatch({ type: "aborted" });
   }, []);
 
   const start = useCallback(async () => {
@@ -156,8 +167,12 @@ export function useGameRecorder({
     const recorder = recorderRef.current;
     if (!recorder) return;
     dispatch({ type: "stopping" });
-    finishWith(await recorder.stop("user"));
-  }, [finishWith]);
+    try {
+      finishWith(await recorder.stop("user"));
+    } catch {
+      abort();
+    }
+  }, [finishWith, abort]);
 
   const addEvent = useCallback(
     (type: RecordingEventType, source: EventSource, data?: Record<string, unknown>) => {
@@ -187,17 +202,19 @@ export function useGameRecorder({
       const recorder = recorderRef.current;
       if (!recorder?.isRecording) return;
       dispatch({ type: "stopping" });
-      void recorder.stop("navigated").then(finishWith);
+      void recorder.stop("navigated").then(finishWith, abort);
     };
     frame.addEventListener("load", onLoad);
     return () => frame.removeEventListener("load", onLoad);
-  }, [iframeRef, finishWith]);
+  }, [iframeRef, finishWith, abort]);
 
   // Leaving the page releases every handle. Nothing is downloaded: a take the
   // tester never asked to save is not theirs to find in a downloads folder.
   useEffect(() => {
     return () => {
-      void recorderRef.current?.stop("user");
+      // Also covers a take still STARTING: stop() cancels it and releases its
+      // handles once the start wait is over.
+      void recorderRef.current?.stop("user").catch(() => {});
       recorderRef.current = null;
     };
   }, []);

@@ -143,6 +143,8 @@ export type RecordedTake = {
   cap: "time" | "size" | null;
 };
 
+type StartResult = { ok: true } | { ok: false; reason: RecordFailure };
+
 type AudioContextCtor = typeof AudioContext;
 
 function audioContextCtor(): AudioContextCtor | null {
@@ -158,6 +160,20 @@ const START_WAIT_MS = 1500;
 
 /** Same message arriving again within this window is one event, not a flood. */
 const ERROR_DEDUPE_MS = 1000;
+
+/**
+ * The shim handle, or null. EVERY read of the game's window goes through here:
+ * once the game has navigated cross-origin, even looking at a property on its
+ * window throws, and one such throw in teardown used to leave the timer, the
+ * tracks and the AudioContext running.
+ */
+function shimOf(win: Window): ShimHandle | null {
+  try {
+    return (win as unknown as { __hpRec?: ShimHandle }).__hpRec ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export class GameRecorder {
   private recorder: MediaRecorder | null = null;
@@ -176,7 +192,19 @@ export class GameRecorder {
   private mimeType = "";
   /** Re-draw the canvas onto itself every tick — 2D only; see {@link pushFrame}. */
   private heartbeat = false;
-  private stopping: Promise<RecordedTake> | null = null;
+  /** True once `start()` has finished bringing the recording up. */
+  private started = false;
+  /** `stop()` (or a failure) arrived while `start()` was still waiting. */
+  private cancelled = false;
+  private startPromise: Promise<StartResult> | null = null;
+  private stopping: Promise<RecordedTake | null> | null = null;
+  /**
+   * Set BEFORE `finish()` is called, not after. `finish()` runs synchronously up
+   * to its first await, and stopping the MediaRecorder fires `dataavailable`
+   * inside that stretch — which re-enters {@link checkCaps} while `stopping` is
+   * still unassigned and would end the take a second time.
+   */
+  private ending = false;
   private pendingEnd: { endedBy: EndedBy; cap: "time" | "size" | null } = {
     endedBy: "user",
     cap: null,
@@ -195,15 +223,21 @@ export class GameRecorder {
     },
   ) {}
 
+  /** Recording is up and has not been told to end. False while still starting. */
   get isRecording(): boolean {
-    return this.recorder !== null && !this.stopping;
+    return this.started && !this.ending;
   }
 
   /**
    * Begin recording. Must be called from the Record click: the audio mixer is a
    * new `AudioContext`, which starts suspended everywhere until a gesture.
    */
-  async start(): Promise<{ ok: true } | { ok: false; reason: RecordFailure }> {
+  start(): Promise<StartResult> {
+    this.startPromise ??= this.bringUp();
+    return this.startPromise;
+  }
+
+  private async bringUp(): Promise<StartResult> {
     const { limits } = this.options;
     try {
       const picked = pickMimeType();
@@ -248,7 +282,27 @@ export class GameRecorder {
       // `start` until the first one. A game sitting on a still screen when Record
       // is pressed (a title card, a pause menu) left this awaiting forever and the
       // control stuck on "starting". Found by `scripts/verify-recorder.mjs`.
-      await Promise.race([started, new Promise<void>((r) => setTimeout(r, START_WAIT_MS))]);
+      let waitTimer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        started,
+        new Promise<void>((r) => {
+          waitTimer = setTimeout(r, START_WAIT_MS);
+        }),
+      ]);
+      clearTimeout(waitTimer);
+
+      // Anything can have happened during that wait: the tester pressed Stop, the
+      // page unmounted, the recorder errored, or the game reloaded and took its
+      // canvas with it. Carrying on would build a log, listeners and a timer for a
+      // recording that has already been torn down — a leaked interval, a take
+      // stamped 1970, and a UI told "started" after "finished". So: check, clean
+      // up, and report that nothing started.
+      if (this.cancelled || !this.game.canvas.isConnected) {
+        this.cancelled = true;
+        this.teardown();
+        return { ok: false, reason: "failed" };
+      }
+
       this.heartbeat = this.is2dCanvas();
       this.pushFrame();
 
@@ -264,8 +318,10 @@ export class GameRecorder {
         this.pushFrame();
         this.checkCaps();
       }, 250);
+      this.started = true;
       return { ok: true };
     } catch {
+      this.cancelled = true;
       this.teardown();
       return { ok: false, reason: "failed" };
     }
@@ -281,9 +337,31 @@ export class GameRecorder {
     this.log?.add(type, source, data);
   }
 
-  /** Finish the take and return it. Safe to call twice; the second call gets the same one. */
-  stop(endedBy: EndedBy = "user"): Promise<RecordedTake> {
+  /**
+   * Finish the take and return it. Safe to call twice; the second call gets the
+   * same one.
+   *
+   * Resolves `null` when recording never got going — stopped while still
+   * starting, or start failed. There is no take to hand back, and inventing an
+   * empty one would only be a file to delete.
+   */
+  stop(endedBy: EndedBy = "user"): Promise<RecordedTake | null> {
     if (this.stopping) return this.stopping;
+    if (!this.started) {
+      this.cancelled = true;
+      this.stopping = (this.startPromise ?? Promise.resolve()).then(
+        () => {
+          this.teardown();
+          return null;
+        },
+        () => {
+          this.teardown();
+          return null;
+        },
+      );
+      return this.stopping;
+    }
+    this.ending = true;
     if (this.pendingEnd.endedBy === "user") this.pendingEnd = { endedBy, cap: null };
     this.stopping = this.finish();
     return this.stopping;
@@ -338,7 +416,7 @@ export class GameRecorder {
   }
 
   private checkCaps(): void {
-    if (this.stopping) return;
+    if (this.ending || !this.started) return;
     const cap = capReached(
       this.options.limits,
       performance.now() - this.startedPerf,
@@ -348,10 +426,24 @@ export class GameRecorder {
   }
 
   private autoStop(endedBy: EndedBy, cap: "time" | "size" | null): void {
-    if (this.stopping) return;
+    if (this.ending) return;
+    // An error while still starting is a failed start, not a take to hand over.
+    if (!this.started) {
+      this.cancelled = true;
+      return;
+    }
+    this.ending = true;
     this.pendingEnd = { endedBy, cap };
-    this.stopping = this.finish();
-    void this.stopping.then((take) => this.options.onAutoStop?.(take));
+    const finishing = this.finish();
+    this.stopping = finishing;
+    finishing.then(
+      (take) => {
+        if (take) this.options.onAutoStop?.(take);
+      },
+      () => {
+        /* finish() already released everything; there is no take to report */
+      },
+    );
   }
 
   /**
@@ -360,7 +452,7 @@ export class GameRecorder {
    * `"unsupported"`) when there is nothing to mix into.
    */
   private buildAudioMixer(): MediaStreamTrack | null {
-    const hp = (this.game.win as unknown as { __hpRec?: ShimHandle }).__hpRec;
+    const hp = shimOf(this.game.win);
     if (!hp) {
       this.audio = "none";
       return null;
@@ -407,7 +499,7 @@ export class GameRecorder {
 
   /** Subscribe to the shim's events and to the game's own errors. */
   private wireEvents(): void {
-    const hp = (this.game.win as unknown as { __hpRec?: ShimHandle }).__hpRec;
+    const hp = shimOf(this.game.win);
     if (hp) {
       hp.onEvent = (event) => {
         this.log?.add(
@@ -458,6 +550,16 @@ export class GameRecorder {
   }
 
   private async finish(): Promise<RecordedTake> {
+    // Release everything whatever happens below: a throw while assembling the take
+    // must not leave a recording timer and an open AudioContext behind.
+    try {
+      return await this.assemble();
+    } finally {
+      this.teardown();
+    }
+  }
+
+  private async assemble(): Promise<RecordedTake> {
     const recorder = this.recorder;
     const { endedBy, cap } = this.pendingEnd;
     const elapsed = performance.now() - this.startedPerf;
@@ -502,28 +604,41 @@ export class GameRecorder {
       },
       this.log ?? new EventLog(this.startEpochMs),
     );
-    this.teardown();
     return { video, mimeType, sidecar, fileNames, durationMs: elapsed, bytes: video.size, endedBy, cap };
   }
 
-  /** Release every handle. Idempotent. */
+  /**
+   * Release every handle. Idempotent, and each step is isolated: the game may
+   * already be gone (navigated cross-origin, frame removed), and a throw in one
+   * release must not skip the others.
+   */
   private teardown(): void {
-    if (this.timer) clearInterval(this.timer);
-    this.timer = null;
-    this.detachErrors();
+    const attempt = (fn: () => void) => {
+      try {
+        fn();
+      } catch {
+        /* already torn down, or the frame is gone */
+      }
+    };
+    attempt(() => {
+      if (this.timer) clearInterval(this.timer);
+      this.timer = null;
+    });
+    attempt(() => this.detachErrors());
     this.detachErrors = () => {};
-    const hp = (this.game.win as unknown as { __hpRec?: ShimHandle }).__hpRec;
-    try {
+    attempt(() => {
+      const hp = shimOf(this.game.win);
       if (hp) {
         hp.onEvent = null;
         hp.onStream = null;
       }
-    } catch {
-      /* frame gone */
-    }
-    this.videoStream?.getTracks().forEach((t) => t.stop());
-    this.mixerDest?.stream.getTracks().forEach((t) => t.stop());
-    void this.mixer?.close().catch(() => {});
+    });
+    attempt(() => {
+      if (this.recorder && this.recorder.state !== "inactive") this.recorder.stop();
+    });
+    attempt(() => this.videoStream?.getTracks().forEach((t) => t.stop()));
+    attempt(() => this.mixerDest?.stream.getTracks().forEach((t) => t.stop()));
+    attempt(() => void this.mixer?.close().catch(() => {}));
     this.mixer = null;
     this.mixerDest = null;
   }

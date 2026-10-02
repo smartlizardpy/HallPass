@@ -57,4 +57,23 @@ describe("recReducer", () => {
   it("will not discard a take that is still recording", () => {
     expect(recReducer(recording, { type: "discard" })).toBe(recording);
   });
+
+  it("ignores a late 'started' once the take has finished or aborted", () => {
+    expect(recReducer({ phase: "ready", take }, { type: "started", layered: false, silent: false })).toEqual({
+      phase: "ready",
+      take,
+    });
+    expect(recReducer(idle, { type: "started", layered: false, silent: false })).toBe(idle);
+    const refused: RecState = { phase: "refused", reason: "failed" };
+    expect(recReducer(refused, { type: "started", layered: false, silent: false })).toBe(refused);
+  });
+
+  it("turns a take that could not be produced into a refusal, not an eternal 'Saving…'", () => {
+    expect(recReducer({ phase: "stopping" }, { type: "aborted" })).toEqual({
+      phase: "refused",
+      reason: "failed",
+    });
+    expect(recReducer(recording, { type: "aborted" }).phase).toBe("refused");
+    expect(recReducer(idle, { type: "aborted" })).toBe(idle);
+  });
 });
