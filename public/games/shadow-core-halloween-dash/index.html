@@ -1320,6 +1320,11 @@
         function pauseGame() {
             if (gameState === 'PLAYING') changeState('PAUSED');
         }
+        function resumeGame() {
+            if (gameState !== 'PAUSED') return;
+            changeState('PLAYING'); // keeps the level as-is and resets lastTime so no time jump
+            keys.left = keys.right = keys.jump = false;
+        }
         function triggerDeath(reason = 'void') {
             if (player.isDead) return;
             player.isDead = true;
