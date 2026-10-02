@@ -1,0 +1,83 @@
+/**
+ * Streak reminders — `POST /api/v1/admin/streaks/remind`.
+ *
+ * Sends the "your streak ends tonight" push to every player who is due one right
+ * now. Driven hourly by `.github/workflows/streak-reminders.yml` through
+ * `scripts/send-streak-reminders.mjs`; like the site alerts, nothing on a
+ * serverless deployment wakes up to do this by itself.
+ *
+ * ── THE RUNNER DECIDES NOTHING ─────────────────────────────────────────────
+ * The body carries no player ids and no text. Who is due is a database question
+ * answered here (`dueForReminder`), and the wording is built by
+ * `streakAtRiskCopy`. The credential lives in a GitHub repository's settings, so
+ * the worst a holder can do is trigger the reminder early or repeatedly — and
+ * `claimNudge` makes "repeatedly" mean once.
+ *
+ * ── AT MOST ONCE PER PLAYER PER LOCAL DAY ──────────────────────────────────
+ * The nudge is CLAIMED before it is sent. A failure after the claim costs one
+ * missed reminder; a claim after the send would let an overlapping run repeat it,
+ * and a reminder twice is worse than none.
+ *
+ * ── A BROKEN SCHEMA IS LOUD HERE ───────────────────────────────────────────
+ * Unlike the beacon, this answers 503 when `player_streaks` is missing: the
+ * caller is a CI job whose whole purpose is to be seen failing, and "nothing to
+ * send" every hour for ever is the failure `check-alerts.mjs` was written to
+ * avoid.
+ *
+ * `{ "dryRun": true }` reports who is due and claims and sends nothing.
+ */
+
+import { alertsAuthGate, alertsError } from "@/app/lib/alerts/http";
+import { isMissingStreakSchema, streaks } from "@/app/lib/streak";
+import { notifyStreakAtRisk } from "@/app/lib/streak/notify";
+import { REMINDER_RUN_CAP } from "@/app/lib/streak/server-core";
+
+/** Players notified at once. Small: each is a few queries and a push. */
+const BATCH = 10;
+
+export async function POST(req: Request): Promise<Response> {
+  const denied = alertsAuthGate(req.headers);
+  if (denied) return denied;
+
+  let dryRun = false;
+  try {
+    dryRun = ((await req.json()) as { dryRun?: unknown } | null)?.dryRun === true;
+  } catch {
+    dryRun = false;
+  }
+
+  let due;
+  try {
+    due = await streaks.dueForReminder(new Date(), REMINDER_RUN_CAP);
+  } catch (error) {
+    if (isMissingStreakSchema(error)) {
+      return alertsError(
+        "player_streaks is not available. Apply migration 036_player_streaks.sql.",
+        503,
+      );
+    }
+    console.error("streaks/remind dueForReminder failed:", error);
+    return alertsError("Could not read who is due a reminder", 500);
+  }
+
+  if (dryRun) {
+    return Response.json({ ok: true, dryRun: true, due: due.length, claimed: 0 });
+  }
+
+  let claimed = 0;
+  for (let i = 0; i < due.length; i += BATCH) {
+    await Promise.all(
+      due.slice(i, i + BATCH).map(async (player) => {
+        try {
+          if (!(await streaks.claimNudge(player.playerId, player.localDay))) return;
+          claimed += 1;
+          await notifyStreakAtRisk(player.playerId, player.current, player.localDay);
+        } catch (error) {
+          console.error(`streaks/remind ${player.playerId} failed:`, error);
+        }
+      }),
+    );
+  }
+
+  return Response.json({ ok: true, dryRun: false, due: due.length, claimed });
+}

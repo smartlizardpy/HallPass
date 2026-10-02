@@ -28,6 +28,9 @@ export const REMINDER_HOUR = 17;
 /** A run shorter than this is not yet worth a reminder: one day is not a habit. */
 export const REMINDER_MIN_STREAK = 2;
 
+/** The most reminders one run will send, so a runaway cannot fan out unbounded. */
+export const REMINDER_RUN_CAP = 500;
+
 /** Offsets are minutes EAST of UTC, within the real world's range. */
 export const MAX_TZ_OFFSET_MIN = 840;
 
