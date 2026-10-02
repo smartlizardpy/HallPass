@@ -9,6 +9,8 @@ const h = vi.hoisted(() => ({
   log: [] as string[],
   media: null as null | { id: string; blobPath: string },
   failAt: null as null | string,
+  kindOk: [] as boolean[],
+  blobOpOn: true,
 }));
 
 function step(name: string) {
@@ -25,6 +27,10 @@ vi.mock("@/app/lib/beta", () => ({
   BETA_CREDITS_CACHE_TAG: "beta-game-credits",
   beta: { markShotPromoted: async (id: string, m: string) => step(`markPromoted:${id}:${m}`) },
 }));
+vi.mock("@/app/lib/blob-ops", () => ({
+  isBlobOpEnabled: async () => h.blobOpOn,
+  blobOpDisabledMessage: () => "promotion is off",
+}));
 vi.mock("@/app/lib/beta/publish-shot", () => ({
   publishShotToGallery: async (shot: { id: string }) => {
     step("promote");
@@ -38,7 +44,7 @@ vi.mock("@/app/lib/game-media", () => ({
   getMediaForSlug: async () => h.media,
   setMediaKind: async (id: string, kind: string) => {
     step(`kind:${id}:${kind}`);
-    return true;
+    return h.kindOk.length > 0 ? h.kindOk.shift()! : true;
   },
 }));
 vi.mock("@/app/lib/image-meta", () => ({ toImageType: () => "image/png" }));
@@ -60,6 +66,8 @@ beforeEach(() => {
   h.log = [];
   h.media = { id: "m1", blobPath: "game-media/g/m1.png" };
   h.failAt = null;
+  h.kindOk = [];
+  h.blobOpOn = true;
 });
 
 describe("setCoverFromShot", () => {
@@ -76,6 +84,25 @@ describe("setCoverFromShot", () => {
   it("writes the external store for an external game", async () => {
     await setCoverFromShot(shot(), true);
     expect(h.log.at(-1)).toBe("extCover:g:/game-media/g/s1.png");
+  });
+
+  it("re-promotes a promoted shot whose media row was deleted, instead of pointing at nothing", async () => {
+    h.kindOk = [false, true];
+    await setCoverFromShot(shot({ promotedMediaId: "s1" }), false);
+    expect(h.log).toEqual(["kind:s1:hero", "promote", "kind:s1:hero", "cover:g:/game-media/g/s1.png"]);
+  });
+
+  it("keeps the old cover when the row is gone and promotion is switched off", async () => {
+    h.kindOk = [false];
+    h.blobOpOn = false;
+    await expect(setCoverFromShot(shot({ promotedMediaId: "s1" }), false)).rejects.toThrow();
+    expect(h.log.some((l) => l.startsWith("cover:"))).toBe(false);
+  });
+
+  it("keeps the old cover when the row is still missing after re-promotion", async () => {
+    h.kindOk = [false, false];
+    await expect(setCoverFromShot(shot({ promotedMediaId: "s1" }), false)).rejects.toThrow();
+    expect(h.log.some((l) => l.startsWith("cover:"))).toBe(false);
   });
 
   it("a failure before the pointer leaves the pointer unwritten", async () => {

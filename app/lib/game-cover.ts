@@ -33,6 +33,7 @@
 import "server-only";
 import { revalidatePath, updateTag } from "next/cache";
 import { beta, BETA_CREDITS_CACHE_TAG } from "@/app/lib/beta";
+import { blobOpDisabledMessage, isBlobOpEnabled } from "@/app/lib/blob-ops";
 import type { BetaShot } from "@/app/lib/beta/store";
 import { publishShotToGallery } from "@/app/lib/beta/publish-shot";
 import {
@@ -71,15 +72,28 @@ async function writePointer(
  *
  * A shot that was never promoted needs the Blob `copy()` (an advanced operation,
  * gated by `shot_promotion` — the CALLER checks that switch so it can redirect
- * with the right message before anything is written).
+ * with the right message before anything is written). A promoted shot whose
+ * media row was deleted is re-promoted here, behind the same switch.
  */
 export async function setCoverFromShot(
   shot: BetaShot,
   external: boolean,
 ): Promise<string> {
-  const mediaId = shot.promotedMediaId ?? (await publishShotToGallery(shot));
+  let mediaId = shot.promotedMediaId ?? (await publishShotToGallery(shot));
   if (!shot.promotedMediaId) await beta.markShotPromoted(shot.id, mediaId);
-  await setMediaKind(mediaId, "hero");
+  if (!(await setMediaKind(mediaId, "hero"))) {
+    // The shot was promoted once, but its media row has since been deleted (a
+    // gallery delete). Pointing the cover at it would leave a dangling URL, so
+    // copy it back in — idempotent, the media id is the shot id — or fail and
+    // keep the old cover if that Blob operation is switched off.
+    if (!(await isBlobOpEnabled("shot_promotion"))) {
+      throw new Error(blobOpDisabledMessage("shot_promotion"));
+    }
+    mediaId = await publishShotToGallery(shot);
+    if (!(await setMediaKind(mediaId, "hero"))) {
+      throw new Error(`media row ${mediaId} is missing after re-promotion`);
+    }
+  }
   // Derived the way `publishShotToGallery` derives the key, so no extra read.
   const path = coverPathFor(shot.slug, mediaId, shot.contentType);
   await writePointer(shot.slug, path, external);
