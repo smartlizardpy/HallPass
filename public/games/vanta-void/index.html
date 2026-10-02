@@ -947,7 +947,7 @@
                     if (this.boss) {
                         bossSpawned = false;
                         ui.boss.style.opacity = 0;
-                        multiplier += 2;
+                        multiplier = Math.min(10, multiplier + 2);
                         nextBossThreshold += 20000; 
                         bossCount++; 
                         
@@ -1120,7 +1120,11 @@
                     enemies.push(new Enemy(bossTypes[bossCount % bossTypes.length]));
                     bossSpawned = true;
                 }
-                else if (frame % (40 - Math.min(30, multiplier)) === 0) {
+                // The interval must be a whole number of frames: `frame % x === 0`
+                // is never true for a fractional x, and flow is fractional as soon
+                // as the first kill lands (1.1X, 1.2X...), which used to dry up
+                // the spawns almost completely.
+                else if (frame % Math.round(40 - Math.min(30, multiplier)) === 0) {
                     let r = Math.random();
                     let t = r > 0.9 ? 'tank' : (r > 0.7 ? 'rusher' : 'scout');
                     enemies.push(new Enemy(t));
