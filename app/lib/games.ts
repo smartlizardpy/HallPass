@@ -314,7 +314,7 @@ export const games: Game[] = [
     accent: "#84cc16",
     art: "terrain",
     plays: 142001,
-    platform: "desktop",
+    platform: "both",
   },
   {
     slug: "snag",
