@@ -28,11 +28,14 @@ import {
   contentGapCopy,
   errorSpikeCopy,
   friendAcceptedCopy,
+  friendPassedCopy,
   friendRequestCopy,
   gameDropCopy,
   reviewPostedCopy,
   reviewReportedCopy,
   shortName,
+  streakAtRiskCopy,
+  streakMilestoneCopy,
   trafficSpikeCopy,
   type NotificationCopy,
 } from "./copy";
@@ -48,6 +51,14 @@ const EVERY_KIND: Record<string, NotificationCopy> = {
     boardTitle: "High score",
     targetScore: 4200,
   }),
+  friend_passed: friendPassedCopy({
+    by: "Deniz",
+    game: "Duskfall",
+    boardTitle: "High score",
+    targetScore: 4200,
+  }),
+  streak_at_risk: streakAtRiskCopy({ current: 5 }),
+  streak_milestone: streakMilestoneCopy({ current: 7 }),
   friend_request: friendRequestCopy({ from: "Ayşe" }),
   friend_accepted: friendAcceptedCopy({ from: "Ayşe" }),
   game_drop: gameDropCopy({ title: "Duskfall", slug: "duskfall" }),
@@ -92,6 +103,49 @@ describe("challengeBeatenCopy", () => {
       by: "Deniz", game: null, boardTitle: "Fastest lap", targetScore: 12,
     });
     expect(copy.body).toContain("Fastest lap");
+  });
+});
+
+describe("friendPassedCopy", () => {
+  it("names the passer and the recipient's own lost score", () => {
+    const copy = friendPassedCopy({
+      by: "Deniz",
+      game: "Duskfall",
+      boardTitle: "High score",
+      targetScore: 4200,
+    });
+    expect(copy.title).toBe("Deniz passed your score");
+    expect(copy.body).toBe("Your 4,200 on Duskfall has been passed.");
+    expect(copy.url).toBe("/play/you/friends");
+  });
+
+  it("falls back to the board title, and to a blank-safe name", () => {
+    const copy = friendPassedCopy({
+      by: "  ",
+      game: null,
+      boardTitle: "Time attack",
+      targetScore: 90,
+    });
+    expect(copy.title).toBe("Someone passed your score");
+    expect(copy.body).toContain("Time attack");
+  });
+});
+
+describe("the streak copy", () => {
+  it("says how long the streak is and what to do about it", () => {
+    const copy = streakAtRiskCopy({ current: 5 });
+    expect(copy.title).toBe("Your 5-day streak ends tonight");
+    expect(copy.body).toMatch(/Play any game/);
+  });
+
+  it("celebrates a milestone", () => {
+    expect(streakMilestoneCopy({ current: 30 }).title).toBe("30-day streak!");
+  });
+
+  it("names no player and no game", () => {
+    for (const copy of [streakAtRiskCopy({ current: 9 }), streakMilestoneCopy({ current: 9 })]) {
+      expect(copy.title + copy.body).not.toMatch(/Duskfall|Ozan/);
+    }
   });
 });
 
