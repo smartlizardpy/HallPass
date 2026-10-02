@@ -11,6 +11,7 @@ import { games } from "@/app/lib/games";
 import { isStagedSlug } from "@/app/lib/games-store";
 import { canViewStaged } from "@/app/lib/beta/staged-access";
 import { injectShim } from "@/app/lib/capture/record-shim";
+import { trustedSelfOrigin } from "@/app/lib/site";
 
 const MAX_PATH_SEGMENTS = 10;
 
@@ -62,7 +63,10 @@ const NOT_FOUND = () =>
  * route instead fetches the document (the static twin, or the blob when that is
  * what would have been served), puts the shim from `record-shim.ts` straight
  * after `<head>`, and answers 200. Every game is a single self-contained HTML
- * file, so nothing else needs routing. It runs AFTER the staged gate above, so a
+ * file, so nothing else needs routing. For the static twin it also adds a
+ * `<base href="/games/<slug>/">`, so relative URLs resolve where production's 307
+ * would have left them, and it fetches the twin from a trusted origin
+ * (`trustedSelfOrigin`), never from the request's Host header. It runs AFTER the staged gate above, so a
  * denied request is still the one indistinguishable 404, and the injected
  * document is always `no-store` (public games included): a shared cache must never
  * hand a shimmed document to somebody who did not ask for it. Assets, and any
@@ -111,10 +115,24 @@ export async function GET(
     segments.length === 0 && new URL(req.url).searchParams.get("hp-rec") === "1";
 
   if (recordMode) {
-    const upstreamUrl = source.kind === "static" ? staticUrl : source.url;
+    // The static twin is fetched from a TRUSTED origin, not `origin` above: that is
+    // derived from the request's Host header, and a server-side fetch must not be
+    // steerable by whoever sets it. (The 307 target above is only ever followed by
+    // the client, so it can keep using the request origin.)
+    const upstreamUrl =
+      source.kind === "static"
+        ? `${trustedSelfOrigin(req.url)}/games/${slug}/index.html`
+        : source.url;
     const doc = await fetch(upstreamUrl, { cache: "no-store" });
     if (!doc.ok) return staged ? NOT_FOUND() : Response.redirect(staticUrl, 307);
-    return new Response(injectShim(await doc.text()), {
+    // A document that would have been reached through the 307 lives at
+    // /games/<slug>/ in production, so its relative URLs resolve there. Served from
+    // /game-html/<slug>/ they would resolve here instead, so say where they belong.
+    // Only for the static case: a newer blob is served in place at /game-html/ in
+    // production too, and must resolve exactly as it does there. (`location.pathname`
+    // still differs from production; a base tag cannot change that.)
+    const baseHref = source.kind === "static" ? `/games/${slug}/` : undefined;
+    return new Response(injectShim(await doc.text(), { baseHref }), {
       status: 200,
       headers: {
         "content-type": "text/html; charset=utf-8",

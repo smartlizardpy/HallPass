@@ -109,7 +109,7 @@ describe("/game-html staged gate", () => {
 });
 
 describe("/game-html record mode (?hp-rec=1)", () => {
-  const SHIMMED = /^<html><head><script data-hp-rec>/;
+  const SHIMMED = /^<html><head>(<base href="[^"]*">)?<script data-hp-rec>/;
 
   beforeEach(() => {
     vi.stubGlobal(
@@ -124,17 +124,44 @@ describe("/game-html record mode (?hp-rec=1)", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("location")).toBeNull();
     expect(res.headers.get("cache-control")).toBe("no-store");
-    expect(await res.text()).toMatch(SHIMMED);
+    // Static case: a <base> puts relative URLs back under /games/<slug>/, where
+    // production's 307 would have left the document.
+    expect(await res.text()).toMatch(
+      /^<html><head><base href="\/games\/pub\/"><script data-hp-rec>/,
+    );
     expect(fetch).toHaveBeenCalledWith("https://hp.test/games/pub/index.html", {
       cache: "no-store",
     });
+  });
+
+  it("fetches the static twin from a trusted origin, not the request's Host", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VERCEL_URL", "");
+    vi.stubEnv("SELF_ORIGIN", "");
+    mocks.getServingBlobMap.mockResolvedValue(blobMap("pub", 1));
+    const res = await GET(new Request("https://evil.example/game-html/pub/?hp-rec=1"), {
+      params: Promise.resolve({ slug: "pub", path: undefined }),
+    });
+    expect(res.status).toBe(200);
+    expect(fetch).toHaveBeenCalledWith(
+      "https://hallpass-rouge.vercel.app/games/pub/index.html",
+      { cache: "no-store" },
+    );
+    expect(fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining("evil.example"),
+      expect.anything(),
+    );
+    vi.unstubAllEnvs();
   });
 
   it("injects into a newer blob too", async () => {
     mocks.getServingBlobMap.mockResolvedValue(blobMap("pub", 5000));
     const res = await call("pub", undefined, "?hp-rec=1");
     expect(res.status).toBe(200);
-    expect(await res.text()).toMatch(SHIMMED);
+    const body = await res.text();
+    expect(body).toMatch(SHIMMED);
+    // Served in place in production too: no <base>.
+    expect(body).not.toContain("<base");
     expect(fetch).toHaveBeenCalledWith("https://blob.test/games/pub/index.html", {
       cache: "no-store",
     });

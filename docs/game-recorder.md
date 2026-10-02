@@ -43,13 +43,17 @@ tap has to be in place before the game builds its graph. The `/game-html` route
 normally 307s to the static mirror and never touches the HTML. With
 `?hp-rec=1` **on the game document only**, it fetches the HTML (static twin, or
 the blob when that is what would have been served), puts `RECORD_SHIM_SOURCE`
-after `<head>` and answers 200, `no-store` (private for staged games, and the
+after `<head>` (with a `<base href="/games/<slug>/">` for a static-twin game, so
+relative URLs resolve as they do after production's 307; `location.pathname` still
+differs) and answers 200, `no-store` (private for staged games, and the
 staged gate runs first). Only the beta session iframe asks for it.
 
 The shim patches `AudioNode.prototype.connect` so a connection to a destination
-is also made to a per-context `MediaStreamAudioDestinationNode`; the recorder mixes
+is also made (from the same output index) to a per-context
+`MediaStreamAudioDestinationNode`; the recorder mixes
 those streams (including contexts created mid-take) into one track. It also
-wraps `HallPass.submitScore`/`progress` in place, listens for the `achievement`
+wraps `HallPass.submitScore`/`progress` in place (only on an object that has
+`submitScore` and a `version` — `window.HP` is often a game's own variable), listens for the `achievement`
 event, and reports tab visibility. It never throws and is idempotent.
 
 Known limits: a node the game later `disconnect()`s from the destination keeps
