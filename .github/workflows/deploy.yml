@@ -56,6 +56,12 @@ jobs:
       # published-later games need a directory created. It is a read-only use and
       # OPTIONAL: if the secret is unset or the read fails, the sync falls back to
       # the games.ts flags and creates no new directories.
+      #
+      # The same DATABASE_URL read drives the COVER MIRROR: a cover an admin chose
+      # in the dashboard is written over public/games/<slug>/cover.png for this
+      # build, so share cards pick it up. Nothing is committed back to Git; to
+      # refresh share cards after changing a cover, run this workflow
+      # (workflow_dispatch).
       - name: Sync games from Blob into the static mirror
         if: env.HAS_BLOB_TOKEN == 'true'
         env:
