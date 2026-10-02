@@ -20,12 +20,15 @@ import "server-only";
  *
  * ── A STAGED GAME IS NEVER NAMED ───────────────────────────────────────────
  * A staged game's existence is visible only to testers. The recipient may not be
- * one, so a board linked to a staged (or unverifiable) game notifies nobody — the
- * same fail-closed rule every other public surface follows
- * (`isStagedOrUnverifiable`).
+ * one, so a board linked to a game the PUBLIC resolver cannot find notifies
+ * nobody. `resolveGame` is public-only — it returns `null` for a staged game, and
+ * for one it cannot verify during an outage — so that single lookup is both the
+ * title and the fail-closed gate, and this module needs none of the including-
+ * staged APIs that `staged-allowlist.test.ts` guards (the same choice
+ * `challenges/notify.ts` makes).
  */
 
-import { isStagedOrUnverifiable, resolveGame } from "@/app/lib/games-store";
+import { resolveGame } from "@/app/lib/games-store";
 import { friendPassedCopy } from "@/app/lib/notifications/copy";
 import { notifyPlayer } from "@/app/lib/notifications/deliver";
 import { store } from "@/app/lib/scoreboard";
@@ -49,8 +52,6 @@ export async function notifyFriendsPassed(input: {
 }): Promise<void> {
   try {
     const { playerId, board } = input;
-    if (board.gameSlug && (await isStagedOrUnverifiable(board.gameSlug))) return;
-
     const passed = await store.getFriendsNewlyPassed(
       playerId,
       board.id,
@@ -58,13 +59,17 @@ export async function notifyFriendsPassed(input: {
       input.scoreId,
       board.sort,
     );
+    // The common case — nobody newly passed — costs exactly that one statement.
     if (passed.length === 0) return;
 
-    // The DISPLAY TITLE, resolved once for the whole batch through the public
-    // resolver, as `challenges/notify.ts` does. Falls back to the board title.
-    const game = board.gameSlug
-      ? ((await resolveGame(board.gameSlug))?.title ?? null)
-      : null;
+    // The DISPLAY TITLE, through the public resolver, once for the whole batch.
+    // A linked game it cannot resolve is staged or unverifiable: say nothing.
+    let game: string | null = null;
+    if (board.gameSlug) {
+      game = (await resolveGame(board.gameSlug))?.title ?? null;
+      if (game === null) return;
+    }
+
     const skip = new Set(input.skipPlayerIds);
 
     for (const friend of passed) {
