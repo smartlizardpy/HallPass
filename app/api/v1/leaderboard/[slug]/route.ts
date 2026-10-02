@@ -47,6 +47,7 @@ import { canViewStaged } from "@/app/lib/beta/staged-access";
 import { isStagedOrUnverifiable } from "@/app/lib/games-store";
 import { resolveChallengesForScore } from "@/app/lib/challenges";
 import { notifyChallengesBeaten } from "@/app/lib/challenges/notify";
+import { notifyFriendsPassed } from "@/app/lib/scoreboard/friend-passed-notify";
 import { getPublicIdentity, upsertPlayerOnLogin } from "@/app/lib/players";
 import type { Session } from "next-auth";
 import type {
@@ -278,6 +279,23 @@ export async function POST(
     // score was posted under, which is exactly who the challenger should be told
     // beat them — never a Google name and never an id.
     await notifyChallengesBeaten(beaten, cleanHandle);
+    // And any friend this score newly passed, challenge or not. Skips the
+    // challengers just told, so one overtake is one notification. Gated by the
+    // arithmetic of the query on a NEW personal best — see
+    // `getFriendsNewlyPassed` — and never throws.
+    await notifyFriendsPassed({
+      playerId,
+      passerName: cleanHandle,
+      board: {
+        id: slug,
+        gameSlug: board.gameSlug ?? null,
+        title: board.title,
+        sort: board.sort,
+      },
+      score: intScore,
+      scoreId: result.id,
+      skipPlayerIds: beaten.map((c) => c.challengerId),
+    });
   }
 
   const body: SubmitResponse = {
