@@ -270,7 +270,9 @@ if (dbSql && registeredSlugs !== null) {
       }
       const tmp = `${dest}.tmp`;
       try {
-        const res = await fetch(url);
+        // A stalled download must not hang the deploy; the file loop's fetches
+        // are left as they were.
+        const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const body = Buffer.from(await res.arrayBuffer());
         if (!isPng(body)) throw new Error("downloaded bytes are not a PNG");
