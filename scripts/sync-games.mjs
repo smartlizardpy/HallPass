@@ -7,8 +7,20 @@
 // index.html-only contract could not. Keeps its spirit: tmp-file + rename
 // writes, per-item log lines, a final summary, non-zero exit on failures.
 //
-// Never deletes local files (cover.png exists only in the repo) and never
-// writes blob paths that fail validation.
+// Never deletes local files and never writes blob paths that fail validation.
+// `cover.png` is not a Blob game file (the publish flow keeps it repo-only), but
+// the COVER MIRROR step below does overwrite it in the CI working tree when an
+// admin has chosen a different cover in the dashboard.
+//
+// THE COVER MIRROR. A game's cover is a database pointer that every in-app
+// surface follows with no deploy; only the share-card renderer reads
+// `public/games/<slug>/cover.png` from disk. After the game files are synced,
+// each non-staged native game whose chosen cover is a PNG `game_media` row is
+// downloaded over that file, so the deployed static twin, the share cards and
+// the service-worker precache all carry the chosen cover. Nothing is committed:
+// the CI checkout is discarded after the build, and the repo's own cover.png
+// remains the "original cover". Rules and reasoning: scripts/lib/cover-mirror.mjs.
+// Run locally this dirties the tracked cover.png — do not commit that.
 //
 // STAGED GAMES ARE NEVER MIRRORED. `public/games/` is served as free static files
 // at predictable, unauthenticated URLs, so a staged (beta-only) game copied in
@@ -30,6 +42,7 @@ import { list } from "@vercel/blob";
 import { existsSync, statSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { coverDest, fetchCoverRows, isPng, planCoverMirror } from "./lib/cover-mirror.mjs";
 import {
   decideSlug,
   fetchStagedRows,
@@ -91,7 +104,10 @@ if (staticGames.length === 0) {
 }
 
 let rows = { overrides: null, externals: null, error: "DATABASE_URL is not set" };
+/** Same database handle, kept for the cover read after the file sync. */
+let dbSql = null;
 if (process.env.DATABASE_URL) {
+  dbSql = neon(process.env.DATABASE_URL);
   // A hung connection must not hold up a deploy: give the read 10s, then fall
   // back. `fetchStagedRows` turns a rejection into the same fallback.
   const timeout = new Promise((resolve) =>
@@ -106,7 +122,7 @@ if (process.env.DATABASE_URL) {
     ).unref(),
   );
   rows = await Promise.race([
-    fetchStagedRows(neon(process.env.DATABASE_URL)),
+    fetchStagedRows(dbSql),
     timeout,
   ]);
 }
@@ -218,8 +234,71 @@ for (const blob of blobs) {
   }
 }
 
+// COVER MIRROR — see the header. Runs after the file loop so a chosen cover wins
+// over anything the loop wrote at the same path. Non-fatal by design: a failure
+// leaves the repo's cover.png in place and is reported, never a failed deploy,
+// and it does not affect the mirror stamp (cover.png is not a served game file).
+let coversMirrored = 0;
+let coversFailed = 0;
+if (dbSql && registeredSlugs !== null) {
+  const covers = await Promise.race([
+    fetchCoverRows(dbSql),
+    new Promise((resolve) =>
+      setTimeout(() => resolve({ rows: null, error: "timed out after 10s" }), 10_000).unref(),
+    ),
+  ]);
+  if (covers.rows === null) {
+    console.log(`warn: cover read unavailable (${covers.error}); keeping the repo covers`);
+  } else {
+    const plan = planCoverMirror({
+      coverRows: covers.rows,
+      staged: stagedSlugs,
+      registered: registeredSlugs,
+      hasLocalDir: (slug) => {
+        const dir = path.join(gamesDir, slug);
+        return existsSync(dir) && statSync(dir).isDirectory();
+      },
+    });
+    for (const { slug, reason } of plan.skipped) {
+      logItem(`games/${slug}/cover.png`, `skip (cover: ${reason})`);
+    }
+    for (const { slug, url } of plan.mirror) {
+      const dest = coverDest(gamesDir, slug);
+      if (!dest) {
+        logItem(`games/${slug}/cover.png`, "skip (cover: unsafe path)");
+        continue;
+      }
+      const tmp = `${dest}.tmp`;
+      try {
+        // A stalled download must not hang the deploy; the file loop's fetches
+        // are left as they were.
+        const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = Buffer.from(await res.arrayBuffer());
+        if (!isPng(body)) throw new Error("downloaded bytes are not a PNG");
+        const changed = !existsSync(dest) || !(await readFile(dest)).equals(body);
+        await mkdir(path.dirname(dest), { recursive: true });
+        await writeFile(tmp, body);
+        await rename(tmp, dest);
+        logItem(`games/${slug}/cover.png`, changed ? "ok (chosen cover)" : "ok (unchanged)");
+        coversMirrored += 1;
+      } catch (err) {
+        await rm(tmp, { force: true }).catch(() => {});
+        logItem(
+          `games/${slug}/cover.png`,
+          `FAIL (cover: ${err instanceof Error ? err.message : err}); keeping the repo cover`,
+        );
+        coversFailed += 1;
+      }
+    }
+  }
+}
+
 console.log();
 console.log(`synced: ${synced}   skipped: ${skipped}   failed: ${failed}`);
+if (coversMirrored > 0 || coversFailed > 0) {
+  console.log(`covers mirrored: ${coversMirrored}   cover failures: ${coversFailed}`);
+}
 
 if (overwritten.length > 0) {
   console.log();

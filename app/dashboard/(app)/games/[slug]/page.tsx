@@ -40,10 +40,12 @@ import { SITE_URL } from "@/app/lib/site";
 import type { Game } from "@/app/lib/games";
 import { CopyBox } from "./_ui/CopyBox";
 import { PublishPanel } from "./_ui/PublishPanel";
+import { CoverPanel } from "./_ui/CoverPanel";
 import { resolveCategories, resolveGameIncludingStaged, resolveTags } from "@/app/lib/games-store";
 import { beta } from "@/app/lib/beta";
 import { store } from "@/app/lib/scoreboard";
-import { getGameMedia, mediaPublicPath } from "@/app/lib/game-media";
+import { getGameMedia, listCoverMediaForSlug, mediaPublicPath } from "@/app/lib/game-media";
+import { coverImageSrc } from "@/app/components/CoverImage";
 import {
   MAX_MEDIA_PER_SLUG,
   MAX_MEDIA_PER_UPLOAD,
@@ -357,9 +359,38 @@ export default async function GameControlPage({
 
   // Only a staged game has a Publish panel, so only a staged game pays for the
   // read. Fail-soft: a Neon blip costs the picker, not the page.
-  const covers = game.staged
-    ? await beta.acceptedCoverShots(slug).catch(() => [])
-    : [];
+  // The Change-cover panel is offered for every game, staged or live, so it reads
+  // its own candidates: accepted tester shots (the Publish picker above only has
+  // them while staged), earlier covers and the gallery. All fail-soft — a Neon
+  // blip costs the panel its choices, not the page.
+  const [coverShots, previousCovers, galleryShots] = await Promise.all([
+    beta.acceptedCoverShots(slug).catch(() => []),
+    listCoverMediaForSlug(slug).catch(() => []),
+    getGameMedia(slug),
+  ]);
+  // Only a staged game has a Publish panel, which offers the same tester shots.
+  const covers = game.staged ? coverShots : [];
+  const toChoice = (m: (typeof previousCovers)[number]) => ({
+    id: m.id,
+    url: mediaPublicPath(m),
+    width: m.width,
+    height: m.height,
+  });
+  const coverPanel = (
+    <CoverPanel
+      slug={slug}
+      currentSrc={coverImageSrc(game)}
+      external={Boolean(game.externalUrl)}
+      hasOverride={Boolean(game.coverUrl)}
+      shots={coverShots.map((s) => ({
+        id: s.id,
+        blobUrl: s.blobUrl,
+        promotedMediaId: s.promotedMediaId,
+      }))}
+      previous={previousCovers.map(toChoice)}
+      gallery={galleryShots.map(toChoice)}
+    />
+  );
 
   const inputClass =
     "mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/30";
@@ -443,6 +474,8 @@ export default async function GameControlPage({
         {game.staged && (
           <PublishPanel slug={slug} title={game.title} covers={covers} />
         )}
+
+        {coverPanel}
 
         {/* DETAILS — one write covering every descriptive field + colours + an
             optional cover-URL override. */}
@@ -758,6 +791,8 @@ export default async function GameControlPage({
       {game.staged && (
         <PublishPanel slug={slug} title={game.title} covers={covers} />
       )}
+
+      {coverPanel}
 
       {/* DETAILS */}
       <Section title="Details" subtitle="Overrides the static catalogue">

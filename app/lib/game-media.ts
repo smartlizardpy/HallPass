@@ -356,6 +356,48 @@ export async function countMediaForSlug(slug: string): Promise<number> {
 }
 
 /**
+ * A slug's cover rows (`kind = 'hero'`), newest first, read UNCACHED.
+ *
+ * These are the "previous covers" the dashboard's cover panel offers: replacing
+ * a cover never deletes its row, it only stops pointing `cover_url` at it, so
+ * every earlier cover is still here and any of them can be put back. Uncached
+ * for the same reason as {@link listMediaIdsForSlug} — the panel must show what
+ * the table holds right now, not what a one-hour cache last saw. Capped because
+ * the list is a picker, not an archive.
+ */
+export async function listCoverMediaForSlug(
+  slug: string,
+  limit = 24,
+): Promise<GameMedia[]> {
+  const rows = await sql`
+    SELECT id, slug, kind, blob_path, content_type, width, height, bytes, alt, position
+    FROM game_media
+    WHERE slug = ${slug} AND kind = 'hero'
+    ORDER BY created_at DESC
+    LIMIT ${Math.max(1, Math.min(100, limit))}
+  `;
+  return rows.map(mapMedia);
+}
+
+/**
+ * One row by id, SCOPED to its slug, or `null`. Uncached.
+ *
+ * The slug predicate is what stops a forged id in the cover form from pointing
+ * one game's cover at another game's image.
+ */
+export async function getMediaForSlug(
+  slug: string,
+  id: string,
+): Promise<GameMedia | null> {
+  const rows = await sql`
+    SELECT id, slug, kind, blob_path, content_type, width, height, bytes, alt, position
+    FROM game_media
+    WHERE id = ${id} AND slug = ${slug}
+  `;
+  return rows.length > 0 ? mapMedia(rows[0]) : null;
+}
+
+/**
  * Look up one row by its blob path. Used by the serving route to confirm a
  * requested object is actually registered media before streaming it, rather than
  * trusting the URL to name any object in the store.

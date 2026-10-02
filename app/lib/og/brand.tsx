@@ -68,6 +68,10 @@ export async function nunito() {
  * a preview card must not depend on a second network hop that a crawler's
  * timeout can lose. Blob-hosted (`coverUrl`) games are skipped for the same
  * reason — every card here is good without art.
+ *
+ * That file is the repo's cover until a deploy: `scripts/sync-games.mjs` writes
+ * an admin-chosen PNG cover over it in CI (`scripts/lib/cover-mirror.mjs`), which
+ * is why a changed cover reaches these cards at the next deploy, not instantly.
  */
 export async function coverDataUri(slug: string): Promise<string | null> {
   try {
