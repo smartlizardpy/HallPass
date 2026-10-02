@@ -74,6 +74,37 @@ describe("injectShim", () => {
     expect(out.startsWith("<!DOCTYPE html><script data-hp-rec>")).toBe(true);
   });
 
+  it("skips a <head> that appears inside a comment, a script or a title", () => {
+    const html =
+      '<!doctype html><!-- <head> --><html><title>a <head> b</title><script>var s = "<head>";</script><head><meta></head>';
+    const out = injectShim(html);
+    expect(out.indexOf("<script data-hp-rec>")).toBe(html.lastIndexOf("<head><meta>") + "<head>".length);
+  });
+
+  it("does not mistake <header> for <head>", () => {
+    const out = injectShim("<!doctype html><header>x</header><head></head>");
+    expect(out).toContain("<head><script data-hp-rec>");
+  });
+
+  it("never inserts before the doctype, even when a comment precedes it", () => {
+    const out = injectShim("<!-- hi --><!DOCTYPE html><body></body>");
+    expect(out.indexOf("data-hp-rec")).toBeGreaterThan(out.indexOf("<!DOCTYPE html>"));
+  });
+
+  it("adds a <base> ahead of the shim when asked", () => {
+    const out = injectShim("<!doctype html><head><title>x</title>", { baseHref: "/games/snag/" });
+    expect(out).toContain('<head><base href="/games/snag/"><script data-hp-rec>');
+  });
+
+  it("leaves a game's own <base> alone", () => {
+    const out = injectShim('<head><base href="/mine/">', { baseHref: "/games/snag/" });
+    expect(out).not.toContain("/games/snag/");
+  });
+
+  it("adds no <base> unless asked", () => {
+    expect(injectShim("<head></head>")).not.toContain("<base");
+  });
+
   it("falls back to the very start for a fragment", () => {
     expect(injectShim("<canvas></canvas>").startsWith("<script data-hp-rec>")).toBe(true);
   });

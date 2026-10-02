@@ -174,20 +174,46 @@ export const RECORD_SHIM_SOURCE = `(function (w) {
 })(window);`;
 
 /**
+ * Tokens that can CONTAIN the text `<head>` without being a head element, matched
+ * whole so the scan below steps over them: comments, and the raw-text elements
+ * (`script`, `style`, `title`, `textarea`) whose bodies are not markup. The
+ * fourth alternative is the real thing.
+ */
+const HTML_SCAN =
+  /<!--[\s\S]*?-->|<(script|style|title|textarea)\b[^>]*>[\s\S]*?<\/\1\s*>|(<head(?:\s[^>]*)?>)/gi;
+
+/** The doctype, allowing comments before it. Matched at the very start only. */
+const DOCTYPE = /^\s*(?:<!--[\s\S]*?-->\s*)*<!doctype[^>]*>/i;
+
+/**
+ * Where to insert: just after the real opening `<head>`, else just after the
+ * doctype, else the very start. Never before the doctype — a script ahead of it
+ * throws the page into quirks mode.
+ */
+function insertionPoint(html: string): number {
+  const doctypeEnd = DOCTYPE.exec(html)?.[0].length ?? 0;
+  HTML_SCAN.lastIndex = 0;
+  for (let m = HTML_SCAN.exec(html); m; m = HTML_SCAN.exec(html)) {
+    if (m[2]) return Math.max(doctypeEnd, m.index + m[2].length);
+  }
+  return doctypeEnd;
+}
+
+/**
  * Put the shim at the very top of a game's HTML, ahead of every game script.
  *
- * After the opening `<head>` when there is one; otherwise at the very start,
- * after any doctype (a script before the doctype would throw the page into
- * quirks mode).
+ * `baseHref` also injects `<base href>` ahead of the shim, so a document served
+ * from `/game-html/<slug>/` resolves its relative URLs against `/games/<slug>/`
+ * exactly as it does in production, where the same document is reached through
+ * the 307. (`location.pathname` still differs; a base tag cannot change that.)
+ * Skipped when the game already declares its own `<base>`.
  */
-export function injectShim(html: string): string {
-  const tag = `<script data-hp-rec>${RECORD_SHIM_SOURCE}</script>`;
-  const head = /<head(\s[^>]*)?>/i.exec(html);
-  if (head) {
-    const at = head.index + head[0].length;
-    return html.slice(0, at) + tag + html.slice(at);
-  }
-  const doctype = /^\s*<!doctype[^>]*>/i.exec(html);
-  const at = doctype ? doctype[0].length : 0;
+export function injectShim(html: string, options: { baseHref?: string } = {}): string {
+  const at = insertionPoint(html);
+  const base =
+    options.baseHref && !/<base\s/i.test(html)
+      ? `<base href="${options.baseHref.replace(/"/g, "&quot;")}">`
+      : "";
+  const tag = `${base}<script data-hp-rec>${RECORD_SHIM_SOURCE}</script>`;
   return html.slice(0, at) + tag + html.slice(at);
 }
