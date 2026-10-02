@@ -1046,6 +1046,9 @@
             player.isDead = false;
 
             const rand = createSeededRandom(levelIdx * 9999 + 4321);
+            // Separate stream for the newer obstacles so adding them never
+            // reshuffles the platform layout the main stream produces.
+            const orand = createSeededRandom(levelIdx * 7919 + 1234);
             levelLength = 8500 + (levelIdx * 600);
 
             // Background fog nodes
@@ -1123,6 +1126,7 @@
                 };
                 platforms.push(pObj);
 
+                const hazardsBefore = hazards.length;
                 let hasSpring = false;
                 let springX = 0;
                 if (levelIdx >= 3 && rand() < 0.3 && platType === 'normal' && platW >= 150) {
@@ -1182,6 +1186,32 @@
                         w: 56, h: 56,
                         angle: 0
                     });
+                }
+
+                // Newer obstacles: only on bare normal platforms, so they never
+                // overlap a spring, spikes or the static sawblade.
+                const oRoll = orand();
+                const oPhase = orand() * 6.28;
+                if (platType === 'normal' && !hasSpring && hazards.length === hazardsBefore) {
+                    if (levelIdx >= 3 && platW >= 170 && oRoll < 0.22) {
+                        // Retracting spikes: sink, flash red as a warning, then pop up
+                        const cx = curX + platW / 2;
+                        for (let i = 0; i < 2; i++) {
+                            hazards.push({
+                                type: 'popspike',
+                                x: cx - 32 + i * 32, y: curY - 32, w: 32, h: 32,
+                                ext: 0, offset: oPhase
+                            });
+                        }
+                    } else if (levelIdx >= 10 && platW >= 220 && oRoll > 0.75) {
+                        // Low patrolling sawblade: jump over it, mind the timing
+                        hazards.push({
+                            type: 'saw', patrol: true,
+                            x: curX + platW / 2, y: curY - 22, r: 22, w: 44, h: 44,
+                            cx: curX + platW / 2, range: platW / 2 - 40,
+                            speed: 1.5 + orand() * 0.8, phase: oPhase, angle: 0
+                        });
+                    }
                 }
 
                 // Collectible Pumpkin Souls placement
@@ -1392,6 +1422,9 @@
                 const dx = cx - nx, dy = cy - ny;
                 return dx * dx + dy * dy < r * r;
             }
+            if (h.type === 'popspike') {
+                if (h.ext <= 0.5) return false; // retracted or still warning
+            }
             // Spike: narrower, shorter box hugging the triangle's body
             return checkAABB(box, { x: h.x + h.w * 0.25, y: h.y + h.h * 0.35, w: h.w * 0.5, h: h.h * 0.65 });
         }
@@ -1431,6 +1464,11 @@
             for (let h of hazards) {
                 if (h.type === 'saw') {
                     h.angle += dt * 8;
+                    if (h.patrol) h.x = h.cx + Math.sin(gameTime * h.speed + h.phase) * h.range;
+                } else if (h.type === 'popspike') {
+                    // 2.4s cycle: down 0-1.2s, warning 1.2-1.6s, up 1.6-2.4s
+                    const t = (gameTime + h.offset) % 2.4;
+                    h.ext = t < 1.2 ? 0 : (t < 1.6 ? 0.4 * (t - 1.2) / 0.4 : 1);
                 }
             }
 
@@ -1691,7 +1729,22 @@
 
             // Draw Triangular Ground Spikes (Original dark silhouettes without glow)
             for (let h of hazards) {
-                if (h.type === 'spike') {
+                if (h.type === 'popspike') {
+                    targetCtx.save();
+                    const warn = h.ext > 0 && h.ext < 1;
+                    // base stub always visible, triangle grows with ext
+                    targetCtx.fillStyle = '#07070A';
+                    targetCtx.fillRect(h.x, h.y + h.h - 5, h.w, 5);
+                    const th = Math.max(0.15, h.ext) * (h.h - 5);
+                    targetCtx.fillStyle = warn ? '#F43F5E' : '#07070A';
+                    targetCtx.beginPath();
+                    targetCtx.moveTo(h.x + h.w / 2, h.y + h.h - 5 - th);
+                    targetCtx.lineTo(h.x + h.w, h.y + h.h - 5);
+                    targetCtx.lineTo(h.x, h.y + h.h - 5);
+                    targetCtx.closePath();
+                    targetCtx.fill();
+                    targetCtx.restore();
+                } else if (h.type === 'spike') {
                     targetCtx.save();
                     targetCtx.fillStyle = '#07070A';
                     targetCtx.beginPath();
