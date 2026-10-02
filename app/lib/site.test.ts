@@ -23,13 +23,13 @@ describe("trustedSelfOrigin", () => {
     expect(trustedSelfOrigin(REQ)).toBe(SITE_URL);
   });
 
-  it("prefers the project's production URL in production when set", () => {
+  it("ignores the project's production URL in production (it can be a protected alias)", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("SELF_ORIGIN", "");
     vi.stubEnv("VERCEL_ENV", "production");
-    vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "hallpass.example.com");
+    vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "hallpass-ates-team-projects.vercel.app");
     vi.stubEnv("VERCEL_URL", "hallpass-abc123.vercel.app");
-    expect(trustedSelfOrigin(REQ)).toBe("https://hallpass.example.com");
+    expect(trustedSelfOrigin(REQ)).toBe(SITE_URL);
   });
 
   it("uses the deployment host only for a preview", () => {

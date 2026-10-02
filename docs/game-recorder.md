@@ -57,7 +57,7 @@ wraps `HallPass.submitScore`/`progress` in place (only on an object that has
 event, and reports tab visibility. It never throws and is idempotent.
 
 The route fetches the static twin from a **trusted origin** — `SELF_ORIGIN`, else in
-production the canonical site URL (or `VERCEL_PROJECT_PRODUCTION_URL`), and only
+production the canonical site URL (not `VERCEL_PROJECT_PRODUCTION_URL`, which can name a protected alias), and only
 on a preview the per-deployment `VERCEL_URL` — never from the request's Host
 header, and never `VERCEL_URL` in production: that host is behind Deployment
 Protection and answers a 302 to Vercel's login page. The fetch uses
