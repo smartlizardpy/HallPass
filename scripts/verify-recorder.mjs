@@ -130,7 +130,12 @@ function makeServer() {
       const html = fs.readFileSync(file, "utf8");
       return void res
         .writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" })
-        .end(url.searchParams.get("hp-rec") === "1" ? injectShim(html) : html);
+        .end(url.searchParams.get("hp-rec") === "1" ? injectShim(html, { baseHref: `/games/${m[1]}/` }) : html);
+    }
+    // The static twin's own path, which the injected <base> points relative URLs at.
+    const g = /^\/games\/([a-z0-9-]+)\/(.+)$/.exec(url.pathname);
+    if (g && !g[2].includes("..") && fs.existsSync(path.join(gamesDir, g[1], g[2]))) {
+      return void res.writeHead(200).end(fs.readFileSync(path.join(gamesDir, g[1], g[2])));
     }
     const s = /^\/sdk\/(.+)$/.exec(url.pathname);
     if (s && fs.existsSync(path.join(root, "public/sdk", s[1]))) {
