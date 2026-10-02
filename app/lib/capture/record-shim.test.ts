@@ -140,7 +140,7 @@ describe("shim SDK events", () => {
 
   it("does not double-log a stub call replayed into the real client", async () => {
     const { win, events, queued } = setup();
-    const stub = { version: "0", submitScore: async () => ({ ok: false, reason: "inert" }) };
+    const stub = { version: "0", submitScore: async (...args: number[]) => ({ ok: false, reason: "inert", n: args.length }) };
     win.HallPass = win.HP = stub;
     (win.HallPass as typeof stub).submitScore(7);
 
