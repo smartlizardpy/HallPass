@@ -151,7 +151,7 @@
             <div id="timer">90</div>
             <div id="combo-counter">x1 COMBO</div>
         </div>
-        <div class="hud-zone bot-hud">P1: Tap Sides to Shield / Catch Green Orbs</div>
+        <div class="hud-zone bot-hud">P1: Tap Sides to Shield / Catch Power Orbs</div>
     </div>
 
     <!-- Start Menu -->
@@ -343,6 +343,7 @@
         enemiesSpawned: 0,
         p2Energy: 100,
         coreHealth: 100,
+        wideTimer: 0,
         shake: 0,
         slowMo: 1.0,
         difficulty: 1.0
@@ -360,6 +361,13 @@
 
     const CONF = {
         colors: { p1: '#00f0ff', p2: '#ff0055', power: '#00ff66' },
+        baseArc: Math.PI/1.3,
+        wideFrames: 480, // WIDE SHIELD lasts 8s
+        powerKinds: {
+            repair: { color: '#00ff66', label: '+' },
+            wide:   { color: '#ffee00', label: 'W' },
+            pulse:  { color: '#ffffff', label: 'P' }
+        },
         spawnCost: 20,
         recharge: 0.6
     };
@@ -459,7 +467,7 @@
     }
 
     function resetVars() {
-        state = { ...state, running: true, paused: false, time: 90, score: 0, combo: 0, coreHealth: 100, p2Energy: 100, enemiesSpawned: 0 };
+        state = { ...state, running: true, paused: false, time: 90, score: 0, combo: 0, coreHealth: 100, p2Energy: 100, enemiesSpawned: 0, wideTimer: 0 };
         ENTITY.enemies = [];
         ENTITY.particles = [];
         ENTITY.powerups = [];
@@ -467,6 +475,7 @@
         ENTITY.ripples = [];
         ENTITY.p1.angle = 0;
         ENTITY.p1.dir = 0;
+        ENTITY.p1.arc = CONF.baseArc;
         touches.clear();
         ui.timer.innerText = 90;
         ui.combo.style.opacity = 0;
@@ -481,36 +490,53 @@
 
         const angle = Math.atan2(ty - cy, tx - cx);
         const distFromCenter = Math.abs(tx - cx);
-        
-        let type = 'std';
-        let speed = 2.5;
-        let size = 12;
-        let hp = 1;
-        let color = CONF.colors.p2;
 
-        if (distFromCenter < width * 0.15) {
-            type = 'tank';
-            speed = 1.2;
-            size = 18;
-            hp = 3; 
-            color = '#ff4400';
-        } else if (distFromCenter > width * 0.35) {
-            type = 'dart';
-            speed = 4.5;
-            size = 8;
-            color = '#ff0099';
-        }
+        // Where you tap picks the unit: centre = tank, then zigzagger, normal
+        // (sometimes a splitter), and the far edges launch fast darts.
+        let type = 'std';
+        if (distFromCenter < width * 0.15) type = 'tank';
+        else if (distFromCenter > width * 0.35) type = 'dart';
+        else if (distFromCenter < width * 0.25) type = 'zigzag';
+        else if (Math.random() < 0.25) type = 'splitter';
+
+        pushEnemy(type, angle);
+    }
+
+    function pushEnemy(type, angle, fromX, fromY) {
+        let speed = 2.5, size = 12, hp = 1, color = CONF.colors.p2;
+        if (type === 'tank')          { speed = 1.2; size = 18; hp = 3; color = '#ff4400'; }
+        else if (type === 'dart')     { speed = 4.5; size = 8; color = '#ff0099'; }
+        else if (type === 'zigzag')   { speed = 2.2; size = 10; color = '#ffaa00'; }
+        else if (type === 'splitter') { speed = 1.8; size = 15; hp = 2; color = '#b44dff'; }
+        else if (type === 'mini')     { speed = 3.2; size = 7; color = '#d98cff'; }
 
         speed *= state.difficulty;
 
+        const far = Math.max(width, height) * 0.7;
         ENTITY.enemies.push({
-            x: cx + Math.cos(angle) * (Math.max(width, height) * 0.7),
-            y: cy + Math.sin(angle) * (Math.max(width, height) * 0.7),
+            x: fromX !== undefined ? fromX : cx + Math.cos(angle) * far,
+            y: fromY !== undefined ? fromY : cy + Math.sin(angle) * far,
             angle: angle,
             type, speed, size, hp, color,
             spin: (Math.random()-0.5)*0.2,
-            rot: 0
+            rot: 0,
+            phase: Math.random() * Math.PI * 2
         });
+    }
+
+    // Automatic waves: the swarm attacks on its own every 15s, bigger as the clock runs down
+    function spawnWave() {
+        const n = 3 + Math.floor((90 - state.time) / 15) * 2;
+        const base = Math.random() * Math.PI * 2;
+        const types = ['std', 'std', 'dart', 'zigzag', 'splitter', 'tank'];
+        for (let i = 0; i < n; i++) {
+            const a = base + (i - n/2) * 0.22;
+            const type = types[Math.floor(Math.random() * types.length)];
+            setTimeout(() => { if (state.running && !state.paused) pushEnemy(type, a); }, i * 160);
+        }
+        state.enemiesSpawned += n;
+        addFloatText("WAVE INCOMING", cx - 60, cy - 120, CONF.colors.p2);
+        Audio.sfx('spawn');
     }
 
     function spawnPowerup() {
@@ -521,7 +547,8 @@
             vx: -Math.cos(angle) * 1.5,
             vy: -Math.sin(angle) * 1.5,
             angle: angle,
-            life: 1.0
+            life: 1.0,
+            kind: Math.random() < 0.5 ? 'repair' : (Math.random() < 0.5 ? 'wide' : 'pulse')
         });
     }
 
@@ -555,9 +582,12 @@
             state.time--;
             ui.timer.innerText = state.time;
             if (state.time <= 0) gameOver("DEFENDER WINS", "TIME LIMIT REACHED");
-            if (state.time % 10 === 0 && Math.random() > 0.3) spawnPowerup();
+            if (state.time % 8 === 0 && Math.random() > 0.2) spawnPowerup();
+            if (state.time % 15 === 0 && state.time > 0 && state.time < 90) spawnWave();
         }
 
+        if (state.wideTimer > 0) state.wideTimer--;
+        ENTITY.p1.arc = CONF.baseArc * (state.wideTimer > 0 ? 1.5 : 1);
         ENTITY.p1.angle += ENTITY.p1.dir * 0.12 * state.slowMo;
 
         if (state.p2Energy < 100) state.p2Energy += CONF.recharge;
@@ -572,6 +602,12 @@
             
             e.x -= Math.cos(e.angle) * e.speed * state.slowMo;
             e.y -= Math.sin(e.angle) * e.speed * state.slowMo;
+            if (e.type === 'zigzag') {
+                // weave sideways across its path
+                const w = Math.cos(state.frames * 0.12 + e.phase) * 3.5 * state.slowMo;
+                e.x += -Math.sin(e.angle) * w;
+                e.y += Math.cos(e.angle) * w;
+            }
             e.rot += e.spin;
 
             const dx = e.x - cx;
@@ -609,6 +645,12 @@
                         ui.combo.innerText = `x${state.combo} COMBO`;
                         ui.combo.style.opacity = 1;
                         addFloatText("BLOCK", e.x, e.y, CONF.colors.p1);
+                        if (e.type === 'splitter') {
+                            const a = Math.atan2(e.y - cy, e.x - cx);
+                            pushEnemy('mini', a + 0.2, e.x, e.y);
+                            pushEnemy('mini', a - 0.2, e.x, e.y);
+                            addFloatText("SPLIT!", e.x, e.y - 18, e.color);
+                        }
                         ENTITY.enemies.splice(i, 1);
                     } else {
                          addFloatText("TINK", e.x, e.y, '#fff');
@@ -619,7 +661,7 @@
 
             // Core Collision
             if (dist < 30) {
-                let dmg = e.type === 'tank' ? 25 : 10;
+                let dmg = e.type === 'tank' ? 25 : (e.type === 'mini' ? 5 : 10);
                 state.coreHealth -= dmg;
                 state.combo = 0;
                 ui.combo.style.opacity = 0;
@@ -657,10 +699,29 @@
                 if (diff > Math.PI) diff = 2*Math.PI - diff;
 
                 if (diff < ENTITY.p1.arc / 2) {
-                    state.coreHealth = Math.min(100, state.coreHealth + 15);
                     Audio.sfx('powerup');
-                    addFloatText("REPAIRED", p.x, p.y, CONF.colors.power);
-                    createExplosion(p.x, p.y, CONF.colors.power, 10);
+                    const pk = CONF.powerKinds[p.kind];
+                    if (p.kind === 'wide') {
+                        state.wideTimer = CONF.wideFrames;
+                        addFloatText("WIDE SHIELD", p.x, p.y, pk.color);
+                    } else if (p.kind === 'pulse') {
+                        addFloatText("PULSE!", p.x, p.y, pk.color);
+                        state.shake = 12;
+                        ENTITY.enemies.forEach(en => {
+                            createExplosion(en.x, en.y, pk.color, 12);
+                            state.combo++;
+                        });
+                        state.maxCombo = Math.max(state.combo, state.maxCombo);
+                        if (state.combo > 0) {
+                            ui.combo.innerText = `x${state.combo} COMBO`;
+                            ui.combo.style.opacity = 1;
+                        }
+                        ENTITY.enemies.length = 0;
+                    } else {
+                        state.coreHealth = Math.min(100, state.coreHealth + 15);
+                        addFloatText("REPAIRED", p.x, p.y, pk.color);
+                    }
+                    createExplosion(p.x, p.y, pk.color, 10);
                     ENTITY.powerups.splice(i, 1);
                     continue;
                 }
@@ -751,7 +812,7 @@
         ctx.rotate(ENTITY.p1.angle);
         ctx.shadowBlur = 15;
         ctx.shadowColor = CONF.colors.p1;
-        ctx.strokeStyle = CONF.colors.p1;
+        ctx.strokeStyle = state.wideTimer > 0 ? '#ffee00' : CONF.colors.p1;
         ctx.lineWidth = 8;
         ctx.lineCap = 'round';
         ctx.beginPath();
@@ -767,15 +828,16 @@
 
         // Objects
         ENTITY.powerups.forEach(p => {
+            const pk = CONF.powerKinds[p.kind];
             ctx.shadowBlur = 10;
-            ctx.shadowColor = CONF.colors.power;
-            ctx.fillStyle = CONF.colors.power;
+            ctx.shadowColor = pk.color;
+            ctx.fillStyle = pk.color;
             ctx.beginPath();
             ctx.arc(p.x, p.y, 8, 0, Math.PI*2);
             ctx.fill();
-            ctx.fillStyle = '#fff';
-            ctx.font = '10px Arial';
-            ctx.fillText("+", p.x-3, p.y+3);
+            ctx.fillStyle = p.kind === 'pulse' ? '#000' : '#fff';
+            ctx.font = 'bold 10px Arial';
+            ctx.fillText(pk.label, p.x-3, p.y+3);
         });
 
         ENTITY.enemies.forEach(e => {
@@ -790,6 +852,19 @@
             ctx.beginPath();
             if (e.type === 'tank') {
                 ctx.rect(-e.size, -e.size, e.size*2, e.size*2);
+            } else if (e.type === 'splitter') {
+                for (let k = 0; k < 6; k++) {
+                    const a = k * Math.PI / 3;
+                    const px = Math.cos(a) * e.size, py = Math.sin(a) * e.size;
+                    if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+            } else if (e.type === 'zigzag') {
+                ctx.moveTo(e.size, 0);
+                ctx.lineTo(0, -e.size);
+                ctx.lineTo(-e.size, 0);
+                ctx.lineTo(0, e.size);
+                ctx.closePath();
             } else if (e.type === 'dart') {
                 ctx.moveTo(e.size*2, 0);
                 ctx.lineTo(-e.size, -e.size/2);
