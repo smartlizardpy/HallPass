@@ -61,6 +61,8 @@ import { pickMimeType } from "./replay-buffer";
 /** The slice of `window.__hpRec` (see `record-shim.ts`) this module uses. */
 type ShimHandle = {
   streams: MediaStream[];
+  /** Which context type the game first got from each canvas ("2d", "webgl2", …). */
+  ctxTypes?: WeakMap<object, string>;
   onEvent: ((event: { at: number; type: string; source: string; data?: Record<string, unknown> }) => void) | null;
   onStream: ((stream: MediaStream) => void) | null;
 };
@@ -369,10 +371,19 @@ export class GameRecorder {
 
   // ── internals ─────────────────────────────────────────────────────────────
 
-  /** Whether the game's canvas is a plain 2D one (`getContext("2d")` is null for WebGL). */
+  /**
+   * Whether the game's canvas is KNOWN to hold a 2D context.
+   *
+   * Never answered by calling `getContext("2d")` on the canvas: on one with no
+   * context that creates a 2D context, and the game's own later
+   * `getContext("webgl")` — or a 2D one with different attributes — then fails.
+   * The shim recorded what the game asked for; without the shim, or for a canvas
+   * it did not see (an OffscreenCanvas transfer), the answer is "don't know", and
+   * the nudge is skipped.
+   */
   private is2dCanvas(): boolean {
     try {
-      return this.game.canvas.getContext("2d") !== null;
+      return shimOf(this.game.win)?.ctxTypes?.get(this.game.canvas) === "2d";
     } catch {
       return false;
     }

@@ -24,10 +24,18 @@ function makeWindow() {
       return new TapNode();
     }
   }
+  const getContextCalls: unknown[][] = [];
+  class HTMLCanvasElement {
+    getContext(...args: unknown[]) {
+      getContextCalls.push(args);
+      return args[0] === "nope" ? null : { type: args[0] };
+    }
+  }
   const listeners: Record<string, Listener[]> = {};
   const win: Record<string, unknown> = {
     AudioNode,
     AudioDestinationNode,
+    HTMLCanvasElement,
     performance: { timeOrigin: 1_000_000, now: () => 500 },
     setTimeout: (fn: () => void) => {
       queued.push(fn);
@@ -41,7 +49,7 @@ function makeWindow() {
     },
   };
   const queued: Array<() => void> = [];
-  return { win, connections, AudioNode, FakeContext, listeners, queued };
+  return { win, connections, AudioNode, FakeContext, listeners, queued, HTMLCanvasElement, getContextCalls };
 }
 
 function run(win: Record<string, unknown>) {
@@ -186,5 +194,36 @@ describe("shim SDK events", () => {
     const { listeners, events } = setup();
     listeners.visibilitychange[0]();
     expect(events[0]).toMatchObject({ type: "visibility", data: { state: "hidden" } });
+  });
+});
+
+describe("shim canvas context types", () => {
+  it("remembers the first context type a game asked for, and still returns the context", () => {
+    const { win, HTMLCanvasElement } = makeWindow();
+    run(win);
+    const types = (win.__hpRec as { ctxTypes: WeakMap<object, string> }).ctxTypes;
+    const c = new HTMLCanvasElement();
+    expect(c.getContext("2d")).toEqual({ type: "2d" });
+    c.getContext("webgl");
+    expect(types.get(c)).toBe("2d");
+    const g = new HTMLCanvasElement();
+    g.getContext("webgl2", { alpha: false });
+    expect(types.get(g)).toBe("webgl2");
+  });
+
+  it("records nothing when the game's request failed", () => {
+    const { win, HTMLCanvasElement } = makeWindow();
+    run(win);
+    const types = (win.__hpRec as { ctxTypes: WeakMap<object, string> }).ctxTypes;
+    const c = new HTMLCanvasElement();
+    expect(c.getContext("nope")).toBeNull();
+    expect(types.has(c)).toBe(false);
+  });
+
+  it("never asks for a context on a canvas by itself", () => {
+    const { win, getContextCalls, HTMLCanvasElement } = makeWindow();
+    run(win);
+    new HTMLCanvasElement();
+    expect(getContextCalls).toHaveLength(0);
   });
 });

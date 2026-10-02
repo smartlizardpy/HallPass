@@ -24,6 +24,7 @@
  *     queued calls into itself. Calls made while that replay runs are skipped,
  *     otherwise every early call would be logged by the stub wrapper AND the
  *     real one.
+ *     (1b) It also notes which context type each canvas was given — see below.
  *  3. VISIBILITY. A hidden tab throttles the game's frame loop, which shows up as
  *     a hole in the video; the event makes the hole explicable.
  *
@@ -41,7 +42,7 @@
 export const RECORD_SHIM_SOURCE = `(function (w) {
   try {
     if (w.__hpRec) return;
-    var hp = (w.__hpRec = { version: 1, streams: [], onEvent: null, onStream: null });
+    var hp = (w.__hpRec = { version: 1, streams: [], ctxTypes: new WeakMap(), onEvent: null, onStream: null });
     var epoch = function () { return w.performance.timeOrigin + w.performance.now(); };
     var emit = function (type, source, data) {
       try {
@@ -71,6 +72,26 @@ export const RECORD_SHIM_SOURCE = `(function (w) {
             }
           } catch (e) {}
           return origConnect.apply(this, arguments);
+        };
+      }
+    } catch (e) {}
+
+    // 1b. CANVAS CONTEXT TYPES ------------------------------------------------
+    // The recorder wants to nudge a STILL 2D canvas into emitting a frame, which is
+    // only safe on a canvas that already HAS a 2D context. Asking the canvas with
+    // getContext("2d") is not a way to find out: on a canvas with no context it
+    // CREATES one, and the game's own later getContext("webgl") then returns null.
+    // So remember what the game itself asked for, and let the recorder look that up.
+    try {
+      var CE = w.HTMLCanvasElement;
+      if (CE && CE.prototype && typeof CE.prototype.getContext === "function") {
+        var origGetContext = CE.prototype.getContext;
+        CE.prototype.getContext = function (type) {
+          var ctx = origGetContext.apply(this, arguments);
+          try {
+            if (ctx && !hp.ctxTypes.has(this)) hp.ctxTypes.set(this, String(type));
+          } catch (e) {}
+          return ctx;
         };
       }
     } catch (e) {}

@@ -175,4 +175,55 @@ describe("GameRecorder lifecycle", () => {
     expect(onAutoStop.mock.calls[0][0]).toMatchObject({ endedBy: "cap", cap: "time" });
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  describe("still-canvas nudge", () => {
+    function withShim(type: string | undefined) {
+      vi.stubGlobal("window", {});
+      const ctx = {
+        save: vi.fn(),
+        restore: vi.fn(),
+        setTransform: vi.fn(),
+        drawImage: vi.fn(),
+      };
+      const getContext = vi.fn(() => ctx);
+      const { game, canvas, win } = makeGame({ shimmed: true });
+      (canvas as unknown as { getContext: unknown }).getContext = getContext;
+      const ctxTypes = new WeakMap<object, string>();
+      if (type) ctxTypes.set(canvas, type);
+      (win as unknown as Record<string, unknown>).__hpRec = {
+        streams: [],
+        ctxTypes,
+        onEvent: null,
+        onStream: null,
+      };
+      return { game, getContext, ctx };
+    }
+
+    it("draws the canvas onto itself when the game itself asked for a 2D context", async () => {
+      const { game, ctx } = withShim("2d");
+      const rec = new GameRecorder(game, options);
+      await rec.start();
+      await vi.advanceTimersByTimeAsync(600);
+      expect(ctx.drawImage).toHaveBeenCalled();
+      await rec.stop();
+    });
+
+    it("never calls getContext on a canvas whose context type is unknown", async () => {
+      const { game, getContext } = withShim(undefined);
+      const rec = new GameRecorder(game, options);
+      await rec.start();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(getContext).not.toHaveBeenCalled();
+      await rec.stop();
+    });
+
+    it("leaves a WebGL canvas alone", async () => {
+      const { game, getContext } = withShim("webgl2");
+      const rec = new GameRecorder(game, options);
+      await rec.start();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(getContext).not.toHaveBeenCalled();
+      await rec.stop();
+    });
+  });
 });
