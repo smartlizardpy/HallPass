@@ -43,7 +43,7 @@ const secret = (process.env.ALERTS_SECRET || "").trim();
 const dryRun = process.argv.includes("--dry-run");
 
 /** A run does a few queries and a push per player, so allow more than the probe. */
-const TIMEOUT_MS = 60_000;
+const TIMEOUT_MS = 60_000; // matches `maxDuration` on the route
 
 const annotate = (level, message) => console.log(`::${level}::${message}`);
 
@@ -105,6 +105,14 @@ console.log(`  ${dryRun ? "would send" : "sent     "} ${dryRun ? body.due : body
 if (!dryRun && body.claimed < body.due) {
   console.log(
     "  (the rest were claimed by an overlapping run, or failed and were logged by the site)",
+  );
+}
+if (body.capped) {
+  // More players were due than one run will send to; the rest miss today's
+  // reminder (their 17:00 hour has passed by the next run). See the route.
+  annotate(
+    "warning",
+    `More than ${body.cap} players were due this hour; only the first ${body.cap} were processed.`,
   );
 }
 if (dryRun) console.log("\n--dry-run: nobody was notified.");

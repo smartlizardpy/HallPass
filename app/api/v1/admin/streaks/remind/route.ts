@@ -24,6 +24,9 @@
  * send" every hour for ever is the failure `check-alerts.mjs` was written to
  * avoid.
  *
+ * `due` is the number processed this run, at most `cap`; `capped: true` means
+ * MORE were due than the cap allowed (see the comment at the cap below).
+ *
  * `{ "dryRun": true }` reports who is due and claims and sends nothing.
  */
 
@@ -31,6 +34,20 @@ import { alertsAuthGate, alertsError } from "@/app/lib/alerts/http";
 import { isMissingStreakSchema, streaks } from "@/app/lib/streak";
 import { notifyStreakAtRisk } from "@/app/lib/streak/notify";
 import { REMINDER_RUN_CAP } from "@/app/lib/streak/server-core";
+
+/**
+ * The longest this route may run, in seconds (Route Segment Config —
+ * `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/02-route-segment-config/maxDuration.md`;
+ * the platform applies it from the build output).
+ *
+ * A full run is `REMINDER_RUN_CAP` players in batches of {@link BATCH}: each a
+ * claim, a preferences read, a bell insert and a push lookup, so on the order of
+ * a few hundred milliseconds a batch. 60s covers a capped run with room to spare
+ * and matches the runner's own 60s request timeout in
+ * `scripts/send-streak-reminders.mjs`, so the two give up together instead of the
+ * runner abandoning a function that is still working.
+ */
+export const maxDuration = 60;
 
 /** Players notified at once. Small: each is a few queries and a push. */
 const BATCH = 10;
@@ -48,7 +65,9 @@ export async function POST(req: Request): Promise<Response> {
 
   let due;
   try {
-    due = await streaks.dueForReminder(new Date(), REMINDER_RUN_CAP);
+    // ONE MORE than the cap, so "there were more than the cap" is knowable
+    // without a second COUNT query. Only the first `cap` are processed.
+    due = await streaks.dueForReminder(new Date(), REMINDER_RUN_CAP + 1);
   } catch (error) {
     if (isMissingStreakSchema(error)) {
       return alertsError(
@@ -60,8 +79,28 @@ export async function POST(req: Request): Promise<Response> {
     return alertsError("Could not read who is due a reminder", 500);
   }
 
+  // THE PER-RUN CAP, AND WHAT IT COSTS. A player's reminder hour is 17:00 local,
+  // so one run reaches only the slice of players whose offset puts them in that
+  // hour, and the runner knocks once an hour. Players past the cap are NOT picked
+  // up later: next hour a different slice is in its 17:00, and theirs has passed,
+  // so they miss that day's reminder. `ORDER BY player_id` also means the same
+  // players are always first in line. That is the right trade at this scale — a
+  // runaway query or a leaked secret cannot fan out unbounded pushes — but it is a
+  // real ceiling, which is why `capped` is reported and the runner warns. If one
+  // offset's slice ever approaches the cap, raise it (and `maxDuration`) or fan
+  // out across several runs rather than ignoring the warning.
+  const capped = due.length > REMINDER_RUN_CAP;
+  due = due.slice(0, REMINDER_RUN_CAP);
+
   if (dryRun) {
-    return Response.json({ ok: true, dryRun: true, due: due.length, claimed: 0 });
+    return Response.json({
+      ok: true,
+      dryRun: true,
+      due: due.length,
+      cap: REMINDER_RUN_CAP,
+      capped,
+      claimed: 0,
+    });
   }
 
   let claimed = 0;
@@ -79,5 +118,12 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  return Response.json({ ok: true, dryRun: false, due: due.length, claimed });
+  return Response.json({
+    ok: true,
+    dryRun: false,
+    due: due.length,
+    cap: REMINDER_RUN_CAP,
+    capped,
+    claimed,
+  });
 }
