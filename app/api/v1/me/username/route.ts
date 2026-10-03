@@ -15,6 +15,7 @@
  * same leak by a slower route.
  */
 
+import { creditedSlugsFor, expireTesterCredits } from "@/app/lib/beta";
 import { isMissingColumnError } from "@/app/lib/db";
 import { social } from "@/app/lib/social";
 import {
@@ -104,6 +105,8 @@ export async function POST(req: Request): Promise<Response> {
   try {
     const result = await social.claimUsername(playerId, format.username);
     if (result.claimed) {
+      // A credit with no handle prints `@username` on `/game/<slug>`.
+      expireTesterCredits(await creditedSlugsFor(playerId), "route");
       return Response.json({ ok: true, username: format.username }, { headers: NO_STORE });
     }
     if (result.tombstoned) {

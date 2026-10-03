@@ -365,8 +365,13 @@ if (staged) {
 // writing, so the new blob is visible on the very next request. A script cannot
 // reach Next's data cache, so the deployed app keeps its cached read of the
 // index until the TTL in `game-blob-index.ts` expires (1h). Redeploy to clear it
-// sooner.
+// sooner. The hero row inserted above is in the same position against the media
+// cache, whose backstop is a DAY (`CATALOGUE_TTL_SECONDS` in
+// `app/lib/cache-lifetimes.ts`); any media edit for the game on its dashboard
+// page expires that cache at once.
 console.log(
   "\nNote: the deployed app caches the blob index for up to an hour, so the\n" +
-    "change may take that long to appear. Redeploy to clear it immediately.",
+    "change may take that long to appear. Redeploy to clear it immediately.\n" +
+    "The hero image can take up to a day to reach the game page; any media edit\n" +
+    "for the game on its dashboard page shows it at once.",
 );

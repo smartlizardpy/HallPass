@@ -672,6 +672,22 @@ export function createBetaStore(sql: Sql) {
       }));
     },
 
+    /**
+     * The games whose public tester credit names this player: the pages that
+     * go stale when they rename or delete their account. Same status filter as
+     * {@link completedTesters}, which is what makes it the right set; the two
+     * must change together.
+     */
+    async creditedSlugs(playerId: string): Promise<string[]> {
+      const rows = await sql`
+        SELECT DISTINCT slug
+        FROM beta_assignments
+        WHERE player_id = ${playerId}
+          AND status IN ('submitted', 'closed')
+      `;
+      return rows.map((row) => String(row.slug));
+    },
+
     /** Every assignment, newest first — the admin overview. */
     async allAssignments(): Promise<BetaAssignment[]> {
       const rows = await sql`
@@ -737,9 +753,16 @@ export function createBetaStore(sql: Sql) {
       `;
     },
 
-    /** Withdraw an assignment entirely. */
-    async unassign(id: number): Promise<void> {
-      await sql`DELETE FROM beta_assignments WHERE id = ${id}`;
+    /**
+     * Withdraw an assignment entirely. Returns the game it was for, or `null`
+     * when no such assignment existed — the caller needs the slug to refresh
+     * that game's public tester credit, which a finished assignment fed.
+     */
+    async unassign(id: number): Promise<string | null> {
+      const rows = await sql`
+        DELETE FROM beta_assignments WHERE id = ${id} RETURNING slug
+      `;
+      return rows[0] ? String(rows[0].slug) : null;
     },
 
     // -----------------------------------------------------------------------

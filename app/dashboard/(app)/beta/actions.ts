@@ -49,7 +49,7 @@ import {
   SITE_WRITE_ROLE,
 } from "@/app/lib/permissions";
 import { blobOpDisabledMessage, isBlobOpEnabled } from "@/app/lib/blob-ops";
-import { beta, type AgentActivity } from "@/app/lib/beta";
+import { beta, expireTesterCredits, type AgentActivity } from "@/app/lib/beta";
 import { AGENT_FEED_LIMIT } from "@/app/lib/mcp/activity";
 import { ACTIVITY_IDLE_MINUTES } from "@/app/lib/mcp/config";
 import {
@@ -380,6 +380,10 @@ export async function assignGameAction(formData: FormData): Promise<void> {
 
   revalidatePath(BETA_PATH);
   revalidatePath("/beta");
+  // An upsert REOPENS a finished assignment, which takes the tester's credit off
+  // the game's public page. Unconditional rather than checked: an admin assign
+  // is rare, and a regeneration whose output did not change costs no write.
+  expireTesterCredits([slug], "action");
   back("ok", "Game assigned");
 }
 
@@ -390,13 +394,16 @@ export async function unassignAction(formData: FormData): Promise<void> {
   const id = Number(readString(formData, "id"));
   if (!Number.isInteger(id) || id <= 0) back("error", "Missing assignment");
 
+  let slug: string | null = null;
   try {
-    await beta.unassign(id);
+    slug = await beta.unassign(id);
   } catch {
     back("error", "Could not remove that assignment");
   }
   revalidatePath(BETA_PATH);
   revalidatePath("/beta");
+  // A withdrawn FINISHED assignment was a public credit on the game's page.
+  if (slug) expireTesterCredits([slug], "action");
   back("ok", "Assignment removed");
 }
 

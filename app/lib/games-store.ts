@@ -19,7 +19,7 @@
  *   sentinel-return pattern in `app/lib/overview.ts` — never throw to a page.
  *
  * Caching: the override read is memoised with `unstable_cache` under the
- * {@link CACHE_TAG} tag (1h soft TTL). The catalogue is small and read on every
+ * {@link CACHE_TAG} tag (a day's soft TTL, `CATALOGUE_TTL_SECONDS`). The catalogue is small and read on every
  * public render, so we serve it from the data cache and invalidate explicitly
  * on edit. MUTATIONS below are deliberately UNCACHED; after any of them a server
  * action MUST call `updateTag(CACHE_TAG)` and `revalidatePath(...)` for the
@@ -47,6 +47,7 @@
 
 import "server-only";
 import { unstable_cache } from "next/cache";
+import { CATALOGUE_TTL_SECONDS } from "@/app/lib/cache-lifetimes";
 import { sql } from "@/app/lib/db";
 import {
   games,
@@ -147,8 +148,8 @@ function mapOverride(row: Row): GameOverride {
  * The cached primitive behind {@link readOverrides}. It THROWS on any failure on
  * purpose: `unstable_cache` only stores a fulfilled result, so a transient DB
  * blip must reject here rather than resolve to `[]` — otherwise the empty list
- * would be cached under {@link CACHE_TAG} for the full 1h TTL and wipe every
- * override site-wide. Memoised with a 1h soft revalidate; explicit
+ * would be cached under {@link CACHE_TAG} for the full day-long TTL and wipe
+ * every override site-wide. Memoised with a soft revalidate; explicit
  * `updateTag` after a mutation makes edits appear immediately.
  */
 const readOverridesCached = unstable_cache(
@@ -161,7 +162,7 @@ const readOverridesCached = unstable_cache(
     return rows.map(mapOverride);
   },
   ["game-overrides"],
-  { tags: [CACHE_TAG], revalidate: 3600 },
+  { tags: [CACHE_TAG], revalidate: CATALOGUE_TTL_SECONDS },
 );
 
 /**

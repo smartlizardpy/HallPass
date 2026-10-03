@@ -23,10 +23,12 @@
 
 import "server-only";
 import { unstable_cache } from "next/cache";
+import { CATALOGUE_TTL_SECONDS } from "@/app/lib/cache-lifetimes";
 import { redirect } from "next/navigation";
 import { isMissingColumnError, isUnconfiguredDbError, sql } from "@/app/lib/db";
 import { auth } from "@/app/lib/auth";
 import { publicDisplayName } from "@/app/lib/players";
+import { BETA_CREDITS_CACHE_TAG } from "./credit-cache";
 import { createBetaStore } from "./store";
 import type {
   AgentActivity,
@@ -293,11 +295,10 @@ export async function getShotQueue(): Promise<BetaShot[]> {
 }
 
 /**
- * Cache tag for {@link readTestersCached}. Invalidated when an assignment
- * reaches a finished state, so a fresh credit appears without waiting out the
- * TTL.
+ * Cache tag for {@link readTestersCached}, defined beside the helper that
+ * expires it — see `./credit-cache.ts` for every write that must.
  */
-export const BETA_CREDITS_CACHE_TAG = "beta-game-credits";
+export { BETA_CREDITS_CACHE_TAG, expireTesterCredits } from "./credit-cache";
 
 /**
  * Everyone who finished a playtest, grouped by slug.
@@ -305,14 +306,14 @@ export const BETA_CREDITS_CACHE_TAG = "beta-game-credits";
  * THROWS on failure by design. The try/catch lives at the CALL SITE, not inside
  * the cached primitive: `unstable_cache` only stores a FULFILLED result, so a
  * transient Neon blip must reject here — swallowing it into an empty map would
- * cache "nobody tested anything" for the full hour and quietly strip the credit
+ * cache "nobody tested anything" for the full TTL and quietly strip the credit
  * from every game page. Same argument as `game-serving-blobs.ts`.
  */
 const readTestersCached = unstable_cache(
   async (): Promise<{ slug: string; handle: string | null; username: string | null }[]> =>
     beta.completedTesters(),
   ["beta-game-credits"],
-  { tags: [BETA_CREDITS_CACHE_TAG], revalidate: 3600 },
+  { tags: [BETA_CREDITS_CACHE_TAG], revalidate: CATALOGUE_TTL_SECONDS },
 );
 
 /**
@@ -339,6 +340,27 @@ export async function getGameTesters(slug: string): Promise<string[]> {
     .map((row) => publicDisplayName(row));
   // A tester assigned the same game twice would otherwise be credited twice.
   return [...new Set(names)];
+}
+
+/**
+ * The games whose public credit names `playerId`, for
+ * {@link expireTesterCredits} after the player renames or deletes their
+ * account. Read it BEFORE a delete: the assignments cascade away with the row.
+ *
+ * NOT fail-soft to `[]` like the reads above, because `[]` here means "refresh
+ * nothing" and a wrong "nothing" would leave a deleted player's name on a public
+ * page. A missing table or unconfigured database is the expected schema gap and
+ * genuinely means no credits; any other failure answers `null`, "unknown", and
+ * the caller expires every credit instead.
+ */
+export async function creditedSlugsFor(playerId: string): Promise<string[] | null> {
+  try {
+    return await beta.creditedSlugs(playerId);
+  } catch (error) {
+    if (isExpectedSchemaGap(error)) return [];
+    console.error("beta.creditedSlugs failed; refreshing every credit:", error);
+    return null;
+  }
 }
 
 /** Every assignment, for the admin overview. Fail-soft to `[]`. */

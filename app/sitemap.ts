@@ -7,9 +7,16 @@ import { SITE_URL } from "@/app/lib/site";
 
 const BASE = SITE_URL;
 
+/**
+ * NO `lastModified`, deliberately. Every entry used to say `new Date()`, which is
+ * a claim that every URL changed at the moment of rendering — false, and Google
+ * says it ignores a `lastmod` that is not consistently accurate. It also made
+ * this route's output differ on every regeneration, and Vercel bills a changed
+ * regeneration as an ISR write (#131). We do not track when a page's content
+ * last changed, so the honest value is none at all; `changeFrequency` and
+ * `priority` stay.
+ */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const now = new Date();
-
   const [games, categories, tags] = await Promise.all([
     resolveGames(),
     resolveCategories(),
@@ -19,7 +26,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [
     {
       url: BASE,
-      lastModified: now,
       changeFrequency: "daily",
       priority: 1,
     },
@@ -29,7 +35,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       // that this URL is where updates are announced, which is worth a low
       // priority rather than an absence.
       url: `${BASE}${WHATS_NEW_PATH}`,
-      lastModified: now,
       changeFrequency: "weekly",
       priority: 0.5,
     },
@@ -38,7 +43,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const categoryPages: MetadataRoute.Sitemap = routedCategories(categories).map(
     (cat) => ({
       url: `${BASE}${categoryPath(cat)}`,
-      lastModified: now,
       changeFrequency: "weekly" as const,
       priority: 0.8,
     }),
@@ -50,7 +54,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // own, and the route resolves against the same floor.
   const tagPages: MetadataRoute.Sitemap = landingTags(tags).map(({ tag }) => ({
     url: `${BASE}${tagPath(tag)}`,
-    lastModified: now,
     changeFrequency: "weekly" as const,
     // Below categories, which are the curated axis and carry the nav, and below
     // the game pages they lead to.
@@ -63,7 +66,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // media now change them.
   const gamePages: MetadataRoute.Sitemap = games.map((g) => ({
     url: `${BASE}/game/${g.slug}`,
-    lastModified: now,
     changeFrequency: "weekly" as const,
     priority: 0.7,
   }));
