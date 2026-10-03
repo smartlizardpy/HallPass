@@ -93,3 +93,39 @@ describe("external game staged flag", () => {
     expect(h.calls[1].values.at(-1)).toBe(true);
   });
 });
+
+/**
+ * The read goes through `unstable_cache`, which stores JSON. A cache MISS hands
+ * the render this module's objects as built; a HIT hands it their JSON round
+ * trip. If the two differ, the prerendered pages that list games serialise
+ * differently depending on which one they got, and Vercel bills every such
+ * regeneration as an ISR write even though nothing changed (issue #131).
+ */
+describe("external game rows are identical fresh and from the data cache", () => {
+  it.each([
+    ["no cover, no platform", row()],
+    ["a cover and a platform", row({ cover_url: "/game-media/ext/c.png", platform: "desktop" })],
+    ["an unrecognised platform", row({ platform: "toaster" })],
+  ])("%s", async (_name, r) => {
+    h.rows = [r];
+    const [fresh] = await readExternalGames();
+    // `toStrictEqual`, not `toEqual`: only the strict form tells a key holding
+    // `undefined` apart from a missing key, which is exactly the difference JSON
+    // erases.
+    expect(JSON.parse(JSON.stringify(fresh))).toStrictEqual(fresh);
+  });
+
+  it("still maps a cover and a platform when the row has them", async () => {
+    h.rows = [row({ cover_url: "/game-media/ext/c.png", platform: "desktop" })];
+    const [game] = await readExternalGames();
+    expect(game.coverUrl).toBe("/game-media/ext/c.png");
+    expect(game.platform).toBe("desktop");
+  });
+
+  it("leaves both keys off when the row has neither", async () => {
+    h.rows = [row()];
+    const [game] = await readExternalGames();
+    expect("coverUrl" in game).toBe(false);
+    expect("platform" in game).toBe(false);
+  });
+});
