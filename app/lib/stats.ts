@@ -1,5 +1,6 @@
 import "server-only";
 
+import { PUBLIC_PLAY_COUNTS_TTL_SECONDS } from "@/app/lib/cache-lifetimes";
 import { type HogqlResponse, namedRows } from "@/app/lib/hogql-rows";
 import {
   type Delta,
@@ -460,9 +461,11 @@ export async function getGamePlayCounts(): Promise<PlayCounts> {
           Authorization: `Bearer ${API_KEY}`,
         },
         body: JSON.stringify(query),
-        // Homepage card counts are vanity numbers on a high-traffic page, so a
-        // 5-minute window keeps them fresh-ish without a PostHog hit per render.
-        next: { revalidate: 300, tags: ["game-play-counts"] },
+        // NOT a freshness knob for the counts alone: this lifetime becomes the
+        // regeneration interval of every prerendered page that shows them. At
+        // 300s it rewrote `/`, every category and every game page each five
+        // minutes, one play at a time (#131). See `cache-lifetimes.ts`.
+        next: { revalidate: PUBLIC_PLAY_COUNTS_TTL_SECONDS, tags: ["game-play-counts"] },
         signal: AbortSignal.timeout(8000),
       });
 
