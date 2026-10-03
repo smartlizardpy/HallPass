@@ -35,6 +35,7 @@
 
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/app/lib/auth";
+import { creditedSlugsFor, expireTesterCredits } from "@/app/lib/beta";
 import { deletePlayer, setPlayerHandle } from "@/app/lib/players";
 
 export async function setHandleAction(formData: FormData): Promise<void> {
@@ -56,6 +57,9 @@ export async function setHandleAction(formData: FormData): Promise<void> {
     saveFailed = true;
   }
   if (saveFailed) redirect("/play/you/settings?error=db");
+
+  // A credited beta tester's handle is the name on `/game/<slug>`.
+  expireTesterCredits(await creditedSlugsFor(playerId), "action");
 
   // Back to the settings tab with a success marker for the banner.
   redirect("/play/you/settings?ok=1");
@@ -97,6 +101,11 @@ export async function deleteAccountAction(formData: FormData): Promise<void> {
   // try and bounce OUTSIDE with the `db` error code. `signOut`'s redirect is the
   // last statement and likewise stays outside the try so its thrown control
   // signal is never caught.
+  // Read BEFORE the delete: the assignments that make a public tester credit
+  // cascade away with the player row, and with them the answer to "which game
+  // pages still print this name".
+  const credited = await creditedSlugsFor(playerId);
+
   let deleteFailed = false;
   try {
     await deletePlayer(playerId);
@@ -104,6 +113,9 @@ export async function deleteAccountAction(formData: FormData): Promise<void> {
     deleteFailed = true;
   }
   if (deleteFailed) redirect("/play/you/settings?error=db");
+
+  // Erasure has to reach the prerendered game pages too, not wait out a cache.
+  expireTesterCredits(credited, "action");
 
   await signOut({ redirectTo: "/" });
 }

@@ -17,6 +17,7 @@
  */
 
 import { auth } from "@/app/lib/auth";
+import { creditedSlugsFor, expireTesterCredits } from "@/app/lib/beta";
 import { getPublicIdentity, setPlayerHandle } from "@/app/lib/players";
 import type { Session } from "next-auth";
 import type { ApiError, MeResponse, SetHandleRequest } from "@/sdk/src/contract";
@@ -64,6 +65,9 @@ export async function POST(req: Request): Promise<Response> {
   // name) when nothing usable remains. We re-read the effective identity so the
   // caller sees exactly what was stored.
   await setPlayerHandle(playerId, handle);
+  // A credited beta tester's handle is the name on `/game/<slug>`. A Route
+  // Handler cannot `updateTag`, hence "route".
+  expireTesterCredits(await creditedSlugsFor(playerId), "route");
   const player = await getPublicIdentity(playerId);
   return Response.json({ player } satisfies MeResponse, { headers: NO_STORE });
 }

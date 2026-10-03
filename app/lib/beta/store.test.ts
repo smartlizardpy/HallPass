@@ -244,6 +244,17 @@ describe("assignments", () => {
     expect(await createBetaStore(none.sql).unassign(7)).toBeNull();
   });
 
+  it("creditedSlugs selects the same finished statuses the public credit does", async () => {
+    const { sql, calls } = makeFakeSql(() => [{ slug: "neon-run" }, { slug: "pixel-slicer" }]);
+    expect(await createBetaStore(sql).creditedSlugs("p1")).toEqual(["neon-run", "pixel-slicer"]);
+    const text = flat(calls[0].text);
+    expect(text).toContain("SELECT DISTINCT slug FROM beta_assignments");
+    // Must match `completedTesters`, or a rename would skip a page that prints
+    // the name (or refresh pages that do not).
+    expect(text).toContain("status IN ('submitted', 'closed')");
+    expect(calls[0].values).toEqual(["p1"]);
+  });
+
   it("stamps completed_at only for terminal statuses", async () => {
     for (const status of ["submitted", "closed"] as const) {
       const { sql, calls } = makeFakeSql();

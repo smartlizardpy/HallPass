@@ -15,6 +15,7 @@
 
 import { redirect } from "next/navigation";
 import { auth } from "@/app/lib/auth";
+import { creditedSlugsFor, expireTesterCredits } from "@/app/lib/beta";
 import { validateHandle } from "@/app/lib/handle";
 import { setPlayerHandle } from "@/app/lib/players";
 import { hasBlockedDisplayTerm } from "@/app/lib/reviews/wordlist";
@@ -54,6 +55,10 @@ export async function setInitialHandleAction(formData: FormData): Promise<void> 
     saveFailed = true;
   }
   if (saveFailed) redirect(back("db"));
+
+  // Almost always `[]` this early; checked anyway because the handle is the
+  // name a credited beta tester's game page prints.
+  expireTesterCredits(await creditedSlugsFor(playerId), "action");
 
   redirect(next);
 }
@@ -119,7 +124,11 @@ export async function setInitialUsernameAction(formData: FormData): Promise<void
         : "error";
   }
 
-  if (outcome === "claimed") redirect(next);
+  if (outcome === "claimed") {
+    // A credit with no handle prints `@username`.
+    expireTesterCredits(await creditedSlugsFor(playerId), "action");
+    redirect(next);
+  }
   redirect(back(outcome));
 }
 

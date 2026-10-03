@@ -341,6 +341,27 @@ export async function getGameTesters(slug: string): Promise<string[]> {
   return [...new Set(names)];
 }
 
+/**
+ * The games whose public credit names `playerId`, for
+ * {@link expireTesterCredits} after the player renames or deletes their
+ * account. Read it BEFORE a delete: the assignments cascade away with the row.
+ *
+ * NOT fail-soft to `[]` like the reads above, because `[]` here means "refresh
+ * nothing" and a wrong "nothing" would leave a deleted player's name on a public
+ * page. A missing table or unconfigured database is the expected schema gap and
+ * genuinely means no credits; any other failure answers `null`, "unknown", and
+ * the caller expires every credit instead.
+ */
+export async function creditedSlugsFor(playerId: string): Promise<string[] | null> {
+  try {
+    return await beta.creditedSlugs(playerId);
+  } catch (error) {
+    if (isExpectedSchemaGap(error)) return [];
+    console.error("beta.creditedSlugs failed; refreshing every credit:", error);
+    return null;
+  }
+}
+
 /** Every assignment, for the admin overview. Fail-soft to `[]`. */
 export async function getAllAssignments(): Promise<BetaAssignment[]> {
   try {
