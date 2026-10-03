@@ -234,6 +234,16 @@ describe("assignments", () => {
     expect(text).toContain("completed_at = NULL");
   });
 
+  it("unassign returns the game it withdrew, so its credit can be refreshed", async () => {
+    const { sql, calls } = makeFakeSql(() => [{ slug: "pixel-slicer" }]);
+    expect(await createBetaStore(sql).unassign(7)).toBe("pixel-slicer");
+    expect(flat(calls[0].text)).toBe("DELETE FROM beta_assignments WHERE id = ? RETURNING slug");
+    expect(calls[0].values).toEqual([7]);
+
+    const none = makeFakeSql(() => []);
+    expect(await createBetaStore(none.sql).unassign(7)).toBeNull();
+  });
+
   it("stamps completed_at only for terminal statuses", async () => {
     for (const status of ["submitted", "closed"] as const) {
       const { sql, calls } = makeFakeSql();

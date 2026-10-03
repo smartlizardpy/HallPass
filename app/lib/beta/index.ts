@@ -27,6 +27,7 @@ import { redirect } from "next/navigation";
 import { isMissingColumnError, isUnconfiguredDbError, sql } from "@/app/lib/db";
 import { auth } from "@/app/lib/auth";
 import { publicDisplayName } from "@/app/lib/players";
+import { BETA_CREDITS_CACHE_TAG } from "./credit-cache";
 import { createBetaStore } from "./store";
 import type {
   AgentActivity,
@@ -293,11 +294,10 @@ export async function getShotQueue(): Promise<BetaShot[]> {
 }
 
 /**
- * Cache tag for {@link readTestersCached}. Invalidated when an assignment
- * reaches a finished state, so a fresh credit appears without waiting out the
- * TTL.
+ * Cache tag for {@link readTestersCached}, defined beside the helper that
+ * expires it — see `./credit-cache.ts` for every write that must.
  */
-export const BETA_CREDITS_CACHE_TAG = "beta-game-credits";
+export { BETA_CREDITS_CACHE_TAG, expireTesterCredits } from "./credit-cache";
 
 /**
  * Everyone who finished a playtest, grouped by slug.

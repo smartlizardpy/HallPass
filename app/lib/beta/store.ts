@@ -737,9 +737,16 @@ export function createBetaStore(sql: Sql) {
       `;
     },
 
-    /** Withdraw an assignment entirely. */
-    async unassign(id: number): Promise<void> {
-      await sql`DELETE FROM beta_assignments WHERE id = ${id}`;
+    /**
+     * Withdraw an assignment entirely. Returns the game it was for, or `null`
+     * when no such assignment existed — the caller needs the slug to refresh
+     * that game's public tester credit, which a finished assignment fed.
+     */
+    async unassign(id: number): Promise<string | null> {
+      const rows = await sql`
+        DELETE FROM beta_assignments WHERE id = ${id} RETURNING slug
+      `;
+      return rows[0] ? String(rows[0].slug) : null;
     },
 
     // -----------------------------------------------------------------------
