@@ -27,6 +27,7 @@ jobs:
     # set — the `secrets` context is available to job env but not to a step `if`.
     env:
       HAS_BLOB_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN != '' }}
+      HAS_ALERTS_SECRET: ${{ secrets.ALERTS_SECRET != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -96,4 +97,58 @@ jobs:
             echo "## Deployed to production"
             echo ""
             echo "$url"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Tell the site's admins a new version is live: a bell row and, for admins
+      # who opted in, a web push, saying what shipped. See
+      # `scripts/notify-deploy.mjs` and `docs/deploy-notify-design.md`.
+      #
+      # NEVER FAILS THE DEPLOY. The site is already live by this point, so a red
+      # run over a missing notification would be a false alarm about the thing
+      # that worked. The script turns every problem into a warning and exits 0;
+      # `continue-on-error` covers whatever a script cannot catch in itself.
+      #
+      # OPT-IN, like the alerts cron: without ALERTS_SECRET the next step says
+      # what to set and the deploy is unaffected.
+      #
+      # THE COMMIT MESSAGE GOES IN THROUGH `env:` ONLY. It is text somebody typed,
+      # and interpolating `${{ ... }}` into a `run:` script would let a crafted
+      # commit message run as shell. As an environment variable it is just data.
+      # `head_commit.message` exists for pushes; a workflow_dispatch redeploy has
+      # no head commit, so the step falls back to the checked-out commit's own.
+      #
+      # ONE NOTIFICATION PER COMMIT: the site dedupes on the sha, so re-running
+      # this workflow or dispatching it again for the same commit announces
+      # nothing — including a deliberate redeploy to refresh cover art.
+      #
+      # TWO MERGES CLOSE TOGETHER: the `concurrency` group above has
+      # `cancel-in-progress: true`, so when a second merge lands while the first
+      # is still deploying, the first run is cancelled before it reaches this
+      # step. Only the NEWER deploy notifies, and it names only its own merge —
+      # the cancelled one is never announced, even though it was merged. That
+      # is accepted: the newer notification is the version that is actually live.
+      - name: Notify admins of the new version
+        if: env.HAS_ALERTS_SECRET == 'true'
+        continue-on-error: true
+        env:
+          ALERTS_SECRET: ${{ secrets.ALERTS_SECRET }}
+          # Optional; defaults to the production origin in the script.
+          HALLPASS_SITE_URL: ${{ vars.HALLPASS_SITE_URL }}
+          DEPLOY_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          if [ -z "$DEPLOY_COMMIT_MESSAGE" ]; then
+            DEPLOY_COMMIT_MESSAGE="$(git log -1 --format=%B)"
+            export DEPLOY_COMMIT_MESSAGE
+          fi
+          node scripts/notify-deploy.mjs
+
+      - name: Explain why admins were not notified
+        if: env.HAS_ALERTS_SECRET != 'true'
+        run: |
+          echo "::warning::ALERTS_SECRET is not set, so admins were not told about this deploy."
+          {
+            echo "### Deploy notification — not configured"
+            echo ""
+            echo "Add \`ALERTS_SECRET\` under Settings → Secrets and variables → Actions,"
+            echo "matching \`ALERTS_SECRET\` on the Vercel deployment."
           } >> "$GITHUB_STEP_SUMMARY"

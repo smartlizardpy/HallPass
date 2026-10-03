@@ -515,3 +515,43 @@ export function agentFinishedCopy(input: {
     url: AGENT_URL,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Deploys
+// ---------------------------------------------------------------------------
+
+/** Where a tap on a deploy notification lands: the admin landing page. */
+const DEPLOY_URL = "/dashboard";
+
+/**
+ * "New version deployed — Add streak flames (#130) · b2f3113"
+ *
+ * ── THE COMMIT TEXT IS IN THE FULL COPY ONLY ───────────────────────────────
+ * Unlike most wording here, this body quotes text a person wrote (a PR title).
+ * That is the point of the notification — "something shipped" with no "what" is
+ * barely worth the buzz — and it is acceptable because the audience is admins
+ * alone, `app/lib/deploys/parse.ts` has already stripped control characters and
+ * bounded the title, and the DISCREET counterpart in `config.ts` ("The site was
+ * updated.") carries none of it. A device in quiet mode never shows a title.
+ *
+ * `title` is expected to come from `deployInfoFromMessage`; it is clipped again
+ * here so this builder is safe on its own. `pr` is omitted when the commit was
+ * not a PR. The URL cannot be the PR itself — notification URLs are app-relative
+ * by rule — so the short sha and `#PR` are text an admin can search for.
+ */
+export function deployCopy(input: {
+  /** The PR title or commit subject. */
+  title: string;
+  /** The deployed commit; only the first seven characters are shown. */
+  sha: string;
+  /** The pull request number, or `null` when there was none. */
+  pr: number | null;
+}): NotificationCopy {
+  const title = clip(input.title, 160) || "A new commit";
+  const pr = input.pr === null ? "" : ` (#${input.pr})`;
+  return bound({
+    title: "New version deployed",
+    body: `${title}${pr} · ${input.sha.slice(0, 7)}`,
+    url: DEPLOY_URL,
+  });
+}
