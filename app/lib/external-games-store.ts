@@ -19,7 +19,7 @@
  *   throw to a page.
  *
  * Caching: the read is memoised with `unstable_cache` under the
- * {@link EXTERNAL_CACHE_TAG} tag (1h soft TTL). MUTATIONS below are deliberately
+ * {@link EXTERNAL_CACHE_TAG} tag (a day's soft TTL, `CATALOGUE_TTL_SECONDS`). MUTATIONS below are deliberately
  * UNCACHED; after any of them a server action MUST call
  * `updateTag(EXTERNAL_CACHE_TAG)` and `revalidatePath(...)` for the affected
  * public routes so the next render rebuilds the cache — that wiring lives in the
@@ -33,6 +33,7 @@
 
 import "server-only";
 import { unstable_cache } from "next/cache";
+import { CATALOGUE_TTL_SECONDS } from "@/app/lib/cache-lifetimes";
 import { sql } from "@/app/lib/db";
 import { toGamePlatform, type Game, type GamePlatform } from "@/app/lib/games";
 
@@ -90,7 +91,7 @@ function toTags(value: unknown): string[] {
  * without `coverUrl` while the render that MISSED the cache (and got this
  * object directly) serialised `"coverUrl":"$undefined"` into the page's RSC
  * payload. Same catalogue, different bytes: every prerendered page that lists
- * games changed whenever the hourly entry refreshed, and Vercel bills a changed
+ * games changed whenever the cached entry refreshed, and Vercel bills a changed
  * page as an ISR write. Observed on production `/` in issue #131.
  */
 function mapRow(row: Row): Game {
@@ -127,8 +128,8 @@ function mapRow(row: Row): Game {
  * The cached primitive behind {@link readExternalGames}. It THROWS on any failure
  * on purpose: `unstable_cache` only stores a fulfilled result, so a transient DB
  * blip must reject here rather than resolve to `[]` — otherwise the empty list
- * would be cached under {@link EXTERNAL_CACHE_TAG} for the full 1h TTL and hide
- * every external game site-wide. Memoised with a 1h soft revalidate; explicit
+ * would be cached under {@link EXTERNAL_CACHE_TAG} for the full day-long TTL and
+ * hide every external game site-wide. Memoised with a soft revalidate; explicit
  * `updateTag` after a mutation makes edits appear immediately.
  */
 const readExternalGamesCached = unstable_cache(
@@ -142,7 +143,7 @@ const readExternalGamesCached = unstable_cache(
     return rows.map(mapRow);
   },
   ["external-games"],
-  { tags: [EXTERNAL_CACHE_TAG], revalidate: 3600 },
+  { tags: [EXTERNAL_CACHE_TAG], revalidate: CATALOGUE_TTL_SECONDS },
 );
 
 /**

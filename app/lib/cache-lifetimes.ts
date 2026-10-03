@@ -25,6 +25,27 @@
  */
 
 /**
+ * The catalogue reads behind the public pages: game overrides, external games,
+ * media, videos, credits and beta tester credits.
+ *
+ * A BACKSTOP, NOT THE FRESHNESS MECHANISM. Every write to those tables from the
+ * app expires its tag on the spot (`updateTag` in Server Actions, an immediate
+ * `revalidateTag` in Route Handlers) and revalidates the pages that show it,
+ * so an edit is visible on the next request whatever this says. The lifetime
+ * only bounds how long a write the app never saw can stay invisible: a row
+ * changed by hand in the Neon console, or by `scripts/publish-game.mjs`, which
+ * inserts a game's hero image. A day is the right trade for those rare cases
+ * against regenerating every catalogue page every hour.
+ *
+ * If you add a writer to one of these tables, it MUST expire the tag; this
+ * number will not cover for it.
+ *
+ * NOT used by `app-settings.ts` or `game-blob-index.ts`: no prerendered page
+ * reads those, they keep their own hour.
+ */
+export const CATALOGUE_TTL_SECONDS = 86_400;
+
+/**
  * The 30-day play counts shown to the PUBLIC: the "Most played" ordering, the
  * related-games ordering and the `interactionStatistic` in a game's JSON-LD.
  *

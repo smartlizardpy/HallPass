@@ -35,6 +35,7 @@
 
 import "server-only";
 import { unstable_cache } from "next/cache";
+import { CATALOGUE_TTL_SECONDS } from "@/app/lib/cache-lifetimes";
 import { sql } from "@/app/lib/db";
 
 /** Cache tag for {@link readAllCreditsCached}. */
@@ -120,7 +121,7 @@ const readAllCreditsCached = unstable_cache(
     return rows.map(mapCredit);
   },
   ["game-credits"],
-  { tags: [CREDITS_CACHE_TAG], revalidate: 3600 },
+  { tags: [CREDITS_CACHE_TAG], revalidate: CATALOGUE_TTL_SECONDS },
 );
 
 /** Every credit, keyed by slug. Fail-soft to an empty map. */

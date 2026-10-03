@@ -32,6 +32,7 @@
 
 import "server-only";
 import { unstable_cache } from "next/cache";
+import { CATALOGUE_TTL_SECONDS } from "@/app/lib/cache-lifetimes";
 import { sql } from "@/app/lib/db";
 import { isYouTubeId } from "@/app/lib/youtube";
 
@@ -90,7 +91,7 @@ const readAllVideosCached = unstable_cache(
     return rows.map(mapVideo).filter((v) => isYouTubeId(v.youtubeId));
   },
   ["game-videos"],
-  { tags: [VIDEOS_CACHE_TAG], revalidate: 3600 },
+  { tags: [VIDEOS_CACHE_TAG], revalidate: CATALOGUE_TTL_SECONDS },
 );
 
 /** Every video, keyed by slug. Fail-soft to an empty map. */

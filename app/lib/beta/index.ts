@@ -23,6 +23,7 @@
 
 import "server-only";
 import { unstable_cache } from "next/cache";
+import { CATALOGUE_TTL_SECONDS } from "@/app/lib/cache-lifetimes";
 import { redirect } from "next/navigation";
 import { isMissingColumnError, isUnconfiguredDbError, sql } from "@/app/lib/db";
 import { auth } from "@/app/lib/auth";
@@ -305,14 +306,14 @@ export { BETA_CREDITS_CACHE_TAG, expireTesterCredits } from "./credit-cache";
  * THROWS on failure by design. The try/catch lives at the CALL SITE, not inside
  * the cached primitive: `unstable_cache` only stores a FULFILLED result, so a
  * transient Neon blip must reject here — swallowing it into an empty map would
- * cache "nobody tested anything" for the full hour and quietly strip the credit
+ * cache "nobody tested anything" for the full TTL and quietly strip the credit
  * from every game page. Same argument as `game-serving-blobs.ts`.
  */
 const readTestersCached = unstable_cache(
   async (): Promise<{ slug: string; handle: string | null; username: string | null }[]> =>
     beta.completedTesters(),
   ["beta-game-credits"],
-  { tags: [BETA_CREDITS_CACHE_TAG], revalidate: 3600 },
+  { tags: [BETA_CREDITS_CACHE_TAG], revalidate: CATALOGUE_TTL_SECONDS },
 );
 
 /**

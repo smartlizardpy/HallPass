@@ -13,7 +13,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PUBLIC_PLAY_COUNTS_TTL_SECONDS } from "@/app/lib/cache-lifetimes";
+import {
+  CATALOGUE_TTL_SECONDS,
+  PUBLIC_PLAY_COUNTS_TTL_SECONDS,
+} from "@/app/lib/cache-lifetimes";
 
 vi.mock("server-only", () => ({}));
 
@@ -51,6 +54,12 @@ describe("PostHog fetch lifetimes", () => {
       tags: ["game-play-counts"],
     });
     expect(PUBLIC_PLAY_COUNTS_TTL_SECONDS).toBe(86_400);
+  });
+
+  it("never regenerates the catalogue pages more often than the catalogue does", () => {
+    // The pages that show counts also read the catalogue; the shorter of the two
+    // lifetimes is the one they regenerate on, so the counts must not be it.
+    expect(PUBLIC_PLAY_COUNTS_TTL_SECONDS).toBeGreaterThanOrEqual(CATALOGUE_TTL_SECONDS);
   });
 
   it("keeps the dashboard's queries near-live", async () => {
