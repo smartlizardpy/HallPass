@@ -558,6 +558,23 @@ export const games: Game[] = [
     isNew: true,
     platform: "both",
   },
+  {
+    slug: "cyber-pulse-3d-neon-dash",
+    author: "Sohan Kanti Dolai",
+    title: "Cyber Pulse 3D: Neon Dash",
+    tagline: "Dash the neon grid.",
+    description:
+      "Sprint a high-octane synthwave runway through a neon city. Steer, jump and duck past hazards as the pace climbs, and chase your best distance.",
+    category: "Arcade",
+    tags: ["Arcade", "Neon", "Cyber", "3D"],
+    gradient: ["#0a0f2e", "#00e5ff"],
+    accent: "#00e5ff",
+    art: "speed",
+    isNew: true,
+    platform: "both",
+    staged: true,
+    coverUrl: "/game-media/cyber-pulse-3d-neon-dash/hero-21d6190d1b.png",
+  },
 ];
 
 /**
