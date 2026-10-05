@@ -575,6 +575,23 @@ export const games: Game[] = [
     staged: true,
     coverUrl: "/game-media/cyber-pulse-3d-neon-dash/hero-21d6190d1b.png",
   },
+  {
+    slug: "living-flesh",
+    author: "Ateş Demir",
+    title: "Living Flesh",
+    tagline: "You are the horror.",
+    description:
+      "Play the escaped specimen of Relith Science's Site-19. Consume, grow and tear through sixteen sectors of the deep-crust complex, and uncover the lore as you go.",
+    category: "Horror",
+    tags: ["Horror", "Pixel", "Survival"],
+    gradient: ["#2a0510", "#e11d48"],
+    accent: "#e11d48",
+    art: "eye",
+    isNew: true,
+    platform: "both",
+    staged: true,
+    coverUrl: "/game-media/living-flesh/hero-19070c87dd.png",
+  },
 ];
 
 /**
