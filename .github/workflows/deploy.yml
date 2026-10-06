@@ -89,9 +89,24 @@ jobs:
       - name: Build
         run: vercel build --prod
 
+      # A FAILED UPLOAD MUST FAIL THIS STEP. The `| tail -n1` pipeline used to run
+      # without `pipefail`, so its exit status was `tail`'s, never `vercel`'s: on
+      # 2026-10-05 the deploy of #134 died with "Upload aborted", printed an EMPTY
+      # deployment URL, went green, and the next step told every admin the new
+      # version was live. Production kept serving the previous build, so the
+      # staged game that merge added (living-flesh) never reached the Manager,
+      # while an assignment for it had already been written to the shared
+      # database. `pipefail` surfaces vercel's own exit code, and the URL check
+      # catches a CLI that exits 0 without having deployed anything. Failing here
+      # also skips the notify step below, which only runs on success.
       - name: Deploy
         run: |
+          set -o pipefail
           url=$(vercel deploy --prebuilt --prod | tail -n1)
+          if [[ "$url" != https://* ]]; then
+            echo "::error::vercel deploy did not report a deployment URL (got '$url') — production was NOT updated."
+            exit 1
+          fi
           echo "Deployment URL: $url"
           {
             echo "## Deployed to production"

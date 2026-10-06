@@ -92,6 +92,22 @@ function privateOfflineDoc(pathname) {
 }
 /* @pure-end */
 
+// Whether a fetched response is a real same-origin success the page can be
+// handed — the first half of `isCacheable`, without the cache-control rule.
+// Kept as its own block (not called from `isCacheable`) because the tests
+// extract each block on its own. See `networkFirstWithStaticFallback` for why
+// the two must not be conflated.
+/* @pure-start isUsableResponse */
+function isUsableResponse(res) {
+  return Boolean(
+    res &&
+      res.ok &&
+      !res.redirected &&
+      (res.type === "basic" || res.type === "default"),
+  );
+}
+/* @pure-end */
+
 // A response is safe to cache.put only if it's a non-redirected,
 // same-origin (basic/default) success. Avoids redirect-poisoning the cache —
 // some browsers refuse to serve redirected responses for iframe src.
@@ -498,6 +514,7 @@ async function networkFirstNoHttpCache(req) {
   }
 }
 
+/* @strategy-start gameHtml */
 async function networkFirstWithStaticFallback(req) {
   const url = new URL(req.url);
   const rel = url.pathname.slice("/game-html/".length).replace(/\/+$/, "");
@@ -513,9 +530,17 @@ async function networkFirstWithStaticFallback(req) {
     res = null; // network unreachable — use the cache chain below.
   }
 
-  if (res && isCacheable(res)) {
-    const cache = await caches.open(RUNTIME_CACHE);
-    await cache.put(req, res.clone()).catch(() => {});
+  // USABLE and CACHEABLE are two questions, and this branch used to ask only
+  // the second. A staged game's files arrive `private, no-store` precisely so
+  // that no device keeps them, which makes them uncacheable — but they are
+  // still the right answer to THIS request. Gating the return on `isCacheable`
+  // threw that 200 away and fell through to the public twin below, which a
+  // staged game never has, so every tester saw a 404 in the game area.
+  if (res && isUsableResponse(res)) {
+    if (isCacheable(res)) {
+      const cache = await caches.open(RUNTIME_CACHE);
+      await cache.put(req, res.clone()).catch(() => {});
+    }
     return res;
   }
 
@@ -558,6 +583,7 @@ async function fetchStaticFallback(staticUrl) {
     );
   }
 }
+/* @strategy-end */
 
 // ---------- games-version polling: refresh cache when admin uploads. ----------
 async function refreshAllGameHtml() {
