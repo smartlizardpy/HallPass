@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { floatingBottom } from "../lib/bottom-chrome";
 import { CLIENT_BUILD_ID, isStaleBuild } from "../lib/build-id";
+import { syncPushSubscription } from "../lib/push/client";
 
 let reloaded = false;
 
@@ -69,6 +70,9 @@ export function PWA() {
       // whether the GAMES have changed, also ask whether the service worker has.
       // See the note on `checkForNewWorker`.
       void checkForNewWorker();
+      // Same moment, same throttle: keep this device's push subscription current.
+      // Rate-limited to once a day inside, and silent unless already enabled.
+      void syncPushSubscription();
       try {
         const res = await fetch("/games-version", { cache: "no-store" });
         if (!res.ok) return;
