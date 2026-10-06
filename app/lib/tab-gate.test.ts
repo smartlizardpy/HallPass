@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import { PRIMARY_NAV } from "../components/primary-nav";
 import {
   SKELETON_DELAY_MS,
+  HARD_NAVIGATION_MS,
   SLOW_NOTICE_MS,
   needsNetwork,
+  shouldHardNavigate,
   tabGateView,
 } from "./tab-gate";
 
@@ -128,5 +130,26 @@ describe("the two thresholds", () => {
     // shout "slow connection" at a page that is arriving normally.
     expect(SKELETON_DELAY_MS).toBeGreaterThan(0);
     expect(SLOW_NOTICE_MS).toBeGreaterThan(SKELETON_DELAY_MS * 4);
+  });
+});
+
+describe("shouldHardNavigate", () => {
+  it("waits out a merely slow page before giving up on the router", () => {
+    expect(HARD_NAVIGATION_MS).toBeGreaterThan(SLOW_NOTICE_MS);
+    expect(
+      shouldHardNavigate({ online: true, waitedMs: HARD_NAVIGATION_MS - 1 }),
+    ).toBe(false);
+  });
+
+  it("falls back to a full page load once an online tap has stalled", () => {
+    expect(
+      shouldHardNavigate({ online: true, waitedMs: HARD_NAVIGATION_MS }),
+    ).toBe(true);
+  });
+
+  it("never does so offline, where the offline card owns the answer", () => {
+    expect(
+      shouldHardNavigate({ online: false, waitedMs: HARD_NAVIGATION_MS * 2 }),
+    ).toBe(false);
   });
 });

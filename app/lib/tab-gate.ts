@@ -52,6 +52,31 @@ export const SKELETON_DELAY_MS = 150;
 export const SLOW_NOTICE_MS = 5000;
 
 /**
+ * How long a tab tap may stay pending, ONLINE, before the bar stops trusting
+ * the client router and loads the page itself.
+ *
+ * An installed app can stay alive for days on JavaScript a deploy or two behind
+ * the server. Against a newer server that router can accept the tap, show the
+ * skeleton, receive the response and never commit it — a stall no amount of
+ * waiting ends, and one that only a force-quit cleared. A real document load
+ * skips the router entirely, so it is the one answer that works whatever put the
+ * router in that state. Set past `SLOW_NOTICE_MS` so a merely slow page is told
+ * to hang on first, and long enough that a healthy navigation never reaches it.
+ */
+export const HARD_NAVIGATION_MS = 8000;
+
+/** Has this tap been stuck long enough to fall back to a full page load? */
+export function shouldHardNavigate({
+  online,
+  waitedMs,
+}: {
+  online: boolean;
+  waitedMs: number;
+}): boolean {
+  return online && waitedMs >= HARD_NAVIGATION_MS;
+}
+
+/**
  * What the bar is showing over the page.
  *
  *   `none`     — nothing; the tap is being handled normally.
