@@ -92,9 +92,11 @@ import { useDevicePlatform } from "../lib/use-device-platform";
 import { useOnline } from "../lib/use-online";
 import { clearBottomChrome, publishBottomChrome } from "../lib/bottom-chrome";
 import {
+  HARD_NAVIGATION_MS,
   SKELETON_DELAY_MS,
   SLOW_NOTICE_MS,
   needsNetwork,
+  shouldHardNavigate,
   tabGateView,
 } from "../lib/tab-gate";
 import { TabWaitOverlay } from "./offline/TabWaitOverlay";
@@ -208,6 +210,17 @@ export function MobileTabBar() {
   const [refusal, setRefusal] = useState<Journey | null>(null);
   const [stage, setStage] = useState<{ id: string; ms: number } | null>(null);
 
+  // A JOURNEY ENDS WHEN THE ROUTE LEAVES THE PAGE IT STARTED ON. Deriving
+  // "pending" from `from === pathname` alone is only half of that: it goes false
+  // on the commit, but the record stays, so coming back to `from` by any other
+  // road (the back button, the wordmark) made the old journey pending AGAIN — the
+  // skeleton over a page nobody was leaving, the wrong tab lit, and now the stall
+  // fallback below firing at a destination nobody asked for. Dropping the record
+  // during render is React's sanctioned way to reset state from a prop change,
+  // and keeps this free of the effect-that-sets-state the lint rule forbids.
+  if (navigation !== null && navigation.from !== pathname) setNavigation(null);
+  if (refusal !== null && refusal.from !== pathname) setRefusal(null);
+
   const pending = navigation !== null && navigation.from === pathname;
   const waiting = pending && navigation.gated;
   const refusedFor = refusal?.from === pathname ? refusal.destination : null;
@@ -234,6 +247,24 @@ export function MobileTabBar() {
       clearTimeout(toNotice);
     };
   }, [waiting, navigation]);
+
+  // THE WAY OUT OF A STALLED ROUTER. If the journey is still open after
+  // `HARD_NAVIGATION_MS` with a connection, the client router has taken the tap
+  // and is not going to finish it — the installed-app-a-deploy-behind stall that
+  // only a force-quit used to clear. A document load does not go through the
+  // router at all, so it is the answer that works whatever state the router is
+  // in. EVERY tab, not just the gated ones: Home stalled in the same reports.
+  // The cleanup is the whole guard — a commit moves `pathname`, `pending` goes
+  // false, and this timer is cancelled before it can fire.
+  useEffect(() => {
+    if (!pending || !navigation) return;
+    const timer = setTimeout(() => {
+      if (shouldHardNavigate({ online: navigator.onLine, waitedMs: HARD_NAVIGATION_MS })) {
+        window.location.assign(navigation.href);
+      }
+    }, HARD_NAVIGATION_MS);
+    return () => clearTimeout(timer);
+  }, [pending, navigation]);
 
   // The card goes away by itself the moment the thing it asked for happens —
   // "connect to wifi" still on screen after you have is just a second wrong
