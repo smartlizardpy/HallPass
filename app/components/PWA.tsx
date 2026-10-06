@@ -3,8 +3,28 @@
 import { useEffect, useRef, useState } from "react";
 
 import { floatingBottom } from "../lib/bottom-chrome";
+import { CLIENT_BUILD_ID, isStaleBuild } from "../lib/build-id";
 
 let reloaded = false;
+
+const STALE_RELOAD_KEY = "hp:stale-reload-at";
+const STALE_RELOAD_COOLDOWN_MS = 10 * 60_000;
+
+// Reload at most once per cooldown. If the reload itself comes back stale (a
+// cached document, a worker mid-update) a second one a moment later would not
+// help and could loop, so the next attempt waits. Storage can throw or be
+// absent; with no record the reload simply goes ahead once per page load.
+function reloadIfCooldownAllows() {
+  try {
+    const last = Number(localStorage.getItem(STALE_RELOAD_KEY) ?? 0);
+    if (Date.now() - last < STALE_RELOAD_COOLDOWN_MS) return;
+    localStorage.setItem(STALE_RELOAD_KEY, String(Date.now()));
+  } catch {
+    if (reloaded) return;
+  }
+  reloaded = true;
+  window.location.reload();
+}
 
 export function PWA() {
   const [offline, setOffline] = useState(false);
@@ -52,7 +72,17 @@ export function PWA() {
       try {
         const res = await fetch("/games-version", { cache: "no-store" });
         if (!res.ok) return;
-        const { version } = (await res.json()) as { version?: string };
+        const { version, build } = (await res.json()) as {
+          version?: string;
+          build?: string;
+        };
+        // An installed app resumed from the background can be several deploys
+        // behind, and its router then accepts taps it never finishes. A reload
+        // is the cure, and the foreground is the cheapest moment for one.
+        if (isStaleBuild(CLIENT_BUILD_ID, build)) {
+          reloadIfCooldownAllows();
+          return;
+        }
         if (!version) return;
         const reg = await navigator.serviceWorker.ready;
         reg.active?.postMessage({ type: "CHECK_GAMES_VERSION", version });
