@@ -69,7 +69,16 @@ async function sendTo(device: PushDevice, payload: string): Promise<void> {
       return;
     }
     // Transient: log once and leave the subscription in place.
-    console.error(`[push] send failed (${String(status ?? "no status")}):`, error);
+    let host = "unknown";
+    try {
+      host = new URL(device.endpoint).host;
+    } catch {
+      /* keep "unknown" */
+    }
+    console.error(
+      `[push] send to ${host} failed (${String(status ?? "no status")}):`,
+      error,
+    );
   }
 }
 
