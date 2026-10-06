@@ -210,6 +210,17 @@ export function MobileTabBar() {
   const [refusal, setRefusal] = useState<Journey | null>(null);
   const [stage, setStage] = useState<{ id: string; ms: number } | null>(null);
 
+  // A JOURNEY ENDS WHEN THE ROUTE LEAVES THE PAGE IT STARTED ON. Deriving
+  // "pending" from `from === pathname` alone is only half of that: it goes false
+  // on the commit, but the record stays, so coming back to `from` by any other
+  // road (the back button, the wordmark) made the old journey pending AGAIN — the
+  // skeleton over a page nobody was leaving, the wrong tab lit, and now the stall
+  // fallback below firing at a destination nobody asked for. Dropping the record
+  // during render is React's sanctioned way to reset state from a prop change,
+  // and keeps this free of the effect-that-sets-state the lint rule forbids.
+  if (navigation !== null && navigation.from !== pathname) setNavigation(null);
+  if (refusal !== null && refusal.from !== pathname) setRefusal(null);
+
   const pending = navigation !== null && navigation.from === pathname;
   const waiting = pending && navigation.gated;
   const refusedFor = refusal?.from === pathname ? refusal.destination : null;
