@@ -140,3 +140,75 @@ export async function enablePush(publicKey: string): Promise<boolean> {
     return false;
   }
 }
+
+const SYNC_KEY = "hp:push-synced-at";
+/** How often an app that is already enabled re-registers with the server. */
+export const PUSH_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/** Is a re-sync due? A missing or unreadable timestamp means yes. */
+export function pushSyncDue(lastSyncedAt: number | null, now: number): boolean {
+  if (lastSyncedAt === null || !Number.isFinite(lastSyncedAt)) return true;
+  return now - lastSyncedAt >= PUSH_SYNC_INTERVAL_MS;
+}
+
+/**
+ * Re-register this device's push subscription with the server, if the player
+ * already switched notifications on.
+ *
+ * WHY THIS EXISTS. `enablePush` runs once, from a tap, and never again — so the
+ * server's copy of a phone's subscription is exactly as old as that tap. iOS
+ * quietly drops or rotates a Home Screen app's subscription (an update, a
+ * reinstall, a permission reset), and when it does, the row we hold keeps being
+ * sent to for ever while nothing arrives. The Mac, whose subscription never
+ * moved, kept working — which is how this looks from outside.
+ *
+ * It never PROMPTS: it only acts when permission is already `granted`, and
+ * `subscribe()` is allowed without a gesture in that state. It reuses a live
+ * subscription, mints one only if the browser has none, and POSTs either way —
+ * the server's upsert refreshes `last_seen_at`, so a healthy device costs one
+ * cheap write a day. Rate-limited by `pushSyncDue`; every failure is silent,
+ * and the next foreground tries again.
+ */
+export async function syncPushSubscription(): Promise<void> {
+  try {
+    if (!canUsePush() || Notification.permission !== "granted") return;
+
+    let last: number | null = null;
+    try {
+      const raw = localStorage.getItem(SYNC_KEY);
+      last = raw === null ? null : Number(raw);
+    } catch {
+      /* storage blocked: treat as due */
+    }
+    if (!pushSyncDue(last, Date.now())) return;
+
+    const publicKey = await fetchPushConfig();
+    if (!publicKey) return;
+
+    const registration = await navigator.serviceWorker.ready;
+    const subscription =
+      (await registration.pushManager.getSubscription()) ??
+      (await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: decodeKey(publicKey),
+      }));
+
+    const res = await fetch("/api/v1/me/push", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(subscription.toJSON()),
+    });
+    // Only a server that accepted it counts. A signed-out player gets a 401 and
+    // is tried again once they are signed in, rather than waiting out the day.
+    if (res.ok) {
+      try {
+        localStorage.setItem(SYNC_KEY, String(Date.now()));
+      } catch {
+        /* nothing further */
+      }
+    }
+  } catch {
+    /* best-effort: the next foreground asks again */
+  }
+}
