@@ -140,3 +140,114 @@ export async function enablePush(publicKey: string): Promise<boolean> {
     return false;
   }
 }
+
+const SYNC_KEY = "hp:push-synced-at";
+/** How often an app that is already enabled re-registers with the server. */
+export const PUSH_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+const ROTATE_KEY = "hp:push-rotated-at";
+/** How often a device swaps its subscription for a brand-new one. */
+export const PUSH_ROTATE_INTERVAL_MS = 14 * 24 * 60 * 60 * 1000;
+
+/** Is a fresh subscription due? Same reading of a missing record as a sync. */
+export function pushRotateDue(lastRotatedAt: number | null, now: number): boolean {
+  if (lastRotatedAt === null || !Number.isFinite(lastRotatedAt)) return true;
+  return now - lastRotatedAt >= PUSH_ROTATE_INTERVAL_MS;
+}
+
+function readStamp(key: string): number | null {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw === null ? null : Number(raw);
+  } catch {
+    return null;
+  }
+}
+
+function writeStamp(key: string): void {
+  try {
+    localStorage.setItem(key, String(Date.now()));
+  } catch {
+    /* nothing further */
+  }
+}
+
+/** Is a re-sync due? A missing or unreadable timestamp means yes. */
+export function pushSyncDue(lastSyncedAt: number | null, now: number): boolean {
+  if (lastSyncedAt === null || !Number.isFinite(lastSyncedAt)) return true;
+  return now - lastSyncedAt >= PUSH_SYNC_INTERVAL_MS;
+}
+
+/**
+ * Re-register this device's push subscription with the server, if the player
+ * already switched notifications on.
+ *
+ * WHY THIS EXISTS. `enablePush` runs once, from a tap, and never again — so the
+ * server's copy of a phone's subscription is exactly as old as that tap. iOS
+ * quietly drops or rotates a Home Screen app's subscription (an update, a
+ * reinstall, a permission reset), and when it does, the row we hold keeps being
+ * sent to for ever while nothing arrives. The Mac, whose subscription never
+ * moved, kept working — which is how this looks from outside.
+ *
+ * It never PROMPTS: it only acts when permission is already `granted`, and
+ * `subscribe()` is allowed without a gesture in that state. It re-posts the
+ * live subscription (the server's upsert refreshes `last_seen_at`), mints one if
+ * the browser has none, and every `PUSH_ROTATE_INTERVAL_MS` swaps in a brand-new
+ * one and deletes the old row. A device that has never rotated does so on its
+ * first run, which is also what heals one that has already rotted. Rate-limited by `pushSyncDue`; every failure is silent,
+ * and the next foreground tries again.
+ */
+export async function syncPushSubscription(): Promise<void> {
+  try {
+    if (!canUsePush() || Notification.permission !== "granted") return;
+
+    if (!pushSyncDue(readStamp(SYNC_KEY), Date.now())) return;
+
+    const publicKey = await fetchPushConfig();
+    if (!publicKey) return;
+
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+
+    // ROTATION. Re-posting a subscription proves the server still has it, not
+    // that the push service still honours it: a rotted one is accepted on both
+    // ends and delivers nothing, and only a brand-new subscription cures that —
+    // which is what re-enabling by hand did. So every couple of weeks the old
+    // one is retired and a new one minted. Unsubscribing first is safe: if the
+    // steps below fail, the next foreground finds no subscription and mints one.
+    let retired: string | null = null;
+    if (subscription && pushRotateDue(readStamp(ROTATE_KEY), Date.now())) {
+      retired = subscription.endpoint;
+      await subscription.unsubscribe();
+      subscription = null;
+    }
+
+    subscription ??= await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: decodeKey(publicKey),
+    });
+
+    const res = await fetch("/api/v1/me/push", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(subscription.toJSON()),
+    });
+    // Only a server that accepted it counts. A signed-out player gets a 401 and
+    // is tried again once they are signed in, rather than waiting out the day.
+    if (!res.ok) return;
+    writeStamp(SYNC_KEY);
+    if (retired !== null || readStamp(ROTATE_KEY) === null) writeStamp(ROTATE_KEY);
+    if (retired !== null && retired !== subscription.endpoint) {
+      // The old row would otherwise be sent to until the push service 410s it.
+      await fetch("/api/v1/me/push", {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: retired }),
+      }).catch(() => {});
+    }
+  } catch {
+    /* best-effort: the next foreground asks again */
+  }
+}

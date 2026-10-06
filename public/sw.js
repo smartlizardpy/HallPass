@@ -769,6 +769,37 @@ async function showPush(event) {
   });
 }
 
+// The browser replaced or dropped this device's subscription (iOS does this on
+// updates and reinstalls). Without a handler the server keeps sending to the old
+// endpoint and nothing arrives, so re-subscribe with the same key and tell it.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        const old = event.oldSubscription;
+        const key = old && old.options && old.options.applicationServerKey;
+        const sub =
+          event.newSubscription ||
+          (key
+            ? await self.registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: key,
+              })
+            : null);
+        if (!sub) return;
+        await fetch("/api/v1/me/push", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(sub.toJSON()),
+        });
+      } catch {
+        // The page-side sync on the next foreground is the backstop.
+      }
+    })(),
+  );
+});
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil(openFromNotification(event));
