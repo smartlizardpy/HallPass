@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["192.168.1.142"],
+  // Which deploy a page came from — compared with the server's own id by
+  // `app/lib/build-id.ts` so a stale installed app can reload itself.
+  env: { NEXT_PUBLIC_BUILD_ID: process.env.VERCEL_GIT_COMMIT_SHA ?? "dev" },
   experimental: {
     // Multi-file game bundles are uploaded through a Server Action; Next's
     // default 1 MB action body cap would reject any real .zip bundle.

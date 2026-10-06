@@ -1,7 +1,8 @@
 /**
  * HallPass — the games-version poll endpoint.
  *
- * Answers `{ version }`. `app/components/PWA.tsx` polls this every 30s and
+ * Answers `{ version, build }` — `build` is the running deploy's id, which the
+ * PWA compares with its own to spot a stale installed app. `app/components/PWA.tsx` polls this every 30s and
  * forwards the value to the service worker, which re-fetches every cached
  * `/game-html/` entry when it moves.
  *
@@ -20,13 +21,14 @@
  * means no refresh rather than a spurious full-corpus re-download.
  */
 
+import { serverBuildId } from "@/app/lib/build-id";
 import { readGamesVersion } from "@/app/lib/games-version";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   return Response.json(
-    { version: await readGamesVersion() },
+    { version: await readGamesVersion(), build: serverBuildId() },
     {
       headers: { "cache-control": "no-store, must-revalidate" },
     },
