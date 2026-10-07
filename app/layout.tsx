@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { Nunito } from "next/font/google";
 import { FeaturePromo } from "./components/FeaturePromo";
+import { SurveyBanner } from "./components/SurveyBanner";
 import { GrowthTracker } from "./components/GrowthTracker";
 import { MobileSplash } from "./components/MobileSplash";
 import { MobileTabBar } from "./components/MobileTabBar";
@@ -106,6 +107,8 @@ export default function RootLayout({
         <WelcomeToast />
         <PWA />
         <FeaturePromo />
+        {/* A strip for a live survey; below the promo and the game player. */}
+        <SurveyBanner />
         <MobileTabBar />
         <MobileSplash />
         <StealthController />

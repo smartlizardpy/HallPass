@@ -40,9 +40,13 @@ import { mcpActor } from "./config";
 
 /** Who the caller is, and therefore which tools they get (`server.ts`). */
 export type McpActor =
-  /** A holder of `MCP_SECRET`. Gets the bug tools and the analytics tools. */
+  /** A holder of `MCP_SECRET`. Gets the bug, tracker, survey and analytics tools. */
   | { kind: "secret"; actor: string }
-  /** A signed-in dashboard account. Gets the analytics tools only. */
+  /**
+   * A signed-in dashboard account. Gets the analytics tools (read-only) and the
+   * survey tools, whose writes it may use only at `SITE_WRITE_ROLE` or above
+   * (`mcp/surveys.ts`). No bug or tracker tools.
+   */
   | { kind: "user"; email: string; role: Role; playerId: string | null; clientName: string };
 
 /** Why a request was refused, for the HTTP layer to render. */

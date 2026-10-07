@@ -23,8 +23,11 @@
  * A dialog that enumerates permissions teaches nobody anything — every one of
  * them reads as "this app needs this to work". The half that carries
  * information is the half saying what it still cannot do, because that is the
- * part a reader cannot infer and the part that is actually true here: every
- * tool an OAuth caller can reach is read-only (`analytics-mcp-design.md` §3).
+ * part a reader cannot infer and the part that is actually true here: an OAuth
+ * caller can read analytics, and the ONE thing it can write is surveys, and only
+ * if the account is an admin (`mcp/surveys.ts`). That used to be "every tool is
+ * read-only" (`analytics-mcp-design.md` §3); if surveys ever stop being the sole
+ * exception, this card is the first place the change has to show.
  */
 
 import type { Metadata } from "next";
@@ -309,10 +312,16 @@ export default async function AuthorizePage({
           Run read-only queries against a view of the database with emails, real
           names and photos removed
         </Grant>
+        <Grant can>
+          Create, edit and publish player surveys, and read their results —
+          admin accounts only
+        </Grant>
       </ul>
 
       <ul className="mt-4 space-y-2.5 border-t border-border pt-4">
-        <Grant can={false}>It cannot post, edit or delete anything</Grant>
+        <Grant can={false}>
+          It cannot post, edit or delete anything except surveys
+        </Grant>
         <Grant can={false}>It cannot close bug reports or pay XP</Grant>
         <Grant can={false}>
           It cannot see any player&apos;s email address, real name or photo
