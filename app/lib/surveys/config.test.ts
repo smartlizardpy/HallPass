@@ -18,6 +18,7 @@ import {
   SURVEY_STATUS_HINT,
   SURVEY_STATUS_LABEL,
   assignOptionIds,
+  checkQuestion,
   hasOptions,
   parseOptionLabels,
   toOptions,
@@ -132,5 +133,37 @@ describe("toOptions", () => {
       { id: "o1", label: "A" },
     ]);
     expect(toOptions("nope")).toEqual([]);
+  });
+});
+
+describe("checkQuestion", () => {
+  it("trims the prompt and drops options a non-choice question cannot have", () => {
+    expect(checkQuestion("text", "  Anything else?  ", ["ignored", "also ignored"])).toEqual({
+      ok: true,
+      prompt: "Anything else?",
+      optionLabels: [],
+    });
+    expect(checkQuestion("scale", "Rate the art", undefined)).toMatchObject({ ok: true });
+  });
+
+  it("refuses an empty prompt", () => {
+    expect(checkQuestion("text", "   ", undefined)).toMatchObject({ ok: false });
+    expect(checkQuestion("text", undefined, undefined)).toMatchObject({ ok: false });
+  });
+
+  it("needs two different options on a choice question, from text or a list", () => {
+    expect(checkQuestion("single", "Genre?", "Racing")).toMatchObject({ ok: false });
+    expect(checkQuestion("multi", "Genre?", ["Racing", "racing"])).toMatchObject({ ok: false });
+    expect(checkQuestion("single", "Genre?", "Racing\nPuzzle")).toEqual({
+      ok: true,
+      prompt: "Genre?",
+      optionLabels: ["Racing", "Puzzle"],
+    });
+    expect(checkQuestion("multi", "Genre?", ["A", "B"])).toMatchObject({ ok: true });
+  });
+
+  it("caps the prompt at the column limit", () => {
+    const result = checkQuestion("text", "x".repeat(1000), undefined);
+    expect(result.ok && result.prompt.length).toBe(300);
   });
 });

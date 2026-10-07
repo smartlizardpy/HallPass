@@ -197,6 +197,36 @@ export function assignOptionIds(
   });
 }
 
+export type QuestionCheck =
+  | { ok: true; prompt: string; optionLabels: string[] }
+  | { ok: false; error: string };
+
+/**
+ * The rules for what a question may say, in ONE place for every door that can
+ * write one (the dashboard action and the MCP tools), so "a choice question
+ * needs two options" cannot be true for one and not the other.
+ *
+ * `options` is ignored for scale and text questions, which carry none. The
+ * database CHECKs are the backstop; this is where a bad field becomes a message
+ * instead of a failed insert.
+ */
+export function checkQuestion(
+  kind: QuestionKind,
+  prompt: unknown,
+  options: string | readonly string[] | undefined,
+): QuestionCheck {
+  const text = String(prompt ?? "").trim().slice(0, QUESTION_PROMPT_MAX);
+  if (!text) return { ok: false, error: "A question needs some text." };
+
+  if (!hasOptions(kind)) return { ok: true, prompt: text, optionLabels: [] };
+
+  const optionLabels = parseOptionLabels(options ?? []);
+  if (optionLabels.length < OPTIONS_MIN) {
+    return { ok: false, error: `Give at least ${OPTIONS_MIN} different options.` };
+  }
+  return { ok: true, prompt: text, optionLabels };
+}
+
 /** Narrow a jsonb value read back from the database to an option list. */
 export function toOptions(value: unknown): SurveyOption[] {
   if (!Array.isArray(value)) return [];

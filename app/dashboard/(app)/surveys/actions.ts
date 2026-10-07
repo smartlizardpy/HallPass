@@ -27,13 +27,11 @@ import { requireRole } from "@/app/lib/auth";
 import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { surveys } from "@/app/lib/surveys";
 import {
-  OPTIONS_MIN,
-  QUESTION_PROMPT_MAX,
   SURVEYS_DASHBOARD_PATH as LIST,
   SURVEY_INTRO_MAX,
   SURVEY_TITLE_MAX,
+  checkQuestion,
   hasOptions,
-  parseOptionLabels,
   toQuestionKind,
   toSlug,
   toSurveyStatus,
@@ -80,17 +78,9 @@ type QuestionFields =
 
 /** Validate the prompt/required/options fields add and edit share. */
 function parseQuestionFields(formData: FormData, kind: QuestionKind): QuestionFields {
-  const prompt = String(formData.get("prompt") ?? "").trim().slice(0, QUESTION_PROMPT_MAX);
-  if (!prompt) return { ok: false, error: "A question needs some text." };
-
-  const optionLabels = hasOptions(kind)
-    ? parseOptionLabels(String(formData.get("options") ?? ""))
-    : [];
-  if (hasOptions(kind) && optionLabels.length < OPTIONS_MIN) {
-    return { ok: false, error: `Give at least ${OPTIONS_MIN} different options, one per line.` };
-  }
-
-  return { ok: true, prompt, required: formData.get("required") === "on", optionLabels };
+  const checked = checkQuestion(kind, formData.get("prompt"), String(formData.get("options") ?? ""));
+  if (!checked.ok) return checked;
+  return { ...checked, required: formData.get("required") === "on" };
 }
 
 /** Create a draft survey and land on it. */
