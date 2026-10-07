@@ -4,7 +4,12 @@
  * the question without echoing what was typed.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// The blocked-word list is `server-only` so it never ships to a browser; the
+// same stub `reviews/wordlist.test.ts` uses lets it load under vitest.
+vi.mock("server-only", () => ({}));
+
 import { MAX_ANSWER_KEYS, validateAnswers, type AnswerableQuestion } from "./validate";
 
 const options = [
@@ -90,6 +95,12 @@ describe("validateAnswers", () => {
 
     const link = validateAnswers(questions, { "1": "o1", "3": 3, "4": "see https://example.com" });
     expect(link).toMatchObject({ ok: false, questionId: 4 });
+  });
+
+  it("refuses a blocked word, again without echoing it", () => {
+    const result = validateAnswers(questions, { "1": "o1", "3": 3, "4": "this game is fuck" });
+    expect(result).toMatchObject({ ok: false, questionId: 4 });
+    expect(JSON.stringify(result)).not.toContain("fuck");
   });
 
   it("refuses a key that is not a live question (a stale form)", () => {

@@ -1,7 +1,9 @@
 /**
  * HallPass — checking a player's answers against the survey they were shown.
  *
- * Pure, so the public route, the tests and any future import share one rule.
+ * No database, so the public route, the MCP tools and the tests share one rule.
+ * It is SERVER-ONLY by inheritance, though: the blocked-word list it consults
+ * (`reviews/wordlist.ts`) deliberately never ships to a browser.
  *
  * ── THE QUESTION SET IS THE SOURCE OF TRUTH ────────────────────────────────
  * A submission is `{ [questionId]: value }`, and every key and every value is
@@ -16,6 +18,8 @@
  * a phone number or a link gets typed. `validateReviewBody` already refuses
  * contact info, links, keyboard-mashing and blocked words, and a second copy of
  * those rules would drift from the first. It also supplies the 500-character cap.
+ * The blocked-word list is a separate step in the review route, so it is a
+ * separate step here too (see the `text` case).
  *
  * ── REFUSALS NEVER ECHO THE INPUT ───────────────────────────────────────────
  * The message names the QUESTION, not what was typed, so a rejected phone number
@@ -27,6 +31,7 @@ import {
   validateReviewBody,
   type ReviewRejection,
 } from "@/app/lib/reviews/validate";
+import { containsBlockedReviewTerm } from "@/app/lib/reviews/wordlist";
 import { SCALE_MAX, SCALE_MIN, type QuestionKind, type SurveyOption } from "./config";
 
 /** The slice of a question validation needs. */
@@ -150,6 +155,17 @@ export function validateAnswers(
         if (!checked.ok) {
           return refuse(
             `${TEXT_REJECTION_MESSAGES[checked.reason]} (${question.prompt})`,
+            question.id,
+          );
+        }
+        // The wordlist is NOT part of `validateReviewBody`; the review route runs
+        // it separately, last, on the normalised text, and so does this. Only
+        // BLOCKED terms are refused. A merely FLAGGED one is kept: reviews hold
+        // those for a moderator because other players would read them, but survey
+        // text is shown to admins alone, so there is no queue to hold it in.
+        if (containsBlockedReviewTerm(checked.body) === "blocked") {
+          return refuse(
+            `${TEXT_REJECTION_MESSAGES["blocked-word"]} (${question.prompt})`,
             question.id,
           );
         }
