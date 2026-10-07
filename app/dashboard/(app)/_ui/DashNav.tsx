@@ -52,6 +52,10 @@ const ITEMS: NavItem[] = [
   // shortest reach that is going spare, which is right for the surface people
   // open to answer "what is being built".
   { href: "/dashboard/tracker", label: "Tracker", edit: true },
+  // Right under the tracker: both are "what should we build" boards, one fed by
+  // the admins' own ideas and this one by the players'. `edit` hides it from a
+  // beta admin, whose dashboard role cannot write surveys.
+  { href: "/dashboard/surveys", label: "Surveys", edit: true },
   { href: "/dashboard/boards", label: "Leaderboards", edit: true },
   // Below the three surfaces with something waiting on them and above the
   // catalogue admin: Growth is a read-only screen nobody is blocked on, but it
