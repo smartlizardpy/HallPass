@@ -19,6 +19,7 @@ import {
   SURVEY_STATUS_LABEL,
   assignOptionIds,
   checkQuestion,
+  closesAtFromDate,
   hasOptions,
   parseOptionLabels,
   toOptions,
@@ -165,5 +166,17 @@ describe("checkQuestion", () => {
   it("caps the prompt at the column limit", () => {
     const result = checkQuestion("text", "x".repeat(1000), undefined);
     expect(result.ok && result.prompt.length).toBe(300);
+  });
+});
+
+describe("closesAtFromDate", () => {
+  it("is the end of that day in UTC", () => {
+    expect(closesAtFromDate("2026-12-14")).toBe("2026-12-14T23:59:59.000Z");
+  });
+
+  it("is null for blank, malformed or impossible dates", () => {
+    for (const bad of ["", "  ", "14/12/2026", "2026-13-01", "2026-02-31", "soon", null, undefined]) {
+      expect(closesAtFromDate(bad)).toBeNull();
+    }
   });
 });

@@ -128,9 +128,22 @@ in `permissions.ts` (`canConfirmOwnWork`), and deciding how those interact with 
 machine-mediated close is a feature of its own — not a side effect of adding a
 credential. The bug tools stay exactly as they are, on exactly the key they had.
 
-The consequence is a clean sentence: **an OAuth session on this server can read and
-cannot write.** Every tool it can reach is marked `readOnlyHint`, and that is true
+The consequence was a clean sentence: **an OAuth session on this server can read and
+cannot write.** Every tool it could reach was marked `readOnlyHint`, and that was true
 rather than aspirational.
+
+> **Amended for surveys.** That sentence no longer holds without an exception, and the
+> exception is deliberate: the player-survey tools (`mcp/surveys.ts`) are listed for
+> both credentials, and an OAuth account may *write* them while its role meets
+> `SITE_WRITE_ROLE` (admin or above). The role is re-resolved on every request, so
+> a demotion bites on the next call. The reasoning is that the people who run
+> surveys are the people connecting an assistant to the site, and a survey you can
+> only read is half a feature. What did **not** change: the analytics tools are still
+> `readOnlyHint`, and bugs, the tracker and XP are still secret-only for the reason
+> above. Survey results never identify a player, and free-text answers are labelled
+> as untrusted in the result. The consent card at `/oauth/authorize` and the
+> connections page were reworded to match; if the exception ever widens, they are the
+> first things to change.
 
 ### Who may sign in
 

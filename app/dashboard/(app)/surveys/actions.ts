@@ -31,6 +31,7 @@ import {
   SURVEY_INTRO_MAX,
   SURVEY_TITLE_MAX,
   checkQuestion,
+  closesAtFromDate,
   hasOptions,
   toQuestionKind,
   toSlug,
@@ -57,19 +58,6 @@ function revalidateSurveys(id?: number): void {
   if (id) revalidatePath(surveyPath(id));
   // The public page and the banner (rendered in the root layout) read live data.
   revalidatePath("/survey/[slug]", "page");
-}
-
-/**
- * A `<input type="date">` value as the END of that day (UTC), or `null` when
- * blank or malformed. End-of-day because "closes on the 14th" means players can
- * still answer on the 14th. Never throws on a bad date: an unparseable field is
- * "no close date", not a failed save of everything else on the form.
- */
-function toClosesAt(value: unknown): string | null {
-  const raw = String(value ?? "").trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
-  const date = new Date(`${raw}T23:59:59.000Z`);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 type QuestionFields =
@@ -118,7 +106,7 @@ export async function updateSurveyAction(formData: FormData): Promise<void> {
   const id = toId(formData.get("id"));
   const title = String(formData.get("title") ?? "").trim().slice(0, SURVEY_TITLE_MAX);
   const intro = String(formData.get("intro") ?? "").trim().slice(0, SURVEY_INTRO_MAX);
-  const closesAt = toClosesAt(formData.get("closes_at"));
+  const closesAt = closesAtFromDate(formData.get("closes_at"));
 
   if (!id) redirect(target(LIST, "error", "Unknown survey."));
   if (!title) redirect(target(surveyPath(id), "error", "A survey needs a title."));

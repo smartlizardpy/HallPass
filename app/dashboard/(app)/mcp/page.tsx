@@ -206,7 +206,8 @@ function ConnectPanel({ url }: { url: string }) {
       </dl>
 
       <p className="text-xs text-muted">
-        A connection reads analytics only. It cannot write anything, and no view
+        A connection reads analytics and, for an admin account, can create, edit
+        and publish player surveys. It cannot change anything else, and no view
         it can reach carries a player&apos;s email, real name or photo.
       </p>
     </div>

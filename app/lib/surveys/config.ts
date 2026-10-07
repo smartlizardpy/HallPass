@@ -238,6 +238,27 @@ export function toOptions(value: unknown): SurveyOption[] {
 }
 
 // ---------------------------------------------------------------------------
+// Close dates
+// ---------------------------------------------------------------------------
+
+/**
+ * A `YYYY-MM-DD` date as the END of that day (UTC), or `null` when blank or
+ * malformed.
+ *
+ * End-of-day because "closes on the 14th" means players can still answer on the
+ * 14th. Never throws on a bad date: an unparseable field is "no close date", not
+ * a failed save of everything else on the form. A real calendar check, so
+ * `2026-02-31` is `null` rather than silently rolling into March.
+ */
+export function closesAtFromDate(value: unknown): string | null {
+  const raw = String(value ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const date = new Date(`${raw}T23:59:59.000Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10) === raw ? date.toISOString() : null;
+}
+
+// ---------------------------------------------------------------------------
 // Paths
 // ---------------------------------------------------------------------------
 
