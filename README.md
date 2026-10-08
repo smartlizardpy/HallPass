@@ -2,7 +2,29 @@
 
 ## What this is
 
-HALLPASS is a Next.js 16 site hosting 28 self-hosted unblocked browser games — the hand-authored catalogue in `app/lib/games.ts`, which the dashboard can extend at runtime with **external games** (a row in `external_games` whose play surface is a third-party URL) and patch with **overrides** (`game_overrides`, descriptive fields only). A self-hosted game is either a single self-contained `index.html` or a **multi-file bundle** (its own JS, images, audio in subfolders). Each game runs inside an iframe pointed at `/game-html/<slug>/` — the trailing slash is load-bearing: it makes the game's relative asset URLs resolve inside its own directory. That URL hits `app/game-html/[slug]/[[...path]]/route.ts`, which serves **every game file blob-first**: it streams `games/<slug>/<file>` from Vercel Blob when present and 307s to the baked-in copy under `public/games/<slug>/` otherwise. Once a visitor loads the site, a hand-rolled service worker precaches the shell, every hashed JS/CSS chunk, every game route, and every game file — so the entire arcade keeps working with no network.
+HALLPASS is a Next.js 16 site hosting a growing catalogue of self-hosted unblocked browser games — the hand-authored catalogue in `app/lib/games.ts`, which the dashboard can extend at runtime with **external games** (a row in `external_games` whose play surface is a third-party URL) and patch with **overrides** (`game_overrides`, descriptive fields only). A self-hosted game is either a single self-contained `index.html` or a **multi-file bundle** (its own JS, images, audio in subfolders). Each game runs inside an iframe pointed at `/game-html/<slug>/` — the trailing slash is load-bearing: it makes the game's relative asset URLs resolve inside its own directory. That URL hits `app/game-html/[slug]/[[...path]]/route.ts`, which serves **every game file blob-first**: it streams `games/<slug>/<file>` from Vercel Blob when present and 307s to the baked-in copy under `public/games/<slug>/` otherwise. Once a visitor loads the site, a hand-rolled service worker precaches the shell, every hashed JS/CSS chunk, every game route, and every game file — so the entire arcade keeps working with no network.
+
+## Quick start
+
+```bash
+npm install
+npm run dev        # http://localhost:3000, works with no environment set
+npm test           # Vitest
+npm run lint
+```
+
+Only the signed-in half of the site needs a `.env.local`; see
+[Local development](#local-development) and
+[Environment variables](#environment-variables).
+
+## Contents
+
+- **Getting going:** [Stack](#stack) · [Repo layout](#repo-layout) · [Local development](#local-development) · [Scripts](#scripts) · [Deploying](#deploying)
+- **Games:** [Adding a new game](#adding-a-new-game) · [Updating an existing game's source](#updating-an-existing-games-source) · [Offline / PWA architecture](#offline--pwa-architecture) · [P2P co-op SDK](#p2p-co-op-sdk)
+- **Players:** [Stealth mode & daily streak](#player-features-stealth-mode--daily-streak) · [Friend challenges](#friend-challenges) · [Friends on the leaderboard](#friends-on-the-leaderboard)
+- **Running the site:** [Dashboard roles](#dashboard-roles) · [Admin project tracker](#admin-project-tracker) · [Site alerts](#site-alerts) · [Deploy notifications](#deploy-notifications) · [Beta clip and screenshot retention](#beta-clip-and-screenshot-retention)
+- **Agents:** [MCP](#mcp) · [Analytics MCP](#analytics-mcp--for-a-person-on-their-own-account)
+- **Reference:** [Environment variables](#environment-variables) · [Known caveats](#known-caveats) · [License](#license)
 
 ## Stack
 
@@ -1035,6 +1057,8 @@ and auth vars below are not in it.
 ## Deploying
 
 Vercel auto-deploys from the `main` branch. After a merge: Vercel runs `next build`, the `postbuild` hook regenerates `public/sw-manifest.js` with the new `BUILD_ID`, and once the deploy is live every existing PWA client picks up the new SW on next visit, posts `SKIP_WAITING`, and reloads once.
+
+**The build reads the database, and the deploy refreshes the catalogue cache.** The home page, sitemap and game pages are prerendered at build time from the static catalogue plus `game_overrides` and `external_games`. `vercel pull` cannot fetch Sensitive variables such as `DATABASE_URL`, so the workflow passes the `DATABASE_URL` repository secret straight to the Build step (it warns if the secret is unset, in which case pages are baked from the static catalogue only). After the deploy, a non-blocking step runs `vercel cache invalidate --tag game-overrides,external-games` so the first real requests re-read the live data. Migrations are still not run by the deploy; run `npm run migrate` against production yourself.
 
 The `Deploy to Vercel` GitHub Action (`.github/workflows/deploy.yml`) pulls the production env, then runs `scripts/check-build-env.mjs` **before** building. This fails the deploy if `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` is missing — because that var is inlined at build time, a missing token would otherwise ship a build that silently captures zero analytics. Missing server-side PostHog vars only warn. Set `POSTHOG_ENV_CHECK=warn` to make the client-token check non-blocking too. Super admins can also confirm the same at runtime on `/dashboard/logs`.
 
