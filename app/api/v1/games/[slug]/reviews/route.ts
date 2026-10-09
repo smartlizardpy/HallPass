@@ -8,7 +8,7 @@
  * with no role. All three existing player-scoped writes — `/me/handle`,
  * `/me/favorites`, `/leaderboard/[slug]` — are route handlers, and reviews
  * belong with them. It also sidesteps the global 25 MB
- * `serverActions.bodySizeLimit` set for game-zip uploads.
+ * `serverActions.bodySizeLimit` set for the dashboard's file uploads.
  *
  * GET is IDENTITY-FREE so it can be CDN-cached: it carries no "is this mine" or
  * "did I vote" flag, and the client compares against its own `/api/v1/me` data.
