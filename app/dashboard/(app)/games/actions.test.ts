@@ -144,6 +144,14 @@ describe("uploadHtmlAction", () => {
     expect(banner()).toBe("redirect:/dashboard/games/g?error=File too large (max 10 MB).");
   });
 
+  it("measures the bytes, not the reported size, which a compressed read leaves at 0", async () => {
+    h.stored.set(HTML_PATH, new Uint8Array(10 * MB + 1).fill(0x41));
+    h.reportedSize = 0;
+    const log = await run(uploadHtmlAction, { slug: "g", uploadPath: HTML_PATH });
+    expect(log.some((l) => l.startsWith("put:"))).toBe(false);
+    expect(banner()).toBe("redirect:/dashboard/games/g?error=File too large (max 10 MB).");
+  });
+
   it.each([
     ["no path", ""],
     ["another game's upload", "game-uploads/other/lq3x9a-abcdefgh.html"],

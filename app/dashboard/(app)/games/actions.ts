@@ -335,6 +335,9 @@ async function takeUpload(
       return "The upload didn't arrive. Try again.";
     }
     // The token already capped the PUT; this is the same cap on what we read.
+    // `blob.size` is only an early refusal: it is the response's content-length,
+    // which the CDN leaves off a COMPRESSED text response — an HTML upload reads
+    // back with size 0 (seen live). The check on the bytes is the one that counts.
     const tooLarge = `File too large (max ${uploadLimitLabel(kind)}).`;
     if (found.blob.size > MAX_UPLOAD_BYTES[kind]) return tooLarge;
     const bytes = new Uint8Array(await new Response(found.stream).arrayBuffer());
