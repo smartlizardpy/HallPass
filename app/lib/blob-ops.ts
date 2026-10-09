@@ -101,7 +101,7 @@ export const ADVANCED_BLOB_OPS: readonly AdvancedBlobOp[] = [
     operation: "put",
     effect:
       "Uploading, pasting or bundling a game's HTML from the game control center.",
-    cost: "One operation per file. A multi-file bundle spends one per file — a 300-file zip is 300.",
+    cost: "One operation per file published, plus one for an uploaded file's trip from the browser — an HTML upload is 2, a paste 1, a 300-file zip 301.",
     disabledMessage:
       "Game source publishing is switched off to conserve Blob operations. A super admin can re-enable it in Dashboard → Blob ops.",
   },

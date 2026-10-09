@@ -11,11 +11,20 @@
  * A bundle upload deletes blobs missing from the new zip; a single-file upload
  * is a one-file bundle and deletes leftover assets; reset deletes everything.
  *
+ * THE UPLOADED FILE DOES NOT ARRIVE IN THE FORM. Vercel caps a function's
+ * request body at 4.5 MB, so the dashboard's form PUTs the `.html` or `.zip`
+ * straight to Blob first, at a temporary `game-uploads/<slug>/…` path (see
+ * `app/lib/game-upload.ts` and `api/v1/admin/game-upload-token`), and posts only
+ * that path here. {@link takeUpload} reads the bytes back and deletes the
+ * temporary file; everything after it is the same validation and publish as
+ * when the file was posted directly. Pasted HTML still arrives in the form.
+ *
  * KILL SWITCH: publishing is a `put` per file, the last recurring advanced-Blob
  * spender left in the app, so the three PUBLISHING actions check the
  * `game_source` switch immediately before writing and refuse with the
  * registry's banner when a super admin has turned it off (see
- * `app/lib/blob-ops.ts`). `clearHtmlAction` deliberately does NOT check it: a
+ * `app/lib/blob-ops.ts`). The upload-token route checks the same switch before
+ * the browser's own PUT. `clearHtmlAction` deliberately does NOT check it: a
  * reset is `del` + a database write, both free of the advanced allowance, and
  * being unable to un-publish a broken game because the allowance is spent would
  * be the worst possible time for that.
@@ -44,7 +53,7 @@
 
 "use server";
 
-import { del, put } from "@vercel/blob";
+import { del, get, put } from "@vercel/blob";
 import { unzipSync } from "fflate";
 import { redirect } from "next/navigation";
 import { updateTag } from "next/cache";
@@ -67,12 +76,22 @@ import {
   isSafeSegment,
 } from "@/app/lib/game-html-blob";
 import {
+  MAX_UPLOAD_BYTES,
+  parseUploadPath,
+  uploadLimitLabel,
+  type SourceUploadKind,
+} from "@/app/lib/game-upload";
+import {
   GAMES_VERSION_CACHE_TAG,
   writeGamesVersion,
 } from "@/app/lib/games-version";
 import { games } from "@/app/lib/games";
 
-/** Largest HTML payload we will accept, in characters (~2 MB of text). */
+/**
+ * Largest PASTED HTML we will accept, in characters (~2 MB of text). A paste
+ * still arrives in the form body, so it stays well under the platform's 4.5 MB
+ * request cap; an uploaded file is capped by `MAX_UPLOAD_BYTES` instead.
+ */
 const MAX_HTML_CHARS = 2_000_000;
 
 /** Bundle caps — generous for real games, tight enough to blunt zip bombs. */
@@ -284,31 +303,83 @@ function extractBundle(zipBytes: Uint8Array): Map<string, Uint8Array> | string {
 }
 
 /**
- * Upload a game's HTML from a chosen file.
+ * Take the file the form PUT to its temporary path: check the path is this
+ * game's upload of this kind, read the bytes back, and DELETE the temporary
+ * blob whatever happens next. Returns the bytes, or a banner string.
  *
- * Validation order mirrors the legacy page: confirm a known game is selected and
- * a real File is present, decode the text, then reject empty or oversized
- * payloads — each failure short-circuits via a `?error=` redirect. Only once the
- * input is sound do we attempt the blob write, whose outcome decides the final
- * banner.
+ * The path comes from the browser, so it is parsed rather than trusted — an
+ * upload for another game or from the other form is refused before anything is
+ * read or deleted. The bytes are fetched by PATHNAME through `get()`, which
+ * builds the URL from our own store id, so no URL the browser chose is ever
+ * fetched server-side.
+ *
+ * Deleting here, before any validation or publishing, means every outcome
+ * leaves no temporary file behind: a rejected bundle, a switched-off publish and
+ * a failed `put` all end with the bytes in memory and nothing in the store. A
+ * retry is a fresh upload from the form, which the form does on its own. `del`
+ * is free, so the cleanup costs nothing against the advanced allowance.
+ */
+async function takeUpload(
+  slug: string,
+  kind: SourceUploadKind,
+  uploadPath: string,
+): Promise<Uint8Array | string> {
+  const target = parseUploadPath(uploadPath);
+  if (!target || target.slug !== slug || target.kind !== kind) {
+    return kind === "html" ? "Pick an HTML file to upload." : "Pick a .zip bundle to upload.";
+  }
+
+  try {
+    const found = await get(uploadPath, { access: "public" });
+    if (!found || found.statusCode !== 200) {
+      return "The upload didn't arrive. Try again.";
+    }
+    // The token already capped the PUT; this is the same cap on what we read.
+    // `blob.size` is only an early refusal: it is the response's content-length,
+    // which the CDN leaves off a COMPRESSED text response — an HTML upload reads
+    // back with size 0 (seen live). The check on the bytes is the one that counts.
+    const tooLarge = `File too large (max ${uploadLimitLabel(kind)}).`;
+    if (found.blob.size > MAX_UPLOAD_BYTES[kind]) return tooLarge;
+    const bytes = new Uint8Array(await new Response(found.stream).arrayBuffer());
+    if (bytes.length > MAX_UPLOAD_BYTES[kind]) return tooLarge;
+    return bytes;
+  } catch {
+    return "Couldn't read the upload back. Try again.";
+  } finally {
+    try {
+      await del(uploadPath);
+    } catch {
+      // Best-effort: a leftover temporary file is outside `games/`, so it is
+      // never served, indexed or mirrored — it only takes up storage.
+    }
+  }
+}
+
+/**
+ * Upload a game's HTML from a chosen file — which the form has already PUT to a
+ * temporary path, named by the `uploadPath` field (see the module docblock).
+ *
+ * Validation order mirrors the legacy page: confirm a known game is selected,
+ * take the uploaded bytes (wrong path, missing or over 10 MB is refused there),
+ * decode the text, then reject an empty file — each failure short-circuits via
+ * a `?error=` redirect. Only once the input is sound do we attempt the blob
+ * write, whose outcome decides the final banner.
  */
 export async function uploadHtmlAction(formData: FormData): Promise<void> {
   const { email: actorEmail } = await requireRole("admin");
 
   const slug = String(formData.get("slug") ?? "").trim();
-  const file = formData.get("htmlFile");
+  const uploadPath = String(formData.get("uploadPath") ?? "");
 
   if (!slug) redirect(listErrorTarget("Choose a game first."));
   if (!isKnownSlug(slug)) redirect(listErrorTarget("Unknown game."));
-  if (!(file instanceof File)) {
-    redirect(gameTarget(slug, "error", "Pick an HTML file to upload."));
-  }
 
-  const html = await file.text();
+  const uploaded = await takeUpload(slug, "html", uploadPath);
+  if (typeof uploaded === "string") redirect(gameTarget(slug, "error", uploaded));
+
+  // UTF-8, BOM stripped — what `File.text()` did when the file came in the form.
+  const html = new TextDecoder().decode(uploaded);
   if (!html.trim()) redirect(gameTarget(slug, "error", "Uploaded file is empty."));
-  if (html.length > MAX_HTML_CHARS) {
-    redirect(gameTarget(slug, "error", "File too large (max 2MB)."));
-  }
   // Checked HERE, after the file has been read and validated and immediately
   // before the write: a switch thrown while a slow upload was still streaming
   // must still be honoured, and an admin whose file was rejected anyway should
@@ -387,10 +458,12 @@ export async function pasteHtmlAction(formData: FormData): Promise<void> {
 }
 
 /**
- * Upload a whole multi-file game as a `.zip` bundle.
+ * Upload a whole multi-file game as a `.zip` bundle — already PUT by the form to
+ * a temporary path, named by the `uploadPath` field (see the module docblock).
  *
- * Validation mirrors {@link uploadHtmlAction} (known slug, real File), then the
- * archive is unpacked and vetted by {@link extractBundle} — any string it
+ * Validation mirrors {@link uploadHtmlAction} (known slug, this game's upload,
+ * at most 50 MB), then the archive is unpacked and vetted by
+ * {@link extractBundle} — any string it
  * returns short-circuits into an `?error=` banner. Only a sound bundle touches
  * blob storage: every extracted file is written under the game's prefix, then
  * any previously published blob whose path is NOT in the new bundle is deleted,
@@ -406,15 +479,13 @@ export async function uploadBundleAction(formData: FormData): Promise<void> {
   const { email: actorEmail } = await requireRole("admin");
 
   const slug = String(formData.get("slug") ?? "").trim();
-  const file = formData.get("bundleFile");
+  const uploadPath = String(formData.get("uploadPath") ?? "");
 
   if (!slug) redirect(listErrorTarget("Choose a game first."));
   if (!isKnownSlug(slug)) redirect(listErrorTarget("Unknown game."));
-  if (!(file instanceof File)) {
-    redirect(gameTarget(slug, "error", "Pick a .zip bundle to upload."));
-  }
 
-  const zipBytes = new Uint8Array(await file.arrayBuffer());
+  const zipBytes = await takeUpload(slug, "zip", uploadPath);
+  if (typeof zipBytes === "string") redirect(gameTarget(slug, "error", zipBytes));
   if (zipBytes.length === 0) {
     redirect(gameTarget(slug, "error", "Uploaded file is empty."));
   }
