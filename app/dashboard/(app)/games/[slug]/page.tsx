@@ -105,6 +105,16 @@ const PLATFORM_CHOICES: readonly { value: string; label: string }[] = [
 ];
 
 /**
+ * The largest published `index.html` the Source-code panel embeds in its copy
+ * box, in characters. The copy box ships the whole document to the browser on
+ * every load of this page, and since uploads go straight to Blob a single-file
+ * game can be 10 MB. 2 MB is the old upload cap, so every source that could be
+ * published before still shows; above it the panel says how to get the file
+ * instead.
+ */
+const MAX_COPY_CHARS = 2_000_000;
+
+/**
  * The "Plays on" editor, shared by BOTH branches of this page.
  *
  * One component rather than two copies because native and external games differ
@@ -1201,7 +1211,14 @@ export default async function GameControlPage({
               back with the forms below. It doubles as the sync point: both admins
               read the same live blob, so whoever opens this page has the latest. */}
           <div className="space-y-3">
-            {currentHtml ? (
+            {currentHtml && currentHtml.length > MAX_COPY_CHARS ? (
+              <p className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-xs text-muted">
+                The current index.html is{" "}
+                {(Buffer.byteLength(currentHtml) / (1024 * 1024)).toFixed(1)} MB
+                — too large to show here. Open the game below and save its source from
+                the browser to edit it, then publish it back with the forms further down.
+              </p>
+            ) : currentHtml ? (
               <CopyBox
                 label={
                   customFileCount > 0
