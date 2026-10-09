@@ -57,12 +57,8 @@ import { ReadOnlyNotice } from "../../_ui/ReadOnlyNotice";
 import { Section } from "../../_ui/Section";
 import { TagEditor } from "../../_ui/TagEditor";
 import { createBoardAction, linkBoardAction, unlinkBoardAction } from "../../boards/actions";
-import {
-  clearHtmlAction,
-  pasteHtmlAction,
-  uploadBundleAction,
-  uploadHtmlAction,
-} from "../actions";
+import { clearHtmlAction, pasteHtmlAction } from "../actions";
+import { SourceUploadForm } from "./_ui/SourceUploadForm";
 import {
   clearGameOverrideAction,
   setGamePlatformAction,
@@ -1245,25 +1241,10 @@ export default async function GameControlPage({
             previously published for this game — a single HTML file counts as a
             one-file bundle.
           </p>
-          <form action={uploadHtmlAction} className="space-y-3">
-            <input type="hidden" name="slug" value={slug} />
-            <label className="block text-sm font-semibold text-foreground">
-              Upload an <code className="font-mono">.html</code> file
-              <input
-                name="htmlFile"
-                type="file"
-                required
-                accept=".html,text/html"
-                className="mt-2 block w-full text-sm"
-              />
-            </label>
-            <button
-              type="submit"
-              className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
-            >
-              Upload HTML
-            </button>
-          </form>
+          {/* The two FILE forms upload straight to Blob before calling their
+              action — Vercel's 4.5 MB request cap — so they are client
+              components. The paste form still posts its text directly. */}
+          <SourceUploadForm slug={slug} kind="html" />
 
           <form action={pasteHtmlAction} className="space-y-3 border-t border-border pt-6">
             <input type="hidden" name="slug" value={slug} />
@@ -1286,26 +1267,9 @@ export default async function GameControlPage({
             </button>
           </form>
 
-          <form action={uploadBundleAction} className="space-y-3 border-t border-border pt-6">
-            <input type="hidden" name="slug" value={slug} />
-            <label className="block text-sm font-semibold text-foreground">
-              …or upload a multi-file bundle (<code className="font-mono">.zip</code> with{" "}
-              <code className="font-mono">index.html</code> at its root)
-              <input
-                name="bundleFile"
-                type="file"
-                required
-                accept=".zip,application/zip"
-                className="mt-2 block w-full text-sm"
-              />
-            </label>
-            <button
-              type="submit"
-              className="rounded-full bg-brand px-5 py-2 text-sm font-extrabold text-white hover:bg-brand-600"
-            >
-              Upload bundle (.zip)
-            </button>
-          </form>
+          <div className="border-t border-border pt-6">
+            <SourceUploadForm slug={slug} kind="zip" />
+          </div>
 
           <div className="flex flex-wrap items-center gap-4 border-t border-border pt-6">
             <form action={clearHtmlAction}>
