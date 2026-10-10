@@ -9,6 +9,17 @@ to the served URL path (`v1` → `/sdk/v1/hallpass.js`).
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-10
+
+### Fixed
+
+- The inline `invite` and `challenge` pickers fit their card. The frame opened
+  at a fixed height (520 px for invites, 440 px for challenges) and showed the
+  page's background under a shorter card. The picker now posts its card's height
+  (`hallpass:frame-size`, accepted only from that frame and HallPass's origin)
+  and the frame shrinks to it, never past the old height, so a long friend list
+  still scrolls. Popups are unchanged.
+
 ## [1.4.0] - 2026-10-10
 
 ### Added

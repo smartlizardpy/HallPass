@@ -12,6 +12,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CHALLENGE_SIGNAL_KEY,
+  FRAME_SIZE_TYPE,
   isSameOrigin,
   openInlinePicker,
   pickerUrl,
@@ -92,6 +93,70 @@ describe("openInlinePicker", () => {
     const picker = openInlinePicker(pickerUrl(API));
     picker?.close();
     expect(() => picker?.close()).not.toThrow();
+  });
+
+  it("asks the picker for its inline layout", () => {
+    openInlinePicker(pickerUrl(API));
+    const src = document.querySelector("iframe")?.getAttribute("src") ?? "";
+    expect(new URL(src, window.location.href).searchParams.get("inline")).toBe("1");
+  });
+
+  describe("fitting the card", () => {
+    function frame(): HTMLIFrameElement {
+      const el = document.querySelector("iframe");
+      if (!el) throw new Error("no frame");
+      return el;
+    }
+    // jsdom's CSSOM drops `min()` values, so watch what is set, not what sticks.
+    function heights(el = frame()) {
+      return vi.spyOn(el.style, "setProperty");
+    }
+    function postSize(
+      data: unknown,
+      { source = frame().contentWindow, origin = window.location.origin } = {},
+    ) {
+      window.dispatchEvent(
+        new MessageEvent("message", { data, origin, source: source as Window | null }),
+      );
+    }
+
+    it("shrinks to the height the picker reports, capped at the default", () => {
+      openInlinePicker(pickerUrl(API));
+      const set = heights();
+      postSize({ type: FRAME_SIZE_TYPE, height: 227.4 });
+      expect(set).toHaveBeenCalledWith("height", "min(228px,min(440px,80vh))");
+    });
+
+    it("ignores a size from another frame or another origin", () => {
+      openInlinePicker(pickerUrl(API));
+      const set = heights();
+      postSize({ type: FRAME_SIZE_TYPE, height: 200 }, { source: window });
+      postSize({ type: FRAME_SIZE_TYPE, height: 200 }, { origin: "https://evil.example" });
+      expect(set).not.toHaveBeenCalled();
+    });
+
+    it("ignores other messages and nonsense heights", () => {
+      openInlinePicker(pickerUrl(API));
+      const set = heights();
+      postSize({ type: "hallpass:challenge", height: 200 });
+      postSize({ type: FRAME_SIZE_TYPE, height: "200px; background:red" });
+      postSize({ type: FRAME_SIZE_TYPE, height: 0 });
+      postSize({ type: FRAME_SIZE_TYPE, height: 1e9 });
+      postSize(null);
+      expect(set).not.toHaveBeenCalled();
+    });
+
+    it("stops listening once closed", () => {
+      const added = vi.spyOn(window, "addEventListener");
+      const removed = vi.spyOn(window, "removeEventListener");
+      const picker = openInlinePicker(pickerUrl(API));
+      const listener = added.mock.calls.find(([type]) => type === "message")?.[1];
+      expect(listener).toBeTypeOf("function");
+      picker?.close();
+      expect(removed).toHaveBeenCalledWith("message", listener);
+      added.mockRestore();
+      removed.mockRestore();
+    });
   });
 });
 

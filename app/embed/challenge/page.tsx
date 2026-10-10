@@ -30,6 +30,7 @@ import { auth } from "@/app/lib/auth";
 import { social } from "@/app/lib/social";
 import { isMissingColumnError } from "@/app/lib/db";
 import type { PublicProfile } from "@/app/lib/social/store";
+import { FrameFit } from "../FrameFit";
 import { ChallengeEmbed } from "./ChallengeEmbed";
 
 export const metadata: Metadata = {
@@ -59,9 +60,9 @@ async function friendsOf(playerId: string): Promise<PublicProfile[]> {
 export default async function ChallengeEmbedPage({
   searchParams,
 }: {
-  searchParams: Promise<{ board?: string; game?: string }>;
+  searchParams: Promise<{ board?: string; game?: string; inline?: string }>;
 }) {
-  const { board, game } = await searchParams;
+  const { board, game, inline } = await searchParams;
 
   // `auth()` rather than `currentPlayerId()`: that helper lives in the social
   // request-guard and is for route handlers. Same source of truth either way —
@@ -73,13 +74,13 @@ export default async function ChallengeEmbedPage({
   const friends = playerId ? await friendsOf(playerId) : [];
 
   return (
-    <main className="p-3">
+    <FrameFit inline={inline === "1"}>
       <ChallengeEmbed
         signedIn={Boolean(playerId)}
         friends={friends}
         board={board ?? null}
         game={game ?? null}
       />
-    </main>
+    </FrameFit>
   );
 }

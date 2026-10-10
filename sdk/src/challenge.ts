@@ -41,6 +41,17 @@ export const CHALLENGE_SIGNAL_KEY = "hallpass:challenge";
 /** Path of the picker page. */
 export const CHALLENGE_PATH = "/embed/challenge";
 
+/**
+ * The `type` of the message a picker in an inline frame posts with its card's
+ * height, so the frame can fit the card instead of showing the page under it.
+ * The frame's URL carries `inline=1`, which tells the picker to drop its outer
+ * padding and report its size.
+ *
+ * MIRRORED BY HAND in `app/embed/FrameFit.tsx`, for the same reason as
+ * {@link CHALLENGE_SIGNAL_KEY}.
+ */
+export const FRAME_SIZE_TYPE = "hallpass:frame-size";
+
 /** How long to keep listening before giving up and tearing down. */
 const WATCH_MAX_MS = 5 * 60 * 1000;
 
@@ -142,7 +153,7 @@ export function openInlinePicker(
     if (typeof document === "undefined" || !document.body) return null;
 
     const frame = document.createElement("iframe");
-    frame.src = url;
+    frame.src = `${url}${url.includes("?") ? "&" : "?"}inline=1`;
     frame.title = chrome.title;
     // `min()` keeps it inside a small game canvas without a media query, and the
     // fixed centring is deliberately NOT a full-screen flex container: nothing
@@ -165,9 +176,31 @@ export function openInlinePicker(
     );
     document.body.appendChild(frame);
 
+    // The frame opens at `frameHeight`, then fits the card once the picker says
+    // how tall it is — never taller than `frameHeight`, so a long friend list
+    // scrolls inside the frame. Only this frame's own messages, from the
+    // picker's origin, count; a height is not a secret, but any frame on the
+    // page could otherwise stretch this one.
+    let pickerOrigin = "";
+    try {
+      pickerOrigin = new URL(frame.src, window.location.href).origin;
+    } catch {
+      pickerOrigin = "";
+    }
+    const onSize = (event: MessageEvent): void => {
+      if (event.source !== frame.contentWindow || event.origin !== pickerOrigin) return;
+      const data = event.data as { type?: unknown; height?: unknown } | null;
+      if (!data || typeof data !== "object" || data.type !== FRAME_SIZE_TYPE) return;
+      const height = Number(data.height);
+      if (!Number.isFinite(height) || height < 40 || height > 4000) return;
+      frame.style.setProperty("height", `min(${Math.ceil(height)}px,${chrome.frameHeight})`);
+    };
+    window.addEventListener("message", onSize);
+
     return {
       window: null,
       close(): void {
+        window.removeEventListener("message", onSize);
         try {
           frame.remove();
         } catch {
