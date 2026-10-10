@@ -607,7 +607,7 @@ export const games: Game[] = [
     isNew: true,
     platform: "desktop",
     staged: true,
-    coverUrl: "/game-media/last-bell/hero-b4184cb75f.png",
+    coverUrl: "/game-media/last-bell/hero-22dbdbcc08.png",
   },
 ];
 
