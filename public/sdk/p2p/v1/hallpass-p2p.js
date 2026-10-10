@@ -1848,7 +1848,7 @@ var HttpSignaling = class {
   setLobby(s) {
     const changed = s.joinable !== this.lobby.joinable || s.locked !== this.lobby.locked || s.full !== this.lobby.full;
     this.lobby = s;
-    if (changed) this.wake(0);
+    if (changed) this.urgent(5e3);
   }
   close(bye) {
     if (this.closed) return;

@@ -15,6 +15,9 @@
  * BROWSER=chromium|webkit|firefox (default chromium; WebKit gets mic access
  * first so it exposes host candidates; the voice check is skipped on Firefox), ONLY=2,5 to run
  * some checks, HEADED=1 to watch.
+ * P2P_BASE_URL=http://localhost:3000 runs against a running HallPass (`npm run dev`) with
+ * the `hallpass` transport — real signaling routes and database — instead of a
+ * built-in static server; the simulated-loss check is skipped there.
  * Exit code 1 if any check fails.
  *
  * Not covered here (cannot be simulated on one machine): NAT traversal between
@@ -96,6 +99,10 @@ async function until(fn, ms = 10000, what = "condition") {
 let ctx;
 let base;
 let gameSeq = 0;
+const REMOTE = process.env.P2P_BASE_URL;
+const TRANSPORT = REMOTE ? "hallpass" : "auto";
+/** The local transport isolates scenarios by game id; HallPass only knows real slugs and the demo id. */
+const gameFor = () => (REMOTE ? "hallpass-p2p-demo" : `e2e-${++gameSeq}-${Date.now()}`);
 const pages = [];
 const EVENTS = ["player-join", "player-leave", "player-update", "room-update", "start", "host-left", "kicked", "closed", "visibility", "error"];
 
@@ -111,10 +118,10 @@ async function newPage(game, name, extra = {}) {
     await page.evaluate(() => navigator.mediaDevices.getUserMedia({ audio: true }).then((s) => (window.keepMic = s)));
   }
   await page.evaluate(
-    async ({ game, name, extra }) => {
-      window.client = await window.HallPassP2P.connect({ gameId: game, gameVersion: "1", name, transport: "auto", ...extra });
+    async ({ game, name, extra, transport }) => {
+      window.client = await window.HallPassP2P.connect({ gameId: game, gameVersion: "1", name, transport, ...extra });
     },
-    { game, name, extra },
+    { game, name, extra, transport: TRANSPORT },
   );
   pages.push(page);
   return page;
@@ -147,7 +154,7 @@ async function join(page, code) {
 }
 
 async function group(n, extra = {}, roomOpts = {}) {
-  const game = `e2e-${++gameSeq}-${Date.now()}`;
+  const game = gameFor();
   const host = await newPage(game, "Host", extra);
   const code = await create(host, { maxPlayers: 4, ...roomOpts });
   const guests = [];
@@ -175,8 +182,8 @@ const players = (p) => p.evaluate(() => window.room.players.map((x) => ({ id: x.
 async function main() {
   const pw = await loadPlaywright();
   const kind = process.env.BROWSER || "chromium";
-  const server = await serve();
-  base = `http://127.0.0.1:${server.address().port}`;
+  const server = REMOTE ? null : await serve();
+  base = REMOTE ? REMOTE.replace(/\/+$/, "") : `http://127.0.0.1:${server.address().port}`;
   const isChromium = kind === "chromium";
   const browser = await pw[kind].launch({
     headless: !process.env.HEADED,
@@ -184,7 +191,7 @@ async function main() {
     args: isChromium ? ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required"] : [],
   });
   ctx = await browser.newContext(kind === "firefox" ? {} : { permissions: ["microphone"] });
-  console.log(`HallPass P2P e2e — ${kind} ${browser.version()} — ${base}`);
+  console.log(`HallPass P2P e2e — ${kind} ${browser.version()} — ${base} — ${TRANSPORT} transport`);
 
   await check("1. a host and three joiners form a room and all see the same players over real WebRTC", async () => {
     const { all } = await group(3);
@@ -219,7 +226,7 @@ async function main() {
     await closeAll();
   });
 
-  await check("3. unreliable messages under 30% simulated loss arrive partially and never throw", async () => {
+  if (!REMOTE) await check("3. unreliable messages under 30% simulated loss arrive partially and never throw", async () => {
     const { host, guests } = await group(1, { simulate: { lossPct: 30, latencyMs: 10, jitterMs: 20 } });
     await guests[0].evaluate(() => {
       window.u = [];
@@ -388,7 +395,7 @@ async function main() {
   });
 
   await browser.close();
-  server.close();
+  server?.close();
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exit(failed.length ? 1 : 0);

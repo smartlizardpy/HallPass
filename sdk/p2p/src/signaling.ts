@@ -256,7 +256,11 @@ class HttpSignaling implements Signaling {
   setLobby(s: { joinable: boolean; locked: boolean; full: boolean }): void {
     const changed = s.joinable !== this.lobby.joinable || s.locked !== this.lobby.locked || s.full !== this.lobby.full;
     this.lobby = s;
-    if (changed) this.wake(0);
+    // Poll fast for a few seconds: the new state reaches the server on the next
+    // poll even if one is in flight now (a locked room otherwise only polls
+    // every 25 s), and a join that slipped in before the server knew gets its
+    // refusal at once instead of waiting for a heartbeat.
+    if (changed) this.urgent(5000);
   }
 
   close(bye: boolean): void {
