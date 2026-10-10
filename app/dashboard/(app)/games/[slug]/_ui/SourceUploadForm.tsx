@@ -3,6 +3,7 @@
 import { upload } from "@vercel/blob/client";
 import { startTransition, useState, type FormEvent } from "react";
 import {
+  DIRECT_UPLOAD_MAX_BYTES,
   MAX_UPLOAD_BYTES,
   UPLOAD_CONTENT_TYPE,
   newUploadPath,
@@ -12,19 +13,23 @@ import {
 import { uploadBundleAction, uploadHtmlAction } from "../../actions";
 
 /**
- * One of the Source-code panel's two FILE forms — an `.html` or a `.zip` — in
- * the two steps a game's source upload now takes.
+ * One of the Source-code panel's two FILE forms — an `.html` or a `.zip`.
+ *
+ * A file up to 4 MB is posted to the action in the form data, as it always was.
+ * A bigger one takes two steps, because Vercel caps a function's request body at
+ * 4.5 MB (which is why zips over that size used to fail):
  *
  * 1. The file goes STRAIGHT TO BLOB from the browser, at a temporary path, with
- *    a token from `api/v1/admin/game-upload-token`. It cannot be posted to the
- *    action like every other dashboard form: Vercel caps a function's request
- *    body at 4.5 MB, which is why zips over that size used to fail. See
- *    `app/lib/game-upload.ts`.
+ *    a token from `api/v1/admin/game-upload-token`. See `app/lib/game-upload.ts`.
  * 2. The action is then called with only that path. It reads the file back,
- *    deletes the temporary copy, validates and publishes exactly as before, and
- *    `redirect()`s to this page with the usual `?ok=` / `?error=` banner — a
- *    redirect from an action called in a transition navigates the same way a
- *    form post does.
+ *    deletes the temporary copy, and validates and publishes exactly as it does
+ *    for a posted file.
+ *
+ * Small files skip step 1 because it is a billed Blob `put` that buys nothing
+ * when the form could carry the file anyway. Either way the action
+ * `redirect()`s to this page with the usual `?ok=` / `?error=` banner — a
+ * redirect from an action called in a transition navigates the same way a form
+ * post does.
  *
  * Client-only because step 1 is a browser PUT, so this form needs JavaScript
  * where the panel's other forms do not. The size is checked here first purely
@@ -67,6 +72,24 @@ export function SourceUploadForm({
     }
 
     setError(null);
+    const formData = new FormData();
+    formData.set("slug", slug);
+    const action = kind === "html" ? uploadHtmlAction : uploadBundleAction;
+    // The action always ends in a redirect to this page's banner, which is what
+    // clears the "Publishing…" state; nothing after it runs.
+    const publish = () => {
+      setStage("publishing");
+      startTransition(async () => {
+        await action(formData);
+      });
+    };
+
+    if (file.size <= DIRECT_UPLOAD_MAX_BYTES) {
+      formData.set("file", file);
+      publish();
+      return;
+    }
+
     setPercent(0);
     setStage("uploading");
     let uploadPath: string;
@@ -88,16 +111,8 @@ export function SourceUploadForm({
       return;
     }
 
-    setStage("publishing");
-    const formData = new FormData();
-    formData.set("slug", slug);
     formData.set("uploadPath", uploadPath);
-    const action = kind === "html" ? uploadHtmlAction : uploadBundleAction;
-    // The action always ends in a redirect to this page's banner, which is what
-    // clears the "Publishing…" state; nothing after it runs.
-    startTransition(async () => {
-      await action(formData);
-    });
+    publish();
   };
 
   return (

@@ -11,13 +11,15 @@
  * A bundle upload deletes blobs missing from the new zip; a single-file upload
  * is a one-file bundle and deletes leftover assets; reset deletes everything.
  *
- * THE UPLOADED FILE DOES NOT ARRIVE IN THE FORM. Vercel caps a function's
- * request body at 4.5 MB, so the dashboard's form PUTs the `.html` or `.zip`
- * straight to Blob first, at a temporary `game-uploads/<slug>/…` path (see
- * `app/lib/game-upload.ts` and `api/v1/admin/game-upload-token`), and posts only
- * that path here. {@link takeUpload} reads the bytes back and deletes the
- * temporary file; everything after it is the same validation and publish as
- * when the file was posted directly. Pasted HTML still arrives in the form.
+ * A LARGE UPLOADED FILE DOES NOT ARRIVE IN THE FORM. Vercel caps a function's
+ * request body at 4.5 MB, so for a file over 4 MB the dashboard's form PUTs the
+ * `.html` or `.zip` straight to Blob first, at a temporary `game-uploads/<slug>/…`
+ * path (see `app/lib/game-upload.ts` and `api/v1/admin/game-upload-token`), and
+ * posts only that path here. {@link takeUpload} reads the bytes back and deletes
+ * the temporary file. A smaller file is still posted in the form, because the
+ * trip through Blob costs a billed `put`; {@link readUpload} takes either, and
+ * everything after it is the same validation and publish. Pasted HTML always
+ * arrives in the form.
  *
  * KILL SWITCH: publishing is a `put` per file, the last recurring advanced-Blob
  * spender left in the app, so the three PUBLISHING actions check the
@@ -356,8 +358,34 @@ async function takeUpload(
 }
 
 /**
- * Upload a game's HTML from a chosen file — which the form has already PUT to a
- * temporary path, named by the `uploadPath` field (see the module docblock).
+ * The uploaded file's bytes, from whichever route the form used: the file
+ * itself in the `file` field (anything up to 4 MB), or the `uploadPath` of the
+ * copy it PUT to Blob (anything bigger) — see the module docblock. Returns the
+ * bytes, or a banner string.
+ *
+ * A posted file is held to the same cap as one sent via Blob. In production the
+ * platform refuses a body over 4.5 MB before this runs, so the check only
+ * matters where nothing else enforces it, such as the dev server.
+ */
+async function readUpload(
+  formData: FormData,
+  slug: string,
+  kind: SourceUploadKind,
+): Promise<Uint8Array | string> {
+  const file = formData.get("file");
+  if (file instanceof File) {
+    if (file.size > MAX_UPLOAD_BYTES[kind]) {
+      return `File too large (max ${uploadLimitLabel(kind)}).`;
+    }
+    return new Uint8Array(await file.arrayBuffer());
+  }
+  return takeUpload(slug, kind, String(formData.get("uploadPath") ?? ""));
+}
+
+/**
+ * Upload a game's HTML from a chosen file — posted in the `file` field, or, when
+ * it is over 4 MB, already PUT to a temporary path named by the `uploadPath`
+ * field (see the module docblock).
  *
  * Validation order mirrors the legacy page: confirm a known game is selected,
  * take the uploaded bytes (wrong path, missing or over 10 MB is refused there),
@@ -369,12 +397,11 @@ export async function uploadHtmlAction(formData: FormData): Promise<void> {
   const { email: actorEmail } = await requireRole("admin");
 
   const slug = String(formData.get("slug") ?? "").trim();
-  const uploadPath = String(formData.get("uploadPath") ?? "");
 
   if (!slug) redirect(listErrorTarget("Choose a game first."));
   if (!isKnownSlug(slug)) redirect(listErrorTarget("Unknown game."));
 
-  const uploaded = await takeUpload(slug, "html", uploadPath);
+  const uploaded = await readUpload(formData, slug, "html");
   if (typeof uploaded === "string") redirect(gameTarget(slug, "error", uploaded));
 
   // UTF-8, BOM stripped — what `File.text()` did when the file came in the form.
@@ -458,8 +485,9 @@ export async function pasteHtmlAction(formData: FormData): Promise<void> {
 }
 
 /**
- * Upload a whole multi-file game as a `.zip` bundle — already PUT by the form to
- * a temporary path, named by the `uploadPath` field (see the module docblock).
+ * Upload a whole multi-file game as a `.zip` bundle — posted in the `file` field,
+ * or, when it is over 4 MB, already PUT by the form to a temporary path named by
+ * the `uploadPath` field (see the module docblock).
  *
  * Validation mirrors {@link uploadHtmlAction} (known slug, this game's upload,
  * at most 50 MB), then the archive is unpacked and vetted by
@@ -479,12 +507,11 @@ export async function uploadBundleAction(formData: FormData): Promise<void> {
   const { email: actorEmail } = await requireRole("admin");
 
   const slug = String(formData.get("slug") ?? "").trim();
-  const uploadPath = String(formData.get("uploadPath") ?? "");
 
   if (!slug) redirect(listErrorTarget("Choose a game first."));
   if (!isKnownSlug(slug)) redirect(listErrorTarget("Unknown game."));
 
-  const zipBytes = await takeUpload(slug, "zip", uploadPath);
+  const zipBytes = await readUpload(formData, slug, "zip");
   if (typeof zipBytes === "string") redirect(gameTarget(slug, "error", zipBytes));
   if (zipBytes.length === 0) {
     redirect(gameTarget(slug, "error", "Uploaded file is empty."));

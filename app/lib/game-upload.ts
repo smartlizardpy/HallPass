@@ -21,6 +21,12 @@
  * outside `games/`, so the serving index, the reindex sweep and `sync-games`
  * (every one of them scoped to `games/`) never see it.
  *
+ * ONLY A FILE TOO BIG FOR THE FORM TAKES THIS ROUTE. The trip through Blob is a
+ * billed `put` (an advanced operation) plus a read back, and it buys nothing for
+ * a file the action could have received directly — which is every game in the
+ * catalogue today. So a file up to {@link DIRECT_UPLOAD_MAX_BYTES} is still
+ * posted in the form, as it always was, and only a bigger one goes via Blob.
+ *
  * Deliberately imports NOTHING, like `game-html-blob.ts`: the token route, the
  * upload actions and the browser form all share these helpers, and the browser
  * must not drag a blob client or `server-only` along with them.
@@ -49,6 +55,15 @@ export const MAX_UPLOAD_BYTES: Record<SourceUploadKind, number> = {
   html: 10 * MB,
   zip: 50 * MB,
 };
+
+/**
+ * The largest file the form posts DIRECTLY to the action, skipping Blob.
+ *
+ * Below Vercel's 4.5 MB request cap with room to spare for the multipart
+ * envelope around the file and the form's other fields, so a file at exactly
+ * this size still reaches the action. Anything larger goes via Blob.
+ */
+export const DIRECT_UPLOAD_MAX_BYTES = 4 * MB;
 
 /** The cap as an admin reads it in a banner: "10 MB". */
 export function uploadLimitLabel(kind: SourceUploadKind): string {

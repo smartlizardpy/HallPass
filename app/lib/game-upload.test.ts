@@ -8,6 +8,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DIRECT_UPLOAD_MAX_BYTES,
   MAX_UPLOAD_BYTES,
   UPLOAD_PREFIX,
   newUploadPath,
@@ -58,5 +59,10 @@ describe("limits", () => {
     expect(MAX_UPLOAD_BYTES.zip).toBe(50 * 1024 * 1024);
     expect(uploadLimitLabel("html")).toBe("10 MB");
     expect(uploadLimitLabel("zip")).toBe("50 MB");
+  });
+
+  it("post a file directly only while it fits under Vercel's 4.5 MB request cap", () => {
+    expect(DIRECT_UPLOAD_MAX_BYTES).toBe(4 * 1024 * 1024);
+    expect(DIRECT_UPLOAD_MAX_BYTES).toBeLessThan(4.5 * 1000 * 1000);
   });
 });

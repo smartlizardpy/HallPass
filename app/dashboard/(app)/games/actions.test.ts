@@ -1,6 +1,7 @@
 /**
- * Tests for the two FILE upload actions now that the file arrives by temporary
- * path rather than in the form (see `app/lib/game-upload.ts`).
+ * Tests for the two FILE upload actions, whose file arrives either in the form
+ * (up to 4 MB) or by temporary path (anything bigger — see
+ * `app/lib/game-upload.ts`).
  *
  * Every collaborator appends to one shared `log`, so the assertions read as the
  * sequence the action performed. The load-bearing claims:
@@ -90,14 +91,17 @@ import { uploadBundleAction, uploadHtmlAction } from "./actions";
 const HTML_PATH = "game-uploads/g/lq3x9a-abcdefgh.html";
 const ZIP_PATH = "game-uploads/g/lq3x9a-abcdefgh.zip";
 
-function form(fields: Record<string, string>): FormData {
+function form(fields: Record<string, string | File>): FormData {
   const fd = new FormData();
   for (const [k, v] of Object.entries(fields)) fd.set(k, v);
   return fd;
 }
 
 /** Run an action to its redirect and return the log. */
-async function run(action: (fd: FormData) => Promise<void>, fields: Record<string, string>) {
+async function run(
+  action: (fd: FormData) => Promise<void>,
+  fields: Record<string, string | File>,
+) {
   await expect(action(form(fields))).rejects.toThrow("NEXT_REDIRECT");
   return h.log;
 }
@@ -199,6 +203,29 @@ describe("uploadHtmlAction", () => {
     await run(uploadHtmlAction, { slug: "g", uploadPath: HTML_PATH });
     expect(banner()).toBe("redirect:/dashboard/games/g?error=Blob write failed. Try again.");
   });
+
+  it("publishes a file posted in the form without the temporary-upload trip", async () => {
+    const file = new File(["<!doctype html><p>small</p>"], "game.html", { type: "text/html" });
+    const log = await run(uploadHtmlAction, { slug: "g", file });
+    expect(log.slice(0, 2)).toEqual([
+      "role:admin",
+      "put:games/g/index.html:<!doctype html><p>small</p>",
+    ]);
+    expect(log.some((l) => /^(get|del):/.test(l))).toBe(false);
+    expect(banner()).toBe("redirect:/dashboard/games/g?ok=Uploaded HTML");
+  });
+
+  it("holds a posted file to the same 10 MB cap", async () => {
+    const file = new File([new Uint8Array(10 * MB + 1)], "game.html");
+    const log = await run(uploadHtmlAction, { slug: "g", file });
+    expect(log.some((l) => l.startsWith("put:"))).toBe(false);
+    expect(banner()).toBe("redirect:/dashboard/games/g?error=File too large (max 10 MB).");
+  });
+
+  it("refuses an empty posted file", async () => {
+    await run(uploadHtmlAction, { slug: "g", file: new File([], "game.html") });
+    expect(banner()).toBe("redirect:/dashboard/games/g?error=Uploaded file is empty.");
+  });
 });
 
 describe("uploadBundleAction", () => {
@@ -246,6 +273,14 @@ describe("uploadBundleAction", () => {
     h.stored.set(ZIP_PATH, strToU8("not a zip"));
     await run(uploadBundleAction, { slug: "g", uploadPath: ZIP_PATH });
     expect(banner()).toBe("redirect:/dashboard/games/g?error=Not a valid .zip archive.");
+  });
+
+  it("publishes a zip posted in the form without the temporary-upload trip", async () => {
+    const zip = zipSync({ "index.html": strToU8("<p>game</p>") });
+    const log = await run(uploadBundleAction, { slug: "g", file: new File([zip], "game.zip") });
+    expect(log).toContain("put:games/g/index.html:<p>game</p>");
+    expect(log.some((l) => /^(get|del):/.test(l))).toBe(false);
+    expect(banner()).toBe("redirect:/dashboard/games/g?ok=Uploaded bundle (1 file)");
   });
 
   it("refuses the HTML form's upload without touching the store", async () => {
