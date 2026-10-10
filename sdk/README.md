@@ -263,6 +263,284 @@ against); `unknown-achievement` means that key is not provisioned for this game.
 The window global is installed as both `window.HallPass` and the alias
 `window.HP`.
 
+## P2P co-op (`hallpass-p2p.js`)
+
+A separate, dependency-free **ES module** that lets a HallPass game run 1–8
+player online play with no server of its own: players connect directly to each
+other over WebRTC, and HallPass only helps them find each other.
+
+| | |
+| --- | --- |
+| Version | **1.0.0** (`HallPassP2P.version`) |
+| Hosted at | `https://hallpass.gg/sdk/p2p/v1/hallpass-p2p.js`, `hallpass-p2p.min.js` (49 KB, 17 KB gzipped), `hallpass-p2p.d.ts` |
+| Source | `sdk/p2p/src/` (build: `npm run build:sdk:p2p`) |
+| Demo / manual test page | `/sdk/p2p/demo/index.html` (coloured dots + chat) |
+| Design | `docs/p2p-design.md` |
+
+Unlike the scoreboard SDK above, this one **does reject**: failures are
+`P2PError`s with a stable `code`, and their `message` is written for players, so
+`showError(err.message)` is a complete error UI.
+
+### Install
+
+Copy `hallpass-p2p.js` (or the `.min.js`) and `hallpass-p2p.d.ts` into your game
+and import it with a relative path. No build step.
+
+```js
+import { HallPassP2P } from './lib/hallpass-p2p.js';
+```
+
+### Quickstart
+
+```js
+const client = await HallPassP2P.connect({
+  gameId: 'last-bell',      // your HallPass game slug
+  gameVersion: '1.2.0',     // a joiner on another version gets 'version-mismatch'
+  name: 'Guest 4821',       // used when the player is not signed in to HallPass
+});
+
+// Host
+const room = await client.createRoom({ maxPlayers: 4, meta: { difficulty: 'normal' }, lockOnStart: true });
+showCode(room.code);        // e.g. 'K7QX' — friends type this in
+
+// Everyone else
+try {
+  const room = await client.joinRoom(codeInput.value);
+} catch (err) {
+  showError(err.message);   // err.code: room-not-found | room-full | room-locked | version-mismatch | connect-failed | timeout
+}
+
+room.on('player-join', (p) => addToLobby(p));
+room.on('player-leave', ({ id, reason }) => removeFromLobby(id, reason));
+room.setReady(true);
+
+// Host starts; everybody gets the same seed and begins on the same frame.
+room.on('start', ({ payload, startAt }) => {
+  const wait = startAt - room.now();          // room.now() is the shared (host) clock
+  setTimeout(() => beginRun(payload.seed), Math.max(0, wait));
+});
+if (room.isHost) room.start({ seed: 123456 });
+
+// Positions: unreliable, ~15–20 Hz. Events: reliable (the default).
+setInterval(() => room.send('pos', [x, y, z, yaw], { reliable: false }), 50);
+room.on('pos', (p, meta) => moveGhost(meta.from, p));
+
+// Ask the host to validate an action.
+room.handle('pickup', (data, meta) => ({ ok: tryPickup(meta.from, data.itemId) }));   // host
+const res = await room.request('host', 'pickup', { itemId: 'fuse' }, { timeoutMs: 3000 }); // anyone
+```
+
+### Running it locally
+
+`transport: 'auto'` (the default) uses the **local** transport on `localhost`,
+`127.0.0.1` and `[::1]`: tabs of one browser profile find each other over
+`BroadcastChannel` and connect with real WebRTC — no HallPass server, no
+internet. Open your game in two or more tabs.
+
+```js
+HallPassP2P.connect({ gameId: 'last-bell', transport: 'local', simulate: { latencyMs: 80, jitterMs: 30, lossPct: 5 } });
+```
+
+`simulate` (local only) adds one-way latency and jitter to both channels (reliable
+messages stay in order) and drops `lossPct` % of unreliable messages.
+
+The HallPass endpoints are same-origin only, so the `hallpass` transport works
+for games served by HallPass. To try it locally, run `npm run dev` with
+migration 040 applied to your database and open
+`/sdk/p2p/demo/index.html?transport=hallpass` in two tabs.
+
+**Safari:** Safari and WebKit hide a page's local ICE candidates until the page
+has camera or microphone permission, so two Safari tabs on one machine cannot
+connect over the local transport. Grant the microphone (start voice) first, or
+turn on Develop → WebRTC → Disable ICE Candidate Restrictions. Players on
+different machines are unaffected.
+
+### API
+
+```js
+const client = await HallPassP2P.connect(options);
+```
+
+| Option | Default | |
+| --- | --- | --- |
+| `gameId` | — | Required. On HallPass, your game's slug (a staged game works only for players who can see it). |
+| `gameVersion` | `''` | Joining a room whose host runs a different version fails with `version-mismatch`. |
+| `name` | `'Player'` | Fallback display name. A signed-in HallPass player gets their public HallPass name instead (handle, else `@username`) — never their real name. |
+| `transport` | `'auto'` | `'auto'` \| `'hallpass'` \| `'local'`. |
+| `relayOnly` | `false` | Route everything through a TURN relay so other players never see your IP. Fails with `connect-failed`/`relay-unavailable` when HallPass has no TURN server. Ignored by `local`. |
+| `simulate` | `null` | Local transport only: `{ latencyMs, jitterMs, lossPct }`. |
+| `debug` | `false` | Log to the console. |
+| `api` | page origin | *Extension.* HallPass origin for the `hallpass` transport. |
+| `iceServers` | HallPass's | *Extension.* Replace the ICE servers (`local` uses none). |
+
+`connect()` rejects only for `invalid-argument` (bad `gameId`) and `unsupported`
+(no WebRTC). If HallPass cannot be reached it still resolves, with your fallback
+name; creating or joining a room then fails with a clear `connect-failed`.
+
+**Client:** `client.self` `{ id, name, avatarUrl }` (`id` is random per
+`connect()`, never tied to an account; `avatarUrl` is currently always `null`) ·
+`client.transport` · `client.createRoom({ maxPlayers = 4 (1–8), meta = {}, lockOnStart = false })` ·
+`client.joinRoom(code, { timeoutMs = 20000 }?)` · `client.close()`. One room at a
+time per client (`already-in-room`).
+
+`joinRoom` resolves once you are connected to **every** player. Codes are
+case-insensitive (`k7qx` works).
+
+**Room state:** `code`, `selfId`, `hostId`, `isHost`, `meta`, `locked`,
+`started`, `maxPlayers` (*extension*), and `players` — each
+`{ id, name, avatarUrl, isHost, isSelf, ready, meta, hidden, connection: { state, rttMs, relay } }`.
+`connection` is *your* link to that player: `state` is
+`'connecting' | 'connected' | 'reconnecting'`, `rttMs` is `null` until measured.
+`hidden` (*extension*) is true while their tab is in the background. These
+getters return copies.
+
+**Lobby:** `setReady(bool)` · `setPlayerMeta(obj)` (shallow merge; set a key to
+`null` to remove it; ≤ 4 KB) · host only: `setRoomMeta(obj)` (≤ 8 KB), `lock()`,
+`unlock()`, `kick(peerId, reason?)`, `start(payload?)`. Host-only methods called
+by anyone else throw `not-host`. A kicked player cannot rejoin with the same
+client. `start` sends everyone `{ payload, startAt }` where `startAt` is ~500 ms
+ahead on the shared clock; with `lockOnStart` the room locks and players still
+mid-join are turned away. A player who joins a started, unlocked room receives
+the last `start` right after `joinRoom` resolves.
+
+**Messages:** `room.send(name, data, { to = 'others', reliable = true })`.
+`to`: `'others'` · `'all'` (you too, delivered asynchronously) · `'host'` · a peer
+id · an array of ids. `data`: anything JSON-serialisable, or an `ArrayBuffer`,
+typed array or `DataView` (sent as binary; it arrives as the same type).
+`room.on(name, (data, meta) => …)` returns an unsubscribe function;
+`meta = { from, sentAt, reliable }`, with `sentAt` on the shared clock.
+`room.off(name, fn)` also works (*extension*).
+
+- Reliable messages arrive exactly once and in order per sender. Unreliable ones
+  may drop or arrive out of order and are never retried.
+- Handlers always run asynchronously, in the order events arrived.
+- Message names may not be room event names (`start`, `closed`, …): `send` throws
+  `invalid-argument`.
+- `'others'` means the players *you* currently know. A newcomer becomes reachable
+  from your side when you get its `player-join` (one hop after its own
+  `joinRoom` resolves).
+
+**Request / response:** `room.handle(name, async (data, meta) => result)` (one
+handler per name; returns an unregister function) and
+`room.request(to, name, data, { timeoutMs = 5000 })` with `to` = `'host'` or a
+peer id. Rejections: `timeout` (also when nobody handles the name),
+`handler-error` (the handler threw; `message` is its message), `peer-left`,
+`closed`.
+
+**Shared clock:** `room.now()` — milliseconds on the host's clock (an epoch
+timestamp), estimated from ping/pong using the lowest-RTT samples. Agrees within
+a few ms on one machine; never runs backwards.
+
+**Events:**
+
+| Event | Payload | When |
+| --- | --- | --- |
+| `player-join` | player | Someone joined (and is connected to everyone). |
+| `player-leave` | `{ id, reason }` | `left` (left or closed the page) · `kicked` · `disconnected` (connection closed without a goodbye) · `timeout` (unreachable for 10 s). |
+| `player-update` | player | Ready, meta, name, or your connection state/relay to them changed. Not raised for RTT changes — poll `room.players` for those. |
+| `room-update` | room | Meta, lock, started or capacity changed. |
+| `start` | `{ payload, startAt }` | The host started. |
+| `host-left` | — | The host left, closed their tab, or was unreachable for 10 s. Always followed by `closed`. |
+| `kicked` | `{ reason }` | You were kicked. Followed by `closed`. |
+| `closed` | `{ reason }` | The room is over for you: `left` · `kicked` · `host-left` · `timeout` · `error`. |
+| `visibility` | `{ id, hidden }` | Another player's tab went to the background or came back. |
+| `error` | `P2PError` | One of your handlers threw, or a host lost its server registration. |
+
+**Voice** (off until you call it): `await room.voice.start({ echoCancellation, noiseSuppression, autoGainControl })`
+asks for the microphone (`mic-denied` / `mic-unavailable`).
+`room.voice.on('stream', ({ peerId, stream }) => …)` gives you each player's raw
+`MediaStream` (a late subscriber is told about streams that already arrived);
+`'stream-end'` when they stop. `setMuted(bool)`, `setPeerMuted(peerId, bool)`,
+`stop()`, and *extensions* `active`, `muted`. You hear players who started voice
+even if you have not (listen-only).
+
+```js
+const ctx = new AudioContext();               // resume() it from a click
+room.voice.on('stream', ({ peerId, stream }) => {
+  const panner = new PannerNode(ctx, { panningModel: 'HRTF', distanceModel: 'inverse' });
+  ctx.createMediaStreamSource(stream).connect(panner).connect(ctx.destination);
+  panners.set(peerId, panner);                 // move panner.positionX/Y/Z with that player
+});
+```
+
+**Diagnostics:** `await room.stats()` → `{ [peerId]: { rttMs, lossPct, bytesIn, bytesOut, relay } }`
+(`lossPct` = lost pings on the unreliable channel). `await HallPassP2P.selfTest()`
+→ `{ stun, turn, natType, notes: string[] }` for a "Test connection" button; the
+notes are sentences a player can read.
+
+**Leaving:** `await room.leave()`, `await client.close()`. Closing the tab sends a
+best-effort goodbye too.
+
+### Error codes
+
+`room-not-found`, `room-full`, `room-locked` (also: kicked from that room),
+`version-mismatch`, `timeout` (the host never answered), `connect-failed` with
+`err.reason`:
+
+| `reason` | Meaning |
+| --- | --- |
+| `no-turn-restrictive-network` | Direct connection failed and HallPass has no relay server. |
+| `turn-failed` | Could not connect even through the relay. |
+| `relay-unavailable` | Relay-only was asked for (by you, the host, or HallPass) but there is no relay. |
+| `peer-unreachable` | Reached the host but not every other player. |
+| `signaling-unreachable` / `signaling-unavailable` | HallPass could not be reached / P2P is switched off or not deployed. |
+| `rate-limited` | Too many attempts; wait a minute. |
+| `unknown-game` | HallPass does not know `gameId` (or you may not see that staged game). |
+| `room-closed` | The room closed while you were joining. |
+
+Also: `closed`, `not-host`, `peer-left`, `handler-error`, `message-too-large`,
+`send-buffer-full`, `invalid-argument`, `already-in-room`, `unsupported`,
+`mic-denied`, `mic-unavailable`.
+
+### Gotchas
+
+- **IP addresses.** Peer-to-peer means each player's IP address is visible to the
+  others in the room. `relayOnly: true` (or `P2P_FORCE_RELAY=1` on HallPass)
+  routes everything through TURN so nobody sees anybody's IP; a host's
+  `relayOnly` applies to everyone who joins its room. It needs a TURN server.
+- **Background tabs.** Browsers throttle timers in background tabs (to once a
+  second, and after a while once a minute in Chrome). A host that tabs away keeps
+  answering messages but its game loop slows — listen for `visibility` and pause
+  or hand off. A backgrounded host also notices join requests more slowly.
+- **Chrome and Web Audio.** Chrome only plays a remote WebRTC stream through Web
+  Audio if the stream is also attached to a media element. The SDK attaches each
+  remote voice stream to a muted `<audio>` element for you; just use
+  `createMediaStreamSource`.
+- **Message size and rate.** Reliable messages up to 256 KB (split into 16 KB
+  chunks under the hood); unreliable up to 16 KB, and keep them far smaller —
+  positions are a few numbers. Send positions at ~15–20 Hz over the unreliable
+  channel and smooth on the receiving side; send events and state changes
+  reliably. Unreliable messages are dropped rather than queued when a link is
+  backed up; reliable ones queue (16 MB cap, then `send-buffer-full`).
+- **One mesh.** Every player connects to every other player (max 8). On strict
+  networks without TURN some pairs may never connect: `joinRoom` then fails with
+  `connect-failed` rather than leaving you half-connected.
+- **Host leaves = room ends (v1).** No host migration yet.
+- **Voice in one browser.** Safari lets only one tab use the microphone at a
+  time; testing voice with several tabs of one Safari mutes all but the last.
+
+### How it works (short)
+
+HallPass runs serverless functions and Postgres, no WebSocket server, so
+signaling is HTTP polling: `POST /api/v1/p2p/rooms` (open), `…/rooms/<code>/join`
+(ask to join), `…/rooms/<code>/signal` (send and receive in one request), and
+`GET /api/v1/p2p/config` (your public name, STUN, short-lived TURN credentials).
+Only the joiner↔host handshake and reconnects use it; signals between two guests
+are relayed by the host over its data channels, and game data never touches
+HallPass. Presence is host-authoritative and lives on the data channels. See
+`docs/p2p-design.md`.
+
+### Tests
+
+- `npx vitest run sdk/p2p app/lib/p2p app/api/v1/p2p` — unit and integration tests
+  (room behaviour over the real local transport with an in-memory WebRTC; the
+  hallpass transport against the real route handlers).
+- `node sdk/p2p/e2e/run.mjs` — the brief's section 6 scenarios in headless
+  Chromium or WebKit with real WebRTC (opt-in; see the file header for setup).
+  `P2P_BASE_URL=http://localhost:3000` runs them against `npm run dev`.
+- `P2P_DB_TEST=1 … app/lib/p2p/store.db.test.ts` — the signaling SQL against a
+  real (non-production) database.
+
 ## License
 
 MIT (see the published package).

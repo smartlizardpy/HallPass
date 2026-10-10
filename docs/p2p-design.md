@@ -51,7 +51,9 @@ Every place this build differs from that contract is listed in `HANDOFF.md`.
 | `local` (auto on `localhost`/`127.0.0.1`/`[::1]`) | `BroadcastChannel('hallpass-p2p/<gameId>')` between tabs of one browser profile. The host tab answers join lookups. No server at all. | none by default (host candidates suffice on one machine) |
 | `hallpass` (auto elsewhere) | `POST /api/v1/p2p/rooms`, `…/rooms/[code]/join`, `…/rooms/[code]/signal` (send + poll in one request) | `GET /api/v1/p2p/config` (STUN + short-lived TURN) |
 
-Polling (HTTP): 250 ms while a handshake or reconnect is in flight (and 15 s after); the host polls every 1 s while the room is joinable, and sends a heartbeat every 25 s otherwise. A room whose host has not polled for 180 s is gone (`room-not-found`). Outgoing signals are batched (30 ms) into the next request.
+Polling (HTTP): 250 ms while a handshake or reconnect is in flight (and 15 s after); the host polls every 1 s while the room is joinable, and sends a heartbeat every 25 s otherwise. Any lobby change (lock, full, start) makes the host poll fast for 5 s, so the server learns the new state at once and a join that slipped in before it did is refused at once rather than after a heartbeat. A room whose host has not polled for 180 s is gone (`room-not-found`). Outgoing signals are batched (30 ms) into the next request.
+
+The `local` transport uses no ICE servers, so it works offline. Safari/WebKit expose no host candidates to a page without capture permission, so same-machine Safari testing needs the mic granted (or Develop → WebRTC → Disable ICE Candidate Restrictions).
 
 ## 3. Server
 
@@ -90,11 +92,15 @@ sdk/p2p/e2e/run.mjs    opt-in Playwright run of the spec §6 scenarios against r
 
 `npm run build:sdk` builds both SDKs (it already runs in `predev`/`prebuild`). Served at `/sdk/p2p/v1/` (patched in place within major 1, like `/sdk/v1/`); the exact semver is in the banner and `HallPassP2P.version`. Games vendor the file and import it relatively.
 
+Size: the minified build is 49 KB (17 KB gzipped), over the brief's ~40 KB aim. Property mangling would save ~4 KB but risks renaming DOM/API properties, so it is not done; the bulk is the room protocol itself.
+
 ## 6. Tests
 
 * vitest (node env): wire framing/chunking, clock estimator, codes, tokens, ICE minting, store SQL shape, routes (validation + status codes), and room behaviour end-to-end over the **real** `LocalSignaling` (Node's `BroadcastChannel`) with an in-memory fake `RTCPeerConnection`: 4-player join, room-full/locked/version-mismatch, reliable ordering under simulated latency+jitter, unreliable under loss, request/handle + timeout, kick, host leave, reconnect after a cut link, clock agreement, start.
 * Real browsers: `sdk/p2p/e2e/run.mjs` drives headless Chromium (fake media devices) through the same scenarios with real WebRTC and the `local` transport, plus voice. Opt-in because Playwright is not a dependency of this repo.
-* Not verifiable locally: NAT traversal across different networks, TURN (needs a provider account), iOS Safari.
+* Not verifiable locally: NAT traversal across different networks, TURN (needs a provider account), iOS Safari, Firefox (no browser available to the build agent).
+
+What was actually run (2026-10-10): all vitest suites; `run.mjs` on Chromium 153 (9/9) and WebKit 26.6 (9/9) over the local transport; `run.mjs` against `next dev` with the `hallpass` transport and migration 040 applied to the dev database branch (Chromium 8/8 — the loss check needs `simulate`, which only the local transport has; WebKit 7/8, the voice-mute reading kept ~0.07 RMS there, see HANDOFF); `store.db.test.ts` against the dev branch. Testing the SQL for real caught that `full` is a reserved word (the columns are `is_locked`/`is_full`), and the HallPass run caught that a lock could reach the server 25 s late.
 
 ## 7. Plan (files, order, commits)
 
