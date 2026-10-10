@@ -12,16 +12,30 @@
  *
  * Client-only because it owns copy-to-clipboard feedback and the modal's
  * open/Esc/backdrop state; the prompt itself is inert text passed in as a prop.
+ *
+ * `title` and `description` let the same panel carry another prompt: the board
+ * page also shows the co-op one (`buildCoopPrompt`) under this one. The modal
+ * is the leaderboard's alone, so a reused panel leaves `celebrate` off.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 export function IntegratePanel({
   prompt,
   celebrate = false,
+  title = "Integrate with an AI agent",
+  description = (
+    <>
+      Copy this prompt and paste it into your AI agent (Gemini Canvas, Claude
+      Artifacts, …) with your game open. It interviews you, then wires this
+      leaderboard into your game&apos;s HTML.
+    </>
+  ),
 }: {
   prompt: string;
   celebrate?: boolean;
+  title?: string;
+  description?: ReactNode;
 }) {
   const [showModal, setShowModal] = useState(celebrate);
 
@@ -43,12 +57,8 @@ export function IntegratePanel({
       <section className="mt-6 rounded-xl border border-border bg-surface p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-black">Integrate with an AI agent</h2>
-            <p className="mt-1 max-w-xl text-sm text-muted">
-              Copy this prompt and paste it into your AI agent (Gemini Canvas,
-              Claude Artifacts, …) with your game open. It interviews you, then
-              wires this leaderboard into your game&apos;s HTML.
-            </p>
+            <h2 className="text-lg font-black">{title}</h2>
+            <p className="mt-1 max-w-xl text-sm text-muted">{description}</p>
           </div>
           <CopyButton prompt={prompt} />
         </div>
