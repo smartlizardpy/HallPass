@@ -10,9 +10,12 @@
  *   - the temporary file is deleted on EVERY outcome once it has been read,
  *     and before anything is published;
  *   - the bytes it held are what gets published, through the same validation as
- *     before, and the kill switch is still honoured.
+ *     before, and the kill switch is still honoured;
+ *   - a file whose fingerprint matches what is published is not written again,
+ *     and a publish that changes nothing does not bump the games version.
  */
 
+import { createHash } from "node:crypto";
 import { zipSync, strToU8 } from "fflate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -27,6 +30,11 @@ const h = vi.hoisted(() => ({
   getThrows: false,
   blobOpOn: true,
   putFails: false,
+  /** What `readGameFileHashesLive` answers; `null` makes it throw. */
+  hashes: new Map<string, string>() as Map<string, string> | null,
+  /** What the index lists for the game, for the stale sweep. */
+  live: [] as string[],
+  records: [] as { pathname: string; sha256?: string }[],
 }));
 
 vi.mock("server-only", () => ({}));
@@ -59,9 +67,15 @@ vi.mock("@/app/lib/games-version", () => ({
   writeGamesVersion: async () => h.log.push("bump"),
 }));
 vi.mock("@/app/lib/game-blob-index", () => ({
-  recordGameBlobs: async (rows: { pathname: string }[]) =>
-    h.log.push(`record:${rows.map((r) => r.pathname).join(",")}`),
-  listGameFilesLive: async () => [],
+  recordGameBlobs: async (rows: { pathname: string; sha256?: string }[]) => {
+    h.records.push(...rows);
+    h.log.push(`record:${rows.map((r) => r.pathname).join(",")}`);
+  },
+  listGameFilesLive: async () => h.live.map((pathname) => ({ pathname, size: 1 })),
+  readGameFileHashesLive: async () => {
+    if (!h.hashes) throw new Error('column "sha256" does not exist');
+    return h.hashes;
+  },
   forgetGameBlobs: async () => {},
   forgetGameBlobsForSlug: async () => {},
 }));
@@ -86,7 +100,7 @@ vi.mock("@vercel/blob", () => ({
   },
 }));
 
-import { uploadBundleAction, uploadHtmlAction } from "./actions";
+import { pasteHtmlAction, uploadBundleAction, uploadHtmlAction } from "./actions";
 
 const HTML_PATH = "game-uploads/g/lq3x9a-abcdefgh.html";
 const ZIP_PATH = "game-uploads/g/lq3x9a-abcdefgh.zip";
@@ -107,6 +121,8 @@ async function run(
 }
 
 const banner = () => h.log.find((l) => l.startsWith("redirect:")) ?? "";
+const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+const puts = () => h.log.filter((l) => l.startsWith("put:"));
 
 beforeEach(() => {
   h.log = [];
@@ -115,6 +131,9 @@ beforeEach(() => {
   h.getThrows = false;
   h.blobOpOn = true;
   h.putFails = false;
+  h.hashes = new Map();
+  h.live = [];
+  h.records = [];
 });
 
 describe("uploadHtmlAction", () => {
@@ -287,5 +306,97 @@ describe("uploadBundleAction", () => {
     const log = await run(uploadBundleAction, { slug: "g", uploadPath: HTML_PATH });
     expect(log.some((l) => /^(get|del|put):/.test(l))).toBe(false);
     expect(banner()).toBe("redirect:/dashboard/games/g?error=Pick a .zip bundle to upload.");
+  });
+});
+
+describe("unchanged files", () => {
+  it("records the fingerprint of the HTML it writes", async () => {
+    h.stored.set(HTML_PATH, strToU8("<p>hi</p>"));
+    await run(uploadHtmlAction, { slug: "g", uploadPath: HTML_PATH });
+    expect(h.records).toEqual([
+      expect.objectContaining({ pathname: "games/g/index.html", sha256: sha("<p>hi</p>") }),
+    ]);
+  });
+
+  it("skips the write and the version bump when that HTML is already published", async () => {
+    h.hashes = new Map([["games/g/index.html", sha("<p>hi</p>")]]);
+    h.stored.set(HTML_PATH, strToU8("<p>hi</p>"));
+    const log = await run(uploadHtmlAction, { slug: "g", uploadPath: HTML_PATH });
+    expect(puts()).toEqual([]);
+    expect(log).not.toContain("bump");
+    expect(banner()).toBe(
+      "redirect:/dashboard/games/g?ok=No changes — that HTML is already published.",
+    );
+  });
+
+  it("still sweeps leftover assets, and bumps, when only those changed", async () => {
+    h.hashes = new Map([["games/g/index.html", sha("<p>hi</p>")]]);
+    h.live = ["games/g/index.html", "games/g/old.js"];
+    const log = await run(uploadHtmlAction, {
+      slug: "g",
+      file: new File(["<p>hi</p>"], "game.html"),
+    });
+    expect(puts()).toEqual([]);
+    expect(log).toContain("del:games/g/old.js");
+    expect(log).toContain("bump");
+    expect(banner()).toBe("redirect:/dashboard/games/g?ok=Uploaded HTML");
+  });
+
+  it("writes everything, as before, when the fingerprints can't be read", async () => {
+    h.hashes = null;
+    h.stored.set(HTML_PATH, strToU8("<p>hi</p>"));
+    await run(uploadHtmlAction, { slug: "g", uploadPath: HTML_PATH });
+    expect(puts()).toEqual(["put:games/g/index.html:<p>hi</p>"]);
+    expect(banner()).toBe("redirect:/dashboard/games/g?ok=Uploaded HTML");
+  });
+
+  it("applies to pasted HTML too", async () => {
+    h.hashes = new Map([["games/g/index.html", sha("<p>hi</p>")]]);
+    await run(pasteHtmlAction, { slug: "g", html: "<p>hi</p>" });
+    expect(puts()).toEqual([]);
+    expect(banner()).toBe(
+      "redirect:/dashboard/games/g?ok=No changes — that HTML is already published.",
+    );
+  });
+
+  it("writes only the bundle files that changed", async () => {
+    h.hashes = new Map([
+      ["games/g/index.html", sha("<p>game</p>")],
+      ["games/g/js/main.js", sha("old()")],
+    ]);
+    h.stored.set(
+      ZIP_PATH,
+      zipSync({ "index.html": strToU8("<p>game</p>"), "js/main.js": strToU8("go()") }),
+    );
+    const log = await run(uploadBundleAction, { slug: "g", uploadPath: ZIP_PATH });
+    expect(puts()).toEqual(["put:games/g/js/main.js:go()"]);
+    expect(h.records).toEqual([
+      expect.objectContaining({ pathname: "games/g/js/main.js", sha256: sha("go()") }),
+    ]);
+    expect(log).toContain("bump");
+    expect(banner()).toBe("redirect:/dashboard/games/g?ok=Uploaded bundle (2 files, 1 changed)");
+  });
+
+  it("writes nothing and bumps nothing for a bundle that is already published", async () => {
+    h.hashes = new Map([["games/g/index.html", sha("<p>game</p>")]]);
+    h.live = ["games/g/index.html"];
+    h.stored.set(ZIP_PATH, zipSync({ "index.html": strToU8("<p>game</p>") }));
+    const log = await run(uploadBundleAction, { slug: "g", uploadPath: ZIP_PATH });
+    expect(puts()).toEqual([]);
+    expect(log).not.toContain("bump");
+    expect(banner()).toBe(
+      "redirect:/dashboard/games/g?ok=No changes — every file in that bundle is already published.",
+    );
+  });
+
+  it("still removes files the new bundle dropped, even when the rest is unchanged", async () => {
+    h.hashes = new Map([["games/g/index.html", sha("<p>game</p>")]]);
+    h.live = ["games/g/index.html", "games/g/dropped.png"];
+    h.stored.set(ZIP_PATH, zipSync({ "index.html": strToU8("<p>game</p>") }));
+    const log = await run(uploadBundleAction, { slug: "g", uploadPath: ZIP_PATH });
+    expect(puts()).toEqual([]);
+    expect(log).toContain("del:games/g/dropped.png");
+    expect(log).toContain("bump");
+    expect(banner()).toBe("redirect:/dashboard/games/g?ok=Uploaded bundle (1 file, 0 changed)");
   });
 });
