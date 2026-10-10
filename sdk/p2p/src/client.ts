@@ -11,7 +11,7 @@ import { clampPlayers, RoomImpl } from "./room";
 import { fetchConfig, httpTransport, localTransport, type Transport } from "./signaling";
 import type { Client, ConnectOptions, CreateRoomOptions, JoinRoomOptions, Room, SelfInfo } from "./types";
 
-export const VERSION = "1.0.0";
+export { P2P_VERSION as VERSION } from "./version";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
