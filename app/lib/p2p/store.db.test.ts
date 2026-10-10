@@ -27,7 +27,8 @@ const isProd = !!process.env.PROD_DATABASE_URL && endpoint(url) === endpoint(pro
 const enabled = process.env.P2P_DB_TEST === "1" && !!url && !isProd;
 
 describe.skipIf(!enabled)("p2p store against Postgres", () => {
-  const sql = neon(url);
+  // The describe body runs even when skipped; never hand neon() an empty URL.
+  const sql = neon(enabled ? url : "postgres://skipped@localhost/skipped");
   const store = createP2PStore(sql);
   const tag = randomBytes(4).toString("hex");
   const key = `test-${tag}`;
