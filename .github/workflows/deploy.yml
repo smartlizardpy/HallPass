@@ -99,10 +99,13 @@ jobs:
       # database. `pipefail` surfaces vercel's own exit code, and the URL check
       # catches a CLI that exits 0 without having deployed anything. Failing here
       # also skips the notify step below, which only runs on success.
+      # `--archive=tgz` uploads the build as one archive instead of file by file:
+      # the free plan allows 5000 file uploads a day, and a busy day of deploys
+      # ran out (2026-10-10, "api-upload-free", production NOT updated).
       - name: Deploy
         run: |
           set -o pipefail
-          url=$(vercel deploy --prebuilt --prod | tail -n1)
+          url=$(vercel deploy --prebuilt --prod --archive=tgz | tail -n1)
           if [[ "$url" != https://* ]]; then
             echo "::error::vercel deploy did not report a deployment URL (got '$url') — production was NOT updated."
             exit 1
