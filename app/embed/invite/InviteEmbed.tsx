@@ -209,6 +209,11 @@ export function InviteEmbed({
       signal(nonce, "update", sentTotal.current, url);
     }
 
+    // On screen BEFORE the share sheet opens: the sheet's promise settles only
+    // when the player finishes with it (or never, in some embedded browsers),
+    // and the link must be readable and copyable meanwhile.
+    setLinkState({ kind: "done", url, how: "shown" });
+
     if (typeof navigator.share === "function") {
       try {
         // Names the game, never the player: this text lands in group chats.
