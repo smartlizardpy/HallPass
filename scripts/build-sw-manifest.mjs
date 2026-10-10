@@ -5,6 +5,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
+import { planGamePrecache } from "./lib/precache-budget.mjs";
 import { parseStaticGames } from "./lib/staged.mjs";
 
 const root = resolve(process.cwd());
@@ -206,9 +207,11 @@ for (const slug of slugs) {
   // Trailing slash — must byte-match the PlayerOverlay iframe URL, since
   // caches.match() is exact.
   pageRoutes.add(`/game-html/${slug}/`);
-  // Precache every file under public/games/{slug}/ — games may be multi-file
-  // (index.html + JS + assets).
+  // Precache the files under public/games/{slug}/ — games may be multi-file
+  // (index.html + JS + assets) — unless they are over the per-game budget, when
+  // only the cover is listed. See scripts/lib/precache-budget.mjs.
   const slugDir = resolve(gamesDir, slug);
+  const files = [];
   const stack = [slugDir];
   while (stack.length > 0) {
     const dir = stack.pop();
@@ -219,8 +222,18 @@ for (const slug of slugs) {
         continue;
       }
       const rel = full.slice(slugDir.length + 1).split(/[/\\]/).join("/");
-      pageRoutes.add(`/games/${slug}/${rel}`);
+      files.push({ rel, size: statSync(full).size });
     }
+  }
+  const plan = planGamePrecache(files);
+  if (plan.overBudget) {
+    const mb = (plan.playBytes / (1024 * 1024)).toFixed(1);
+    console.log(
+      `[sw-manifest] ${slug}: ${mb} MB of game files is over the precache budget — cover only; the rest is saved on first play`,
+    );
+  }
+  for (const rel of plan.precache) {
+    pageRoutes.add(`/games/${slug}/${rel}`);
   }
 }
 
