@@ -329,7 +329,7 @@ describe("shim moments", () => {
   // Assigning a real client starts the shim's replay window (calls are skipped
   // until a task later), so let that task pass, as it would before a game plays.
   const sdk = (win: Record<string, unknown>, queued: Array<() => void>) => {
-    const real = { version: "1", submitScore: () => 0, moment: async (..._args: unknown[]) => ({ ok: true }), on: () => real };
+    const real = { version: "1", submitScore: () => 0, moment: ((() => ({ ok: true })) as (...a: unknown[]) => unknown), on: () => real };
     win.HallPass = real;
     queued.splice(0).forEach((fn) => fn());
     return real;
@@ -408,10 +408,10 @@ describe("shim moments", () => {
 
   it("does not double-log a stub call replayed into the real client", () => {
     const { win, moments, queued } = setup();
-    const stub = { version: "0", submitScore: () => 0, moment: (..._args: unknown[]) => 0 };
+    const stub = { version: "0", submitScore: () => 0, moment: ((() => 0) as (...a: unknown[]) => unknown) };
     win.HallPass = win.HP = stub;
     stub.moment();
-    const real = { version: "1", submitScore: () => 0, moment: (..._args: unknown[]) => 0, on: () => real };
+    const real = { version: "1", submitScore: () => 0, moment: ((() => 0) as (...a: unknown[]) => unknown), on: () => real };
     win.HallPass = real;
     win.HP = real;
     real.moment();
