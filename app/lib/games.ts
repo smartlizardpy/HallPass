@@ -117,6 +117,24 @@ export type Game = {
    * every consumer treats anything other than an explicit `true` as public.
    */
   staged?: boolean;
+  /**
+   * Online play, for games built on the P2P co-op SDK (`sdk/p2p`, served at
+   * `/sdk/p2p/v1/`). The store page shows a "Players" row from it.
+   *
+   * OPTIONAL, and absent means "single-player as far as we know" — the same
+   * honest-unknown rule as {@link platform}: a game declares this only once its
+   * multiplayer actually ships, so the badge never promises a mode that is not
+   * there yet. It does not gate the SDK: any catalogue game may open rooms.
+   *
+   * Static-catalogue only for now; dashboard-uploaded and external games have
+   * no column for it.
+   */
+  multiplayer?: {
+    minPlayers: number;
+    maxPlayers: number;
+    /** The game offers voice chat (always opt-in for the player). */
+    voice?: boolean;
+  };
 };
 
 export const games: Game[] = [

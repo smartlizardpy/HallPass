@@ -349,6 +349,17 @@ export function GameStore({
                     : "Desktop — keyboard controls"}
               </MetaRow>
             )}
+            {/* Declared by games that ship online play (see `Game.multiplayer`);
+                absent means single-player, so the row is simply omitted. */}
+            {game.multiplayer && (
+              <MetaRow label="Players">
+                {game.multiplayer.minPlayers === game.multiplayer.maxPlayers
+                  ? game.multiplayer.maxPlayers
+                  : `${game.multiplayer.minPlayers}–${game.multiplayer.maxPlayers}`}
+                {" · online co-op"}
+                {game.multiplayer.voice ? " · voice chat" : ""}
+              </MetaRow>
+            )}
           </dl>
 
           <div className="flex items-center gap-2">
