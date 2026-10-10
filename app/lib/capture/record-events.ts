@@ -45,6 +45,7 @@ export type RecordingEventType =
   | "visibility"
   | "report"
   | "mark"
+  | "moment"
   | "pause";
 
 export type RecordingEvent = {

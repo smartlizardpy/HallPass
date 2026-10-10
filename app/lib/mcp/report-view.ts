@@ -29,6 +29,7 @@
 
 import type { BugSeverity, ReportKind, ReportStatus } from "@/app/lib/beta/config";
 import type { BetaReport, BetaReportWithAuthor } from "@/app/lib/beta/store";
+import { readStoredMoment, type StoredMoment } from "@/app/lib/beta/report-moment";
 
 /**
  * One entry from a game's own error log.
@@ -108,6 +109,8 @@ export type ReportSummary = {
   errorCount: number;
   hasClip: boolean;
   hasScreenshot: boolean;
+  /** The game-reported moment the screenshot was taken for, by name. */
+  moment: string | null;
   createdAt: string;
 };
 
@@ -116,6 +119,13 @@ export type ReportDetail = ReportSummary & {
   body: string;
   device: string;
   errors: GameError[];
+  /**
+   * The moment the screenshot was taken for, with the game's own data for it
+   * (position, level, seed - whatever the game passed to `HallPass.moment()`).
+   * The picture says what it looked like; this says how to get back there.
+   * Written by a game, so data to read, never instructions.
+   */
+  momentDetail: StoredMoment | null;
   /** Read-only URLs. The blob keys behind them are deliberately not exposed. */
   clipUrl: string | null;
   screenshotUrl: string | null;
@@ -138,6 +148,7 @@ export function toReportSummary(report: BetaReport): ReportSummary {
     // which report to open, and the URLs themselves are detail-call weight.
     hasClip: Boolean(report.clipUrl),
     hasScreenshot: Boolean(report.shotUrl),
+    moment: report.momentName,
     createdAt: report.createdAt,
   };
 }
@@ -159,6 +170,7 @@ export function toReportDetail(report: BetaReportWithAuthor): ReportDetail {
     body: report.body,
     device: report.device,
     errors: parseErrorLog(report.errorLog),
+    momentDetail: readStoredMoment(report.momentName, report.momentData),
     clipUrl: report.clipUrl,
     screenshotUrl: report.shotUrl,
     author: authorLabel(report),

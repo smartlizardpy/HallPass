@@ -76,6 +76,7 @@ import { formatClock, type RecordFailure } from "@/app/lib/capture/record-policy
 import { upload } from "@vercel/blob/client";
 import { SessionTutorial, tutorialSeen } from "./SessionTutorial";
 import { useGameRecorder } from "./useGameRecorder";
+import { useGameMoments } from "./useGameMoments";
 import {
   finishAssignmentAction,
   submitReportAction,
@@ -414,6 +415,26 @@ export function TestSessionClient({
   }, []);
 
   /**
+   * Moments the GAME marks with `HallPass.moment()`: a picture of each lands in
+   * the filmstrip below, tagged with its name. See `useGameMoments.ts`.
+   */
+  const moments = useGameMoments({
+    iframeRef,
+    grabberRef,
+    freezeActive: freezeFrame !== null,
+    pushShot,
+    addEvent: recAddEvent,
+  });
+  const { last: lastMoment, momentFor } = moments;
+  const [momentChip, setMomentChip] = useState<string | null>(null);
+  useEffect(() => {
+    if (!lastMoment) return;
+    setMomentChip(`📍 ${lastMoment.name}`);
+    const t = setTimeout(() => setMomentChip(null), 2000);
+    return () => clearTimeout(t);
+  }, [lastMoment]);
+
+  /**
    * Read a still straight out of the game's canvas — no permission, no stream.
    *
    * The fallback for every device without `getDisplayMedia`, which is every
@@ -592,6 +613,7 @@ export function TestSessionClient({
     // there but not inside a plain serialised object.
     let shot: FormData | undefined;
     const attached = shots.find((s) => s.id === attachedId);
+    const attachedMoment = attached ? momentFor(attached.id) : null;
     if (attached) {
       // The type is read off the blob rather than assumed to be WebP: an
       // attachment falls back to JPEG on a browser that cannot encode WebP, and
@@ -650,6 +672,9 @@ export function TestSessionClient({
         clipMs,
         errorLog: pendingErrors.length ? JSON.stringify(pendingErrors) : null,
         errorCount: pendingErrors.length,
+        // Only when the pinned picture was taken for a game-reported moment.
+        momentName: attachedMoment?.name ?? null,
+        momentData: attachedMoment?.data ?? null,
       },
       shot,
     );
@@ -751,6 +776,17 @@ export function TestSessionClient({
         >
           ?
         </button>
+
+        {/* A game marked a moment. In the top bar, not a banner above the game: a
+            banner would change the game's height and resize it mid-play. */}
+        {momentChip && (
+          <span
+            role="status"
+            className="max-w-[40vw] truncate rounded-full bg-white/10 px-3 py-1.5 text-xs font-extrabold text-white"
+          >
+            {momentChip}
+          </span>
+        )}
 
         <span className="min-w-0 flex-1 truncate text-sm font-black text-white">
           {game.title}
@@ -1289,6 +1325,8 @@ export function TestSessionClient({
           <p className="mb-1.5 text-[11px] font-black uppercase tracking-wide text-white/60">
             Screenshots — attach them to a report, or send the good ones to the
             game&rsquo;s page
+            {moments.count > 0 &&
+              ` · ${moments.count} moment${moments.count === 1 ? "" : "s"} marked by the game`}
           </p>
           <ul className="flex gap-2 overflow-x-auto pb-1">
             {shots.map((shot) => {
@@ -1301,6 +1339,11 @@ export function TestSessionClient({
                     alt=""
                     className="h-20 w-auto rounded-lg border border-white/20"
                   />
+                  {momentFor(shot.id) && (
+                    <span className="absolute left-1 top-1 max-w-[calc(100%-0.5rem)] truncate rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-black text-white backdrop-blur">
+                      📍 {momentFor(shot.id)?.name}
+                    </span>
+                  )}
                   {/* No "use this" on anything the gallery would refuse: a photo
                       from a camera roll, or a grab of a game that is not the
                       landscape shape a game page renders. The alternative is a

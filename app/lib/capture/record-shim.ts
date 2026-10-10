@@ -25,6 +25,11 @@
  *     otherwise every early call would be logged by the stub wrapper AND the
  *     real one.
  *     (1b) It also notes which context type each canvas was given — see below.
+ *  2b. MOMENTS. Hands `HallPass.moment(...)` calls to `__hpRec.onMoment`, and
+ *     wraps `requestAnimationFrame` so the hand-over happens at the END of the
+ *     frame the game drew in - the one instant a WebGL canvas can be read back.
+ *     The wrapper returns the same frame id and re-throws the game's errors, so
+ *     `cancelAnimationFrame` and error handling behave as before.
  *  3. VISIBILITY. A hidden tab throttles the game's frame loop, which shows up as
  *     a hole in the video; the event makes the hole explicable.
  *
@@ -42,7 +47,7 @@
 export const RECORD_SHIM_SOURCE = `(function (w) {
   try {
     if (w.__hpRec) return;
-    var hp = (w.__hpRec = { version: 1, streams: [], ctxTypes: new WeakMap(), onEvent: null, onStream: null });
+    var hp = (w.__hpRec = { version: 1, streams: [], ctxTypes: new WeakMap(), onEvent: null, onStream: null, onMoment: null });
     var epoch = function () { return w.performance.timeOrigin + w.performance.now(); };
     var emit = function (type, source, data) {
       try {
@@ -104,6 +109,52 @@ export const RECORD_SHIM_SOURCE = `(function (w) {
       }
     } catch (e) {}
 
+    // 2b. MOMENTS ------------------------------------------------------------
+    // HallPass.moment(name, data, opts) asks for a picture of the game NOW. A WebGL
+    // canvas is cleared once its frame has been shown, so a read taken from an
+    // event handler (or before the game has drawn this frame) comes back blank.
+    // The read has to happen at the END of a requestAnimationFrame callback, when
+    // the game has just drawn. So a moment is held until the callback it was made
+    // in finishes, or - made outside one - until the end of the NEXT one. A timer
+    // flushes it anyway for a game with no animation loop or a hidden tab.
+    // The arguments are forwarded RAW; the app side validates them.
+    var momentQueue = [];
+    var rafDepth = 0;
+    var flushMoments = function (armedOnly) {
+      try {
+        var keep = [];
+        for (var i = 0; i < momentQueue.length; i++) {
+          var m = momentQueue[i];
+          if (armedOnly && !m.armed) { keep.push(m); continue; }
+          try { if (typeof hp.onMoment === "function") hp.onMoment(m.payload); } catch (e) {}
+        }
+        momentQueue = keep;
+      } catch (e) {}
+    };
+    var queueMoment = function (args) {
+      if (typeof hp.onMoment !== "function" || momentQueue.length >= 20) return;
+      momentQueue.push({ armed: rafDepth > 0, payload: { at: epoch(), name: args[0], data: args[1], opts: args[2] } });
+      if (typeof w.setTimeout === "function") w.setTimeout(function () { flushMoments(false); }, 250);
+    };
+    try {
+      var origRaf = w.requestAnimationFrame;
+      if (typeof origRaf === "function") {
+        w.requestAnimationFrame = function (cb) {
+          if (typeof cb !== "function") return origRaf.apply(w, arguments);
+          return origRaf.call(w, function () {
+            rafDepth++;
+            for (var i = 0; i < momentQueue.length; i++) momentQueue[i].armed = true;
+            try {
+              return cb.apply(this, arguments);
+            } finally {
+              rafDepth--;
+              if (rafDepth === 0) flushMoments(true);
+            }
+          });
+        };
+      }
+    } catch (e) {}
+
     // 2. SDK EVENTS ----------------------------------------------------------
     try {
       var replaying = false;
@@ -144,6 +195,7 @@ export const RECORD_SHIM_SOURCE = `(function (w) {
           wrapMethod(v, "progress",
             function (a) { var n = Number(a[1]); emit("progress", "sdk", { key: String(a[0]), value: isFinite(n) ? n : null }); },
             function () {});
+          wrapMethod(v, "moment", function (a) { queueMoment(a); }, function () {});
           if (real && typeof v.on === "function") {
             v.on("achievement", function (p) {
               p = p || {};

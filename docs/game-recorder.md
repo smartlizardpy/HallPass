@@ -125,7 +125,9 @@ Event types (v1): `recording.start|stop`, `score.submit {score}`,
 `score.result {ok, rank, reason}`, `achievement {key, name, points}`,
 `progress {key, value}`, `game.error {message, file?, line?}`,
 `visibility {state}`, `report {kind}` (tester opened a bug report), `mark`
-(tester pressed ⭐). Sources: `recorder`, `sdk`, `tester`, `game`. New types and
+(tester pressed ⭐), `moment {name, data, shot}` (the game called
+`HallPass.moment()`; `shot` says whether a picture was kept on the tester's
+device - see `game-moments.md`). Sources: `recorder`, `sdk`, `tester`, `game`. New types and
 fields may be **added**; existing ones never change meaning.
 
 For consumers:
@@ -137,7 +139,8 @@ For consumers:
   pause signal anywhere, so for the rest the file holds recorder and tester events
   (`mark` and `report` are the strongest highlight signals available). "Game over"
   is, at best, "the game called `submitScore`". Richer events want an additive SDK
-  method — a separate piece of work, deliberately not part of v1.
+  method - `HallPass.moment(name, data, { shot: false })` (SDK 1.3.0) is that
+  method; a game that calls it adds `moment` events here.
 - **No identity.** No player id, handle, name or email. Score values are logged;
   who scored them is not.
 - **Chrome WebM has no duration header** and sparse frames on static scenes

@@ -345,7 +345,7 @@ npm run publish-game -- <slug> --staged --from .staging/<slug> --cover .staging/
 npm run publish-game -- <slug> --staged --from .staging/<slug> --cover .staging/<slug>/cover.png --yes
 ```
 
-A multi-file game is accepted only as a **first** upload. The slug was just deduped against `games.ts` in Folder Step 2, so that is what this always is; if the script refuses with "already has published file(s)", the slug is in use — stop and pick another rather than working around it, because a bundle republish has to delete the files it orphans and only the dashboard does that safely.
+A multi-file game is accepted only as a **first** upload. The slug was just deduped against `games.ts` in Folder Step 2, so that is what this always is; if the script refuses with "already has published file(s)", the slug is in use — stop and pick another rather than working around it, because a bundle republish has to delete the files it orphans. This skill adds NEW games and never republishes. When the user asks to UPDATE a game that is already published, that is `npm run publish-game -- <slug> [--staged --from .staging/<slug>] --republish` (dry-run first, read the write/DELETE list, then `--yes`): it writes only the files whose bytes changed and deletes the ones the folder no longer has, and refuses a folder with no `index.html` or one that would delete over half the published files. The dashboard's zip upload does the same.
 
 Confirm the dry run listed every file and the `--yes` run printed `published games/<slug>/<file>` for each, including `games/<slug>/index.html`.
 

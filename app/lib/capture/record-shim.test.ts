@@ -314,3 +314,124 @@ describe("shim leaves non-SDK objects alone", () => {
     expect(stub.submitScore).not.toBe(original);
   });
 });
+
+describe("shim moments", () => {
+  function setup() {
+    const ctx = makeWindow();
+    const frames: Array<(t: number) => unknown> = [];
+    ctx.win.requestAnimationFrame = (cb: (t: number) => unknown) => frames.push(cb);
+    run(ctx.win);
+    const moments: Array<{ name: unknown; data: unknown; opts: unknown; at: number }> = [];
+    (ctx.win.__hpRec as { onMoment: unknown }).onMoment = (m: never) => moments.push(m);
+    const stepFrame = () => frames.splice(0).forEach((cb) => cb(0));
+    return { ...ctx, moments, stepFrame, frames };
+  }
+  // Assigning a real client starts the shim's replay window (calls are skipped
+  // until a task later), so let that task pass, as it would before a game plays.
+  const sdk = (win: Record<string, unknown>, queued: Array<() => void>) => {
+    const real = { version: "1", submitScore: () => 0, moment: ((() => ({ ok: true })) as (...a: unknown[]) => unknown), on: () => real };
+    win.HallPass = real;
+    queued.splice(0).forEach((fn) => fn());
+    return real;
+  };
+
+  it("holds a moment made outside a frame until the end of the next frame", () => {
+    const { win, moments, stepFrame, queued } = setup();
+    const hp = sdk(win, queued);
+    let drew = false;
+    (win.requestAnimationFrame as (cb: () => void) => void)(() => {
+      drew = true;
+      expect(moments).toHaveLength(0);
+    });
+    hp.moment("Boss", { hp: 3 }, { shot: false });
+    expect(moments).toHaveLength(0);
+    stepFrame();
+    expect(drew).toBe(true);
+    expect(moments).toEqual([{ at: 1_000_500, name: "Boss", data: { hp: 3 }, opts: { shot: false } }]);
+  });
+
+  it("delivers a moment made inside a frame when that frame's callback returns", () => {
+    const { win, moments, stepFrame, queued } = setup();
+    const hp = sdk(win, queued);
+    (win.requestAnimationFrame as (cb: () => void) => void)(() => {
+      hp.moment("died");
+      expect(moments).toHaveLength(0);
+    });
+    stepFrame();
+    expect(moments.map((m) => m.name)).toEqual(["died"]);
+  });
+
+  it("falls back to a timer for a game with no animation loop", () => {
+    const { win, moments, queued } = setup();
+    sdk(win, queued).moment("still");
+    expect(moments).toHaveLength(0);
+    queued.forEach((fn) => fn());
+    expect(moments.map((m) => m.name)).toEqual(["still"]);
+  });
+
+  it("delivers each moment once", () => {
+    const { win, moments, queued, stepFrame } = setup();
+    const hp = sdk(win, queued);
+    (win.requestAnimationFrame as (cb: () => void) => void)(() => {});
+    hp.moment("once");
+    stepFrame();
+    queued.forEach((fn) => fn());
+    expect(moments).toHaveLength(1);
+  });
+
+  it("keeps the frame id, the callback's result and the game's errors intact", () => {
+    const { win, frames } = setup();
+    const id = (win.requestAnimationFrame as (cb: () => void) => number)(() => {});
+    expect(id).toBe(1);
+    (win.requestAnimationFrame as (cb: () => void) => number)(() => {
+      throw new Error("game bug");
+    });
+    expect(() => frames[1](0)).toThrow("game bug");
+  });
+
+  it("passes a non-function straight through", () => {
+    const { win } = setup();
+    expect(() => (win.requestAnimationFrame as (cb: unknown) => unknown)("x")).not.toThrow();
+  });
+
+  it("ignores moments when no session is listening, and caps the queue", () => {
+    const { win, moments, queued } = setup();
+    (win.__hpRec as { onMoment: unknown }).onMoment = null;
+    const hp = sdk(win, queued);
+    hp.moment("lost");
+    expect(queued).toHaveLength(0);
+    (win.__hpRec as { onMoment: unknown }).onMoment = (m: never) => moments.push(m);
+    for (let i = 0; i < 30; i += 1) hp.moment("m" + i);
+    queued.forEach((fn) => fn());
+    expect(moments).toHaveLength(20);
+  });
+
+  it("does not double-log a stub call replayed into the real client", () => {
+    const { win, moments, queued } = setup();
+    const stub = { version: "0", submitScore: () => 0, moment: ((() => 0) as (...a: unknown[]) => unknown) };
+    win.HallPass = win.HP = stub;
+    stub.moment();
+    const real = { version: "1", submitScore: () => 0, moment: ((() => 0) as (...a: unknown[]) => unknown), on: () => real };
+    win.HallPass = real;
+    win.HP = real;
+    real.moment();
+    queued.forEach((fn) => fn());
+    expect(moments).toHaveLength(1);
+  });
+
+  it("is harmless on an older SDK that has no moment method", () => {
+    const { win } = setup();
+    expect(() => {
+      win.HallPass = { version: "0", submitScore: () => 0 };
+    }).not.toThrow();
+  });
+
+  it("never lets a throwing listener reach the game", () => {
+    const { win, queued } = setup();
+    (win.__hpRec as { onMoment: unknown }).onMoment = () => {
+      throw new Error("boom");
+    };
+    sdk(win, queued).moment("x");
+    expect(() => queued.forEach((fn) => fn())).not.toThrow();
+  });
+});

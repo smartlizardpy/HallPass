@@ -183,6 +183,10 @@ export type BetaReport = {
   errorLog: string | null;
   /** Denormalised so a queue row can be badged without parsing the JSON. */
   errorCount: number;
+  /** The game-reported moment the pinned screenshot was taken for, if any. */
+  momentName: string | null;
+  /** The game's data for that moment, as a JSON string. Parsed by the reader. */
+  momentData: string | null;
   device: string;
   createdAt: string;
   resolvedBy: string | null;
@@ -286,6 +290,8 @@ function mapReport(row: Row): BetaReport {
     shotUrl: toStrOrNull(row.shot_url),
     errorLog: toStrOrNull(row.error_log),
     errorCount: toInt(row.error_count),
+    momentName: toStrOrNull(row.moment_name),
+    momentData: toStrOrNull(row.moment_data),
     device: toStr(row.device),
     createdAt: toIso(row.created_at),
     resolvedBy: toStrOrNull(row.resolved_by),
@@ -791,6 +797,9 @@ export function createBetaStore(sql: Sql) {
       /** The game's own errors as JSON, and how many there were. */
       errorLog?: string | null;
       errorCount?: number;
+      /** The moment the pinned screenshot was taken for; already validated. */
+      momentName?: string | null;
+      momentData?: string | null;
       /**
        * A replay clip the BROWSER already uploaded straight to Blob storage.
        *
@@ -807,12 +816,14 @@ export function createBetaStore(sql: Sql) {
         INSERT INTO beta_reports
           (player_id, assignment_id, slug, kind, severity, title, body, device,
            shot_blob_path, shot_url, error_log, error_count,
+           moment_name, moment_data,
            clip_blob_path, clip_url, clip_bytes, clip_ms)
         VALUES (${input.playerId}, ${input.assignmentId}, ${input.slug},
                 ${input.kind}, ${input.severity}, ${input.title}, ${input.body},
                 ${input.device ?? ""},
                 ${input.shotBlobPath ?? null}, ${input.shotUrl ?? null},
                 ${input.errorLog ?? null}, ${input.errorCount ?? 0},
+                ${input.momentName ?? null}, ${input.momentData ?? null},
                 ${input.clipBlobPath ?? null}, ${input.clipUrl ?? null},
                 ${input.clipBytes ?? 0},
                 ${input.clipMs ?? 0})
@@ -827,7 +838,7 @@ export function createBetaStore(sql: Sql) {
         SELECT id, player_id, assignment_id, slug, kind, severity, title, body,
                status, clip_blob_path, clip_url, clip_bytes, clip_ms,
                shot_blob_path, shot_url,
-               error_log, error_count, device, created_at,
+               error_log, error_count, moment_name, moment_data, device, created_at,
                resolved_by, resolved_at
         FROM beta_reports
         WHERE id = ${id}
@@ -852,7 +863,7 @@ export function createBetaStore(sql: Sql) {
         SELECT r.id, r.player_id, r.assignment_id, r.slug, r.kind, r.severity,
                r.title, r.body, r.status, r.clip_blob_path, r.clip_url, r.clip_bytes,
                r.clip_ms, r.shot_blob_path, r.shot_url,
-               r.error_log, r.error_count,
+               r.error_log, r.error_count, r.moment_name, r.moment_data,
                r.device, r.created_at, r.resolved_by, r.resolved_at,
                p.username AS author_username,
                p.handle   AS author_handle,
@@ -870,7 +881,7 @@ export function createBetaStore(sql: Sql) {
         SELECT id, player_id, assignment_id, slug, kind, severity, title, body,
                status, clip_blob_path, clip_url, clip_bytes, clip_ms,
                shot_blob_path, shot_url,
-               error_log, error_count, device, created_at,
+               error_log, error_count, moment_name, moment_data, device, created_at,
                resolved_by, resolved_at
         FROM beta_reports
         WHERE player_id = ${playerId}
@@ -893,7 +904,7 @@ export function createBetaStore(sql: Sql) {
         SELECT r.id, r.player_id, r.assignment_id, r.slug, r.kind, r.severity,
                r.title, r.body, r.status, r.clip_blob_path, r.clip_url, r.clip_bytes,
                r.clip_ms, r.shot_blob_path, r.shot_url,
-               r.error_log, r.error_count,
+               r.error_log, r.error_count, r.moment_name, r.moment_data,
                r.device, r.created_at, r.resolved_by, r.resolved_at,
                p.username AS author_username,
                p.handle   AS author_handle,

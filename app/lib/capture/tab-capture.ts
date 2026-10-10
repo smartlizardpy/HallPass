@@ -39,6 +39,7 @@ import {
   differenceHash,
   centreCrop,
   isBlankFrame,
+  isEmptyFrame,
   isDuplicateOf,
   mapRectToFrame,
   type FrameHash,
@@ -221,70 +222,115 @@ export class FrameGrabber {
     this.video.srcObject = null;
   }
 
+  /**
+   * Take one still RIGHT NOW, for a game-reported moment.
+   *
+   * None of the timed grab's filters apply: this is a picture somebody asked for,
+   * so a dark scene or a repeat of the last one is still wanted, and it does not
+   * count against `maxShots`. It does refuse a frame with no picture in it at all
+   * ({@link isEmptyFrame}), which is a capture that has not started, not a scene.
+   * Null when nothing could be taken; the caller falls back to reading the canvas.
+   */
+  async grabNow(): Promise<Shot | null> {
+    if (this.busy) return null;
+    this.busy = true;
+    try {
+      const drawn = this.drawCrop();
+      if (!drawn || isEmptyFrame(drawn.pixels)) return null;
+      const blob = await new Promise<Blob | null>((resolve) =>
+        this.canvas.toBlob((b) => resolve(b), "image/webp", 0.9),
+      );
+      if (!blob) return null;
+      return {
+        id: `now-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        blob,
+        previewUrl: URL.createObjectURL(blob),
+        width: drawn.outW,
+        height: drawn.outH,
+        origin: "grab",
+      };
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  /**
+   * Draw the current frame, cropped to the game, onto the working canvas and read
+   * it back. Shared by the timed grab and {@link grabNow}, so both crop to exactly
+   * the same rectangle and size. Null when there is nothing to draw yet.
+   */
+  private drawCrop(): { outW: number; outH: number; pixels: Uint8ClampedArray } | null {
+    const frameW = this.video.videoWidth;
+    const frameH = this.video.videoHeight;
+    if (frameW === 0 || frameH === 0) return null;
+
+    const cssRect = this.options.getTargetRect();
+    if (!cssRect || cssRect.width < 2 || cssRect.height < 2) return null;
+
+    // 1. Crop the captured frame to the iframe — this is what excludes the
+    //    tester HUD from every stored image.
+    const source = mapRectToFrame(
+      cssRect,
+      { width: window.innerWidth, height: window.innerHeight },
+      { width: frameW, height: frameH },
+    );
+
+    // 2. Centre-crop that to a FIXED aspect and draw at a FIXED size.
+    //
+    // Both are load-bearing, and neither was true at first. `validateMediaUpload`
+    // — the same gate the dashboard gallery uses, and the one an accepted shot
+    // must pass again on its way into `game_media` — requires an aspect between
+    // 1.2 and 2.2 and a width of at least 640.
+    //
+    // Cropping to the iframe's own aspect failed both. The iframe is a flex
+    // child, so opening the report or review panel narrows it to roughly 1.12
+    // and every grab from then on was rejected as `bad-aspect`; a small window
+    // produced output under 640px wide and was rejected as `too-narrow`.
+    //
+    // Pinning the crop to 16:9 and the canvas to a constant size makes every
+    // grab valid by construction rather than by hoping the window cooperates.
+    // Upscaling a small source is a real cost, but a slightly soft screenshot
+    // is worth incomparably more than a rejected one.
+    const aspect = this.options.aspect ?? DEFAULT_CAPTURE_ASPECT;
+    const inner = centreCrop(source, aspect);
+    const cropX = source.x + inner.x;
+    const cropY = source.y + inner.y;
+
+    const outW = this.options.maxEdge ?? DEFAULT_CAPTURE_WIDTH;
+    const outH = Math.max(1, Math.round(outW / aspect));
+
+    this.canvas.width = outW;
+    this.canvas.height = outH;
+    const ctx = this.canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(
+      this.video,
+      cropX,
+      cropY,
+      inner.width,
+      inner.height,
+      0,
+      0,
+      outW,
+      outH,
+    );
+
+    const pixels = ctx.getImageData(0, 0, outW, outH).data;
+    return { outW, outH, pixels };
+  }
+
   private async grab(): Promise<void> {
     // Skip rather than queue: a slow toBlob must not let two grabs interleave
     // on the same canvas.
     if (this.busy) return;
     if (this.hashes.length >= this.options.maxShots) return;
-    const frameW = this.video.videoWidth;
-    const frameH = this.video.videoHeight;
-    if (frameW === 0 || frameH === 0) return;
-
-    const cssRect = this.options.getTargetRect();
-    if (!cssRect || cssRect.width < 2 || cssRect.height < 2) return;
-
     this.busy = true;
     try {
-      // 1. Crop the captured frame to the iframe — this is what excludes the
-      //    tester HUD from every stored image.
-      const source = mapRectToFrame(
-        cssRect,
-        { width: window.innerWidth, height: window.innerHeight },
-        { width: frameW, height: frameH },
-      );
-
-      // 2. Centre-crop that to a FIXED aspect and draw at a FIXED size.
-      //
-      // Both are load-bearing, and neither was true at first. `validateMediaUpload`
-      // — the same gate the dashboard gallery uses, and the one an accepted shot
-      // must pass again on its way into `game_media` — requires an aspect between
-      // 1.2 and 2.2 and a width of at least 640.
-      //
-      // Cropping to the iframe's own aspect failed both. The iframe is a flex
-      // child, so opening the report or review panel narrows it to roughly 1.12
-      // and every grab from then on was rejected as `bad-aspect`; a small window
-      // produced output under 640px wide and was rejected as `too-narrow`.
-      //
-      // Pinning the crop to 16:9 and the canvas to a constant size makes every
-      // grab valid by construction rather than by hoping the window cooperates.
-      // Upscaling a small source is a real cost, but a slightly soft screenshot
-      // is worth incomparably more than a rejected one.
-      const aspect = this.options.aspect ?? DEFAULT_CAPTURE_ASPECT;
-      const inner = centreCrop(source, aspect);
-      const cropX = source.x + inner.x;
-      const cropY = source.y + inner.y;
-
-      const outW = this.options.maxEdge ?? DEFAULT_CAPTURE_WIDTH;
-      const outH = Math.max(1, Math.round(outW / aspect));
-
-      this.canvas.width = outW;
-      this.canvas.height = outH;
-      const ctx = this.canvas.getContext("2d", { willReadFrequently: true });
-      if (!ctx) return;
-      ctx.drawImage(
-        this.video,
-        cropX,
-        cropY,
-        inner.width,
-        inner.height,
-        0,
-        0,
-        outW,
-        outH,
-      );
+      const drawn = this.drawCrop();
+      if (!drawn) return;
+      const { outW, outH, pixels } = drawn;
 
       // 3. Reject loading screens and fades.
-      const pixels = ctx.getImageData(0, 0, outW, outH).data;
       if (isBlankFrame(pixels)) return;
 
       // 4. Reject a repeat of something already kept. The downscale is done by
