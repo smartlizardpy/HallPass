@@ -171,6 +171,7 @@ describe("getByCode", () => {
         data: { room: "ABCD" },
         expires_at: "2026-10-10T12:00:00Z",
         expired: false,
+        seconds_left: 1500,
         has_sender: true,
         from_handle: null,
         from_username: "ozan",
@@ -188,6 +189,7 @@ describe("getByCode", () => {
       from: "@ozan",
       expiresAt: "2026-10-10T12:00:00.000Z",
       expired: false,
+      secondsLeft: 1500,
     });
   });
 

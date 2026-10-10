@@ -32,6 +32,7 @@ const GAMES_VERSION_KEY = "https://hallpass.local/__sw__/games-version";
 // answered with a PRECACHED, PII-free document ({@link privateOfflineDoc}) that
 // says the page needs a connection. Nothing about the private response itself is
 // stored, read back, or reused: see {@link privatePageFallback}.
+/* @pure-start isPrivatePath */
 function isPrivatePath(pathname) {
   return (
     // The ENTIRE `/play/you` subtree, matched as a prefix rather than tab by
@@ -62,9 +63,15 @@ function isPrivatePath(pathname) {
     // to the next person on a shared school machine. It is dynamic (it calls
     // `auth()`) and so never enters the precache, but that is a separate
     // mechanism and not a substitute for this one.
-    pathname.startsWith("/embed/")
+    pathname.startsWith("/embed/") ||
+    // Game invites. `/i/<code>` is dynamic and reads a per-code row, and for a
+    // STAGED game it is per-viewer too (a tester sees the card, everyone else
+    // "run out"), so a cached copy could show one person's answer to the next
+    // on a shared machine. Never stored, like the challenge picker above.
+    pathname.startsWith("/i/")
   );
 }
+/* @pure-end */
 
 /* @pure-start privateOfflineDoc */
 /**

@@ -120,6 +120,8 @@ export type PublicInvite = {
   expiresAt: string;
   /** Judged by the DATABASE clock, so a skewed server clock cannot revive one. */
   expired: boolean;
+  /** Whole seconds until it expires, by the same clock; `0` once expired. */
+  secondsLeft: number;
 };
 
 export function createInviteStore(sql: Sql) {
@@ -351,6 +353,7 @@ export function createInviteStore(sql: Sql) {
       const rows = (await sql`
         SELECT g.code, g.slug, g.kind, g.data, g.expires_at,
                (g.expires_at <= now())       AS expired,
+               GREATEST(0, floor(EXTRACT(EPOCH FROM (g.expires_at - now()))))::int AS seconds_left,
                (g.from_player IS NOT NULL)   AS has_sender,
                p.handle AS from_handle, p.username AS from_username
           FROM game_invites g
@@ -368,6 +371,7 @@ export function createInviteStore(sql: Sql) {
         from: row.has_sender === true ? displayNameFrom(row.from_handle, row.from_username) : null,
         expiresAt: toIso(row.expires_at),
         expired: row.expired === true,
+        secondsLeft: toInt(row.seconds_left),
       };
     },
   };

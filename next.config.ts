@@ -103,6 +103,19 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // GAME INVITES ARE NEVER INDEXED — the `/c/:path*` argument exactly: an
+        // invite link is made to be pasted into chats where crawlers find it,
+        // and what it exposes is a child's display name and the game they are
+        // in right now. Crawlable plus `noindex`, never a robots.txt block.
+        source: "/i/:path*",
+        headers: [
+          {
+            key: "X-Robots-Tag",
+            value: "noindex, nofollow, noimageindex, noarchive",
+          },
+        ],
+      },
+      {
         // BETA SURFACES ARE NEVER INDEXED — same two-part signal as `/u/:path*`
         // above, for the same reason: the `robots` metadata in each page is not
         // enough on its own, because Next answers a streamed `not-found.js` with

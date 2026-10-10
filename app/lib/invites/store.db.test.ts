@@ -131,6 +131,8 @@ describe.skipIf(!enabled)("invites store against Postgres", () => {
     const minutes = (Date.parse(invite!.expiresAt) - Date.now()) / 60000;
     expect(minutes).toBeGreaterThan(28);
     expect(minutes).toBeLessThanOrEqual(30.5);
+    expect(invite!.secondsLeft).toBeGreaterThan(28 * 60);
+    expect(invite!.secondsLeft).toBeLessThanOrEqual(30 * 60);
   });
 
   it("skips a friend already invited to this game inside the cooldown", async () => {
@@ -217,7 +219,7 @@ describe.skipIf(!enabled)("invites store against Postgres", () => {
       VALUES (${recent}, ${slug}, 'link', '{}'::jsonb, ${guestKey}, now() - interval '31 minutes', now() - interval '1 minute'),
              (${old},    ${slug}, 'link', '{}'::jsonb, ${guestKey}, now() - interval '3 hours',    now() - interval '2 hours')
     `;
-    expect((await store.getByCode(recent))?.expired).toBe(true);
+    expect(await store.getByCode(recent)).toMatchObject({ expired: true, secondsLeft: 0 });
     expect((await store.getByCode(old))?.expired).toBe(true);
     // Any write collects.
     await store.createLink({

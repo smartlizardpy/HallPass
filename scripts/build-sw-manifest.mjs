@@ -171,6 +171,10 @@ if (existsSync(prerenderManifestPath)) {
       // card into a cache shared by everybody on the browser profile, and serve
       // it under a URL that belongs to somebody else's code.
       route.startsWith("/c/") ||
+      // NOR ANY GAME INVITE, for the same reason: `/i/<code>` is one person's
+      // invite under a URL that belongs to its code. Dynamic today, excluded
+      // anyway.
+      route.startsWith("/i/") ||
       // NO GENERATED SOCIAL CARD IS EVER PRECACHED. `/opengraph-image` and the
       // per-category/per-tag ones under it are statically optimised, so they DO
       // reach the prerender manifest — verified, not assumed: the home card
