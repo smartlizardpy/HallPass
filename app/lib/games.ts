@@ -625,6 +625,7 @@ export const games: Game[] = [
     isNew: true,
     platform: "desktop",
     staged: true,
+    multiplayer: { minPlayers: 1, maxPlayers: 4, voice: true },
     coverUrl: "/game-media/last-bell/hero-22dbdbcc08.png",
   },
 ];
