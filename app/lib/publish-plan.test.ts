@@ -11,6 +11,7 @@ import {
   heroIdentity,
   isInsidePublic,
   parsePublishArgs,
+  planRepublish,
   planUploads,
   readPngSize,
 } from "../../scripts/lib/publish-plan.mjs";
@@ -125,6 +126,108 @@ describe("classifyPublish", () => {
   it("lets a half-finished first upload be retried", () => {
     // Asset rows exist but index.html's does not, so the caller passes false.
     expect(classifyPublish(5, false)).toBe("bundle-first");
+  });
+  it("republishes a published bundle only when asked", () => {
+    expect(classifyPublish(5, true, true)).toBe("bundle-republish");
+    expect(classifyPublish(5, true, false)).toBe("refuse-bundle");
+  });
+  it("--republish changes nothing for a first upload or a lone file", () => {
+    expect(classifyPublish(5, false, true)).toBe("bundle-first");
+    expect(classifyPublish(1, true, true)).toBe("single");
+  });
+});
+
+describe("--republish argument", () => {
+  it("is off by default and parsed as a flag", () => {
+    expect(parsePublishArgs(["g"]).republish).toBe(false);
+    expect(
+      parsePublishArgs(["g", "--staged", "--from", ".staging/g", "--republish", "--yes"]),
+    ).toMatchObject({ slug: "g", staged: true, republish: true, yes: true, error: null });
+  });
+});
+
+describe("planRepublish", () => {
+  const h = (c: string) => c.repeat(64);
+  const local = (...entries: [string, string][]) =>
+    entries.map(([rel, c]) => ({ rel, sha256: h(c) }));
+  const pub = (...entries: [string, string | null][]) =>
+    entries.map(([name, c]) => ({
+      pathname: `games/g/${name}`,
+      sha256: c === null ? null : h(c),
+    }));
+
+  it("skips files whose bytes match, writes the changed and new ones", () => {
+    const r = planRepublish({
+      slug: "g",
+      local: local(["index.html", "a"], ["game.js", "b"], ["new.js", "c"]),
+      published: pub(["index.html", "a"], ["game.js", "x"]),
+    });
+    expect(r.skip).toEqual(["index.html"]);
+    expect(r.write).toEqual(["game.js", "new.js"]);
+    expect(r.stale).toEqual([]);
+    expect(r.error).toBeNull();
+  });
+
+  it("never reads a missing fingerprint as 'same'", () => {
+    const r = planRepublish({
+      slug: "g",
+      local: local(["index.html", "a"]),
+      published: pub(["index.html", null]),
+    });
+    expect(r.write).toEqual(["index.html"]);
+    expect(r.skip).toEqual([]);
+  });
+
+  it("names the published files the folder no longer contains", () => {
+    const r = planRepublish({
+      slug: "g",
+      local: local(["index.html", "a"], ["a.js", "a"], ["b.js", "a"]),
+      published: pub(["index.html", "a"], ["a.js", "a"], ["b.js", "a"], ["old.js", "a"]),
+    });
+    expect(r.stale).toEqual(["games/g/old.js"]);
+    expect(r.error).toBeNull();
+  });
+
+  it("only ever considers this game's own prefix", () => {
+    const r = planRepublish({
+      slug: "g",
+      local: local(["index.html", "a"]),
+      published: [
+        ...pub(["index.html", "a"]),
+        { pathname: "games/other/index.html", sha256: h("a") },
+        { pathname: "games/gg/index.html", sha256: h("a") },
+      ],
+    });
+    expect(r.stale).toEqual([]);
+  });
+
+  it("refuses a folder with no index.html", () => {
+    const r = planRepublish({
+      slug: "g",
+      local: local(["game.js", "a"]),
+      published: pub(["index.html", "a"], ["game.js", "a"]),
+    });
+    expect(r.error).toMatch(/index\.html/);
+  });
+
+  it("refuses to delete more than half of what is published (wrong folder)", () => {
+    const r = planRepublish({
+      slug: "g",
+      local: local(["index.html", "a"]),
+      published: pub(["index.html", "a"], ["1.js", "a"], ["2.js", "a"], ["3.js", "a"]),
+    });
+    expect(r.stale).toHaveLength(3);
+    expect(r.error).toMatch(/delete 3 of the 4/);
+  });
+
+  it("allows deleting exactly half", () => {
+    const r = planRepublish({
+      slug: "g",
+      local: local(["index.html", "a"], ["1.js", "a"]),
+      published: pub(["index.html", "a"], ["1.js", "a"], ["2.js", "a"], ["3.js", "a"]),
+    });
+    expect(r.stale).toHaveLength(2);
+    expect(r.error).toBeNull();
   });
 });
 

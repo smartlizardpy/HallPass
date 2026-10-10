@@ -65,6 +65,7 @@ export function contentTypeForPath(relPath) {
  *   slug: string | undefined,
  *   yes: boolean,
  *   staged: boolean,
+ *   republish: boolean,
  *   from: string | null,
  *   cover: string | null,
  *   error: string | null,
@@ -72,7 +73,7 @@ export function contentTypeForPath(relPath) {
  */
 
 /**
- * Parse `<slug> [--yes] [--staged] [--from <dir>] [--cover <png>]`.
+ * Parse `<slug> [--yes] [--staged] [--republish] [--from <dir>] [--cover <png>]`.
  *
  * `--from` and `--cover` take the NEXT argument, which is why the slug cannot be
  * "the first argument without a dash" any more: that would pick up the folder.
@@ -87,6 +88,7 @@ export function parsePublishArgs(argv) {
     slug: undefined,
     yes: false,
     staged: false,
+    republish: false,
     from: null,
     cover: null,
     error: null,
@@ -96,6 +98,7 @@ export function parsePublishArgs(argv) {
     const a = argv[i];
     if (a === "--yes") out.yes = true;
     else if (a === "--staged") out.staged = true;
+    else if (a === "--republish") out.republish = true;
     else if (a === "--from" || a === "--cover") {
       const value = argv[i + 1];
       if (!value || value.startsWith("-")) {
@@ -195,17 +198,81 @@ export function planUploads(relPaths) {
  *  - `bundle-first`  several files and no published index.html: safe, because
  *                    there is no live game whose files a retry could orphan
  *  - `refuse-bundle` several files over a published game: a republish must
- *                    also delete the files the new upload orphans, which only
- *                    the dashboard does (see `writeGameHtml`); getting it wrong
- *                    deletes a live game's assets
+ *                    also delete the files the new upload orphans, and getting
+ *                    that wrong deletes a live game's assets, so it is refused
+ *                    unless the caller asked for it with `--republish`
+ *  - `bundle-republish` the same, asked for: writes only the files whose bytes
+ *                    changed and deletes the orphans, under the guards of
+ *                    {@link planRepublish} (the dashboard's zip upload does the
+ *                    same sweep)
  *
  * @param {number} fileCount uploads, excluding repo-only files
  * @param {boolean} indexPublished a `games/<slug>/index.html` row exists
- * @returns {"single" | "bundle-first" | "refuse-bundle"}
+ * @param {boolean} [republish] the caller passed `--republish`
+ * @returns {"single" | "bundle-first" | "refuse-bundle" | "bundle-republish"}
  */
-export function classifyPublish(fileCount, indexPublished) {
+export function classifyPublish(fileCount, indexPublished, republish = false) {
   if (fileCount <= 1) return "single";
-  return indexPublished ? "refuse-bundle" : "bundle-first";
+  if (!indexPublished) return "bundle-first";
+  return republish ? "bundle-republish" : "refuse-bundle";
+}
+
+/**
+ * A republish may delete at most this share of a game's published files. A
+ * folder that would delete more is almost certainly the WRONG folder (an empty
+ * export, another game's directory), and the cost of being wrong is a live game
+ * with its assets gone. Half is generous for a real refactor and still stops
+ * that mistake; a game that genuinely shrank by more goes through the dashboard.
+ */
+export const MAX_REPUBLISH_DELETE_SHARE = 0.5;
+
+/**
+ * Decide what a republish writes, skips and deletes.
+ *
+ * Pure, so the dangerous half (what gets DELETED) has tests. Mirrors the
+ * dashboard's bundle publish: a file whose recorded fingerprint equals the local
+ * bytes is skipped (no advanced Blob operation spent); a file with no
+ * fingerprint is written, since "unknown" must never read as "same"; and a
+ * published blob under this game's prefix that the new folder does not contain is
+ * stale.
+ *
+ * Only pathnames under `games/<slug>/` are ever considered, however the caller
+ * assembled `published`, so a bad row cannot make this name another game's blob.
+ *
+ * @param {{
+ *   slug: string,
+ *   local: { rel: string, sha256: string }[],
+ *   published: { pathname: string, sha256: string | null }[],
+ * }} input
+ * @returns {{ write: string[], skip: string[], stale: string[], error: string | null }}
+ */
+export function planRepublish({ slug, local, published }) {
+  const prefix = `games/${slug}/`;
+  const mine = published.filter((p) => p.pathname.startsWith(prefix));
+  const known = new Map(mine.map((p) => [p.pathname, p.sha256]));
+  const localPaths = new Set(local.map((f) => `${prefix}${f.rel}`));
+
+  /** @type {string[]} */
+  const write = [];
+  /** @type {string[]} */
+  const skip = [];
+  for (const f of local) {
+    const recorded = known.get(`${prefix}${f.rel}`);
+    if (recorded && recorded === f.sha256) skip.push(f.rel);
+    else write.push(f.rel);
+  }
+  const stale = mine.map((p) => p.pathname).filter((p) => !localPaths.has(p)).sort();
+
+  /** @type {string | null} */
+  let error = null;
+  if (!localPaths.has(`${prefix}index.html`)) {
+    error = "the folder has no index.html, so a republish would leave nothing to serve";
+  } else if (mine.length > 0 && stale.length > mine.length * MAX_REPUBLISH_DELETE_SHARE) {
+    error =
+      `this would delete ${stale.length} of the ${mine.length} published files — that is ` +
+      "far more than a normal update and usually means the wrong folder";
+  }
+  return { write, skip, stale, error };
 }
 
 /**
