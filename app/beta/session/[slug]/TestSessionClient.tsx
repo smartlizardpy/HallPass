@@ -613,6 +613,7 @@ export function TestSessionClient({
     // there but not inside a plain serialised object.
     let shot: FormData | undefined;
     const attached = shots.find((s) => s.id === attachedId);
+    const attachedMoment = attached ? momentFor(attached.id) : null;
     if (attached) {
       // The type is read off the blob rather than assumed to be WebP: an
       // attachment falls back to JPEG on a browser that cannot encode WebP, and
@@ -671,6 +672,9 @@ export function TestSessionClient({
         clipMs,
         errorLog: pendingErrors.length ? JSON.stringify(pendingErrors) : null,
         errorCount: pendingErrors.length,
+        // Only when the pinned picture was taken for a game-reported moment.
+        momentName: attachedMoment?.name ?? null,
+        momentData: attachedMoment?.data ?? null,
       },
       shot,
     );

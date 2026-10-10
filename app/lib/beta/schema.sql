@@ -84,6 +84,12 @@ CREATE TABLE IF NOT EXISTS beta_reports (
   -- without parsing every row's JSON.
   error_log      TEXT,
   error_count    INTEGER NOT NULL DEFAULT 0,
+  -- Which game-reported moment (`HallPass.moment()`, SDK 1.3.0) the pinned
+  -- screenshot was taken for, and the game's data for it. TEXT with no CHECK for
+  -- the same reason as `error_log`; the app validates and caps both first
+  -- (`sdk/src/moment.ts`). See `scoreboard/migrations/039_beta_report_moment.sql`.
+  moment_name    TEXT,
+  moment_data    TEXT,
   clip_bytes     INTEGER NOT NULL DEFAULT 0,
   clip_ms        INTEGER NOT NULL DEFAULT 0,
   device         TEXT NOT NULL DEFAULT '',

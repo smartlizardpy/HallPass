@@ -39,6 +39,8 @@ const base: BetaReport = {
   shotUrl: "https://blob.example/shot.png",
   errorLog: null,
   errorCount: 0,
+  momentName: null,
+  momentData: null,
   device: "Chromebook / Chrome 141",
   createdAt: "2026-09-01T10:00:00.000Z",
   resolvedBy: null,

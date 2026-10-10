@@ -38,6 +38,7 @@ import {
   toReportKind,
 } from "@/app/lib/beta/config";
 import { isKnownSlug } from "@/app/lib/games-store";
+import { reportMoment } from "@/app/lib/beta/report-moment";
 import { findGame } from "@/app/lib/games";
 import { bugReportCopy } from "@/app/lib/notifications/copy";
 import { notifyAdmins } from "@/app/lib/notifications/deliver";
@@ -125,6 +126,12 @@ export async function submitReportAction(
     /** The game's own errors, already capped and serialised by the client. */
     errorLog?: string | null;
     errorCount?: number;
+    /**
+     * The game-reported moment the pinned screenshot was taken for
+     * (`HallPass.moment()`), as the game gave it. Re-validated below.
+     */
+    momentName?: string | null;
+    momentData?: Record<string, unknown> | null;
   },
   /**
    * An optional screenshot pinned to the report, picked from the session's
@@ -232,6 +239,9 @@ export async function submitReportAction(
         ? input.errorLog.slice(0, MAX_ERROR_LOG_CHARS)
         : null;
 
+    // Game-supplied, so judged by the SDK's own rules; see `report-moment.ts`.
+    const moment = reportMoment(input.momentName, input.momentData, Boolean(shotUrl));
+
     await beta.createReport({
       playerId,
       assignmentId: assignment?.id ?? null,
@@ -254,6 +264,8 @@ export async function submitReportAction(
       clipMs: Math.max(0, Math.min(MAX_CLIP_MS, Math.floor(input.clipMs ?? 0))),
       errorLog: errors,
       errorCount: Math.max(0, Math.min(MAX_ERROR_ENTRIES, Math.floor(input.errorCount ?? 0))),
+      momentName: moment?.name ?? null,
+      momentData: moment?.data ?? null,
     });
 
     // Opening a report means they are actively testing; reflect that in the
