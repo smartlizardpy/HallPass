@@ -36,6 +36,7 @@ import { canEditSite, DASHBOARD_MIN_ROLE } from "@/app/lib/permissions";
 import { isUnconfiguredDbError } from "@/app/lib/db";
 import { listGameFiles, readPublishedIndexHtml } from "@/app/lib/game-blob-index";
 import { buildEmbedSnippet, buildExampleCalls } from "@/app/lib/integration-prompt";
+import { buildCoopPrompt } from "@/app/lib/coop-prompt";
 import { SITE_URL } from "@/app/lib/site";
 import type { Game } from "@/app/lib/games";
 import { CopyBox } from "./_ui/CopyBox";
@@ -55,6 +56,7 @@ import type { BoardConfig } from "@/sdk/src/contract";
 import { DashHeader } from "../../_ui/DashHeader";
 import { ReadOnlyNotice } from "../../_ui/ReadOnlyNotice";
 import { Section } from "../../_ui/Section";
+import { CopyButton, PromptBox } from "../../_ui/IntegratePanel";
 import { TagEditor } from "../../_ui/TagEditor";
 import { createBoardAction, linkBoardAction, unlinkBoardAction } from "../../boards/actions";
 import { clearHtmlAction, pasteHtmlAction } from "../actions";
@@ -360,6 +362,8 @@ export default async function GameControlPage({
   }
 
   const sp = await searchParams;
+  // Pure string, so building it for an external game (which never shows it) is free.
+  const coopPrompt = buildCoopPrompt({ gameId: slug, title: game.title, baseUrl: SITE_URL });
   const ok = asString(sp.ok);
   const error = asString(sp.error);
 
@@ -1307,6 +1311,25 @@ export default async function GameControlPage({
             </Link>
           </div>
         </div>
+      </Section>
+
+      {/* ONLINE CO-OP — the P2P co-op SDK's copy-paste agent prompt. Here and
+          not only on a board's page because co-op belongs to the game: plenty of
+          co-op games have no leaderboard. Native games only — the co-op
+          endpoints are same-origin, so an external game could never connect. */}
+      <Section title="Online co-op" subtitle="Add it with an AI agent">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <p className="max-w-xl text-sm text-muted">
+            Copy this prompt and paste it into your AI agent with the game open.
+            It interviews you, then adds online co-op (host or join with a code,
+            2–8 players, optional voice chat) using HallPass&apos;s peer-to-peer
+            co-op SDK, and keeps single-player working. Co-op connects once the
+            game is hosted here as <span className="font-mono">{slug}</span>. No
+            leaderboard needed.
+          </p>
+          <CopyButton prompt={coopPrompt} />
+        </div>
+        <PromptBox prompt={coopPrompt} className="mt-4" />
       </Section>
 
       {/* LEADERBOARDS */}

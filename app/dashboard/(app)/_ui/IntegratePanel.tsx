@@ -16,6 +16,8 @@
  * `title` and `description` let the same panel carry another prompt: the board
  * page also shows the co-op one (`buildCoopPrompt`) under this one. The modal
  * is the leaderboard's alone, so a reused panel leaves `celebrate` off.
+ * `CopyButton` and `PromptBox` are exported for a page that frames the prompt
+ * in its own `Section` — the game control center's "Online co-op" panel.
  */
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -121,7 +123,7 @@ export function IntegratePanel({
 }
 
 /** A copy-to-clipboard button with transient "Copied!" feedback. */
-function CopyButton({ prompt }: { prompt: string }) {
+export function CopyButton({ prompt }: { prompt: string }) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -167,7 +169,7 @@ function CopyButton({ prompt }: { prompt: string }) {
 }
 
 /** Read-only, scrollable rendering of the prompt text. */
-function PromptBox({ prompt, className = "" }: { prompt: string; className?: string }) {
+export function PromptBox({ prompt, className = "" }: { prompt: string; className?: string }) {
   return (
     <pre className={`max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-surface-2 p-4 font-mono text-xs leading-relaxed text-foreground ${className}`}>
       {prompt}
