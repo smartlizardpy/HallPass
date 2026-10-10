@@ -4,6 +4,11 @@ self.importScripts("/sw-manifest.js");
 
 const BUILD_ID = self.__SW_BUILD_ID || "dev";
 const PRECACHE_URLS = self.__SW_PRECACHE || [];
+// The same list as request pathnames, so a lookup by `url.pathname` agrees with
+// the manifest about percent-encoding (a space in a bundle path, say).
+const PRECACHED_PATHS = new Set(
+  PRECACHE_URLS.map((u) => new URL(u, self.location.origin).pathname),
+);
 const STATIC_CACHE = `hp-static-${BUILD_ID}`;
 // Runtime + meta caches are intentionally NOT keyed by BUILD_ID: they must
 // survive deploys so the games-version sentinel + warm runtime entries persist.
@@ -303,6 +308,16 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // A game file the install did not download — a game over the precache budget
+  // (`scripts/lib/precache-budget.mjs`). Neither strategy below fits it:
+  // `cacheFirst` would pin its first copy in `hp-runtime` for good, and
+  // `networkFirst` would download a document of several megabytes again on
+  // every play. See `revalidateGameFile`.
+  if (url.pathname.startsWith("/games/") && !PRECACHED_PATHS.has(url.pathname)) {
+    event.respondWith(revalidateGameFile(url.pathname + url.search));
+    return;
+  }
+
   // HTML navigations: network-first so updates land when online.
   if (req.mode === "navigate" || req.headers.get("accept")?.includes("text/html")) {
     event.respondWith(networkFirst(req));
@@ -551,6 +566,9 @@ async function networkFirstWithStaticFallback(req) {
   if (res && res.type === "opaqueredirect") {
     const cache = await caches.open(RUNTIME_CACHE);
     await cache.delete(req).catch(() => {});
+    // A game over the precache budget has no install-time copy, and the one
+    // its first play saved would never be replaced if it were preferred here.
+    if (!PRECACHED_PATHS.has(staticUrl)) return revalidateGameFile(staticUrl);
     const fallback = await caches.match(staticUrl);
     if (fallback) return fallback;
     return fetchStaticFallback(staticUrl);
@@ -574,14 +592,52 @@ async function fetchStaticFallback(staticUrl) {
     }
     return res;
   } catch {
-    return new Response(
-      '<!doctype html><meta charset="utf-8"><title>Offline</title><body style="font-family:system-ui;padding:2rem"><h1>Game unavailable offline</h1><p>Reconnect and reload to play.</p>',
-      {
-        status: 503,
-        headers: { "content-type": "text/html; charset=utf-8" },
-      },
-    );
+    return gameOfflineResponse();
   }
+}
+
+/**
+ * A game file the install did NOT precache, which means a game over the
+ * per-game budget in `scripts/lib/precache-budget.mjs`. Such a game is too big
+ * to download again on every deploy, so it is saved the first time it is played
+ * and from then on only REVALIDATED: the saved copy's `etag` goes up as
+ * `If-None-Match`, and an unchanged file comes back as a bodiless 304 (checked
+ * against the live CDN, which answers one for the strong and the weak, i.e.
+ * compressed, form of the tag alike).
+ *
+ * The validator is sent by hand, with `cache: "no-store"`, rather than left to
+ * the browser's HTTP cache through `cache: "no-cache"`: that cache can evict a
+ * file of several megabytes whenever it likes, and would also hold a second copy
+ * of it. The saved copy here is the one offline play needs anyway.
+ *
+ * Offline, or on any network failure, the saved copy is served — so a big game
+ * still plays offline once it has been played online.
+ */
+async function revalidateGameFile(url) {
+  const cache = await caches.open(RUNTIME_CACHE);
+  const saved = await cache.match(url);
+  const etag = saved ? saved.headers.get("etag") : null;
+  try {
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: etag ? { "if-none-match": etag } : {},
+    });
+    if (res.status === 304 && saved) return saved;
+    if (isCacheable(res)) await cache.put(url, res.clone()).catch(() => {});
+    return res;
+  } catch {
+    return saved || gameOfflineResponse();
+  }
+}
+
+function gameOfflineResponse() {
+  return new Response(
+    '<!doctype html><meta charset="utf-8"><title>Offline</title><body style="font-family:system-ui;padding:2rem"><h1>Game unavailable offline</h1><p>Reconnect and reload to play.</p>',
+    {
+      status: 503,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    },
+  );
 }
 /* @strategy-end */
 

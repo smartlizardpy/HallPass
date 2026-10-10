@@ -27,13 +27,18 @@
 // reason: it used to be a `games/version.txt` blob costing one advanced write
 // per publish and a simple read per poll window.
 //
-// BUNDLES ARE FIRST-PUBLISH ONLY, deliberately. A bundle's REpublish also has
-// to delete the files a new upload orphans (`writeGameHtml` in the dashboard
-// does that with the same index), and getting that wrong deletes a live game's
-// assets. So a multi-file game is accepted only when `game_blobs` has no
+// BUNDLES ARE FIRST-PUBLISH ONLY unless you pass `--republish`, deliberately. A
+// bundle's REpublish also has to delete the files a new upload orphans
+// (`uploadBundleAction` in the dashboard does that with the same index), and
+// getting that wrong deletes a live game's assets. So a multi-file game is accepted only when `game_blobs` has no
 // `index.html` row for the slug yet — a first upload (or the retry of one that
 // died part-way) has no live game to orphan — and is refused
-// loudly otherwise; republishing a bundle keeps going through the dashboard.
+// loudly otherwise. `--republish` is the explicit opt-in for the other case: it
+// writes only the files whose bytes changed (by the `game_blobs.sha256`
+// fingerprint, like the dashboard), then deletes the published files the folder
+// no longer contains, under the guards in `planRepublish` (no index.html, or more
+// than half the published files going, is an error). The dashboard's zip upload
+// remains the other way to do the same.
 // This is what lets the add-game skill use one code path for single-file and
 // folder games instead of each growing its own `put()` loop.
 //
@@ -57,11 +62,12 @@
 //   npm run publish-game -- <slug>                       # dry run: says what it would do
 //   npm run publish-game -- <slug> --yes                 # actually writes
 //   npm run publish-game -- <slug> --staged --from .staging/<slug> --cover cover.png [--yes]
+//   npm run publish-game -- <slug> [--staged --from .staging/<slug>] --republish [--yes]
 //
 // Needs BLOB_READ_WRITE_TOKEN and DATABASE_URL, or a .env.local providing them.
 
 import { neon } from "@neondatabase/serverless";
-import { head, put } from "@vercel/blob";
+import { del, head, put } from "@vercel/blob";
 import { createHash } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
@@ -72,6 +78,7 @@ import {
   heroIdentity,
   isInsidePublic,
   parsePublishArgs,
+  planRepublish,
   planUploads,
   readPngSize,
 } from "./lib/publish-plan.mjs";
@@ -81,7 +88,8 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const args = parsePublishArgs(process.argv.slice(2));
 const USAGE =
   "usage: npm run publish-game -- <slug> [--yes]\n" +
-  "       npm run publish-game -- <slug> --staged --from .staging/<slug> [--cover <png>] [--yes]";
+  "       npm run publish-game -- <slug> --staged --from .staging/<slug> [--cover <png>] [--yes]\n" +
+  "       add --republish to update a bundle that is already published";
 if (args.error) {
   console.error(`error: ${args.error}\n${USAGE}`);
   process.exit(1);
@@ -176,13 +184,14 @@ if (plan.errors.length > 0) {
 const indexRows = await sql`
   SELECT 1 FROM game_blobs WHERE pathname = ${`games/${slug}/index.html`} LIMIT 1
 `;
-const mode = classifyPublish(plan.uploads.length, indexRows.length > 0);
+const mode = classifyPublish(plan.uploads.length, indexRows.length > 0, args.republish);
 if (mode === "refuse-bundle") {
   const extras = plan.uploads.map((u) => u.rel).filter((r) => r !== "index.html");
   console.error(
     `error: ${slug} is a multi-file bundle (${extras.join(", ")}) and already\n` +
-      "       published. Republish it through the dashboard,\n" +
-      "       which also removes the files a new upload orphans. This script only\n" +
+      "       published. Pass --republish to update it (writes only the files that\n" +
+      "       changed and deletes the ones the folder no longer has), or republish\n" +
+      "       it through the dashboard. Without --republish this script only\n" +
       "       handles a lone index.html, or a bundle's FIRST upload (a retry of a\n" +
       "       half-finished first upload is fine).",
   );
@@ -197,7 +206,37 @@ for (const u of plan.uploads) {
     body,
     blobPath: `games/${slug}/${u.rel}`,
     hash: createHash("sha256").update(body).digest("hex").slice(0, 12),
+    sha256: createHash("sha256").update(body).digest("hex"),
   });
+}
+
+// A republish: what the database says is published, read UNCACHED and straight
+// from `game_blobs` (never a Blob `list()`, which is an advanced operation).
+// Fingerprints are absent on a database migration 038 has not reached; the plan
+// reads that as "write it", which is the old behaviour.
+let republish = null;
+if (mode === "bundle-republish") {
+  let rows;
+  try {
+    rows = await sql`SELECT pathname, sha256 FROM game_blobs WHERE slug = ${slug}`;
+  } catch (error) {
+    const missingColumn =
+      error?.code === "42703" || /column .* does not exist/i.test(error?.message ?? "");
+    if (!missingColumn) throw error;
+    rows = (await sql`SELECT pathname FROM game_blobs WHERE slug = ${slug}`).map((r) => ({
+      ...r,
+      sha256: null,
+    }));
+  }
+  republish = planRepublish({
+    slug,
+    local: files.map((f) => ({ rel: f.rel, sha256: f.sha256 })),
+    published: rows.map((r) => ({ pathname: String(r.pathname), sha256: r.sha256 ? String(r.sha256) : null })),
+  });
+  if (republish.error) {
+    console.error(`error: cannot republish ${slug}: ${republish.error}.`);
+    process.exit(1);
+  }
 }
 
 // The staged flow's cover: validated up front like everything else, so a bad
@@ -253,6 +292,13 @@ if (mode === "single") {
       ? `published:   ${live.size} bytes  sha256:${liveHash ?? "unreadable"}  uploaded ${live.uploadedAt.toISOString()}`
       : "published:   (nothing yet — this would be the first upload)",
   );
+} else if (republish) {
+  console.log(
+    `local:       ${files.length} files (republish: ${republish.write.length} to write, ` +
+      `${republish.skip.length} unchanged, ${republish.stale.length} to delete)`,
+  );
+  for (const rel of republish.write) console.log(`  write      ${rel}`);
+  for (const pathname of republish.stale) console.log(`  DELETE     ${pathname}`);
 } else {
   console.log(`local:       ${files.length} files (first upload of a multi-file game)`);
   for (const f of files) console.log(`             ${f.rel}  ${f.body.length} bytes`);
@@ -264,8 +310,10 @@ if (hero) {
 // A lone index.html identical to what is live needs no write. A cover still
 // does, which is why this only drops the HTML rather than exiting.
 const identical = mode === "single" && liveHash && liveHash === htmlFile.hash;
-const toWrite = identical ? [] : files;
-if (toWrite.length === 0 && !hero) {
+const writeSet = republish ? new Set(republish.write) : null;
+const toWrite = identical ? [] : writeSet ? files.filter((f) => writeSet.has(f.rel)) : files;
+const toDelete = republish ? republish.stale : [];
+if (toWrite.length === 0 && toDelete.length === 0 && !hero) {
   console.log("\nidentical — nothing to publish.");
   process.exit(0);
 }
@@ -280,6 +328,11 @@ if (!confirmed) {
         : `upload ${toWrite.length} files under games/${slug}/`,
     );
     steps.push("record it in game_blobs so the serving route can see it");
+  }
+  if (toDelete.length > 0) {
+    steps.push(
+      `delete ${toDelete.length} published file${toDelete.length === 1 ? "" : "s"} the folder no longer has, and forget their game_blobs rows (after every upload succeeded)`,
+    );
   }
   if (hero) steps.push(`upload the cover to ${hero.blobPath} and add its hero row to game_media`);
   steps.push(
@@ -306,14 +359,52 @@ for (const f of toWrite) {
   console.log(`\npublished ${f.blobPath}`);
 
   // NOT best-effort, unlike the bump below: without this row the serving route
-  // does not know the blob exists. Mirrors `recordGameBlobs()`.
-  await sql`
-    INSERT INTO game_blobs (pathname, slug, url, size, uploaded_at)
-    VALUES (${f.blobPath}, ${slug}, ${uploaded.url}, ${f.body.length}, now())
-    ON CONFLICT (pathname) DO UPDATE
-      SET url = EXCLUDED.url, size = EXCLUDED.size, uploaded_at = EXCLUDED.uploaded_at
-  `;
+  // does not know the blob exists. Mirrors `recordGameBlobs()`, fingerprint
+  // included — and that part is not optional either: the dashboard skips any
+  // file whose bytes match the row's fingerprint (migration 038), so a row
+  // still holding the dashboard's last one would make it skip re-publishing
+  // those older bytes over this file, and say "No changes".
+  const sha256 = createHash("sha256").update(f.body).digest("hex");
+  try {
+    await sql`
+      INSERT INTO game_blobs (pathname, slug, url, size, uploaded_at, sha256)
+      VALUES (${f.blobPath}, ${slug}, ${uploaded.url}, ${f.body.length}, now(), ${sha256})
+      ON CONFLICT (pathname) DO UPDATE
+        SET url = EXCLUDED.url, size = EXCLUDED.size, uploaded_at = EXCLUDED.uploaded_at,
+            sha256 = EXCLUDED.sha256
+    `;
+  } catch (error) {
+    // A database migration 038 has not reached: no column, so no fingerprint
+    // to leave stale. Record the row the way it was recorded before.
+    const missingColumn =
+      error?.code === "42703" || /column .* does not exist/i.test(error?.message ?? "");
+    if (!missingColumn) throw error;
+    await sql`
+      INSERT INTO game_blobs (pathname, slug, url, size, uploaded_at)
+      VALUES (${f.blobPath}, ${slug}, ${uploaded.url}, ${f.body.length}, now())
+      ON CONFLICT (pathname) DO UPDATE
+        SET url = EXCLUDED.url, size = EXCLUDED.size, uploaded_at = EXCLUDED.uploaded_at
+    `;
+  }
   console.log("recorded in game_blobs");
+}
+
+// The sweep, AFTER every upload has succeeded (a failed `put` above exits the
+// script, so a half-finished republish never deletes anything), and best-effort
+// like the dashboard's: a leftover file is unreferenced, not fatal, and the next
+// republish converges it. Blob first, then the rows, so a failed delete leaves
+// rows that still describe real blobs rather than blobs nothing knows about.
+if (toDelete.length > 0) {
+  try {
+    await del(toDelete);
+    await sql`DELETE FROM game_blobs WHERE pathname = ANY(${toDelete}::text[])`;
+    console.log(`\ndeleted ${toDelete.length} orphaned file${toDelete.length === 1 ? "" : "s"}`);
+  } catch (error) {
+    console.warn(
+      `\nwarning: wrote the new files but could not delete the orphans: ${error.message}\n` +
+        "         re-run with --republish to retry; they are unreferenced, not harmful.",
+    );
+  }
 }
 
 // The hero row. Under `game-media/`, never `games/` — see `game-media.sql` for

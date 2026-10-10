@@ -6,8 +6,11 @@ const nextConfig: NextConfig = {
   // `app/lib/build-id.ts` so a stale installed app can reload itself.
   env: { NEXT_PUBLIC_BUILD_ID: process.env.VERCEL_GIT_COMMIT_SHA ?? "dev" },
   experimental: {
-    // Multi-file game bundles are uploaded through a Server Action; Next's
-    // default 1 MB action body cap would reject any real .zip bundle.
+    // Raises Next's own 1 MB action body default for the actions that still
+    // take files in the form — gallery screenshots and beta evidence, up to
+    // 4 MB each. It sits UNDER Vercel's 4.5 MB request-body cap and cannot lift
+    // it, which is why game source uploads (.html / .zip) go straight to Blob
+    // instead: see `app/lib/game-upload.ts`.
     serverActions: { bodySizeLimit: "25mb" },
   },
   async rewrites() {

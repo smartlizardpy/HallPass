@@ -2,8 +2,9 @@
 -- Canonical fresh-install DDL.
 --
 -- Kept in lockstep with `app/lib/scoreboard/migrations/026_blob_ops.sql`, which
--- is the same body wrapped in BEGIN/COMMIT. Read that file for the full
--- reasoning; the short version is below.
+-- is the same body wrapped in BEGIN/COMMIT, and with `038_game_blob_sha256.sql`,
+-- which added the `sha256` column. Read those files for the full reasoning; the
+-- short version is below.
 --
 -- WHY THIS TABLE EXISTS. Vercel bills `list()` as an ADVANCED Blob operation
 -- (Hobby allowance: 2,000/month, a twentieth of the simple-operation budget),
@@ -70,7 +71,17 @@ CREATE TABLE IF NOT EXISTS game_blobs (
   -- mirror stamp to decide free-CDN-twin versus paid proxy, so it must be the
   -- WRITE time and not the row's insert time on a reindex — `reindexGameBlobs()`
   -- carries `uploadedAt` over from the listing rather than defaulting it.
-  uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  -- SHA-256 (lowercase hex) of the bytes written, or NULL when the writer did
+  -- not compute one. The dashboard's publishers skip a file whose fingerprint
+  -- already matches, which saves a billed `put()`; NULL never matches, so
+  -- "unknown" always means "write it". A stale value would skip a needed write,
+  -- so every writer that cannot compute one writes NULL — see
+  -- `038_game_blob_sha256.sql`.
+  sha256      TEXT
+                CONSTRAINT game_blobs_sha256_format
+                CHECK (sha256 IS NULL OR sha256 ~ '^[0-9a-f]{64}$')
 );
 
 -- Covers the per-game reads and the per-game delete sweep. The full-table read
