@@ -592,6 +592,23 @@ export const games: Game[] = [
     staged: true,
     coverUrl: "/game-media/living-flesh/hero-19070c87dd.png",
   },
+  {
+    slug: "last-bell",
+    author: "Ozan Kaygusuz",
+    title: "Last Bell",
+    tagline: "Report to Room 000.",
+    description:
+      "Trapped in a locked school after the final bell, find the keycard, the fuse and the exit key while the caretaker hunts you and the building rearranges itself every minute.",
+    category: "Horror",
+    tags: ["Horror", "Retro", "Survival"],
+    gradient: ["#161614", "#6f7a68"],
+    accent: "#e8e3d3",
+    art: "eye",
+    isNew: true,
+    platform: "desktop",
+    staged: true,
+    coverUrl: "/game-media/last-bell/hero-b4184cb75f.png",
+  },
 ];
 
 /**
