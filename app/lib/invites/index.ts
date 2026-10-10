@@ -78,11 +78,6 @@ export function reportUnexpected(what: string, error: unknown): void {
   }
 }
 
-/** Whether a write failed only because the schema is not deployed yet. */
-export function isInvitesUnavailable(error: unknown): boolean {
-  return isExpectedMissingSchema(error);
-}
-
 /**
  * The friends this player may invite to the game, or `[]` on any failure. The
  * picker still offers "Share link" when this is empty.
