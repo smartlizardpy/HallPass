@@ -178,8 +178,13 @@ export function useGameRecorder({
   }, [finishWith, abort]);
 
   const addEvent = useCallback(
-    (type: RecordingEventType, source: EventSource, data?: Record<string, unknown>) => {
-      recorderRef.current?.addEvent(type, source, data);
+    (
+      type: RecordingEventType,
+      source: EventSource,
+      data?: Record<string, unknown>,
+      atEpochMs?: number,
+    ) => {
+      recorderRef.current?.addEvent(type, source, data, atEpochMs);
     },
     [],
   );

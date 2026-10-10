@@ -334,9 +334,11 @@ export class GameRecorder {
     type: RecordingEventType,
     source: EventSource,
     data?: Record<string, unknown>,
+    /** When it happened, if not just now (a game-reported moment carries its own). */
+    atEpochMs?: number,
   ): void {
     if (!this.isRecording) return;
-    this.log?.add(type, source, data);
+    this.log?.add(type, source, data, atEpochMs);
   }
 
   /**
