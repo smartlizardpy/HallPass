@@ -9,6 +9,21 @@ to the served URL path (`v1` → `/sdk/v1/hallpass.js`).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-10
+
+### Added
+
+- `moment(name, data?, { shot? })` — a game marks a moment worth keeping
+  ("boss-phase-2", "fell-through-floor"). In a beta test session the tester's
+  device takes a picture of the game at that instant and logs the event; pass
+  `{ shot: false }` for an event with no picture (a death, a pause). Everywhere
+  else it is a no-op that sends no request and stores nothing, so the calls can ship
+  permanently. Names are lowercased `[a-z0-9._-]`, up to 40 characters; `data` is a
+  plain object of about 2 KB of JSON. Resolves `{ ok, name }` / `{ ok: false,
+  reason }`, never throws.
+- The inline stub queues `moment`. Games embedded before this release keep working
+  but have no `moment` method: guard with `HallPass.moment && HallPass.moment(...)`.
+
 ## [1.2.0] - 2026-07-27
 
 ### Added

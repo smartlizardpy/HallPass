@@ -15,6 +15,9 @@
  *    A breaking change means a new `/sdk/v2/` + `/api/v2/` contract.
  */
 
+import type { MomentOptions, MomentResult } from "./moment";
+export type { MomentOptions, MomentResult };
+
 /** Sort direction for a board. `desc` = higher score wins (default); `asc` = lower wins (time / golf). */
 export type SortDir = "desc" | "asc";
 
@@ -714,4 +717,20 @@ export interface HallPass {
    * Never throws. Added in v1.
    */
   challenge?(opts?: ChallengeOptions): Promise<ChallengeResult>;
+  /**
+   * Mark a moment worth keeping: `HallPass.moment("boss-phase-2", { level: 4 })`.
+   *
+   * In a beta test session the tester's device takes a picture of the game at
+   * that instant (and logs it to the recording's events file); pass
+   * `{ shot: false }` to log the event with no picture. EVERYWHERE ELSE it does
+   * nothing — no request, no storage — so the calls can ship permanently.
+   *
+   * `name` is lowercased, up to 40 chars of `[a-z0-9._-]`. `data` is a small plain
+   * object (about 2 KB of JSON) and is kept with the picture. Safe to call often:
+   * the session throttles repeats of one name. Resolves `{ ok: true, name }` or
+   * `{ ok: false, reason }`; never throws. Added in v1.3 (append-only) — on an
+   * older paste-in snippet the method is missing, so guard with
+   * `HallPass.moment && HallPass.moment(...)`.
+   */
+  moment?(name: string, data?: Record<string, unknown>, opts?: MomentOptions): Promise<MomentResult>;
 }

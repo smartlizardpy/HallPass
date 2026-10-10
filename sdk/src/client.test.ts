@@ -503,3 +503,19 @@ describe("createClient sticky auth event", () => {
     expect(seen).toEqual([payload]);
   });
 });
+
+describe("moment", () => {
+  it("validates, resolves, and sends nothing", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const api = createClient(baseConfig(), () => {});
+
+    expect(await api.moment?.("Boss-1", { hp: 3 })).toEqual({ ok: true, name: "boss-1" });
+    expect(await api.moment?.("not valid")).toEqual({ ok: false, reason: "bad-name" });
+    expect(await api.moment?.("ok", [] as unknown as Record<string, unknown>)).toEqual({
+      ok: false,
+      reason: "bad-data",
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+});

@@ -23,6 +23,8 @@ import type {
   LeaderboardResponse,
   MeResponse,
   Mode,
+  MomentOptions,
+  MomentResult,
   PlayerIdentity,
   ReadyState,
   ScoreEntry,
@@ -46,6 +48,7 @@ import {
   subscribeChallengeSignals,
 } from "./challenge";
 import { ensureHandle, getHandle, setHandle } from "./handle";
+import { parseMoment } from "./moment";
 import { getJSON, postJSON } from "./transport";
 import { SDK_MAJOR } from "./version";
 
@@ -545,6 +548,21 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
     unlockMany: achievements.unlockMany,
     progress: achievements.progress,
     getAchievements: achievements.getAchievements,
+    /**
+     * Mark a moment. A deliberate no-op here: it validates and settles, sends
+     * nothing and stores nothing. The recording shim a beta session injects
+     * observes the call and does the work on the tester's device; see `moment.ts`.
+     */
+    async moment(name: string, data?: Record<string, unknown>, opts?: MomentOptions): Promise<MomentResult> {
+      try {
+        const parsed = parseMoment(name, data, opts);
+        return parsed.ok
+          ? { ok: true, name: parsed.moment.name }
+          : { ok: false, reason: parsed.reason };
+      } catch {
+        return { ok: false, reason: "bad-data" };
+      }
+    },
     /**
      * Open the challenge picker and resolve once it closes.
      *
