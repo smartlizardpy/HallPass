@@ -32,6 +32,7 @@ import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { resolveGamesIncludingStaged } from "@/app/lib/games-store";
 import { store } from "@/app/lib/scoreboard";
 import { buildIntegrationPrompt } from "@/app/lib/integration-prompt";
+import { buildCoopPrompt } from "@/app/lib/coop-prompt";
 import {
   deleteBoardAction,
   deleteScoreAction,
@@ -39,7 +40,7 @@ import {
   updateBoardAction,
 } from "../actions";
 import { DashHeader } from "../../_ui/DashHeader";
-import { IntegratePanel } from "./IntegratePanel";
+import { IntegratePanel } from "../../_ui/IntegratePanel";
 
 export const metadata: Metadata = {
   title: "Edit leaderboard",
@@ -163,6 +164,17 @@ export default async function BoardDetailPage({
     : gameMissing
       ? `${board.gameSlug} (missing)`
       : "Standalone board";
+
+  // Co-op rooms are scoped per game, by the game's HallPass slug, so the co-op
+  // prompt is offered only for a board linked to a game. Every game also has it
+  // on its own control center, leaderboard or not.
+  const coopPrompt = linkedGame
+    ? buildCoopPrompt({
+        gameId: linkedGame.slug,
+        title: linkedGame.title,
+        baseUrl: `${proto}://${host}`,
+      })
+    : null;
 
   return (
     <div className="mx-auto w-full max-w-3xl">
@@ -296,6 +308,22 @@ export default async function BoardDetailPage({
       </form>
 
       <IntegratePanel prompt={integrationPrompt} celebrate={created} />
+
+      {linkedGame && coopPrompt && (
+        <IntegratePanel
+          prompt={coopPrompt}
+          title="Add online co-op with an AI agent"
+          description={
+            <>
+              Copy this prompt and paste it into your AI agent with your game
+              open. It interviews you, then adds online co-op (host or join with
+              a code, 2–8 players, optional voice chat) using HallPass&apos;s
+              peer-to-peer co-op SDK. Co-op connects once the game is hosted on
+              HallPass as <span className="font-mono">{linkedGame.slug}</span>.
+            </>
+          }
+        />
+      )}
 
       <section className="mt-6 rounded-xl border border-border bg-surface p-5">
         <div className="mb-3 flex items-baseline justify-between">

@@ -32,6 +32,7 @@ import { auth } from "@/app/lib/auth";
 import { getInvitableFriends, resolveInviteGame } from "@/app/lib/invites";
 import { clampExpiryMinutes, inviteRefusalText } from "@/app/lib/invites/config";
 import { parseInviteDataParam } from "@/app/lib/invites/data";
+import { FrameFit } from "../FrameFit";
 import { InviteEmbed } from "./InviteEmbed";
 
 export const metadata: Metadata = {
@@ -73,7 +74,7 @@ export default async function InviteEmbedPage({
   const friends = target && payload && playerId ? await getInvitableFriends(playerId, target) : [];
 
   return (
-    <main className="p-3">
+    <FrameFit inline={first(params.inline) === "1"}>
       <InviteEmbed
         nonce={nonce}
         signedIn={Boolean(playerId)}
@@ -83,6 +84,6 @@ export default async function InviteEmbedPage({
         minutes={minutes}
         friends={friends}
       />
-    </main>
+    </FrameFit>
   );
 }
