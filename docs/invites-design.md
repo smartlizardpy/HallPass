@@ -233,3 +233,45 @@ to refresh itself after a popup sign-in); invites to a specific room that
 HallPass understands (the data is opaque); revoking an invite (they expire in
 minutes); the in-app-browser escape `/c/` attempts; a launch handoff for
 cross-origin games; an "invite" SDK event; inbound caps.
+
+## 12. As built — differences from the plan
+
+- **Refusals** are `{ ok: false, sent: 0, reason }` (the challenge route's shape),
+  and every store failure is `503 unavailable` — logged unless the table is simply
+  missing — because the caller can only "try later" either way.
+- **Minutes left** on `/i/<code>` come from the database clock (`secondsLeft` in
+  `getByCode`), not `Date.now()` in render.
+- **The game's slug** for both `invite()` and `getLaunch()` is taken from the
+  frame path first (`/games/<slug>/`, `/game-html/<slug>/`), then `data-game`.
+  `data-game` names a leaderboard and can differ from the catalogue slug — it does
+  for `shadow-core-halloween-dash` (`haloween-fastest-level-time`).
+- **The picker shows the link before opening the share sheet.** The end-to-end
+  run found `navigator.share()` never settling in headless Chrome; a player can
+  also sit on the sheet, and the link must be on screen meanwhile.
+- `isPrivatePath` in `sw.js` gained `@pure` markers so `/i/` and `/embed/` are
+  tested against the shipped function.
+
+## 13. Verification (2026-10-10)
+
+- **sessionStorage sharing, real browsers.** A top page writes the key, then
+  frames `/game-html/demo/`, which a real HTTP server 307s to
+  `/games/demo/index.html`. The game frame AND a frame nested inside it read the
+  value; a separate tab does not. Chrome 154 and WebKit 26.6 (Safari engine).
+- **End to end against `next dev` and the dev database**, Chrome 154 and WebKit
+  26.6, 19/19 checks each: guest picker → Share link → `/i/<code>` (`X-Robots-Tag:
+  noindex`, names nobody) → Play → the SDK in the game frame returns the data from
+  `getLaunch()` and the entry is consumed; signed in, `HallPass.invite()` from a
+  game page opens the inline picker → invite a friend → "Invited" → Share link →
+  Close resolves `{ sent: 1, link, cancelled: false }` and removes the frame; one
+  friend row with the data and a 15-minute TTL; the friend's `game_invite`
+  notification has the exact title/body/URL; the friend's landing names the sender
+  by handle with no image, and their game gets the data; an unknown code shows the
+  run-out card. From the game page `GET /api/v1/me/friends` and
+  `POST /api/v1/me/invites` are 403 and `/count` is 200. A fetch that forges a
+  same-origin `referrer` is 200 — the honest limit in §7, demonstrated.
+- **Legitimate friend-GET callers**, signed in, real browser: `/play/you/friends`
+  lists the friend; `/game/<slug>` gets 200 from `/count`, `/activity` and
+  `/scores`.
+- **SQL against Postgres** (`store.db.test.ts`, dev database): 9/9.
+- Migration 041 applied to the dev database twice (idempotent), then dropped
+  again after testing so dev's migration ledger stays truthful.
