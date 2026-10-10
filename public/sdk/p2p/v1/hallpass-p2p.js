@@ -1280,7 +1280,7 @@ var RoomImpl = class {
         const p = this.pendingJoins.get(from);
         if (!this.isHost || !p || !isObj(body)) return;
         p.name = sanitizeName(body.name, p.name);
-        p.avatarUrl = typeof body.avatarUrl === "string" && /^https:\/\//.test(body.avatarUrl) ? body.avatarUrl.slice(0, 500) : null;
+        p.avatarUrl = safeAvatar(body.avatarUrl);
         p.hello = true;
         return this.maybeWelcome(from);
       }
@@ -1649,7 +1649,7 @@ var RoomImpl = class {
     return {
       id: p.id,
       name: p.name,
-      avatarUrl: p.avatarUrl,
+      avatarUrl: safeAvatar(p.avatarUrl),
       isHost: p.id === this.hostId,
       isSelf: p.id === this.selfId,
       ready: p.ready,
@@ -1685,6 +1685,20 @@ var RoomImpl = class {
     this.ev.emit("error", err);
   }
 };
+function safeAvatar(url) {
+  if (typeof url !== "string" || url.length > 500) return null;
+  try {
+    const u = new URL(url);
+    let own = "";
+    try {
+      own = location.host;
+    } catch {
+    }
+    return u.protocol === "https:" && (u.host === own || u.host === "lh3.googleusercontent.com") ? url : null;
+  } catch {
+    return null;
+  }
+}
 function mergeMeta(base, patch) {
   const out = { ...base };
   for (const [k, v] of Object.entries(patch)) {

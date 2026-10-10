@@ -515,6 +515,11 @@ Also: `closed`, `not-host`, `peer-left`, `handler-error`, `message-too-large`,
 - **One mesh.** Every player connects to every other player (max 8). On strict
   networks without TURN some pairs may never connect: `joinRoom` then fails with
   `connect-failed` rather than leaving you half-connected.
+- **Peers are untrusted.** Names, player meta, messages and request data all come
+  from other players' browsers; validate them like any network input (the host's
+  `handle` is the place to check an action is legal). Avatar URLs other than
+  HallPass's own or Google's avatar host are replaced with `null`, so a modified
+  client cannot make you load a tracking image.
 - **Host leaves = room ends (v1).** No host migration yet.
 - **Voice in one browser.** Safari lets only one tab use the microphone at a
   time; testing voice with several tabs of one Safari mutes all but the last.

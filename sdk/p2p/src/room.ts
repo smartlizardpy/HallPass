@@ -650,7 +650,7 @@ export class RoomImpl implements Room {
         const p = this.pendingJoins.get(from);
         if (!this.isHost || !p || !isObj(body)) return;
         p.name = sanitizeName(body.name, p.name);
-        p.avatarUrl = typeof body.avatarUrl === "string" && /^https:\/\//.test(body.avatarUrl) ? body.avatarUrl.slice(0, 500) : null;
+        p.avatarUrl = safeAvatar(body.avatarUrl);
         p.hello = true;
         return this.maybeWelcome(from);
       }
@@ -1069,7 +1069,7 @@ export class RoomImpl implements Room {
     return {
       id: p.id,
       name: p.name,
-      avatarUrl: p.avatarUrl,
+      avatarUrl: safeAvatar(p.avatarUrl),
       isHost: p.id === this.hostId,
       isSelf: p.id === this.selfId,
       ready: p.ready,
@@ -1110,6 +1110,28 @@ export class RoomImpl implements Room {
 
   reportError(err: Error): void {
     this.ev.emit("error", err);
+  }
+}
+
+/**
+ * Avatar URLs come from other players, so a modified client could point one at
+ * a tracking server and learn every player's IP the moment a game renders it.
+ * Only HTTPS images on the page's own origin (HallPass) or Google's avatar host
+ * are passed through; anything else becomes `null`.
+ */
+function safeAvatar(url: unknown): string | null {
+  if (typeof url !== "string" || url.length > 500) return null;
+  try {
+    const u = new URL(url);
+    let own = "";
+    try {
+      own = location.host;
+    } catch {
+      // no page (tests)
+    }
+    return u.protocol === "https:" && (u.host === own || u.host === "lh3.googleusercontent.com") ? url : null;
+  } catch {
+    return null;
   }
 }
 
