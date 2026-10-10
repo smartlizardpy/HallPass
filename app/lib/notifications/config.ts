@@ -89,7 +89,7 @@ export function deliversToPush(channel: NotificationChannel): boolean {
  * own visibility would be one `&&` away from listing admin kinds to a player.
  */
 export const NOTIFICATION_GROUPS = [
-  { id: "social", label: "Friends", blurb: "Challenges and friend requests." },
+  { id: "social", label: "Friends", blurb: "Challenges, game invites and friend requests." },
   { id: "games", label: "Games", blurb: "New games and what you unlock." },
   { id: "streaks", label: "Streaks", blurb: "Keeping your daily flame alive." },
   { id: "beta", label: "Beta testing", blurb: "Games assigned to you to break." },
@@ -216,6 +216,22 @@ export const NOTIFICATION_KINDS = {
     // what needs you now, the bell for what you will be pleased to find.
     defaultChannel: "bell",
     discreet: "Someone beat one of your scores.",
+  },
+  game_invite: {
+    audience: "player",
+    scope: "personal",
+    group: "social",
+    label: "Game invites",
+    icon: "📨",
+    description: "A friend asks you to join the game they are playing right now.",
+    // PUSH, because an invite is the one social kind that is worthless later:
+    // it runs out in minutes (30 by default), and a bell found tomorrow is an
+    // expired link. The volume is bounded by the SENDER's limits in
+    // `invites/config.ts` (20 an hour, one per friend per game per 10 minutes).
+    defaultChannel: "push",
+    // Names nobody and no game: a lock screen in a classroom is exactly where
+    // "Ozan invited you to play …" should not appear unless the player chose it.
+    discreet: "You have a new invite.",
   },
   friend_request: {
     audience: "player",

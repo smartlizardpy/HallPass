@@ -166,6 +166,29 @@ export function friendPassedCopy(input: {
   });
 }
 
+/**
+ * "Ozan invited you to play LAST BELL."
+ *
+ * Lands on the invite itself (`/i/<code>`), which starts the game in place with
+ * the inviter's data — the whole point is joining THEM, now. The minutes are
+ * the invite's own lifetime, so the body never promises longer than the link
+ * lasts. Takes the PUBLIC display name (never a real name); `shortName` bounds
+ * both it and the game title.
+ */
+export function gameInviteCopy(input: {
+  from: string;
+  game: string;
+  code: string;
+  minutes: number;
+}): NotificationCopy {
+  const minutes = Math.max(1, Math.round(input.minutes));
+  return bound({
+    title: `${shortName(input.from, "A friend")} invited you to play ${shortName(input.game, "a game")}`,
+    body: `Tap to join them. The invite runs out in ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`,
+    url: `/i/${encodeURIComponent(input.code)}`,
+  });
+}
+
 /** "Ayşe wants to be friends." */
 export function friendRequestCopy(input: { from: string }): NotificationCopy {
   return bound({

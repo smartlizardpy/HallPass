@@ -32,6 +32,7 @@ import {
   friendPassedCopy,
   friendRequestCopy,
   gameDropCopy,
+  gameInviteCopy,
   reviewPostedCopy,
   reviewReportedCopy,
   shortName,
@@ -61,6 +62,7 @@ const EVERY_KIND: Record<string, NotificationCopy> = {
   streak_at_risk: streakAtRiskCopy({ current: 5 }),
   streak_milestone: streakMilestoneCopy({ current: 7 }),
   friend_request: friendRequestCopy({ from: "Ayşe" }),
+  game_invite: gameInviteCopy({ from: "Ozan", game: "Duskfall", code: "CDFGHJKMNPQR", minutes: 30 }),
   friend_accepted: friendAcceptedCopy({ from: "Ayşe" }),
   game_drop: gameDropCopy({ title: "Duskfall", slug: "duskfall" }),
   achievement_unlocked: achievementCopy({
@@ -406,6 +408,41 @@ describe("every kind", () => {
         expect(discreet, kind).not.toContain(leak);
       }
     }
+  });
+});
+
+describe("gameInviteCopy", () => {
+  it("names the inviter and the game, and lands on the invite", () => {
+    const copy = gameInviteCopy({ from: "Ozan", game: "LAST BELL", code: "CDFGHJKMNPQR", minutes: 30 });
+    expect(copy).toEqual({
+      title: "Ozan invited you to play LAST BELL",
+      body: "Tap to join them. The invite runs out in 30 minutes.",
+      url: "/i/CDFGHJKMNPQR",
+    });
+  });
+
+  it("says how long THIS invite lasts", () => {
+    expect(gameInviteCopy({ from: "Ozan", game: "G", code: "C", minutes: 120 }).body).toBe(
+      "Tap to join them. The invite runs out in 120 minutes.",
+    );
+    expect(gameInviteCopy({ from: "Ozan", game: "G", code: "C", minutes: 1 }).body).toBe(
+      "Tap to join them. The invite runs out in 1 minute.",
+    );
+  });
+
+  it("bounds long names and falls back for blank ones", () => {
+    const copy = gameInviteCopy({ from: "x".repeat(300), game: "y".repeat(300), code: "C", minutes: 30 });
+    expect(copy.title.length).toBeLessThanOrEqual(NOTIFICATION_TITLE_MAX);
+    expect(copy.title).toBe(`${"x".repeat(23)}… invited you to play ${"y".repeat(23)}…`);
+    expect(gameInviteCopy({ from: " ", game: "", code: "C", minutes: 30 }).title).toBe(
+      "A friend invited you to play a game",
+    );
+  });
+
+  it("has a discreet counterpart that names nobody and no game", () => {
+    expect(NOTIFICATION_KINDS.game_invite.discreet).toBe("You have a new invite.");
+    expect(NOTIFICATION_KINDS.game_invite.group).toBe("social");
+    expect(NOTIFICATION_KINDS.game_invite.defaultChannel).toBe("push");
   });
 });
 
