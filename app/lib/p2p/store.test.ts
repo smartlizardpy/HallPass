@@ -74,8 +74,8 @@ describe("lookupForJoin", () => {
         host_peer: "hostpeerabcd",
         game_version: "1.2.0",
         relay_only: true,
-        locked: false,
-        full: true,
+        is_locked: false,
+        is_full: true,
       },
     ]);
     const res = await createP2PStore(sql).lookupForJoin("last-bell", "K7QX", "key");

@@ -13,8 +13,8 @@ CREATE TABLE IF NOT EXISTS p2p_rooms (
   relay_only   BOOLEAN     NOT NULL DEFAULT false,
   -- The host's last reported lobby state, so a join to a locked or full room is
   -- refused without waking the host. The host re-checks every join anyway.
-  locked       BOOLEAN     NOT NULL DEFAULT false,
-  full         BOOLEAN     NOT NULL DEFAULT false,
+  is_locked    BOOLEAN     NOT NULL DEFAULT false,
+  is_full      BOOLEAN     NOT NULL DEFAULT false,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   host_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (game_id, code)

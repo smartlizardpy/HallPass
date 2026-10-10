@@ -144,7 +144,7 @@ export function createP2PStore(sql: Sql) {
           (SELECT count(*) FROM p2p_attempts
             WHERE key = ${key} AND kind = 'miss'
               AND created_at >= now() - make_interval(secs => ${RATE_LIMITS.miss.windowSeconds})) AS misses,
-          r.room_id, r.host_peer, r.game_version, r.relay_only, r.locked, r.full
+          r.room_id, r.host_peer, r.game_version, r.relay_only, r.is_locked, r.is_full
         FROM (SELECT 1) AS one
         LEFT JOIN p2p_rooms r
           ON r.game_id = ${gameId} AND r.code = ${code}
@@ -161,8 +161,8 @@ export function createP2PStore(sql: Sql) {
                 hostPeer: String(row.host_peer),
                 gameVersion: String(row.game_version ?? ""),
                 relayOnly: row.relay_only === true,
-                locked: row.locked === true,
-                full: row.full === true,
+                locked: row.is_locked === true,
+                full: row.is_full === true,
               },
       };
     },
@@ -212,8 +212,8 @@ export function createP2PStore(sql: Sql) {
         beat AS (
           UPDATE p2p_rooms
              SET host_seen_at = now(),
-                 locked = COALESCE(${locked}::boolean, locked),
-                 full = COALESCE(${full}::boolean, full)
+                 is_locked = COALESCE(${locked}::boolean, is_locked),
+                 is_full = COALESCE(${full}::boolean, is_full)
            WHERE room_id = ${p.roomId} AND ${p.isHost}::boolean
         ),
         acked AS (
