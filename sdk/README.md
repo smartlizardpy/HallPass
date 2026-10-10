@@ -29,7 +29,7 @@ w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
 submitScore:e("submitScore"),getScores:e("getScores"),
 getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
 unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
-getAchievements:e("getAchievements"),challenge:e("challenge"),
+getAchievements:e("getAchievements"),challenge:e("challenge"),moment:e("moment"),
 signIn:function(){},signOut:function(){},
 getHandle:function(){return null},setHandle:function(v){return v},
 on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
@@ -193,6 +193,29 @@ throws, and the game plays on regardless.
 > (`await HallPass.ready()`), by which point the real SDK has replaced the stub.
 > Re-paste the snippet above to get early-call queueing for them too.
 
+### Mark moments for beta testers (optional)
+
+```js
+HallPass.moment && HallPass.moment("boss-phase-2", { level: 4, hp: 31 });
+HallPass.moment && HallPass.moment("died", { cause: "spikes" }, { shot: false });
+```
+
+`moment()` flags an instant worth looking at. In a HallPass **beta test session**
+the tester's device takes a picture of the game at that instant (and logs it to
+their recording's events file), which they can pin to a bug report or send as a
+screenshot. `{ shot: false }` logs the event with no picture. Anywhere else —
+every public player — it does nothing: no request, no storage. So leave the calls
+in.
+
+Names are lowercased `[a-z0-9._-]`, up to 40 characters. `data` is a plain object
+of about 2 KB of JSON, kept with the picture. Repeats of one name are throttled by
+the session, so calling it from a loop is fine. It resolves `{ ok: true, name }`
+or `{ ok: false, reason: "bad-name" | "bad-data" | "inert" }`.
+
+> The `HallPass.moment &&` guard matters for a game that pasted the snippet before
+> v1.3.0: its stub has no `moment`, and calling a missing method would throw.
+> Re-paste the snippet above to drop the guard.
+
 ### React to events
 
 ```js
@@ -222,6 +245,7 @@ HallPass
 | `unlockMany(keys, opts?)`       | `Promise<UnlockResult[]>` | Earn several in ONE request; results come back in the order the keys were given. |
 | `progress(key, value, opts?)`   | `Promise<UnlockResult>`  | Report ABSOLUTE progress. Coalesced per key (~1s) and flushed on page hide. `opts`: `{ game?, flush? }`. |
 | `getAchievements(opts?)`        | `Promise<PlayerAchievement[]>` | This player's view of the game's achievements. `[]` on any failure. `opts`: `{ game? }`. |
+| `moment(name, data?, opts?)`    | `Promise<MomentResult>`  | Mark a moment for beta testers; a no-op for everyone else. `opts`: `{ shot? }` (`false` = event only). |
 | `on(event, cb)` / `off(...)`    | `HallPass`               | Events: `ready`, `scores`, `submitted`, `error`, `auth`, `achievement`. `auth` fires `{ player }` when sign-in/out completes (sticky). `achievement` fires the earned achievement — only on a NEW unlock, never sticky. Chainable. |
 
 ### `submitScore` reasons
