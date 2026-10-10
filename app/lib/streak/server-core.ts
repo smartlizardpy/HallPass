@@ -22,8 +22,16 @@
 
 import { diffDays, isDayKey, isMilestone } from "./core";
 
-/** The local hour the at-risk reminder goes out in (17:00–17:59). */
-export const REMINDER_HOUR = 17;
+/**
+ * The local hours the at-risk reminder may go out in: from 17:00 to the end of
+ * 20:59. It is a WINDOW, not one hour, because the hourly runner is best-effort
+ * (GitHub drops and delays cron runs, with gaps of several hours seen in
+ * practice). A run that lands late still finds the player inside the window, and
+ * the once-per-local-day claim keeps the wider window from sending twice. The
+ * window closes at 21:00 so the push still arrives with hours left to act on it.
+ */
+export const REMINDER_FIRST_HOUR = 17;
+export const REMINDER_LAST_HOUR = 20;
 
 /** A run shorter than this is not yet worth a reminder: one day is not a habit. */
 export const REMINDER_MIN_STREAK = 2;
@@ -143,7 +151,7 @@ export type NudgeCandidate = {
  *
  * Yes when their run is worth saving, it is still ALIVE but unextended (the last
  * day it advanced was their local yesterday, so it is today's play that keeps
- * it), it is the reminder hour where they are, and they have not been nudged
+ * it), it is inside the reminder window where they are, and they have not been nudged
  * today. Somebody who already played today has `lastDay` = today and is skipped.
  * Somebody whose streak lapsed is skipped too — there is deliberately no
  * win-back message.
@@ -151,7 +159,7 @@ export type NudgeCandidate = {
 export function isNudgeDue(c: NudgeCandidate, nowMs: number): boolean {
   if (c.current < REMINDER_MIN_STREAK) return false;
   const { day, hour } = localParts(nowMs, c.tzOffsetMin);
-  if (hour !== REMINDER_HOUR) return false;
+  if (hour < REMINDER_FIRST_HOUR || hour > REMINDER_LAST_HOUR) return false;
   if (diffDays(c.lastDay, day) !== 1) return false;
   return c.lastNudgedDay !== day;
 }
