@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex">
+<title>HallPass P2P test harness</title>
+</head>
+<body>
+<p>Automated-test harness for the HallPass P2P SDK. Driven by <code>sdk/p2p/e2e/run.mjs</code>; exposes the SDK as <code>window.HallPassP2P</code>.</p>
+<script type="module">
+  import { HallPassP2P } from "../v1/hallpass-p2p.js";
+  window.HallPassP2P = HallPassP2P;
+  // Every room event, in order, for assertions: [event, payload].
+  window.events = [];
+  window.record = (room, names) => {
+    for (const n of names) room.on(n, (a, b) => window.events.push([n, a, b]));
+  };
+  window.ready = true;
+</script>
+</body>
+</html>

@@ -933,6 +933,16 @@ working and the panel stays empty — logging can never fail a tool call.
   endpoints. `GET` and `DELETE` answer 405: the endpoint is stateless, so there
   is no event stream to open and no session to end.
 
+## P2P co-op SDK
+
+`sdk/p2p/` builds `hallpass-p2p.js`, an ES module games vendor to get 1–8 player
+online play over WebRTC with no server of their own (first user: LAST BELL).
+HallPass provides signaling (`/api/v1/p2p/*`, HTTP polling on Postgres,
+migration `040`) and short-lived TURN credentials. The API and gotchas are in
+[`sdk/README.md`](sdk/README.md#p2p-co-op-hallpass-p2pjs), the design in
+[`docs/p2p-design.md`](docs/p2p-design.md), and the demo at
+`/sdk/p2p/demo/index.html`.
+
 ## Environment variables
 
 Derived from `process.env.*` references in the codebase, plus the few Auth.js
@@ -969,6 +979,13 @@ and auth vars below are not in it.
 | `POSTHOG_ENV_CHECK` | `scripts/check-build-env.mjs` | Set to `warn` to stop a missing `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` failing the deploy. |
 | `HALLPASS_SITE_URL` | `scripts/check-alerts.mjs` | Repository *variable*, not a secret. Points a workflow run at a deployment other than production. |
 | `CREDIT_GEO_GATE` | `app/lib/credit-visibility.ts` | Optional, **on by default**. The public footer shows the team's real names only to visitors `GET /api/v1/credit-visibility` geolocates (via `@vercel/functions`) to the UK or Turkey; everyone else sees "Sigma Alpha Male Game Studios". Set to `off`/`0`/`false`/`no` to turn the gate off and show the real names to everybody, same as before this existed. |
+| `P2P_SIGNING_SECRET` | `app/lib/p2p/tokens.ts` | Optional. Signs the P2P signaling tokens. Falls back to `AUTH_SECRET`, so P2P works with what is already set; set it to rotate P2P tokens on their own. With neither, the P2P room endpoints answer 503. |
+| `P2P_TURN_CLOUDFLARE_KEY_ID` / `P2P_TURN_CLOUDFLARE_API_TOKEN` | `app/lib/p2p/ice.ts` | Optional. Cloudflare Realtime TURN: `GET /api/v1/p2p/config` mints short-lived TURN credentials per request. Without a TURN provider players on strict (school) networks often cannot connect; the SDK then says so (`connect-failed` / `no-turn-restrictive-network`). |
+| `P2P_TURN_URLS` / `P2P_TURN_SECRET` | `app/lib/p2p/ice.ts` | Optional alternative to Cloudflare: any TURN server using the shared-secret REST scheme (coturn `use-auth-secret`). Comma-separated `turn:`/`turns:` URLs plus the shared secret. Cloudflare wins if both are set. |
+| `P2P_TURN_TTL_SECONDS` | `app/lib/p2p/ice.ts` | Optional TURN credential lifetime, 300–172800; default 14400 (4 h). The SDK refreshes ten minutes before expiry. |
+| `P2P_STUN_URLS` | `app/lib/p2p/ice.ts` | Optional comma-separated STUN URLs; default Cloudflare's and Google's public STUN. |
+| `P2P_FORCE_RELAY` | `app/lib/p2p/config.ts` | Set to `1` to make every P2P connection relay-only (players never see each other's IP). Needs TURN; without it nobody can connect. |
+| `P2P_DISABLED` | `app/lib/p2p/config.ts` | Kill switch: `1` makes every P2P endpoint answer 503 (`unavailable`). |
 
 ## Scripts
 
