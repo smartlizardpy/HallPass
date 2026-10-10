@@ -50,6 +50,7 @@ import {
 import { AGENT_FEED_LIMIT } from "@/app/lib/mcp/activity";
 import { ACTIVITY_IDLE_MINUTES } from "@/app/lib/mcp/config";
 import type { BetaReportWithAuthor, BetaShot } from "@/app/lib/beta/store";
+import { readStoredMoment } from "@/app/lib/beta/report-moment";
 import {
   BUG_SEVERITIES,
   DUPLICATE_XP,
@@ -101,6 +102,36 @@ export const metadata: Metadata = {
  * `<details>` keeps a long stack collapsed by default: the queue is for scanning
  * and a 40-line trace between two reports makes that impossible.
  */
+/**
+ * The game-reported moment the pinned screenshot was taken for, with the game's
+ * own data for it. Written by a game, so rendered as text: keys and values go
+ * through React's escaping and nothing here is ever interpreted.
+ */
+function MomentNote({ name, dataText }: { name: string; dataText: string | null }) {
+  const moment = readStoredMoment(name, dataText);
+  if (!moment) return null;
+  const entries = moment.data ? Object.entries(moment.data) : [];
+  return (
+    <details className="mt-2 rounded-lg border border-border bg-surface-2 px-3 py-2">
+      <summary className="cursor-pointer text-xs font-black uppercase tracking-wide text-foreground">
+        📍 Moment: {moment.name}
+      </summary>
+      {entries.length > 0 && (
+        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+          {entries.map(([key, value]) => (
+            <div key={key} className="contents">
+              <dt className="font-black text-muted">{key}</dt>
+              <dd className="break-all font-semibold text-foreground">
+                {typeof value === "string" ? value : JSON.stringify(value)}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </details>
+  );
+}
+
 function ErrorList({ raw, count }: { raw: string | null; count: number }) {
   let entries: {
     at?: number;
@@ -325,6 +356,10 @@ function ReportCard({
           preload="metadata"
           className="mt-2 h-48 w-auto rounded-lg border border-border bg-black"
         />
+      )}
+
+      {report.momentName && (
+        <MomentNote name={report.momentName} dataText={report.momentData} />
       )}
 
       {report.errorCount > 0 && (

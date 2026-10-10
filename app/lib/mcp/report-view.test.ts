@@ -181,3 +181,30 @@ describe("toReportDetail", () => {
     expect(wire).not.toContain("secret-key");
   });
 });
+
+describe("game-reported moments", () => {
+  const withMoment = {
+    ...base,
+    authorUsername: null,
+    authorHandle: null,
+    authorName: null,
+    momentName: "boss-phase-2",
+    momentData: '{"level":4,"hp":31}',
+  } as unknown as BetaReportWithAuthor;
+
+  it("names the moment in the summary and carries its data in the detail", () => {
+    expect(toReportSummary(withMoment).moment).toBe("boss-phase-2");
+    expect(toReportDetail(withMoment).momentDetail).toEqual({
+      name: "boss-phase-2",
+      data: { level: 4, hp: 31 },
+    });
+  });
+
+  it("is null for a report with no moment, and survives corrupt data", () => {
+    expect(toReportSummary(base).moment).toBeNull();
+    expect(toReportDetail({ ...withMoment, momentName: null } as never).momentDetail).toBeNull();
+    expect(
+      toReportDetail({ ...withMoment, momentData: "{nope" } as never).momentDetail,
+    ).toEqual({ name: "boss-phase-2", data: null });
+  });
+});

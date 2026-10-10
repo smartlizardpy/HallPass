@@ -30,3 +30,21 @@ describe("reportMoment", () => {
     expect(reportMoment("", {}, true)).toBeNull();
   });
 });
+
+import { readStoredMoment } from "./report-moment";
+
+describe("readStoredMoment", () => {
+  it("reads a name and its data", () => {
+    expect(readStoredMoment("died", '{"x":1}')).toEqual({ name: "died", data: { x: 1 } });
+  });
+  it("is no moment without a name", () => {
+    expect(readStoredMoment(null, '{"x":1}')).toBeNull();
+    expect(readStoredMoment("", null)).toBeNull();
+  });
+  it("never throws on corrupt data", () => {
+    expect(readStoredMoment("died", "{nope")).toEqual({ name: "died", data: null });
+    expect(readStoredMoment("died", "[1,2]")).toEqual({ name: "died", data: null });
+    expect(readStoredMoment("died", "5")).toEqual({ name: "died", data: null });
+    expect(readStoredMoment("died", null)).toEqual({ name: "died", data: null });
+  });
+});

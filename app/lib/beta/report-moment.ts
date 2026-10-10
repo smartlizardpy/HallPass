@@ -34,3 +34,37 @@ export function reportMoment(
   const { moment } = parsed;
   return { name: moment.name, data: moment.data ? JSON.stringify(moment.data) : null };
 }
+
+/** A report's stored moment, read back for display. */
+export type StoredMoment = {
+  name: string;
+  data: Record<string, unknown> | null;
+};
+
+/**
+ * Read a report's moment back out of its columns.
+ *
+ * NEVER THROWS, for the reason `parseErrorLog` gives: `moment_data` is TEXT with
+ * no CHECK so a bad payload cannot fail the insert, which means the reader has to
+ * absorb it - one corrupt row must not be able to take down the queue listing the
+ * report behind it. A missing name is no moment; unreadable data is a moment with
+ * no data.
+ */
+export function readStoredMoment(
+  name: string | null,
+  data: string | null,
+): StoredMoment | null {
+  if (!name) return null;
+  let parsed: Record<string, unknown> | null = null;
+  if (data) {
+    try {
+      const value: unknown = JSON.parse(data);
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        parsed = value as Record<string, unknown>;
+      }
+    } catch {
+      parsed = null;
+    }
+  }
+  return { name, data: parsed };
+}
