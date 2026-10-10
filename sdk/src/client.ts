@@ -20,6 +20,9 @@ import type {
   EventName,
   GetScoresOptions,
   HallPass,
+  InviteOptions,
+  InviteResult,
+  LaunchInfo,
   LeaderboardResponse,
   MeResponse,
   Mode,
@@ -48,6 +51,14 @@ import {
   subscribeChallengeSignals,
 } from "./challenge";
 import { ensureHandle, getHandle, setHandle } from "./handle";
+import {
+  INVITE_CHROME,
+  invitePickerUrl,
+  makeNonce,
+  serializeInviteData,
+  subscribeInviteSignals,
+} from "./invite";
+import { slugFromPath, takeLaunch } from "./launch";
 import { parseMoment } from "./moment";
 import { getJSON, postJSON } from "./transport";
 import { SDK_MAJOR } from "./version";
@@ -97,6 +108,50 @@ export function emit(event: EventName, payload: unknown): void {
  * settle a promise, so this is the half that actually cleans up.
  */
 const PICKER_MAX_MS = 5 * 60 * 1000;
+
+/**
+ * How long an INLINE invite picker may take to say it has loaded before the SDK
+ * takes it down. An inline frame has no window chrome: if the page fails to load
+ * (a server error, a captive portal) nothing on it can be closed, so without
+ * this the player would be left with a dead card over their game until
+ * {@link PICKER_MAX_MS}. A popup needs no such deadline — the player can always
+ * close a window.
+ */
+const INVITE_READY_MS = 20 * 1000;
+
+/** What every failed or empty `invite()` resolves. A fresh object each time. */
+function noInvite(): InviteResult {
+  return { sent: 0, link: null, cancelled: true };
+}
+
+/**
+ * The game's CATALOGUE slug: the frame's own path when the game is hosted on
+ * HallPass (`/games/<slug>/`, `/game-html/<slug>/`), else the configured game.
+ * The path wins because it IS the catalogue slug, while `data-game` names a
+ * leaderboard and need not match it.
+ */
+function catalogueSlug(configured: string | null): string | null {
+  try {
+    const fromPath = typeof window !== "undefined" && window.location ? slugFromPath(window.location.pathname) : null;
+    return fromPath ?? configured ?? null;
+  } catch {
+    return configured ?? null;
+  }
+}
+
+/**
+ * Read the invite this page was launched with, ONCE, at construction — so a
+ * reload cannot rejoin, and a game that calls `getLaunch()` late still gets it.
+ * Tries the catalogue slug from the path, then the configured game.
+ */
+function readLaunchOnce(configured: string | null): LaunchInfo | null {
+  try {
+    const fromPath = catalogueSlug(null);
+    return takeLaunch(fromPath) ?? (configured && configured !== fromPath ? takeLaunch(configured) : null);
+  } catch {
+    return null;
+  }
+}
 
 /** Cap on the number of pending claim tokens held in memory. */
 const MAX_CLAIM_TOKENS = 20;
@@ -168,6 +223,9 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
 
   /** Single-flight guard for {@link refreshAuth} so overlapping signals coalesce. */
   let refreshing = false;
+
+  /** The invite this page load was started from, read once at construction. */
+  let launch: LaunchInfo | null = readLaunchOnce(cfg.game);
 
   /**
    * True iff the configured API origin equals the page origin, so credentialed
@@ -658,6 +716,127 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
           resolve({ ok: false, sent: false, reason: "network" });
         }
       });
+    },
+    /**
+     * Open the invite picker and resolve once it closes.
+     *
+     * Orchestration only, like `challenge`: the picker is a first-party page, so
+     * nothing about the player or their friends is read or drawn here. It may
+     * signal several times (see `invite.ts`); this keeps the running totals and
+     * settles on the first of: the picker saying it closed, the popup being
+     * closed by hand, an inline frame that never loaded, or the abandon timer.
+     */
+    invite(opts: InviteOptions): Promise<InviteResult> {
+      return new Promise<InviteResult>((resolve) => {
+        try {
+          if (mode === "inert") return resolve(noInvite());
+          if (typeof navigator !== "undefined" && navigator.onLine === false) {
+            return resolve(noInvite());
+          }
+          const game = catalogueSlug(cfg.game);
+          const data = serializeInviteData(opts?.data);
+          if (!game || data === null) return resolve(noInvite());
+
+          const nonce = makeNonce();
+          const url = invitePickerUrl(cfg.api, {
+            game,
+            data,
+            nonce,
+            expiresInMinutes: opts?.expiresInMinutes,
+          });
+
+          let sent = 0;
+          let link: string | null = null;
+          let opened = false;
+          let settled = false;
+          const timers: ReturnType<typeof setTimeout>[] = [];
+          let stopWatching = (): void => {};
+          let unsubscribe = (): void => {};
+          let picker: { close(): void; window: Window | null } | null = null;
+
+          const finish = (): void => {
+            if (settled) return;
+            settled = true;
+            for (const t of timers) {
+              try {
+                clearTimeout(t);
+              } catch {
+                // Teardown must not stop the promise settling.
+              }
+            }
+            try {
+              stopWatching();
+            } catch {
+              // ditto
+            }
+            try {
+              unsubscribe();
+            } catch {
+              // ditto
+            }
+            try {
+              picker?.close();
+            } catch {
+              // ditto
+            }
+            resolve({ sent, link, cancelled: sent === 0 && link === null });
+          };
+
+          // Subscribe BEFORE opening, so an instant "open" cannot be missed.
+          unsubscribe = subscribeInviteSignals(cfg.api, nonce, (signal) => {
+            opened = true;
+            if (signal.sent > sent) sent = signal.sent;
+            if (signal.link) link = signal.link;
+            if (signal.phase === "closed") finish();
+          });
+
+          picker = isSameOrigin(cfg.api)
+            ? openInlinePicker(url, INVITE_CHROME) ?? openPopupPicker(url, INVITE_CHROME)
+            : openPopupPicker(url, INVITE_CHROME);
+          if (!picker) {
+            unsubscribe();
+            settled = true;
+            return resolve(noInvite());
+          }
+
+          if (picker.window) {
+            stopWatching = watchPopup(picker.window, finish);
+          } else {
+            timers.push(
+              setTimeout(() => {
+                if (!opened) finish();
+              }, INVITE_READY_MS),
+            );
+          }
+          // The same backstop `challenge` has, for the same reason: only this
+          // side can remove an abandoned frame and settle the promise.
+          timers.push(setTimeout(finish, PICKER_MAX_MS));
+        } catch {
+          resolve(noInvite());
+        }
+      });
+    },
+    /**
+     * The invite this page load was started from, or `null`. Synchronous; read
+     * once at construction (see `launch.ts`), and `null` again once it expires.
+     * Returns a copy, so a game mutating it cannot change the next answer.
+     */
+    getLaunch(): LaunchInfo | null {
+      try {
+        if (!launch) return null;
+        if (launch.expiresAt <= Date.now()) {
+          launch = null;
+          return null;
+        }
+        return {
+          kind: "invite",
+          data: JSON.parse(JSON.stringify(launch.data)) as Record<string, unknown>,
+          from: launch.from,
+          expiresAt: launch.expiresAt,
+        };
+      } catch {
+        return null;
+      }
     },
     on(event: EventName, cb: (payload: unknown) => void): HallPass {
       try {
