@@ -94,6 +94,7 @@ const ALLOWED_PREFIXES = [
   "app/lib/beta/",
   "app/lib/game-media.ts",
   "app/lib/p2p/index.ts",
+  "app/lib/invites/index.ts",
 ];
 
 /** Every non-test `.ts`/`.tsx` file under `dir`, as repo-relative posix paths. */

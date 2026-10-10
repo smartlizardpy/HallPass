@@ -34,8 +34,12 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-/** The env-driven super-admin allow-list, normalised. Read lazily, as there. */
-function superAdminEmails(): string[] {
+/**
+ * The env-driven super-admin allow-list, normalised. Read lazily, as there.
+ * Exported for `invites/index.ts`, which needs the same list to decide who may
+ * RECEIVE an invite to a staged game.
+ */
+export function superAdminEmails(): string[] {
   return (process.env.SUPER_ADMIN_EMAILS ?? "")
     .split(/[\s,]+/)
     .map((entry) => entry.trim().toLowerCase())
