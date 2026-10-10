@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   counts: vi.fn(),
   isStagedOrUnverifiable: vi.fn(),
   canViewStaged: vi.fn(),
+  trusted: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -28,6 +29,8 @@ vi.mock("@/app/lib/beta/staged-access", () => ({ canViewStaged: h.canViewStaged 
 vi.mock("@/app/lib/social/request-guard", () => ({
   NO_STORE: { "Cache-Control": "private, no-store" },
   currentPlayerId: h.playerId,
+  isTrustedOrigin: h.trusted,
+  forbidden: () => Response.json({ ok: false, error: "forbidden" }, { status: 403 }),
   credentialedOptions: () => new Response(null, { status: 204 }),
 }));
 
@@ -50,6 +53,7 @@ beforeEach(() => {
   h.counts.mockResolvedValue({ friends: 3 });
   h.isStagedOrUnverifiable.mockImplementation(async (s: string) => s === "beta");
   h.canViewStaged.mockResolvedValue(false);
+  h.trusted.mockReturnValue(true);
 });
 
 describe("GET /me/friends/scores on a staged game", () => {

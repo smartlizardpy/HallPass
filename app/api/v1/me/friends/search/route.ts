@@ -26,6 +26,8 @@ import {
   NO_STORE,
   credentialedOptions,
   currentPlayerId,
+  forbidden,
+  isTrustedOrigin,
 } from "@/app/lib/social/request-guard";
 import { SEARCH_MIN_CHARS } from "@/app/lib/social/config";
 import { foldToAscii, normalizeUsername } from "@/app/lib/username";
@@ -35,6 +37,9 @@ export async function GET(req: Request): Promise<Response> {
   if (!playerId) {
     return Response.json({ results: [] }, { status: 401, headers: NO_STORE });
   }
+  // Same-origin pages only, like every write here: a game frame must not be
+  // able to read who its player's friends are (`social/origin.ts`).
+  if (!isTrustedOrigin(req)) return forbidden();
 
   const raw = new URL(req.url).searchParams.get("q") ?? "";
   // FOLD, DO NOT REJECT. This used to normalise to the username charset and

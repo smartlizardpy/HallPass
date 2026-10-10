@@ -187,6 +187,27 @@ describe("warmSocial", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("skips the friend list on a page its origin check would refuse", async () => {
+    // `/api/v1/me/friends` 403s a referrer outside the allowlist, and the
+    // splash fires on whatever page a phone lands on — an invite, a challenge
+    // link. The challenges read is not gated and still warms.
+    window.history.replaceState(null, "", "/i/CDFGHJKMNPQR");
+    try {
+      const fetchMock = stubFetch({
+        "/api/v1/me/friends": friendsPayload(),
+        "/api/v1/me/challenges": challengesPayload,
+      });
+
+      await mod.warmSocial();
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(String(fetchMock.mock.calls[0][0])).toBe("/api/v1/me/challenges");
+      expect(mod.readCachedFriends()).toBeNull();
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
   it("refetches once the entry has aged past the TTL", async () => {
     const fetchMock = stubFetch({
       "/api/v1/me/friends": friendsPayload(),

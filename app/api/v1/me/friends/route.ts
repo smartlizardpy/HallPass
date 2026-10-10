@@ -57,7 +57,7 @@ const SEND_STATUS: Record<SendResult, number> = {
   unavailable: 404,
 };
 
-export async function GET(): Promise<Response> {
+export async function GET(req: Request): Promise<Response> {
   const playerId = await currentPlayerId();
   if (!playerId) {
     return Response.json(
@@ -65,6 +65,9 @@ export async function GET(): Promise<Response> {
       { headers: NO_STORE },
     );
   }
+  // Same-origin pages only, like every write here: a game frame must not be
+  // able to read who its player's friends are (`social/origin.ts`).
+  if (!isTrustedOrigin(req)) return forbidden();
 
   try {
     const [friends, incoming, outgoing] = await Promise.all([
