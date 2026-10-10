@@ -14,6 +14,7 @@ import type { Client, ConnectOptions, CreateRoomOptions, JoinRoomOptions, Room, 
 export { P2P_VERSION as VERSION } from "./version";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+const PUBLIC_STUN: RTCIceServer[] = [{ urls: ["stun:stun.cloudflare.com:3478", "stun:stun.l.google.com:19302"] }];
 
 function pageOrigin(): string {
   try {
@@ -95,7 +96,11 @@ class ClientImpl implements Client {
   ) {
     this.t = transport === "local" ? localTransport() : httpTransport(api, log);
     this.ice = {
-      servers: opts.iceServers ?? (transport === "local" ? [] : (cfg?.iceServers ?? [{ urls: "stun:stun.l.google.com:19302" }])),
+      // The local transport uses NO ICE servers, so it works offline and talks
+      // to nothing outside the machine: tabs connect over host candidates.
+      // (Safari hides host candidates from pages without mic/camera
+      // permission — see the README's Safari note.)
+      servers: opts.iceServers ?? (transport === "local" ? [] : (cfg?.iceServers ?? PUBLIC_STUN)),
       expiresAt: cfg?.iceExpiresAt ?? null,
       turn: cfg?.turn ?? false,
       forceRelay: cfg?.forceRelay ?? false,

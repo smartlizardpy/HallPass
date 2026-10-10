@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>HallPass P2P demo</title>
+<style>
+  :root {
+    --bg: #f6f6f3; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e2e2dc;
+    --accent: #3b5bdb; --ok: #2b8a3e; --warn: #c27c0e; --bad: #c92a2a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #151515; --panel: #1f1f1e; --ink: #ecece8; --muted: #9a9a94; --line: #33332f; --accent: #748ffc; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 17px; }
+  header small { color: var(--muted); }
+  main { display: grid; gap: 12px; padding: 12px 16px 40px; grid-template-columns: minmax(0, 1fr); max-width: 1100px; margin: 0 auto; }
+  @media (min-width: 900px) { main { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 8px; }
+  label { display: inline-flex; gap: 6px; align-items: center; margin: 0 10px 6px 0; }
+  input, select, button { font: inherit; color: inherit; }
+  input[type=text], input[type=number], select { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; min-width: 0; }
+  input[type=number] { width: 70px; }
+  button { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 6px 11px; cursor: pointer; margin: 0 6px 6px 0; }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  button:disabled { opacity: .45; cursor: default; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; }
+  .code { font: 700 30px/1 ui-monospace, Menlo, monospace; letter-spacing: .12em; }
+  .hidden { display: none !important; }
+  canvas { width: 100%; height: auto; aspect-ratio: 3 / 2; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; touch-action: none; display: block; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  .pill { display: inline-block; padding: 0 6px; border-radius: 99px; font-size: 11px; border: 1px solid var(--line); }
+  .connected { color: var(--ok); } .connecting { color: var(--warn); } .reconnecting { color: var(--bad); }
+  #chat, #log { height: 180px; overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px; font-size: 12px; }
+  #log { font-family: ui-monospace, Menlo, monospace; white-space: pre-wrap; }
+  .err { color: var(--bad); }
+  pre { white-space: pre-wrap; font-size: 12px; margin: 6px 0 0; }
+  .note { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>HallPass P2P demo</h1>
+  <small id="ver"></small>
+  <small id="transportInfo"></small>
+</header>
+<main>
+  <section id="connectBox">
+    <h2>1. Connect</h2>
+    <div class="row">
+      <label>Name <input id="name" type="text" maxlength="24" placeholder="Guest"></label>
+      <label>Transport
+        <select id="transport"><option value="auto">auto</option><option value="local">local (tabs)</option><option value="hallpass">hallpass</option></select>
+      </label>
+      <label><input id="relayOnly" type="checkbox"> relay only</label>
+      <label><input id="debug" type="checkbox"> debug log</label>
+    </div>
+    <div class="row">
+      <span class="note">Simulate (local only):</span>
+      <label>latency <input id="lat" type="number" min="0" value="0"></label>
+      <label>jitter <input id="jit" type="number" min="0" value="0"></label>
+      <label>loss % <input id="loss" type="number" min="0" max="100" value="0"></label>
+    </div>
+    <div class="row">
+      <button id="connectBtn">Connect</button>
+      <button id="selfTestBtn" class="ghost">Test connection</button>
+    </div>
+    <pre id="selfTestOut" class="hidden"></pre>
+  </section>
+
+  <section id="lobbyBox" class="hidden">
+    <h2>2. Create or join</h2>
+    <div class="row">
+      <label>Max players <input id="max" type="number" min="1" max="8" value="4"></label>
+      <label><input id="lockOnStart" type="checkbox" checked> lock on start</label>
+      <button id="createBtn">Create room</button>
+    </div>
+    <div class="row">
+      <label>Code <input id="code" type="text" maxlength="4" placeholder="K7QX" style="width:80px;text-transform:uppercase"></label>
+      <button id="joinBtn">Join</button>
+    </div>
+    <p class="err" id="joinErr"></p>
+  </section>
+
+  <section id="roomBox" class="hidden">
+    <div class="row" style="justify-content:space-between">
+      <div><h2>Room</h2><span class="code" id="roomCode"></span> <span id="roomFlags" class="note"></span></div>
+      <div>
+        <button id="readyBtn" class="ghost">Ready</button>
+        <button id="colorBtn" class="ghost">Change colour</button>
+        <button id="lockBtn" class="ghost hostOnly">Lock</button>
+        <button id="startBtn" class="hostOnly">Start</button>
+        <button id="leaveBtn" class="ghost">Leave</button>
+      </div>
+    </div>
+    <table><thead><tr><th>Player</th><th>Ready</th><th>Link</th><th>RTT</th><th></th></tr></thead><tbody id="players"></tbody></table>
+    <p class="note">Move your dot with the arrow keys / WASD, or drag on the board. Positions go over the unreliable channel at 20 Hz; chat goes over the reliable one.</p>
+    <canvas id="board" width="600" height="400"></canvas>
+  </section>
+
+  <section id="sideBox" class="hidden">
+    <h2>Chat</h2>
+    <div id="chat"></div>
+    <div class="row" style="margin-top:6px">
+      <input id="chatIn" type="text" maxlength="200" placeholder="Say something" style="flex:1;margin-right:6px">
+      <button id="chatBtn">Send</button>
+    </div>
+    <h2 style="margin-top:12px">Request / voice / stats</h2>
+    <div class="row">
+      <button id="rollBtn" class="ghost">Ask host to roll a die</button>
+      <button id="voiceBtn" class="ghost">Start voice</button>
+      <button id="muteBtn" class="ghost" disabled>Mute me</button>
+      <button id="statsBtn" class="ghost">Stats</button>
+    </div>
+    <pre id="statsOut"></pre>
+    <h2 style="margin-top:12px">Event log</h2>
+    <div id="log"></div>
+  </section>
+</main>
+<script type="module" src="./demo.js"></script>
+</body>
+</html>

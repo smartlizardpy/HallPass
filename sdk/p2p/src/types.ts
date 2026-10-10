@@ -33,7 +33,7 @@ export interface ConnectOptions {
   debug?: boolean;
   /** Extension: HallPass origin for the `hallpass` transport. Default: page origin. */
   api?: string;
-  /** Extension: replace the ICE servers (the `local` transport uses none by default). */
+  /** Extension: replace the ICE servers (default: HallPass's list; none for `local`). */
   iceServers?: RTCIceServer[];
 }
 

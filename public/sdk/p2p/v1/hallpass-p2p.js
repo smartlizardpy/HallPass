@@ -1991,6 +1991,7 @@ var P2P_VERSION = "1.0.0";
 
 // sdk/p2p/src/client.ts
 var LOCAL_HOSTS = /* @__PURE__ */ new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+var PUBLIC_STUN = [{ urls: ["stun:stun.cloudflare.com:3478", "stun:stun.l.google.com:19302"] }];
 function pageOrigin() {
   try {
     return location.origin;
@@ -2056,7 +2057,11 @@ var ClientImpl = class {
     this.closed = false;
     this.t = transport === "local" ? localTransport() : httpTransport(api, log);
     this.ice = {
-      servers: opts.iceServers ?? (transport === "local" ? [] : cfg?.iceServers ?? [{ urls: "stun:stun.l.google.com:19302" }]),
+      // The local transport uses NO ICE servers, so it works offline and talks
+      // to nothing outside the machine: tabs connect over host candidates.
+      // (Safari hides host candidates from pages without mic/camera
+      // permission — see the README's Safari note.)
+      servers: opts.iceServers ?? (transport === "local" ? [] : cfg?.iceServers ?? PUBLIC_STUN),
       expiresAt: cfg?.iceExpiresAt ?? null,
       turn: cfg?.turn ?? false,
       forceRelay: cfg?.forceRelay ?? false
