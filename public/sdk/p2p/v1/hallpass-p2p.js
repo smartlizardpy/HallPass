@@ -88,7 +88,8 @@ var REASONS = {
   "signaling-unavailable": "Online play is unavailable on HallPass right now. Try again later.",
   "rate-limited": "Too many attempts. Wait a minute, then try again.",
   "unknown-game": "HallPass doesn't recognise this game, so it can't host a room for it.",
-  "room-closed": "The room closed while you were joining."
+  "room-closed": "The room closed while you were joining.",
+  "registration-lost": "This room can no longer take new players (HallPass stopped hearing from it, often because the tab was asleep). Players already here can keep playing."
 };
 function connectFailed(reason) {
   return new P2PError("connect-failed", REASONS[reason] ?? REASONS["signaling-unreachable"], reason);
@@ -835,8 +836,10 @@ var RoomImpl = class {
     this.hostId = d.hostId;
     this.isHost = d.isHost;
     this.ev = new Emitter((err, event) => {
-      if (event === "error") console.error("[hallpass-p2p] an 'error' handler threw:", err);
-      else this.ev.emit("error", err instanceof Error ? err : new Error(String(err)));
+      if (event === "error") return console.error("[hallpass-p2p] an 'error' handler threw:", err);
+      const e = new P2PError("handler-error", `A "${event}" handler threw: ${err instanceof Error ? err.message : String(err)}`);
+      e.cause = err;
+      this.ev.emit("error", e);
     });
     const empty = { rev: 0, host: d.hostId, meta: {}, locked: false, started: false, max: 4, players: [], pending: [], start: null };
     this.view = empty;
@@ -1060,7 +1063,7 @@ var RoomImpl = class {
     sig.onMessage = (from, data) => this.onSignal(from, data);
     sig.onLost = () => {
       if (this.phase === "joining") this.failJoin(connectFailed("room-closed"));
-      else if (this.isHost) this.ev.emit("error", connectFailed("room-closed"));
+      else if (this.isHost) this.ev.emit("error", connectFailed("registration-lost"));
     };
   }
   // ── internals: links & routing ─────────────────────────────────────────────
@@ -1538,6 +1541,7 @@ var RoomImpl = class {
   }
   hostGone(reason) {
     if (this.closed || this.isHost) return;
+    if (this.phase === "joining") return this.failJoin(connectFailed("room-closed"));
     this.ev.emit("host-left");
     this.finish(reason, false);
   }
@@ -1557,6 +1561,9 @@ var RoomImpl = class {
     for (const link of [...this.links.values()]) link.closeSoon(300);
     this.sig?.close(byeToServer || this.isHost);
     for (const u of this.unlisten) u();
+    const waiter = this.joinWaiter;
+    this.joinWaiter = void 0;
+    waiter?.reject(connectFailed("room-closed"));
     if (!silentClose) this.ev.emit("closed", { reason });
     this.d.onClosed();
   }

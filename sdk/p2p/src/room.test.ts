@@ -324,6 +324,39 @@ describe("leaving, kicking, the host leaving", () => {
     for (const s of seen) expect(s).toEqual(["host-left", "closed:host-left"]);
   });
 
+  it("the host leaving while a guest is mid-join rejects that join instead of hanging", async () => {
+    const { game, host } = await room(0);
+    const c = await client(game, "Midway");
+    // The host leaves the instant the join request reaches it.
+    const internals = host as unknown as { onJoin: (from: string, data: unknown) => void };
+    const onJoin = internals.onJoin.bind(host);
+    internals.onJoin = (from, data) => {
+      onJoin(from, data);
+      void host.leave();
+    };
+    const outcome = await c.joinRoom(host.code).then(
+      () => null,
+      (e: { code: string; reason?: string }) => e,
+    );
+    expect(outcome).toMatchObject({ code: "connect-failed", reason: "room-closed" });
+  });
+
+  it("reports a throwing handler as an 'error' event and keeps delivering", async () => {
+    const { host, guests } = await room(1);
+    const errors: Array<{ code: string; cause?: unknown }> = [];
+    const got: number[] = [];
+    host.on("error", (e: { code: string; cause?: unknown }) => errors.push(e));
+    host.on("n", () => {
+      throw new Error("game bug");
+    });
+    host.on("n", (n: number) => got.push(n));
+    guests[0].send("n", 1);
+    guests[0].send("n", 2);
+    await until(() => got.length === 2 && errors.length === 2);
+    expect(errors[0].code).toBe("handler-error");
+    expect((errors[0].cause as Error).message).toBe("game bug");
+  });
+
   it("a closed tab (no bye) is reported as 'disconnected'", async () => {
     const { host, guests } = await room(1);
     const left: string[] = [];

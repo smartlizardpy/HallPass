@@ -29,6 +29,8 @@ const REASONS: Record<string, string> = {
   "rate-limited": "Too many attempts. Wait a minute, then try again.",
   "unknown-game": "HallPass doesn't recognise this game, so it can't host a room for it.",
   "room-closed": "The room closed while you were joining.",
+  "registration-lost":
+    "This room can no longer take new players (HallPass stopped hearing from it, often because the tab was asleep). Players already here can keep playing.",
 };
 
 export function connectFailed(reason: string): P2PError {
