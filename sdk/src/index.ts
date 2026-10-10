@@ -124,5 +124,11 @@ function safeDefault(name: string, args?: unknown[]): unknown {
   // rather than `ok`, and an absent `sent` would read as falsey by luck rather
   // than by contract.
   if (name === "challenge") return { ok: false, sent: false, reason: "network" };
+  // An invite that never reached the picker sent nothing and made no link —
+  // the same shape the stub's 2s fallback and every failed `invite()` resolve.
+  if (name === "invite") return { sent: 0, link: null, cancelled: true };
+  // Synchronous on the live client and on the stub, so it is never queued; kept
+  // for completeness should a hand-written stub queue it anyway.
+  if (name === "getLaunch") return null;
   return { ok: false, reason: "network" };
 }

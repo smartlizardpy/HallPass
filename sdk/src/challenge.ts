@@ -99,6 +99,28 @@ export function isSameOrigin(api: string): boolean {
   }
 }
 
+/**
+ * How a picker frame or window is labelled and sized. The defaults are the
+ * challenge picker's; `invite.ts` passes its own (a taller list, a different
+ * title and window name, so the two pickers never reuse each other's popup).
+ */
+export interface PickerChrome {
+  title: string;
+  /** CSS height of the inline frame. */
+  frameHeight: string;
+  /** `window.open` target name. */
+  windowName: string;
+  /** `window.open` features. */
+  windowFeatures: string;
+}
+
+const CHALLENGE_CHROME: PickerChrome = {
+  title: "Challenge a friend",
+  frameHeight: "min(440px,80vh)",
+  windowName: "hallpass-challenge",
+  windowFeatures: "popup=yes,width=400,height=520",
+};
+
 /** A picker that has been opened, and the one way to take it away again. */
 export interface OpenPicker {
   close(): void;
@@ -112,13 +134,16 @@ export interface OpenPicker {
  * Returns `null` when the DOM will not take it (no `document`, a sandbox that
  * blocks frames), so the caller can fall back to a popup.
  */
-export function openInlinePicker(url: string): OpenPicker | null {
+export function openInlinePicker(
+  url: string,
+  chrome: PickerChrome = CHALLENGE_CHROME,
+): OpenPicker | null {
   try {
     if (typeof document === "undefined" || !document.body) return null;
 
     const frame = document.createElement("iframe");
     frame.src = url;
-    frame.title = "Challenge a friend";
+    frame.title = chrome.title;
     // `min()` keeps it inside a small game canvas without a media query, and the
     // fixed centring is deliberately NOT a full-screen flex container: nothing
     // here covers the page or intercepts a click outside the card.
@@ -130,7 +155,7 @@ export function openInlinePicker(url: string): OpenPicker | null {
         "left:50%",
         "transform:translate(-50%,-50%)",
         "width:min(360px,92vw)",
-        "height:min(440px,80vh)",
+        `height:${chrome.frameHeight}`,
         "border:0",
         "border-radius:16px",
         "box-shadow:0 10px 40px rgba(0,0,0,.25)",
@@ -162,12 +187,15 @@ export function openInlinePicker(url: string): OpenPicker | null {
  * which the caller reports as `"popup-blocked"`: there is no inline fallback
  * from here, because inline is exactly what did not work for this origin.
  */
-export function openPopupPicker(url: string): OpenPicker | null {
+export function openPopupPicker(
+  url: string,
+  chrome: PickerChrome = CHALLENGE_CHROME,
+): OpenPicker | null {
   try {
     if (typeof window === "undefined" || typeof window.open !== "function") {
       return null;
     }
-    const popup = window.open(url, "hallpass-challenge", "popup=yes,width=400,height=520");
+    const popup = window.open(url, chrome.windowName, chrome.windowFeatures);
     if (!popup) return null;
     return {
       window: popup,

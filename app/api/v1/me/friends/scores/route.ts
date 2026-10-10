@@ -52,6 +52,8 @@ import {
   NO_STORE,
   credentialedOptions,
   currentPlayerId,
+  forbidden,
+  isTrustedOrigin,
 } from "@/app/lib/social/request-guard";
 
 /** The slug shape every game route in this repo validates against. */
@@ -65,6 +67,9 @@ export async function GET(req: Request): Promise<Response> {
       { headers: NO_STORE },
     );
   }
+  // Same-origin pages only, like every write here: a game frame must not be
+  // able to read who its player's friends are (`social/origin.ts`).
+  if (!isTrustedOrigin(req)) return forbidden();
 
   const slug = (new URL(req.url).searchParams.get("slug") ?? "").trim();
   if (!SLUG.test(slug)) {

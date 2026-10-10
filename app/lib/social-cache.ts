@@ -37,6 +37,7 @@ import { useSyncExternalStore } from "react";
 import type { IncomingChallenge, OutgoingChallenge } from "./challenges/store";
 import type { PublicProfile } from "./social/store";
 import { preloadImages } from "./mobile-preload";
+import { isTrustedPath } from "./social/origin";
 
 /** A pending friend request — a profile plus when it was sent. */
 export type FriendRequest = PublicProfile & { requestedAt: string };
@@ -202,6 +203,15 @@ export function refreshChallenges(): Promise<void> {
   return challengesInFlight;
 }
 
+/** Whether this document's path is one the friend-list GET accepts a referrer from. */
+function onTrustedPage(): boolean {
+  try {
+    return isTrustedPath(window.location.pathname);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The LAUNCH warm-up: fetch both, unless they are already fresh, and preload the
  * faces that come back.
@@ -223,7 +233,12 @@ export function refreshChallenges(): Promise<void> {
 export function warmSocial(): Promise<void> {
   const work: Promise<unknown>[] = [];
 
-  if (!fresh(friendsEntry)) {
+  // The friend list answers 403 to a referrer outside the first-party allowlist
+  // (`social/origin.ts`), and the splash can fire on any page a phone lands on
+  // — a challenge link, an invite, a tag page. Skip the read there rather than
+  // earn a 403 for a cache nobody on that page reads; the island refetches on
+  // mount anyway.
+  if (!fresh(friendsEntry) && onTrustedPage()) {
     work.push(
       refreshFriends().then(() => {
         const people = friendsEntry?.value;

@@ -20,6 +20,8 @@ import {
   NO_STORE,
   credentialedOptions,
   currentPlayerId,
+  forbidden,
+  isTrustedOrigin,
 } from "@/app/lib/social/request-guard";
 import { FRIENDS_PER_GAME } from "@/app/lib/social/config";
 
@@ -35,6 +37,9 @@ export async function GET(req: Request): Promise<Response> {
   if (!playerId) {
     return Response.json({ signedIn: false, bySlug: {} }, { headers: NO_STORE });
   }
+  // Same-origin pages only, like every write here: a game frame must not be
+  // able to read who its player's friends are (`social/origin.ts`).
+  if (!isTrustedOrigin(req)) return forbidden();
 
   const raw = new URL(req.url).searchParams.get("slugs") ?? "";
   const slugs = Array.from(

@@ -733,4 +733,65 @@ export interface HallPass {
    * `HallPass.moment && HallPass.moment(...)`.
    */
   moment?(name: string, data?: Record<string, unknown>, opts?: MomentOptions): Promise<MomentResult>;
+  /**
+   * Invite friends into what the player is doing right now — a co-op room, a
+   * level, a seed: `HallPass.invite({ data: { room: "ABCD" } })`.
+   *
+   * Opens a SMALL HALLPASS-STYLED PICKER (inline on HallPass's own origin, a
+   * popup elsewhere, exactly like `challenge`) listing the player's friends who
+   * can open this game, plus a "Share link" button. A signed-out player gets
+   * the link button and a "Sign in to invite friends" note. Each friend invited
+   * gets a notification; tapping it, or opening the link, starts this game with
+   * `getLaunch()` returning `data`.
+   *
+   * `data` is the game's own: a plain JSON object of at most 1 KB, never
+   * interpreted by HallPass. `expiresInMinutes` defaults to 30 (1–120).
+   *
+   * Resolves when the picker closes with `{ sent, link, cancelled }` — `sent`
+   * friends invited, the last share link made (or `null`), and `cancelled` when
+   * neither happened. Offline, inert, an invalid `data`, or a blocked popup
+   * resolve `{ sent: 0, link: null, cancelled: true }`. Never throws. Added in
+   * v1.4 (append-only) — guard with `HallPass.invite && HallPass.invite(...)`.
+   */
+  invite?(opts: InviteOptions): Promise<InviteResult>;
+  /**
+   * How this page load was started, when it matters to the game: the `data` of
+   * the invite the player followed, once per page load, else `null`.
+   *
+   * SYNCHRONOUS. Call it after `await HallPass.ready()` — the inline stub cannot
+   * know the answer before the real SDK loads, so its `getLaunch` returns `null`.
+   * The SDK reads the invite when it loads and keeps it for that page load (until
+   * `expiresAt`); a reload returns `null`. Works for games hosted on HallPass; a
+   * game on its own domain always gets `null`. Never throws. Added in v1.4.
+   */
+  getLaunch?(): LaunchInfo | null;
+}
+
+/** Options for {@link HallPass.invite}. Added in v1.4. */
+export interface InviteOptions {
+  /** The game's payload for the friend's copy of the game, e.g. `{ room: "ABCD" }`. A plain JSON object, ≤ 1 KB. */
+  data: Record<string, unknown>;
+  /** How long the invite works, in minutes. Default 30, clamped to 1–120. */
+  expiresInMinutes?: number;
+}
+
+/** What {@link HallPass.invite} resolves. Added in v1.4. */
+export interface InviteResult {
+  /** Friends invited from the picker. */
+  sent: number;
+  /** The last share link the player made (absolute URL), else `null`. */
+  link: string | null;
+  /** `true` when nothing was sent and no link was made (including every failure). */
+  cancelled: boolean;
+}
+
+/** What {@link HallPass.getLaunch} returns when the game was opened from an invite. Added in v1.4. */
+export interface LaunchInfo {
+  kind: "invite";
+  /** The `data` the inviting game passed to `invite()`, unchanged. */
+  data: Record<string, unknown>;
+  /** The inviter's public display name, or `null` for a guest's share link. */
+  from: string | null;
+  /** When the invite stops working, in epoch milliseconds. */
+  expiresAt: number;
 }

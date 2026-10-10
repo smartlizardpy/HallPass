@@ -30,12 +30,13 @@ submitScore:e("submitScore"),getScores:e("getScores"),
 getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
 unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
 getAchievements:e("getAchievements"),challenge:e("challenge"),moment:e("moment"),
+invite:e("invite"),getLaunch:function(){return null},
 signIn:function(){},signOut:function(){},
 getHandle:function(){return null},setHandle:function(v){return v},
 on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
 off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
 setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
-q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:{ok:false,reason:"inert"})})},2000)})(window);
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:c.n==="invite"?{sent:0,link:null,cancelled:true}:{ok:false,reason:"inert"})})},2000)})(window);
 </script>
 <script src="https://hallpass.gg/sdk/v1/hallpass.js" data-game="YOUR-SLUG" defer></script>
 ```
@@ -216,6 +217,57 @@ or `{ ok: false, reason: "bad-name" | "bad-data" | "inert" }`.
 > v1.3.0: its stub has no `moment`, and calling a missing method would throw.
 > Re-paste the snippet above to drop the guard.
 
+### Invite friends (optional)
+
+`invite()` lets a player bring friends into what they are doing right now — a
+co-op room, a level, a seed. It opens a small HallPass picker (inline on HallPass,
+a popup when the game is hosted elsewhere) listing the player's friends who can
+open this game, plus a **Share link** button (share sheet, else clipboard, else
+the link on screen). Each friend invited gets a notification; tapping it — or
+opening the link — starts **this game** on HallPass, and `getLaunch()` hands it
+the `data` you passed.
+
+```js
+// Host: open a room, then invite people into it.
+const room = await client.createRoom({ maxPlayers: 4 });
+document.querySelector("#invite").onclick = async () => {
+  const r = HallPass.invite && await HallPass.invite({ data: { room: room.code } });
+  if (r && !r.cancelled) toast(r.sent ? `Invited ${r.sent}` : "Link ready");
+};
+
+// Everyone: on load, join the room you were invited to, if any.
+await HallPass.ready();
+const launch = HallPass.getLaunch && HallPass.getLaunch();
+if (launch && typeof launch.data.room === "string") {
+  await client.joinRoom(launch.data.room);   // straight into the lobby
+} else {
+  showTitleScreen();
+}
+```
+
+- `data` is yours: a plain JSON object, at most 1 KB serialised. HallPass stores
+  and hands it back but never reads it. Don't put anything private in it — anyone
+  with the link can open it.
+- `expiresInMinutes` defaults to 30 (clamped to 1–120). Invites are for "come
+  now"; an expired one opens a "this invite has run out" page.
+- `invite()` resolves when the picker closes: `{ sent, link, cancelled }` —
+  friends invited, the last link made (or `null`), and `cancelled` when neither
+  happened. Offline, a blocked popup, bad `data`, or no SDK at all all resolve
+  `{ sent: 0, link: null, cancelled: true }`. It never rejects.
+- Signed-out players can still share a link; inviting friends needs a sign-in.
+  On a staged (beta) game only friends who can see it are listed.
+- `getLaunch()` is **synchronous** and returns the invite once per page load —
+  a reload returns `null`. Call it **after** `await HallPass.ready()`: the inline
+  stub cannot know the answer, so before the SDK loads it returns `null`.
+- **Hosted games only for `getLaunch()`.** The invite reaches the game through
+  `sessionStorage` on HallPass's origin, so a game served from its own domain
+  always gets `null` (invites and notifications still work; the friend just lands
+  on your title screen).
+
+> Guard with `HallPass.invite &&` / `HallPass.getLaunch &&` if your page pasted the
+> snippet before v1.4.0 — that stub has neither method. Re-paste it to drop the
+> guards.
+
 ### React to events
 
 ```js
@@ -246,6 +298,8 @@ HallPass
 | `progress(key, value, opts?)`   | `Promise<UnlockResult>`  | Report ABSOLUTE progress. Coalesced per key (~1s) and flushed on page hide. `opts`: `{ game?, flush? }`. |
 | `getAchievements(opts?)`        | `Promise<PlayerAchievement[]>` | This player's view of the game's achievements. `[]` on any failure. `opts`: `{ game? }`. |
 | `moment(name, data?, opts?)`    | `Promise<MomentResult>`  | Mark a moment for beta testers; a no-op for everyone else. `opts`: `{ shot? }` (`false` = event only). |
+| `invite(opts)`                  | `Promise<InviteResult>`  | Open the invite picker. `opts`: `{ data, expiresInMinutes? }` (`data`: plain JSON object ≤ 1 KB; minutes default 30, 1–120). Resolves `{ sent, link, cancelled }` when it closes; never rejects. |
+| `getLaunch()`                   | `LaunchInfo \| null`     | SYNCHRONOUS. `{ kind: "invite", data, from, expiresAt }` when this page load came from an invite, else `null`. Hosted games only; call after `ready()`. |
 | `on(event, cb)` / `off(...)`    | `HallPass`               | Events: `ready`, `scores`, `submitted`, `error`, `auth`, `achievement`. `auth` fires `{ player }` when sign-in/out completes (sticky). `achievement` fires the earned achievement — only on a NEW unlock, never sticky. Chainable. |
 
 ### `submitScore` reasons

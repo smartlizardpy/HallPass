@@ -9,6 +9,29 @@ to the served URL path (`v1` → `/sdk/v1/hallpass.js`).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-10
+
+### Added
+
+- `invite({ data, expiresInMinutes? })` — invite friends into what the player is
+  doing right now (a co-op room, a level, a seed). Opens a small HallPass picker —
+  inline on HallPass's own origin, a popup elsewhere, like `challenge` — listing
+  the player's friends who can open this game, with a "Share link" button
+  (share sheet, else clipboard, else the URL on screen). Signed-out players get
+  the link button and a "Sign in to invite friends" note. Resolves when the picker
+  closes with `{ sent, link, cancelled }`; offline, inert, invalid `data` or a
+  blocked popup resolve `{ sent: 0, link: null, cancelled: true }`. `data` is a
+  plain JSON object of at most 1 KB that HallPass never interprets;
+  `expiresInMinutes` defaults to 30 and is clamped to 1–120.
+- `getLaunch()` — SYNCHRONOUS. When the game was started from an invite
+  (`/i/<code>`), returns `{ kind: "invite", data, from, expiresAt }` for that page
+  load, else `null`. Read once when the SDK loads, so a reload returns `null`.
+  Games hosted on HallPass only; a game on its own domain always gets `null`.
+  Call it after `await HallPass.ready()`.
+- The inline stub queues `invite` (its 2 s fallback resolves the cancelled shape)
+  and answers `getLaunch()` with `null`. Games embedded before this release keep
+  working but lack both methods: guard with `HallPass.invite && …`.
+
 ## [1.3.0] - 2026-10-10
 
 ### Added

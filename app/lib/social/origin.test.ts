@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { isTrustedOrigin } from "./origin";
+import { isTrustedOrigin, isTrustedPath } from "./origin";
 
 const ORIGIN = "https://hallpass.example";
 
@@ -103,5 +103,18 @@ describe("isTrustedOrigin", () => {
     expect(
       isTrustedOrigin(reqWithReferer(`${ORIGIN}/game-html/duskfall/`)),
     ).toBe(false);
+  });
+});
+
+describe("isTrustedPath", () => {
+  it("is the same rule as the referrer check, for a bare path", () => {
+    for (const path of ["/", "/play/you/friends", "/game/duskfall", "/embed/invite", "/u/ozan"]) {
+      expect(isTrustedPath(path), path).toBe(true);
+      expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}${path}`)), path).toBe(true);
+    }
+    for (const path of ["/game-html/duskfall/", "/games/duskfall/index.html", "/c/K7QX", "/i/K7QXM3PDGHT9", "/tag/io", ""]) {
+      expect(isTrustedPath(path), path).toBe(false);
+      expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}${path}`)), path).toBe(path === "");
+    }
   });
 });
