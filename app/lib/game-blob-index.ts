@@ -16,8 +16,10 @@
  *   - `uploadHtmlAction` / `pasteHtmlAction` (`dashboard/games/actions.ts`)
  *   - `uploadBundleAction` / `clearHtmlAction` (same file)
  *   - `cacheCoverToBlob` (`dashboard/external-games/actions.ts`)
- *   - `scripts/publish-game.mjs`, which writes out-of-band and therefore CANNOT
- *     record anything — see the reindex note below.
+ *   - `scripts/publish-game.mjs`, which writes its own row (fingerprint
+ *     included) with the same upsert.
+ * An edit made in the Vercel dashboard is the one write nothing records — see
+ * the reindex note below.
  *
  * ── WHY GETTING IT WRONG IS A DEGRADATION, NOT A BREAKAGE ───────────────────
  * A blob missing from this index reads as "this game has no override", and
@@ -35,9 +37,10 @@
  * ({@link readGameFileHashesLive}). The rule that keeps that safe: a row carries
  * the fingerprint of what is ACTUALLY in the store or NULL, never an old one.
  * So every writer that does not compute one records NULL over it — the upsert
- * in {@link recordGameBlobs} replaces the column whatever it held — and the
- * reindex sweep, which cannot know what changed out-of-band, clears them all.
- * See `scoreboard/migrations/038_game_blob_sha256.sql`.
+ * in {@link recordGameBlobs} replaces the column whatever it held —
+ * `publish-game.mjs` records the fingerprint of what it put, and the reindex
+ * sweep, which cannot know what changed out-of-band, clears them all. See
+ * `scoreboard/migrations/038_game_blob_sha256.sql`.
  *
  * ── RECONCILIATION ──────────────────────────────────────────────────────────
  * {@link reindexGameBlobs} spends ONE deliberate `list()` sweep to rebuild the
