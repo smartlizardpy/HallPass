@@ -24,7 +24,7 @@
  * {@link PICTURE_THROTTLE_MS} are still logged as events but get no picture.
  */
 
-import { parseMoment, type ValidMoment } from "../../../sdk/src/moment";
+import { parseMoment, type ValidMoment } from "@/sdk/src/moment";
 import type { Shot } from "./tab-capture";
 
 /** Newest moments kept in the tab. */
