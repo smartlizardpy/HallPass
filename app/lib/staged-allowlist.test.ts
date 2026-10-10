@@ -50,6 +50,10 @@
  *                                           and shot handling.
  *   app/lib/game-media.ts                   Hero/cover media knows which games
  *                                           are staged.
+ *   app/lib/p2p/index.ts                    P2P rooms may be opened for a staged
+ *                                           game only by those who can see it
+ *                                           (canViewStaged); denied answers
+ *                                           match an unknown slug.
  *
  * Anything else is deliberately NOT here: public pages, sitemap, llms, OG images,
  * challenges and the game page itself use the public-only resolvers, which is the
@@ -89,6 +93,7 @@ const ALLOWED_PREFIXES = [
   "app/lib/social/index.ts",
   "app/lib/beta/",
   "app/lib/game-media.ts",
+  "app/lib/p2p/index.ts",
 ];
 
 /** Every non-test `.ts`/`.tsx` file under `dir`, as repo-relative posix paths. */
