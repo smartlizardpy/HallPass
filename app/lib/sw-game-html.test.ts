@@ -69,28 +69,38 @@ function response(
   return r;
 }
 
+/** The games the stub install precached, unless a test says otherwise. */
+const PRECACHED = ["/games/duskfall/index.html", "/games/duskfall/cover.png"];
+
 /**
  * Run the real strategy for `url`. `network` answers each fetch (or throws for
- * "offline"); `cached` pre-seeds the cache. Returns the response the iframe
- * would get and what the worker wrote to its cache.
+ * "offline"), and sees the request's `If-None-Match`; `cached` pre-seeds the
+ * cache and `precached` stands in for the install's manifest. Returns the
+ * response the iframe would get, what the worker wrote to its cache, and every
+ * URL it fetched.
  */
 async function run(
   url: string,
-  network: (u: string) => StubResponse | "offline",
+  network: (u: string, ifNoneMatch: string | null) => StubResponse | "offline",
   cached: Record<string, StubResponse> = {},
+  precached: string[] = PRECACHED,
 ) {
   const store = new Map<string, StubResponse>(Object.entries(cached));
-  const keyOf = (r: unknown) => (typeof r === "string" ? r : (r as { url: string }).url);
+  const fetched: string[] = [];
+  const keyOf = (r: unknown) =>
+    (typeof r === "string" ? r : (r as { url: string }).url).replace(/^https?:\/\/[^/]+/, "");
   const cache = {
     put: async (r: unknown, v: StubResponse) => void store.set(keyOf(r), v),
     delete: async (r: unknown) => store.delete(keyOf(r)),
+    match: async (r: unknown) => store.get(keyOf(r)),
   };
   const caches = {
     open: async () => cache,
-    match: async (r: unknown) => store.get(keyOf(r).replace(/^https?:\/\/[^/]+/, "")) ?? store.get(keyOf(r)),
+    match: async (r: unknown) => store.get(keyOf(r)),
   };
-  const fetch = async (r: unknown) => {
-    const answer = network(keyOf(r).replace(/^https?:\/\/[^/]+/, ""));
+  const fetch = async (r: unknown, init?: { headers?: Record<string, string> }) => {
+    fetched.push(keyOf(r));
+    const answer = network(keyOf(r), init?.headers?.["if-none-match"] ?? null);
     if (answer === "offline") throw new TypeError("Failed to fetch");
     return answer;
   };
@@ -99,11 +109,37 @@ async function run(
     "fetch",
     "caches",
     "RUNTIME_CACHE",
+    "PRECACHED_PATHS",
+    "Response",
     `${helpers}\n${strategy}\nreturn networkFirstWithStaticFallback;`,
-  )(fetch, caches, RUNTIME_CACHE) as (req: { url: string }) => Promise<StubResponse>;
+  )(fetch, caches, RUNTIME_CACHE, new Set(precached), StubOffline) as (req: {
+    url: string;
+  }) => Promise<StubResponse>;
 
   const res = await fn({ url: `https://hallpass.example${url}` });
-  return { res, cachedKeys: [...store.keys()] };
+  return { res, cachedKeys: [...store.keys()], fetched };
+}
+
+/** Stands in for `Response` in the strategy's own offline page. */
+class StubOffline {
+  ok = false;
+  type = "basic";
+  redirected = false;
+  headers = new Headers();
+  constructor(
+    public body: string,
+    init: { status: number },
+  ) {
+    this.status = init.status;
+  }
+  status: number;
+}
+
+const REDIRECT_TO_TWIN = response(0, "", undefined, { ok: false, type: "opaqueredirect" });
+
+function withEtag(res: StubResponse, etag: string): StubResponse {
+  res.headers.set("etag", etag);
+  return res;
 }
 
 const STAGED_DOC = "/game-html/living-flesh/?hp-rec=1";
@@ -131,7 +167,7 @@ describe("networkFirstWithStaticFallback", () => {
       response(200, "<html>duskfall</html>", "public, max-age=60, s-maxage=60"),
     );
     expect(res.body).toBe("<html>duskfall</html>");
-    expect(cachedKeys).toEqual(["https://hallpass.example/game-html/duskfall/"]);
+    expect(cachedKeys).toEqual(["/game-html/duskfall/"]);
   });
 
   it("still follows the route's 307 to the static twin", async () => {
@@ -148,5 +184,83 @@ describe("networkFirstWithStaticFallback", () => {
       "/game-html/duskfall/": response(200, "<html>cached duskfall</html>"),
     });
     expect(res.body).toBe("<html>cached duskfall</html>");
+  });
+});
+
+/**
+ * A game over the precache budget (`scripts/lib/precache-budget.mjs`): the
+ * install never downloaded its static twin, so the route's 307 must neither be
+ * answered from a copy saved on an earlier play without asking (it would never
+ * be replaced) nor download the whole file again every time.
+ */
+describe("a game over the precache budget", () => {
+  const BIG_DOC = "/game-html/big/";
+  const BIG_TWIN = "/games/big/index.html";
+
+  it("fetches its static twin on first play and saves it", async () => {
+    const { res, cachedKeys } = await run(BIG_DOC, (u) =>
+      u === BIG_DOC ? REDIRECT_TO_TWIN : withEtag(response(200, "<html>big v1</html>"), '"v1"'),
+    );
+    expect(res.body).toBe("<html>big v1</html>");
+    expect(cachedKeys).toEqual([BIG_TWIN]);
+  });
+
+  it("revalidates the saved copy and serves it on a 304", async () => {
+    const seen: (string | null)[] = [];
+    const { res } = await run(
+      BIG_DOC,
+      (u, ifNoneMatch) => {
+        if (u === BIG_DOC) return REDIRECT_TO_TWIN;
+        seen.push(ifNoneMatch);
+        return response(304, "");
+      },
+      { [BIG_TWIN]: withEtag(response(200, "<html>big v1</html>"), 'W/"v1"') },
+    );
+    expect(seen).toEqual(['W/"v1"']);
+    expect(res.status).toBe(200);
+    expect(res.body).toBe("<html>big v1</html>");
+  });
+
+  it("replaces the saved copy when the game has changed", async () => {
+    const { res, cachedKeys } = await run(
+      BIG_DOC,
+      (u) =>
+        u === BIG_DOC ? REDIRECT_TO_TWIN : withEtag(response(200, "<html>big v2</html>"), '"v2"'),
+      { [BIG_TWIN]: withEtag(response(200, "<html>big v1</html>"), '"v1"') },
+    );
+    expect(res.body).toBe("<html>big v2</html>");
+    expect(cachedKeys).toEqual([BIG_TWIN]);
+  });
+
+  it("serves the saved copy when the twin cannot be reached", async () => {
+    const { res } = await run(
+      BIG_DOC,
+      (u) => (u === BIG_DOC ? REDIRECT_TO_TWIN : "offline"),
+      { [BIG_TWIN]: withEtag(response(200, "<html>big v1</html>"), '"v1"') },
+    );
+    expect(res.body).toBe("<html>big v1</html>");
+  });
+
+  it("plays the saved copy fully offline", async () => {
+    const { res } = await run(BIG_DOC, () => "offline", {
+      [BIG_TWIN]: response(200, "<html>big v1</html>"),
+    });
+    expect(res.body).toBe("<html>big v1</html>");
+  });
+
+  it("explains, rather than failing blank, when it was never played", async () => {
+    const { res } = await run(BIG_DOC, (u) => (u === BIG_DOC ? REDIRECT_TO_TWIN : "offline"));
+    expect(res.status).toBe(503);
+    expect(res.body).toContain("Game unavailable offline");
+  });
+
+  it("leaves a precached game answering from its install-time copy", async () => {
+    const { res, fetched } = await run(
+      "/game-html/duskfall/",
+      (u) => (u === "/game-html/duskfall/" ? REDIRECT_TO_TWIN : response(200, "<html>network</html>")),
+      { "/games/duskfall/index.html": response(200, "<html>precached duskfall</html>") },
+    );
+    expect(res.body).toBe("<html>precached duskfall</html>");
+    expect(fetched).toEqual(["/game-html/duskfall/"]);
   });
 });

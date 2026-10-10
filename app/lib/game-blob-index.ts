@@ -16,8 +16,10 @@
  *   - `uploadHtmlAction` / `pasteHtmlAction` (`dashboard/games/actions.ts`)
  *   - `uploadBundleAction` / `clearHtmlAction` (same file)
  *   - `cacheCoverToBlob` (`dashboard/external-games/actions.ts`)
- *   - `scripts/publish-game.mjs`, which writes out-of-band and therefore CANNOT
- *     record anything — see the reindex note below.
+ *   - `scripts/publish-game.mjs`, which writes its own row (fingerprint
+ *     included) with the same upsert.
+ * An edit made in the Vercel dashboard is the one write nothing records — see
+ * the reindex note below.
  *
  * ── WHY GETTING IT WRONG IS A DEGRADATION, NOT A BREAKAGE ───────────────────
  * A blob missing from this index reads as "this game has no override", and
@@ -27,6 +29,18 @@
  * has drifted serves slightly stale bytes; it does not 404 and it does not
  * corrupt anything. That is what makes a lazily-rebuilt mirror an acceptable
  * substitute for asking the object store.
+ *
+ * ── FINGERPRINTS ────────────────────────────────────────────────────────────
+ * A row may also carry `sha256`, the fingerprint of the bytes its writer put,
+ * which lets the dashboard's publishers skip a file that is already published
+ * byte for byte instead of paying another `put()` for it
+ * ({@link readGameFileHashesLive}). The rule that keeps that safe: a row carries
+ * the fingerprint of what is ACTUALLY in the store or NULL, never an old one.
+ * So every writer that does not compute one records NULL over it — the upsert
+ * in {@link recordGameBlobs} replaces the column whatever it held —
+ * `publish-game.mjs` records the fingerprint of what it put, and the reindex
+ * sweep, which cannot know what changed out-of-band, clears them all. See
+ * `scoreboard/migrations/038_game_blob_sha256.sql`.
  *
  * ── RECONCILIATION ──────────────────────────────────────────────────────────
  * {@link reindexGameBlobs} spends ONE deliberate `list()` sweep to rebuild the
@@ -49,7 +63,7 @@
 import "server-only";
 import { list } from "@vercel/blob";
 import { unstable_cache } from "next/cache";
-import { sql } from "@/app/lib/db";
+import { isMissingColumnError, sql } from "@/app/lib/db";
 import {
   GAMES_PREFIX,
   blobPathForSlug,
@@ -188,6 +202,25 @@ export async function listGameFilesLive(slug: string): Promise<GameBlobFile[]> {
 }
 
 /**
+ * Every fingerprinted file of one game, as `pathname -> sha256`, read UNCACHED.
+ *
+ * Used by the publishers to skip a file whose bytes are already published, so a
+ * stale answer would skip a write that was needed — hence uncached, like
+ * {@link listGameFilesLive}. Rows without a fingerprint are left out, which a
+ * publisher reads as "write it".
+ *
+ * THROWS on failure, including before migration 038 has added the column; the
+ * caller falls back to an empty map, i.e. writing every file, which is exactly
+ * what publishing did before fingerprints existed.
+ */
+export async function readGameFileHashesLive(slug: string): Promise<Map<string, string>> {
+  const rows = await sql`
+    SELECT pathname, sha256 FROM game_blobs WHERE slug = ${slug} AND sha256 IS NOT NULL
+  `;
+  return new Map(rows.map((row) => [String(row.pathname), String(row.sha256)]));
+}
+
+/**
  * The current `index.html` for a game, as a string — or `null` only when neither
  * a published blob nor a baked-in static copy can be read.
  *
@@ -249,6 +282,12 @@ export type GameBlobRecord = {
   size: number;
   /** Epoch ms. Defaults to now, which is what a fresh `put()` means. */
   uploadedAt?: number;
+  /**
+   * SHA-256 (lowercase hex) of the bytes put. Leave it out when the writer did
+   * not compute one: the row is then recorded with NULL, which is the safe
+   * answer — see "FINGERPRINTS" in the module docblock.
+   */
+  sha256?: string;
 };
 
 /**
@@ -259,6 +298,10 @@ export type GameBlobRecord = {
  * Blobs whose path yields no slug (anything directly under `games/`, which the
  * table's CHECK would reject anyway) are skipped rather than thrown on: a writer
  * must never lose its upload to an indexing detail.
+ *
+ * The fingerprint column is REPLACED on conflict, never kept: a record without
+ * one means the writer does not know what the bytes are any more, so the old
+ * fingerprint must not survive it.
  *
  * THROWS on a database failure. Callers treat indexing as best-effort — the blob
  * is already written and the degradation is documented above — so they wrap this
@@ -278,20 +321,47 @@ export async function recordGameBlobs(
   // pay 300 sequential HTTP queries against Neon on top of its 300 put()s. The
   // arrays are BOUND parameters — `unnest` expands them server-side — so nothing
   // is spliced into the SQL text.
-  await sql`
-    INSERT INTO game_blobs (pathname, slug, url, size, uploaded_at)
-    SELECT * FROM unnest(
-      ${rows.map((r) => r.pathname)}::text[],
-      ${rows.map((r) => r.slug)}::text[],
-      ${rows.map((r) => r.url)}::text[],
-      ${rows.map((r) => r.size)}::int[],
-      ${rows.map((r) => new Date(r.uploadedAt ?? Date.now()).toISOString())}::timestamptz[]
-    )
-    ON CONFLICT (pathname) DO UPDATE
-      SET url = EXCLUDED.url,
-          size = EXCLUDED.size,
-          uploaded_at = EXCLUDED.uploaded_at
-  `;
+  const pathnames = rows.map((r) => r.pathname);
+  const slugs = rows.map((r) => r.slug);
+  const urls = rows.map((r) => r.url);
+  const sizes = rows.map((r) => r.size);
+  const uploadedAts = rows.map((r) => new Date(r.uploadedAt ?? Date.now()).toISOString());
+  try {
+    await sql`
+      INSERT INTO game_blobs (pathname, slug, url, size, uploaded_at, sha256)
+      SELECT * FROM unnest(
+        ${pathnames}::text[],
+        ${slugs}::text[],
+        ${urls}::text[],
+        ${sizes}::int[],
+        ${uploadedAts}::timestamptz[],
+        ${rows.map((r) => r.sha256 ?? null)}::text[]
+      )
+      ON CONFLICT (pathname) DO UPDATE
+        SET url = EXCLUDED.url,
+            size = EXCLUDED.size,
+            uploaded_at = EXCLUDED.uploaded_at,
+            sha256 = EXCLUDED.sha256
+    `;
+  } catch (error) {
+    // A database migration 038 has not reached yet: record the row the way it
+    // was recorded before fingerprints existed, rather than lose it.
+    if (!isMissingColumnError(error)) throw error;
+    await sql`
+      INSERT INTO game_blobs (pathname, slug, url, size, uploaded_at)
+      SELECT * FROM unnest(
+        ${pathnames}::text[],
+        ${slugs}::text[],
+        ${urls}::text[],
+        ${sizes}::int[],
+        ${uploadedAts}::timestamptz[]
+      )
+      ON CONFLICT (pathname) DO UPDATE
+        SET url = EXCLUDED.url,
+            size = EXCLUDED.size,
+            uploaded_at = EXCLUDED.uploaded_at
+    `;
+  }
 }
 
 /** Forget the rows for blobs that have just been `del()`eted. */
@@ -312,6 +382,12 @@ export async function forgetGameBlobsForSlug(slug: string): Promise<void> {
  * allowed to be lossy: anything written out-of-band (`publish-game.mjs`, an edit
  * in the Vercel dashboard, a deploy that predates the index) is recoverable by
  * pressing one button instead of by hand-writing rows.
+ *
+ * It also CLEARS every fingerprint: the listing records no `sha256`, and a
+ * blob changed out-of-band — the reason to press the button — must not keep the
+ * fingerprint of what the dashboard last wrote there, or the next publish of
+ * those old bytes would be skipped. Each file's next publish is then a full
+ * write, which records a fresh one.
  *
  * Deliberately NOT a truncate-then-insert: the delete is scoped to pathnames the
  * listing did NOT return, so a `list()` that fails half way through leaves the

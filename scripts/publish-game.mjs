@@ -306,13 +306,33 @@ for (const f of toWrite) {
   console.log(`\npublished ${f.blobPath}`);
 
   // NOT best-effort, unlike the bump below: without this row the serving route
-  // does not know the blob exists. Mirrors `recordGameBlobs()`.
-  await sql`
-    INSERT INTO game_blobs (pathname, slug, url, size, uploaded_at)
-    VALUES (${f.blobPath}, ${slug}, ${uploaded.url}, ${f.body.length}, now())
-    ON CONFLICT (pathname) DO UPDATE
-      SET url = EXCLUDED.url, size = EXCLUDED.size, uploaded_at = EXCLUDED.uploaded_at
-  `;
+  // does not know the blob exists. Mirrors `recordGameBlobs()`, fingerprint
+  // included — and that part is not optional either: the dashboard skips any
+  // file whose bytes match the row's fingerprint (migration 038), so a row
+  // still holding the dashboard's last one would make it skip re-publishing
+  // those older bytes over this file, and say "No changes".
+  const sha256 = createHash("sha256").update(f.body).digest("hex");
+  try {
+    await sql`
+      INSERT INTO game_blobs (pathname, slug, url, size, uploaded_at, sha256)
+      VALUES (${f.blobPath}, ${slug}, ${uploaded.url}, ${f.body.length}, now(), ${sha256})
+      ON CONFLICT (pathname) DO UPDATE
+        SET url = EXCLUDED.url, size = EXCLUDED.size, uploaded_at = EXCLUDED.uploaded_at,
+            sha256 = EXCLUDED.sha256
+    `;
+  } catch (error) {
+    // A database migration 038 has not reached: no column, so no fingerprint
+    // to leave stale. Record the row the way it was recorded before.
+    const missingColumn =
+      error?.code === "42703" || /column .* does not exist/i.test(error?.message ?? "");
+    if (!missingColumn) throw error;
+    await sql`
+      INSERT INTO game_blobs (pathname, slug, url, size, uploaded_at)
+      VALUES (${f.blobPath}, ${slug}, ${uploaded.url}, ${f.body.length}, now())
+      ON CONFLICT (pathname) DO UPDATE
+        SET url = EXCLUDED.url, size = EXCLUDED.size, uploaded_at = EXCLUDED.uploaded_at
+    `;
+  }
   console.log("recorded in game_blobs");
 }
 
