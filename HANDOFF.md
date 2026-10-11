@@ -13,7 +13,7 @@ voice, diagnostics. First consumer: LAST BELL co-op. Built against section 4 of
 
 | | |
 | --- | --- |
-| SDK files (stable: **1.0.0**) | `public/sdk/p2p/v1/hallpass-p2p.js`, `hallpass-p2p.min.js` (49 KB / 17 KB gzip), `hallpass-p2p.d.ts` → served at `/sdk/p2p/v1/…` |
+| SDK files (stable: **1.1.0**) | `public/sdk/p2p/v1/hallpass-p2p.js`, `hallpass-p2p.min.js` (49 KB / 17 KB gzip), `hallpass-p2p.d.ts` → served at `/sdk/p2p/v1/…` |
 | Source | `sdk/p2p/src/` (types in `types.ts`), built by `npm run build:sdk` (runs in `predev`/`prebuild`) or `npm run build:sdk:p2p` |
 | Server | `app/lib/p2p/` (store, tokens, TURN), routes under `app/api/v1/p2p/`, migration `app/lib/scoreboard/migrations/040_p2p_signaling.sql` |
 | Demo / manual test page | `/sdk/p2p/demo/index.html` (dots + chat + voice + stats + self-test); `harness.html` for automation |

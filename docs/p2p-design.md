@@ -1,6 +1,6 @@
 # HallPass P2P co-op SDK — design note
 
-Status: v1 (`hallpass-p2p.js` 1.0.0). First consumer: LAST BELL (1–4 player co-op).
+Status: v1 (`hallpass-p2p.js` 1.1.0). First consumer: LAST BELL (1–4 player co-op).
 Contract: section 4 of `HALLPASS_P2P_SDK_PROMPT.md` (kept in the LAST BELL repo).
 Every place this build differs from that contract is listed in `HANDOFF.md`.
 
@@ -74,7 +74,7 @@ The `local` transport uses no ICE servers, so it works offline. Safari/WebKit ex
 ## 4. Privacy and safety
 
 * Peers see only `{ id, name, avatarUrl }` where `id` is random per client, `name` is the public display name (or the game's fallback), `avatarUrl` is `null` from HallPass in v1. The server stores no names; `join` bodies (name + version) live in `p2p_signals` until the host reads them.
-* IP exposure is inherent to P2P. `relayOnly: true` (or `P2P_FORCE_RELAY=1`) sets `iceTransportPolicy: 'relay'`, so the SDP a peer sends contains only TURN addresses. A host's `relayOnly` is stored on the room and applied by every joiner before it gathers candidates. Without TURN, relay-only cannot connect and says so.
+* IP exposure is inherent to P2P. `relayOnly: true` (or `P2P_FORCE_RELAY=1`) sets `iceTransportPolicy: 'relay'`, so the SDP a peer sends contains only TURN addresses. A host's `relayOnly` is stored on the room and applied by every joiner before it gathers candidates. Without TURN, relay-only cannot connect and says so. There is deliberately no relay by default, so peers see each other's IP (roughly town-level location plus ISP/school network). To be upfront about it, the SDK (`sdk/p2p/src/notice.ts`, since 1.1.0) shows a one-time notice per device before the first `createRoom`/`joinRoom` over the `hallpass` transport: "Players in this room can see your IP address (it shows roughly where you are). Only play with people you know." with Continue / Cancel. Continue is remembered in `localStorage` (blocked storage means once per page session); Cancel rejects with `P2PError` code `cancelled`. It is skipped for the `local` transport, for relay-only connections (a joiner is asked after the room lookup, so a relay-only room is known) and when the game passes `ipNotice: 'custom'` and shows its own consent. There are no public rooms and there will not be: joining needs the code or an invite link.
 * Rooms are private, joined by a 4-character code from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`. No listing. Host can kick (kicked ids are refused on rejoin) and lock.
 * Voice is off until the game calls `room.voice.start()` (mic prompt). Per-peer and self mute.
 
