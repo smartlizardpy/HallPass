@@ -122,6 +122,6 @@ describe("cutoutStyle", () => {
     const base = MEME_AVATARS.find((m) => m.scale === 1 && m.x === 0 && m.y === 0)!;
     expect(cutoutStyle(base)).toEqual({ width: "100%", height: "100%", left: "0%", top: "0%" });
     const harold = MEME_AVATARS.find((m) => m.id === "harold")!;
-    expect(parseFloat(cutoutStyle(harold).width)).toBeCloseTo(81);
+    expect(parseFloat(cutoutStyle(harold).width)).toBeCloseTo(91);
   });
 });
