@@ -162,3 +162,45 @@ describe("rankForYou", () => {
     expect(rankForYou(input({ games: [], ...shooterFan() }))).toBeNull();
   });
 });
+
+describe("quality in the ranking", () => {
+  const rate = (ratings: Record<string, number>): Game[] =>
+    CATALOGUE.map((g) => (ratings[g.slug] ? { ...g, quality: ratings[g.slug] } : g));
+
+  it("puts the better-rated of two otherwise identical games first", () => {
+    const games = [
+      ...CATALOGUE,
+      game("bullet-storm-b", "Shooter", ["Shooter", "Bullet Hell"], { quality: 9 }),
+    ].map((g) => (g.slug === "bullet-storm" ? { ...g, quality: 2 } : g));
+    const r = rankForYou(input({ ...shooterFan(), games }))!;
+    expect(r.order.indexOf("bullet-storm-b")).toBeLessThan(r.order.indexOf("bullet-storm"));
+  });
+
+  it("leaves the order alone when nothing is rated", () => {
+    const a = rankForYou(input(shooterFan()))!;
+    const b = rankForYou(input({ ...shooterFan(), games: rate({}) }))!;
+    expect(b.order).toEqual(a.order);
+  });
+
+  it("is a tie-breaker: a top-rated game outside the player's taste does not beat a poor one they like", () => {
+    const r = rankForYou(
+      input({ ...shooterFan(), games: rate({ "bullet-storm": 1, "kart-rush": 10, "neon-snake": 10 }) }),
+    )!;
+    expect(r.order.indexOf("bullet-storm")).toBeLessThan(r.order.indexOf("kart-rush"));
+    expect(r.order.indexOf("bullet-storm")).toBeLessThan(r.order.indexOf("neon-snake"));
+  });
+
+  it("never drops a game, however it is rated", () => {
+    const r = rankForYou(input({ ...shooterFan(), games: rate({ "word-garden": 1 }) }))!;
+    expect(r.order).toHaveLength(CATALOGUE.length);
+  });
+
+  it("still puts a game known not to work on this device last", () => {
+    const games = CATALOGUE.map((g) =>
+      g.slug === "kart-rush" ? { ...g, quality: 10, platform: "mobile" as const } : g,
+    );
+    const r = rankForYou(input({ ...shooterFan(), games, device: "desktop" }))!;
+    expect(r.order.at(-1)).toBe("kart-rush");
+  });
+});
+

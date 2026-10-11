@@ -42,7 +42,14 @@ import type { Game } from "@/app/lib/games";
 import { CopyBox } from "./_ui/CopyBox";
 import { PublishPanel } from "./_ui/PublishPanel";
 import { CoverPanel } from "./_ui/CoverPanel";
-import { resolveCategories, resolveGameIncludingStaged, resolveTags } from "@/app/lib/games-store";
+import { QualityPanel } from "./_ui/QualityPanel";
+import { emptyScores } from "@/app/lib/quality";
+import {
+  getOverride,
+  resolveCategories,
+  resolveGameIncludingStaged,
+  resolveTags,
+} from "@/app/lib/games-store";
 import { beta } from "@/app/lib/beta";
 import { store } from "@/app/lib/scoreboard";
 import { getGameMedia, listCoverMediaForSlug, mediaPublicPath } from "@/app/lib/game-media";
@@ -380,6 +387,15 @@ export default async function GameControlPage({
   ]);
   // Only a staged game has a Publish panel, which offers the same tester shots.
   const covers = game.staged ? coverShots : [];
+  // A super admin's judgement, so only a super admin reads (or sees) it. Fail-soft
+  // like the reads above: a Neon blip costs the panel its prefill, not the page.
+  const qualityPanel =
+    role === "super_admin" ? (
+      <QualityPanel
+        slug={slug}
+        scores={(await getOverride(slug).catch(() => null))?.qualityScores ?? emptyScores()}
+      />
+    ) : null;
   const toChoice = (m: (typeof previousCovers)[number]) => ({
     id: m.id,
     url: mediaPublicPath(m),
@@ -486,6 +502,7 @@ export default async function GameControlPage({
         )}
 
         {coverPanel}
+      {qualityPanel}
 
         {/* DETAILS — one write covering every descriptive field + colours + an
             optional cover-URL override. */}
@@ -803,6 +820,7 @@ export default async function GameControlPage({
       )}
 
       {coverPanel}
+      {qualityPanel}
 
       {/* DETAILS */}
       <Section title="Details" subtitle="Overrides the static catalogue">

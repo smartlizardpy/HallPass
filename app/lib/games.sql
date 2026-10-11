@@ -19,7 +19,7 @@
 -- For an EXISTING database, run the one-time
 -- `scoreboard/migrations/003_game_overrides.sql` instead, plus
 -- `014_game_platform.sql` for the `platform` column and `035_game_staging.sql`
--- for `staged` and `cover_url`.
+-- for `staged` and `cover_url`, and `046_game_quality.sql` for the `quality_*` ratings.
 
 CREATE TABLE IF NOT EXISTS game_overrides (
   slug         TEXT PRIMARY KEY CHECK (slug ~ '^[a-z0-9][a-z0-9-]*$'),
@@ -50,6 +50,15 @@ CREATE TABLE IF NOT EXISTS game_overrides (
   -- `/game-media/...`. NULL inherits the static `coverUrl`, then the conventional
   -- `/games/<slug>/cover.png`.
   cover_url    TEXT,
+
+  -- A super admin's 1-10 quality rating on five criteria; NULL = not rated on
+  -- that criterion. The average of the rated ones nudges recommendations. See
+  -- `046_game_quality.sql`.
+  quality_gameplay SMALLINT CONSTRAINT game_overrides_quality_gameplay_range CHECK (quality_gameplay IS NULL OR quality_gameplay BETWEEN 1 AND 10),
+  quality_visuals  SMALLINT CONSTRAINT game_overrides_quality_visuals_range  CHECK (quality_visuals  IS NULL OR quality_visuals  BETWEEN 1 AND 10),
+  quality_sound    SMALLINT CONSTRAINT game_overrides_quality_sound_range    CHECK (quality_sound    IS NULL OR quality_sound    BETWEEN 1 AND 10),
+  quality_polish   SMALLINT CONSTRAINT game_overrides_quality_polish_range   CHECK (quality_polish   IS NULL OR quality_polish   BETWEEN 1 AND 10),
+  quality_fun      SMALLINT CONSTRAINT game_overrides_quality_fun_range      CHECK (quality_fun      IS NULL OR quality_fun      BETWEEN 1 AND 10),
 
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );

@@ -1,5 +1,6 @@
 import type { Game } from "./games";
 import { playsFor } from "./plays";
+import { effectiveQuality } from "./quality";
 
 /**
  * HallPass — the orders the main catalogue grid can be put in.
@@ -75,6 +76,8 @@ type Entry = {
   plays: number;
   /** Position in the "for you" order; a huge number for a game that has none. */
   fit: number;
+  /** The game's quality rating, or neutral when unrated (`quality.ts`). */
+  quality: number;
 };
 
 /** Sorts after every real position, and unlike `Infinity` subtracts without NaN. */
@@ -150,6 +153,13 @@ export function sortCatalog(
   },
 ): Game[] {
   const primary = PRIMARY[sort] ?? null;
+  // Where the list has no stronger opinion — the default order, and the for-you
+  // order when it has nothing to say — better-rated games come first. It sits
+  // AFTER the device rank (playable-here still leads) and BEFORE the original
+  // position, and unrated games are all equal, so a catalogue nobody has rated
+  // keeps exactly the order it had. A chosen order (A-Z, Most played, New first)
+  // is a promise about its key and is left alone.
+  const leansOnQuality = sort === "featured" || sort === "foryou";
   return games
     .map(
       (game, index): Entry => ({
@@ -158,11 +168,15 @@ export function sortCatalog(
         rank: rank(game),
         plays: playsFor(game, playCounts),
         fit: forYou?.get(game.slug) ?? NO_FIT,
+        quality: effectiveQuality(game.quality),
       }),
     )
     .sort(
       (a, b) =>
-        (primary ? primary(a, b) : 0) || a.rank - b.rank || a.index - b.index,
+        (primary ? primary(a, b) : 0) ||
+        a.rank - b.rank ||
+        (leansOnQuality ? b.quality - a.quality : 0) ||
+        a.index - b.index,
     )
     .map((entry) => entry.game);
 }

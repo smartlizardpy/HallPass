@@ -64,6 +64,12 @@ export type Game = {
   isNew?: boolean;
   isFeatured?: boolean;
   plays?: number;
+  /**
+   * A super admin's overall quality rating, 1-10 (the average of the criteria
+   * they rated; see `quality.ts`). ABSENT means nobody has rated it, which the
+   * rankings read as neutral — do not default it. Editorial, never personal data.
+   */
+  quality?: number;
   externalUrl?: string; // present => game hosted off-site; iframe points here
   coverUrl?: string; // absolute cover URL; overrides /games/<slug>/cover.png convention
   /**
