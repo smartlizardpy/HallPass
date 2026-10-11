@@ -224,7 +224,7 @@ async function YouShell({ children }: { children: React.ReactNode }) {
       <section className="rounded-xl border border-border bg-surface p-6">
         <div className="flex items-center gap-4">
           {/* Your own avatar: your Google photo only if you opted in (Settings), else a meme avatar. */}
-          <span className="shrink-0 rounded-full border border-border">
+          <span className="flex shrink-0 rounded-full border border-border">
             <Avatar person={{ image: ownAvatarUrl(player), displayName: display }} size={64} />
           </span>
           <div className="min-w-0">
