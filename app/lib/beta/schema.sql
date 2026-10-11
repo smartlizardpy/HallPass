@@ -90,6 +90,9 @@ CREATE TABLE IF NOT EXISTS beta_reports (
   -- (`sdk/src/moment.ts`). See `scoreboard/migrations/039_beta_report_moment.sql`.
   moment_name    TEXT,
   moment_data    TEXT,
+  -- Set when the 30-day retention sweep removed this report's clip/screenshot
+  -- (`media-cleanup.ts`); the text stays. See `044_beta_media_expiry.sql`.
+  media_expired_at TIMESTAMPTZ,
   clip_bytes     INTEGER NOT NULL DEFAULT 0,
   clip_ms        INTEGER NOT NULL DEFAULT 0,
   device         TEXT NOT NULL DEFAULT '',

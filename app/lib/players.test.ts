@@ -21,11 +21,20 @@ vi.mock("@/app/lib/db", () => ({
   sql: (...args: unknown[]) => query(...args),
   isDbConfigured: () => true,
   isUnconfiguredDbError: () => false,
+  isMissingColumnError: (e: unknown) => (e as { code?: string })?.code === "42P01",
 }));
+const del = vi.fn();
+vi.mock("@vercel/blob", () => ({ del: (...args: unknown[]) => del(...args) }));
 
+import { memeAvatarFor } from "./avatars";
 import {
   backfillCountryIfMissing,
+  deletePlayer,
   getPlayerByUsername,
+  getPublicIdentity,
+  ownAvatarUrl,
+  setAvatarChoice,
+  setUseGooglePhoto,
   upsertPlayerOnLogin,
 } from "./players";
 
@@ -41,6 +50,7 @@ const ROW = {
 
 beforeEach(() => {
   query.mockReset();
+  del.mockReset();
 });
 
 describe("getPlayerByUsername", () => {
@@ -141,5 +151,147 @@ describe("backfillCountryIfMissing", () => {
     expect(sql).toContain("WHERE id =");
     expect(sql).toContain("AND country IS NULL");
     expect(values).toEqual(["gb", "sub-alice"]);
+  });
+});
+
+describe("avatars on a player's own identity", () => {
+  const PUBLIC_ID = "11111111-2222-3333-4444-555555555555";
+
+  it("the SDK identity carries the meme avatar, never the Google photo", async () => {
+    query.mockResolvedValue([
+      { ...ROW, image: "https://lh3.example/me.png", public_id: PUBLIC_ID, use_google_photo: true },
+    ]);
+    const ident = await getPublicIdentity("sub-alice");
+    expect(ident?.image).toBe(memeAvatarFor(PUBLIC_ID));
+  });
+
+  it("ownAvatarUrl uses the photo only when opted in", () => {
+    const base = {
+      image: "https://lh3.example/me.png",
+      publicId: PUBLIC_ID,
+      avatarMeme: null,
+      avatarColour: null,
+    };
+    expect(ownAvatarUrl({ ...base, useGooglePhoto: true })).toBe(base.image);
+    expect(ownAvatarUrl({ ...base, useGooglePhoto: false })).toBe(memeAvatarFor(PUBLIC_ID));
+    expect(ownAvatarUrl({ ...base, image: null, useGooglePhoto: true })).toBe(
+      memeAvatarFor(PUBLIC_ID),
+    );
+  });
+
+  it("a stored choice shapes the own avatar and the SDK identity", async () => {
+    const choice = { meme: "doge", colour: "#ffd982" };
+    const base = { image: null, publicId: PUBLIC_ID, useGooglePhoto: false };
+    expect(ownAvatarUrl({ ...base, avatarMeme: "doge", avatarColour: "#ffd982" })).toBe(
+      memeAvatarFor(PUBLIC_ID, choice),
+    );
+    // A stale (removed) meme falls back to the default rather than breaking.
+    expect(ownAvatarUrl({ ...base, avatarMeme: "meme-02", avatarColour: null })).toBe(
+      memeAvatarFor(PUBLIC_ID),
+    );
+    query.mockResolvedValue([
+      { ...ROW, public_id: PUBLIC_ID, avatar_meme: "doge", avatar_colour: "#ffd982" },
+    ]);
+    const ident = await getPublicIdentity("sub-alice");
+    expect(ident?.image).toBe("/avatars/doge.png?bg=ffd982");
+  });
+
+  it("setAvatarChoice binds meme, colour and id", async () => {
+    query.mockResolvedValue([]);
+    await setAvatarChoice("sub-alice", { meme: "doge", colour: "#ffd982" });
+    const [, ...values] = query.mock.calls[0] as [string[], ...unknown[]];
+    expect(values).toEqual(["doge", "#ffd982", "sub-alice"]);
+  });
+
+  it("setUseGooglePhoto binds the flag and the id", async () => {
+    query.mockResolvedValue([]);
+    await setUseGooglePhoto("sub-alice", true);
+    const [, ...values] = query.mock.calls[0] as [string[], ...unknown[]];
+    expect(values).toEqual([true, "sub-alice"]);
+  });
+});
+
+describe("deletePlayer: beta clips and screenshots", () => {
+  /** Routes the fake driver by statement text and records the order of effects. */
+  function wire(opts: { deleted?: boolean; failMediaRead?: boolean } = {}) {
+    const log: string[] = [];
+    query.mockImplementation(async (strings: TemplateStringsArray) => {
+      const text = strings.join("?");
+      if (text.includes("DELETE FROM beta_shots")) {
+        log.push("delete-shot-rows");
+        return [];
+      }
+      if (text.includes("FROM beta_reports")) {
+        log.push("read-reports");
+        if (opts.failMediaRead) throw new Error("neon down");
+        return [{ id: 8, clip_blob_path: "beta-clips/g/8.webm", shot_blob_path: "beta-evidence/8.png" }];
+      }
+      if (text.includes("FROM beta_shots")) {
+        log.push("read-shots");
+        return [{ id: "shot-1", blob_path: "beta-shots/1.png" }];
+      }
+      if (text.includes("UPDATE scores")) log.push("anonymise");
+      if (text.includes("DELETE FROM players")) {
+        log.push("delete-player");
+        return opts.deleted === false ? [] : [{ id: "p1" }];
+      }
+      if (text.includes("UPDATE beta_reports")) log.push("clear-pointers");
+      return [];
+    });
+    del.mockImplementation(async (path: string) => {
+      log.push(`blob:${path}`);
+    });
+    return log;
+  }
+
+  it("reads the media first and deletes the files only after the player row is gone", async () => {
+    const log = wire();
+    await expect(deletePlayer("p1")).resolves.toBe(true);
+    const at = (entry: string) => log.indexOf(entry);
+    expect(at("read-reports")).toBeLessThan(at("anonymise"));
+    expect(at("read-reports")).toBeLessThan(at("delete-player"));
+    for (const path of ["beta-clips/g/8.webm", "beta-evidence/8.png", "beta-shots/1.png"]) {
+      expect(at(`blob:${path}`)).toBeGreaterThan(at("delete-player"));
+    }
+    // Pointers cleared and staged rows dropped only after their objects went.
+    expect(at("clear-pointers")).toBeGreaterThan(at("blob:beta-evidence/8.png"));
+    expect(at("delete-shot-rows")).toBeGreaterThan(at("blob:beta-shots/1.png"));
+  });
+
+  it("does not touch any blob when no player row was deleted", async () => {
+    wire({ deleted: false });
+    await expect(deletePlayer("ghost")).resolves.toBe(false);
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it("still deletes the account when the files cannot be listed", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = wire({ failMediaRead: true });
+    await expect(deletePlayer("p1")).resolves.toBe(true);
+    expect(log).toContain("delete-player");
+    expect(del).not.toHaveBeenCalled();
+    expect(errors).toHaveBeenCalled();
+    errors.mockRestore();
+  });
+
+  it("still reports success when a blob delete fails", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    wire();
+    del.mockRejectedValue(new Error("blob outage"));
+    await expect(deletePlayer("p1")).resolves.toBe(true);
+    expect(errors).toHaveBeenCalled();
+    errors.mockRestore();
+  });
+
+  it("stays quiet when the beta tables do not exist", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    query.mockImplementation(async (strings: TemplateStringsArray) => {
+      const text = strings.join("?");
+      if (text.includes("beta_")) throw Object.assign(new Error("relation does not exist"), { code: "42P01" });
+      return text.includes("DELETE FROM players") ? [{ id: "p1" }] : [];
+    });
+    await expect(deletePlayer("p1")).resolves.toBe(true);
+    expect(errors).not.toHaveBeenCalled();
+    errors.mockRestore();
   });
 });

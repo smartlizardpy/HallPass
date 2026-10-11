@@ -73,6 +73,7 @@
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import type { SortDir } from "@/sdk/src/contract";
 import { orderPair } from "@/app/lib/social/pair";
+import { avatarImage } from "@/app/lib/avatars";
 import {
   CHALLENGE_DISMISSED_COOLDOWN_SECONDS,
   CHALLENGE_LIST_LIMIT,
@@ -121,6 +122,10 @@ function toSort(value: unknown): SortDir {
  * rather than `players.id` for the reason `007_social_graph.sql` spells out:
  * `players.id` is the Google subject, a stable cross-service identifier for a
  * minor, and it must never reach another player's browser.
+ *
+ * `image` is the Google photo and is non-null only when the other party opted in
+ * (`use_google_photo`) AND is an accepted friend of the reader; otherwise it is
+ * null and `Avatar` shows the meme avatar for `id`.
  */
 export type ChallengeParty = {
   id: string;
@@ -295,7 +300,12 @@ function mapParty(row: Row, prefix: string): ChallengeParty {
     id: String(row[`${prefix}_public_id`]),
     username: toStrOrNull(row[`${prefix}_username`]),
     displayName: displayNameFrom(row[`${prefix}_handle`], row[`${prefix}_username`]),
-    image: toStrOrNull(row[`${prefix}_image`]),
+    image: avatarImage(
+      toStrOrNull(row[`${prefix}_image`]),
+      String(row[`${prefix}_public_id`]),
+      row[`${prefix}_avatar_meme`],
+      row[`${prefix}_avatar_colour`],
+    ),
   };
 }
 
@@ -327,7 +337,14 @@ export function createChallengeStore(sql: Sql) {
                c.board_id, b.game_slug, b.title AS board_title,
                b.score_label, b.sort,
                p.public_id AS from_public_id, p.username AS from_username,
-               p.handle AS from_handle, p.image AS from_image
+               p.handle AS from_handle,
+               p.avatar_meme AS from_avatar_meme, p.avatar_colour AS from_avatar_colour,
+               CASE WHEN p.use_google_photo AND EXISTS (
+                      SELECT 1 FROM friendships fr
+                       WHERE fr.status = 'accepted'
+                         AND ((fr.player_a = ${me} AND fr.player_b = p.id)
+                           OR (fr.player_a = p.id AND fr.player_b = ${me}))
+                    ) THEN p.image END AS from_image
           FROM challenges c
           JOIN boards  b ON b.id = c.board_id
           JOIN players p ON p.id = c.challenger_id
@@ -381,7 +398,14 @@ export function createChallengeStore(sql: Sql) {
                c.board_id, b.game_slug, b.title AS board_title,
                b.score_label, b.sort,
                p.public_id AS to_public_id, p.username AS to_username,
-               p.handle AS to_handle, p.image AS to_image
+               p.handle AS to_handle,
+               p.avatar_meme AS to_avatar_meme, p.avatar_colour AS to_avatar_colour,
+               CASE WHEN p.use_google_photo AND EXISTS (
+                      SELECT 1 FROM friendships fr
+                       WHERE fr.status = 'accepted'
+                         AND ((fr.player_a = ${me} AND fr.player_b = p.id)
+                           OR (fr.player_a = p.id AND fr.player_b = ${me}))
+                    ) THEN p.image END AS to_image
           FROM challenges c
           JOIN boards  b ON b.id = c.board_id
           JOIN players p ON p.id = c.target_id
@@ -422,7 +446,14 @@ export function createChallengeStore(sql: Sql) {
                c.board_id, b.game_slug, b.title AS board_title,
                b.score_label, b.sort,
                p.public_id AS from_public_id, p.username AS from_username,
-               p.handle AS from_handle, p.image AS from_image
+               p.handle AS from_handle,
+               p.avatar_meme AS from_avatar_meme, p.avatar_colour AS from_avatar_colour,
+               CASE WHEN p.use_google_photo AND EXISTS (
+                      SELECT 1 FROM friendships fr
+                       WHERE fr.status = 'accepted'
+                         AND ((fr.player_a = ${me} AND fr.player_b = p.id)
+                           OR (fr.player_a = p.id AND fr.player_b = ${me}))
+                    ) THEN p.image END AS from_image
           FROM challenges c
           JOIN boards  b ON b.id = c.board_id
           JOIN players p ON p.id = c.challenger_id

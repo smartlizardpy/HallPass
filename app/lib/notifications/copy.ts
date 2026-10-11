@@ -30,6 +30,7 @@
  * reported text, because a report is frequently about the text being vile.
  */
 
+import { PROFILE_REPORT_REASONS } from "@/app/lib/profile-reports/config";
 import { NOTIFICATION_BODY_MAX, NOTIFICATION_TITLE_MAX } from "./config";
 
 /** One rendering of a notification: what it says, and where a tap lands. */
@@ -318,6 +319,26 @@ export function reviewReportedCopy(input: {
   return bound({
     title: `A review was reported`,
     body: `On ${shortName(input.gameTitle, "a game")}. Open moderation to decide.`,
+    url: "/dashboard/moderation",
+  });
+}
+
+/**
+ * "A profile was reported (Bullying). Open moderation to read it."
+ *
+ * NAMES NEITHER PLAYER. Not the reporter (reporters stay anonymous to moderators
+ * and everyone else) and not the reported child: a handle can be a real name or
+ * the very thing being complained about, and this is a lock-screen banner. The
+ * reason is the admin-facing label from `profile-reports/config.ts`, a fixed
+ * vocabulary, never the reporter's free-text note. The queue is where the
+ * details belong.
+ */
+export function profileReportedCopy(input: { reason: string }): NotificationCopy {
+  const label =
+    PROFILE_REPORT_REASONS.find((r) => r.value === input.reason)?.admin ?? "Other";
+  return bound({
+    title: "A profile was reported",
+    body: `A profile was reported (${label}). Open moderation to read it.`,
     url: "/dashboard/moderation",
   });
 }

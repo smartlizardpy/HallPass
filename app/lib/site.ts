@@ -1,5 +1,13 @@
-/** Canonical origin the site is served from. No trailing slash. */
-export const SITE_URL = "https://hallpass-rouge.vercel.app";
+/**
+ * Canonical origin the site is served from. No trailing slash.
+ *
+ * `www`, because that is the host Vercel serves: the bare `hallpass.games`
+ * answers a 308 to it. Pointing canonicals, the sitemap and the OAuth links at a
+ * host that redirects would make Google treat the redirect target as a
+ * duplicate. Moving the canonical to the bare domain means flipping the primary
+ * domain in Vercel FIRST, then changing this constant.
+ */
+export const SITE_URL = "https://www.hallpass.games";
 
 /**
  * The origin THIS deployment can safely fetch its own static files from.

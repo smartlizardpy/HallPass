@@ -12,6 +12,7 @@ import { StreakBeacon } from "./components/streak/StreakBeacon";
 import { StreakToast } from "./components/streak/StreakToast";
 import { ThemeController } from "./components/theme/ThemeController";
 import { WelcomeToast } from "./components/WelcomeToast";
+import { AnalyticsNotice } from "./components/analytics/AnalyticsNotice";
 import { cloakBootScript } from "./lib/stealth/boot";
 import { themeBootScript } from "./lib/theme/boot";
 import { SITE_URL } from "./lib/site";
@@ -105,6 +106,8 @@ export default function RootLayout({
         </Script>
         {children}
         <WelcomeToast />
+        {/* One-time note about analytics; see its header for where it hides. */}
+        <AnalyticsNotice />
         <PWA />
         <FeaturePromo />
         {/* A strip for a live survey; below the promo and the game player. */}

@@ -1,0 +1,94 @@
+name: Beta clip retention
+
+# Asks the live site, once a day, to delete beta bug-report clips and screenshots
+# older than the retention period (30 days, `CLIP_RETENTION_DAYS` in
+# `app/lib/beta/config.ts`). A second step in the same job, on the same schedule
+# and secret, deletes resolved profile reports 90 days after resolution
+# (`scripts/run-profile-report-retention.mjs`). All the judgement — which are expired, the delete
+# order, what a failure leaves behind — lives on the deployment
+# (`app/lib/beta/media-cleanup.ts`) and is tested there; see
+# `scripts/run-clip-retention.mjs`, which is deliberately thin. The report text is
+# kept; only the recordings and images go.
+#
+# WHY ITS OWN WORKFLOW AND NOT A STEP IN alerts.yml / streak-reminders.yml: a
+# retention failure must not turn the site-health or reminder runs red, and an
+# outage in those must not stop deletions. Different cadence, different failure
+# meaning, different Actions log (same reasoning as streak-reminders.yml).
+#
+# DAILY IS ENOUGH. Retention is measured in days, so a run being hours late costs
+# nothing. A run handles a bounded batch, oldest first, and a backlog simply drains
+# over the next few days; a dropped run is made up for by the next one.
+
+on:
+  schedule:
+    # 03:17 UTC: off the top of the hour, when GitHub's scheduler is busiest, and
+    # off-peak for the site.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report what is due, but delete nothing"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clip-retention
+  # NOT cancel-in-progress: a run that has started deleting should finish.
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: Delete expired beta clips and screenshots
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Job-level env so the step guard can read whether the secret is set — the
+    # `secrets` context is available to job env but not to a step `if`.
+    env:
+      HAS_ALERTS_SECRET: ${{ secrets.ALERTS_SECRET != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # No `npm ci`: the runner uses nothing but `node:fs` and `fetch`.
+
+      # OPT-IN, exactly as alerts.yml and streak-reminders.yml: until
+      # ALERTS_SECRET exists this says what to set and passes, rather than failing
+      # red every day on a repo that has not been provisioned.
+      - name: Explain what is missing
+        if: env.HAS_ALERTS_SECRET != 'true'
+        run: |
+          echo "::warning::ALERTS_SECRET is not set, so expired beta clips are not being deleted."
+          {
+            echo "### HallPass beta clip retention — not configured"
+            echo ""
+            echo "Add \`ALERTS_SECRET\` under Settings → Secrets and variables → Actions,"
+            echo "matching \`ALERTS_SECRET\` on the Vercel deployment. Until then this"
+            echo "workflow does nothing."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Delete expired clips and screenshots
+        if: env.HAS_ALERTS_SECRET == 'true'
+        env:
+          ALERTS_SECRET: ${{ secrets.ALERTS_SECRET }}
+          HALLPASS_SITE_URL: ${{ vars.HALLPASS_SITE_URL }}
+        run: |
+          node scripts/run-clip-retention.mjs ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      # Its own step and route so the names stay honest and a failure in one sweep
+      # is reported against that sweep. `!cancelled()` lets it run after the clip
+      # step failed; the job still ends red if either did. Resolved profile reports
+      # are deleted 90 days after resolution (`PROFILE_REPORT_RETENTION_DAYS`).
+      - name: Delete resolved profile reports past retention
+        if: ${{ !cancelled() && env.HAS_ALERTS_SECRET == 'true' }}
+        env:
+          ALERTS_SECRET: ${{ secrets.ALERTS_SECRET }}
+          HALLPASS_SITE_URL: ${{ vars.HALLPASS_SITE_URL }}
+        run: |
+          node scripts/run-profile-report-retention.mjs ${{ inputs.dry_run && '--dry-run' || '' }}

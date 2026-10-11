@@ -29,7 +29,11 @@
  * module is plain JSON-safe strings.
  */
 
-import { sql } from "@/app/lib/db";
+import { del } from "@vercel/blob";
+import { createBetaStore } from "@/app/lib/beta/store";
+import { removeOwnedMedia } from "@/app/lib/beta/media-cleanup";
+import { memeAvatarFor, type AvatarChoice } from "@/app/lib/avatars";
+import { isMissingColumnError, sql } from "@/app/lib/db";
 
 /** A player as stored server-side (carries `email` — never send this to clients). */
 export interface Player {
@@ -37,6 +41,13 @@ export interface Player {
   email: string;
   name: string | null;
   image: string | null;
+  /** `public_id` UUID: the key the meme avatar is derived from. */
+  publicId: string;
+  /** Opt-in to show `image` to accepted friends. Default false. */
+  useGooglePhoto: boolean;
+  /** Chosen meme id / palette colour; null = never chose (default from `publicId`). */
+  avatarMeme: string | null;
+  avatarColour: string | null;
   handle: string | null;
   createdAt: string;
   lastLogin: string | null;
@@ -144,6 +155,10 @@ function mapPlayer(row: Row): Player {
     email: String(row.email),
     name: row.name == null ? null : String(row.name),
     image: row.image == null ? null : String(row.image),
+    publicId: row.public_id == null ? "" : String(row.public_id),
+    useGooglePhoto: row.use_google_photo === true,
+    avatarMeme: row.avatar_meme == null ? null : String(row.avatar_meme),
+    avatarColour: row.avatar_colour == null ? null : String(row.avatar_colour),
     handle: row.handle == null ? null : String(row.handle),
     createdAt: toIso(row.created_at),
     lastLogin: row.last_login == null ? null : toIso(row.last_login),
@@ -220,7 +235,7 @@ export async function backfillCountryIfMissing(
 /** A single player by Google subject id, or `null` if unknown. */
 export async function getPlayerById(id: string): Promise<Player | null> {
   const rows = await sql`
-    SELECT id, email, name, image, handle, created_at, last_login
+    SELECT id, email, name, image, handle, public_id, use_google_photo, avatar_meme, avatar_colour, created_at, last_login
     FROM players
     WHERE id = ${id}
   `;
@@ -244,7 +259,7 @@ export async function getPlayerByUsername(
   username: string,
 ): Promise<Player | null> {
   const rows = await sql`
-    SELECT id, email, name, image, handle, created_at, last_login
+    SELECT id, email, name, image, handle, public_id, use_google_photo, avatar_meme, avatar_colour, created_at, last_login
     FROM players
     WHERE username = ${username}
   `;
@@ -261,7 +276,9 @@ export async function getPublicIdentity(id: string): Promise<PlayerIdentity | nu
   const player = await getPlayerById(id);
   if (!player) return null;
   const display = effectiveHandle(player);
-  return { id: player.id, name: display, image: player.image, handle: display };
+  // The SDK identity reaches game code, so it never carries the Google photo:
+  // the image is the meme avatar for the public id.
+  return { id: player.id, name: display, image: memeAvatarFor(player.publicId, { meme: player.avatarMeme, colour: player.avatarColour }), handle: display };
 }
 
 /**
@@ -282,6 +299,37 @@ export async function getPublicIdentity(id: string): Promise<PlayerIdentity | nu
 export async function getPublicPlayerId(id: string): Promise<string | null> {
   const rows = await sql`SELECT public_id FROM players WHERE id = ${id}`;
   return rows.length > 0 ? String(rows[0].public_id) : null;
+}
+
+/**
+ * The avatar a signed-in player sees for THEMSELVES: their Google photo only if
+ * they opted in (`use_google_photo`), else the meme avatar. Server-side use only
+ * (the `/play/you` header); anything that reaches game code or another player
+ * uses {@link getPublicIdentity} or the friend-scoped queries instead.
+ */
+export function ownAvatarUrl(
+  player: Pick<
+    Player,
+    "image" | "publicId" | "useGooglePhoto" | "avatarMeme" | "avatarColour"
+  >,
+): string {
+  return player.useGooglePhoto && player.image
+    ? player.image
+    : memeAvatarFor(player.publicId, {
+        meme: player.avatarMeme,
+        colour: player.avatarColour,
+      });
+}
+
+/**
+ * Record the player's opt-in to show their Google profile picture to ACCEPTED
+ * FRIENDS. Default is off; turning it off takes effect on the next read since
+ * every friend query gates on this column.
+ */
+export async function setUseGooglePhoto(id: string, value: boolean): Promise<void> {
+  await sql`
+    UPDATE players SET use_google_photo = ${value} WHERE id = ${id}
+  `;
 }
 
 /**
@@ -328,6 +376,10 @@ export const DELETED_PLAYER_HANDLE = "Deleted";
  *   `player_id` is null there is no key left to find those rows by). This rewrite
  *   is the only chance to do it.
  *
+ * BETA CLIPS AND SCREENSHOTS are deleted too (see the two BETA MEDIA parts in the
+ * body): their keys are read first, and their files removed last and best-effort.
+ * The report text stays, de-tagged like the scores.
+ *
  * Order is deliberate and NOT interchangeable. The `neon()` HTTP driver has no
  * cross-statement transaction, so these two statements can interleave with a
  * failure. Anonymising FIRST means the worst case is "scores anonymised but the
@@ -336,11 +388,61 @@ export const DELETED_PLAYER_HANDLE = "Deleted";
  * orphaned with no key to reach them: an unrecoverable privacy failure.
  */
 export async function deletePlayer(id: string): Promise<boolean> {
+  // BETA MEDIA, part 1 of 2: find the player's clips and screenshots BEFORE
+  // anything is deleted. `beta_reports` and `beta_shots` are `ON DELETE SET NULL`
+  // (the report text outlives its author), so once the row is gone `player_id` is
+  // null and there is no key left to find the files by. Same reason `scores` are
+  // anonymised first. FAIL-SOFT: this must never stop an erasure, so a failure is
+  // logged and the account is deleted anyway; the 30-day sweep (`media-cleanup.ts`)
+  // still removes the reports' files because their pointers are untouched.
+  const betaStore = createBetaStore(sql);
+  let owned: Awaited<ReturnType<typeof betaStore.mediaOwnedBy>> | null = null;
+  try {
+    owned = await betaStore.mediaOwnedBy(id);
+  } catch (error) {
+    // A missing beta table just means the programme is not installed here.
+    if (!isMissingColumnError(error)) {
+      console.error("deletePlayer: could not list beta media; deleting the account anyway:", error);
+    }
+  }
+
   await sql`
     UPDATE scores SET handle = ${DELETED_PLAYER_HANDLE} WHERE player_id = ${id}
   `;
   const rows = await sql`
     DELETE FROM players WHERE id = ${id} RETURNING id
   `;
+
+  // BETA MEDIA, part 2 of 2: delete the files only AFTER the account delete
+  // succeeded. Doing it first would destroy a child's recordings and then, if the
+  // delete failed, leave an account that still exists minus its evidence; doing it
+  // after means the worst case is a deleted account whose files linger until the
+  // sweep (reports) or a log line (staged shots). Never throws.
+  if (rows.length > 0 && owned && (owned.reports.length > 0 || owned.shots.length > 0)) {
+    try {
+      await removeOwnedMedia({
+        store: betaStore,
+        remove: async (path) => {
+          await del(path);
+        },
+        owned,
+      });
+    } catch (error) {
+      console.error("deletePlayer: beta media clean-up failed:", error);
+    }
+  }
   return rows.length > 0;
+}
+
+/**
+ * Save the player's chosen meme avatar and background colour. The caller passes
+ * an already-validated {@link AvatarChoice} (`parseAvatarChoice`); the values are
+ * bound, never spliced, and the table's CHECKs bound their shape as a backstop.
+ */
+export async function setAvatarChoice(id: string, choice: AvatarChoice): Promise<void> {
+  await sql`
+    UPDATE players
+       SET avatar_meme = ${choice.meme}, avatar_colour = ${choice.colour}
+     WHERE id = ${id}
+  `;
 }

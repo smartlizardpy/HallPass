@@ -174,3 +174,27 @@ describe("games.ts public views", () => {
     expect(m.findGame(m.games[0].slug)).toBe(m.games[0]);
   });
 });
+
+describe("quality rating", () => {
+  it("is absent when nobody has rated the game, so rankings read it as neutral", () => {
+    expect(applyOverride(game("a"), override("a")).quality).toBeUndefined();
+  });
+
+  it("comes from the override, which beats nothing but fills the gap", () => {
+    expect(applyOverride(game("a"), override("a", { quality: 8.5 })).quality).toBe(8.5);
+  });
+
+  it("reaches an external game, which has no static twin", () => {
+    const merged = mergeCatalogue(
+      [],
+      [override("ext", { quality: 7 })],
+      [game("ext", { externalUrl: "https://x" })],
+    );
+    expect(merged[0].quality).toBe(7);
+  });
+
+  it("leaves an unrated external game untouched (same object)", () => {
+    const ext = game("ext", { externalUrl: "https://x" });
+    expect(mergeCatalogue([], [], [ext])[0]).toBe(ext);
+  });
+});

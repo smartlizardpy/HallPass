@@ -49,6 +49,17 @@
 -- profile leaks nothing until they choose to connect, while a link they share
 -- still works well enough to receive a friend request.
 --
+-- `use_google_photo` is the player's opt-in to show their Google `image` to
+-- ACCEPTED FRIENDS (migration 042). Default false: everyone else, everywhere,
+-- sees a meme avatar derived from `public_id` (`app/lib/avatars.ts`). Public
+-- queries never select `image`; friend queries select it only through
+-- `CASE WHEN p.use_google_photo THEN p.image END`.
+--
+-- `avatar_meme` / `avatar_colour` are the player's chosen meme avatar and its
+-- background colour (migration 045). Both NULL = never chose, so the avatar is
+-- derived from `public_id`. The catalogue and palette live in
+-- `app/lib/avatars.ts`; the CHECKs only bound the shape.
+--
 -- Username case-insensitivity is achieved by STORING LOWERCASE, not by citext and
 -- not by a functional index. Uppercase cannot exist in the column, so a plain
 -- UNIQUE btree IS the case-insensitive index and every lookup is a plain equality
@@ -71,7 +82,12 @@ CREATE TABLE IF NOT EXISTS players (
   profile_visibility     TEXT NOT NULL DEFAULT 'friends'
                            CHECK (profile_visibility IN ('public','friends','private')),
   handle_changed_at      TIMESTAMPTZ,
-  created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  use_google_photo       BOOLEAN NOT NULL DEFAULT false,
+  avatar_meme            TEXT CONSTRAINT players_avatar_meme_chk
+                           CHECK (avatar_meme IS NULL OR avatar_meme ~ '^[a-z0-9-]{1,40}$'),
+  avatar_colour          TEXT CONSTRAINT players_avatar_colour_chk
+                           CHECK (avatar_colour IS NULL OR avatar_colour ~ '^#[0-9a-f]{6}$'),
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_login             TIMESTAMPTZ,
   country                CHAR(2) CHECK (country IS NULL OR country ~ '^[A-Z]{2}$')
 );

@@ -568,8 +568,9 @@ export async function fixReportAction(formData: FormData): Promise<void> {
 
   let applied = false;
   let clipBlobPath: string | null = null;
+  let shotBlobPath: string | null = null;
   try {
-    ({ applied, clipBlobPath } = await beta.payAndRemoveReport({
+    ({ applied, clipBlobPath, shotBlobPath } = await beta.payAndRemoveReport({
       id,
       resolvedBy: actor,
       awards: [
@@ -584,13 +585,7 @@ export async function fixReportAction(formData: FormData): Promise<void> {
   // AFTER the write, best-effort, exactly as triage does it: a failed blob
   // delete must never undo a decision. No `clearClip` follows, because the row
   // that held the pointer is already gone.
-  if (applied && clipBlobPath) {
-    try {
-      await del(clipBlobPath);
-    } catch (error) {
-      console.error(`beta clip cleanup failed for fixed report ${id}:`, error);
-    }
-  }
+  if (applied) await deleteEvidence([clipBlobPath, shotBlobPath], id, "fixed");
 
   revalidatePath(BETA_PATH);
   revalidatePath("/beta");
@@ -648,8 +643,9 @@ export async function duplicateReportAction(formData: FormData): Promise<void> {
 
   let applied = false;
   let clipBlobPath: string | null = null;
+  let shotBlobPath: string | null = null;
   try {
-    ({ applied, clipBlobPath } = await beta.payAndRemoveReport({
+    ({ applied, clipBlobPath, shotBlobPath } = await beta.payAndRemoveReport({
       id,
       resolvedBy: actor,
       // ONE award, and the reason says what was PAID rather than what the report
@@ -661,18 +657,33 @@ export async function duplicateReportAction(formData: FormData): Promise<void> {
     back("error", "Could not close that as duplicate (database error)");
   }
 
-  if (applied && clipBlobPath) {
-    try {
-      await del(clipBlobPath);
-    } catch (error) {
-      console.error(`beta clip cleanup failed for duplicate report ${id}:`, error);
-    }
-  }
+  if (applied) await deleteEvidence([clipBlobPath, shotBlobPath], id, "duplicate");
 
   revalidatePath(BETA_PATH);
   revalidatePath("/beta");
   if (!applied) back("error", "Someone else triaged that first");
   back("ok", `Duplicate — ${DUPLICATE_XP} XP awarded, report removed`);
+}
+
+/**
+ * Delete a removed report's clip and pinned screenshot, best-effort and after the
+ * write. Each object is tried on its own so a failure on one does not strand the
+ * other; the row is already gone, so there is no pointer to clear and nothing for
+ * a retention sweep to find - a failure is logged and the object is orphaned.
+ */
+async function deleteEvidence(
+  paths: (string | null)[],
+  id: number,
+  outcome: string,
+): Promise<void> {
+  for (const path of paths) {
+    if (!path) continue;
+    try {
+      await del(path);
+    } catch (error) {
+      console.error(`beta media cleanup failed for ${outcome} report ${id}:`, error);
+    }
+  }
 }
 
 /** Drop every cache that could still be serving the old gallery. */

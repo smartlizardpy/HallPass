@@ -16,6 +16,7 @@ vi.mock("@/app/lib/games-store", () => ({
   resolveTags: async () => [{ tag: "Neon", count: 99 }],
 }));
 
+import { SITE_URL } from "@/app/lib/site";
 import sitemap from "./sitemap";
 
 afterEach(() => {
@@ -36,5 +37,11 @@ describe("sitemap", () => {
     const entries = await sitemap();
     expect(entries.length).toBeGreaterThan(0);
     for (const entry of entries) expect(entry).not.toHaveProperty("lastModified");
+  });
+
+  it("lists the legal pages", async () => {
+    const urls = (await sitemap()).map((e) => e.url);
+    expect(urls).toContain(`${SITE_URL}/privacy`);
+    expect(urls).toContain(`${SITE_URL}/terms`);
   });
 });

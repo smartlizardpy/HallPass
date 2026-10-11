@@ -57,7 +57,7 @@
  * `/category/[category]` in the prerender manifest — those must stay precachable
  * and this must not be precached at all.
  *
- * Avatars are remote Google URLs rendered with a plain `<img>` (matching the
+ * The avatar is a meme image, or the player's own Google URL if they opted in, rendered with a plain `<img>` (matching the
  * repo's GameCard / Arcade convention) plus `referrerPolicy="no-referrer"` so
  * Google serves them.
  */
@@ -67,7 +67,7 @@ import type { Metadata } from "next";
 import { BackButton } from "@/app/components/BackButton";
 import { Wordmark } from "@/app/components/Wordmark";
 import { earnedBadges } from "@/app/lib/badges";
-import { effectiveHandle } from "@/app/lib/players";
+import { effectiveHandle, ownAvatarUrl } from "@/app/lib/players";
 import { readBadgeStats, readOwnSocial, readPlayer } from "./_data";
 import { NotSignedInCard } from "./_ui/NotSignedInCard";
 import { YouPageSkeleton } from "./_ui/YouSkeleton";
@@ -222,10 +222,11 @@ async function YouShell({ children }: { children: React.ReactNode }) {
       {/* IDENTITY — persistent across all three tabs. */}
       <section className="rounded-xl border border-border bg-surface p-6">
         <div className="flex items-center gap-4">
-          {player.image ? (
+          {/* Your own avatar: your Google photo only if you opted in (Settings), else a meme avatar. */}
+          {ownAvatarUrl(player) ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={player.image}
+              src={ownAvatarUrl(player)}
               alt=""
               width={64}
               height={64}

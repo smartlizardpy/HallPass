@@ -21,7 +21,7 @@ import {
   protectedResourceMetadataUrl,
 } from "./metadata";
 
-const PROD = "https://hallpass-rouge.vercel.app";
+const PROD = "https://www.hallpass.games";
 const LOCAL = "http://localhost:3000";
 
 describe("originOf", () => {
@@ -49,7 +49,7 @@ describe("protectedResourceMetadata", () => {
   it("follows the request origin rather than hard-coding production", () => {
     const doc = protectedResourceMetadata(LOCAL);
     expect(doc.resource).toBe(`${LOCAL}/api/mcp`);
-    expect(JSON.stringify(doc)).not.toContain("hallpass-rouge");
+    expect(JSON.stringify(doc)).not.toContain("hallpass.games");
   });
 });
 

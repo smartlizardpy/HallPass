@@ -126,6 +126,25 @@ export function useCatalogSort(): CatalogSort {
 }
 
 /** Choose an order; every grid on the page re-renders from this one call. */
+/**
+ * The sort the visitor has EXPLICITLY chosen, or `null` if they never touched the
+ * toolbar. `useCatalogSort` cannot say: it answers with the default either way. The
+ * "for you" order needs the difference — it is the default for a player who has
+ * not chosen, and it must never override a player who has.
+ */
+const getSortChoiceSnapshot = (): CatalogSort | null => {
+  try {
+    return toCatalogSort(window.localStorage.getItem(SORT_KEY));
+  } catch {
+    return null;
+  }
+};
+const serverSortChoice = (): CatalogSort | null => null;
+
+export function useCatalogSortChoice(): CatalogSort | null {
+  return useSyncExternalStore(subscribe, getSortChoiceSnapshot, serverSortChoice);
+}
+
 export function setCatalogSort(sort: CatalogSort): void {
   write(SORT_KEY, sort);
 }

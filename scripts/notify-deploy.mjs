@@ -45,7 +45,7 @@
 import { appendFileSync } from "node:fs";
 
 /** Matches `app/lib/site.ts` and `check-alerts.mjs`. */
-const DEFAULT_SITE_URL = "https://hallpass-rouge.vercel.app";
+const DEFAULT_SITE_URL = "https://www.hallpass.games";
 
 const siteUrl = (process.env.HALLPASS_SITE_URL || DEFAULT_SITE_URL).replace(/\/+$/, "");
 const secret = (process.env.ALERTS_SECRET || "").trim();

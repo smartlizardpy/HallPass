@@ -27,7 +27,12 @@
  * cheerfully reason about how minor it is.
  */
 
-import type { BugSeverity, ReportKind, ReportStatus } from "@/app/lib/beta/config";
+import {
+  CLIP_RETENTION_DAYS,
+  type BugSeverity,
+  type ReportKind,
+  type ReportStatus,
+} from "@/app/lib/beta/config";
 import type { BetaReport, BetaReportWithAuthor } from "@/app/lib/beta/store";
 import { readStoredMoment, type StoredMoment } from "@/app/lib/beta/report-moment";
 
@@ -109,6 +114,13 @@ export type ReportSummary = {
   errorCount: number;
   hasClip: boolean;
   hasScreenshot: boolean;
+  /**
+   * True when the clip and/or screenshot were deleted by the retention sweep
+   * (`CLIP_RETENTION_DAYS`). The report text is intact; `hasClip` and
+   * `hasScreenshot` are false because the files are gone, not because the tester
+   * attached none.
+   */
+  mediaRemoved: boolean;
   /** The game-reported moment the screenshot was taken for, by name. */
   moment: string | null;
   createdAt: string;
@@ -129,6 +141,8 @@ export type ReportDetail = ReportSummary & {
   /** Read-only URLs. The blob keys behind them are deliberately not exposed. */
   clipUrl: string | null;
   screenshotUrl: string | null;
+  /** Says why the evidence is missing when it was expired, else null. */
+  mediaNote: string | null;
   /** The tester's public handle, or null for an orphaned report. */
   author: string | null;
   resolvedBy: string | null;
@@ -148,6 +162,7 @@ export function toReportSummary(report: BetaReport): ReportSummary {
     // which report to open, and the URLs themselves are detail-call weight.
     hasClip: Boolean(report.clipUrl),
     hasScreenshot: Boolean(report.shotUrl),
+    mediaRemoved: report.mediaExpiredAt !== null,
     moment: report.momentName,
     createdAt: report.createdAt,
   };
@@ -173,6 +188,10 @@ export function toReportDetail(report: BetaReportWithAuthor): ReportDetail {
     momentDetail: readStoredMoment(report.momentName, report.momentData),
     clipUrl: report.clipUrl,
     screenshotUrl: report.shotUrl,
+    mediaNote:
+      report.mediaExpiredAt !== null
+        ? `The clip and/or screenshot were deleted on ${report.mediaExpiredAt.slice(0, 10)}: beta media is kept for ${CLIP_RETENTION_DAYS} days. The report text is unchanged.`
+        : null,
     author: authorLabel(report),
     resolvedBy: report.resolvedBy,
     resolvedAt: report.resolvedAt,

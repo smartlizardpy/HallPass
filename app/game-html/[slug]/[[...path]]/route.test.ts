@@ -151,7 +151,7 @@ describe("/game-html record mode (?hp-rec=1)", () => {
     });
     expect(res.status).toBe(200);
     expect(fetch).toHaveBeenCalledWith(
-      "https://hallpass-rouge.vercel.app/games/pub/index.html",
+      "https://www.hallpass.games/games/pub/index.html",
       { cache: "no-store", redirect: "manual" },
     );
     expect(fetch).not.toHaveBeenCalledWith(

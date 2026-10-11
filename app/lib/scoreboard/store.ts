@@ -22,6 +22,7 @@
  */
 
 import type { NeonQueryFunction } from "@neondatabase/serverless";
+import { avatarImage, memeAvatarFor } from "../avatars";
 import type {
   BoardConfig,
   CreateBoardRequest,
@@ -211,8 +212,12 @@ export function createStore(sql: Sql) {
    *
    * Each branch LEFT JOINs `players` so a verified row (`scores.player_id` set)
    * is tagged in its `ScoreEntry`: `verified = true`, `avatar` carries
-   * `players.image`, `playerId` carries the `public_id` UUID (the only player
-   * identifier that crosses the wire anywhere in this codebase), and `handle`
+   * the MEME avatar picked from the public id (`avatars.ts`) - NEVER
+   * `players.image`, which these templates do not select: the Google photo is
+   * often a real photograph of a child and is shown to accepted friends only
+   * (see `getFriendStandings`). `playerId` carries the `public_id` UUID (the
+   * only player identifier that crosses the wire anywhere in this codebase),
+   * and `handle`
    * becomes the player's PUBLIC display — chosen `p_handle`, else `@p_username`,
    * else a stable generated name like `AuraFarmer#0417`, built from that public id
    * (`display-name.ts`). An anonymous row (no `player_id`) maps to `verified = false`
@@ -257,7 +262,9 @@ export function createStore(sql: Sql) {
           }),
           score: Number(row.score),
           verified: true,
-          avatar: row.p_image == null ? null : String(row.p_image),
+          avatar: publicId
+            ? memeAvatarFor(publicId, { meme: row.p_avatar_meme, colour: row.p_avatar_colour })
+            : null,
           playerId: publicId,
         };
       }
@@ -284,8 +291,8 @@ export function createStore(sql: Sql) {
    * `DISTINCT ON (identity)` keeps the first row per identity under the inner
    * `ORDER BY`, i.e. each player's best (highest for desc, lowest for asc); the
    * outer query then ranks those bests. Each LEFT JOINs `players p ON p.id =
-   * s.player_id` to carry the verified player's `handle`/`username`/`public_id`/
-   * `image` — deliberately NOT `name`, see `getTopScores`; an anonymous row
+   * s.player_id` to carry the verified player's `handle`/`username`/`public_id` —
+   * deliberately NOT `name` or `image`, see `getTopScores`; an anonymous row
    * yields NULL for the `p_*` columns. `score` lives only on
    * `scores`, so it stays unqualified. Only `boardId` and `limit` are ever bound
    * — the join and dedup introduce no spliced fragment.
@@ -294,10 +301,10 @@ export function createStore(sql: Sql) {
     if (sort === "asc") {
       if (period === "day") {
         return sql`
-          SELECT handle, score, player_id, p_handle, p_username, p_public_id, p_image FROM (
+          SELECT handle, score, player_id, p_handle, p_username, p_public_id, p_avatar_meme, p_avatar_colour FROM (
             SELECT DISTINCT ON (COALESCE('p:' || s.player_id, 'g:' || s.handle))
               s.handle, s.score, s.player_id, p.handle AS p_handle, p.username AS p_username,
-              p.public_id AS p_public_id, p.image AS p_image, s.created_at, s.id
+              p.public_id AS p_public_id, p.avatar_meme AS p_avatar_meme, p.avatar_colour AS p_avatar_colour, s.created_at, s.id
             FROM scores s LEFT JOIN players p ON p.id = s.player_id
             WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 0, 1)
             ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score ASC, s.created_at ASC, s.id ASC
@@ -308,10 +315,10 @@ export function createStore(sql: Sql) {
       }
       if (period === "week") {
         return sql`
-          SELECT handle, score, player_id, p_handle, p_username, p_public_id, p_image FROM (
+          SELECT handle, score, player_id, p_handle, p_username, p_public_id, p_avatar_meme, p_avatar_colour FROM (
             SELECT DISTINCT ON (COALESCE('p:' || s.player_id, 'g:' || s.handle))
               s.handle, s.score, s.player_id, p.handle AS p_handle, p.username AS p_username,
-              p.public_id AS p_public_id, p.image AS p_image, s.created_at, s.id
+              p.public_id AS p_public_id, p.avatar_meme AS p_avatar_meme, p.avatar_colour AS p_avatar_colour, s.created_at, s.id
             FROM scores s LEFT JOIN players p ON p.id = s.player_id
             WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 1)
             ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score ASC, s.created_at ASC, s.id ASC
@@ -321,10 +328,10 @@ export function createStore(sql: Sql) {
         `;
       }
       return sql`
-        SELECT handle, score, player_id, p_handle, p_username, p_public_id, p_image FROM (
+        SELECT handle, score, player_id, p_handle, p_username, p_public_id, p_avatar_meme, p_avatar_colour FROM (
           SELECT DISTINCT ON (COALESCE('p:' || s.player_id, 'g:' || s.handle))
             s.handle, s.score, s.player_id, p.handle AS p_handle, p.username AS p_username,
-              p.public_id AS p_public_id, p.image AS p_image, s.created_at, s.id
+              p.public_id AS p_public_id, p.avatar_meme AS p_avatar_meme, p.avatar_colour AS p_avatar_colour, s.created_at, s.id
           FROM scores s LEFT JOIN players p ON p.id = s.player_id
           WHERE s.board_id = ${boardId}
           ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score ASC, s.created_at ASC, s.id ASC
@@ -336,10 +343,10 @@ export function createStore(sql: Sql) {
     // sort === "desc"
     if (period === "day") {
       return sql`
-        SELECT handle, score, player_id, p_handle, p_username, p_public_id, p_image FROM (
+        SELECT handle, score, player_id, p_handle, p_username, p_public_id, p_avatar_meme, p_avatar_colour FROM (
           SELECT DISTINCT ON (COALESCE('p:' || s.player_id, 'g:' || s.handle))
             s.handle, s.score, s.player_id, p.handle AS p_handle, p.username AS p_username,
-              p.public_id AS p_public_id, p.image AS p_image, s.created_at, s.id
+              p.public_id AS p_public_id, p.avatar_meme AS p_avatar_meme, p.avatar_colour AS p_avatar_colour, s.created_at, s.id
           FROM scores s LEFT JOIN players p ON p.id = s.player_id
           WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 0, 1)
           ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score DESC, s.created_at ASC, s.id ASC
@@ -350,10 +357,10 @@ export function createStore(sql: Sql) {
     }
     if (period === "week") {
       return sql`
-        SELECT handle, score, player_id, p_handle, p_username, p_public_id, p_image FROM (
+        SELECT handle, score, player_id, p_handle, p_username, p_public_id, p_avatar_meme, p_avatar_colour FROM (
           SELECT DISTINCT ON (COALESCE('p:' || s.player_id, 'g:' || s.handle))
             s.handle, s.score, s.player_id, p.handle AS p_handle, p.username AS p_username,
-              p.public_id AS p_public_id, p.image AS p_image, s.created_at, s.id
+              p.public_id AS p_public_id, p.avatar_meme AS p_avatar_meme, p.avatar_colour AS p_avatar_colour, s.created_at, s.id
           FROM scores s LEFT JOIN players p ON p.id = s.player_id
           WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 1)
           ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score DESC, s.created_at ASC, s.id ASC
@@ -363,10 +370,10 @@ export function createStore(sql: Sql) {
       `;
     }
     return sql`
-      SELECT handle, score, player_id, p_handle, p_username, p_public_id, p_image FROM (
+      SELECT handle, score, player_id, p_handle, p_username, p_public_id, p_avatar_meme, p_avatar_colour FROM (
         SELECT DISTINCT ON (COALESCE('p:' || s.player_id, 'g:' || s.handle))
           s.handle, s.score, s.player_id, p.handle AS p_handle, p.username AS p_username,
-              p.public_id AS p_public_id, p.image AS p_image, s.created_at, s.id
+              p.public_id AS p_public_id, p.avatar_meme AS p_avatar_meme, p.avatar_colour AS p_avatar_colour, s.created_at, s.id
         FROM scores s LEFT JOIN players p ON p.id = s.player_id
         WHERE s.board_id = ${boardId}
         ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score DESC, s.created_at ASC, s.id ASC
@@ -713,7 +720,9 @@ export function createStore(sql: Sql) {
       )
       SELECT r.board_id, r.best, r.friend_pos, r.board_pos,
         b.title, b.sort, b.score_label,
-        p.public_id, p.username, p.handle, p.image,
+        p.public_id, p.username, p.handle,
+        CASE WHEN p.use_google_photo THEN p.image END AS image,
+        p.avatar_meme, p.avatar_colour,
         (r.player_id = ${playerId}) AS is_you,
         1 + (SELECT count(*) FROM scores o
               WHERE o.board_id = r.board_id
@@ -743,7 +752,12 @@ export function createStore(sql: Sql) {
           // same store page, so a player who has set no handle must not appear
           // under two different names one section apart.
           displayName: publicScoreName({ handle, username, publicId }),
-          image: row.image == null ? null : String(row.image),
+          image: avatarImage(
+            row.image == null ? null : String(row.image),
+            publicId,
+            row.avatar_meme,
+            row.avatar_colour,
+          ),
         },
         best: Number(row.best),
         rank: Number(row.rank),

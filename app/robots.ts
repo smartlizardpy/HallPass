@@ -26,6 +26,10 @@ import { SITE_URL } from "@/app/lib/site";
  * still be listed as a bare link that can then never be removed. Crawlable +
  * noindex is the only combination that actually keeps minors' profiles out of
  * search.
+ *
+ * NO `host` DIRECTIVE. It is a Yandex-only extension that Google ignores; the
+ * canonical host is expressed by `SITE_URL` in the sitemap, the `<link
+ * rel="canonical">` tags and the redirect Vercel serves from the other host.
  */
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -35,6 +39,5 @@ export default function robots(): MetadataRoute.Robots {
       disallow: ["/api/", "/dashboard", "/admin", "/play/", "/auth/", "/oauth/"],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,
-    host: SITE_URL,
   };
 }

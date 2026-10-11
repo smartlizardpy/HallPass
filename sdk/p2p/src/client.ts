@@ -7,6 +7,7 @@
 import { derivePeerId, generateSecret, isValidGameId, normalizeCode, sanitizeName, sanitizeVersion } from "./codes";
 import { env } from "./env";
 import { connectFailed, P2PError } from "./errors";
+import { confirmIpNotice } from "./notice";
 import { clampPlayers, RoomImpl } from "./room";
 import { fetchConfig, httpTransport, localTransport, type Transport } from "./signaling";
 import type { Client, ConnectOptions, CreateRoomOptions, JoinRoomOptions, Room, SelfInfo } from "./types";
@@ -118,6 +119,7 @@ class ClientImpl implements Client {
     const relayOnly = this.needRelay(false);
     this.busy = true;
     try {
+      await this.consent(relayOnly);
       const gameVersion = sanitizeVersion(this.opts.gameVersion);
       let room: RoomImpl | null = null;
       const { sig, code } = await this.t.create({
@@ -154,6 +156,9 @@ class ClientImpl implements Client {
       let relayOnly: boolean;
       try {
         relayOnly = this.needRelay(roomRelay);
+        // The room's own relay-only setting is only known now, so a joiner is
+        // asked after the lookup but before any WebRTC link exists.
+        await this.consent(relayOnly);
       } catch (e) {
         sig.close(false);
         throw e;
@@ -204,6 +209,17 @@ class ClientImpl implements Client {
     const relay = !!this.opts.relayOnly || this.ice.forceRelay || roomRelay;
     if (relay && !this.ice.turn) throw connectFailed("relay-unavailable");
     return relay;
+  }
+
+  /**
+   * The one-time IP notice (see notice.ts). Nothing to show on the local
+   * transport, for relay-only connections, or when the game shows its own.
+   */
+  private async consent(relayOnly: boolean): Promise<void> {
+    if (this.transport === "local" || relayOnly || this.opts.ipNotice === "custom") return;
+    if (!(await confirmIpNotice())) {
+      throw new P2PError("cancelled", "You chose not to share your connection, so the game wasn't started.");
+    }
   }
 
   private guard(): void {

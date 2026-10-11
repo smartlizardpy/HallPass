@@ -38,6 +38,7 @@
 
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import type { PublicProfile } from "@/app/lib/social/store";
+import { avatarImage } from "@/app/lib/avatars";
 import {
   FRIEND_INVITE_RATE_LIMIT,
   GC_GRACE_SECONDS,
@@ -141,7 +142,9 @@ export function createInviteStore(sql: Sql) {
     }): Promise<InvitableFriend[]> {
       const { me, slug, stagedOnly, adminEmails } = input;
       const rows = (await sql`
-        SELECT p.public_id, p.username, p.handle, p.image,
+        SELECT p.public_id, p.username, p.handle,
+               CASE WHEN p.use_google_photo THEN p.image END AS image,
+               p.avatar_meme, p.avatar_colour,
                EXISTS (
                  SELECT 1 FROM game_invites g
                   WHERE g.from_player = ${me}
@@ -175,7 +178,12 @@ export function createInviteStore(sql: Sql) {
         id: String(row.public_id),
         username: row.username == null ? null : String(row.username),
         displayName: displayNameFrom(row.handle, row.username),
-        image: row.image == null ? null : String(row.image),
+        image: avatarImage(
+          row.image == null ? null : String(row.image),
+          String(row.public_id),
+          row.avatar_meme,
+          row.avatar_colour,
+        ),
         invitedRecently: row.invited_recently === true,
       }));
     },

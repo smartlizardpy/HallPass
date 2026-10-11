@@ -53,6 +53,7 @@ import type { BetaReportWithAuthor, BetaShot } from "@/app/lib/beta/store";
 import { readStoredMoment } from "@/app/lib/beta/report-moment";
 import {
   BUG_SEVERITIES,
+  CLIP_RETENTION_DAYS,
   DUPLICATE_XP,
   FIX_BONUS_XP,
   INVITE_NOTE_MAX,
@@ -356,6 +357,13 @@ function ReportCard({
           preload="metadata"
           className="mt-2 h-48 w-auto rounded-lg border border-border bg-black"
         />
+      )}
+
+      {report.mediaExpiredAt && !report.shotUrl && !report.clipBlobPath && (
+        <p className="mt-2 text-xs font-semibold text-muted">
+          Clip and screenshot removed on {formatDay(report.mediaExpiredAt)}:
+          beta media is kept for {CLIP_RETENTION_DAYS} days.
+        </p>
       )}
 
       {report.momentName && (

@@ -10,6 +10,7 @@ import {
   useCachedFriends,
 } from "../../lib/social-cache";
 import { formatFriendCode, normalizeFriendCode } from "../../lib/username";
+import { ReportButton } from "../profile/ReportButton";
 import { Avatar } from "./Avatar";
 import { ChallengeList } from "./ChallengeList";
 
@@ -188,6 +189,11 @@ export function FriendsIsland() {
             <ul className="divide-y divide-border">
               {data.friends.map((friend) => (
                 <PersonRow key={friend.id} person={friend}>
+                  <ReportButton
+                    publicId={friend.id}
+                    displayName={friend.displayName}
+                    variant="small"
+                  />
                   <button
                     type="button"
                     disabled={busy === friend.id}

@@ -59,6 +59,7 @@ import {
   readExternalGames,
   readExternalGamesStatus,
 } from "@/app/lib/external-games-store";
+import { overallQuality, toScore, type QualityScores } from "@/app/lib/quality";
 import {
   categoriesOf,
   genreCounts,
@@ -98,6 +99,10 @@ export type GameOverride = {
   staged: boolean | null;
   /** The catalogue cover (a promoted tester shot). `null` inherits. */
   coverUrl: string | null;
+  /** The per-criterion ratings (`quality.ts`); every criterion `null` when unrated. */
+  qualityScores: QualityScores;
+  /** The overall rating derived from {@link qualityScores}, `null` when none is rated. */
+  quality: number | null;
 };
 
 /** A row as returned by the driver (column names as keys). */
@@ -124,6 +129,14 @@ function toTagsOrNull(value: unknown): string[] | null {
 
 /** Map a `game_overrides` row to the {@link GameOverride} egress shape. */
 function mapOverride(row: Row): GameOverride {
+  // Validated like `platform`: a hand-written row must not put a 12 into the ranking.
+  const qualityScores: QualityScores = {
+    gameplay: toScore(row.quality_gameplay),
+    visuals: toScore(row.quality_visuals),
+    sound: toScore(row.quality_sound),
+    polish: toScore(row.quality_polish),
+    fun: toScore(row.quality_fun),
+  };
   return {
     slug: String(row.slug),
     title: toStringOrNull(row.title),
@@ -141,6 +154,8 @@ function mapOverride(row: Row): GameOverride {
     platform: toGamePlatform(row.platform),
     staged: toBoolOrNull(row.staged),
     coverUrl: toStringOrNull(row.cover_url),
+    qualityScores,
+    quality: overallQuality(qualityScores),
   };
 }
 
@@ -156,7 +171,8 @@ const readOverridesCached = unstable_cache(
   async (): Promise<GameOverride[]> => {
     const rows = await sql`
       SELECT slug, title, tagline, description, category, tags, is_new, is_featured, platform,
-             staged, cover_url
+             staged, cover_url,
+             quality_gameplay, quality_visuals, quality_sound, quality_polish, quality_fun
       FROM game_overrides
     `;
     return rows.map(mapOverride);
@@ -346,7 +362,8 @@ export async function resolveGenres(): Promise<{ name: string; count: number }[]
 export async function getOverride(slug: string): Promise<GameOverride | null> {
   const rows = await sql`
     SELECT slug, title, tagline, description, category, tags, is_new, is_featured, platform,
-             staged, cover_url
+             staged, cover_url,
+             quality_gameplay, quality_visuals, quality_sound, quality_polish, quality_fun
     FROM game_overrides
     WHERE slug = ${slug}
   `;
@@ -429,6 +446,8 @@ export async function clearOverride(slug: string): Promise<void> {
   await sql`
     DELETE FROM game_overrides
     WHERE slug = ${slug} AND staged IS NULL AND cover_url IS NULL
+      AND quality_gameplay IS NULL AND quality_visuals IS NULL AND quality_sound IS NULL
+      AND quality_polish IS NULL AND quality_fun IS NULL
   `;
 }
 
@@ -453,6 +472,28 @@ async function setIsFeatured(slug: string, value: boolean): Promise<void> {
     VALUES (${slug}, ${value})
     ON CONFLICT (slug) DO UPDATE SET
       is_featured = EXCLUDED.is_featured,
+      updated_at = now()
+  `;
+}
+
+/**
+ * Set ONLY a game's five quality ratings (sparse-insert + upsert of those
+ * columns), leaving every other overridable field intact. A `null` criterion
+ * clears that rating. The caller MUST be a super admin — this layer does not
+ * check — and must `updateTag(CACHE_TAG)` + `revalidatePath(...)` afterwards.
+ */
+export async function setGameQuality(slug: string, scores: QualityScores): Promise<void> {
+  await sql`
+    INSERT INTO game_overrides
+      (slug, quality_gameplay, quality_visuals, quality_sound, quality_polish, quality_fun)
+    VALUES
+      (${slug}, ${scores.gameplay}, ${scores.visuals}, ${scores.sound}, ${scores.polish}, ${scores.fun})
+    ON CONFLICT (slug) DO UPDATE SET
+      quality_gameplay = EXCLUDED.quality_gameplay,
+      quality_visuals = EXCLUDED.quality_visuals,
+      quality_sound = EXCLUDED.quality_sound,
+      quality_polish = EXCLUDED.quality_polish,
+      quality_fun = EXCLUDED.quality_fun,
       updated_at = now()
   `;
 }

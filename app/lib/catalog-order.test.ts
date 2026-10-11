@@ -128,3 +128,75 @@ describe("sortCatalog and the device ranking", () => {
     ]);
   });
 });
+
+describe("the for-you sort", () => {
+  const games = ["a", "b", "c", "d"].map((slug) => game({ slug }));
+
+  it("follows the supplied personal order", () => {
+    const forYou = new Map([["c", 0], ["a", 1], ["d", 2], ["b", 3]]);
+    expect(slugs(sortCatalog(games, { sort: "foryou", forYou }))).toEqual(["c", "a", "d", "b"]);
+  });
+
+  it("puts a game with no position after every game that has one", () => {
+    const forYou = new Map([["d", 0], ["b", 1]]);
+    expect(slugs(sortCatalog(games, { sort: "foryou", forYou }))).toEqual(["d", "b", "a", "c"]);
+  });
+
+  it("is Featured when no order is supplied, so nothing breaks when it is unavailable", () => {
+    expect(slugs(sortCatalog(games, { sort: "foryou" }))).toEqual(slugs(sortCatalog(games, { sort: "featured" })));
+  });
+
+  it("still never filters", () => {
+    const forYou = new Map([["c", 0]]);
+    expect(sortCatalog(games, { sort: "foryou", forYou })).toHaveLength(games.length);
+  });
+
+  it("is a value the toolbar can store and read back", () => {
+    expect(toCatalogSort("foryou")).toBe("foryou");
+  });
+});
+
+describe("quality in the default order", () => {
+  const rated = [
+    game({ slug: "plain", title: "Plain" }),
+    game({ slug: "great", title: "Great", quality: 9 }),
+    game({ slug: "poor", title: "Poor", quality: 2 }),
+    game({ slug: "good", title: "Good", quality: 7 }),
+    game({ slug: "mobile-great", title: "Mobile", quality: 10, platform: "mobile" }),
+  ];
+  const rank = (g: Game) => (g.platform === "mobile" ? 2 : 0);
+
+  it("puts better-rated games first and unrated ones in the middle", () => {
+    expect(slugs(sortCatalog(rated.slice(0, 4), { sort: "featured" }))).toEqual([
+      "great",
+      "good",
+      "plain",
+      "poor",
+    ]);
+  });
+
+  it("keeps the playable-here games ahead of a better-rated one that is not", () => {
+    const out = slugs(sortCatalog(rated, { sort: "featured", rank }));
+    expect(out.at(-1)).toBe("mobile-great");
+  });
+
+  it("keeps the catalogue order when nothing is rated", () => {
+    const unrated = ["x", "y", "z"].map((slug) => game({ slug }));
+    expect(slugs(sortCatalog(unrated, { sort: "featured" }))).toEqual(["x", "y", "z"]);
+  });
+
+  it("leaves a chosen order alone", () => {
+    expect(slugs(sortCatalog(rated, { sort: "alpha" }))).toEqual([
+      "good",
+      "great",
+      "mobile-great",
+      "plain",
+      "poor",
+    ]);
+  });
+
+  it("never filters, whatever the ratings", () => {
+    expect(sortCatalog(rated, { sort: "featured" })).toHaveLength(rated.length);
+  });
+});
+

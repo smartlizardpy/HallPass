@@ -35,12 +35,16 @@ import { isBetaTester } from "@/app/lib/beta";
 import { getUserRole } from "@/app/lib/dashboard-users";
 import { ROLE_HINT, ROLE_LABEL } from "@/app/lib/permissions";
 import { UsernameCard } from "@/app/components/friends/UsernameCard";
+import { AnalyticsSettingsCard } from "@/app/components/analytics/AnalyticsSwitch";
 import {
   setHandleAction,
   deleteAccountAction,
 } from "@/app/play/account/actions";
 import { readOwnSocial, readPlayer, readPlayerId } from "../_data";
 import { AppearanceCard } from "../_ui/AppearanceCard";
+import { AvatarCard } from "../_ui/AvatarCard";
+import { GooglePhotoCard } from "../_ui/GooglePhotoCard";
+import { ForYouCard } from "../_ui/ForYouCard";
 import { StealthSettingsRow } from "../_ui/StealthSettingsRow";
 
 export const metadata: Metadata = {
@@ -62,6 +66,7 @@ const GENERIC_ERROR = "Something went wrong — try again.";
 const ERROR_MESSAGES: Record<string, string> = {
   confirm: "Type DELETE to confirm.",
   db: GENERIC_ERROR,
+  avatar: "Pick a meme and a colour from the lists.",
 };
 
 function errorMessage(code: string | undefined): string | null {
@@ -182,6 +187,16 @@ export default async function YouSettingsPage({
         {own && <UsernameCard initialUsername={own.username} />}
       </section>
 
+      {/* PROFILE PICTURE ---------------------------------------------------- */}
+      <section aria-label="Profile picture" className="space-y-4">
+        <AvatarCard
+          publicId={player.publicId}
+          meme={player.avatarMeme}
+          colour={player.avatarColour}
+        />
+        <GooglePhotoCard enabled={player.useGooglePhoto} />
+      </section>
+
       {/* ACCOUNT ----------------------------------------------------------- */}
       <section aria-labelledby="settings-account" className="space-y-4">
         <GroupHeading id="settings-account">Account</GroupHeading>
@@ -193,6 +208,11 @@ export default async function YouSettingsPage({
         {/* The other per-device preference, and the fuller version of the
             sidebar footer's one-button cycle. */}
         <AppearanceCard />
+
+        {/* The signed-in "for you" order of the game grid: on by default, and this
+            is the off switch and the way to wipe what the device has learned. Only
+            here, not on `NotSignedInCard`: signing in is what turns it on. */}
+        <ForYouCard />
 
         {/* BETA — the mobile way into the programme, mirroring the admin card
             below. `MobileTabBar` has no beta tab and should not grow one: the
@@ -264,6 +284,12 @@ export default async function YouSettingsPage({
             </button>
           </form>
         </div>
+      </section>
+
+      {/* PRIVACY ------------------------------------------------------------ */}
+      <section aria-labelledby="settings-privacy" className="space-y-4">
+        <GroupHeading id="settings-privacy">Privacy</GroupHeading>
+        <AnalyticsSettingsCard />
       </section>
 
       {/* DANGER ZONE -------------------------------------------------------- */}
