@@ -41,6 +41,7 @@ import {
 } from "@/app/play/account/actions";
 import { readOwnSocial, readPlayer, readPlayerId } from "../_data";
 import { AppearanceCard } from "../_ui/AppearanceCard";
+import { ForYouCard } from "../_ui/ForYouCard";
 import { StealthSettingsRow } from "../_ui/StealthSettingsRow";
 
 export const metadata: Metadata = {
@@ -193,6 +194,11 @@ export default async function YouSettingsPage({
         {/* The other per-device preference, and the fuller version of the
             sidebar footer's one-button cycle. */}
         <AppearanceCard />
+
+        {/* The signed-in "for you" order of the game grid: on by default, and this
+            is the off switch and the way to wipe what the device has learned. Only
+            here, not on `NotSignedInCard`: signing in is what turns it on. */}
+        <ForYouCard />
 
         {/* BETA — the mobile way into the programme, mirroring the admin card
             below. `MobileTabBar` has no beta tab and should not grow one: the
