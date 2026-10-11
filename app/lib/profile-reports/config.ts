@@ -53,14 +53,18 @@ export const REPORT_DAILY_LIMIT = {
   windowSeconds: 86400,
 } as const satisfies RateLimit;
 
-/** Why the route refused. `self` and `unavailable` are the only target errors. */
+/**
+ * Why the route refused. `self` and `unavailable` (no such player) are the only
+ * target errors; `down` is a database fault, so the dialog can say "try later".
+ */
 export type ProfileReportRefusal =
   | "forbidden"
   | "bad-request"
   | "signed-out"
   | "self"
   | "unavailable"
-  | "rate-limited";
+  | "rate-limited"
+  | "down";
 
 /**
  * Trim a note, collapse it to `null` when blank, and refuse (`undefined`) one
