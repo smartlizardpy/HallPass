@@ -69,7 +69,7 @@ export default function TermsPage() {
       <LegalSection id="about" title="1. About these terms">
         <p>
           These terms are an agreement between you and the people who run HALLPASS (&quot;we&quot;).
-          You can reach us at smartlizardpy@duck.com. By using
+          You can reach us at legal@hallpass.games. By using
           the site you agree to them. If you do not agree, please do not use
           it. Our <Link href="/privacy">Privacy Policy</Link> explains how we
           use your data and is part of the picture too.
@@ -161,7 +161,7 @@ export default function TermsPage() {
           shown who made a report, and the person reported is never told.
           Reviews that several people report are also hidden automatically. For
           anything else, or anything that worries you, email
-          smartlizardpy@duck.com. If you are in danger or someone else is, tell
+          legal@hallpass.games. If you are in danger or someone else is, tell
           a trusted adult or the police first.
         </p>
         <p>
@@ -178,7 +178,7 @@ export default function TermsPage() {
         <p>
           <strong>Complaints and appeals.</strong> If you think we got it wrong
           (we removed your content or suspended your account), or you are
-          unhappy about how we handled a report, email smartlizardpy@duck.com
+          unhappy about how we handled a report, email legal@hallpass.games
           with what happened and why you disagree. A person (not an automatic
           system) will look at it again and reply.
         </p>
@@ -233,7 +233,7 @@ export default function TermsPage() {
           If you own something on HALLPASS (a game, art, music or text) and you
           did not agree to it being here, or you think a game is credited
           wrongly, or you think a game, review, name or picture on HALLPASS
-          breaks your rights or is harmful, email smartlizardpy@duck.com{" "}
+          breaks your rights or is harmful, email legal@hallpass.games{" "}
           with:
         </p>
         <ul>
@@ -329,7 +329,7 @@ export default function TermsPage() {
         </p>
         <p>
           If something is wrong, please talk to us first at{" "}
-          smartlizardpy@duck.com.
+          legal@hallpass.games.
         </p>
         <p>
           We may update these terms, for example when we add features or the

@@ -107,7 +107,7 @@ export default function PrivacyPage() {
           </li>
           <li>
             You can delete your account yourself in your settings. Questions or
-            requests: smartlizardpy@duck.com.
+            requests: legal@hallpass.games.
           </li>
         </ul>
       }
@@ -122,7 +122,7 @@ www.hallpass.games. It is run from England. We
         </p>
         <p>
           Contact for anything in this policy:{" "}
-          smartlizardpy@duck.com
+          legal@hallpass.games
         </p>
       </LegalSection>
 
@@ -151,7 +151,7 @@ www.hallpass.games. It is run from England. We
             telling the truth. We do not knowingly keep an account belonging to
             anyone under 13. If we learn we have, or a parent or carer tells us,
             we will delete the account. Parents and carers can contact us at{" "}
-            smartlizardpy@duck.com to see, correct or delete their
+            legal@hallpass.games to see, correct or delete their
             child&apos;s data.
           </li>
         </ul>
@@ -664,7 +664,7 @@ www.hallpass.games. It is run from England. We
           <li>withdraw consent (for example, push notifications) at any time.</li>
         </ul>
         <p>
-          Email smartlizardpy@duck.com. We may need to check
+          Email legal@hallpass.games. We may need to check
           it is really you. We will reply within one month. It is free. A
           parent or carer can make a request for a child.
         </p>
