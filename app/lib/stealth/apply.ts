@@ -23,12 +23,13 @@ const ORIG_HREF = "data-hp-orig-href";
  * NOT an apple-touch icon. Created (empty) if the document has none. Records its
  * original href once so {@link applyFavicon}`(null)` can put it back.
  */
-function primaryIconLink(): HTMLLinkElement | null {
+function primaryIconLink(create: boolean): HTMLLinkElement | null {
   if (typeof document === "undefined") return null;
   let link = document.head.querySelector<HTMLLinkElement>(
     'link[rel~="icon"]:not([rel~="apple-touch-icon"])',
   );
   if (!link) {
+    if (!create) return null;
     link = document.createElement("link");
     link.setAttribute("rel", "icon");
     document.head.appendChild(link);
@@ -45,7 +46,12 @@ function primaryIconLink(): HTMLLinkElement | null {
  * prefs change and a no-op outside the browser.
  */
 export function applyFavicon(dataUri: string | null): void {
-  const link = primaryIconLink();
+  // Restoring (`null`) must NEVER create a link just to remove it again. The
+  // controller calls this from a MutationObserver on <head>; with no icon link
+  // present (a navigation swaps Next's icon tags) the old create-then-remove
+  // pair was itself two head mutations, which re-fired the observer forever and
+  // froze the page's main thread.
+  const link = primaryIconLink(dataUri !== null);
   if (!link) return;
   if (dataUri) {
     link.setAttribute("type", "image/svg+xml");
