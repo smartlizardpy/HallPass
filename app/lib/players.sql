@@ -55,6 +55,11 @@
 -- queries never select `image`; friend queries select it only through
 -- `CASE WHEN p.use_google_photo THEN p.image END`.
 --
+-- `avatar_meme` / `avatar_colour` are the player's chosen meme avatar and its
+-- background colour (migration 045). Both NULL = never chose, so the avatar is
+-- derived from `public_id`. The catalogue and palette live in
+-- `app/lib/avatars.ts`; the CHECKs only bound the shape.
+--
 -- Username case-insensitivity is achieved by STORING LOWERCASE, not by citext and
 -- not by a functional index. Uppercase cannot exist in the column, so a plain
 -- UNIQUE btree IS the case-insensitive index and every lookup is a plain equality
@@ -78,7 +83,11 @@ CREATE TABLE IF NOT EXISTS players (
                            CHECK (profile_visibility IN ('public','friends','private')),
   handle_changed_at      TIMESTAMPTZ,
   use_google_photo       BOOLEAN NOT NULL DEFAULT false,
-  created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  avatar_meme            TEXT CONSTRAINT players_avatar_meme_chk
+                           CHECK (avatar_meme IS NULL OR avatar_meme ~ '^[a-z0-9-]{1,40}$'),
+  avatar_colour          TEXT CONSTRAINT players_avatar_colour_chk
+                           CHECK (avatar_colour IS NULL OR avatar_colour ~ '^#[0-9a-f]{6}$'),
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_login             TIMESTAMPTZ,
   country                CHAR(2) CHECK (country IS NULL OR country ~ '^[A-Z]{2}$')
 );
