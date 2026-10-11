@@ -73,6 +73,7 @@
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import type { SortDir } from "@/sdk/src/contract";
 import { orderPair } from "@/app/lib/social/pair";
+import { avatarImage } from "@/app/lib/avatars";
 import {
   CHALLENGE_DISMISSED_COOLDOWN_SECONDS,
   CHALLENGE_LIST_LIMIT,
@@ -299,7 +300,12 @@ function mapParty(row: Row, prefix: string): ChallengeParty {
     id: String(row[`${prefix}_public_id`]),
     username: toStrOrNull(row[`${prefix}_username`]),
     displayName: displayNameFrom(row[`${prefix}_handle`], row[`${prefix}_username`]),
-    image: toStrOrNull(row[`${prefix}_image`]),
+    image: avatarImage(
+      toStrOrNull(row[`${prefix}_image`]),
+      String(row[`${prefix}_public_id`]),
+      row[`${prefix}_avatar_meme`],
+      row[`${prefix}_avatar_colour`],
+    ),
   };
 }
 
@@ -332,6 +338,7 @@ export function createChallengeStore(sql: Sql) {
                b.score_label, b.sort,
                p.public_id AS from_public_id, p.username AS from_username,
                p.handle AS from_handle,
+               p.avatar_meme AS from_avatar_meme, p.avatar_colour AS from_avatar_colour,
                CASE WHEN p.use_google_photo AND EXISTS (
                       SELECT 1 FROM friendships fr
                        WHERE fr.status = 'accepted'
@@ -392,6 +399,7 @@ export function createChallengeStore(sql: Sql) {
                b.score_label, b.sort,
                p.public_id AS to_public_id, p.username AS to_username,
                p.handle AS to_handle,
+               p.avatar_meme AS to_avatar_meme, p.avatar_colour AS to_avatar_colour,
                CASE WHEN p.use_google_photo AND EXISTS (
                       SELECT 1 FROM friendships fr
                        WHERE fr.status = 'accepted'
@@ -439,6 +447,7 @@ export function createChallengeStore(sql: Sql) {
                b.score_label, b.sort,
                p.public_id AS from_public_id, p.username AS from_username,
                p.handle AS from_handle,
+               p.avatar_meme AS from_avatar_meme, p.avatar_colour AS from_avatar_colour,
                CASE WHEN p.use_google_photo AND EXISTS (
                       SELECT 1 FROM friendships fr
                        WHERE fr.status = 'accepted'

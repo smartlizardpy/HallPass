@@ -33,6 +33,7 @@ import {
   getPlayerByUsername,
   getPublicIdentity,
   ownAvatarUrl,
+  setAvatarChoice,
   setUseGooglePhoto,
   upsertPlayerOnLogin,
 } from "./players";
@@ -165,12 +166,41 @@ describe("avatars on a player's own identity", () => {
   });
 
   it("ownAvatarUrl uses the photo only when opted in", () => {
-    const base = { image: "https://lh3.example/me.png", publicId: PUBLIC_ID };
+    const base = {
+      image: "https://lh3.example/me.png",
+      publicId: PUBLIC_ID,
+      avatarMeme: null,
+      avatarColour: null,
+    };
     expect(ownAvatarUrl({ ...base, useGooglePhoto: true })).toBe(base.image);
     expect(ownAvatarUrl({ ...base, useGooglePhoto: false })).toBe(memeAvatarFor(PUBLIC_ID));
-    expect(ownAvatarUrl({ image: null, publicId: PUBLIC_ID, useGooglePhoto: true })).toBe(
+    expect(ownAvatarUrl({ ...base, image: null, useGooglePhoto: true })).toBe(
       memeAvatarFor(PUBLIC_ID),
     );
+  });
+
+  it("a stored choice shapes the own avatar and the SDK identity", async () => {
+    const choice = { meme: "doge", colour: "#ffd982" };
+    const base = { image: null, publicId: PUBLIC_ID, useGooglePhoto: false };
+    expect(ownAvatarUrl({ ...base, avatarMeme: "doge", avatarColour: "#ffd982" })).toBe(
+      memeAvatarFor(PUBLIC_ID, choice),
+    );
+    // A stale (removed) meme falls back to the default rather than breaking.
+    expect(ownAvatarUrl({ ...base, avatarMeme: "meme-02", avatarColour: null })).toBe(
+      memeAvatarFor(PUBLIC_ID),
+    );
+    query.mockResolvedValue([
+      { ...ROW, public_id: PUBLIC_ID, avatar_meme: "doge", avatar_colour: "#ffd982" },
+    ]);
+    const ident = await getPublicIdentity("sub-alice");
+    expect(ident?.image).toBe("/avatars/doge.png?bg=ffd982");
+  });
+
+  it("setAvatarChoice binds meme, colour and id", async () => {
+    query.mockResolvedValue([]);
+    await setAvatarChoice("sub-alice", { meme: "doge", colour: "#ffd982" });
+    const [, ...values] = query.mock.calls[0] as [string[], ...unknown[]];
+    expect(values).toEqual(["doge", "#ffd982", "sub-alice"]);
   });
 
   it("setUseGooglePhoto binds the flag and the id", async () => {

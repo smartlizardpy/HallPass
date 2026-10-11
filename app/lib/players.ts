@@ -32,7 +32,7 @@
 import { del } from "@vercel/blob";
 import { createBetaStore } from "@/app/lib/beta/store";
 import { removeOwnedMedia } from "@/app/lib/beta/media-cleanup";
-import { memeAvatarFor } from "@/app/lib/avatars";
+import { memeAvatarFor, type AvatarChoice } from "@/app/lib/avatars";
 import { isMissingColumnError, sql } from "@/app/lib/db";
 
 /** A player as stored server-side (carries `email` — never send this to clients). */
@@ -45,6 +45,9 @@ export interface Player {
   publicId: string;
   /** Opt-in to show `image` to accepted friends. Default false. */
   useGooglePhoto: boolean;
+  /** Chosen meme id / palette colour; null = never chose (default from `publicId`). */
+  avatarMeme: string | null;
+  avatarColour: string | null;
   handle: string | null;
   createdAt: string;
   lastLogin: string | null;
@@ -154,6 +157,8 @@ function mapPlayer(row: Row): Player {
     image: row.image == null ? null : String(row.image),
     publicId: row.public_id == null ? "" : String(row.public_id),
     useGooglePhoto: row.use_google_photo === true,
+    avatarMeme: row.avatar_meme == null ? null : String(row.avatar_meme),
+    avatarColour: row.avatar_colour == null ? null : String(row.avatar_colour),
     handle: row.handle == null ? null : String(row.handle),
     createdAt: toIso(row.created_at),
     lastLogin: row.last_login == null ? null : toIso(row.last_login),
@@ -230,7 +235,7 @@ export async function backfillCountryIfMissing(
 /** A single player by Google subject id, or `null` if unknown. */
 export async function getPlayerById(id: string): Promise<Player | null> {
   const rows = await sql`
-    SELECT id, email, name, image, handle, public_id, use_google_photo, created_at, last_login
+    SELECT id, email, name, image, handle, public_id, use_google_photo, avatar_meme, avatar_colour, created_at, last_login
     FROM players
     WHERE id = ${id}
   `;
@@ -254,7 +259,7 @@ export async function getPlayerByUsername(
   username: string,
 ): Promise<Player | null> {
   const rows = await sql`
-    SELECT id, email, name, image, handle, public_id, use_google_photo, created_at, last_login
+    SELECT id, email, name, image, handle, public_id, use_google_photo, avatar_meme, avatar_colour, created_at, last_login
     FROM players
     WHERE username = ${username}
   `;
@@ -273,7 +278,7 @@ export async function getPublicIdentity(id: string): Promise<PlayerIdentity | nu
   const display = effectiveHandle(player);
   // The SDK identity reaches game code, so it never carries the Google photo:
   // the image is the meme avatar for the public id.
-  return { id: player.id, name: display, image: memeAvatarFor(player.publicId), handle: display };
+  return { id: player.id, name: display, image: memeAvatarFor(player.publicId, { meme: player.avatarMeme, colour: player.avatarColour }), handle: display };
 }
 
 /**
@@ -303,11 +308,17 @@ export async function getPublicPlayerId(id: string): Promise<string | null> {
  * uses {@link getPublicIdentity} or the friend-scoped queries instead.
  */
 export function ownAvatarUrl(
-  player: Pick<Player, "image" | "publicId" | "useGooglePhoto">,
+  player: Pick<
+    Player,
+    "image" | "publicId" | "useGooglePhoto" | "avatarMeme" | "avatarColour"
+  >,
 ): string {
   return player.useGooglePhoto && player.image
     ? player.image
-    : memeAvatarFor(player.publicId);
+    : memeAvatarFor(player.publicId, {
+        meme: player.avatarMeme,
+        colour: player.avatarColour,
+      });
 }
 
 /**
@@ -421,4 +432,17 @@ export async function deletePlayer(id: string): Promise<boolean> {
     }
   }
   return rows.length > 0;
+}
+
+/**
+ * Save the player's chosen meme avatar and background colour. The caller passes
+ * an already-validated {@link AvatarChoice} (`parseAvatarChoice`); the values are
+ * bound, never spliced, and the table's CHECKs bound their shape as a backstop.
+ */
+export async function setAvatarChoice(id: string, choice: AvatarChoice): Promise<void> {
+  await sql`
+    UPDATE players
+       SET avatar_meme = ${choice.meme}, avatar_colour = ${choice.colour}
+     WHERE id = ${id}
+  `;
 }

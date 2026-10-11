@@ -16,6 +16,7 @@
  * check-then-write split has a real window in between.
  */
 
+import { avatarImage } from "@/app/lib/avatars";
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import {
   REVIEW_DUP_WINDOW_SECONDS,
@@ -111,9 +112,9 @@ export function createReviewStore(sql: Sql) {
         // Never the Google `name` — that is the player's real name for most
         // accounts. Handle, else "@username", else "Player".
         displayName: handle || (username ? `@${username}` : "Player"),
-        // Always null: public queries never select `players.image` (a child's
+        // Never the Google photo: public queries never select `players.image` (a child's
         // Google photo). `Avatar` renders the meme avatar for `id` instead.
-        image: null,
+        image: avatarImage(null, String(row.public_id), row.avatar_meme, row.avatar_colour),
         tag: String(row.author_tag ?? "").slice(0, 4),
       },
     };
@@ -143,7 +144,7 @@ export function createReviewStore(sql: Sql) {
         sort === "helpful"
           ? await sql`
               SELECT r.id, r.recommended, r.body, r.helpful_count, r.created_at, r.updated_at,
-                     p.public_id, p.username, p.handle,
+                     p.public_id, p.username, p.handle, p.avatar_meme, p.avatar_colour,
                      encode(sha256((p.id || ${salt})::bytea), 'hex') AS author_tag,
                      count(*) OVER () AS total
               FROM game_reviews r
@@ -155,7 +156,7 @@ export function createReviewStore(sql: Sql) {
           : before === null
             ? await sql`
                 SELECT r.id, r.recommended, r.body, r.helpful_count, r.created_at, r.updated_at,
-                       p.public_id, p.username, p.handle,
+                       p.public_id, p.username, p.handle, p.avatar_meme, p.avatar_colour,
                        encode(sha256((p.id || ${salt})::bytea), 'hex') AS author_tag,
                        count(*) OVER () AS total
                 FROM game_reviews r
@@ -166,7 +167,7 @@ export function createReviewStore(sql: Sql) {
               `
             : await sql`
                 SELECT r.id, r.recommended, r.body, r.helpful_count, r.created_at, r.updated_at,
-                       p.public_id, p.username, p.handle,
+                       p.public_id, p.username, p.handle, p.avatar_meme, p.avatar_colour,
                        encode(sha256((p.id || ${salt})::bytea), 'hex') AS author_tag,
                        count(*) OVER () AS total
                 FROM game_reviews r
@@ -230,7 +231,7 @@ export function createReviewStore(sql: Sql) {
     async ownReview(slug: string, playerId: string): Promise<Review | null> {
       const rows = await sql`
         SELECT r.id, r.recommended, r.body, r.helpful_count, r.created_at, r.updated_at,
-               p.public_id, p.username, p.handle, '' AS author_tag
+               p.public_id, p.username, p.handle, p.avatar_meme, p.avatar_colour, '' AS author_tag
         FROM game_reviews r
         JOIN players p ON p.id = r.player_id
         WHERE r.slug = ${slug} AND r.player_id = ${playerId} AND r.status <> 'deleted'
