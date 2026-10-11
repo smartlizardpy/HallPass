@@ -13,17 +13,28 @@
  *    `app/play/you/settings/page.tsx`. Scores are kept with the name "Deleted".
  *  - Analytics: `instrumentation-client.ts` (PostHog EU via the `/ingest`
  *    rewrite in `next.config.ts`, no `identify`), `app/lib/growth/first-touch.ts`.
- *    Session-replay and cookie defaults are NOT set in code: open question.
+ *    DEPENDS ON THE PARALLEL WORKSTREAM (not in this branch's code when
+ *    drafted): the settings Analytics switch, the one-time notice, clearing the
+ *    ID on opt-out, and session recording forced off in `posthog.init`. Verify
+ *    each against the merged `instrumentation-client.ts` before publishing.
  *  - Device storage: the `hp:*` keys listed in the audit (personalization.ts,
  *    streak/store.ts, stealth/config.ts, catalog-prefs.ts, …), `public/sw.js`.
- *  - Avatars: shown on leaderboards (`app/lib/scoreboard/store.ts`), reviews and
- *    friends; withheld on /c/ and /i/ pages (`app/c/[code]/page.tsx`,
- *    `app/i/[code]/page.tsx`) and from co-op peers (`SHARE_AVATAR_WITH_PEERS` in
- *    `app/lib/p2p/config.ts`).
+ *  - Avatars: today's code shows the Google photo on leaderboards
+ *    (`app/lib/scoreboard/store.ts`), reviews and friends. The text describes
+ *    the DECIDED design (default meme avatar from the public id; Google photo
+ *    only to accepted friends behind a settings opt-in; never on leaderboards,
+ *    reviews, non-friend lookups, /c/ and /i/ pages or co-op rooms, see
+ *    `SHARE_AVATAR_WITH_PEERS` in `app/lib/p2p/config.ts`). DEPENDS ON THE
+ *    PARALLEL AVATAR WORKSTREAM; re-verify after merge.
  *  - IP addresses: salted hash only, `app/lib/scoreboard/guard.ts`; country via
  *    `app/lib/geo.ts`.
- *  - Co-op: `app/lib/p2p/*`, `sdk/p2p/src/client.ts` (`iceTransportPolicy`),
- *    `docs/p2p-design.md`, migration `040_p2p_signaling.sql`.
+ *  - Co-op: `app/lib/p2p/*` (STUN defaults in `config.ts`; TURN code still
+ *    exists in `ice.ts`, so the deployment must have no TURN env set for the
+ *    "no relay" statement to hold), `sdk/p2p/src/client.ts`,
+ *    `docs/p2p-design.md`, migration `040_p2p_signaling.sql`. The first-use
+ *    notice and "no public rooms" depend on the parallel co-op workstream.
+ *  - Reports about profiles and the moderation queue: PARALLEL WORKSTREAM.
+ *    Review reports exist today (`app/lib/reviews/*`).
  *  - Push, notifications, streak reminders: `app/lib/push/*`,
  *    `app/lib/notifications/*`, `app/lib/streak/*`,
  *    `.github/workflows/streak-reminders.yml`.
@@ -32,7 +43,9 @@
  *    `app/lib/invites/*`, `docs/challenge-sharing-design.md`,
  *    `docs/invites-design.md`.
  *  - Beta programme and recordings: `app/lib/beta/*`, `app/lib/capture/*`,
- *    `docs/game-recorder.md`, `app/api/v1/beta/clips/[id]/route.ts`.
+ *    `docs/game-recorder.md`, `app/api/v1/beta/clips/[id]/route.ts`. The 30-day
+ *    and on-account-deletion deletion of clips depends on a PARALLEL
+ *    WORKSTREAM (today `deletePlayer` does not touch blobs).
  *  - Surveys: `app/lib/surveys/*`.
  *
  * Static on purpose: no session or database reads, so it prerenders.
@@ -244,6 +257,16 @@ export default function PrivacyPage() {
           </li>
         </ul>
         <p>
+          <strong>If you report someone</strong> (a review, or another
+          player&apos;s profile from its Report button): we keep your report,
+          the reason you chose, who you reported, and who made the report, so
+          that our team can look at it in a moderation queue and see whether
+          the same person is reported repeatedly. The person you report is not
+          told who reported them. [Legitimate interests: keeping the site safe.
+          Where a report is about a child at risk we may have a wider duty to
+          act.] See section 10 for how long we keep reports.
+        </p>
+        <p>
           <strong>If you are in the beta testing programme</strong> (invite
           only) see section 8.
         </p>
@@ -409,14 +432,17 @@ export default function PrivacyPage() {
           device <strong>directly to theirs</strong> (called peer-to-peer, or
           WebRTC). To do that, devices must learn each other&apos;s network
           addresses. <strong>That means the other players in your room may be
-          able to see your IP address</strong>, which can show roughly where you
-          are and who your internet provider is.
+          can see your IP address</strong>, which can show roughly where you
+          are and who your internet provider is. The first time you use co-op
+          on a device we show a short notice saying this before anything
+          connects.
         </p>
         <ul>
           <li>
-            Rooms are private. You join with a short code, so only people you
-            share the code with should be able to join. Do not share the code
-            with strangers.
+            <strong>There are no public rooms.</strong> Nobody can browse or
+            search for rooms. To join you need a room code or an invite link
+            from the host, so only people you share it with can get in. Do not
+            share a code or link with strangers.
           </li>
           <li>
             Other players see your display name, not your Google name or email.
@@ -431,16 +457,15 @@ export default function PrivacyPage() {
           </li>
           <li>
             Your browser asks free &quot;STUN&quot; servers run by Cloudflare
-            and Google what your public address is. If a direct link is not
-            possible, traffic goes through a &quot;relay&quot; (TURN) server
-            instead <Placeholder>CONFIRM which TURN provider is live in
-            production (the code supports Cloudflare Realtime TURN)</Placeholder>
-            . Those providers will see your IP address.
+            and Google what your public address is, so those two providers see
+            your IP address. We do <strong>not</strong> use a relay (TURN)
+            server, so if a direct link between two devices is not possible,
+            co-op will not connect. Some school and home networks block direct
+            connections, so co-op may not work for everyone.
           </li>
           <li>
             Game data goes directly between players and does not pass through
-            our servers (unless a relay is used, which only forwards it). We do
-            not record it. Games can use your microphone for voice only if the
+            our servers. We do not record it. Games can use your microphone for voice only if the
             game asks and your browser permission prompt is accepted; you can
             mute. <Placeholder>CONFIRM whether any live game uses
             voice</Placeholder>
@@ -484,10 +509,11 @@ export default function PrivacyPage() {
             &quot;Tested by&quot; on that game&apos;s public page.
           </li>
           <li>
-            We delete clips and screenshots when a bug is marked fixed. If a
-            report is not resolved we do not yet delete it on a timer.{" "}
-            <Placeholder>OWNER: set and state a retention period for
-            unresolved reports, clips and screenshots</Placeholder>
+            <strong>Clips and screenshots are deleted</strong> automatically 30
+            days after you send them if the report is still unresolved,
+            straight away when the report is fixed or closed, and when you
+            delete your account. The text of the report stays (it is cut loose
+            from your account if you delete it).
           </li>
         </ul>
         <p>
@@ -511,12 +537,14 @@ export default function PrivacyPage() {
             <strong>PostHog</strong> (analytics, EU).
           </li>
           <li>
-            <strong>Google</strong> (sign-in; it also hosts the profile picture
-            we show, and runs a STUN server and the optional review
-            translation described below).
+            <strong>Google</strong> (sign-in; it hosts your Google profile
+            picture, which is only loaded for your friends if you chose to show
+            it; and it runs a STUN server and the optional review translation
+            described below).
           </li>
           <li>
-            <strong>Cloudflare</strong> (co-op connection helper servers).
+            <strong>Cloudflare</strong> (a free STUN server that tells your
+            browser its public address for co-op; it sees your IP address).
           </li>
           <li>
             <strong>Push services</strong> run by your browser&apos;s maker
@@ -561,8 +589,15 @@ export default function PrivacyPage() {
             link to you.
           </li>
           <li>
-            <strong>Bug reports and survey answers</strong> you made stay but
-            are cut loose from your account when you delete it.
+            <strong>Bug reports (the text) and survey answers</strong> you made
+            stay but are cut loose from your account when you delete it.
+          </li>
+          <li>
+            <strong>Reports about reviews and profiles</strong> are kept in our
+            moderation queue while we look at them, and afterwards as a short
+            record of what we decided, so that repeat problems are noticed.{" "}
+            <Placeholder>OWNER: set a retention period for resolved moderation
+            reports; confirm what the merged code deletes</Placeholder>
           </li>
           <li>
             <strong>Invite links</strong>: removed about an hour after they
@@ -572,21 +607,23 @@ export default function PrivacyPage() {
           <li>
             <strong>Analytics</strong>: kept by PostHog for{" "}
             <Placeholder>PostHog retention setting</Placeholder>. Deleting your
-            account does not delete analytics, which are not tied to you; ask
-            us if you want us to look into removing a browser&apos;s data.
+            account does not delete analytics, which are not tied to you.
+            Switching analytics off clears the ID in your browser; ask us if
+            you want us to look into removing data already sent.
           </li>
           <li>
-            <strong>Beta clips and screenshots</strong>: see section 8.
-            <Placeholder>Not all files are yet deleted automatically when an
-            account is deleted: CONFIRM</Placeholder>
+            <strong>Beta clips and screenshots</strong>: 30 days if unresolved,
+            deleted at once when the report is fixed or closed, and when you
+            delete your account (section 8).
           </li>
           <li>
             <strong>Challenge links</strong> do not expire on their own. You can
             switch yours off.
           </li>
           <li>
-            Some small records (such as who blocked whom, or a review ban) are
-            kept after deletion to keep other people safe.
+            Some small records (such as who blocked whom, a review ban, or a
+            record that a report was made) are kept after deletion to keep
+            other people safe.
           </li>
         </ul>
       </LegalSection>
