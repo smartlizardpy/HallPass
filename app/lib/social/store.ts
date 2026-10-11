@@ -40,6 +40,7 @@ import {
   USERNAME_TOMBSTONE_DAYS,
 } from "./config";
 import { orderPair } from "./pair";
+import { avatarImage } from "@/app/lib/avatars";
 import { foldToAscii } from "@/app/lib/username";
 
 type Sql = NeonQueryFunction<false, false>;
@@ -122,7 +123,12 @@ export function createSocialStore(sql: Sql) {
       id: String(row.public_id),
       username,
       displayName: handle || (username ? `@${username}` : "Player"),
-      image: row.image == null ? null : String(row.image),
+      image: avatarImage(
+        row.image == null ? null : String(row.image),
+        String(row.public_id),
+        row.avatar_meme,
+        row.avatar_colour,
+      ),
     };
   }
 
@@ -222,7 +228,7 @@ export function createSocialStore(sql: Sql) {
       const startsWith = `${escaped}%`;
       const wordStart = `% ${escaped}%`;
       const rows = await sql`
-        SELECT p.public_id, p.username, p.handle
+        SELECT p.public_id, p.username, p.handle, p.avatar_meme, p.avatar_colour
         FROM players p
         WHERE (
                 p.username LIKE ${startsWith} ESCAPE '\\'
@@ -259,7 +265,7 @@ export function createSocialStore(sql: Sql) {
     /** Accepted friends, newest first. */
     async listFriends(me: string): Promise<PublicProfile[]> {
       const rows = await sql`
-        SELECT p.public_id, p.username, p.handle, CASE WHEN p.use_google_photo THEN p.image END AS image
+        SELECT p.public_id, p.username, p.handle, CASE WHEN p.use_google_photo THEN p.image END AS image, p.avatar_meme, p.avatar_colour
         FROM friendships f
         JOIN players p
           ON p.id = CASE WHEN f.player_a = ${me} THEN f.player_b ELSE f.player_a END
@@ -273,7 +279,7 @@ export function createSocialStore(sql: Sql) {
     /** Requests sent TO me and awaiting my answer. */
     async listIncomingRequests(me: string): Promise<FriendRequest[]> {
       const rows = await sql`
-        SELECT p.public_id, p.username, p.handle, f.created_at
+        SELECT p.public_id, p.username, p.handle, p.avatar_meme, p.avatar_colour, f.created_at
         FROM friendships f
         JOIN players p
           ON p.id = CASE WHEN f.player_a = ${me} THEN f.player_b ELSE f.player_a END
@@ -291,7 +297,7 @@ export function createSocialStore(sql: Sql) {
     /** Requests I have sent that are still awaiting an answer. */
     async listOutgoingRequests(me: string): Promise<FriendRequest[]> {
       const rows = await sql`
-        SELECT p.public_id, p.username, p.handle, f.created_at
+        SELECT p.public_id, p.username, p.handle, p.avatar_meme, p.avatar_colour, f.created_at
         FROM friendships f
         JOIN players p
           ON p.id = CASE WHEN f.player_a = ${me} THEN f.player_b ELSE f.player_a END
@@ -352,7 +358,7 @@ export function createSocialStore(sql: Sql) {
     ): Promise<{ slug: string; friend: PublicProfile; lastPlayed: string }[]> {
       if (slugs.length === 0) return [];
       const rows = await sql`
-        SELECT pp.slug, pp.last_played, p.public_id, p.username, p.handle, CASE WHEN p.use_google_photo THEN p.image END AS image
+        SELECT pp.slug, pp.last_played, p.public_id, p.username, p.handle, CASE WHEN p.use_google_photo THEN p.image END AS image, p.avatar_meme, p.avatar_colour
         FROM friendships f
         JOIN players p
           ON p.id = CASE WHEN f.player_a = ${me} THEN f.player_b ELSE f.player_a END
@@ -565,7 +571,7 @@ export function createSocialStore(sql: Sql) {
 
     async listBlocked(me: string): Promise<PublicProfile[]> {
       const rows = await sql`
-        SELECT p.public_id, p.username, p.handle
+        SELECT p.public_id, p.username, p.handle, p.avatar_meme, p.avatar_colour
         FROM player_blocks b
         JOIN players p ON p.id = b.blocked_id
         WHERE b.blocker_id = ${me}

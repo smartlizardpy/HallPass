@@ -71,6 +71,7 @@
 import "server-only";
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { isMissingColumnError, sql } from "@/app/lib/db";
+import { avatarImage } from "@/app/lib/avatars";
 import { publicDisplayName } from "@/app/lib/players";
 import { createSocialStore } from "@/app/lib/social/store";
 import {
@@ -422,6 +423,8 @@ export function createProfileReader(sqlClient: Sql) {
           p.public_id,
           p.username,
           p.handle,
+          p.avatar_meme,
+          p.avatar_colour,
           p.profile_visibility,
           (SELECT count(*)::int FROM friendships fc
             WHERE fc.status = 'accepted'
@@ -438,6 +441,8 @@ export function createProfileReader(sqlClient: Sql) {
         p.public_id,
         p.username,
         p.handle,
+        p.avatar_meme,
+        p.avatar_colour,
         CASE WHEN p.use_google_photo AND (p.id = ${viewerId} OR f.status = 'accepted')
              THEN p.image END                                          AS image,
         p.profile_visibility,
@@ -537,7 +542,12 @@ export function createProfileReader(sqlClient: Sql) {
           handle: row.handle == null ? null : String(row.handle),
           username: row.username == null ? null : String(row.username),
         }),
-        image: row.image == null ? null : String(row.image),
+        image: avatarImage(
+          row.image == null ? null : String(row.image),
+          String(row.public_id),
+          row.avatar_meme,
+          row.avatar_colour,
+        ),
         friendship,
         canSendFriendRequest:
           viewerId !== null && !isOwner && !isBlocked && friendship === "none",
