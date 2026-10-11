@@ -141,7 +141,8 @@ export function createInviteStore(sql: Sql) {
     }): Promise<InvitableFriend[]> {
       const { me, slug, stagedOnly, adminEmails } = input;
       const rows = (await sql`
-        SELECT p.public_id, p.username, p.handle, p.image,
+        SELECT p.public_id, p.username, p.handle,
+               CASE WHEN p.use_google_photo THEN p.image END AS image,
                EXISTS (
                  SELECT 1 FROM game_invites g
                   WHERE g.from_player = ${me}

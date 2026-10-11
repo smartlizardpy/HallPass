@@ -169,3 +169,34 @@ describe("visibleReviewBody", () => {
     expect(await store.visibleReviewBody(999)).toBeNull();
   });
 });
+
+describe("review authors never carry the Google photo", () => {
+  it("selects no image in any listing or own-review statement, and maps image to null", async () => {
+    const row = {
+      id: 1,
+      recommended: true,
+      body: "hi",
+      helpful_count: 0,
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      public_id: "11111111-2222-3333-4444-555555555555",
+      username: "ada",
+      handle: null,
+      author_tag: "abcd",
+      total: 1,
+      // A stray column must still never reach the browser.
+      image: "https://lh3.example/real-photo.png",
+    };
+    const { sql, calls } = makeFakeSql([row]);
+    const store = createReviewStore(sql);
+    for (const sort of ["helpful", "recent"] as const) {
+      const { reviews } = await store.listReviews("g", { sort, before: null, salt: "s" });
+      expect(reviews[0].author.image).toBeNull();
+    }
+    await store.listReviews("g", { sort: "recent", before: 5, salt: "s" });
+    const own = await store.ownReview("g", "me");
+    expect(own?.author.image).toBeNull();
+    expect(calls).toHaveLength(4);
+    for (const call of calls) expect(call.text).not.toMatch(/\bp\.image\b/);
+  });
+});

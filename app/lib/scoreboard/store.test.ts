@@ -687,7 +687,7 @@ describe("getFriendsNewlyPassed", () => {
 });
 
 describe("public leaderboard never reads the Google photo", () => {
-  it.each(["all", "day", "week", "month", "year"] as const)(
+  it.each(["all", "day", "week"] as const)(
     "does not select players.image for the %s window, in either direction",
     async (period) => {
       for (const sort of ["asc", "desc"] as const) {

@@ -111,7 +111,9 @@ export function createReviewStore(sql: Sql) {
         // Never the Google `name` — that is the player's real name for most
         // accounts. Handle, else "@username", else "Player".
         displayName: handle || (username ? `@${username}` : "Player"),
-        image: row.image == null ? null : String(row.image),
+        // Always null: public queries never select `players.image` (a child's
+        // Google photo). `Avatar` renders the meme avatar for `id` instead.
+        image: null,
         tag: String(row.author_tag ?? "").slice(0, 4),
       },
     };
@@ -141,7 +143,7 @@ export function createReviewStore(sql: Sql) {
         sort === "helpful"
           ? await sql`
               SELECT r.id, r.recommended, r.body, r.helpful_count, r.created_at, r.updated_at,
-                     p.public_id, p.username, p.handle, p.image,
+                     p.public_id, p.username, p.handle,
                      encode(sha256((p.id || ${salt})::bytea), 'hex') AS author_tag,
                      count(*) OVER () AS total
               FROM game_reviews r
@@ -153,7 +155,7 @@ export function createReviewStore(sql: Sql) {
           : before === null
             ? await sql`
                 SELECT r.id, r.recommended, r.body, r.helpful_count, r.created_at, r.updated_at,
-                       p.public_id, p.username, p.handle, p.image,
+                       p.public_id, p.username, p.handle,
                        encode(sha256((p.id || ${salt})::bytea), 'hex') AS author_tag,
                        count(*) OVER () AS total
                 FROM game_reviews r
@@ -164,7 +166,7 @@ export function createReviewStore(sql: Sql) {
               `
             : await sql`
                 SELECT r.id, r.recommended, r.body, r.helpful_count, r.created_at, r.updated_at,
-                       p.public_id, p.username, p.handle, p.image,
+                       p.public_id, p.username, p.handle,
                        encode(sha256((p.id || ${salt})::bytea), 'hex') AS author_tag,
                        count(*) OVER () AS total
                 FROM game_reviews r
@@ -228,7 +230,7 @@ export function createReviewStore(sql: Sql) {
     async ownReview(slug: string, playerId: string): Promise<Review | null> {
       const rows = await sql`
         SELECT r.id, r.recommended, r.body, r.helpful_count, r.created_at, r.updated_at,
-               p.public_id, p.username, p.handle, p.image, '' AS author_tag
+               p.public_id, p.username, p.handle, '' AS author_tag
         FROM game_reviews r
         JOIN players p ON p.id = r.player_id
         WHERE r.slug = ${slug} AND r.player_id = ${playerId} AND r.status <> 'deleted'

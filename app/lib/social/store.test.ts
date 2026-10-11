@@ -421,3 +421,37 @@ describe("badgeStats excludes staged games' achievement points", () => {
     expect(calls[0].values).toContainEqual([]);
   });
 });
+
+describe("Google photo exposure (meme avatar by default)", () => {
+  const select = (text: string) => text.slice(text.indexOf("SELECT"), text.indexOf("FROM"));
+
+  it("only friend-scoped reads select the photo, and only through the opt-in CASE", async () => {
+    const { sql, calls } = makeFakeSql(() => []);
+    const store = createSocialStore(sql);
+    await store.listFriends("me");
+    await store.friendsPlaying("me", ["a"]);
+    for (const call of calls) {
+      expect(call.text).toContain("CASE WHEN p.use_google_photo THEN p.image END AS image");
+      expect(call.text).not.toMatch(/p\.image,/);
+    }
+  });
+
+  it("search, pending requests and the blocked list never select players.image", async () => {
+    const { sql, calls } = makeFakeSql(() => []);
+    const store = createSocialStore(sql);
+    await store.searchPlayers("me", "ada");
+    await store.listIncomingRequests("me");
+    await store.listOutgoingRequests("me");
+    await store.listBlocked("me");
+    expect(calls).toHaveLength(4);
+    for (const call of calls) expect(select(call.text)).not.toMatch(/image/);
+  });
+
+  it("maps a row with no image column to a null image", async () => {
+    const { sql } = makeFakeSql(() => [
+      { public_id: "11111111-2222-3333-4444-555555555555", username: "ada", handle: null },
+    ]);
+    const [p] = await createSocialStore(sql).searchPlayers("me", "ada");
+    expect(p.image).toBeNull();
+  });
+});
