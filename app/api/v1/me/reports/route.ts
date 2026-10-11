@@ -31,11 +31,14 @@ import {
   currentPlayerId,
   isTrustedOrigin,
 } from "@/app/lib/social/request-guard";
+import { notifyAdmins } from "@/app/lib/notifications/deliver";
+import { profileReportedCopy } from "@/app/lib/notifications/copy";
 import { profileReports, reportUnexpected } from "@/app/lib/profile-reports";
 import {
   MAX_BODY_BYTES,
   isProfileReportReason,
   parseNote,
+  type ProfileReportReason,
   type ProfileReportRefusal,
 } from "@/app/lib/profile-reports/config";
 
@@ -77,6 +80,30 @@ async function readJsonBody(req: Request): Promise<Record<string, unknown> | nul
   }
 }
 
+/**
+ * Tell the admins a new report is in the queue, the way `reviews/[id]/report`
+ * does. BEST EFFORT AND FAIL-SOFT: `notifyAdmins` swallows its own failures, and
+ * the `catch` here covers anything that escapes (an import-time fault, a throw
+ * from the copy builder), so a notification problem can never fail the report
+ * request: the report is already stored.
+ *
+ * The text names NO ONE: not the reporter (anonymous to moderators) and not the
+ * reported child, only the fixed reason label (`profileReportedCopy`). Not
+ * deduped (`dedupeKey: null`): a `created` outcome is by construction a new open
+ * report, and the per-reporter rate limit already bounds the volume.
+ */
+async function announce(reason: ProfileReportReason): Promise<void> {
+  try {
+    await notifyAdmins({
+      kind: "profile_reported",
+      copy: profileReportedCopy({ reason }),
+      dedupeKey: null,
+    });
+  } catch (error) {
+    console.error("[profile-reports] admin notification failed:", error);
+  }
+}
+
 export async function POST(req: Request): Promise<Response> {
   if (!isTrustedOrigin(req)) return refuse("forbidden");
 
@@ -102,7 +129,10 @@ export async function POST(req: Request): Promise<Response> {
     });
     switch (outcome.result) {
       case "created":
+        await announce(reason);
+        return Response.json({ ok: true }, { headers: NO_STORE });
       case "duplicate":
+        // Writes no row, so there is nothing new to announce.
         return Response.json({ ok: true }, { headers: NO_STORE });
       case "self":
         return refuse("self");
