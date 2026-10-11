@@ -33,4 +33,15 @@ describe("Avatar", () => {
     );
     expect(html).toContain("background-color");
   });
+
+  it("is a block, so a plain wrapper around it adds no baseline gap under the circle", () => {
+    const html = renderToStaticMarkup(
+      createElement(Avatar, {
+        person: { image: null, displayName: "Ozan", id: "00000000-0000-4000-8000-000000000001" },
+        size: 32,
+      }),
+    );
+    expect(html).toMatch(/class="[^"]*\bblock\b/);
+    expect(html).not.toContain("inline-block");
+  });
 });
