@@ -27,6 +27,16 @@ export interface ConnectOptions {
   transport?: TransportKind;
   /** Route all traffic through TURN so peers never see each other's IP. */
   relayOnly?: boolean;
+  /**
+   * `'auto'` (default): before this device's first host or join over the
+   * `hallpass` transport, the SDK shows a one-time notice that other players
+   * can see the player's IP address, with Continue / Cancel (remembered in
+   * `localStorage`). Cancel rejects `createRoom`/`joinRoom` with a
+   * `cancelled` error. Not shown for `local`, or when the connection is
+   * relay-only. `'custom'`: the SDK shows nothing and the game must get the
+   * player's consent itself before calling `createRoom`/`joinRoom`.
+   */
+  ipNotice?: "auto" | "custom";
   /** Local transport only. */
   simulate?: SimulateOptions | null;
   /** Log to the console. */
@@ -172,6 +182,7 @@ export type ErrorCode =
   | "invalid-argument"
   | "already-in-room"
   | "unsupported"
+  | "cancelled"
   | "mic-denied"
   | "mic-unavailable";
 

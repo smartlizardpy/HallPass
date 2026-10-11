@@ -325,7 +325,7 @@ other over WebRTC, and HallPass only helps them find each other.
 
 | | |
 | --- | --- |
-| Version | **1.0.0** (`HallPassP2P.version`) |
+| Version | **1.1.0** (`HallPassP2P.version`) |
 | Hosted at | `https://hallpass.gg/sdk/p2p/v1/hallpass-p2p.js`, `hallpass-p2p.min.js` (49 KB, 17 KB gzipped), `hallpass-p2p.d.ts` |
 | Source | `sdk/p2p/src/` (build: `npm run build:sdk:p2p`) |
 | Demo / manual test page | `/sdk/p2p/demo/index.html` (coloured dots + chat) |
@@ -422,6 +422,7 @@ const client = await HallPassP2P.connect(options);
 | `name` | `'Player'` | Fallback display name. A signed-in HallPass player gets their public HallPass name instead (handle, else `@username`) — never their real name. |
 | `transport` | `'auto'` | `'auto'` \| `'hallpass'` \| `'local'`. |
 | `relayOnly` | `false` | Route everything through a TURN relay so other players never see your IP. Fails with `connect-failed`/`relay-unavailable` when HallPass has no TURN server. Ignored by `local`. |
+| `ipNotice` | `'auto'` | `'auto'` \| `'custom'`. `'auto'`: before this device's first host or join over the `hallpass` transport the SDK shows a one-time "Players in this room can see your IP address (it shows roughly where you are). Only play with people you know." notice with Continue / Cancel, remembered in `localStorage` (if storage is blocked it shows once per page session). Cancel makes `createRoom`/`joinRoom` reject with `cancelled`. Not shown for `local`, or when the connection is relay-only. `'custom'`: the SDK shows nothing and your game must get the player's consent itself first. |
 | `simulate` | `null` | Local transport only: `{ latencyMs, jitterMs, lossPct }`. |
 | `debug` | `false` | Log to the console. |
 | `api` | page origin | *Extension.* HallPass origin for the `hallpass` transport. |
@@ -542,6 +543,11 @@ best-effort goodbye too.
 | `unknown-game` | HallPass does not know `gameId` (or you may not see that staged game). |
 | `room-closed` | The room closed while you were joining. |
 
+`cancelled` — the player pressed Cancel (or Escape) on the one-time IP notice, so
+nothing was started. It is a choice, not a failure: return to your menu quietly
+instead of showing an error. `err.message` is already player-safe if you want
+to say something.
+
 Also: `closed`, `not-host`, `peer-left`, `handler-error`, `message-too-large`,
 `send-buffer-full`, `invalid-argument`, `already-in-room`, `unsupported`,
 `mic-denied`, `mic-unavailable`.
@@ -552,6 +558,8 @@ Also: `closed`, `not-host`, `peer-left`, `handler-error`, `message-too-large`,
   others in the room. `relayOnly: true` (or `P2P_FORCE_RELAY=1` on HallPass)
   routes everything through TURN so nobody sees anybody's IP; a host's
   `relayOnly` applies to everyone who joins its room. It needs a TURN server.
+  Otherwise the SDK shows a one-time notice per device before the first
+  connection (see `ipNotice`); rooms are private (code or invite link only).
 - **Background tabs.** Browsers throttle timers in background tabs (to once a
   second, and after a while once a minute in Chrome). A host that tabs away keeps
   answering messages but its game loop slows — listen for `visibility` and pause
