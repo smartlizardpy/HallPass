@@ -24,6 +24,16 @@ interface ConnectOptions {
     transport?: TransportKind;
     /** Route all traffic through TURN so peers never see each other's IP. */
     relayOnly?: boolean;
+    /**
+     * `'auto'` (default): before this device's first host or join over the
+     * `hallpass` transport, the SDK shows a one-time notice that other players
+     * can see the player's IP address, with Continue / Cancel (remembered in
+     * `localStorage`). Cancel rejects `createRoom`/`joinRoom` with a
+     * `cancelled` error. Not shown for `local`, or when the connection is
+     * relay-only. `'custom'`: the SDK shows nothing and the game must get the
+     * player's consent itself before calling `createRoom`/`joinRoom`.
+     */
+    ipNotice?: "auto" | "custom";
     /** Local transport only. */
     simulate?: SimulateOptions | null;
     /** Log to the console. */
@@ -133,7 +143,7 @@ interface SelfTestOptions {
     iceServers?: RTCIceServer[];
     timeoutMs?: number;
 }
-type ErrorCode = "room-not-found" | "room-full" | "room-locked" | "version-mismatch" | "connect-failed" | "timeout" | "closed" | "not-host" | "peer-left" | "handler-error" | "message-too-large" | "send-buffer-full" | "invalid-argument" | "already-in-room" | "unsupported" | "mic-denied" | "mic-unavailable";
+type ErrorCode = "room-not-found" | "room-full" | "room-locked" | "version-mismatch" | "connect-failed" | "timeout" | "closed" | "not-host" | "peer-left" | "handler-error" | "message-too-large" | "send-buffer-full" | "invalid-argument" | "already-in-room" | "unsupported" | "cancelled" | "mic-denied" | "mic-unavailable";
 /** Every error the SDK throws or rejects with. `message` is written for players. */
 interface P2PErrorShape extends Error {
     code: ErrorCode;

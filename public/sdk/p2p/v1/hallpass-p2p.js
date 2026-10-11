@@ -1,4 +1,4 @@
-/* HallPass P2P SDK v1.0.0 — peer-to-peer co-op for HallPass games — https://hallpass.gg/sdk/p2p/v1/ — MIT */
+/* HallPass P2P SDK v1.1.0 — peer-to-peer co-op for HallPass games — https://hallpass.gg/sdk/p2p/v1/ — MIT */
 
 // sdk/p2p/src/codes.ts
 var CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -115,6 +115,126 @@ function roomError(code, extra) {
     default:
       return new P2PError(code, "Something went wrong with the connection.");
   }
+}
+
+// sdk/p2p/src/notice.ts
+var NOTICE_KEY = "hallpass-p2p:ip-notice:v1";
+var NOTICE_TEXT = "Players in this room can see your IP address (it shows roughly where you are). Only play with people you know.";
+var acceptedThisSession = false;
+var pending = null;
+function readAck() {
+  try {
+    return globalThis.localStorage?.getItem(NOTICE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function writeAck() {
+  try {
+    globalThis.localStorage?.setItem(NOTICE_KEY, "1");
+  } catch {
+  }
+}
+function noticeAcknowledged() {
+  return acceptedThisSession || readAck();
+}
+async function confirmIpNotice(show = showNoticeDialog) {
+  if (noticeAcknowledged()) return true;
+  if (!hasDocument()) return true;
+  pending ?? (pending = show().finally(() => {
+    pending = null;
+  }));
+  const ok = await pending;
+  if (ok) {
+    acceptedThisSession = true;
+    writeAck();
+  }
+  return ok;
+}
+var CSS = `
+:host{all:initial}
+*{box-sizing:border-box}
+.backdrop{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(8,10,20,.72);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;animation:fade .15s ease-out}
+.card{width:100%;max-width:380px;max-height:100%;overflow:auto;padding:20px;border-radius:14px;background:#fff;color:#14161f;box-shadow:0 12px 40px rgba(0,0,0,.45);animation:pop .15s ease-out}
+h2{margin:0 0 8px;font-size:18px;line-height:1.25}
+p{margin:0 0 18px;font-size:15px;line-height:1.45}
+.row{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+button{font:inherit;font-size:15px;font-weight:600;padding:10px 18px;min-height:44px;border-radius:10px;border:2px solid #3b4bd8;cursor:pointer}
+button.go{background:#3b4bd8;color:#fff}
+button.no{background:#fff;color:#3b4bd8}
+button:focus-visible{outline:3px solid #f5a623;outline-offset:2px}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes pop{from{transform:scale(.96);opacity:.6}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.backdrop,.card{animation:none}}
+`;
+function showNoticeDialog() {
+  return new Promise((resolve) => {
+    const previous = document.activeElement;
+    const host = document.createElement("hallpass-p2p-notice");
+    const root = host.attachShadow({ mode: "open" });
+    const style = document.createElement("style");
+    style.textContent = CSS;
+    const backdrop = document.createElement("div");
+    backdrop.className = "backdrop";
+    const card = document.createElement("div");
+    card.className = "card";
+    card.setAttribute("role", "dialog");
+    card.setAttribute("aria-modal", "true");
+    card.setAttribute("aria-labelledby", "t");
+    card.setAttribute("aria-describedby", "d");
+    const h = document.createElement("h2");
+    h.id = "t";
+    h.textContent = "Before you play online";
+    const p = document.createElement("p");
+    p.id = "d";
+    p.textContent = NOTICE_TEXT;
+    const row = document.createElement("div");
+    row.className = "row";
+    const no = document.createElement("button");
+    no.type = "button";
+    no.className = "no";
+    no.textContent = "Cancel";
+    const go = document.createElement("button");
+    go.type = "button";
+    go.className = "go";
+    go.textContent = "Continue";
+    row.append(no, go);
+    card.append(h, p, row);
+    backdrop.append(card);
+    root.append(style, backdrop);
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      window.removeEventListener("keydown", onKey, true);
+      host.remove();
+      try {
+        previous?.focus?.();
+      } catch {
+      }
+      resolve(ok);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        finish(false);
+      } else if (e.key === "Tab") {
+        e.preventDefault();
+        e.stopPropagation();
+        const active = root.activeElement;
+        (active === go ? no : go).focus();
+      }
+    };
+    no.addEventListener("click", () => finish(false));
+    go.addEventListener("click", () => finish(true));
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) finish(false);
+    });
+    window.addEventListener("keydown", onKey, true);
+    document.body.append(host);
+    go.focus();
+  });
 }
 
 // sdk/p2p/src/clock.ts
@@ -1208,12 +1328,12 @@ var RoomImpl = class {
       this.ev.emit(event, body, { from, sentAt: Number(h[2]), reliable });
     } else if (h[0] === "q") this.onRequest(from, Number(h[1]), String(h[2]), Number(h[3]), body);
     else if (h[0] === "r") {
-      const pending = this.reqs.get(Number(h[1]));
-      if (!pending || pending.to !== from) return;
+      const pending2 = this.reqs.get(Number(h[1]));
+      if (!pending2 || pending2.to !== from) return;
       this.reqs.delete(Number(h[1]));
-      clearTimeout(pending.timer);
-      if (h[2]) pending.resolve(body);
-      else pending.reject(new P2PError("handler-error", typeof body === "string" && body ? body : "The request failed."));
+      clearTimeout(pending2.timer);
+      if (h[2]) pending2.resolve(body);
+      else pending2.reject(new P2PError("handler-error", typeof body === "string" && body ? body : "The request failed."));
     }
   }
   onRequest(from, id, event, sentAt, body) {
@@ -2008,7 +2128,7 @@ async function fetchConfig(api, gameId) {
 }
 
 // sdk/p2p/src/version.ts
-var P2P_VERSION = "1.0.0";
+var P2P_VERSION = "1.1.0";
 
 // sdk/p2p/src/client.ts
 var LOCAL_HOSTS = /* @__PURE__ */ new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
@@ -2099,6 +2219,7 @@ var ClientImpl = class {
     const relayOnly = this.needRelay(false);
     this.busy = true;
     try {
+      await this.consent(relayOnly);
       const gameVersion = sanitizeVersion(this.opts.gameVersion);
       let room = null;
       const { sig, code } = await this.t.create({
@@ -2134,6 +2255,7 @@ var ClientImpl = class {
       let relayOnly;
       try {
         relayOnly = this.needRelay(roomRelay);
+        await this.consent(relayOnly);
       } catch (e) {
         sig.close(false);
         throw e;
@@ -2181,6 +2303,16 @@ var ClientImpl = class {
     const relay = !!this.opts.relayOnly || this.ice.forceRelay || roomRelay;
     if (relay && !this.ice.turn) throw connectFailed("relay-unavailable");
     return relay;
+  }
+  /**
+   * The one-time IP notice (see notice.ts). Nothing to show on the local
+   * transport, for relay-only connections, or when the game shows its own.
+   */
+  async consent(relayOnly) {
+    if (this.transport === "local" || relayOnly || this.opts.ipNotice === "custom") return;
+    if (!await confirmIpNotice()) {
+      throw new P2PError("cancelled", "You chose not to share your connection, so the game wasn't started.");
+    }
   }
   guard() {
     if (this.closed) throw new P2PError("closed", "This connection was closed. Call HallPassP2P.connect() again.");
