@@ -152,7 +152,7 @@ async function confirmIpNotice(show = showNoticeDialog) {
   return ok;
 }
 var CSS = `
-:host{all:initial}
+:host{all:initial;display:block;position:fixed;inset:0;z-index:2147483647}
 *{box-sizing:border-box}
 .backdrop{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(8,10,20,.72);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;animation:fade .15s ease-out}
 .card{width:100%;max-width:380px;max-height:100%;overflow:auto;padding:20px;border-radius:14px;background:#fff;color:#14161f;box-shadow:0 12px 40px rgba(0,0,0,.45);animation:pop .15s ease-out}
