@@ -40,6 +40,7 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CLIP_RETENTION_DAYS } from "@/app/lib/beta/config";
 import {
   LegalPage,
   LegalSection,
@@ -434,10 +435,9 @@ export default function PrivacyPage() {
             &quot;Tested by&quot; on that game&apos;s public page.
           </li>
           <li>
-            We delete clips and screenshots when a bug is marked fixed. If a
-            report is not resolved we do not yet delete it on a timer.{" "}
-            <Placeholder>OWNER: set and state a retention period for
-            unresolved reports, clips and screenshots</Placeholder>
+            We delete clips and screenshots when a bug is marked fixed, and in
+            any case {CLIP_RETENTION_DAYS} days after the report was filed. The
+            written report stays; only the recording and images are removed.
           </li>
         </ul>
         <p>
@@ -526,9 +526,10 @@ export default function PrivacyPage() {
             us if you want us to look into removing a browser&apos;s data.
           </li>
           <li>
-            <strong>Beta clips and screenshots</strong>: see section 8.
-            <Placeholder>Not all files are yet deleted automatically when an
-            account is deleted: CONFIRM</Placeholder>
+            <strong>Beta clips and screenshots</strong>: see section 8. When you
+            delete your account we delete all of your clips and screenshots too.
+            The written text of a bug report you filed stays, no longer linked
+            to you.
           </li>
           <li>
             <strong>Challenge links</strong> do not expire on their own. You can
