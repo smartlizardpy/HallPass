@@ -41,6 +41,7 @@ import {
 } from "@/app/play/account/actions";
 import { readOwnSocial, readPlayer, readPlayerId } from "../_data";
 import { AppearanceCard } from "../_ui/AppearanceCard";
+import { GooglePhotoCard } from "../_ui/GooglePhotoCard";
 import { StealthSettingsRow } from "../_ui/StealthSettingsRow";
 
 export const metadata: Metadata = {
@@ -180,6 +181,11 @@ export default async function YouSettingsPage({
 
         {/* Absent rather than broken when the social columns are not there. */}
         {own && <UsernameCard initialUsername={own.username} />}
+      </section>
+
+      {/* PROFILE PICTURE ---------------------------------------------------- */}
+      <section aria-label="Profile picture" className="space-y-4">
+        <GooglePhotoCard enabled={player.useGooglePhoto} />
       </section>
 
       {/* ACCOUNT ----------------------------------------------------------- */}
