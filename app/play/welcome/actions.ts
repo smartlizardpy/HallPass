@@ -13,11 +13,14 @@
  * catch-all would otherwise swallow it.
  */
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/app/lib/auth";
+import { parseAvatarChoice } from "@/app/lib/avatars";
+import { AVATAR_SKIP_COOKIE, AVATAR_SKIP_MAX_AGE_S } from "@/app/lib/onboarding";
 import { creditedSlugsFor, expireTesterCredits } from "@/app/lib/beta";
 import { validateHandle } from "@/app/lib/handle";
-import { setPlayerHandle } from "@/app/lib/players";
+import { setAvatarChoice, setPlayerHandle } from "@/app/lib/players";
 import { hasBlockedDisplayTerm } from "@/app/lib/reviews/wordlist";
 import { safeRelativePath } from "@/app/lib/safe-redirect";
 import { social } from "@/app/lib/social";
@@ -142,5 +145,61 @@ export async function setInitialUsernameAction(formData: FormData): Promise<void
 export async function skipUsernameAction(formData: FormData): Promise<void> {
   const next =
     safeRelativePath(String(formData.get("next") ?? "")) ?? DEFAULT_NEXT;
+  // Back to the welcome page, not straight to `next`, so the avatar step still
+  // follows. `su=1` tells the page the username was skipped on purpose; without
+  // it the page would ask for the username again.
+  redirect(`/play/welcome?next=${encodeURIComponent(next)}&su=1`);
+}
+
+// ---------------------------------------------------------------------------
+// Step three: pick your look (skippable)
+// ---------------------------------------------------------------------------
+
+/**
+ * Save the avatar chosen during sign-up.
+ *
+ * Identity comes ONLY from `auth()`. The form supplies `meme`, `colour` and a
+ * destination, and the first two are re-validated by `parseAvatarChoice`, the
+ * same strict check the Settings card uses. A rejected pick or a write error
+ * does not block anything: the player lands on `next` and can choose again from
+ * Settings, so this step can never strand a sign-in.
+ */
+export async function setInitialAvatarAction(formData: FormData): Promise<void> {
+  const session = await auth();
+  const playerId = session?.user?.playerId;
+  if (!playerId) redirect("/play/signin?callbackUrl=/play/welcome");
+
+  const next =
+    safeRelativePath(String(formData.get("next") ?? "")) ?? DEFAULT_NEXT;
+  const choice = parseAvatarChoice({
+    meme: formData.get("meme"),
+    colour: formData.get("colour"),
+  });
+  if (choice) {
+    try {
+      await setAvatarChoice(playerId, choice);
+    } catch (error) {
+      console.error("onboarding avatar save failed:", error);
+    }
+  }
+  redirect(next);
+}
+
+/**
+ * Skip the avatar step. Remembered in a 30-day cookie (no migration) so the
+ * landing router and the gate stop asking; the avatar stays on its generated
+ * default and can be chosen any time in Settings. A POST, like the username
+ * skip, so a prefetcher cannot skip on the player's behalf.
+ */
+export async function skipAvatarAction(formData: FormData): Promise<void> {
+  const next =
+    safeRelativePath(String(formData.get("next") ?? "")) ?? DEFAULT_NEXT;
+  (await cookies()).set(AVATAR_SKIP_COOKIE, "1", {
+    maxAge: AVATAR_SKIP_MAX_AGE_S,
+    path: "/",
+    sameSite: "lax",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+  });
   redirect(next);
 }
