@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { DeviceSwitch } from "./DeviceSwitch";
 import { FooterCredits } from "./FooterCredits";
 import { Wordmark } from "./Wordmark";
@@ -40,6 +41,16 @@ export function SiteFooter() {
               size or weight, not a lower alpha. */}
           <p className="mt-1 text-muted">
             © {new Date().getFullYear()} · all games unblocked, forever.
+          </p>
+          {/* The legal pages: the first links this footer has carried. */}
+          <p className="mt-1 text-muted">
+            <Link href="/privacy" className="underline underline-offset-2 hover:text-brand">
+              Privacy
+            </Link>
+            {" · "}
+            <Link href="/terms" className="underline underline-offset-2 hover:text-brand">
+              Terms
+            </Link>
           </p>
         </div>
       </div>
