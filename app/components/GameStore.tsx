@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import posthog from "posthog-js";
-import { useState } from "react";
 import { gameFaq } from "../lib/faq";
 import type { Game } from "../lib/games";
 import { type GameMedia, mediaPublicPath } from "../lib/game-media-blob";
@@ -14,7 +13,6 @@ import { GameCard } from "./GameCard";
 import { GameAchievements } from "./GameAchievements";
 import { GameLeaderboard } from "./GameLeaderboard";
 import { GameReviews } from "./reviews/GameReviews";
-import { GameTrailer } from "./GameTrailer";
 import { ChallengedHere } from "./ChallengedHere";
 import { FriendsWhoPlay } from "./friends/FriendsWhoPlay";
 import { FriendsBoard } from "./friends/FriendsBoard";
@@ -84,8 +82,9 @@ export function GameStore({
    */
   testers?: string[];
   /**
-   * A gameplay/intro video, or `null` when the game has none — which renders no
-   * switch at all, leaving the media column exactly as it was before the feature.
+   * A gameplay/intro video, or `null` when the game has none — which leaves the
+   * gallery exactly as it was before the video existed. When present it is the
+   * gallery's first slide (`lib/gallery-slides.ts`).
    *
    * STRUCTURALLY TYPED, not `GameVideo`. `app/lib/game-videos.ts` is `server-only`
    * and must never enter a browser bundle's import graph, so the shape is spelled
@@ -103,16 +102,6 @@ export function GameStore({
     openGame,
   );
   const { isFavorite, toggleFavorite } = useFavorites();
-
-  /**
-   * Which side of the media switch is showing. Defaults to the video when there is
-   * one, because it answers "what is this like to play" and a still cannot.
-   *
-   * Every read is guarded by `video &&` rather than trusting this flag alone: the
-   * page keys this component on the slug so the state cannot survive a navigation,
-   * but a `true` here with a `null` video must be inert regardless of that.
-   */
-  const [showVideo, setShowVideo] = useState(video !== null);
 
   const favorited = isFavorite(game.slug);
   const categoryHref = `/category/${encodeURIComponent(game.category.toLowerCase())}`;
@@ -192,73 +181,57 @@ export function GameStore({
       {/* HERO — media left, metadata rail + Play right. */}
       <section className="game-hero grid gap-5 rounded-3xl p-4 sm:gap-6 sm:p-6 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
         <div className="min-w-0">
-          {/* MEDIA SWITCH — rendered only when there is a genuine choice, i.e. a
-              video AND screenshots. A game with a video and no stills just shows
-              the video; a game with no video is untouched by this feature.
-
-              `aria-pressed` toggle buttons rather than a `role="tablist"`. Tabs
-              come with an arrow-key contract, and ScreenshotGallery already binds
-              ArrowLeft/ArrowRight on its own container to step slides — a tablist
-              directly above it would fight that handler for the same keys. Toggle
-              buttons carry no such contract and stay unambiguous. */}
-          {video && hasShots && (
-            <div
-              role="group"
-              aria-label={`${game.title} media`}
-              className="mb-2 inline-flex gap-1 rounded-full bg-surface/70 p-1"
-            >
-              <MediaSwitch pressed={showVideo} onClick={() => setShowVideo(true)}>
-                {video.label}
-              </MediaSwitch>
-              <MediaSwitch pressed={!showVideo} onClick={() => setShowVideo(false)}>
-                Screenshots
-              </MediaSwitch>
-            </div>
-          )}
-
-          {video && showVideo ? (
-            <GameTrailer
-              videoId={video.id}
-              label={video.label}
+          {/* THE MEDIA. One gallery: when the game has a gameplay/intro video it is
+              the FIRST SLIDE, in the same frame and thumbnail strip as the
+              pictures, rather than a separate Gameplay / Screenshots toggle. A game
+              with a video and no stills is a gallery of one slide; a game with
+              neither falls through to its cover art below. */}
+          {hasGallery || video ? (
+            <ScreenshotGallery
+              media={media}
               title={game.title}
-              onPlay={() =>
-                posthog.capture("game_video_played", {
-                  game_slug: game.slug,
-                  game_title: game.title,
-                  game_category: game.category,
-                  video_label: video.label,
-                })
-              }
-              // Only offered when there is somewhere to go back TO.
-              onExit={hasShots ? () => setShowVideo(false) : undefined}
-              poster={
-                firstShot ? (
-                  // Decorative: it sits behind a play button whose accessible name
-                  // already says which game and which video this is.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={mediaPublicPath(firstShot)}
-                    alt=""
-                    width={firstShot.width}
-                    height={firstShot.height}
-                    loading="eager"
-                    fetchPriority="high"
-                    decoding="async"
-                    aria-hidden
-                    className="absolute inset-0 h-full w-full object-cover"
-                  />
-                ) : (
-                  <CoverImage
-                    game={game}
-                    initialClass="text-7xl sm:text-8xl"
-                    loading="eager"
-                    fetchPriority="high"
-                  />
-                )
+              cover={coverSrc}
+              video={
+                video
+                  ? {
+                      id: video.id,
+                      label: video.label,
+                      // The strip's tile: our own artwork, never a YouTube image.
+                      thumb: firstShot ? mediaPublicPath(firstShot) : coverSrc,
+                      onPlay: () =>
+                        posthog.capture("game_video_played", {
+                          game_slug: game.slug,
+                          game_title: game.title,
+                          game_category: game.category,
+                          video_label: video.label,
+                        }),
+                      poster: firstShot ? (
+                        // Decorative: it sits behind a play button whose accessible
+                        // name already says which game and which video this is.
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={mediaPublicPath(firstShot)}
+                          alt=""
+                          width={firstShot.width}
+                          height={firstShot.height}
+                          loading="eager"
+                          fetchPriority="high"
+                          decoding="async"
+                          aria-hidden
+                          className="absolute inset-0 h-full w-full object-cover"
+                        />
+                      ) : (
+                        <CoverImage
+                          game={game}
+                          initialClass="text-7xl sm:text-8xl"
+                          loading="eager"
+                          fetchPriority="high"
+                        />
+                      ),
+                    }
+                  : null
               }
             />
-          ) : hasGallery ? (
-            <ScreenshotGallery media={media} title={game.title} cover={coverSrc} />
           ) : (
             <div className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl bg-zinc-900">
               <CoverImage
@@ -496,33 +469,6 @@ export function GameStore({
         </section>
       )}
     </div>
-  );
-}
-
-/** One side of the video/screenshots switch above the hero media. */
-function MediaSwitch({
-  pressed,
-  onClick,
-  children,
-}: {
-  pressed: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={pressed}
-      style={{ touchAction: "manipulation" }}
-      className={`rounded-full px-3.5 py-1.5 text-[12px] font-black uppercase tracking-wider transition focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/30 ${
-        pressed
-          ? "bg-brand text-white shadow-sm"
-          : "text-muted hover:bg-surface hover:text-foreground"
-      }`}
-    >
-      {children}
-    </button>
   );
 }
 
