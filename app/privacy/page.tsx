@@ -121,8 +121,6 @@ www.hallpass.games. It is run from England. We
           which means we decide how and why it is used.
         </p>
         <p>
-          Operator: Ozan Kaygusuz
-          <br />
           Contact for anything in this policy:{" "}
           smartlizardpy@duck.com
         </p>

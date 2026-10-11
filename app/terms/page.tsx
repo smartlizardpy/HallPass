@@ -1,7 +1,9 @@
 /**
  * `/terms` — the Terms of Service.
  *
- * DRAFT by a non-lawyer, written from what the product does. Facts it rests on:
+ * Written from what the product does, not from a template. Open questions
+ * (minor operator, Online Safety Act duties, takedown process) are tracked in
+ * `docs/dpia.md` rather than shown to readers. Facts it rests on:
  *
  *  - Accounts are Google-only and optional: `app/lib/auth.ts`; the FAQ line "no
  *    account is needed to play" in `app/lib/faq.ts`. Deletion is self-service:
@@ -16,14 +18,16 @@
  *    (`app/lib/handle.ts`, `app/lib/username.ts`). Profile reports
  *    (`app/lib/profile-reports/*`, `docs/profile-reports-design.md`): reasons,
  *    the moderation queue and the profile-reset action. DEPENDS ON A PARALLEL
- *    WORKSTREAM: the co-op rules about room codes (no public rooms).
+ *    WORKSTREAM: the co-op rules about room codes (no public rooms). Production has no TURN
+ *    relay configured (confirmed by the owner).
  *  - Games: self-hosted games (`public/games/*`, uploads via
  *    `app/lib/game-upload.ts`), external games embedded from other origins
  *    (`app/lib/external-games-store.ts`), "By <name>" credits from
  *    `app/lib/game-credits.ts`. No takedown mechanism exists in the code; the
  *    takedown section is an email process only.
- *  - Liability and minor operator: conservative drafting with no cap figure;
- *    the whole clause and the operator's capacity are for a solicitor.
+ *  - Liability: conservative drafting with no cap figure. The text names no
+ *    individual, address or registration; contact is by email only (owner
+ *    decision, 2026-10-11).
  *  - Beta programme: `app/lib/beta/*` (invite only, XP, rank), `/beta/closed`.
  *  - Ads strip (placeholder ad plus a partner): `app/components/Arcade.tsx`.
  *
@@ -32,11 +36,7 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  LegalPage,
-  LegalSection,
-  Placeholder,
-} from "../components/legal/LegalPage";
+import { LegalPage, LegalSection } from "../components/legal/LegalPage";
 
 const title = "Terms of Service";
 const description =
@@ -53,8 +53,7 @@ export default function TermsPage() {
   return (
     <LegalPage
       title={title}
-      updated={<>11 October 2026 (draft)</>}
-      draft
+      updated={<>11 October 2026</>}
       shortVersion={
         <ul>
           <li>HALLPASS is a free arcade of browser games. Play as a guest or sign in.</li>
@@ -69,10 +68,8 @@ export default function TermsPage() {
     >
       <LegalSection id="about" title="1. About these terms">
         <p>
-          These terms are an agreement between you and the operator of HALLPASS:{" "}
-          Ozan Kaygusuz,{" "}
-          <Placeholder>POSTAL ADDRESS</Placeholder>, contact{" "}
-          smartlizardpy@duck.com (&quot;we&quot;). By using
+          These terms are an agreement between you and the people who run HALLPASS (&quot;we&quot;).
+          You can reach us at smartlizardpy@duck.com. By using
           the site you agree to them. If you do not agree, please do not use
           it. Our <Link href="/privacy">Privacy Policy</Link> explains how we
           use your data and is part of the picture too.
@@ -103,15 +100,6 @@ export default function TermsPage() {
             or carer tells us, we delete their account.
           </li>
         </ul>
-        <p>
-          <Placeholder>SOLICITOR (IMPORTANT): (a) capacity of minors to
-          contract, including whether the wording should be a licence rather
-          than a contract for under-18s; and (b) the operator, Ozan Kaygusuz, is
-          himself under 18, so take advice on whether he can be the party to
-          this agreement and the data controller. Suggestion: a parent or
-          guardian (or a company) is named as the legal operator in section
-          1.</Placeholder>
-        </p>
       </LegalSection>
 
       <LegalSection id="accounts" title="3. Your account">
@@ -192,10 +180,7 @@ export default function TermsPage() {
           (we removed your content or suspended your account), or you are
           unhappy about how we handled a report, email smartlizardpy@duck.com
           with what happened and why you disagree. A person (not an automatic
-          system) will look at it again and reply.{" "}
-          <Placeholder>SOLICITOR: Online Safety Act duties (illegal content,
-          children&apos;s risk assessment, reporting and complaints routes) for
-          the friends, invites, reviews and co-op features</Placeholder>
+          system) will look at it again and reply.
         </p>
       </LegalSection>
 
@@ -238,9 +223,7 @@ export default function TermsPage() {
           </li>
           <li>
             The HALLPASS name, logo and the site&apos;s own code, art and text
-            belong to us or our contributors.{" "}
-            <Placeholder>OWNER: licence/ownership wording for contributed
-            games</Placeholder>
+            belong to us or our contributors.
           </li>
         </ul>
       </LegalSection>
@@ -263,11 +246,7 @@ export default function TermsPage() {
           We aim to respond promptly. We may remove or disable the content while
           we look into it, and we will tell the person who posted or uploaded it
           so they can reply. If something of yours was taken down and you think
-          that was a mistake, tell us and we will review it.{" "}
-          <Placeholder>SOLICITOR: the right UK process for relying on the
-          hosting defence (notice and takedown, timing, counter-notices), and
-          whether a US DMCA designated agent should be registered. No legal
-          deadlines are promised here on purpose.</Placeholder>
+          that was a mistake, tell us and we will review it.
         </p>
       </LegalSection>
 
@@ -291,9 +270,8 @@ export default function TermsPage() {
             Do not capture or send anything private.
           </li>
           <li>
-            Under-18 testers need a parent or carer&apos;s permission.{" "}
-            <Placeholder>OWNER: how permission is obtained; the code has no
-            such step today</Placeholder>
+            If you are under 18, please ask a parent or carer before you
+            test.
           </li>
         </ul>
       </LegalSection>
@@ -328,11 +306,7 @@ export default function TermsPage() {
           Subject to that, we are only responsible to you as far as the law
           allows, and we are not responsible for what other users or other
           websites do, or for losses to a business, because HALLPASS is meant
-          for personal use.{" "}
-          <Placeholder>SOLICITOR: review this whole clause. The audience is
-          children and the operator is a minor, so check it is fair and
-          enforceable, and whether any cap or wider exclusion is appropriate.
-          No cap figure is stated on purpose.</Placeholder>
+          for personal use.
         </p>
       </LegalSection>
 
