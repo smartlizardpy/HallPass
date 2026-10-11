@@ -216,7 +216,11 @@ export default async function AuthorizePage({
         <form
           action={async () => {
             "use server";
-            await signIn("google", { redirectTo: returnTo });
+            // Via the landing router so a first-time sign-in still gets the sign-up
+            // steps before consent.
+            await signIn("google", {
+              redirectTo: `/auth/landing?next=${encodeURIComponent(returnTo)}`,
+            });
           }}
           className="mt-6"
         >
