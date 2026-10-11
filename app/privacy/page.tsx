@@ -33,8 +33,12 @@
  *    "no relay" statement to hold), `sdk/p2p/src/client.ts`,
  *    `docs/p2p-design.md`, migration `040_p2p_signaling.sql`. The first-use
  *    notice and "no public rooms" depend on the parallel co-op workstream.
- *  - Reports about profiles and the moderation queue: PARALLEL WORKSTREAM.
- *    Review reports exist today (`app/lib/reviews/*`).
+ *  - Reports about profiles and the moderation queue: `app/lib/profile-reports/*`,
+ *    `app/api/v1/me/reports/route.ts`, `app/dashboard/(app)/moderation/*`,
+ *    `docs/profile-reports-design.md`. Resolved profile reports are deleted 90
+ *    days after resolution (`PROFILE_REPORT_RETENTION_DAYS`, run daily by
+ *    `.github/workflows/clip-retention.yml`). Review reports
+ *    (`app/lib/reviews/*`) have NO retention rule in the code yet.
  *  - Push, notifications, streak reminders: `app/lib/push/*`,
  *    `app/lib/notifications/*`, `app/lib/streak/*`,
  *    `.github/workflows/streak-reminders.yml`.
@@ -258,12 +262,32 @@ www.hallpass.games. It is run from England. We
         <p>
           <strong>If you report someone</strong> (a review, or another
           player&apos;s profile from its Report button): we keep your report,
-          the reason you chose, who you reported, and who made the report, so
-          that our team can look at it in a moderation queue and see whether
-          the same person is reported repeatedly. The person you report is not
-          told who reported them. [Legitimate interests: keeping the site safe.
-          Where a report is about a child at risk we may have a wider duty to
-          act.] See section 10 for how long we keep reports.
+          the reason you chose, any note you write, who you reported, and which
+          account made the report, so that our team can look at it in a
+          moderation queue and so that one person cannot send a flood of
+          reports (there is a limit per hour and per day). The person you
+          report is not told who reported them. [Legitimate interests: keeping
+          the site safe. Where a report is about a child at risk we may have a
+          wider duty to act.] See section 10 for how long we keep reports.
+        </p>
+        <p>
+          <strong>Reports about profiles, in particular.</strong> When a profile
+          is reported, our team is sent a notification (in the site&apos;s bell,
+          and as a push notification if they have turned that on). It says only
+          that a profile was reported and the reason, with a link to the
+          moderation page; it names nobody. The moderation queue shows the
+          reported player&apos;s public name, username and public ID, the
+          reason, the note and the time. It does <strong>not</strong> show who
+          made the report, and the reported player is never shown that either.
+          (The reporting account is kept in the database for the limits above,
+          but it is not displayed to moderators.) If a moderator decides a
+          profile broke the rules, they can reset it: the player&apos;s chosen
+          display name and username are cleared (so they appear under a
+          generated name and their public profile page goes away), their Google
+          photo stops being shown, and all open reports about them are marked
+          as dealt with. They can choose a new name afterwards, but not the
+          same username again for 90 days. This does not delete the account,
+          scores or friends.
         </p>
         <p>
           <strong>If you are in the beta testing programme</strong> (invite
@@ -592,11 +616,14 @@ www.hallpass.games. It is run from England. We
             stay but are cut loose from your account when you delete it.
           </li>
           <li>
-            <strong>Reports about reviews and profiles</strong> are kept in our
+            <strong>Reports about profiles</strong> are kept while we look at
+            them, and are then deleted 90 days after we close them (whether we
+            acted on them or dismissed them). This runs automatically once a
+            day. <strong>Reports about reviews</strong> are kept in our
             moderation queue while we look at them, and afterwards as a short
             record of what we decided, so that repeat problems are noticed.{" "}
-            <Placeholder>OWNER: set a retention period for resolved moderation
-            reports; confirm what the merged code deletes</Placeholder>
+            <Placeholder>OWNER: set a retention period for resolved review
+            reports (the code has no deletion rule for them yet)</Placeholder>
           </li>
           <li>
             <strong>Invite links</strong>: removed about an hour after they
@@ -622,7 +649,9 @@ www.hallpass.games. It is run from England. We
           <li>
             Some small records (such as who blocked whom, a review ban, or a
             record that a report was made) are kept after deletion to keep
-            other people safe.
+            other people safe. If you delete your account, profile reports you
+            made stay (without a link to you) until they are deleted under the
+            rule above, and profile reports about you are deleted with it.
           </li>
         </ul>
       </LegalSection>

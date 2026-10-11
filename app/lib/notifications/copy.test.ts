@@ -34,6 +34,7 @@ import {
   gameDropCopy,
   gameInviteCopy,
   reviewPostedCopy,
+  profileReportedCopy,
   reviewReportedCopy,
   shortName,
   streakAtRiskCopy,
@@ -73,6 +74,7 @@ const EVERY_KIND: Record<string, NotificationCopy> = {
   beta_assignment: betaAssignmentCopy({ gameTitle: "Duskfall" }),
   review_posted: reviewPostedCopy({ gameTitle: "Duskfall", slug: "duskfall" }),
   review_reported: reviewReportedCopy({ gameTitle: "Duskfall" }),
+  profile_reported: profileReportedCopy({ reason: "bullying" }),
   bug_report_filed: bugReportCopy({ gameTitle: "Duskfall" }),
   traffic_spike: trafficSpikeCopy({ visitors: 312, ratio: 4.2 }),
   error_spike: errorSpikeCopy({ errors: 84, ratio: 6 }),
@@ -243,6 +245,21 @@ describe("the moderation kinds", () => {
     );
     expect(reviewReportedCopy({ gameTitle: "D" }).url).toContain("/dashboard");
     expect(bugReportCopy({ gameTitle: "D" }).url).toContain("/dashboard");
+  });
+});
+
+describe("profileReportedCopy", () => {
+  it("says only that a profile was reported, with the reason, and links to moderation", () => {
+    const copy = profileReportedCopy({ reason: "inappropriate_name" });
+    expect(copy.title).toBe("A profile was reported");
+    expect(copy.body).toBe("A profile was reported (Inappropriate name). Open moderation to read it.");
+    expect(copy.url).toBe("/dashboard/moderation");
+  });
+
+  it("falls back to Other for an unknown reason and carries no input text", () => {
+    const copy = profileReportedCopy({ reason: "Ayşe Yılmaz told me to" });
+    expect(`${copy.title} ${copy.body}`).not.toContain("Ayşe");
+    expect(copy.body).toContain("(Other)");
   });
 });
 

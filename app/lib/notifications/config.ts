@@ -355,6 +355,19 @@ export const NOTIFICATION_KINDS = {
     defaultChannel: "push",
     discreet: "Something needs moderating.",
   },
+  profile_reported: {
+    audience: "admin",
+    scope: "personal",
+    group: "moderation",
+    label: "Reported players",
+    icon: "🚩",
+    description: "A player reports another player's profile for moderation.",
+    // Same test as `review_reported`: a safeguarding signal about a child, rare
+    // enough that a push is not noise. The text names no reporter and no real
+    // name (`profileReportedCopy`).
+    defaultChannel: "push",
+    discreet: "Something needs moderating.",
+  },
   bug_report_filed: {
     audience: "admin",
     scope: "personal",

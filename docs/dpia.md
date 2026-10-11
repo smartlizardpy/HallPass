@@ -6,7 +6,7 @@
 > Anything the code and docs could not settle is marked **OPEN ITEM** and
 > collected in section 9. Statements marked **(pending merge)** describe
 > features built in parallel workstreams (default avatars, analytics switch,
-> co-op notice, profile reports, beta clip deletion) and must be re-verified
+> co-op notice, beta clip deletion) and must be re-verified
 > against the merged code.
 
 Version: draft 1, 11 October 2026.
@@ -53,7 +53,7 @@ storage, headers), the host (country, IP).
 | Friends, blocks | Player | Social features, safety | Contract; legitimate interests (blocks) | Neon | Friends deleted with account; some block records kept | `app/lib/social/*` |
 | Challenges and invites | Player | Sharing | Contract | Neon | Invites 30 min default (max 120), removed about 1 h after expiry; challenge links until switched off or account deleted | `app/lib/challenges/*`, `app/lib/invites/*`, `docs/challenge-sharing-design.md`, `docs/invites-design.md` |
 | Reviews, review reports | Player | Public reviews; moderation | Contract; legitimate interests | Neon; Google Translate (review text only, on request) | Reviews deleted with account; auto-hide at 3 reporters | `app/lib/reviews/*` |
-| Profile reports and moderation queue (pending merge) | Player | Moderation | Legitimate interests | Neon | OPEN ITEM 4 (no retention set) | parallel workstream |
+| Profile reports and moderation queue | Player | Moderation | Legitimate interests | Neon | Open reports until resolved; resolved reports deleted 90 days after resolution by a daily job; deleted with the reported player's account; the reporter link is cut when the reporter's account is deleted. Review reports: OPEN ITEM 4 | `app/lib/profile-reports/*`, `app/api/v1/admin/profile-reports/retention/route.ts` |
 | Push subscriptions (endpoint, keys, up to 10 per player) | Browser | Notifications | Consent | Neon; browser push services (Apple, Google, Microsoft, Mozilla) | Until removed or account deleted | `app/lib/push/*`, `app/lib/notifications/*` |
 | Notifications | System | Notifications | Contract | Neon | Latest 100 | `app/lib/notifications/*` |
 | Survey answers | Player | Improve the site | Legitimate interests | Neon | Kept; unlinked on account deletion | `app/lib/surveys/*` |
@@ -136,11 +136,11 @@ mitigations are in place (pending-merge items count only once merged).
 |---|---|---|---|---|---|
 | R1 | **Avatars/photos:** a child's real Google photo is visible to strangers (previously on leaderboards and reviews) | High before change | High | Default meme avatar from public id; Google photo only if the player ticks the setting, only to accepted friends, never on leaderboards, reviews, non-friend lookups, challenge/invite links or co-op rooms (pending merge) | Low |
 | R2 | **Public leaderboards and handles:** a handle or username reveals identity or is offensive; leaderboards readable by other sites | Medium | Medium | Handles/usernames filtered (`app/lib/handle.ts`, `app/lib/username.ts`); guest names; "Deleted" on deletion; terms ban personal details; moderation can rename. Handle filter coverage is untested here (OPEN ITEM 13) | Medium |
-| R3 | **Friends, invites, challenges:** unwanted contact; links forwarded to strangers | Medium | High | Friends are mutual and blockable; profiles start friends-only; invite links expire (30 min default); challenge links show name and score only and can be switched off; report button on profiles (pending merge) | Medium (links are bearer links by design) |
+| R3 | **Friends, invites, challenges:** unwanted contact; links forwarded to strangers | Medium | High | Friends are mutual and blockable; profiles start friends-only; invite links expire (30 min default); challenge links show name and score only and can be switched off; report button on profiles; admins are notified of each new profile report (reason only, no names); a moderator can reset a reported profile (clears display name and username, hides the Google photo) | Medium (links are bearer links by design) |
 | R4 | **Co-op IP exposure:** peers see IP (rough location, ISP); a stranger who gets a code could harvest it | Medium | High | No public rooms, codes/links only; one-time notice before first connection; no avatar sent to peers; rooms expire; rate limits on joins and code guessing (`RATE_LIMITS`); terms rule against sharing codes (pending merge for notice and public-room removal) | Medium |
 | R5 | **Analytics and device ID:** a persistent ID tracks a child's browser; on by default; shared school machines | Medium | Medium | EU region; first-party proxy; no `identify`; no session recording (forced off, pending merge); Analytics switch in settings clears the ID; one-time notice; no ads, no selling. Opt-out rather than opt-in is the owner's choice and PECR/Children's Code position is unconfirmed | Medium until solicitor decides (OPEN ITEM 5) |
 | R6 | **Beta recordings:** clips/screenshots can show a child, their name or private info | Low (invite only, button-press) | High | Capture only on press, game window only, no mic/camera; unguessable URLs, never rendered raw (`clips/[id]/route.ts`); deleted at 30 days, on fix/close, on account deletion (pending merge); team access limited; AI tools may read reports (disclosed). No parental consent step for under-18 testers (OPEN ITEM 14) | Medium |
-| R7 | **Reviews and reports:** bullying or personal info in reviews; reports about children kept; reporter exposed | Medium | Medium | Wordlist and moderation (`app/lib/reviews/moderation.ts`, `wordlist.ts`), auto-hide at 3 reports, rate limits, report reasons, complaints email; reporter not told to the reported person; retention of reports undefined (OPEN ITEM 4); single human moderator who is a minor (OPEN ITEM 1) | Medium |
+| R7 | **Reviews and reports:** bullying or personal info in reviews; reports about children kept; reporter exposed | Medium | Medium | Wordlist and moderation (`app/lib/reviews/moderation.ts`, `wordlist.ts`), auto-hide at 3 reports, rate limits, report reasons, complaints email; reporter not told to the reported person; reporters of profiles are never shown to moderators or to the reported player (the id is stored for rate limits only); profile reports deleted 90 days after resolution, but review-report retention is still undefined (OPEN ITEM 4); single human moderator who is a minor (OPEN ITEM 1) | Medium |
 | R8 | **No age check:** under-13s hold accounts or use the site without permission | High | Medium | Terms: 13+, parent permission for under-13s; delete accounts found to be under 13; Google's own age rules gate sign-in; guests collect little. Owner decision to have no check is CONFIRMED but it is a recognised gap against Children's Code standard 3 | Medium |
 | R9 | **Account deletion / de-identification:** residual data after deletion (scores, analytics, backups, blobs) | Medium | Low | `deletePlayer` removes the player row (cascades) and renames scores to "Deleted"; beta clips deleted with account (pending merge); analytics not linked to account. Backup retention at Neon unknown (OPEN ITEM 15); analytics deletion by browser not self-service | Low |
 | R10 | **Third parties:** Vercel, Neon (US/other processing), PostHog (EU), Google (sign-in, STUN, translate), Cloudflare (STUN), GitHub (cron), push services: transfers, breaches, onward use | Medium | Medium | EU PostHog; IP hash only; Google translate sends review text only; GitHub gets no player data; regions and transfer mechanisms to be confirmed (OPEN ITEM 12) | Medium |
@@ -168,7 +168,7 @@ land; re-check after merge.
 | 12 | Profiling | Partly | No profiling for ads or decisions. Analytics device ID is behavioural tracking by browser; opt-out available (pending merge). Personalisation (recents, favourites) is local. |
 | 13 | Nudge techniques | Partly | Streaks, XP and rank, daily reminders and beta XP can nudge continued use. Not assessed against the Code; no nudges to weaken privacy settings known. OPEN ITEM 17. |
 | 14 | Connected toys and devices | N/A | Browser-only. |
-| 15 | Online tools | Partly | Block, report review, report profile (pending merge), delete account, analytics switch (pending merge), email contact. No in-product way to exercise access/portability (OPEN ITEM 11). |
+| 15 | Online tools | Partly | Block, report review, report profile, delete account, analytics switch (pending merge), email contact. No in-product way to exercise access/portability (OPEN ITEM 11). |
 
 ## 8. Sign-off
 
@@ -186,7 +186,7 @@ land; re-check after merge.
    parent/guardian or company as legal operator. Solicitor.
 2. Postal address for the policy and terms.
 3. ICO registration and data protection fee: required or exempt?
-4. Retention period for resolved moderation reports and profile reports.
+4. Retention period for resolved REVIEW reports. (Profile reports: decided, 90 days after resolution.)
 5. PECR position for analytics (statistical-purposes exemption added by the
    Data (Use and Access) Act 2025, only confirmed from secondary sources) versus
    an opt-in banner; Children's Code high-privacy-default implications.

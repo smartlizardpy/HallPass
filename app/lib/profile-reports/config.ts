@@ -26,6 +26,14 @@ export function isProfileReportReason(value: unknown): value is ProfileReportRea
 /** Status values (the same trio `review_reports` uses). */
 export type ProfileReportStatus = "open" | "actioned" | "dismissed";
 
+/**
+ * Days a RESOLVED (actioned or dismissed) report is kept after `resolved_at`,
+ * then deleted by the daily retention job. Open reports are never aged out. 90
+ * days is far longer than the 24 hour rate-limit window, which needs the rows to
+ * exist. Owner decision; the privacy notice and the DPIA state the same number.
+ */
+export const PROFILE_REPORT_RETENTION_DAYS = 90;
+
 /** Longest note, in characters. Mirrors the CHECK in the migration. */
 export const NOTE_MAX_CHARS = 300;
 

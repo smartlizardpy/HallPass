@@ -155,6 +155,110 @@ export function createProfileReportStore(sql: Sql) {
       }));
     },
 
+    /**
+     * The account action: in ONE statement (one snapshot, one implicit
+     * transaction; `neon()` over HTTP cannot span a BEGIN/COMMIT across calls),
+     * for the player this OPEN report is about:
+     *   (a) clear `handle` and `username`, so they fall back to the generated
+     *       public name (`display-name.ts`) and `/u/<old-username>` stops
+     *       resolving;
+     *   (b) set `use_google_photo = false`;
+     *   (c) mark EVERY open report against that player `actioned`, with the
+     *       resolution time and the acting admin.
+     * The old username is also tombstoned in `username_history` with a NULL owner
+     * (`claimUsername` lets an owner re-claim their OWN tombstoned name, but not a
+     * NULL-owner one), so a moderated name cannot be taken straight back, by the
+     * child or anyone else, inside `USERNAME_TOMBSTONE_DAYS`. Nothing else about
+     * the account changes: friends, scores, invites and challenges are untouched
+     * and simply render the generated name. The player can pick a new name
+     * through the normal settings flow (no cooldown applies while `username` is
+     * NULL).
+     *
+     * `found: false`: no such report. `changed: false` with `found: true`: it was
+     * already closed, and the account is NOT touched (a stale queue must not
+     * reset a profile someone else already dealt with). `publicId` is returned
+     * for the audit log line, never the internal id.
+     */
+    async actionAccount(input: {
+      id: number;
+      actorEmail: string;
+    }): Promise<{
+      found: boolean;
+      changed: boolean;
+      reportsClosed: number;
+      publicId: string | null;
+    }> {
+      const { id, actorEmail } = input;
+      const rows = (await sql`
+        WITH rep AS (
+          SELECT reported_id FROM profile_reports WHERE id = ${id} AND status = 'open'
+        ),
+        old AS (
+          SELECT id, public_id, username FROM players
+           WHERE id = (SELECT reported_id FROM rep)
+        ),
+        tomb AS (
+          INSERT INTO username_history (username, player_id)
+          SELECT username, NULL FROM old WHERE username IS NOT NULL
+          ON CONFLICT (username) DO UPDATE SET player_id = NULL, released_at = now()
+          RETURNING username
+        ),
+        pl AS (
+          UPDATE players
+             SET handle = NULL, username = NULL, use_google_photo = false
+           WHERE id = (SELECT id FROM old)
+          RETURNING id
+        ),
+        rp AS (
+          UPDATE profile_reports
+             SET status = 'actioned', resolved_at = now(), resolved_by = ${actorEmail}::text
+           WHERE reported_id = (SELECT reported_id FROM rep) AND status = 'open'
+          RETURNING id
+        )
+        SELECT EXISTS (SELECT 1 FROM profile_reports WHERE id = ${id}) AS found,
+               (SELECT count(*) FROM rp)  AS closed,
+               (SELECT count(*) FROM pl)  AS cleared,
+               (SELECT count(*) FROM tomb) AS tombstoned,
+               (SELECT public_id FROM old) AS public_id
+      `) as Row[];
+      const row = rows[0] ?? {};
+      return {
+        found: row.found === true,
+        changed: toInt(row.closed) > 0,
+        reportsClosed: toInt(row.closed),
+        publicId: row.public_id == null ? null : String(row.public_id),
+      };
+    },
+
+    /**
+     * Delete resolved reports more than `days` after they were resolved. Open
+     * reports are never touched. Idempotent; a repeat run deletes nothing more.
+     * Rows with a NULL `resolved_at` and a non-open status cannot exist through
+     * the app, but would be kept rather than guessed at.
+     */
+    async purgeResolved(days: number): Promise<{ deleted: number }> {
+      const rows = (await sql`
+        WITH del AS (
+          DELETE FROM profile_reports
+           WHERE status <> 'open'
+             AND resolved_at < now() - make_interval(days => ${days}::int)
+          RETURNING id
+        )
+        SELECT count(*)::int AS n FROM del
+      `) as Row[];
+      return { deleted: toInt(rows[0]?.n) };
+    },
+
+    /** How many resolved reports are past retention (for a dry run). */
+    async countPurgeable(days: number): Promise<number> {
+      const rows = (await sql`
+        SELECT count(*)::int AS n FROM profile_reports
+         WHERE status <> 'open'
+           AND resolved_at < now() - make_interval(days => ${days}::int)
+      `) as Row[];
+      return toInt(rows[0]?.n);
+    },
+
     async openCount(): Promise<number> {
       const rows = (await sql`
         SELECT count(*)::int AS n FROM profile_reports WHERE status = 'open'

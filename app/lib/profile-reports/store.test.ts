@@ -9,6 +9,7 @@ import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { createProfileReportStore } from "./store";
 import {
   NOTE_MAX_CHARS,
+  PROFILE_REPORT_RETENTION_DAYS,
   REPORT_DAILY_LIMIT,
   REPORT_HOURLY_LIMIT,
   isProfileReportReason,
@@ -114,6 +115,51 @@ describe("resolve", () => {
       found: true,
       changed: false,
     });
+  });
+});
+
+describe("actionAccount", () => {
+  it("is one statement that clears the identity, tombstones the name and closes every open report", async () => {
+    const { sql, calls } = makeFakeSql([{ found: true, closed: "2", cleared: "1", tombstoned: "1", public_id: "pid" }]);
+    const out = await createProfileReportStore(sql).actionAccount({ id: 7, actorEmail: "admin@x.test" });
+    expect(out).toEqual({ found: true, changed: true, reportsClosed: 2, publicId: "pid" });
+    expect(calls).toHaveLength(1);
+    const text = calls[0].text.replace(/\s+/g, " ");
+    expect(text).toMatch(/SET handle = NULL, username = NULL, use_google_photo = false/);
+    expect(text).toMatch(/SET status = 'actioned', resolved_at = now\(\)/);
+    expect(text).toMatch(/WHERE reported_id = \(SELECT reported_id FROM rep\) AND status = 'open'/);
+    expect(text).toMatch(/INSERT INTO username_history/);
+    expect(calls[0].values).toEqual([7, "admin@x.test", 7]);
+  });
+
+  it("changes nothing for a stale or already-closed report", async () => {
+    const run = (row: Record<string, unknown>) =>
+      createProfileReportStore(makeFakeSql([row]).sql).actionAccount({ id: 1, actorEmail: "a" });
+    expect(await run({ found: false, closed: 0, public_id: null })).toMatchObject({ found: false, changed: false });
+    expect(await run({ found: true, closed: 0, public_id: null })).toMatchObject({ found: true, changed: false });
+  });
+});
+
+describe("purgeResolved", () => {
+  it("is one DELETE of resolved rows only, bound to the day count", async () => {
+    const { sql, calls } = makeFakeSql([{ n: "3" }]);
+    const out = await createProfileReportStore(sql).purgeResolved(90);
+    expect(out).toEqual({ deleted: 3 });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].text).toMatch(/DELETE FROM profile_reports/);
+    expect(calls[0].text).toMatch(/status <> 'open'/);
+    expect(calls[0].text).toMatch(/resolved_at < now\(\)/);
+    expect(calls[0].values).toEqual([90]);
+  });
+
+  it("counts what is due for a dry run without deleting", async () => {
+    const { sql, calls } = makeFakeSql([{ n: 2 }]);
+    expect(await createProfileReportStore(sql).countPurgeable(90)).toBe(2);
+    expect(calls[0].text).not.toMatch(/DELETE/);
+  });
+
+  it("keeps the documented retention", () => {
+    expect(PROFILE_REPORT_RETENTION_DAYS).toBe(90);
   });
 });
 

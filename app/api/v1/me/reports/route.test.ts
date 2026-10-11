@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   playerId: vi.fn(),
   reportUnexpected: vi.fn(),
   store: { create: vi.fn() },
+  notifyAdmins: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -26,6 +27,8 @@ vi.mock("@/app/lib/profile-reports", () => ({
   profileReports: h.store,
   reportUnexpected: h.reportUnexpected,
 }));
+
+vi.mock("@/app/lib/notifications/deliver", () => ({ notifyAdmins: h.notifyAdmins }));
 
 import { POST } from "@/app/api/v1/me/reports/route";
 
@@ -51,6 +54,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   h.playerId.mockResolvedValue("google-me");
   h.store.create.mockResolvedValue({ result: "created" });
+  h.notifyAdmins.mockResolvedValue(undefined);
 });
 
 describe("POST /api/v1/me/reports", () => {
@@ -64,6 +68,34 @@ describe("POST /api/v1/me/reports", () => {
       reason: "bullying",
       note: "they keep being mean",
     });
+  });
+
+  it("notifies admins of a NEW report, naming neither player, the note nor the reporter", async () => {
+    await POST(post(GOOD));
+    expect(h.notifyAdmins).toHaveBeenCalledTimes(1);
+    const arg = h.notifyAdmins.mock.calls[0][0];
+    expect(arg.kind).toBe("profile_reported");
+    expect(arg.copy.body).toBe("A profile was reported (Bullying). Open moderation to read it.");
+    expect(arg.copy.url).toBe("/dashboard/moderation");
+    const text = JSON.stringify(arg);
+    for (const secret of ["google-me", TARGET, "they keep being mean"]) {
+      expect(text).not.toContain(secret);
+    }
+  });
+
+  it("sends no notification for a duplicate, a refusal or a rate limit", async () => {
+    for (const result of ["duplicate", "self", "unknown", "rate-limited"]) {
+      h.store.create.mockResolvedValue({ result });
+      await POST(post(GOOD));
+    }
+    expect(h.notifyAdmins).not.toHaveBeenCalled();
+  });
+
+  it("still answers ok when the notification fails", async () => {
+    h.notifyAdmins.mockRejectedValue(new Error("push down"));
+    const res = await POST(post(GOOD));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
   });
 
   it("refuses a game iframe's referrer and a missing one before anything else", async () => {
