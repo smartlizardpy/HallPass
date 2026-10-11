@@ -42,6 +42,7 @@ import {
 } from "@/app/play/account/actions";
 import { readOwnSocial, readPlayer, readPlayerId } from "../_data";
 import { AppearanceCard } from "../_ui/AppearanceCard";
+import { AvatarCard } from "../_ui/AvatarCard";
 import { GooglePhotoCard } from "../_ui/GooglePhotoCard";
 import { ForYouCard } from "../_ui/ForYouCard";
 import { StealthSettingsRow } from "../_ui/StealthSettingsRow";
@@ -65,6 +66,7 @@ const GENERIC_ERROR = "Something went wrong — try again.";
 const ERROR_MESSAGES: Record<string, string> = {
   confirm: "Type DELETE to confirm.",
   db: GENERIC_ERROR,
+  avatar: "Pick a meme and a colour from the lists.",
 };
 
 function errorMessage(code: string | undefined): string | null {
@@ -187,6 +189,11 @@ export default async function YouSettingsPage({
 
       {/* PROFILE PICTURE ---------------------------------------------------- */}
       <section aria-label="Profile picture" className="space-y-4">
+        <AvatarCard
+          publicId={player.publicId}
+          meme={player.avatarMeme}
+          colour={player.avatarColour}
+        />
         <GooglePhotoCard enabled={player.useGooglePhoto} />
       </section>
 
