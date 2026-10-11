@@ -90,7 +90,7 @@ export default function PrivacyPage() {
           </li>
           <li>
             You can delete your account yourself in your settings. Questions or
-            requests: <Placeholder>CONTACT EMAIL</Placeholder>.
+            requests: smartlizardpy@duck.com.
           </li>
         </ul>
       }
@@ -105,12 +105,12 @@ export default function PrivacyPage() {
           which means we decide how and why it is used.
         </p>
         <p>
-          Operator: <Placeholder>OPERATOR LEGAL NAME / TRADING STATUS</Placeholder>
+          Operator: Ozan Kaygusuz
           <br />
           Address: <Placeholder>POSTAL ADDRESS</Placeholder>
           <br />
           Contact for anything in this policy:{" "}
-          <Placeholder>CONTACT EMAIL</Placeholder>
+          smartlizardpy@duck.com
           <br />
           ICO registration number (if registered):{" "}
           <Placeholder>ICO REGISTRATION NUMBER OR NOT REQUIRED</Placeholder>
@@ -136,12 +136,10 @@ export default function PrivacyPage() {
             device storage and analytics described below.
           </li>
           <li>
-            We do not ask your age, and we do not currently check it
-            <Placeholder>CONFIRM: no age check exists in the code today</Placeholder>
-            . We do not knowingly collect an account from anyone under 13. If we
+            We do not ask your age, and we do not currently check it. We do not knowingly collect an account from anyone under 13. If we
             learn we have, or a parent or carer tells us, we will delete it.
             Parents and carers can contact us at{" "}
-            <Placeholder>CONTACT EMAIL</Placeholder> to see, correct or delete
+            smartlizardpy@duck.com to see, correct or delete
             their child&apos;s data.
           </li>
         </ul>
@@ -341,7 +339,7 @@ export default function PrivacyPage() {
             There is currently no cookie banner or switch to turn analytics
             off. If you do not want it, use your browser&apos;s tracker or
             content blocker, or tell us at{" "}
-            <Placeholder>CONTACT EMAIL</Placeholder> and we will act on your
+            smartlizardpy@duck.com and we will act on your
             request. <Placeholder>SOLICITOR: PECR consent / statistical
             exemption position; an opt-out control may be needed</Placeholder>
           </li>
@@ -561,7 +559,7 @@ export default function PrivacyPage() {
           <li>withdraw consent (for example, push notifications) at any time.</li>
         </ul>
         <p>
-          Email <Placeholder>CONTACT EMAIL</Placeholder>. We may need to check
+          Email smartlizardpy@duck.com. We may need to check
           it is really you. We will reply within one month. It is free. A
           parent or carer can make a request for a child.
         </p>

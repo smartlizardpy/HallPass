@@ -65,9 +65,9 @@ export default function TermsPage() {
       <LegalSection id="about" title="1. About these terms">
         <p>
           These terms are an agreement between you and the operator of HALLPASS:{" "}
-          <Placeholder>OPERATOR LEGAL NAME</Placeholder>,{" "}
+          Ozan Kaygusuz,{" "}
           <Placeholder>POSTAL ADDRESS</Placeholder>, contact{" "}
-          <Placeholder>CONTACT EMAIL</Placeholder> (&quot;we&quot;). By using
+          smartlizardpy@duck.com (&quot;we&quot;). By using
           the site you agree to them. If you do not agree, please do not use
           it. Our <Link href="/privacy">Privacy Policy</Link> explains how we
           use your data and is part of the picture too.
@@ -148,7 +148,7 @@ export default function TermsPage() {
           <strong>If something is wrong:</strong> you can block another player,
           and report a review with its report button. To report anything else
           about a person, profile, name or leaderboard entry, or anything that
-          worries you, email <Placeholder>CONTACT EMAIL</Placeholder>.
+          worries you, email smartlizardpy@duck.com.
           Reviews that several people report are hidden automatically. If you
           are in danger or someone else is, tell a trusted adult or the police
           first.
@@ -213,7 +213,7 @@ export default function TermsPage() {
         <p>
           If you own something on HALLPASS (a game, art, music or text) and you
           did not agree to it being here, or you think a game is credited
-          wrongly, email <Placeholder>COPYRIGHT/TAKEDOWN EMAIL</Placeholder>{" "}
+          wrongly, email smartlizardpy@duck.com{" "}
           with:
         </p>
         <ul>
@@ -312,7 +312,7 @@ export default function TermsPage() {
         </p>
         <p>
           If something is wrong, please talk to us first at{" "}
-          <Placeholder>CONTACT EMAIL</Placeholder>.
+          smartlizardpy@duck.com.
         </p>
         <p>
           We may update these terms, for example when we add features or the
