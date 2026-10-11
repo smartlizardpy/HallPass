@@ -5,7 +5,10 @@ import { cutoutStyle, type MemeAvatar } from "../lib/avatars";
  * drawn on top at the meme's fixed framing (see `app/lib/avatars.ts`).
  *
  * Presentational and hook-free, so it renders in server and client components
- * alike. The wrapper clips (`overflow-hidden rounded-full`) because some
+ * alike. It is `block`, not `inline-block`: an inline-block sits on the text
+ * baseline, so any inline parent (a button, a `<span>`) grew a descender gap
+ * below it and went taller than wide - an oval selection ring, a lopsided chip.
+ * The wrapper clips (`overflow-hidden rounded-full`) because some
  * framings deliberately push the cutout past the circle's edge.
  *
  * Plain `<img>` with an eslint-disable, per the repo convention - a small
@@ -26,7 +29,7 @@ export function MemeAvatarCircle({
     <span
       aria-hidden
       style={{ width: size, height: size, backgroundColor: colour }}
-      className={`relative inline-block shrink-0 overflow-hidden rounded-full ${className}`}
+      className={`relative block shrink-0 overflow-hidden rounded-full ${className}`}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img

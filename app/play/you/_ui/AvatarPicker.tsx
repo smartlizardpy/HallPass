@@ -87,7 +87,7 @@ export function AvatarPicker({
               aria-label={m.name}
               title={m.name}
               onClick={() => setMemeId(m.id)}
-              className={`mx-auto rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+              className={`mx-auto block rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brand ${
                 m.id === meme.id ? "ring-2 ring-brand ring-offset-2 ring-offset-surface" : ""
               }`}
             >
