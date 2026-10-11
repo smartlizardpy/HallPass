@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BackButton } from "@/app/components/BackButton";
 import { Wordmark } from "@/app/components/Wordmark";
+import { AnalyticsSettingsCard } from "@/app/components/analytics/AnalyticsSwitch";
 import { AppearanceCard } from "./AppearanceCard";
 import { StealthSettingsRow } from "./StealthSettingsRow";
 
@@ -77,6 +78,8 @@ export function NotSignedInCard() {
         {/* See the docblock: on a phone these are the only way in. */}
         <StealthSettingsRow />
         <AppearanceCard />
+        {/* Per-device too, so signed-out visitors can opt out of analytics. */}
+        <AnalyticsSettingsCard />
       </div>
     </main>
   );
