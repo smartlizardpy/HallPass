@@ -22,15 +22,29 @@ import { PlatformConfirmSheet, usePlayGuard } from "./PlatformGate";
 import { useSearchCapture } from "../lib/use-search-capture";
 import { MIN_PLAYS_SHOWN, playsFor } from "../lib/plays";
 import { type CatalogSort, sortCatalog } from "../lib/catalog-order";
+import { rankForYou } from "../lib/for-you";
+import {
+  useForYouEnabled,
+  useSignedInHint,
+  useSignedInSync,
+  useTaste,
+} from "../lib/taste-store";
 import {
   type CatalogView,
   setCatalogSort,
   setCatalogView,
-  useCatalogSort,
+  useCatalogSortChoice,
   useCatalogView,
 } from "../lib/catalog-prefs";
 import { CatalogToolbar } from "./CatalogToolbar";
 import { GameListRow } from "./GameListRow";
+
+/** Midnight today, local time, in ms. The day the personal order is computed for. */
+function startOfToday(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
 
 /* ===================== Catalogue grid ===================== */
 /**
@@ -229,7 +243,6 @@ function ArcadeRows({
   // prerendered HTML — the copy in the service-worker precache, shared by every
   // visitor and every crawler — is always the grid as it ships. See
   // `catalog-prefs.ts` for why this is not in the URL.
-  const sort = useCatalogSort();
   const view = useCatalogView();
 
   const handleSortChange = (next: CatalogSort) => {
@@ -259,11 +272,46 @@ function ArcadeRows({
   // tiebreak under a chosen one — is `sortCatalog`'s decision and is argued out
   // there, next to the comparators it applies.
   const device = useDevicePlatform();
+
+  // THE PERSONAL ORDER. Only for a player who is signed in, has not switched it
+  // off in settings, and has shown interest in enough games for an order to mean
+  // something (`rankForYou` returns null below that). Everything it reads lives on
+  // this device (`taste-store.ts`) and every input reads as empty until the render
+  // after hydration, so the prerendered HTML is still the Featured grid.
+  //
+  // Signing in is the opt-in, so a guest never reaches it. `useSignedInSync`
+  // refreshes the signed-in hint from `/api/v1/me`, and learns of a sign-out in
+  // time to delete the record before the next person on a shared computer sees it.
+  useSignedInSync();
+  const signedIn = useSignedInHint();
+  const forYouOn = useForYouEnabled();
+  const taste = useTaste();
+  // Rounded to the day so the order does not reshuffle on every render or visit.
+  const [today] = useState(startOfToday);
+  const forYou = useMemo(
+    () =>
+      signedIn && forYouOn
+        ? rankForYou({ games, taste, favorites, recent, device, playCounts, today })
+        : null,
+    [signedIn, forYouOn, games, taste, favorites, recent, device, playCounts, today],
+  );
+  const forYouRank = useMemo(
+    () => (forYou ? new Map(forYou.order.map((slug, i) => [slug, i] as const)) : undefined),
+    [forYou],
+  );
+
+  // The default order for a player who has never chosen one is "for you", when it
+  // is available. An EXPLICIT choice always wins — and an explicit "For you" that
+  // has since become unavailable (signed out, switched off) is just Featured.
+  const chosen = useCatalogSortChoice();
+  const sort: CatalogSort =
+    chosen === "foryou" && !forYou ? "featured" : (chosen ?? (forYou ? "foryou" : "featured"));
   const ordered = useMemo(
     () =>
       sortCatalog(filtered, {
         sort,
         playCounts,
+        forYou: forYouRank,
         rank: device
           ? (g: Game) => {
               const ok = playsOn(g, device);
@@ -271,7 +319,7 @@ function ArcadeRows({
             }
           : undefined,
       }),
-    [filtered, device, sort, playCounts],
+    [filtered, device, sort, playCounts, forYouRank],
   );
 
   // Report the search from HERE rather than from the header: this is the only
@@ -287,7 +335,15 @@ function ArcadeRows({
   // crawler and the service-worker precache both see it). The MobileSplash island
   // covers the swap. Everything shown is confirmed phone-playable, favourites
   // included, so nothing here ever trips the platform interstitial.
-  const mobileGames = useMemo(() => mobileCatalog(filtered), [filtered]);
+  // The phone shell has no sort control, so a player with a personal order simply
+  // gets it.
+  const mobileGames = useMemo(
+    () =>
+      mobileCatalog(
+        forYouRank ? sortCatalog(filtered, { sort: "foryou", forYou: forYouRank }) : filtered,
+      ),
+    [filtered, forYouRank],
+  );
   if (device === "mobile") {
     return (
       <MobileCatalog
@@ -410,10 +466,23 @@ function ArcadeRows({
                 onSortChange={handleSortChange}
                 view={view}
                 onViewChange={handleViewChange}
+                forYou={forYou !== null}
               />
             ) : null
           }
         >
+          {sort === "foryou" && forYou && filtered.length > 0 && (
+            // Say what the order is and where to change it. This is profiling, even
+            // though it never leaves the device, so it is never silent.
+            <p className="mb-3 text-[13px] font-semibold text-muted">
+              Ordered for you
+              {forYou.topInterests.length > 0 ? ` — you like ${forYou.topInterests.join(" and ")} games` : ""},
+              from what you play on this device.{" "}
+              <Link href="/play/you/settings" className="underline underline-offset-2 hover:text-brand">
+                Change this
+              </Link>
+            </p>
+          )}
           {filtered.length === 0 ? (
             <div className="rounded-3xl bg-surface p-16 text-center">
               <p className="text-base font-bold text-muted">

@@ -28,7 +28,7 @@ import { playsFor } from "./plays";
  * `external_games.created_at` for the external half and from the git history for
  * the static half; that is a data change, not a sort, and it is not this.
  */
-export type CatalogSort = "featured" | "played" | "new" | "alpha";
+export type CatalogSort = "foryou" | "featured" | "played" | "new" | "alpha";
 
 /**
  * The order the grid is in when nobody has chosen one — and it is the order the
@@ -40,6 +40,10 @@ export const DEFAULT_CATALOG_SORT: CatalogSort = "featured";
 
 /** The orders, in the order the toolbar offers them. */
 export const CATALOG_SORTS: readonly { value: CatalogSort; label: string }[] = [
+  // Offered only when it can mean something — signed in, switched on and enough
+  // history; see `for-you.ts`. The toolbar hides it otherwise, and `Arcade` treats
+  // a stored "foryou" that has since become unavailable as Featured.
+  { value: "foryou", label: "For you" },
   { value: "featured", label: "Featured" },
   { value: "played", label: "Most played" },
   { value: "new", label: "New first" },
@@ -69,7 +73,12 @@ type Entry = {
   rank: number;
   /** Resolved once here rather than per comparison. */
   plays: number;
+  /** Position in the "for you" order; a huge number for a game that has none. */
+  fit: number;
 };
+
+/** Sorts after every real position, and unlike `Infinity` subtracts without NaN. */
+const NO_FIT = Number.MAX_SAFE_INTEGER;
 
 /**
  * The PRIMARY key of each order, or `null` for the one that has none.
@@ -81,6 +90,10 @@ type Entry = {
  */
 const PRIMARY: Record<CatalogSort, ((a: Entry, b: Entry) => number) | null> = {
   featured: null,
+  // The player's personal order (`rankForYou`), best first. With no order supplied
+  // every `fit` is equal and this key says nothing, so the grid falls through to
+  // the device rank and the original position — exactly Featured.
+  foryou: (a, b) => a.fit - b.fit,
   played: (a, b) => b.plays - a.plays,
   new: (a, b) => Number(Boolean(b.game.isNew)) - Number(Boolean(a.game.isNew)),
   // No explicit locale: this runs only in the browser (see below), so the
@@ -127,10 +140,13 @@ export function sortCatalog(
     sort,
     playCounts = {},
     rank = () => 0,
+    forYou,
   }: {
     sort: CatalogSort;
     playCounts?: Record<string, number>;
     rank?: (game: Game) => number;
+    /** slug → position in the player's "for you" order, for the `foryou` sort. */
+    forYou?: ReadonlyMap<string, number>;
   },
 ): Game[] {
   const primary = PRIMARY[sort] ?? null;
@@ -141,6 +157,7 @@ export function sortCatalog(
         index,
         rank: rank(game),
         plays: playsFor(game, playCounts),
+        fit: forYou?.get(game.slug) ?? NO_FIT,
       }),
     )
     .sort(

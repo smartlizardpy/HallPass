@@ -31,6 +31,7 @@ export function CatalogToolbar({
   onSortChange,
   view,
   onViewChange,
+  forYou = false,
 }: {
   /** How many games the grid below is showing. */
   count: number;
@@ -38,6 +39,8 @@ export function CatalogToolbar({
   onSortChange: (sort: CatalogSort) => void;
   view: CatalogView;
   onViewChange: (view: CatalogView) => void;
+  /** Whether the "For you" order is available to this player right now. */
+  forYou?: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -53,7 +56,7 @@ export function CatalogToolbar({
         aria-label="Order the games"
         className="flex items-center gap-0.5 rounded-full bg-surface-2 p-1"
       >
-        {CATALOG_SORTS.map((option) => (
+        {CATALOG_SORTS.filter((option) => forYou || option.value !== "foryou").map((option) => (
           <Segment
             key={option.value}
             active={option.value === sort}

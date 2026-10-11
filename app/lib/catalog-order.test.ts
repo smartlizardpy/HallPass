@@ -128,3 +128,30 @@ describe("sortCatalog and the device ranking", () => {
     ]);
   });
 });
+
+describe("the for-you sort", () => {
+  const games = ["a", "b", "c", "d"].map((slug) => game({ slug }));
+
+  it("follows the supplied personal order", () => {
+    const forYou = new Map([["c", 0], ["a", 1], ["d", 2], ["b", 3]]);
+    expect(slugs(sortCatalog(games, { sort: "foryou", forYou }))).toEqual(["c", "a", "d", "b"]);
+  });
+
+  it("puts a game with no position after every game that has one", () => {
+    const forYou = new Map([["d", 0], ["b", 1]]);
+    expect(slugs(sortCatalog(games, { sort: "foryou", forYou }))).toEqual(["d", "b", "a", "c"]);
+  });
+
+  it("is Featured when no order is supplied, so nothing breaks when it is unavailable", () => {
+    expect(slugs(sortCatalog(games, { sort: "foryou" }))).toEqual(slugs(sortCatalog(games, { sort: "featured" })));
+  });
+
+  it("still never filters", () => {
+    const forYou = new Map([["c", 0]]);
+    expect(sortCatalog(games, { sort: "foryou", forYou })).toHaveLength(games.length);
+  });
+
+  it("is a value the toolbar can store and read back", () => {
+    expect(toCatalogSort("foryou")).toBe("foryou");
+  });
+});
