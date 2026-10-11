@@ -7,19 +7,23 @@
  *    account is needed to play" in `app/lib/faq.ts`. Deletion is self-service:
  *    `app/play/account/actions.ts`, `deletePlayer` in `app/lib/players.ts`.
  *  - No age gate exists in the code (searched), so the age rule here is a
- *    contractual statement, not an enforced control. Said plainly in the text and
- *    flagged in the Privacy Policy.
+ *    contractual statement, not an enforced control (a CONFIRMED owner
+ *    decision). Said plainly in the text and flagged in the Privacy Policy.
  *  - Conduct surfaces: friends and blocks (`app/lib/social/*`), invites and
  *    challenges (`app/lib/invites/*`, `app/lib/challenges/*`), co-op rooms
  *    (`app/lib/p2p/*`), reviews with a report button and auto-hide at three
  *    reporters (`app/lib/reviews/config.ts`), handles and usernames
- *    (`app/lib/handle.ts`, `app/lib/username.ts`). There is NO way to report a
- *    player or a profile in the code; the text offers email instead.
+ *    (`app/lib/handle.ts`, `app/lib/username.ts`). DEPENDS ON A PARALLEL
+ *    WORKSTREAM: the Report button on player profiles, its reasons and the
+ *    moderation queue (today only reviews can be reported in the code), and the
+ *    co-op rules about room codes (no public rooms).
  *  - Games: self-hosted games (`public/games/*`, uploads via
  *    `app/lib/game-upload.ts`), external games embedded from other origins
  *    (`app/lib/external-games-store.ts`), "By <name>" credits from
- *    `app/lib/game-credits.ts`. No takedown mechanism or licence statement exists
- *    in the code; the takedown section is new text with a placeholder address.
+ *    `app/lib/game-credits.ts`. No takedown mechanism exists in the code; the
+ *    takedown section is an email process only.
+ *  - Liability and minor operator: conservative drafting with no cap figure;
+ *    the whole clause and the operator's capacity are for a solicitor.
  *  - Beta programme: `app/lib/beta/*` (invite only, XP, rank), `/beta/closed`.
  *  - Ads strip (placeholder ad plus a partner): `app/components/Arcade.tsx`.
  *
@@ -54,10 +58,10 @@ export default function TermsPage() {
         <ul>
           <li>HALLPASS is a free arcade of browser games. Play as a guest or sign in.</li>
           <li>You need to be 13 or over for an account. If you are under 18, check with a parent or carer that they are happy for you to use the site.</li>
-          <li>Be kind. No bullying, cheating, hate, sharing other people&apos;s private details, or trying to break the site.</li>
+          <li>Be kind. No bullying, cheating, hate, sharing other people&apos;s private details, or trying to break the site. You can report reviews and other players&apos; profiles; we may remove content, warn, or suspend accounts, and you can appeal by email.</li>
           <li>Keep your own stuff yours. You own what you write; you let us show it on the site.</li>
-          <li>Games have authors and we credit them. Own something we host and want it gone? Tell us.</li>
-          <li>We do our best, but the site is provided &quot;as is&quot; and games can break. Nothing here takes away your legal rights.</li>
+          <li>Games have authors and we credit them. Own something we host, or think something here is harmful, and want it gone? Email us (section 7).</li>
+          <li>We do our best, but the site is provided &quot;as is&quot; and games can break. We are only responsible as far as the law allows, and nothing here takes away your legal rights.</li>
           <li>You can delete your account whenever you like. We can remove accounts that break the rules.</li>
         </ul>
       }
@@ -93,15 +97,19 @@ export default function TermsPage() {
             at any time.
           </li>
           <li>
-            We do not currently check ages. We rely on you telling the truth.
-            If we find out someone is younger than they should be, we may
-            remove their account.
+            We do not ask your age and we do not check it. We rely on you
+            telling the truth. If we learn that someone is under 13, or a parent
+            or carer tells us, we delete their account.
           </li>
         </ul>
         <p>
-          <Placeholder>SOLICITOR: capacity of minors to contract; whether the
-          wording should be a licence rather than a contract for under-18s
-          </Placeholder>
+          <Placeholder>SOLICITOR (IMPORTANT): (a) capacity of minors to
+          contract, including whether the wording should be a licence rather
+          than a contract for under-18s; and (b) the operator, Ozan Kaygusuz, is
+          himself under 18, so take advice on whether he can be the party to
+          this agreement and the data controller. Suggestion: a parent or
+          guardian (or a company) is named as the legal operator in section
+          1.</Placeholder>
         </p>
       </LegalSection>
 
@@ -117,6 +125,11 @@ export default function TermsPage() {
             Pick a display name and username that are fine for a school
             playground. We may change or remove names that are rude, that
             pretend to be someone else, or that include personal details.
+          </li>
+          <li>
+            Your real Google profile picture is hidden by default. Everyone has
+            a default cartoon avatar. You can choose in settings to show your
+            Google picture to your friends. Do not use a picture of anyone else.
           </li>
           <li>
             You can delete your account any time in your settings. Your scores
@@ -139,24 +152,39 @@ export default function TermsPage() {
           <li>use the site to do anything that breaks the law or your school&apos;s rules about devices.</li>
         </ul>
         <p>
-          <strong>Online co-op:</strong> other players may be able to see your
-          IP address (see the Privacy Policy). Only join rooms with people you
-          are comfortable with. Never share a room code with strangers, and
-          never ask for another player&apos;s IP address or personal details.
+          <strong>Online co-op:</strong> other players in your room can see
+          your IP address (see the Privacy Policy). There are no public rooms:
+          you need a room code or an invite link. Only share them with people
+          you know and are comfortable with, and only join rooms you were
+          invited to. Do not share a room code or invite link on public places
+          such as social media or streams, do not use another player&apos;s IP
+          address for anything, and never ask anyone for their IP address or
+          personal details. Co-op may not work on some school networks that
+          block direct connections.
         </p>
         <p>
-          <strong>If something is wrong:</strong> you can block another player,
-          and report a review with its report button. To report anything else
-          about a person, profile, name or leaderboard entry, or anything that
-          worries you, email smartlizardpy@duck.com.
-          Reviews that several people report are hidden automatically. If you
-          are in danger or someone else is, tell a trusted adult or the police
-          first.
+          <strong>If something is wrong:</strong> you can block another player.
+          If you are signed in you can use the <strong>Report</strong> button
+          on a review, or on another player&apos;s profile (reasons: bullying,
+          inappropriate name, inappropriate content, impersonation, or other).
+          Reports go to a moderation queue that the operator reads. Reviews
+          that several people report are also hidden automatically. For
+          anything else, or anything that worries you, email
+          smartlizardpy@duck.com. If you are in danger or someone else is, tell
+          a trusted adult or the police first.
         </p>
         <p>
-          We may remove content, hide scores, limit features or end accounts
-          that break these rules. We will try to explain, but may act quickly
-          where safety is at risk.{" "}
+          <strong>What we may do.</strong> If someone breaks these rules we may
+          remove content, change or remove a name or avatar, hide scores, warn
+          the player, limit features, or suspend or end the account. We will
+          try to explain, but may act quickly where safety is at risk.
+        </p>
+        <p>
+          <strong>Complaints and appeals.</strong> If you think we got it wrong
+          (we removed your content or suspended your account), or you are
+          unhappy about how we handled a report, email smartlizardpy@duck.com
+          with what happened and why you disagree. A person (not an automatic
+          system) will look at it again and reply.{" "}
           <Placeholder>SOLICITOR: Online Safety Act duties (illegal content,
           children&apos;s risk assessment, reporting and complaints routes) for
           the friends, invites, reviews and co-op features</Placeholder>
@@ -213,7 +241,8 @@ export default function TermsPage() {
         <p>
           If you own something on HALLPASS (a game, art, music or text) and you
           did not agree to it being here, or you think a game is credited
-          wrongly, email smartlizardpy@duck.com{" "}
+          wrongly, or you think a game, review, name or picture on HALLPASS
+          breaks your rights or is harmful, email smartlizardpy@duck.com{" "}
           with:
         </p>
         <ul>
@@ -223,11 +252,14 @@ export default function TermsPage() {
           <li>a sentence saying you believe in good faith that it is here without permission, and that what you say is accurate and you are the owner or authorised to act for them.</li>
         </ul>
         <p>
-          We will look at it quickly and may remove or disable the content while
-          we do. If you posted something that was taken down and you think that
-          was a mistake, tell us and we will review it.{" "}
-          <Placeholder>SOLICITOR: UK hosting defence process; whether a US
-          DMCA designated agent registration is wanted</Placeholder>
+          We aim to respond promptly. We may remove or disable the content while
+          we look into it, and we will tell the person who posted or uploaded it
+          so they can reply. If something of yours was taken down and you think
+          that was a mistake, tell us and we will review it.{" "}
+          <Placeholder>SOLICITOR: the right UK process for relying on the
+          hosting defence (notice and takedown, timing, counter-notices), and
+          whether a US DMCA designated agent should be registered. No legal
+          deadlines are promised here on purpose.</Placeholder>
         </p>
       </LegalSection>
 
@@ -246,6 +278,8 @@ export default function TermsPage() {
           <li>
             Screenshots and short clips are only taken when you press the
             button, and are used to fix bugs, as the Privacy Policy explains.
+            They are deleted automatically 30 days after you send them if the
+            bug is not resolved, and straight away when it is fixed or closed.
             Do not capture or send anything private.
           </li>
           <li>
@@ -283,13 +317,14 @@ export default function TermsPage() {
           do not bind you).
         </p>
         <p>
-          Subject to that, and to the extent the law allows, we are not
-          responsible for losses that were not a reasonably foreseeable result
-          of our breach, for what other users or other websites do, or for
-          losses to a business, because HALLPASS is meant for personal use. Our
-          total responsibility to you for anything connected with the site is
-          limited to <Placeholder>SOLICITOR: appropriate cap, if any, for a free
-          consumer service</Placeholder>.
+          Subject to that, we are only responsible to you as far as the law
+          allows, and we are not responsible for what other users or other
+          websites do, or for losses to a business, because HALLPASS is meant
+          for personal use.{" "}
+          <Placeholder>SOLICITOR: review this whole clause. The audience is
+          children and the operator is a minor, so check it is fair and
+          enforceable, and whether any cap or wider exclusion is appropriate.
+          No cap figure is stated on purpose.</Placeholder>
         </p>
       </LegalSection>
 
