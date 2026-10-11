@@ -13,10 +13,10 @@
  *    challenges (`app/lib/invites/*`, `app/lib/challenges/*`), co-op rooms
  *    (`app/lib/p2p/*`), reviews with a report button and auto-hide at three
  *    reporters (`app/lib/reviews/config.ts`), handles and usernames
- *    (`app/lib/handle.ts`, `app/lib/username.ts`). DEPENDS ON A PARALLEL
- *    WORKSTREAM: the Report button on player profiles, its reasons and the
- *    moderation queue (today only reviews can be reported in the code), and the
- *    co-op rules about room codes (no public rooms).
+ *    (`app/lib/handle.ts`, `app/lib/username.ts`). Profile reports
+ *    (`app/lib/profile-reports/*`, `docs/profile-reports-design.md`): reasons,
+ *    the moderation queue and the profile-reset action. DEPENDS ON A PARALLEL
+ *    WORKSTREAM: the co-op rules about room codes (no public rooms).
  *  - Games: self-hosted games (`public/games/*`, uploads via
  *    `app/lib/game-upload.ts`), external games embedded from other origins
  *    (`app/lib/external-games-store.ts`), "By <name>" credits from
@@ -167,8 +167,10 @@ export default function TermsPage() {
           If you are signed in you can use the <strong>Report</strong> button
           on a review, or on another player&apos;s profile (reasons: bullying,
           inappropriate name, inappropriate content, impersonation, or other).
-          Reports go to a moderation queue that the operator reads. Reviews
-          that several people report are also hidden automatically. For
+          Reports go to a moderation queue that the operator reads, and the
+          operator is notified when a profile is reported. Moderators are not
+          shown who made a report, and the person reported is never told.
+          Reviews that several people report are also hidden automatically. For
           anything else, or anything that worries you, email
           smartlizardpy@duck.com. If you are in danger or someone else is, tell
           a trusted adult or the police first.
@@ -176,7 +178,12 @@ export default function TermsPage() {
         <p>
           <strong>What we may do.</strong> If someone breaks these rules we may
           remove content, change or remove a name or avatar, hide scores, warn
-          the player, limit features, or suspend or end the account. We will
+          the player, limit features, or suspend or end the account. For a
+          profile this can mean a reset: we clear the player&apos;s chosen
+          display name and username (they show under a generated name and their
+          public profile page goes away) and stop showing their Google photo.
+          They can pick a new name, but not the same username again for 90
+          days. We will
           try to explain, but may act quickly where safety is at risk.
         </p>
         <p>

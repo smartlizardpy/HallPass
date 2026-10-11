@@ -19,7 +19,10 @@ bullying, an unsuitable name or picture, or impersonation. Read it with
   opens a native modal `<dialog>`: radio list of reasons, optional note,
   "a person at HallPass will look at it", a confirmation state and an error state.
 - **Dashboard** a "Reported players" queue at the top of `/dashboard/moderation`
-  with *Mark actioned* and *Dismiss*; the sidebar badge counts these too.
+  with *Reset this profile…* (a confirm panel), *Mark handled (no account
+  change)* and *Dismiss*; the sidebar badge counts these too.
+- **Admin notification** a `profile_reported` notification (section 9).
+- **Retention job** `POST /api/v1/admin/profile-reports/retention` (section 7).
 
 ## 2. What is stored
 
@@ -44,8 +47,11 @@ On the wire players are identified by `public_id` only, never `players.id`.
   reported player's public display name, `@username` and `public_id`, the
   reason, the note, the time, and how many reports are open against that player.
   The reported child's Google `name` and email are never selected. The
-  reporter is not shown at all; the moderator judges the report, not the child
-  who made it (open question below).
+  reporter is not shown at all, to moderators or the reported player: the
+  moderator judges the report, not the child who made it. This is the owner's
+  decision, and `anonymity.test.ts` locks it in for the store, the dashboard
+  card, the notification and the MCP views (the id stays in the table for the
+  rate limits and for a manual database lookup).
 - The note is rendered as text, never HTML.
 
 ## 4. Privacy rules honoured
@@ -78,25 +84,80 @@ of an open report writes no row and so does not count. One open report per
 resolved the same person may report again. Request bodies are capped at 2 KB.
 Best-effort under true concurrency, like every limiter here.
 
-## 7. Retention (proposal, not built)
+## 7. Retention (decided)
 
-Proposal: delete `actioned` and `dismissed` reports 90 days after `resolved_at`,
-and keep `open` reports until resolved. 90 days is far longer than the 24 hour
-rate-limit window, which needs the rows to exist. No job is built here; this
-codebase prefers opportunistic deletion in a write path, and a one-line
-`DELETE ... WHERE status <> 'open' AND resolved_at < now() - interval '90 days'`
-could ride on `resolve()`. This needs a decision, and the privacy notice should
-state whatever is chosen.
+Resolved (`actioned` or `dismissed`) reports are deleted **90 days after
+`resolved_at`** (`PROFILE_REPORT_RETENTION_DAYS`, owner decision). `open` reports
+are kept until resolved and never aged out. 90 days is far longer than the 24
+hour rate-limit window, which needs the rows to exist.
+
+The sweep is `POST /api/v1/admin/profile-reports/retention`
+(`store.purgeResolved`), behind `alertsAuthGate` like the other scheduled jobs,
+run as the second step of the daily `.github/workflows/clip-retention.yml`
+(`scripts/run-profile-report-retention.mjs`; same `ALERTS_SECRET`, and the
+workflow's *dry run* input counts without deleting). It is its own route and
+step so its name is honest and its failure is reported separately from the beta
+clip sweep. Deleting is idempotent. No migration was needed: `resolved_at`
+already existed.
+
+## 7a. The account action
+
+*Mark actioned* used to only close the report. The queue now has three buttons:
+
+- **Reset this profile…** opens a confirm panel that says, before the click,
+  what will happen. On confirm, in ONE SQL statement (one snapshot; the `neon()`
+  HTTP driver cannot span statements): the reported player's `handle` and
+  `username` become NULL, `use_google_photo` becomes false, **every** open
+  report against that player is marked `actioned` with `resolved_at` and the
+  acting admin, and the old username is tombstoned in `username_history` with no
+  owner, so neither the child nor anyone else can take it for
+  `USERNAME_TOMBSTONE_DAYS` (90). A stale click on an already-closed report
+  changes nothing.
+- **Mark handled (no account change)** closes this one report as `actioned`
+  (the moderator dealt with it elsewhere). `actioned` therefore means "a person
+  acted", with or without a reset.
+- **Dismiss** closes it as `dismissed`.
+
+Admin only (`requireRole("admin")`). The server logs one line: report id, the
+player's `public_id`, how many reports were closed and the admin's dashboard
+email; never a name, the child's email or the reporter.
+
+Consequences, checked against Postgres in `store.db.test.ts`:
+
+- `/u/<old-username>` stops resolving (not found). The old name is held back.
+- Friend rows, scores, challenges and invites are untouched. Everything that
+  prints a name already falls back for a NULL handle and username: the public
+  leaderboard and friend standings show the generated name (`AuraFarmer#0417`
+  style), friend lists and challenges show "Player", and no photo is shown.
+- The player can choose a new name through the normal settings flow. While
+  `username` is NULL, `claimUsername` applies neither the 30 day rename
+  cooldown nor the plays requirement, so a new username can be claimed
+  immediately; the moderated one cannot, for 90 days. The display name
+  (`handle`) has only the short per-change cooldown. There is no rule that
+  stops a player choosing another inappropriate name; that returns to the queue
+  by a new report.
+- The player is not told. The reset does not delete the account and does not
+  touch their Google profile.
 
 ## 8. Open questions
 
-- Retention period (above), and whether open reports should also age out.
-- Should moderators see who reported (for follow-up and for spotting abuse of
-  reports)? Currently no; the data is in the table for a manual lookup.
-- Should *Mark actioned* offer a next step on the reported account (rename,
-  hide the picture)? Today it only closes the report.
-- Whether a notification to admins is wanted for new profile reports (reviews
-  notify via `review_posted`; this does not).
+- Whether open reports should also age out (today they never do).
+- Whether the reset should tell the player (today it does not).
+- Whether a repeat reset for the same player should escalate (suspension is
+  not built).
 - `reported_id` CASCADE means a harasser who deletes their account ends the
   report; if the policy owner prefers to keep a minimal record, that is a
   different table, not a different `ON DELETE`.
+
+## 9. Admin notification
+
+A new report sends the `profile_reported` notification (admin audience,
+moderation group, push by default like `review_reported`;
+`app/lib/notifications/config.ts`, wording in `copy.ts`): "A profile was
+reported (<reason>). Open moderation to read it.", linking to
+`/dashboard/moderation`. It carries no reporter, no reported name and no note.
+It is sent only for a newly created report: a duplicate of an open pair writes no
+row and sends nothing. It is best effort: `notifyAdmins` swallows its own
+failures and the route catches anything else, so a notification problem never
+fails the report request. It is not deduplicated (each new report is one new
+open row, and the per-reporter rate limit bounds the volume).
