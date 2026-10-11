@@ -343,6 +343,7 @@ www.hallpass.games. It is run from England. We
         <p>
           UK rules (PECR) say we must tell you about, and sometimes ask
           permission for, anything we store on your device or read from it.
+          The full list is on our <Link href="/cookies">Cookies page</Link>.
         </p>
         <ul>
           <li>

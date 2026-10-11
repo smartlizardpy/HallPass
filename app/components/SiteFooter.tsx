@@ -51,6 +51,10 @@ export function SiteFooter() {
             <Link href="/terms" className="underline underline-offset-2 hover:text-brand">
               Terms
             </Link>
+            {" · "}
+            <Link href="/cookies" className="underline underline-offset-2 hover:text-brand">
+              Cookies
+            </Link>
           </p>
         </div>
       </div>
