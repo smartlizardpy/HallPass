@@ -134,6 +134,19 @@ jobs:
             echo "$url"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # SECOND LINE OF DEFENCE AGAINST A STALE CATALOGUE. Even with the database
+      # available to the build (see "Build"), the prerendered pages hold whatever
+      # the catalogue looked like at build time until something expires the data
+      # cache. Expiring the two catalogue tags right after the deploy makes the
+      # first real requests re-read the live database, so an edit made in the
+      # dashboard minutes before a deploy cannot be shown stale. The tags are
+      # `CACHE_TAG` in `app/lib/games-store.ts` and `external-games-store.ts`.
+      # NEVER FAILS THE DEPLOY: the site is already live, and a failed purge only
+      # means the old behaviour.
+      - name: Refresh the catalogue cache
+        continue-on-error: true
+        run: vercel cache invalidate --tag game-overrides,external-games --yes
+
       # Tell the site's admins a new version is live: a bell row and, for admins
       # who opted in, a web push, saying what shipped. See
       # `scripts/notify-deploy.mjs` and `docs/deploy-notify-design.md`.
