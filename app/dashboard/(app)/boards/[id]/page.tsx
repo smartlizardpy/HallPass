@@ -39,6 +39,7 @@ import {
   resetBoardAction,
   updateBoardAction,
 } from "../actions";
+import { Avatar } from "@/app/components/friends/Avatar";
 import { DashHeader } from "../../_ui/DashHeader";
 import { IntegratePanel } from "../../_ui/IntegratePanel";
 
@@ -355,15 +356,7 @@ export default async function BoardDetailPage({
                         render bare, exactly as before. EMAIL is never present. */}
                     <span className="flex items-center gap-2">
                       {entry.avatar && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={entry.avatar}
-                          alt=""
-                          width={20}
-                          height={20}
-                          referrerPolicy="no-referrer"
-                          className="h-5 w-5 shrink-0 rounded-full border border-border object-cover"
-                        />
+                        <Avatar person={{ image: entry.avatar, displayName: entry.handle }} size={20} />
                       )}
                       <span>{entry.handle}</span>
                       {entry.verified && (

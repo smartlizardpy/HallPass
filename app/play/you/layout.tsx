@@ -57,14 +57,15 @@
  * `/category/[category]` in the prerender manifest — those must stay precachable
  * and this must not be precached at all.
  *
- * The avatar is a meme image, or the player's own Google URL if they opted in, rendered with a plain `<img>` (matching the
- * repo's GameCard / Arcade convention) plus `referrerPolicy="no-referrer"` so
- * Google serves them.
+ * The avatar is a meme in the player's chosen colour, or the player's own Google photo if they opted in. It goes through the
+ * shared `Avatar`, which draws a meme ref as a coloured circle (a bare `<img>` of
+ * the ref shows the cutout with no background) and keeps `no-referrer` on photos.
  */
 
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { BackButton } from "@/app/components/BackButton";
+import { Avatar } from "@/app/components/friends/Avatar";
 import { Wordmark } from "@/app/components/Wordmark";
 import { earnedBadges } from "@/app/lib/badges";
 import { effectiveHandle, ownAvatarUrl } from "@/app/lib/players";
@@ -223,21 +224,9 @@ async function YouShell({ children }: { children: React.ReactNode }) {
       <section className="rounded-xl border border-border bg-surface p-6">
         <div className="flex items-center gap-4">
           {/* Your own avatar: your Google photo only if you opted in (Settings), else a meme avatar. */}
-          {ownAvatarUrl(player) ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={ownAvatarUrl(player)}
-              alt=""
-              width={64}
-              height={64}
-              referrerPolicy="no-referrer"
-              className="h-16 w-16 shrink-0 rounded-full border border-border object-cover"
-            />
-          ) : (
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 text-2xl font-black text-muted">
-              {display.slice(0, 1).toUpperCase()}
-            </div>
-          )}
+          <span className="shrink-0 rounded-full border border-border">
+            <Avatar person={{ image: ownAvatarUrl(player), displayName: display }} size={64} />
+          </span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="truncate text-xl font-black text-foreground">

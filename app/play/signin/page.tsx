@@ -45,7 +45,14 @@ export default async function PlaySignInPage({
   }
 
   // Where Google sends them back after a successful sign-in.
-  const redirectTo = safeRelativePath(callbackUrl, "/play/you");
+  //
+  // Via `/auth/landing`, NOT straight to the destination. Sending Google directly
+  // to the destination skipped the sign-up steps entirely: a brand-new player
+  // signing in from here (every "Sign in to review" / friends / game-page link)
+  // arrived with no handle and was never asked for one.
+  const redirectTo = `/auth/landing?next=${encodeURIComponent(
+    safeRelativePath(callbackUrl, "/play/you"),
+  )}`;
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-6 py-10">

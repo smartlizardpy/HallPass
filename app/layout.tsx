@@ -11,6 +11,7 @@ import { StealthController } from "./components/stealth/StealthController";
 import { StreakBeacon } from "./components/streak/StreakBeacon";
 import { StreakToast } from "./components/streak/StreakToast";
 import { ThemeController } from "./components/theme/ThemeController";
+import { OnboardingGate } from "./components/OnboardingGate";
 import { WelcomeToast } from "./components/WelcomeToast";
 import { AnalyticsNotice } from "./components/analytics/AnalyticsNotice";
 import { cloakBootScript } from "./lib/stealth/boot";
@@ -106,6 +107,8 @@ export default function RootLayout({
         </Script>
         {children}
         <WelcomeToast />
+        {/* Sends a player who still owes a sign-up step to /play/welcome. */}
+        <OnboardingGate />
         {/* One-time note about analytics; see its header for where it hides. */}
         <AnalyticsNotice />
         <PWA />

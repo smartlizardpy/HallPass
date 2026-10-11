@@ -16,6 +16,7 @@
 
 import { useEffect, useState } from "react";
 import type { MeResponse } from "@/sdk/src/contract";
+import { Avatar } from "./friends/Avatar";
 
 type Toast = { name: string; image: string | null; returning: boolean };
 
@@ -73,21 +74,7 @@ export function WelcomeToast() {
           shown ? "translate-y-0 opacity-100" : "-translate-y-20 opacity-0"
         }`}
       >
-        {toast.image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={toast.image}
-            alt=""
-            width={40}
-            height={40}
-            referrerPolicy="no-referrer"
-            className="h-10 w-10 rounded-full object-cover"
-          />
-        ) : (
-          <span className="grid h-10 w-10 place-items-center rounded-full bg-brand-100 font-black text-brand">
-            {toast.name[0]?.toUpperCase()}
-          </span>
-        )}
+        <Avatar person={{ image: toast.image, displayName: toast.name }} size={40} />
         <span className="text-sm font-extrabold text-foreground">
           {toast.returning ? "Welcome back" : "Welcome"}, {toast.name}!
         </span>

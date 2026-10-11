@@ -6,6 +6,10 @@
  * an ordinary player to the arcade home `/`. Either way we append a `?welcome`
  * flag the client-side toast picks up.
  *
+ * `?next=` (same-origin relative, validated) overrides the destination: the
+ * other sign-in entry points (`/play/signin`, OAuth consent, the dashboard) send
+ * Google here so that NO sign-in path skips the sign-up steps.
+ *
  * A player with no handle is routed through `/play/welcome` first, so they get
  * to choose the name that lands on a leaderboard. It is no longer the LAST line
  * of defence — `getTopScores` cannot publish a Google name at all now — but a
@@ -17,9 +21,12 @@
  * visitor → "Welcome back", otherwise "Welcome".
  */
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/app/lib/auth";
 import { getPlayerById } from "@/app/lib/players";
+import { AVATAR_SKIP_COOKIE, landingTarget } from "@/app/lib/onboarding";
+import { safeRelativePath } from "@/app/lib/safe-redirect";
 import { social } from "@/app/lib/social";
 
 // Reads the session cookie, so this route is inherently per-request.
@@ -27,7 +34,15 @@ export const dynamic = "force-dynamic";
 
 const RETURNING_GAP_MS = 5_000;
 
-export default async function AuthLandingPage() {
+export default async function AuthLandingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const { next: rawNext } = await searchParams;
+  // Optional caller-chosen destination (`/play/signin?callbackUrl=...`, the OAuth
+  // consent page). Same-origin relative paths only.
+  const explicitNext = rawNext ? safeRelativePath(rawNext, "") : "";
   const session = await auth();
   const playerId = session?.user?.playerId;
 
@@ -35,8 +50,9 @@ export default async function AuthLandingPage() {
   if (!playerId) redirect("/");
 
   let returning = false;
-  let needsHandle = false;
-  let needsUsername = false;
+  let handle: string | null = null;
+  let username: string | null = null;
+  let avatarMeme: string | null = null;
   try {
     const player = await getPlayerById(playerId);
     if (player) {
@@ -44,11 +60,12 @@ export default async function AuthLandingPage() {
       // the COLUMN rather than on "is this their first login" also catches
       // existing players who never picked one — the population that otherwise
       // appears under a generated name rather than one they chose.
-      needsHandle = !player.handle;
+      handle = player.handle ?? null;
+      avatarMeme = player.avatarMeme;
       // Fail-soft: if the social read hiccups, treat the username as present so a
       // database blip cannot insert an extra step into everybody's sign-in.
       const own = await social.getOwnSocial(playerId).catch(() => null);
-      needsUsername = own ? !own.username : false;
+      username = own ? (own.username ?? null) : "unknown";
       const created = Date.parse(player.createdAt);
       const last = player.lastLogin ? Date.parse(player.lastLogin) : created;
       returning =
@@ -60,9 +77,12 @@ export default async function AuthLandingPage() {
     // Identity lookup failed — default to a plain "Welcome".
   }
 
-  const destination = `${session?.user?.role ? "/dashboard" : "/"}?welcome=${
-    returning ? "back" : "new"
-  }`;
+  const destination =
+    explicitNext ||
+    `${session?.user?.role ? "/dashboard" : "/"}?welcome=${
+      returning ? "back" : "new"
+    }`;
+  const avatarSkipped = Boolean((await cookies()).get(AVATAR_SKIP_COOKIE));
 
   // Route to the sign-up steps when EITHER name is missing, not just the handle.
   //
@@ -76,8 +96,11 @@ export default async function AuthLandingPage() {
   // Safe to ask on every sign-in because the username step is SKIPPABLE and the
   // page self-guards: once a username exists this branch stops firing. It is not a
   // gate, and sign-in can never dead-end on it.
-  if (needsHandle || needsUsername) {
-    redirect(`/play/welcome?next=${encodeURIComponent(destination)}`);
-  }
-  redirect(destination);
+  //
+  // The decision itself is `landingTarget` (pure, unit-tested). A failed identity
+  // lookup leaves handle null, which routes to welcome; that page re-reads and
+  // self-guards, so the worst case is one extra, harmless step.
+  redirect(
+    landingTarget({ handle, username, avatarMeme, avatarSkipped }, destination),
+  );
 }

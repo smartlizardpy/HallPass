@@ -105,7 +105,7 @@ export default async function DashboardSignInPage({
             <form
               action={async () => {
                 "use server";
-                await signIn("google", { redirectTo: "/dashboard" });
+                await signIn("google", { redirectTo: "/auth/landing?next=%2Fdashboard" });
               }}
               className="mt-6"
             >
