@@ -13,17 +13,28 @@
  *    `app/play/you/settings/page.tsx`. Scores are kept with the name "Deleted".
  *  - Analytics: `instrumentation-client.ts` (PostHog EU via the `/ingest`
  *    rewrite in `next.config.ts`, no `identify`), `app/lib/growth/first-touch.ts`.
- *    Session-replay and cookie defaults are NOT set in code: open question.
+ *    DEPENDS ON THE PARALLEL WORKSTREAM (not in this branch's code when
+ *    drafted): the settings Analytics switch, the one-time notice, clearing the
+ *    ID on opt-out, and session recording forced off in `posthog.init`. Verify
+ *    each against the merged `instrumentation-client.ts` before publishing.
  *  - Device storage: the `hp:*` keys listed in the audit (personalization.ts,
  *    streak/store.ts, stealth/config.ts, catalog-prefs.ts, …), `public/sw.js`.
- *  - Avatars: shown on leaderboards (`app/lib/scoreboard/store.ts`), reviews and
- *    friends; withheld on /c/ and /i/ pages (`app/c/[code]/page.tsx`,
- *    `app/i/[code]/page.tsx`) and from co-op peers (`SHARE_AVATAR_WITH_PEERS` in
- *    `app/lib/p2p/config.ts`).
+ *  - Avatars: today's code shows the Google photo on leaderboards
+ *    (`app/lib/scoreboard/store.ts`), reviews and friends. The text describes
+ *    the DECIDED design (default meme avatar from the public id; Google photo
+ *    only to accepted friends behind a settings opt-in; never on leaderboards,
+ *    reviews, non-friend lookups, /c/ and /i/ pages or co-op rooms, see
+ *    `SHARE_AVATAR_WITH_PEERS` in `app/lib/p2p/config.ts`). DEPENDS ON THE
+ *    PARALLEL AVATAR WORKSTREAM; re-verify after merge.
  *  - IP addresses: salted hash only, `app/lib/scoreboard/guard.ts`; country via
  *    `app/lib/geo.ts`.
- *  - Co-op: `app/lib/p2p/*`, `sdk/p2p/src/client.ts` (`iceTransportPolicy`),
- *    `docs/p2p-design.md`, migration `040_p2p_signaling.sql`.
+ *  - Co-op: `app/lib/p2p/*` (STUN defaults in `config.ts`; TURN code still
+ *    exists in `ice.ts`, so the deployment must have no TURN env set for the
+ *    "no relay" statement to hold), `sdk/p2p/src/client.ts`,
+ *    `docs/p2p-design.md`, migration `040_p2p_signaling.sql`. The first-use
+ *    notice and "no public rooms" depend on the parallel co-op workstream.
+ *  - Reports about profiles and the moderation queue: PARALLEL WORKSTREAM.
+ *    Review reports exist today (`app/lib/reviews/*`).
  *  - Push, notifications, streak reminders: `app/lib/push/*`,
  *    `app/lib/notifications/*`, `app/lib/streak/*`,
  *    `.github/workflows/streak-reminders.yml`.
@@ -32,7 +43,9 @@
  *    `app/lib/invites/*`, `docs/challenge-sharing-design.md`,
  *    `docs/invites-design.md`.
  *  - Beta programme and recordings: `app/lib/beta/*`, `app/lib/capture/*`,
- *    `docs/game-recorder.md`, `app/api/v1/beta/clips/[id]/route.ts`.
+ *    `docs/game-recorder.md`, `app/api/v1/beta/clips/[id]/route.ts`. The 30-day
+ *    and on-account-deletion deletion of clips depends on a PARALLEL
+ *    WORKSTREAM (today `deletePlayer` does not touch blobs).
  *  - Surveys: `app/lib/surveys/*`.
  *
  * Static on purpose: no session or database reads, so it prerenders.
@@ -73,16 +86,19 @@ export default function PrivacyPage() {
           </li>
           <li>
             We keep your Google email, name and profile picture. Your email and
-            real Google name are never shown to other players. Your profile
-            picture <strong>can</strong> be (see section 4).
+            real Google name are never shown to other players. Everyone gets a
+            cartoon avatar by default; your real Google picture is only shown,
+            and only to your accepted friends, if you switch that on (section
+            4).
           </li>
           <li>
             We count visits and clicks with an analytics tool so we can fix
-            things and make better games.
+            things and make better games. It uses an ID stored in your browser,
+            and you can switch it off in settings (section 6).
           </li>
           <li>
             Online co-op connects your device to another player&apos;s, so they
-            may be able to see your IP address (section 7).
+            can see your IP address (section 7). There are no public rooms.
           </li>
           <li>
             You must be 13 or older to have an account. If you are under 13,
@@ -121,7 +137,8 @@ export default function PrivacyPage() {
         <p>
           Lots of our players are at school, and we have designed the site with
           that in mind: we try to collect as little as we can, profiles start
-          friends-only, and we do not use your data for advertising.
+          friends-only, your real photo is hidden unless you choose otherwise,
+          and we do not use your data for advertising.
         </p>
         <ul>
           <li>
@@ -131,22 +148,36 @@ export default function PrivacyPage() {
             third-party sites; that is Google&apos;s setting, not ours.
           </li>
           <li>
-            <strong>If you are under 13</strong>, please ask a parent or carer
-            before using HALLPASS at all. Playing as a guest still involves the
-            device storage and analytics described below.
+            <strong>If you are under 13</strong>, you need a parent or
+            carer&apos;s permission before using HALLPASS at all, and you must
+            not create an account. Playing as a guest still involves the device
+            storage and analytics described below.
           </li>
           <li>
-            We do not ask your age, and we do not currently check it. We do not knowingly collect an account from anyone under 13. If we
-            learn we have, or a parent or carer tells us, we will delete it.
-            Parents and carers can contact us at{" "}
-            smartlizardpy@duck.com to see, correct or delete
-            their child&apos;s data.
+            We do not ask your age and we do not check it: we rely on you
+            telling the truth. We do not knowingly keep an account belonging to
+            anyone under 13. If we learn we have, or a parent or carer tells us,
+            we will delete the account. Parents and carers can contact us at{" "}
+            smartlizardpy@duck.com to see, correct or delete their
+            child&apos;s data.
           </li>
         </ul>
         <p>
           Our approach follows the ICO&apos;s Children&apos;s Code (the UK
-          &quot;Age Appropriate Design Code&quot;).{" "}
-          <Placeholder>SOLICITOR: confirm whether a DPIA is needed and done</Placeholder>
+          &quot;Age Appropriate Design Code&quot;). We have written a draft Data
+          Protection Impact Assessment (in our code repository at{" "}
+          <code>docs/dpia.md</code>).{" "}
+          <Placeholder>SOLICITOR / OWNER: DPIA sign-off, and the position on
+          having no age check for a service that children use</Placeholder>
+        </p>
+        <p>
+          <Placeholder>SOLICITOR (IMPORTANT): this service is run by an
+          individual who is under 18. Take advice on whether a minor can enter
+          the contracts described in the Terms and be the &quot;controller&quot;
+          of children&apos;s personal data with the duties that carries
+          (registration and fee, responding to requests, breach reporting).
+          Strong suggestion: a parent or guardian (or a company) acts as the
+          legal operator, and this page names them in section 1.</Placeholder>
         </p>
       </LegalSection>
 
@@ -174,9 +205,8 @@ export default function PrivacyPage() {
             running a fair leaderboard.]
           </li>
           <li>
-            <strong>Analytics</strong> (section 6). [Legitimate interests, plus
-            the exemption in UK cookie rules for simple statistics; see
-            section 6.]
+            <strong>Analytics</strong> (section 6), on unless you switch it off.
+            [Legitimate interests; see section 6 for the cookie-rule position.]
           </li>
           <li>
             <strong>Technical logs</strong> kept by our hosts when you load a
@@ -190,14 +220,15 @@ export default function PrivacyPage() {
         <ul>
           <li>
             From Google we store your account ID, <strong>email</strong>,{" "}
-            <strong>name</strong> and <strong>profile picture</strong> link. We
+            <strong>name</strong> and a link to your <strong>Google profile
+            picture</strong>. We
             do not get your Google password, contacts or anything else. [To run
             your account: contract.]
           </li>
           <li>
             We add: a display name (&quot;handle&quot;) you can choose, an
             optional public username, a friend code, your profile visibility
-            setting, when you joined and last signed in, and the{" "}
+            setting, your choice about showing your Google picture to friends, when you joined and last signed in, and the{" "}
             <strong>country</strong> your first sign-in came from (just the
             country, worked out from your IP address by our host, never your
             city or location). [To run your account: contract. Country: our
@@ -208,8 +239,9 @@ export default function PrivacyPage() {
             &quot;friends who play this&quot;), achievements, daily streak (with
             your device&apos;s time zone offset, so reminders arrive at a
             sensible time), friends and blocks, challenges and invites,
-            notification settings, and reviews you write. [To provide the
-            features: contract.]
+            notification settings, reviews you write, and reports you make about
+            reviews or profiles (section 10). [To provide the features:
+            contract.]
           </li>
           <li>
             If you turn on push notifications: a push address and keys for each
@@ -224,6 +256,16 @@ export default function PrivacyPage() {
             interests: improving the site.]
           </li>
         </ul>
+        <p>
+          <strong>If you report someone</strong> (a review, or another
+          player&apos;s profile from its Report button): we keep your report,
+          the reason you chose, who you reported, and who made the report, so
+          that our team can look at it in a moderation queue and see whether
+          the same person is reported repeatedly. The person you report is not
+          told who reported them. [Legitimate interests: keeping the site safe.
+          Where a report is about a child at risk we may have a wider duty to
+          act.] See section 10 for how long we keep reports.
+        </p>
         <p>
           <strong>If you are in the beta testing programme</strong> (invite
           only) see section 8.
@@ -246,18 +288,24 @@ export default function PrivacyPage() {
             challenge links and invites.
           </li>
           <li>
-            <strong>Your profile picture is the Google picture, and it is often
-            a real photo.</strong> It appears next to your signed-in
-            leaderboard scores, your reviews, and to friends and on your
-            profile if your visibility setting allows. We deliberately leave it
-            off challenge pages, invite pages and online co-op rooms.{" "}
-            <Placeholder>OWNER TO CONFIRM: is showing the picture on public
-            leaderboards and reviews intended?</Placeholder>
+            <strong>Avatars.</strong> Everyone gets a default cartoon (&quot;meme&quot;)
+            avatar, chosen from your public ID, so it is not a photo of you.
+            That is what appears on leaderboards, reviews, friends lists and
+            profile lookups by people who are not your friends.
+          </li>
+          <li>
+            <strong>Your real Google profile picture</strong> (often a real
+            photo) is shown <strong>only if you tick &quot;Show my Google
+            profile picture to friends&quot; in your settings</strong>. It is
+            off by default. If you tick it, only your accepted friends see it.
+            It is never shown on leaderboards, reviews, profile lookups by
+            people who are not your friends, challenge links, invite links or
+            in co-op rooms. Untick the box and it stops being shown.
           </li>
           <li>
             <strong>Profile visibility</strong> starts at &quot;friends&quot;:
-            people who are not your friends see only your name and picture.
-            You can change it to public or private. Profile pages are marked so
+            people who are not your friends see only your name and default
+            avatar. You can change it to public or private. Profile pages are marked so
             search engines should not list them.
           </li>
           <li>
@@ -298,10 +346,14 @@ export default function PrivacyPage() {
             show your account, friends or profile.
           </li>
           <li>
-            <strong>Analytics</strong> may also store an anonymous ID and which
-            link brought you here, in a cookie and local storage. See below.{" "}
+            <strong>Analytics device ID.</strong> Unless you switch analytics
+            off, our analytics tool stores a random ID, and which link brought
+            you here, in your browser (PostHog&apos;s default is a cookie plus
+            local storage). We use it to tell a returning visitor from a new
+            one. It does not name you. Switching analytics off in settings
+            clears it. See section 6.{" "}
             <Placeholder>CONFIRM the exact PostHog storage settings at
-            runtime</Placeholder>
+            runtime once the final code is merged</Placeholder>
           </li>
         </ul>
         <p>
@@ -313,14 +365,34 @@ export default function PrivacyPage() {
       <LegalSection id="analytics" title="6. Analytics">
         <p>
           We use <strong>PostHog</strong> (servers in the EU) to see which pages
-          and games are used, how people find us, and what breaks. It records
-          page views, clicks, the games you start and stop, what you type in the
-          game search box, favourites, whether you use a challenge or invite
-          link, your device&apos;s daily-play streak, and website errors.
+          and games are used, how people find us, whether people come back, and
+          what breaks. It records page views, clicks, the games you start and
+          stop, what you type in the game search box, favourites, whether you
+          use a challenge or invite link, your device&apos;s daily-play streak,
+          and website errors.
         </p>
         <ul>
           <li>
-            We send these through our own address (/ingest) so they go through
+            <strong>It is on by default.</strong> It stores a random{" "}
+            <strong>device ID</strong> in your browser so we can count returning
+            visitors rather than counting every visit as someone new. We chose
+            this design ourselves: it is on unless you switch it off, and we
+            tell you about it, rather than asking first. The first time you
+            visit we show a short notice explaining what is collected and why.
+          </li>
+          <li>
+            <strong>You can switch it off</strong> with the Analytics switch in
+            your settings. Switching it off stops us capturing anything and
+            clears the stored ID from your browser. Data already sent is not
+            tied to your name; ask us if you want us to look into removing it.
+          </li>
+          <li>
+            <strong>No session recording.</strong> We do not record or replay
+            what you do on the screen. This is switched off in our code, so it
+            cannot be turned on from the PostHog dashboard by accident.
+          </li>
+          <li>
+            Events go through our own address (/ingest) so they pass through
             HALLPASS first. We do not link them to your account: the site never
             tells PostHog who you are, so the data is about a browser, not a
             named person. On a shared school computer, that browser may be used
@@ -331,17 +403,18 @@ export default function PrivacyPage() {
             this data with advertisers.
           </li>
           <li>
-            We do not switch on session recording or screen replay of ordinary
-            visitors. <Placeholder>CONFIRM in PostHog project settings: the
-            code does not set this, so it must be checked</Placeholder>
-          </li>
-          <li>
-            There is currently no cookie banner or switch to turn analytics
-            off. If you do not want it, use your browser&apos;s tracker or
-            content blocker, or tell us at{" "}
-            smartlizardpy@duck.com and we will act on your
-            request. <Placeholder>SOLICITOR: PECR consent / statistical
-            exemption position; an opt-out control may be needed</Placeholder>
+            <strong>Our legal reason</strong> is legitimate interests: knowing
+            whether the site works and is used, so we can fix it. Because this
+            reads and writes an ID on your device, UK cookie rules (PECR) also
+            apply.{" "}
+            <Placeholder>SOLICITOR: PECR position. The owner has chosen
+            on-by-default with a notice and an opt-out. The intended basis is
+            the statistical-purposes exemption added by the Data (Use and
+            Access) Act 2025, which we have only confirmed from secondary
+            sources (not the legislation or ICO guidance itself), and whether
+            it covers a device ID used to count returning visitors, for a
+            service used by children. The alternative is an opt-in banner with
+            analytics off until accepted. Decide before finalising.</Placeholder>
           </li>
         </ul>
         <p>
@@ -359,14 +432,17 @@ export default function PrivacyPage() {
           device <strong>directly to theirs</strong> (called peer-to-peer, or
           WebRTC). To do that, devices must learn each other&apos;s network
           addresses. <strong>That means the other players in your room may be
-          able to see your IP address</strong>, which can show roughly where you
-          are and who your internet provider is.
+          can see your IP address</strong>, which can show roughly where you
+          are and who your internet provider is. The first time you use co-op
+          on a device we show a short notice saying this before anything
+          connects.
         </p>
         <ul>
           <li>
-            Rooms are private. You join with a short code, so only people you
-            share the code with should be able to join. Do not share the code
-            with strangers.
+            <strong>There are no public rooms.</strong> Nobody can browse or
+            search for rooms. To join you need a room code or an invite link
+            from the host, so only people you share it with can get in. Do not
+            share a code or link with strangers.
           </li>
           <li>
             Other players see your display name, not your Google name or email.
@@ -381,16 +457,15 @@ export default function PrivacyPage() {
           </li>
           <li>
             Your browser asks free &quot;STUN&quot; servers run by Cloudflare
-            and Google what your public address is. If a direct link is not
-            possible, traffic goes through a &quot;relay&quot; (TURN) server
-            instead <Placeholder>CONFIRM which TURN provider is live in
-            production (the code supports Cloudflare Realtime TURN)</Placeholder>
-            . Those providers will see your IP address.
+            and Google what your public address is, so those two providers see
+            your IP address. We do <strong>not</strong> use a relay (TURN)
+            server, so if a direct link between two devices is not possible,
+            co-op will not connect. Some school and home networks block direct
+            connections, so co-op may not work for everyone.
           </li>
           <li>
             Game data goes directly between players and does not pass through
-            our servers (unless a relay is used, which only forwards it). We do
-            not record it. Games can use your microphone for voice only if the
+            our servers. We do not record it. Games can use your microphone for voice only if the
             game asks and your browser permission prompt is accepted; you can
             mute. <Placeholder>CONFIRM whether any live game uses
             voice</Placeholder>
@@ -434,10 +509,11 @@ export default function PrivacyPage() {
             &quot;Tested by&quot; on that game&apos;s public page.
           </li>
           <li>
-            We delete clips and screenshots when a bug is marked fixed. If a
-            report is not resolved we do not yet delete it on a timer.{" "}
-            <Placeholder>OWNER: set and state a retention period for
-            unresolved reports, clips and screenshots</Placeholder>
+            <strong>Clips and screenshots are deleted</strong> automatically 30
+            days after you send them if the report is still unresolved,
+            straight away when the report is fixed or closed, and when you
+            delete your account. The text of the report stays (it is cut loose
+            from your account if you delete it).
           </li>
         </ul>
         <p>
@@ -461,12 +537,14 @@ export default function PrivacyPage() {
             <strong>PostHog</strong> (analytics, EU).
           </li>
           <li>
-            <strong>Google</strong> (sign-in; it also hosts the profile picture
-            we show, and runs a STUN server and the optional review
-            translation described below).
+            <strong>Google</strong> (sign-in; it hosts your Google profile
+            picture, which is only loaded for your friends if you chose to show
+            it; and it runs a STUN server and the optional review translation
+            described below).
           </li>
           <li>
-            <strong>Cloudflare</strong> (co-op connection helper servers).
+            <strong>Cloudflare</strong> (a free STUN server that tells your
+            browser its public address for co-op; it sees your IP address).
           </li>
           <li>
             <strong>Push services</strong> run by your browser&apos;s maker
@@ -511,8 +589,15 @@ export default function PrivacyPage() {
             link to you.
           </li>
           <li>
-            <strong>Bug reports and survey answers</strong> you made stay but
-            are cut loose from your account when you delete it.
+            <strong>Bug reports (the text) and survey answers</strong> you made
+            stay but are cut loose from your account when you delete it.
+          </li>
+          <li>
+            <strong>Reports about reviews and profiles</strong> are kept in our
+            moderation queue while we look at them, and afterwards as a short
+            record of what we decided, so that repeat problems are noticed.{" "}
+            <Placeholder>OWNER: set a retention period for resolved moderation
+            reports; confirm what the merged code deletes</Placeholder>
           </li>
           <li>
             <strong>Invite links</strong>: removed about an hour after they
@@ -522,21 +607,23 @@ export default function PrivacyPage() {
           <li>
             <strong>Analytics</strong>: kept by PostHog for{" "}
             <Placeholder>PostHog retention setting</Placeholder>. Deleting your
-            account does not delete analytics, which are not tied to you; ask
-            us if you want us to look into removing a browser&apos;s data.
+            account does not delete analytics, which are not tied to you.
+            Switching analytics off clears the ID in your browser; ask us if
+            you want us to look into removing data already sent.
           </li>
           <li>
-            <strong>Beta clips and screenshots</strong>: see section 8.
-            <Placeholder>Not all files are yet deleted automatically when an
-            account is deleted: CONFIRM</Placeholder>
+            <strong>Beta clips and screenshots</strong>: 30 days if unresolved,
+            deleted at once when the report is fixed or closed, and when you
+            delete your account (section 8).
           </li>
           <li>
             <strong>Challenge links</strong> do not expire on their own. You can
             switch yours off.
           </li>
           <li>
-            Some small records (such as who blocked whom, or a review ban) are
-            kept after deletion to keep other people safe.
+            Some small records (such as who blocked whom, a review ban, or a
+            record that a report was made) are kept after deletion to keep
+            other people safe.
           </li>
         </ul>
       </LegalSection>
