@@ -43,6 +43,8 @@ export type StagingOverride = {
   platform: Game["platform"] | null;
   staged: boolean | null;
   coverUrl: string | null;
+  /** The overall quality rating (`quality.ts`); `null` = not rated. Optional so older callers compile. */
+  quality?: number | null;
 };
 
 /** Whether `game` is staged. Only an explicit `true` counts. */
@@ -74,6 +76,7 @@ export function applyOverride(game: Game, o: StagingOverride): Game {
     platform: o.platform ?? game.platform,
     staged: o.staged ?? game.staged,
     coverUrl: o.coverUrl ?? game.coverUrl,
+    quality: o.quality ?? game.quality,
   };
 }
 
@@ -93,7 +96,13 @@ export function mergeCatalogue(
     const o = bySlug.get(game.slug);
     return o ? applyOverride(game, o) : game;
   });
-  return [...mapped, ...external];
+  // An external game has no static twin to override, but a super admin's quality
+  // rating lives in the same row and must still reach it.
+  const rated = external.map((game) => {
+    const quality = bySlug.get(game.slug)?.quality;
+    return quality != null ? { ...game, quality } : game;
+  });
+  return [...mapped, ...rated];
 }
 
 /** Sorted, unique category list of `list`. */
