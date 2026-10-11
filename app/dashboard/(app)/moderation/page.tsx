@@ -79,12 +79,19 @@ import {
   type QueuedReport,
   type ReviewEntry,
 } from "@/app/lib/reviews/moderation";
+import { PROFILE_REPORT_REASONS } from "@/app/lib/profile-reports/config";
+import {
+  createProfileReportStore,
+  type QueuedProfileReport,
+} from "@/app/lib/profile-reports/store";
 import { DashHeader } from "../_ui/DashHeader";
 import { Section } from "../_ui/Section";
 import {
+  actionProfileReportAction,
   banAuthorAction,
   deleteReviewAction,
   dismissReportAction,
+  dismissProfileReportAction,
   dismissReporterAction,
   hideReviewAction,
   purgeReviewAction,
@@ -105,6 +112,8 @@ export const metadata: Metadata = {
  * binding costs a pointer.
  */
 const moderation = createModerationStore(sql);
+/** Profile ("report a player") reports; see `docs/profile-reports-design.md`. */
+const profileReports = createProfileReportStore(sql);
 
 /** One screen of work. The store clamps anything larger; this is the product choice. */
 const QUEUE_LIMIT = 50;
@@ -118,6 +127,8 @@ const QUEUE_LIMIT = 50;
 const RECENT_LIMIT = 25;
 /** Enough audit rows to see today's work without turning the page into a log viewer. */
 const LOG_LIMIT = 25;
+/** Profile reports shown at once; they are rarer and weightier than reviews. */
+const PROFILE_REPORT_LIMIT = 50;
 
 type SearchParams = Promise<{
   ok?: string | string[];
@@ -173,6 +184,8 @@ function reasonLabel(reason: string): string {
  * nuisance. It is a reading aid for a long queue, not a policy.
  */
 const REASON_TONE: Record<string, Tone> = {
+  inappropriate_name: "amber",
+  inappropriate_content: "amber",
   personal_info: "red",
   bullying: "red",
   hate: "red",
@@ -249,6 +262,20 @@ export default async function ModerationPage({
     else throw err;
   }
 
+  // Profile reports have their own migration, so they are read on their own: a
+  // database without `profile_reports` yet must not blank the review queue
+  // above (and vice versa). A real outage still throws.
+  let profileQueue: QueuedProfileReport[] = [];
+  let profileUnavailable = false;
+  if (!unavailable) {
+    try {
+      profileQueue = await profileReports.queue({ limit: PROFILE_REPORT_LIMIT });
+    } catch (err) {
+      if (isMissingColumnError(err)) profileUnavailable = true;
+      else throw err;
+    }
+  }
+
   // Slug → title for the "which game" link. Membership in this map IS
   // `isResolvedSlug()` — same resolved catalogue (static + external), read once
   // instead of once per card — so a slug that has since been removed renders as
@@ -310,6 +337,48 @@ export default async function ModerationPage({
           </code>{" "}
           and reload.
         </div>
+      )}
+
+      {/* Reports about PLAYERS come first: a name or a picture is a child being
+          harmed in public, and this list is short. */}
+      {!unavailable && profileUnavailable && (
+        <div className="mb-6 rounded-xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+          The profile reports schema is not on this database yet. Apply{" "}
+          <code className="font-mono">
+            app/lib/scoreboard/migrations/043_profile_reports.sql
+          </code>{" "}
+          and reload.
+        </div>
+      )}
+
+      {!unavailable && !profileUnavailable && (
+        <>
+          <ListHeading
+            title="Reported players"
+            subtitle={
+              profileQueue.length === 0
+                ? "nothing outstanding"
+                : `${plural(profileQueue.length, "open report", "open reports")} · newest first`
+            }
+          />
+          {profileQueue.length === 0 ? (
+            <div className="rounded-xl border border-border bg-surface p-8 text-center text-sm text-muted">
+              Nobody has reported a player.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {profileQueue.map((report) => (
+                <ProfileReportCard key={report.id} report={report} />
+              ))}
+            </div>
+          )}
+          {profileQueue.length === PROFILE_REPORT_LIMIT && (
+            <p className="mt-4 text-center text-xs text-muted">
+              Showing the {PROFILE_REPORT_LIMIT} newest reports. Clear some to see
+              the rest.
+            </p>
+          )}
+        </>
       )}
 
       {/* A plain heading rather than a `Section`: the cards below are already
@@ -436,6 +505,92 @@ function ListHeading({ title, subtitle }: { title: string; subtitle: string }) {
       </h2>
       <span className="text-xs text-muted">{subtitle}</span>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------ one profile report */
+
+const PROFILE_REASON_LABEL: Map<string, string> = new Map(
+  PROFILE_REPORT_REASONS.map((r) => [r.value, r.admin]),
+);
+
+/**
+ * One report about a player.
+ *
+ * The reported child is identified by their PUBLIC display name, `@username` and
+ * `public_id` only. Their Google `name` and email are not selected by the store,
+ * so there is nothing to render; the reporter is not selected either. The note
+ * is a child's free text, rendered as TEXT. The link goes to the public profile,
+ * which is what any player would see (and `/u/` is `noindex`).
+ */
+function ProfileReportCard({ report }: { report: QueuedProfileReport }) {
+  const { reported } = report;
+  return (
+    <article className="rounded-xl border border-border bg-surface p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-extrabold text-foreground">
+            {reported.displayName}
+          </p>
+          <p className="mt-0.5 break-all font-mono text-[11px] text-muted">
+            {reported.username ? (
+              <Link
+                href={`/u/${encodeURIComponent(reported.username)}`}
+                className="font-semibold text-brand hover:text-brand-600"
+              >
+                @{reported.username}
+              </Link>
+            ) : (
+              "no username"
+            )}{" "}
+            · {reported.publicId}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Chip tone={REASON_TONE[report.reason] ?? "zinc"}>
+            {PROFILE_REASON_LABEL.get(report.reason) ?? report.reason}
+          </Chip>
+          {report.openAgainstPlayer > 1 && (
+            <Chip
+              tone="red"
+              title="Open reports against this player, this one included."
+            >
+              {report.openAgainstPlayer} open against this player
+            </Chip>
+          )}
+          <span className="text-xs text-muted">{formatDateTime(report.createdAt)}</span>
+        </div>
+      </div>
+
+      {report.note && (
+        <p className="mt-3 whitespace-pre-wrap break-words rounded-lg bg-surface-2 px-3 py-2 text-sm text-foreground-2">
+          {report.note}
+        </p>
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <form action={actionProfileReportAction}>
+          <input type="hidden" name="profileReportId" value={report.id} />
+          <button
+            type="submit"
+            title="A person has dealt with this."
+            className="rounded-full bg-brand px-3 py-1 text-xs font-bold text-white transition hover:bg-brand-600"
+          >
+            Mark actioned
+          </button>
+        </form>
+        <form action={dismissProfileReportAction}>
+          <input type="hidden" name="profileReportId" value={report.id} />
+          <button
+            type="submit"
+            title="This report needs nothing doing."
+            className="rounded-full border border-border bg-surface px-3 py-1 text-xs font-bold text-foreground-2 transition hover:bg-surface-2"
+          >
+            Dismiss
+          </button>
+        </form>
+      </div>
+    </article>
   );
 }
 

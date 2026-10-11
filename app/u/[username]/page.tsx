@@ -74,6 +74,7 @@ import {
 } from "@/app/components/profile/AchievementWall";
 import { FriendButton } from "@/app/components/profile/FriendButton";
 import { ProfileHeader } from "@/app/components/profile/ProfileHeader";
+import { ReportButton } from "@/app/components/profile/ReportButton";
 import {
   RecentPlays,
   type RecentPlayCard,
@@ -236,6 +237,22 @@ export default async function ProfilePage({
     <FriendButton publicId={profile.publicId} displayName={profile.displayName} />
   ) : null;
 
+  // A signed-in viewer can report anyone but themselves — including from a
+  // minimal (private or blocked) profile, which already renders for them, so the
+  // button discloses nothing new. Guests never see it: the endpoint is
+  // signed-in only.
+  const reportButton =
+    viewerId && profile.friendship !== "self" ? (
+      <ReportButton publicId={profile.publicId} displayName={profile.displayName} />
+    ) : null;
+  const headerAction =
+    friendButton || reportButton ? (
+      <div className="flex flex-col items-start gap-2 sm:items-end">
+        {friendButton}
+        {reportButton}
+      </div>
+    ) : null;
+
   let body: React.ReactNode = null;
 
   if (lookup.visibility === "full") {
@@ -280,7 +297,7 @@ export default async function ProfilePage({
       activeCategory=""
     >
       <div className="mx-auto w-full max-w-5xl space-y-5 px-3 pb-10 pt-2 sm:px-8">
-        <ProfileHeader profile={profile} action={friendButton} />
+        <ProfileHeader profile={profile} action={headerAction} />
         {body}
       </div>
     </ArcadeShell>

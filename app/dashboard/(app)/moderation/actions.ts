@@ -53,13 +53,16 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
-import { sql } from "@/app/lib/db";
+import { isMissingColumnError, sql } from "@/app/lib/db";
 import {
   createModerationStore,
   type ReviewActionResult,
 } from "@/app/lib/reviews/moderation";
+import { createProfileReportStore } from "@/app/lib/profile-reports/store";
 
 const moderation = createModerationStore(sql);
+/** Bound here for the same reason `moderation` is: the factory is a bag of closures over `sql`. */
+const profileReports = createProfileReportStore(sql);
 
 /** Where every action lands; centralised so the path cannot drift from `page.tsx`. */
 const MODERATION_PATH = "/dashboard/moderation";
@@ -438,10 +441,72 @@ export async function unbanAuthorAction(formData: FormData): Promise<void> {
  */
 export async function openReportCountAction(): Promise<number> {
   await requireRole("admin");
+  let total = 0;
   try {
-    return await moderation.openReportCount();
+    total += await moderation.openReportCount();
   } catch (error) {
     console.error("[moderation] open report count failed", error);
-    return 0;
   }
+  // Profile reports are counted separately: the table arrives in its own
+  // migration, and its absence must not zero the review count above.
+  try {
+    total += await profileReports.openCount();
+  } catch (error) {
+    if (!isMissingColumnError(error)) {
+      console.error("[moderation] open profile report count failed", error);
+    }
+  }
+  return total;
+}
+
+/* ------------------------------------------------------------ profile reports */
+
+/**
+ * Close one profile report. Thin, like every action here: `requireRole` first,
+ * a validated id, a tight `try` around the one store call, `redirect()` outside
+ * it. The actor is the session's email, never a form field.
+ *
+ * "Actioned" means a human dealt with it (renamed or removed the profile, spoke
+ * to the child, escalated); "dismissed" means it needed nothing. Neither verb
+ * changes the reported player's account: that is a separate, deliberate step.
+ */
+async function resolveProfileReport(
+  formData: FormData,
+  status: "actioned" | "dismissed",
+): Promise<never> {
+  const { email: actor } = await requireRole("admin");
+
+  const id = readId(formData, "profileReportId");
+  if (id === null) back("error", "That profile report id was not valid.");
+
+  let result: { found: boolean; changed: boolean } | null = null;
+  try {
+    result = await profileReports.resolve({ id, status, actorEmail: actor });
+  } catch (error) {
+    console.error(`[moderation] profile report #${id} ${status} failed`, error);
+  }
+
+  if (!result) back("error", `Could not update profile report #${id} (database error).`);
+  if (!result.found) {
+    back("error", `Profile report #${id} no longer exists — the queue was stale.`);
+  }
+
+  revalidatePath(MODERATION_PATH);
+  const verb = status === "actioned" ? "marked actioned" : "dismissed";
+  back(
+    "ok",
+    result.changed
+      ? `Profile report #${id} ${verb}.`
+      : `Profile report #${id} was already closed.`,
+  );
+}
+
+/** The report was right and has been dealt with. */
+export async function actionProfileReportAction(formData: FormData): Promise<void> {
+  await resolveProfileReport(formData, "actioned");
+}
+
+/** The report needed nothing doing. */
+export async function dismissProfileReportAction(formData: FormData): Promise<void> {
+  await resolveProfileReport(formData, "dismissed");
 }
