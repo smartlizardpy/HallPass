@@ -45,6 +45,7 @@ const base: BetaReport = {
   createdAt: "2026-09-01T10:00:00.000Z",
   resolvedBy: null,
   resolvedAt: null,
+  mediaExpiredAt: null,
 };
 
 const withAuthor = (over: Partial<BetaReportWithAuthor> = {}): BetaReportWithAuthor => ({

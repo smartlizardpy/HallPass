@@ -191,6 +191,13 @@ export type BetaReport = {
   createdAt: string;
   resolvedBy: string | null;
   resolvedAt: string | null;
+  /**
+   * When the retention sweep removed this report's clip and/or screenshot, or
+   * null. Set only by `markMediaExpired`; the report text is untouched. Lets the
+   * UI say "removed after 30 days" instead of showing a report that looks as
+   * though it never had evidence.
+   */
+  mediaExpiredAt: string | null;
 };
 
 /** A report joined to its author's public display fields, for the admin queue. */
@@ -296,6 +303,7 @@ function mapReport(row: Row): BetaReport {
     createdAt: toIso(row.created_at),
     resolvedBy: toStrOrNull(row.resolved_by),
     resolvedAt: toIsoOrNull(row.resolved_at),
+    mediaExpiredAt: toIsoOrNull(row.media_expired_at),
   };
 }
 
@@ -839,7 +847,7 @@ export function createBetaStore(sql: Sql) {
                status, clip_blob_path, clip_url, clip_bytes, clip_ms,
                shot_blob_path, shot_url,
                error_log, error_count, moment_name, moment_data, device, created_at,
-               resolved_by, resolved_at
+               resolved_by, resolved_at, media_expired_at
         FROM beta_reports
         WHERE id = ${id}
       `;
@@ -865,6 +873,7 @@ export function createBetaStore(sql: Sql) {
                r.clip_ms, r.shot_blob_path, r.shot_url,
                r.error_log, r.error_count, r.moment_name, r.moment_data,
                r.device, r.created_at, r.resolved_by, r.resolved_at,
+               r.media_expired_at,
                p.username AS author_username,
                p.handle   AS author_handle,
                p.name     AS author_name
@@ -882,7 +891,7 @@ export function createBetaStore(sql: Sql) {
                status, clip_blob_path, clip_url, clip_bytes, clip_ms,
                shot_blob_path, shot_url,
                error_log, error_count, moment_name, moment_data, device, created_at,
-               resolved_by, resolved_at
+               resolved_by, resolved_at, media_expired_at
         FROM beta_reports
         WHERE player_id = ${playerId}
         ORDER BY created_at DESC
@@ -906,6 +915,7 @@ export function createBetaStore(sql: Sql) {
                r.clip_ms, r.shot_blob_path, r.shot_url,
                r.error_log, r.error_count, r.moment_name, r.moment_data,
                r.device, r.created_at, r.resolved_by, r.resolved_at,
+               r.media_expired_at,
                p.username AS author_username,
                p.handle   AS author_handle,
                p.name     AS author_name
@@ -1019,7 +1029,11 @@ export function createBetaStore(sql: Sql) {
        * needs a third: Fixed pays acceptance plus bonus, Duplicate pays one.
        */
       awards: { amount: number; reason: string }[];
-    }): Promise<{ applied: boolean; clipBlobPath: string | null }> {
+    }): Promise<{
+      applied: boolean;
+      clipBlobPath: string | null;
+      shotBlobPath: string | null;
+    }> {
       const first = input.awards[0] ?? { amount: 0, reason: "" };
       const second = input.awards[1] ?? { amount: 0, reason: "" };
 
@@ -1048,16 +1062,19 @@ export function createBetaStore(sql: Sql) {
         )
         SELECT id FROM target
       `;
-      if (paid.length === 0) return { applied: false, clipBlobPath: null };
+      if (paid.length === 0) {
+        return { applied: false, clipBlobPath: null, shotBlobPath: null };
+      }
 
       const removed = await sql`
         DELETE FROM beta_reports
         WHERE id = ${input.id} AND status <> 'rejected'
-        RETURNING clip_blob_path
+        RETURNING clip_blob_path, shot_blob_path
       `;
       return {
         applied: removed.length > 0,
         clipBlobPath: toStrOrNull(removed[0]?.clip_blob_path),
+        shotBlobPath: toStrOrNull(removed[0]?.shot_blob_path),
       };
     },
 
@@ -1089,18 +1106,107 @@ export function createBetaStore(sql: Sql) {
       `;
     },
 
-    /** Clips older than `days`, for the retention sweep. */
-    async expiredClips(days: number): Promise<{ id: number; blobPath: string }[]> {
+    /**
+     * Reports whose clip and/or screenshot are past retention, OLDEST FIRST, at
+     * most `limit` of them (the sweep's bounded batch).
+     *
+     * Clips and screenshots live on the same row (`clip_blob_path` /
+     * `shot_blob_path`), so one query covers both; a row qualifies while EITHER
+     * pointer is still set. Status is deliberately not filtered: triage clears
+     * the clip but leaves a pinned screenshot, and after the window neither is
+     * wanted. A row whose pointers were cleared drops out of this query, which is
+     * what makes the sweep resumable.
+     *
+     * `days` is clamped to at least one so a bad config value cannot select every
+     * report ever filed; `limit` to 1..500 for the same reason.
+     */
+    async expiredMedia(
+      days: number,
+      limit = 50,
+    ): Promise<{ id: number; clipBlobPath: string | null; shotBlobPath: string | null }[]> {
       const rows = await sql`
-        SELECT id, clip_blob_path
+        SELECT id, clip_blob_path, shot_blob_path
         FROM beta_reports
-        WHERE clip_blob_path IS NOT NULL
-          AND created_at < now() - make_interval(days => ${Math.max(1, days)})
+        WHERE (clip_blob_path IS NOT NULL OR shot_blob_path IS NOT NULL)
+          AND created_at < now() - make_interval(days => ${Math.max(1, Math.floor(days))})
+        ORDER BY created_at ASC
+        LIMIT ${Math.max(1, Math.min(500, Math.floor(limit)))}
       `;
       return rows.map((row) => ({
         id: toInt(row.id),
-        blobPath: String(row.clip_blob_path),
+        clipBlobPath: toStrOrNull(row.clip_blob_path),
+        shotBlobPath: toStrOrNull(row.shot_blob_path),
       }));
+    },
+
+    /**
+     * Forget the media of one report AFTER its objects are gone from Blob, and
+     * stamp `media_expired_at` so the UI can say why it is missing.
+     *
+     * Each flag clears only its own pair of columns, so a report whose clip
+     * delete succeeded and whose screenshot delete failed keeps the screenshot
+     * pointer and is picked up again next run.
+     */
+    async markMediaExpired(
+      reportId: number,
+      cleared: { clip: boolean; shot: boolean },
+    ): Promise<void> {
+      if (!cleared.clip && !cleared.shot) return;
+      await sql`
+        UPDATE beta_reports
+        SET clip_blob_path = CASE WHEN ${cleared.clip} THEN NULL ELSE clip_blob_path END,
+            clip_url       = CASE WHEN ${cleared.clip} THEN NULL ELSE clip_url END,
+            clip_bytes     = CASE WHEN ${cleared.clip} THEN 0 ELSE clip_bytes END,
+            clip_ms        = CASE WHEN ${cleared.clip} THEN 0 ELSE clip_ms END,
+            shot_blob_path = CASE WHEN ${cleared.shot} THEN NULL ELSE shot_blob_path END,
+            shot_url       = CASE WHEN ${cleared.shot} THEN NULL ELSE shot_url END,
+            media_expired_at = now()
+        WHERE id = ${reportId}
+      `;
+    },
+
+    /**
+     * Every Blob key a player owns, for account deletion. Read BEFORE the player
+     * row goes: `beta_reports` and `beta_shots` are `ON DELETE SET NULL`, so
+     * afterwards `player_id` is null and there is no key left to find them by.
+     *
+     * Reports carry clip and screenshot evidence. Staged `beta_shots` are
+     * included only while NOT accepted: an accepted one may still be the source
+     * of a gallery copy that has not been published yet, and the published copy
+     * itself is public gallery content, not tester evidence.
+     */
+    async mediaOwnedBy(playerId: string): Promise<{
+      reports: { id: number; clipBlobPath: string | null; shotBlobPath: string | null }[];
+      shots: { id: string; blobPath: string }[];
+    }> {
+      const reports = await sql`
+        SELECT id, clip_blob_path, shot_blob_path
+        FROM beta_reports
+        WHERE player_id = ${playerId}
+          AND (clip_blob_path IS NOT NULL OR shot_blob_path IS NOT NULL)
+      `;
+      const shots = await sql`
+        SELECT id, blob_path
+        FROM beta_shots
+        WHERE player_id = ${playerId} AND status <> 'accepted'
+      `;
+      return {
+        reports: reports.map((row) => ({
+          id: toInt(row.id),
+          clipBlobPath: toStrOrNull(row.clip_blob_path),
+          shotBlobPath: toStrOrNull(row.shot_blob_path),
+        })),
+        shots: shots.map((row) => ({
+          id: String(row.id),
+          blobPath: String(row.blob_path),
+        })),
+      };
+    },
+
+    /** Delete staged shot rows whose objects have been removed from Blob. */
+    async deleteShots(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      await sql`DELETE FROM beta_shots WHERE id = ANY(${ids})`;
     },
 
     /** Reports filed by one player inside the rate-limit window. */
