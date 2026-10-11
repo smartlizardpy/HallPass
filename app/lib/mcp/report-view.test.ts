@@ -122,6 +122,25 @@ describe("toReportSummary", () => {
     });
   });
 
+  it("says when the evidence was expired rather than never attached", () => {
+    const expired = {
+      ...base,
+      clipUrl: null,
+      shotUrl: null,
+      mediaExpiredAt: "2026-02-01T00:00:00.000Z",
+    };
+    expect(toReportSummary(base).mediaRemoved).toBe(false);
+    expect(toReportSummary(expired)).toMatchObject({
+      hasClip: false,
+      hasScreenshot: false,
+      mediaRemoved: true,
+    });
+    const note = toReportDetail(withAuthor(expired)).mediaNote;
+    expect(note).toContain("2026-02-01");
+    expect(note).toContain("30 days");
+    expect(toReportDetail(withAuthor()).mediaNote).toBeNull();
+  });
+
   it("carries the fields needed to choose what to work on", () => {
     expect(toReportSummary(base)).toMatchObject({
       id: 7,
