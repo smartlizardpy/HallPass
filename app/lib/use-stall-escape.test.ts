@@ -6,7 +6,7 @@
  * hands back arms the watcher for the tapped href.
  */
 
-import { act, createElement } from "react";
+import { act, createElement, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,11 +20,15 @@ vi.mock("./stall-escape", () => ({ createStallEscape: () => ({ watch, cancel }) 
 import { useStallEscape } from "./use-stall-escape";
 
 let armed: ((href: string) => void) | null = null;
-function Probe() {
-  armed = useStallEscape();
+function Probe({ onReady }: { onReady: (fn: (href: string) => void) => void }) {
+  const stall = useStallEscape();
+  useEffect(() => onReady(stall), [stall, onReady]);
   return null;
 }
-const render = () => createElement(Probe);
+const onReady = (fn: (href: string) => void) => {
+  armed = fn;
+};
+const render = () => createElement(Probe, { onReady });
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
