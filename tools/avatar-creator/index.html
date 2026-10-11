@@ -31,13 +31,11 @@
       </section>
       <section class="editor" aria-labelledby="selected-name">
         <div class="section-heading"><div><p id="selected-category" class="eyebrow">INTERNET</p><h2 id="selected-name">GigaChad</h2></div><a id="reference" target="_blank" rel="noopener noreferrer">View reference ↗</a></div>
-        <div class="stage"><canvas id="preview" width="512" height="512" aria-label="Selected avatar preview">Your browser needs canvas support to preview and export avatars.</canvas><p>Drag to position · transparent outside the circle</p></div>
+        <div class="stage"><canvas id="preview" width="512" height="512" aria-label="Selected avatar preview">Your browser needs canvas support to preview and export avatars.</canvas><p>Choose your face and colour · framing is fixed</p></div>
         <div class="controls">
           <div class="colour-heading"><h3>Background colour</h3><label class="custom-colour">Custom <input id="colour" type="color" value="#c5b8ff" aria-label="Custom background colour"></label></div>
           <div id="palette" class="palette" aria-label="Background colours"></div>
-          <div class="range-control"><label for="scale">Size <output id="scale-value">100%</output></label><input id="scale" type="range" min="40" max="200" value="100"></div>
-          <div class="placement"><div class="range-control"><label for="x">Horizontal <output id="x-value">0%</output></label><input id="x" type="range" min="-50" max="50" value="0"></div><div class="range-control"><label for="y">Vertical <output id="y-value">0%</output></label><input id="y" type="range" min="-50" max="50" value="0"></div></div>
-          <div class="minor-actions"><button id="random-colour">Shuffle colour</button><button id="reset">Reset face</button><label class="button">Replace cutout<input id="replace" type="file" accept="image/png,image/webp,image/jpeg" hidden></label></div>
+          <div class="minor-actions"><button id="random-colour">Shuffle colour</button><button id="reset">Reset colour</button></div>
         </div>
         <div class="export-actions"><button id="export-png" class="primary" disabled>Download PNG ↗</button><button id="export-pack" disabled>Export all 33 as ZIP</button></div>
         <p class="export-note">512 × 512 PNG · circular background · transparent corners</p>
@@ -45,6 +43,6 @@
       </section>
     </div>
   </main>
-  <footer>Made for the collection. All editing happens in this browser.<span>No accounts. No uploads.</span></footer>
+  <footer>Made for the collection. Choose a face and colour in this browser.<span>No accounts. No uploads.</span></footer>
 </body>
 </html>

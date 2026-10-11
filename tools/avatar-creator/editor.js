@@ -3,20 +3,24 @@
   "use strict";
   const core = AvatarCore, catalogue = AvatarCatalogue;
   const byId = id => document.getElementById(id);
-  const images = new Map(), replacements = new Map(), thumbs = new Map();
-  const storageKey = "avatar-studio:project:v1";
+  const images = new Map(), thumbs = new Map();
+  const storageKey = "avatar-studio:choices:v2";
   let values = core.readProject({ version: 1, avatars: {} }, catalogue);
-  let selected = catalogue[0].id, drag = null, exporting = false, storageWarning = false;
+  let selected = catalogue[0].id, exporting = false, storageWarning = false;
 
   function announce(text, error = false) { byId("status").textContent = text; byId("status").classList.toggle("error", error); }
-  function project() { return { version: 1, avatars: values }; }
+  function project() { return { version: 1, selectedAvatar: selected, avatars: values }; }
   function persist() {
     try { localStorage.setItem(storageKey, JSON.stringify(project())); }
     catch { storageWarning = true; }
   }
   try {
     const saved = localStorage.getItem(storageKey);
-    if (saved) values = core.readProject(JSON.parse(saved), catalogue);
+    if (saved) {
+      const restored = JSON.parse(saved);
+      values = core.readProject(restored, catalogue);
+      if (catalogue.some(item => item.id === restored.selectedAvatar)) selected = restored.selectedAvatar;
+    }
   } catch { storageWarning = true; }
 
   const entry = () => catalogue.find(item => item.id === selected);
@@ -31,23 +35,19 @@
     byId("selected-category").textContent = item.category;
     byId("reference").href = item.reference;
     byId("colour").value = value.color;
-    for (const key of ["scale", "x", "y"]) {
-      byId(key).value = Math.round(value[key] * 100);
-      byId(`${key}-value`).value = `${Math.round(value[key] * 100)}%`;
-    }
     document.querySelectorAll(".swatch").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.colour === value.color)));
     byId("export-png").disabled = !images.has(selected) || exporting;
     byId("export-pack").disabled = images.size !== catalogue.length || exporting;
   }
   function select(id) {
-    selected = id;
+    selected = id; persist();
     document.querySelectorAll(".face").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.id === id)));
     byId("preview").getContext("2d").clearRect(0, 0, 512, 512);
     updateControls(); redraw(id);
-    announce(images.has(id) ? `${entry().name} selected.${storageWarning ? " Use Save project to keep your edits." : ""}` : "This cutout could not load. Use Replace cutout to supply it.", !images.has(id));
+    announce(images.has(id) ? `${entry().name} selected.${storageWarning ? " Use Save project to keep your edits." : ""}` : "This avatar could not load. Please choose another face.", !images.has(id));
   }
   function change(patch) {
-    values[selected] = core.settings({ ...values[selected], ...patch }, entry().defaults);
+    values[selected] = { ...entry().defaults, color: core.settings(patch, values[selected]).color };
     persist(); updateControls(); redraw(selected);
   }
   for (const category of [...new Set(catalogue.map(item => item.category))]) {
@@ -72,7 +72,6 @@
     byId("count").textContent = `${count} ${count === 1 ? "face" : "faces"}`; byId("empty").hidden = count > 0;
   }
   byId("search").addEventListener("input", filter); byId("category").addEventListener("change", filter);
-  for (const key of ["scale", "x", "y"]) byId(key).addEventListener("input", event => change({ [key]: Number(event.target.value) / 100 }));
   byId("colour").addEventListener("input", event => change({ color: event.target.value }));
   byId("random-colour").addEventListener("click", () => {
     const alternatives = core.palette.filter(colour => colour !== values[selected].color);
@@ -80,38 +79,16 @@
   });
   byId("reset").addEventListener("click", () => { values[selected] = { ...entry().defaults }; persist(); updateControls(); redraw(selected); });
 
-  const preview = byId("preview");
-  preview.addEventListener("pointerdown", event => {
-    if (!images.has(selected)) return;
-    drag = { pointer: event.pointerId, x: event.clientX, y: event.clientY, initial: { ...values[selected] } }; preview.setPointerCapture(event.pointerId);
-  });
-  preview.addEventListener("pointermove", event => {
-    if (!drag || drag.pointer !== event.pointerId) return;
-    const size = preview.getBoundingClientRect().width;
-    change({ x: drag.initial.x + (event.clientX - drag.x) / size, y: drag.initial.y + (event.clientY - drag.y) / size });
-  });
-  for (const name of ["pointerup", "pointercancel", "lostpointercapture"]) preview.addEventListener(name, () => { drag = null; });
-
   function download(blob, filename) {
     const url = URL.createObjectURL(blob), link = document.createElement("a"); link.href = url; link.download = filename; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
   function png(canvas) { return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("PNG export failed")), "image/png")); }
   function decode(src) { return new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve(image); image.onerror = () => reject(new Error("Image could not be decoded")); image.src = src; }); }
-  function fileData(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error("File could not be read")); reader.readAsDataURL(file); }); }
-  byId("save-project").addEventListener("click", () => { download(new Blob([JSON.stringify(project(), null, 2)], { type: "application/json" }), "avatar-project.json"); announce("Project saved. It contains your colours and placements."); });
+  byId("save-project").addEventListener("click", () => { download(new Blob([JSON.stringify(project(), null, 2)], { type: "application/json" }), "avatar-project.json"); announce("Choices saved. Avatar framing is fixed."); });
   byId("open-project").addEventListener("change", async event => {
     const file = event.target.files[0]; if (!file) return;
-    try { if (file.size > 1024 * 1024) throw new Error("Project file is too large"); values = core.readProject(JSON.parse(await file.text()), catalogue); persist(); catalogue.forEach(item => redraw(item.id)); updateControls(); announce("Project restored."); }
+    try { if (file.size > 1024 * 1024) throw new Error("Project file is too large"); values = core.readProject(JSON.parse(await file.text()), catalogue); persist(); catalogue.forEach(item => redraw(item.id)); updateControls(); announce("Colours restored. Avatar framing is fixed."); }
     catch (error) { announce(error.message, true); }
-    event.target.value = "";
-  });
-  byId("replace").addEventListener("change", async event => {
-    const file = event.target.files[0], id = selected; if (!file) return;
-    try {
-      if (file.size > 15 * 1024 * 1024) throw new Error("Choose an image smaller than 15 MB");
-      const source = await fileData(file), image = await decode(source); if (image.naturalWidth * image.naturalHeight > 25000000) throw new Error("Choose an image below 25 megapixels");
-      images.set(id, image); replacements.set(id, source); redraw(id); updateControls(); announce("Cutout replaced for this session. Use PNG or ZIP export to keep it.");
-    } catch (error) { announce(error.message, true); }
     event.target.value = "";
   });
   byId("export-png").addEventListener("click", async () => {
@@ -121,11 +98,11 @@
   byId("export-pack").addEventListener("click", async () => {
     exporting = true; updateControls();
     try {
-      const snapshot = core.readProject(project(), catalogue), encoder = new TextEncoder();
+      const snapshot = core.readProject(project(), catalogue), imageSnapshot = new Map(images), encoder = new TextEncoder();
       const files = [{ name: "catalogue.json", data: encoder.encode(JSON.stringify(core.manifest(catalogue, snapshot), null, 2)) }];
       for (const [index, item] of catalogue.entries()) {
         announce(`Preparing ${index + 1} of ${catalogue.length}…`);
-        const image = images.get(item.id), avatar = document.createElement("canvas"), cutout = document.createElement("canvas");
+        const image = imageSnapshot.get(item.id), avatar = document.createElement("canvas"), cutout = document.createElement("canvas");
         core.draw(avatar, image, snapshot[item.id]); cutout.width = image.naturalWidth; cutout.height = image.naturalHeight; cutout.getContext("2d").drawImage(image, 0, 0);
         files.push({ name: `avatars/${item.id}.png`, data: new Uint8Array(await (await png(avatar)).arrayBuffer()) }, { name: `cutouts/${item.id}.png`, data: new Uint8Array(await (await png(cutout)).arrayBuffer()) });
       }
@@ -139,6 +116,6 @@
     images.set(item.id, image); redraw(item.id);
   })).then(results => {
     updateControls(); const failed = results.filter(result => result.status === "rejected").length;
-    announce(failed ? `${failed} cutouts could not load. Select a missing face and use Replace cutout.` : `All 33 faces ready.${storageWarning ? " Browser storage is unavailable; use Save project." : " Your edits are saved in this browser."}`, failed > 0);
+    announce(failed ? `${failed} ${failed === 1 ? "avatar" : "avatars"} could not load. Please choose an available face.` : `All 33 faces ready.${storageWarning ? " Browser storage is unavailable; use Save project." : " Your colours are saved in this browser."}`, failed > 0);
   });
 })();

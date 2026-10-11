@@ -1,0 +1,561 @@
+{
+  "version": 1,
+  "method": "Original images; Python background removal",
+  "avatars": [
+    {
+      "id": "gigachad",
+      "name": "GigaChad",
+      "page": "https://knowyourmeme.com/memes/gigachad",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/026/152/gigachadd.jpg",
+      "crop": [
+        0.27,
+        0,
+        0.75,
+        0.94
+      ]
+    },
+    {
+      "id": "mocking-spongebob",
+      "name": "Mocking SpongeBob",
+      "page": "https://knowyourmeme.com/memes/mocking-spongebob",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/022/940/mockingspongebobbb.jpg"
+    },
+    {
+      "id": "caveman-spongebob",
+      "name": "Caveman SpongeBob",
+      "page": "https://knowyourmeme.com/memes/spongegar-primitive-sponge",
+      "image": "https://i.imgflip.com/14wa6i.jpg"
+    },
+    {
+      "id": "surprised-pikachu",
+      "name": "Surprised Pikachu",
+      "page": "https://knowyourmeme.com/memes/surprised-pikachu",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/027/475/Screen_Shot_2018-10-25_at_11.02.15_AM.png",
+      "mask": [
+        [
+          0.12,
+          0
+        ],
+        [
+          0.33,
+          0.2
+        ],
+        [
+          0.4,
+          0.25
+        ],
+        [
+          0.66,
+          0.26
+        ],
+        [
+          0.9,
+          0.01
+        ],
+        [
+          0.98,
+          0.04
+        ],
+        [
+          1,
+          0.23
+        ],
+        [
+          0.86,
+          0.42
+        ],
+        [
+          0.86,
+          0.69
+        ],
+        [
+          0.9,
+          0.97
+        ],
+        [
+          0.84,
+          1
+        ],
+        [
+          0.19,
+          1
+        ],
+        [
+          0.13,
+          0.78
+        ],
+        [
+          0.14,
+          0.54
+        ],
+        [
+          0.05,
+          0.28
+        ]
+      ],
+      "crop": [
+        0.15,
+        0,
+        0.99,
+        1
+      ]
+    },
+    {
+      "id": "crying-cat",
+      "name": "Crying Cat",
+      "page": "https://knowyourmeme.com/memes/crying-cat",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/026/489/crying.jpg",
+      "crop": [
+        0.28,
+        0,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "polite-cat",
+      "name": "Polite Cat",
+      "page": "https://knowyourmeme.com/memes/polite-cat",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/026/638/cat.jpg"
+    },
+    {
+      "id": "smudge-cat",
+      "name": "Smudge the Cat",
+      "page": "https://knowyourmeme.com/memes/woman-yelling-at-a-cat",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/030/157/womanyellingcat.jpg",
+      "crop": [
+        0.64,
+        0.18,
+        0.96,
+        0.63
+      ]
+    },
+    {
+      "id": "cheems",
+      "name": "Cheems",
+      "page": "https://knowyourmeme.com/memes/cheems",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/031/994/Screen_Shot_2019-12-02_at_11.23.01_AM.png",
+      "crop": [
+        0.3,
+        0.05,
+        0.79,
+        0.95
+      ]
+    },
+    {
+      "id": "roll-safe",
+      "name": "Roll Safe",
+      "page": "https://knowyourmeme.com/memes/roll-safe",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/022/138/highresrollsafe.jpg"
+    },
+    {
+      "id": "nick-young",
+      "name": "Confused Nick Young",
+      "page": "https://knowyourmeme.com/memes/confused-nick-young-swaggy-p",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/018/489/nick-young-confused-face-300x256-nqlyaa.jpg",
+      "crop": [
+        0.23,
+        0,
+        0.83,
+        1
+      ]
+    },
+    {
+      "id": "blinking-guy",
+      "name": "Blinking White Guy",
+      "page": "https://tenor.com/view/drew-scanlon-blonde-guy-blinking-eyes-shocked-confused-gif-3096038337189810639",
+      "image": "https://media1.tenor.com/m/KvdWdtMwkc8AAAAC/drew-scanlon-blonde-guy.gif",
+      "frame": 0,
+      "crop": [
+        0.04,
+        0,
+        0.9,
+        0.86
+      ]
+    },
+    {
+      "id": "jake-peralta",
+      "name": "Jake Peralta · Excited",
+      "page": "https://imgflip.com/memetemplate/66360599/Jake-Peralta",
+      "image": "https://i.imgflip.com/13ic5z.jpg",
+      "crop": [
+        0,
+        0,
+        0.69,
+        0.84
+      ],
+      "frame": 0
+    },
+    {
+      "id": "savage-patrick",
+      "name": "Savage Patrick",
+      "page": "https://knowyourmeme.com/memes/savage-patrick",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/025/580/Screen_Shot_2018-03-01_at_12.59.37_PM.png"
+    },
+    {
+      "id": "squidward",
+      "name": "Squidward",
+      "page": "https://imgflip.com/memetemplate/470226087",
+      "image": "https://i.imgflip.com/7rykrr.jpg",
+      "crop": [
+        0,
+        0.01,
+        0.42,
+        0.33
+      ]
+    },
+    {
+      "id": "doge",
+      "name": "Doge",
+      "page": "https://knowyourmeme.com/memes/doge",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/013/564/doge.jpg"
+    },
+    {
+      "id": "side-eye-dog",
+      "name": "Side Eye Dog",
+      "page": "https://knowyourmeme.com/memes/side-eye-dog",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/041/444/sdc.jpg"
+    },
+    {
+      "id": "pop-cat",
+      "name": "Pop Cat",
+      "page": "https://knowyourmeme.com/memes/pop-cat",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/035/692/cover1.jpg",
+      "crop": [
+        0.51,
+        0,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "monkey-puppet",
+      "name": "Monkey Puppet",
+      "page": "https://knowyourmeme.com/memes/monkey-puppet",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/025/404/1460154368-hqdefault.jpg"
+    },
+    {
+      "id": "harold",
+      "name": "Hide the Pain Harold",
+      "page": "https://knowyourmeme.com/memes/hide-the-pain-harold",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/016/546/hidethepainharold.jpg",
+      "crop": [
+        0.4,
+        0,
+        1,
+        0.96
+      ]
+    },
+    {
+      "id": "math-lady",
+      "name": "Confused Math Lady",
+      "page": "https://knowyourmeme.com/memes/confused-math-lady",
+      "image": "https://i.kym-cdn.com/photos/images/original/001/179/536/c7f.gif",
+      "frame": 0,
+      "crop": [
+        0.1,
+        0,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "kermit-tea",
+      "name": "Kermit Sipping Tea",
+      "page": "https://knowyourmeme.com/memes/kermit-sipping-tea-but-thats-none-of-my-business",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/015/878/thatsnoneofmy.jpg"
+    },
+    {
+      "id": "elmo-rise",
+      "name": "Elmo Rise",
+      "page": "https://knowyourmeme.com/memes/elmo-rise",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/022/134/elmo.jpg"
+    },
+    {
+      "id": "this-is-fine",
+      "name": "This Is Fine",
+      "page": "https://knowyourmeme.com/memes/this-is-fine",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/018/012/this_is_fine.jpeg",
+      "crop": [
+        0.28,
+        0.23,
+        0.6,
+        0.92
+      ],
+      "mask": [
+        [
+          0.19,
+          0.07
+        ],
+        [
+          0.43,
+          0.01
+        ],
+        [
+          0.53,
+          0.1
+        ],
+        [
+          0.55,
+          0.21
+        ],
+        [
+          0.85,
+          0.3
+        ],
+        [
+          0.98,
+          0.38
+        ],
+        [
+          0.97,
+          0.52
+        ],
+        [
+          0.84,
+          0.59
+        ],
+        [
+          0.75,
+          0.76
+        ],
+        [
+          0.61,
+          0.91
+        ],
+        [
+          0.28,
+          0.95
+        ],
+        [
+          0.08,
+          0.7
+        ],
+        [
+          0.03,
+          0.36
+        ]
+      ]
+    },
+    {
+      "id": "saban",
+      "name": "Şaban · Kemal Sunal",
+      "page": "https://hthayat.haberturk.com/en-iyi-inek-saban-capsleri-1028914",
+      "image": "https://im.haberturk.com/hh/2015/04/22/ver1478850166/1028914/jpg/1200x628",
+      "crop": [
+        0.43,
+        0.04,
+        0.78,
+        0.91
+      ]
+    },
+    {
+      "id": "erdal-bakkal",
+      "name": "Erdal Bakkal",
+      "page": "https://tenor.com/view/cengiz-bozkurt-erdal-bakkal-leyla-ile-mecnun-bu-neyin-kafas%C4%B1ya-bu-neyin-gif-24504386",
+      "image": "https://media1.tenor.com/m/SRJiogmNyvEAAAAC/cengiz-bozkurt-erdal-bakkal.gif",
+      "crop": [
+        0.46,
+        0.08,
+        0.75,
+        0.78
+      ]
+    },
+    {
+      "id": "anya",
+      "name": "Anya · Heh",
+      "page": "https://imgflip.com/memesearch?q=anya+heh",
+      "image": "https://i.imgflip.com/6gejmw.png"
+    },
+    {
+      "id": "saitama",
+      "name": "Saitama · OK",
+      "page": "https://knowyourmeme.com/memes/saitama-ok",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/019/649/OK_thumb.png",
+      "crop": [
+        0.06,
+        0.04,
+        0.61,
+        0.96
+      ],
+      "mask": [
+        [
+          0.13,
+          0.02
+        ],
+        [
+          0.49,
+          0
+        ],
+        [
+          0.74,
+          0.08
+        ],
+        [
+          0.92,
+          0.22
+        ],
+        [
+          0.98,
+          0.49
+        ],
+        [
+          0.93,
+          0.7
+        ],
+        [
+          0.83,
+          0.85
+        ],
+        [
+          0.78,
+          0.95
+        ],
+        [
+          0.55,
+          1
+        ],
+        [
+          0.15,
+          0.95
+        ],
+        [
+          0.18,
+          0.72
+        ],
+        [
+          0.07,
+          0.53
+        ],
+        [
+          0.04,
+          0.25
+        ]
+      ]
+    },
+    {
+      "id": "gojo",
+      "name": "Gojo · Nah, I’d win",
+      "page": "https://knowyourmeme.com/memes/nah-id-win",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/047/210/nah_id_win.jpg",
+      "crop": [
+        0.05,
+        0,
+        0.67,
+        1
+      ]
+    },
+    {
+      "id": "enel",
+      "name": "Enel · Shocked",
+      "page": "https://imgflip.com/memesearch?q=enel",
+      "image": "https://i.imgflip.com/3vx3wb.png"
+    },
+    {
+      "id": "chopper",
+      "name": "Chopper · Crying",
+      "page": "https://knowyourmeme.com/memes/chopper-crying",
+      "image": "https://i.kym-cdn.com/entries/icons/original/000/042/079/chopcrycover.jpg",
+      "crop": [
+        0.23,
+        0.08,
+        0.73,
+        0.93
+      ]
+    },
+    {
+      "id": "totoro",
+      "name": "Totoro",
+      "page": "https://www.ghibli.jp/works/totoro/",
+      "image": "https://www.ghibli.jp/gallery/totoro030.jpg",
+      "crop": [
+        0.18,
+        0,
+        0.88,
+        0.98
+      ],
+      "mask": [
+        [
+          0.02,
+          0.31
+        ],
+        [
+          0.09,
+          0.2
+        ],
+        [
+          0.18,
+          0.07
+        ],
+        [
+          0.32,
+          0
+        ],
+        [
+          0.69,
+          0
+        ],
+        [
+          0.82,
+          0.07
+        ],
+        [
+          0.93,
+          0.2
+        ],
+        [
+          0.98,
+          0.45
+        ],
+        [
+          1,
+          0.68
+        ],
+        [
+          0.93,
+          0.88
+        ],
+        [
+          0.8,
+          0.98
+        ],
+        [
+          0.23,
+          1
+        ],
+        [
+          0.07,
+          0.88
+        ],
+        [
+          0,
+          0.64
+        ]
+      ]
+    },
+    {
+      "id": "jiji",
+      "name": "Jiji",
+      "page": "https://www.ghibli.jp/works/majo/",
+      "image": "https://www.ghibli.jp/gallery/majo018.jpg",
+      "crop": [
+        0.315,
+        0.375,
+        0.445,
+        0.665
+      ]
+    },
+    {
+      "id": "no-face",
+      "name": "No-Face",
+      "page": "https://www.ghibli.jp/works/chihiro/",
+      "image": "https://www.ghibli.jp/gallery/chihiro044.jpg",
+      "crop": [
+        0.08,
+        0.01,
+        0.34,
+        0.8
+      ]
+    }
+  ]
+}

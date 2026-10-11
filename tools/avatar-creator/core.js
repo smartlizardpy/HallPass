@@ -36,7 +36,10 @@
   function readProject(raw, catalogue) {
     if (!raw || raw.version !== 1 || !raw.avatars || typeof raw.avatars !== "object" || Array.isArray(raw.avatars)) throw new Error("Choose an Avatar Studio project (version 1)");
     const result = {};
-    for (const entry of catalogue) result[entry.id] = settings(raw.avatars[entry.id], entry.defaults);
+    for (const entry of catalogue) {
+      const value = settings(raw.avatars[entry.id], entry.defaults);
+      result[entry.id] = { ...entry.defaults, color: value.color };
+    }
     return result;
   }
 
@@ -46,7 +49,7 @@
       avatars: catalogue.map(entry => ({
         id: entry.id, name: entry.name, category: entry.category, reference: entry.reference,
         src: `avatars/${entry.id}.png`, cutout: `cutouts/${entry.id}.png`,
-        ...settings(values[entry.id], entry.defaults),
+        ...entry.defaults, color: settings(values[entry.id], entry.defaults).color,
       })),
     };
   }

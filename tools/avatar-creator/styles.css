@@ -34,8 +34,7 @@ h2 { font-size: 21px; letter-spacing: -.6px; margin: 0; }
 .editor { background: #fffdf8; border: 1px solid var(--line); border-radius: 18px; padding: 24px; }
 .editor .eyebrow { font-size: 9px; margin-bottom: 4px; }
 .stage { background-color: #ece8df; background-image: linear-gradient(45deg, #e3dfd5 25%, transparent 25%), linear-gradient(-45deg, #e3dfd5 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e3dfd5 75%), linear-gradient(-45deg, transparent 75%, #e3dfd5 75%); background-size: 24px 24px; background-position: 0 0, 0 12px, 12px -12px, -12px 0; border-radius: 12px; padding: 22px 16px 12px; text-align: center; }
-#preview { display: block; width: min(100%, 290px); height: auto; margin: auto; touch-action: none; cursor: grab; }
-#preview:active { cursor: grabbing; }
+#preview { display: block; width: min(100%, 290px); height: auto; margin: auto; }
 .stage p { font-size: 10px; color: #6a6258; margin: 12px 0 0; }
 .controls { padding-top: 20px; }
 .colour-heading { display: flex; justify-content: space-between; align-items: center; }
@@ -45,10 +44,6 @@ input[type="color"] { width: 34px; height: 34px; padding: 0; border: 0; backgrou
 .palette { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 20px; }
 .swatch { min-height: 34px; width: 34px; border-radius: 50%; padding: 0; border: 2px solid #fff; box-shadow: 0 0 0 1px #dedad2; }
 .swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ink); }
-.range-control label { display: flex; justify-content: space-between; font-size: 12px; }
-output { font-variant-numeric: tabular-nums; color: var(--muted); }
-input[type="range"] { width: 100%; margin: 10px 0 14px; accent-color: var(--accent); }
-.placement { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .minor-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 2px; }
 .minor-actions button, .minor-actions .button { font-size: 11px; padding: 7px 10px; min-height: 36px; }
 .export-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }

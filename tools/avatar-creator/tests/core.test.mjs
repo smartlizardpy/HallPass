@@ -21,9 +21,16 @@ test("catalogue contains all 33 unique agreed faces, one Jake and two Turkish en
   assert.equal(catalogue.filter(entry => entry.category === "Ghibli").length, 3);
 });
 
-test("project import clamps placement and ignores unknown entries and invalid colours", () => {
+test("catalogue preserves the owner's approved framing except the replaced Andy", () => {
+  const approved = JSON.parse(readFileSync(new URL("approved-framing.json", root), "utf8")).avatars;
+  for (const entry of catalogue) {
+    if (entry.id !== "jake-peralta") assert.deepEqual(plain(entry.defaults), approved[entry.id]);
+  }
+});
+
+test("project import locks approved framing and ignores unknown entries and invalid colours", () => {
   const values = core.readProject({ version: 1, avatars: { gigachad: { color: "red;evil", x: 100, y: -100, scale: Infinity }, attacker: { src: "evil" } } }, catalogue);
-  assert.deepEqual(plain(values.gigachad), { color: catalogue[0].defaults.color, x: 0.5, y: -0.5, scale: 1 });
+  assert.deepEqual(plain(values.gigachad), plain(catalogue[0].defaults));
   assert.equal(Object.keys(values).length, 33);
   assert.equal(values.attacker, undefined);
   assert.throws(() => core.readProject({ version: 9, avatars: {} }, catalogue));
@@ -41,6 +48,7 @@ test("export manifest preserves stable IDs and current edits", () => {
   assert.equal(output.avatars.length, 33);
   assert.equal(output.avatars.find(entry => entry.id === "jiji").src, "avatars/jiji.png");
   assert.equal(output.avatars.find(entry => entry.id === "jiji").color, "#112233");
+  assert.equal(output.avatars.find(entry => entry.id === "jiji").x, catalogue.find(entry => entry.id === "jiji").defaults.x);
 });
 
 test("ZIP opens with an independent decoder, including binary data and Unicode content", () => {
@@ -64,7 +72,11 @@ test("renderer clips the background and portrait to a circle", () => {
 test("every catalogue entry points to a local prepared cutout", () => {
   for (const entry of catalogue) {
     assert.match(entry.src, /^assets\/[a-z0-9-]+\.png$/);
-    // Asset existence is checked after preparation, independently of UI loading.
     assert.ok(fileURLToPath(new URL(entry.src, root)).endsWith(`${entry.id}.png`));
+    const png = readFileSync(new URL(entry.src, root));
+    assert.equal(png.subarray(1, 4).toString(), "PNG");
+    assert.equal(png.readUInt32BE(16), 512);
+    assert.equal(png.readUInt32BE(20), 512);
+    assert.equal(png[25], 6, "cutout must retain RGBA rather than an opaque RGB image");
   }
 });
