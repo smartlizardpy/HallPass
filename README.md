@@ -619,6 +619,29 @@ dashboard and the arcade are separate sign-ins) — notifications are owned by a
 player row. See `app/lib/notifications/admins.ts`.
 
 
+## Beta clip and screenshot retention
+
+Beta testers can attach a screen recording and/or a screenshot to a bug report.
+Both are kept for **30 days** (`CLIP_RETENTION_DAYS` in `app/lib/beta/config.ts`;
+the privacy page states the number, so change them together), then deleted. The
+report text stays; the dashboard and the bug MCP show a "removed after 30 days"
+note instead of the evidence (`beta_reports.media_expired_at`, migration `042`).
+Media is also deleted earlier when a report is marked fixed or closed as a
+duplicate, and when a player deletes their account.
+
+- `.github/workflows/clip-retention.yml` runs `scripts/run-clip-retention.mjs`
+  daily at 03:17 UTC, which calls **`POST /api/v1/admin/beta/clip-retention`**.
+  It uses the **same `ALERTS_SECRET`** and `HALLPASS_SITE_URL` as the alerts and
+  streak reminders, so there is nothing new to provision. Until the secret exists
+  the workflow says so and passes. Check it by hand from the Actions tab with
+  *dry run* ticked.
+- Each run deletes at most `MEDIA_SWEEP_BATCH` reports' media, oldest first; a
+  backlog drains over several days. The Blob object is deleted before the row
+  pointer is cleared, so any failure is retried by the next run, and an object
+  that is already gone counts as deleted. See `app/lib/beta/media-cleanup.ts`.
+- Apply `app/lib/scoreboard/migrations/044_beta_media_expiry.sql` **before**
+  deploying: the report queries select `media_expired_at`.
+
 ## Deploy notifications
 
 When a new production version goes live, every admin gets a bell row and — if

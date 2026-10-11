@@ -29,8 +29,11 @@
  * module is plain JSON-safe strings.
  */
 
-import { sql } from "@/app/lib/db";
+import { del } from "@vercel/blob";
+import { createBetaStore } from "@/app/lib/beta/store";
+import { removeOwnedMedia } from "@/app/lib/beta/media-cleanup";
 import { memeAvatarFor } from "@/app/lib/avatars";
+import { isMissingColumnError, sql } from "@/app/lib/db";
 
 /** A player as stored server-side (carries `email` — never send this to clients). */
 export interface Player {
@@ -362,6 +365,10 @@ export const DELETED_PLAYER_HANDLE = "Deleted";
  *   `player_id` is null there is no key left to find those rows by). This rewrite
  *   is the only chance to do it.
  *
+ * BETA CLIPS AND SCREENSHOTS are deleted too (see the two BETA MEDIA parts in the
+ * body): their keys are read first, and their files removed last and best-effort.
+ * The report text stays, de-tagged like the scores.
+ *
  * Order is deliberate and NOT interchangeable. The `neon()` HTTP driver has no
  * cross-statement transaction, so these two statements can interleave with a
  * failure. Anonymising FIRST means the worst case is "scores anonymised but the
@@ -370,11 +377,48 @@ export const DELETED_PLAYER_HANDLE = "Deleted";
  * orphaned with no key to reach them: an unrecoverable privacy failure.
  */
 export async function deletePlayer(id: string): Promise<boolean> {
+  // BETA MEDIA, part 1 of 2: find the player's clips and screenshots BEFORE
+  // anything is deleted. `beta_reports` and `beta_shots` are `ON DELETE SET NULL`
+  // (the report text outlives its author), so once the row is gone `player_id` is
+  // null and there is no key left to find the files by. Same reason `scores` are
+  // anonymised first. FAIL-SOFT: this must never stop an erasure, so a failure is
+  // logged and the account is deleted anyway; the 30-day sweep (`media-cleanup.ts`)
+  // still removes the reports' files because their pointers are untouched.
+  const betaStore = createBetaStore(sql);
+  let owned: Awaited<ReturnType<typeof betaStore.mediaOwnedBy>> | null = null;
+  try {
+    owned = await betaStore.mediaOwnedBy(id);
+  } catch (error) {
+    // A missing beta table just means the programme is not installed here.
+    if (!isMissingColumnError(error)) {
+      console.error("deletePlayer: could not list beta media; deleting the account anyway:", error);
+    }
+  }
+
   await sql`
     UPDATE scores SET handle = ${DELETED_PLAYER_HANDLE} WHERE player_id = ${id}
   `;
   const rows = await sql`
     DELETE FROM players WHERE id = ${id} RETURNING id
   `;
+
+  // BETA MEDIA, part 2 of 2: delete the files only AFTER the account delete
+  // succeeded. Doing it first would destroy a child's recordings and then, if the
+  // delete failed, leave an account that still exists minus its evidence; doing it
+  // after means the worst case is a deleted account whose files linger until the
+  // sweep (reports) or a log line (staged shots). Never throws.
+  if (rows.length > 0 && owned && (owned.reports.length > 0 || owned.shots.length > 0)) {
+    try {
+      await removeOwnedMedia({
+        store: betaStore,
+        remove: async (path) => {
+          await del(path);
+        },
+        owned,
+      });
+    } catch (error) {
+      console.error("deletePlayer: beta media clean-up failed:", error);
+    }
+  }
   return rows.length > 0;
 }

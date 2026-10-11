@@ -283,6 +283,26 @@ export const REPORT_TITLE_MAX = 120;
 export const REPORT_BODY_MIN = 10;
 export const REPORT_BODY_MAX = 2000;
 
+/**
+ * How long a report's clip and screenshot are kept, in days.
+ *
+ * A clip is a recording of a child's screen and a screenshot can show one, so
+ * neither is kept on the off-chance it is useful later. Anything still attached
+ * to a report this long after it was filed is deleted by the daily sweep
+ * (`media-cleanup.ts`, `POST /api/v1/admin/beta/clip-retention`). The report TEXT
+ * stays; only the media goes. The privacy page states this number, so change the
+ * two together. Media is also deleted earlier when a report is fixed or closed as
+ * a duplicate, and when the player deletes their account.
+ */
+export const CLIP_RETENTION_DAYS = 30;
+
+/**
+ * Reports one sweep run handles. Bounded so a backlog (or a bad day) cannot turn
+ * one request into thousands of Blob deletes; the sweep runs daily and takes the
+ * oldest first, so a backlog drains over several runs.
+ */
+export const MEDIA_SWEEP_BATCH = 100;
+
 /** Optional per-assignment note from the admin who issued it. */
 export const ASSIGNMENT_BRIEF_MAX = 500;
 

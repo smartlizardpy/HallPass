@@ -146,7 +146,8 @@ function revalidateBetaSurfaces(): void {
 }
 
 /**
- * Delete a resolved report's replay, best-effort and always AFTER the write.
+ * Delete a resolved report's replay (or pinned screenshot - same rules),
+ * best-effort and always AFTER the write.
  *
  * The actions' reasoning, unchanged: "a resolved report's replay has done its
  * job, and it is a recording of a child's screen — there is no reason to keep it
@@ -266,7 +267,7 @@ export async function markBugReportFixed(input: {
   // or the unique index cannot recognise a re-payment as a repeat.
   const reason = acceptanceReason(report.kind, severity);
 
-  const { applied, clipBlobPath } = await beta.payAndRemoveReport({
+  const { applied, clipBlobPath, shotBlobPath } = await beta.payAndRemoveReport({
     id: input.id,
     resolvedBy: mcpActor(),
     awards: [
@@ -275,7 +276,10 @@ export async function markBugReportFixed(input: {
     ],
   });
 
-  if (applied) await cleanUpClip(clipBlobPath, input.id, false);
+  if (applied) {
+    await cleanUpClip(clipBlobPath, input.id, false);
+    await cleanUpClip(shotBlobPath, input.id, false);
+  }
   revalidateBetaSurfaces();
 
   if (!applied) return refuse(`Someone else resolved report ${input.id} first.`);
@@ -307,7 +311,7 @@ export async function closeBugReportDuplicate(input: {
     );
   }
 
-  const { applied, clipBlobPath } = await beta.payAndRemoveReport({
+  const { applied, clipBlobPath, shotBlobPath } = await beta.payAndRemoveReport({
     id: input.id,
     resolvedBy: mcpActor(),
     // ONE award, and the reason says what was PAID rather than what the report
@@ -316,7 +320,10 @@ export async function closeBugReportDuplicate(input: {
     awards: [{ amount: DUPLICATE_XP, reason: REASON_DUPLICATE }],
   });
 
-  if (applied) await cleanUpClip(clipBlobPath, input.id, false);
+  if (applied) {
+    await cleanUpClip(clipBlobPath, input.id, false);
+    await cleanUpClip(shotBlobPath, input.id, false);
+  }
   revalidateBetaSurfaces();
 
   if (!applied) return refuse(`Someone else resolved report ${input.id} first.`);

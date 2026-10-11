@@ -448,11 +448,15 @@ describe("payAndRemoveReport", () => {
   it("returns the clip path from the DELETE, not from a prior read", async () => {
     const { sql } = makeFakeSql((call) =>
       call.text.includes("DELETE")
-        ? [{ clip_blob_path: "beta-clips/7.webm" }]
+        ? [{ clip_blob_path: "beta-clips/7.webm", shot_blob_path: "beta-evidence/7.png" }]
         : [{ id: 7 }],
     );
     const result = await createBetaStore(sql).payAndRemoveReport(input);
-    expect(result).toEqual({ applied: true, clipBlobPath: "beta-clips/7.webm" });
+    expect(result).toEqual({
+      applied: true,
+      clipBlobPath: "beta-clips/7.webm",
+      shotBlobPath: "beta-evidence/7.png",
+    });
   });
 });
 
@@ -498,17 +502,64 @@ describe("clips", () => {
     expect(flat(calls[0].text)).toContain("WHERE id = ? AND player_id = ?");
   });
 
-  it("only sweeps rows that still have an object", async () => {
+  it("selects clip OR screenshot rows that still have an object, oldest first", async () => {
     const { sql, calls } = makeFakeSql(() => []);
-    await createBetaStore(sql).expiredClips(30);
-    expect(flat(calls[0].text)).toContain("clip_blob_path IS NOT NULL");
+    await createBetaStore(sql).expiredMedia(30);
+    const text = flat(calls[0].text);
+    expect(text).toContain("(clip_blob_path IS NOT NULL OR shot_blob_path IS NOT NULL)");
+    expect(text).toContain("created_at < now() - make_interval(days => ?)");
+    expect(text).toContain("ORDER BY created_at ASC");
+    expect(calls[0].values).toEqual([30, 50]);
   });
 
-  it("clamps a nonsense retention window to at least one day", async () => {
+  it("decodes both pointers, null when one is absent", async () => {
+    const { sql } = makeFakeSql(() => [
+      { id: "7", clip_blob_path: "beta-clips/a/1.webm", shot_blob_path: null },
+    ]);
+    await expect(createBetaStore(sql).expiredMedia(30)).resolves.toEqual([
+      { id: 7, clipBlobPath: "beta-clips/a/1.webm", shotBlobPath: null },
+    ]);
+  });
+
+  it("clamps a nonsense retention window and batch size", async () => {
     const { sql, calls } = makeFakeSql(() => []);
-    await createBetaStore(sql).expiredClips(-5);
+    await createBetaStore(sql).expiredMedia(-5, 100000);
     // Otherwise a bad config value would delete every clip ever recorded.
-    expect(calls[0].values).toContain(1);
+    expect(calls[0].values).toEqual([1, 500]);
+  });
+
+  it("clears only the pointers whose objects were deleted, and stamps the row", async () => {
+    const { sql, calls } = makeFakeSql(() => []);
+    await createBetaStore(sql).markMediaExpired(9, { clip: true, shot: false });
+    const text = flat(calls[0].text);
+    expect(text).toContain("clip_blob_path = CASE WHEN ? THEN NULL ELSE clip_blob_path END");
+    expect(text).toContain("shot_blob_path = CASE WHEN ? THEN NULL ELSE shot_blob_path END");
+    expect(text).toContain("media_expired_at = now()");
+    expect(calls[0].values).toContain(true);
+    expect(calls[0].values).toContain(false);
+    expect(calls[0].values).toContain(9);
+  });
+
+  it("writes nothing when neither object was removed", async () => {
+    const { sql, calls } = makeFakeSql(() => []);
+    await createBetaStore(sql).markMediaExpired(9, { clip: false, shot: false });
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe("mediaOwnedBy", () => {
+  it("reads reports' clips and screenshots plus non-accepted staged shots", async () => {
+    const { sql, calls } = makeFakeSql((call) =>
+      call.text.includes("FROM beta_reports")
+        ? [{ id: 3, clip_blob_path: "c.webm", shot_blob_path: "s.png" }]
+        : [{ id: "shot-1", blob_path: "beta-shots/x.png" }],
+    );
+    const owned = await createBetaStore(sql).mediaOwnedBy("p1");
+    expect(owned).toEqual({
+      reports: [{ id: 3, clipBlobPath: "c.webm", shotBlobPath: "s.png" }],
+      shots: [{ id: "shot-1", blobPath: "beta-shots/x.png" }],
+    });
+    expect(flat(calls[1].text)).toContain("status <> 'accepted'");
   });
 });
 
