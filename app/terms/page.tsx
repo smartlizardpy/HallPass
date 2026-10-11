@@ -54,6 +54,7 @@ export default function TermsPage() {
     <LegalPage
       title={title}
       updated={<>11 October 2026 (draft)</>}
+      draft
       shortVersion={
         <ul>
           <li>HALLPASS is a free arcade of browser games. Play as a guest or sign in.</li>

@@ -11,11 +11,10 @@ import { Wordmark } from "../Wordmark";
  * `ArcadeShell` (same choice as `app/beta/closed/page.tsx`): the shell resolves
  * the whole catalogue, which a text page does not need.
  *
- * THE DRAFT BANNER IS PART OF THE FRAME, NOT AN AFTERTHOUGHT. These texts were
- * drafted from the code by a non-lawyer and carry `Placeholder` markers for
- * facts the code cannot supply (operator identity, contact address). The banner
- * and the markers are removed by whoever finalises the text; until then the
- * page says out loud that it is unfinished rather than looking authoritative.
+ * THE DRAFT BANNER IS PART OF THE FRAME, NOT AN AFTERTHOUGHT, and opt-in: a
+ * page still carrying `Placeholder` markers passes `draft`, so it says out loud
+ * that it is unfinished rather than looking authoritative. A finished page (the
+ * Privacy Policy) leaves it off.
  */
 
 /** Marks a fact the codebase cannot supply. Rendered conspicuously on purpose. */
@@ -52,6 +51,7 @@ export function LegalPage({
   title,
   updated,
   shortVersion,
+  draft = false,
   children,
 }: {
   title: string;
@@ -59,6 +59,8 @@ export function LegalPage({
   updated: ReactNode;
   /** Plain-English summary shown first; a list of one-line points. */
   shortVersion: ReactNode;
+  /** Show the "not yet reviewed" banner. For pages that still have placeholders. */
+  draft?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -75,6 +77,7 @@ export function LegalPage({
           </p>
         </header>
 
+        {draft && (
         <p
           role="note"
           className="mt-4 rounded-xl border border-border bg-surface p-3 text-[13px] font-bold text-muted"
@@ -82,6 +85,7 @@ export function LegalPage({
           Draft: this text has not yet been reviewed by a solicitor. Items in{" "}
           <Placeholder>square brackets</Placeholder> are still to be filled in.
         </p>
+        )}
 
         <aside
           aria-label="The short version"
