@@ -32,7 +32,7 @@ accessed by children.
 
 ## 2. Nature of the processing
 
-Controller: the operator of HallPass, an individual who is under 18 (item 1).
+Controller: the operator of HallPass, a small team of young hobbyists, with at least one operator under 18 (item 1, accepted).
 By the owner's decision the public policies name no individual, postal address
 or registration, and give one contact, legal@hallpass.games (a forwarding
 address). ICO registration: not registered (item 3). No data protection
@@ -143,7 +143,7 @@ mitigations are in place (all mitigations listed are in the merged code).
 | R8 | **No age check:** under-13s hold accounts or use the site without permission | High | Medium | Terms: 13+, parent permission for under-13s; delete accounts found to be under 13; Google's own age rules gate sign-in; guests collect little. Owner decision to have no check is CONFIRMED but it is a recognised gap against Children's Code standard 3 | Medium |
 | R9 | **Account deletion / de-identification:** residual data after deletion (scores, analytics, backups, blobs) | Medium | Low | `deletePlayer` removes the player row (cascades) and renames scores to "Deleted"; beta clips deleted with account; analytics not linked to account. Backup retention at Neon unknown (item 15); analytics deletion by browser not self-service | Low |
 | R10 | **Third parties:** Vercel, Neon (US/other processing), PostHog (EU), Google (sign-in, STUN, translate), Cloudflare (STUN), GitHub (cron), push services: transfers, breaches, onward use | Medium | Medium | EU PostHog; IP hash only; Google translate sends review text only; GitHub gets no player data; regions and transfer mechanisms to be confirmed (item 12) | Medium |
-| R11 | **Operator is a minor / single person:** capacity, availability for rights requests and incidents, breach reporting | Medium | High | Name a parent/guardian or company as operator; incident process (item 1, 16) | High until resolved |
+| R11 | **Operator is a minor / single person:** capacity, availability for rights requests and incidents, breach reporting | Medium | High | Name a parent/guardian or company as operator; incident process (item 1, 16) | Medium (accepted by the owner while the project stays small, item 1) |
 | R12 | **Guest play with Google Sign-In:** Google API policy says mixed-audience apps must allow full access without sign-in | Low | Low | Guest play exists (checked in research notes); confirm no feature is sign-in only that Google would count as essential | Low |
 | R13 | **On-device profiling ("for you" order):** a profile of a child's tastes exists on a shared school computer and the next user could see an order shaped by it; profiling of children is off by default under the Children's Code | Medium | Low | Only while signed in; stays in the browser, never sent or synced; deleted on sign-out, when switched off and on reset; states what it is on the games list and in settings; never filters, only orders; no ads or decisions use it | Low. OPEN: confirm sign-in as the opt-in is acceptable for standard 12 |
 
@@ -174,7 +174,7 @@ Status values: met / partly / not met / n/a. Statuses were checked against the m
 | Item | Name / role | Date | Notes |
 |---|---|---|---|
 | Measures approved by | Operator: ______________  Parent/guardian: ______________ | | To be signed by hand. |
-| Residual risks approved by | ______________ | | R11 is High until item 1 is settled; if it stays High, consider prior consultation with the ICO |
+| Residual risks approved by | ______________ | | R11 is rated Medium on the basis that the project stays small (item 1); if it grows, re-rate it, and if it becomes High consider prior consultation with the ICO |
 | DPO / advice | No DPO. Solicitor review not yet obtained (item 20) | | |
 | Consultation with data subjects | Not yet (item 10) | | |
 | Review | Operator | Next due 11 October 2027 | Also on each new feature that touches personal data, and when player numbers grow |
@@ -186,7 +186,7 @@ owner has chosen to carry for now), **Action** (work still to do).
 
 | # | Item | Status | Detail |
 |---|---|---|---|
-| 1 | Operator is a minor | Action | Capacity to contract and act as controller is unresolved. Preferred fix: a parent/guardian or a company becomes the legal operator and is named in both policies. Solicitor. |
+| 1 | Operator is a minor | Accepted | Owner decision, 11 Oct 2026: HallPass is a small hobby project run by young people, with about 10 players, and no parent, guardian or company is named as legal operator. This is a recognised gap (capacity to contract and to act as controller is unresolved, and the duties in item 3 still apply). Revisit if the audience grows, the site is promoted, any money is involved, or a complaint or rights request arrives. Solicitor advice would settle it (item 20). |
 | 2 | Postal address | Decided | None published. The privacy policy and terms give an email contact only (owner decision, 11 Oct 2026). |
 | 3 | ICO registration and fee | Accepted | Not registered. Whether an exemption applies has not been confirmed; the ICO self-assessment should be run. |
 | 4 | Retention of resolved review reports | Action | Proposed: delete 90 days after resolution, as for profile reports. No deletion job exists yet; until it does the policy says no date is set. |
