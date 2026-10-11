@@ -35,6 +35,7 @@ import { isBetaTester } from "@/app/lib/beta";
 import { getUserRole } from "@/app/lib/dashboard-users";
 import { ROLE_HINT, ROLE_LABEL } from "@/app/lib/permissions";
 import { UsernameCard } from "@/app/components/friends/UsernameCard";
+import { AnalyticsSettingsCard } from "@/app/components/analytics/AnalyticsSwitch";
 import {
   setHandleAction,
   deleteAccountAction,
@@ -264,6 +265,12 @@ export default async function YouSettingsPage({
             </button>
           </form>
         </div>
+      </section>
+
+      {/* PRIVACY ------------------------------------------------------------ */}
+      <section aria-labelledby="settings-privacy" className="space-y-4">
+        <GroupHeading id="settings-privacy">Privacy</GroupHeading>
+        <AnalyticsSettingsCard />
       </section>
 
       {/* DANGER ZONE -------------------------------------------------------- */}
