@@ -30,6 +30,9 @@ import { containsBlockedTerm } from "@/app/lib/username-wordlist";
 /** Where to land after choosing, if the form did not say. */
 const DEFAULT_NEXT = "/";
 
+/** The welcome page, carrying the final destination: it picks the next step. */
+const onward = (next: string) => `/play/welcome?next=${encodeURIComponent(next)}`;
+
 export async function setInitialHandleAction(formData: FormData): Promise<void> {
   const session = await auth();
   const playerId = session?.user?.playerId;
@@ -63,7 +66,9 @@ export async function setInitialHandleAction(formData: FormData): Promise<void> 
   // name a credited beta tester's game page prints.
   expireTesterCredits(await creditedSlugsFor(playerId), "action");
 
-  redirect(next);
+  // Hand back to the welcome page, which decides the next step (username, then
+  // avatar). Going straight to `next` skipped every step after this one.
+  redirect(onward(next));
 }
 
 
@@ -130,7 +135,9 @@ export async function setInitialUsernameAction(formData: FormData): Promise<void
   if (outcome === "claimed") {
     // A credit with no handle prints `@username`.
     expireTesterCredits(await creditedSlugsFor(playerId), "action");
-    redirect(next);
+    // Back to the welcome page for the avatar step; it redirects on to `next`
+    // itself when there is nothing left to ask.
+    redirect(onward(next));
   }
   redirect(back(outcome));
 }
