@@ -38,6 +38,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "weekly",
       priority: 0.5,
     },
+    {
+      // The legal pages: static text, listed so they can be found, at the
+      // lowest priority. No lastModified, as for every entry above.
+      url: `${BASE}/privacy`,
+      changeFrequency: "yearly",
+      priority: 0.2,
+    },
+    {
+      url: `${BASE}/terms`,
+      changeFrequency: "yearly",
+      priority: 0.2,
+    },
   ];
 
   const categoryPages: MetadataRoute.Sitemap = routedCategories(categories).map(
