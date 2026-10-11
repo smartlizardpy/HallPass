@@ -1,8 +1,11 @@
-import { memeAvatarFor } from "../../lib/avatars";
+import { memeAvatarFor, parseAvatarRef } from "../../lib/avatars";
+import { MemeAvatarCircle } from "../MemeAvatar";
 
 /**
- * A player's avatar. Where `image` is null the fallback is the MEME avatar for
- * the player's public id, never blank: `image` is the real Google photo and is
+ * A player's avatar. A meme avatar ref (`/avatars/<id>.png?bg=<hex>`, see
+ * `app/lib/avatars.ts`) draws the coloured circle with the cutout on top. Where
+ * `image` is null the fallback is the default MEME avatar for the player's
+ * public id, never blank: `image` is the real Google photo and is
  * only ever present for an accepted friend who opted in (`use_google_photo`),
  * so everything public arrives here without one. The initial-letter circle
  * remains only for a caller that has no public id at all.
@@ -33,6 +36,11 @@ export function Avatar({
   const dimension = { width: size, height: size };
   const publicId = person.id ?? person.publicId;
   const src = person.image || (publicId ? memeAvatarFor(publicId) : null);
+
+  const meme = parseAvatarRef(src);
+  if (meme) {
+    return <MemeAvatarCircle meme={meme.meme} colour={meme.colour} size={size} />;
+  }
 
   if (!src) {
     return (

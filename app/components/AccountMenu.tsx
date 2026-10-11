@@ -56,6 +56,8 @@ import { useStallEscape } from "../lib/use-stall-escape";
 import { openStealthSettings } from "../lib/stealth/store";
 import type { MeResponse } from "@/sdk/src/contract";
 import { ROLE_LABEL } from "@/app/lib/permissions";
+import { parseAvatarRef } from "@/app/lib/avatars";
+import { MemeAvatarCircle } from "./MemeAvatar";
 
 /**
  * The slice of `/api/v1/me/friends/count` this menu reads. The route also
@@ -380,6 +382,10 @@ function Avatar({
   initial: string;
   size: number;
 }) {
+  const meme = parseAvatarRef(src);
+  if (meme) {
+    return <MemeAvatarCircle meme={meme.meme} colour={meme.colour} size={size} />;
+  }
   if (src) {
     return (
       // Google avatar is a remote URL; next/image would need domain config, and
