@@ -87,6 +87,7 @@ import {
 import { DashHeader } from "../_ui/DashHeader";
 import { Section } from "../_ui/Section";
 import {
+  accountActionProfileReportAction,
   actionProfileReportAction,
   banAuthorAction,
   deleteReviewAction,
@@ -568,15 +569,41 @@ function ProfileReportCard({ report }: { report: QueuedProfileReport }) {
         </p>
       )}
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap items-start gap-2">
+        {/* No-JavaScript confirm step: the panel says what will happen before
+            the button that does it. */}
+        <details className="w-full rounded-lg border border-border bg-surface-2 p-3 sm:w-auto sm:max-w-md">
+          <summary className="cursor-pointer text-xs font-bold text-brand hover:text-brand-600">
+            Reset this profile…
+          </summary>
+          <p className="mt-2 text-xs text-foreground-2">
+            This will clear this player&apos;s display name and username (they
+            fall back to a generated name like &ldquo;AuraFarmer#0417&rdquo; and their
+            public profile page goes away), stop showing their Google photo, and
+            close <strong>all {report.openAgainstPlayer} open report
+            {report.openAgainstPlayer === 1 ? "" : "s"}</strong> against them as
+            actioned. They can choose a new name themselves afterwards, but not
+            this username for 90 days. Friends, scores and invites are not
+            affected. The reporter is never shown to the player.
+          </p>
+          <form action={accountActionProfileReportAction} className="mt-2">
+            <input type="hidden" name="profileReportId" value={report.id} />
+            <button
+              type="submit"
+              className="rounded-full bg-red-600 px-3 py-1 text-xs font-bold text-white transition hover:bg-red-700"
+            >
+              Yes, reset profile and close reports
+            </button>
+          </form>
+        </details>
         <form action={actionProfileReportAction}>
           <input type="hidden" name="profileReportId" value={report.id} />
           <button
             type="submit"
-            title="A person has dealt with this."
-            className="rounded-full bg-brand px-3 py-1 text-xs font-bold text-white transition hover:bg-brand-600"
+            title="A person has dealt with this outside the arcade. Closes this report only; the player's account is not changed."
+            className="rounded-full border border-border bg-surface px-3 py-1 text-xs font-bold text-foreground-2 transition hover:bg-surface-2"
           >
-            Mark actioned
+            Mark handled (no account change)
           </button>
         </form>
         <form action={dismissProfileReportAction}>
