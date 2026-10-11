@@ -115,8 +115,7 @@ export default function PrivacyPage() {
         <p>
           HALLPASS (&quot;we&quot;, &quot;us&quot;) is a free arcade of browser
           games at{" "}
-          <Placeholder>CONFIRM LIVE DOMAIN (the code currently uses
-          hallpass-rouge.vercel.app)</Placeholder>. It is run from England. We
+www.hallpass.games. It is run from England. We
           are the &quot;controller&quot; of the personal data described here,
           which means we decide how and why it is used.
         </p>

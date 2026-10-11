@@ -325,7 +325,7 @@ async function fetchUncached(clientId: string): Promise<CimdResult> {
           // datacenter IP with no User-Agent is the exact shape bot protection
           // dislikes. Insurance rather than a diagnosis: the fetch works from a
           // laptop with the headers this used to send.
-          "user-agent": "HallPass-MCP/1.0 (+https://hallpass-rouge.vercel.app)",
+          "user-agent": "HallPass-MCP/1.0 (+https://www.hallpass.games)",
         },
         signal: AbortSignal.timeout(CIMD_TIMEOUT_MS),
       });

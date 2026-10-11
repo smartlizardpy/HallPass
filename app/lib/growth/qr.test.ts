@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { qrCode, qrSvgDocument } from "./qr";
 
-const URL_LIKE = "https://hallpass-rouge.vercel.app/game/duskfall?ref=qr";
+const URL_LIKE = "https://www.hallpass.games/game/duskfall?ref=qr";
 
 describe("qrCode", () => {
   /**
