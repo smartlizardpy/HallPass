@@ -121,6 +121,10 @@ function toSort(value: unknown): SortDir {
  * rather than `players.id` for the reason `007_social_graph.sql` spells out:
  * `players.id` is the Google subject, a stable cross-service identifier for a
  * minor, and it must never reach another player's browser.
+ *
+ * `image` is the Google photo and is non-null only when the other party opted in
+ * (`use_google_photo`) AND is an accepted friend of the reader; otherwise it is
+ * null and `Avatar` shows the meme avatar for `id`.
  */
 export type ChallengeParty = {
   id: string;
@@ -327,7 +331,13 @@ export function createChallengeStore(sql: Sql) {
                c.board_id, b.game_slug, b.title AS board_title,
                b.score_label, b.sort,
                p.public_id AS from_public_id, p.username AS from_username,
-               p.handle AS from_handle, p.image AS from_image
+               p.handle AS from_handle,
+               CASE WHEN p.use_google_photo AND EXISTS (
+                      SELECT 1 FROM friendships fr
+                       WHERE fr.status = 'accepted'
+                         AND ((fr.player_a = ${me} AND fr.player_b = p.id)
+                           OR (fr.player_a = p.id AND fr.player_b = ${me}))
+                    ) THEN p.image END AS from_image
           FROM challenges c
           JOIN boards  b ON b.id = c.board_id
           JOIN players p ON p.id = c.challenger_id
@@ -381,7 +391,13 @@ export function createChallengeStore(sql: Sql) {
                c.board_id, b.game_slug, b.title AS board_title,
                b.score_label, b.sort,
                p.public_id AS to_public_id, p.username AS to_username,
-               p.handle AS to_handle, p.image AS to_image
+               p.handle AS to_handle,
+               CASE WHEN p.use_google_photo AND EXISTS (
+                      SELECT 1 FROM friendships fr
+                       WHERE fr.status = 'accepted'
+                         AND ((fr.player_a = ${me} AND fr.player_b = p.id)
+                           OR (fr.player_a = p.id AND fr.player_b = ${me}))
+                    ) THEN p.image END AS to_image
           FROM challenges c
           JOIN boards  b ON b.id = c.board_id
           JOIN players p ON p.id = c.target_id
@@ -422,7 +438,13 @@ export function createChallengeStore(sql: Sql) {
                c.board_id, b.game_slug, b.title AS board_title,
                b.score_label, b.sort,
                p.public_id AS from_public_id, p.username AS from_username,
-               p.handle AS from_handle, p.image AS from_image
+               p.handle AS from_handle,
+               CASE WHEN p.use_google_photo AND EXISTS (
+                      SELECT 1 FROM friendships fr
+                       WHERE fr.status = 'accepted'
+                         AND ((fr.player_a = ${me} AND fr.player_b = p.id)
+                           OR (fr.player_a = p.id AND fr.player_b = ${me}))
+                    ) THEN p.image END AS from_image
           FROM challenges c
           JOIN boards  b ON b.id = c.board_id
           JOIN players p ON p.id = c.challenger_id

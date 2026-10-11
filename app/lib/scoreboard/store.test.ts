@@ -10,6 +10,7 @@
 import { describe, it, expect } from "vitest";
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { createStore } from "./store";
+import { memeAvatarFor } from "../avatars";
 import { FRIEND_BOARD_MAX_BOARDS, FRIEND_BOARD_ROWS } from "./config";
 
 interface RecordedCall {
@@ -138,7 +139,7 @@ describe("getTopScores", () => {
 
   it("tags a verified entry from joined player columns and carries its public id", async () => {
     // A row with player_id set maps to verified:true; the display is the chosen
-    // handle, avatar = p_image, and playerId is the public_id UUID — never
+    // handle, avatar = the meme avatar for the public id (never a photo), and playerId is the public_id UUID — never
     // players.id, which is a Google subject.
     const { sql } = makeFakeSql(() => [
       {
@@ -148,7 +149,6 @@ describe("getTopScores", () => {
         p_handle: "Countess",
         p_username: "ada",
         p_public_id: "11111111-2222-3333-4444-555555555555",
-        p_image: "https://example.test/a.png",
       },
     ]);
     const store = createStore(sql);
@@ -164,7 +164,7 @@ describe("getTopScores", () => {
         handle: "Countess",
         score: 500,
         verified: true,
-        avatar: "https://example.test/a.png",
+        avatar: memeAvatarFor("11111111-2222-3333-4444-555555555555"),
         playerId: "11111111-2222-3333-4444-555555555555",
       },
     ]);
@@ -183,7 +183,6 @@ describe("getTopScores", () => {
         p_name: "Ada Lovelace",
         p_username: "ada",
         p_public_id: "11111111-2222-3333-4444-555555555555",
-        p_image: null,
       },
     ]);
     const store = createStore(sql);
@@ -210,7 +209,6 @@ describe("getTopScores", () => {
         p_handle: null,
         p_username: null,
         p_public_id: "11111111-2222-3333-4444-555555555555",
-        p_image: null,
       },
     ]);
     const store = createStore(sql);
@@ -618,6 +616,8 @@ describe("getFriendStandingsForGame", () => {
     expect(text).toContain("CASE WHEN b.sort = 'asc' THEN min(s.score) ELSE max(s.score) END");
     expect(text).toContain("WITH pool AS");
     expect(text).toContain("f.status = 'accepted'");
+    // The real photo is friend-scoped AND opt-in only.
+    expect(text).toContain("CASE WHEN p.use_google_photo THEN p.image END");
     // Both caps are applied in SQL, not in JS.
     expect(text).toContain("r.friend_pos <=");
     expect(text).toContain("r.board_pos <=");
@@ -683,5 +683,39 @@ describe("getFriendsNewlyPassed", () => {
     await createStore(sql).getFriendsNewlyPassed("me", "board-a", 120, 55, "desc");
     expect(calls[0].text).toMatch(/id <> \?/);
     expect(calls[0].text).toMatch(/status = 'accepted'/);
+  });
+});
+
+describe("public leaderboard never reads the Google photo", () => {
+  it.each(["all", "day", "week"] as const)(
+    "does not select players.image for the %s window, in either direction",
+    async (period) => {
+      for (const sort of ["asc", "desc"] as const) {
+        const { sql, calls } = makeFakeSql(() => []);
+        const store = createStore(sql);
+        await store.getTopScores("neon-snake", { limit: 10, period, sort });
+        expect(calls[0].text).not.toMatch(/\bimage\b/);
+        expect(calls[0].text).not.toContain("p_image");
+      }
+    },
+  );
+
+  it("ignores a stray image column on a row and serves the meme avatar", async () => {
+    const id = "11111111-2222-3333-4444-555555555555";
+    const { sql } = makeFakeSql(() => [
+      {
+        handle: "x",
+        score: "1",
+        player_id: "g",
+        p_handle: "Ada",
+        p_username: null,
+        p_public_id: id,
+        p_image: "https://lh3.example/real-child-photo.png",
+        image: "https://lh3.example/real-child-photo.png",
+      },
+    ]);
+    const store = createStore(sql);
+    const [entry] = await store.getTopScores("neon-snake", { limit: 1, period: "all", sort: "desc" });
+    expect(entry.avatar).toBe(memeAvatarFor(id));
   });
 });

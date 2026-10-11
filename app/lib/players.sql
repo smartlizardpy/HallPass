@@ -49,6 +49,12 @@
 -- profile leaks nothing until they choose to connect, while a link they share
 -- still works well enough to receive a friend request.
 --
+-- `use_google_photo` is the player's opt-in to show their Google `image` to
+-- ACCEPTED FRIENDS (migration 042). Default false: everyone else, everywhere,
+-- sees a meme avatar derived from `public_id` (`app/lib/avatars.ts`). Public
+-- queries never select `image`; friend queries select it only through
+-- `CASE WHEN p.use_google_photo THEN p.image END`.
+--
 -- Username case-insensitivity is achieved by STORING LOWERCASE, not by citext and
 -- not by a functional index. Uppercase cannot exist in the column, so a plain
 -- UNIQUE btree IS the case-insensitive index and every lookup is a plain equality
@@ -71,6 +77,7 @@ CREATE TABLE IF NOT EXISTS players (
   profile_visibility     TEXT NOT NULL DEFAULT 'friends'
                            CHECK (profile_visibility IN ('public','friends','private')),
   handle_changed_at      TIMESTAMPTZ,
+  use_google_photo       BOOLEAN NOT NULL DEFAULT false,
   created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_login             TIMESTAMPTZ,
   country                CHAR(2) CHECK (country IS NULL OR country ~ '^[A-Z]{2}$')

@@ -30,6 +30,7 @@
  */
 
 import { sql } from "@/app/lib/db";
+import { memeAvatarFor } from "@/app/lib/avatars";
 
 /** A player as stored server-side (carries `email` — never send this to clients). */
 export interface Player {
@@ -37,6 +38,10 @@ export interface Player {
   email: string;
   name: string | null;
   image: string | null;
+  /** `public_id` UUID: the key the meme avatar is derived from. */
+  publicId: string;
+  /** Opt-in to show `image` to accepted friends. Default false. */
+  useGooglePhoto: boolean;
   handle: string | null;
   createdAt: string;
   lastLogin: string | null;
@@ -144,6 +149,8 @@ function mapPlayer(row: Row): Player {
     email: String(row.email),
     name: row.name == null ? null : String(row.name),
     image: row.image == null ? null : String(row.image),
+    publicId: row.public_id == null ? "" : String(row.public_id),
+    useGooglePhoto: row.use_google_photo === true,
     handle: row.handle == null ? null : String(row.handle),
     createdAt: toIso(row.created_at),
     lastLogin: row.last_login == null ? null : toIso(row.last_login),
@@ -220,7 +227,7 @@ export async function backfillCountryIfMissing(
 /** A single player by Google subject id, or `null` if unknown. */
 export async function getPlayerById(id: string): Promise<Player | null> {
   const rows = await sql`
-    SELECT id, email, name, image, handle, created_at, last_login
+    SELECT id, email, name, image, handle, public_id, use_google_photo, created_at, last_login
     FROM players
     WHERE id = ${id}
   `;
@@ -244,7 +251,7 @@ export async function getPlayerByUsername(
   username: string,
 ): Promise<Player | null> {
   const rows = await sql`
-    SELECT id, email, name, image, handle, created_at, last_login
+    SELECT id, email, name, image, handle, public_id, use_google_photo, created_at, last_login
     FROM players
     WHERE username = ${username}
   `;
@@ -261,7 +268,9 @@ export async function getPublicIdentity(id: string): Promise<PlayerIdentity | nu
   const player = await getPlayerById(id);
   if (!player) return null;
   const display = effectiveHandle(player);
-  return { id: player.id, name: display, image: player.image, handle: display };
+  // The SDK identity reaches game code, so it never carries the Google photo:
+  // the image is the meme avatar for the public id.
+  return { id: player.id, name: display, image: memeAvatarFor(player.publicId), handle: display };
 }
 
 /**
@@ -282,6 +291,31 @@ export async function getPublicIdentity(id: string): Promise<PlayerIdentity | nu
 export async function getPublicPlayerId(id: string): Promise<string | null> {
   const rows = await sql`SELECT public_id FROM players WHERE id = ${id}`;
   return rows.length > 0 ? String(rows[0].public_id) : null;
+}
+
+/**
+ * The avatar a signed-in player sees for THEMSELVES: their Google photo only if
+ * they opted in (`use_google_photo`), else the meme avatar. Server-side use only
+ * (the `/play/you` header); anything that reaches game code or another player
+ * uses {@link getPublicIdentity} or the friend-scoped queries instead.
+ */
+export function ownAvatarUrl(
+  player: Pick<Player, "image" | "publicId" | "useGooglePhoto">,
+): string {
+  return player.useGooglePhoto && player.image
+    ? player.image
+    : memeAvatarFor(player.publicId);
+}
+
+/**
+ * Record the player's opt-in to show their Google profile picture to ACCEPTED
+ * FRIENDS. Default is off; turning it off takes effect on the next read since
+ * every friend query gates on this column.
+ */
+export async function setUseGooglePhoto(id: string, value: boolean): Promise<void> {
+  await sql`
+    UPDATE players SET use_google_photo = ${value} WHERE id = ${id}
+  `;
 }
 
 /**

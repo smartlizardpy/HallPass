@@ -93,9 +93,11 @@ import { USERNAME_MAX_LENGTH } from "@/app/lib/username";
  * The meta half of the two-part noindex. `nofollow` as well as `noindex` because
  * profiles link to each other's games and boards, and a crawler that follows
  * outward from one profile is a crawler that has enumerated the directory it was
- * just told not to index. `noimageindex` keeps the avatar — frequently a real
- * photograph of a child — out of image search, which is a separate index with its
- * own removal process.
+ * just told not to index. `noimageindex` keeps the avatar out of image search,
+ * which is a separate index with its own removal process. The avatar here is a
+ * meme image unless the viewer is an accepted friend of a player who opted in to
+ * showing their Google photo (often a real photograph of a child); the noindex
+ * stays as a second layer for that friend-only case.
  */
 const NOINDEX: Metadata["robots"] = {
   index: false,

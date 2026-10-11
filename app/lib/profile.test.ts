@@ -655,3 +655,19 @@ describe("the live binding", () => {
     expect(getPublicProfileByUsername.length).toBe(2);
   });
 });
+
+describe("getPublicProfileByUsername — the Google photo", () => {
+  it("the signed-out lookup does not select players.image at all", async () => {
+    const { sql, calls } = makeFakeSql(routed(profileRow()));
+    await createProfileReader(sql).getPublicProfileByUsername("cool_kid", null);
+    expect(calls[0].text).not.toMatch(/\bimage\b/);
+  });
+
+  it("the signed-in lookup gates the photo on opt-in AND friendship or ownership", async () => {
+    const { sql, calls } = makeFakeSql(routed(profileRow()));
+    await createProfileReader(sql).getPublicProfileByUsername("cool_kid", "viewer-sub");
+    const text = calls[0].text;
+    expect(text).toMatch(/CASE WHEN p\.use_google_photo AND \(p\.id = \? OR f\.status = 'accepted'\)/);
+    expect(text).not.toMatch(/p\.image,/);
+  });
+});

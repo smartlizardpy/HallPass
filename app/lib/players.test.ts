@@ -23,9 +23,13 @@ vi.mock("@/app/lib/db", () => ({
   isUnconfiguredDbError: () => false,
 }));
 
+import { memeAvatarFor } from "./avatars";
 import {
   backfillCountryIfMissing,
   getPlayerByUsername,
+  getPublicIdentity,
+  ownAvatarUrl,
+  setUseGooglePhoto,
   upsertPlayerOnLogin,
 } from "./players";
 
@@ -141,5 +145,33 @@ describe("backfillCountryIfMissing", () => {
     expect(sql).toContain("WHERE id =");
     expect(sql).toContain("AND country IS NULL");
     expect(values).toEqual(["gb", "sub-alice"]);
+  });
+});
+
+describe("avatars on a player's own identity", () => {
+  const PUBLIC_ID = "11111111-2222-3333-4444-555555555555";
+
+  it("the SDK identity carries the meme avatar, never the Google photo", async () => {
+    query.mockResolvedValue([
+      { ...ROW, image: "https://lh3.example/me.png", public_id: PUBLIC_ID, use_google_photo: true },
+    ]);
+    const ident = await getPublicIdentity("sub-alice");
+    expect(ident?.image).toBe(memeAvatarFor(PUBLIC_ID));
+  });
+
+  it("ownAvatarUrl uses the photo only when opted in", () => {
+    const base = { image: "https://lh3.example/me.png", publicId: PUBLIC_ID };
+    expect(ownAvatarUrl({ ...base, useGooglePhoto: true })).toBe(base.image);
+    expect(ownAvatarUrl({ ...base, useGooglePhoto: false })).toBe(memeAvatarFor(PUBLIC_ID));
+    expect(ownAvatarUrl({ image: null, publicId: PUBLIC_ID, useGooglePhoto: true })).toBe(
+      memeAvatarFor(PUBLIC_ID),
+    );
+  });
+
+  it("setUseGooglePhoto binds the flag and the id", async () => {
+    query.mockResolvedValue([]);
+    await setUseGooglePhoto("sub-alice", true);
+    const [, ...values] = query.mock.calls[0] as [string[], ...unknown[]];
+    expect(values).toEqual([true, "sub-alice"]);
   });
 });

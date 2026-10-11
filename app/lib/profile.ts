@@ -230,10 +230,13 @@ export type RecentPlay = {
 /**
  * What every viewer of an existing profile gets, at any visibility.
  *
- * The avatar survives into the minimal shape on purpose. Minimal exists to let a
- * stranger confirm they found the right person and send a request; without a face
- * the add-friend flow becomes "is @sam_h the Sam I know?", which people resolve
- * by sending requests to all of them.
+ * The avatar survives into the minimal shape, but it is the MEME avatar for the
+ * `publicId` unless the viewer is an accepted friend (or the owner) of a player
+ * who opted in to showing their Google photo. `image` is the real photo ONLY in
+ * that case: the signed-out query does not select `players.image` at all, and
+ * the signed-in one selects it through a CASE. A stranger therefore still gets a
+ * recognisable face to confirm "is this the Sam I know?" without a child's real
+ * photograph being served to anyone who guesses a username.
  */
 type ProfileBase = {
   /** `players.public_id` — a UUID. NEVER `players.id`. */
@@ -242,6 +245,7 @@ type ProfileBase = {
   username: string;
   /** From `publicDisplayName()`. Never the Google `name`. */
   displayName: string;
+  /** Real Google photo, or null (render the meme avatar). See above. */
   image: string | null;
   friendship: FriendshipState;
   /**
@@ -418,7 +422,6 @@ export function createProfileReader(sqlClient: Sql) {
           p.public_id,
           p.username,
           p.handle,
-          p.image,
           p.profile_visibility,
           (SELECT count(*)::int FROM friendships fc
             WHERE fc.status = 'accepted'
@@ -435,7 +438,8 @@ export function createProfileReader(sqlClient: Sql) {
         p.public_id,
         p.username,
         p.handle,
-        p.image,
+        CASE WHEN p.use_google_photo AND (p.id = ${viewerId} OR f.status = 'accepted')
+             THEN p.image END                                          AS image,
         p.profile_visibility,
         (p.id = ${viewerId})                                           AS is_owner,
         f.status                                                       AS friend_status,
