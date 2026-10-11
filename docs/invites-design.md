@@ -51,9 +51,15 @@ transports, their safety rules and their rate-limit shape.
 - **No GET API for an invite.** The landing page resolves the code server-side.
   No caller needs a JSON read, and every public read surface is one more thing to
   rate-limit and keep staged-safe. Add one when a cross-origin handoff needs it.
-- **No OG image, generic metadata.** The page title is "You're invited ·
-  HallPass" and names nobody: a link pasted into a group chat becomes a preview
-  card cached on other people's devices (`challenge-sharing-design.md` §7).
+- **A link preview card, kept to what the page already shows.** A pasted link
+  becomes a preview cached on other people's devices (`challenge-sharing-design.md`
+  §7), so the card (`app/i/[code]/opengraph-image.tsx`) and the title carry only
+  the inviter's public display name and the game, in the game's colours with its
+  cover: no avatar, no room data, no countdown. Every dead end (unknown,
+  collected, expired, staged) gets the generic card and the title "You're invited
+  · HallPass", which name nobody; both ask `getInvitePreview`, so they cannot
+  disagree. A staged game's invite is a dead end here, because a crawler is
+  signed out. (This first shipped with no card; it was added afterwards.)
 - **Kid safety on the landing page**: the inviter's public display name only
   (handle, else `@username`, else "Player" — never the Google name), no avatar,
   no profile link, `noindex` by header and metadata, never precached.
@@ -228,7 +234,7 @@ routes, `app/lib/social-cache.ts`, `next.config.ts`, `public/sw.js`,
 
 ## 11. Deliberately excluded
 
-An OG preview card; a sign-in button inside the picker (it would need the picker
+A sign-in button inside the picker (it would need the picker
 to refresh itself after a popup sign-in); invites to a specific room that
 HallPass understands (the data is opaque); revoking an invite (they expire in
 minutes); the in-app-browser escape `/c/` attempts; a launch handoff for

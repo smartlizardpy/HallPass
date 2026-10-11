@@ -19,7 +19,8 @@
  * Google name) and the game. No avatar, no profile link: an invite link gets
  * pasted into group chats, and sign-in is Google-only, so an avatar here would
  * often be a child's real photograph (`challenge-sharing-design.md` §7). The
- * metadata names nobody, and there is no preview image.
+ * link PREVIEW (title + `opengraph-image.tsx`) shows the same two things and no
+ * more, and falls back to a generic card that names nobody for any dead end.
  *
  * ── ONE ANSWER FOR EVERY DEAD END ──────────────────────────────────────────
  * An unknown code, a collected one, a malformed one, and an invite to a STAGED
@@ -37,15 +38,38 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getInvite, resolveInviteGame } from "@/app/lib/invites";
+import { getInvite, getInvitePreview, resolveInviteGame } from "@/app/lib/invites";
 import { isValidInviteCode, normalizeInviteCode } from "@/app/lib/invites/code";
+import {
+  GENERIC_PREVIEW_DESCRIPTION,
+  GENERIC_PREVIEW_TITLE,
+  invitePreviewTitle,
+} from "@/app/lib/invites/preview";
 import { Wordmark } from "@/app/components/Wordmark";
 import { InviteLanding } from "./InviteLanding";
 
-export const metadata: Metadata = {
-  title: "You're invited · HallPass",
-  robots: { index: false, follow: false },
-};
+/**
+ * The link preview's title. A live invite to a public game names the inviter's
+ * public display name and the game; every dead end, and a staged game, gets the
+ * generic title that names nobody (see the header). The card image beside it is
+ * `opengraph-image.tsx`, which asks {@link getInvitePreview} the same question.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ code: string }>;
+}): Promise<Metadata> {
+  const preview = await getInvitePreview(normalizeInviteCode((await params).code)).catch(() => null);
+  const title = preview ? invitePreviewTitle(preview.from, preview.game.title) : GENERIC_PREVIEW_TITLE;
+  const description = GENERIC_PREVIEW_DESCRIPTION;
+  return {
+    title,
+    description,
+    robots: { index: false, follow: false },
+    openGraph: { title, description, type: "website" },
+    twitter: { card: "summary_large_image", title, description },
+  };
+}
 
 export const dynamic = "force-dynamic";
 

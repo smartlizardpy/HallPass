@@ -23,6 +23,7 @@ import { resolveGame, resolveGameIncludingStaged } from "@/app/lib/games-store";
 import { isStaged } from "@/app/lib/game-staging";
 import { canViewStaged } from "@/app/lib/beta/staged-access";
 import { superAdminEmails } from "@/app/lib/notifications/admins";
+import { isValidInviteCode } from "./code";
 import { createInviteStore, type InvitableFriend, type PublicInvite } from "./store";
 
 /** The live store. Use it directly where errors must surface (writes). */
@@ -104,4 +105,25 @@ export async function getInvite(code: string): Promise<PublicInvite | null> {
     reportUnexpected("getByCode", error);
     return null;
   }
+}
+
+/** What a link preview may show of an invite: the inviter's public name and the game. */
+export type InvitePreview = { from: string | null; game: Game };
+
+/**
+ * What a link preview (the og:title and the card image) may reveal of `code`, or
+ * `null` for ANY dead end.
+ *
+ * `null` covers a malformed or unknown code, a collected one, an expired one,
+ * and an invite to a STAGED game this requester cannot see. A chat app's crawler
+ * is signed out, so it never sees a staged invite, and the last case must be
+ * indistinguishable from the others or the preview would confirm that a hidden
+ * game exists. The landing page makes the same promise for the same reason.
+ */
+export async function getInvitePreview(code: string): Promise<InvitePreview | null> {
+  if (!isValidInviteCode(code)) return null;
+  const invite = await getInvite(code);
+  if (!invite || invite.expired || invite.secondsLeft <= 0) return null;
+  const target = await resolveInviteGame(invite.slug);
+  return target ? { from: invite.from, game: target.game } : null;
 }
