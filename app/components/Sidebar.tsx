@@ -5,6 +5,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { StealthMenuButton } from "./stealth/StealthMenuButton";
 import { ThemeMenuButton } from "./theme/ThemeMenuButton";
 import { Wordmark } from "./Wordmark";
+import { useStallEscape } from "../lib/use-stall-escape";
 
 /**
  * One glyph per browse row, drawn on the same 24x24 grid {@link CategoryIcon}
@@ -230,7 +231,8 @@ export function Sidebar({
    * has an opinion about. The primary destinations (Games / Friends / You) used to
    * sit above the genres and take their highlight from the live pathname; they
    * live in `SiteHeader` alone now, which is why nothing in here reads
-   * `usePathname` any more.
+   * `usePathname` to decide what is highlighted any more. (`useStallEscape` reads
+   * it, but only to cancel its timer when a navigation commits.)
    */
   active: string;
   /**
@@ -245,6 +247,8 @@ export function Sidebar({
   mobileOpen?: boolean;
   onMobileClose?: () => void;
 }) {
+  // The way out if the client router takes a tap here and never commits it.
+  const watchStall = useStallEscape();
   const items = ["All", "New", "Trending", ...categories];
 
   /* ---------------------------------------------------------------------- *
@@ -374,6 +378,7 @@ export function Sidebar({
                 <Link
                   href={hrefForItem(item)}
                   onClick={onMobileClose}
+                  onNavigate={() => watchStall(hrefForItem(item))}
                   title={tooltips ? item : undefined}
                   className={itemClass(isActive, collapsed)}
                 >
@@ -487,7 +492,7 @@ export function Sidebar({
             }`}
           >
             {railExpanded && (
-              <Link href="/" className="min-w-0 flex-1">
+              <Link href="/" className="min-w-0 flex-1" onNavigate={() => watchStall("/")}>
                 <Wordmark size="text-2xl" dotClass="h-1.5 w-1.5" />
               </Link>
             )}
@@ -665,7 +670,7 @@ export function Sidebar({
           }}
         >
           <div className="flex h-16 items-center justify-between px-5">
-            <Link href="/" onClick={onMobileClose}>
+            <Link href="/" onClick={onMobileClose} onNavigate={() => watchStall("/")}>
               <Wordmark />
             </Link>
             <button

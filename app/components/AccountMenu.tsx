@@ -52,6 +52,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { startSignIn, startSignOut } from "../lib/auth-actions";
+import { useStallEscape } from "../lib/use-stall-escape";
 import { openStealthSettings } from "../lib/stealth/store";
 import type { MeResponse } from "@/sdk/src/contract";
 import { ROLE_LABEL } from "@/app/lib/permissions";
@@ -136,6 +137,13 @@ export function AccountMenu() {
   // identity would buy exactly nothing and only imply a guarantee that is not
   // being relied on.
   const closeMenu = () => setOpen(false);
+  // The way out if the client router takes a tap here and never commits it. The
+  // dropdown closes on navigation, so the watch lives up here, not in `MenuLink`.
+  const watchStall = useStallEscape();
+  const goTo = (href: string) => () => {
+    closeMenu();
+    watchStall(href);
+  };
 
   // Identity not resolved yet → hold space without flashing the wrong state.
   if (!loaded) {
@@ -224,7 +232,7 @@ export function AccountMenu() {
 
           <div className="my-1 h-px bg-border" />
 
-          <MenuLink href="/play/you/friends" onNavigate={closeMenu}>
+          <MenuLink href="/play/you/friends" onNavigate={goTo("/play/you/friends")}>
             Friends
             {incoming > 0 && (
               <span className="ml-2 rounded-full bg-accent-pink-ink px-1.5 py-0.5 text-[10px] font-black text-white">
@@ -235,14 +243,14 @@ export function AccountMenu() {
           {/* "Your profile", not "Account settings": `/play/you` is the player's
               own profile with settings as one tab among several, so the old
               label promised a narrower page than the link now opens. */}
-          <MenuLink href="/play/you" onNavigate={closeMenu}>
+          <MenuLink href="/play/you" onNavigate={goTo("/play/you")}>
             Your profile
           </MenuLink>
           {/* Sits in the same slot as Dashboard: the one entry that is only
               there because of who you are. A tester who is also an admin sees
               both — they are different jobs, not two names for one. */}
           {isBetaTester && (
-            <MenuLink href="/beta" onNavigate={closeMenu}>
+            <MenuLink href="/beta" onNavigate={goTo("/beta")}>
               Beta testing
               <span className="ml-2 rounded-full bg-brand-50 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-brand">
                 beta
@@ -250,7 +258,7 @@ export function AccountMenu() {
             </MenuLink>
           )}
           {isAdmin && (
-            <MenuLink href="/dashboard" onNavigate={closeMenu}>
+            <MenuLink href="/dashboard" onNavigate={goTo("/dashboard")}>
               Dashboard
             </MenuLink>
           )}
