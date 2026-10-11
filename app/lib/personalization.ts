@@ -42,6 +42,7 @@
  */
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { recordTastePlay } from "./taste-store";
 
 /** localStorage key holding the JSON `string[]` of favorited game slugs. */
 const FAVORITES_KEY = "hp:favorites";
@@ -283,6 +284,10 @@ export function toggleFavorite(slug: string): void {
  */
 export function recordRecentPlay(slug: string): void {
   if (!slug) return;
+  // The device's taste record (for the signed-in "for you" order). Before the
+  // already-at-the-front check below: playing the same game twice is two plays.
+  // A no-op for a guest and when personalisation is off — see `taste-store.ts`.
+  recordTastePlay(slug);
   ensureLoaded();
   if (recentSnapshot[0] === slug) return;
   commitRecent(prependCapped(recentSnapshot, slug, RECENT_CAP));
