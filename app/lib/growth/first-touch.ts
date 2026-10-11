@@ -39,6 +39,7 @@
  */
 
 import posthog from "posthog-js";
+import { isAnalyticsOptedOut } from "../analytics-consent";
 import { REF_PARAM, bucketRef, normalizeRef } from "./channels";
 
 /** Super property: the raw `ref` this device first arrived with. */
@@ -71,12 +72,19 @@ export function readRef(search: string): string | null {
  * untagged, and writing one on the first organic visit would burn the set-once
  * slot before the tagged visit that mattered ever happened.
  *
+ * Honours the analytics opt-out (`app/lib/analytics-consent.ts`): once opted
+ * out it returns before registering anything.
+ *
  * Safe to call unconditionally. It checks for a browser and for a live PostHog,
  * so a missing analytics token (`instrumentation-client.ts` guards on it) or a
  * server render leaves it inert rather than throwing during startup.
  */
 export function recordFirstTouchRef(): void {
   if (typeof window === "undefined") return;
+  // An opted-out device records nothing. The SDK would also refuse to persist
+  // once opted out, but this must not depend on that: the contract is "no
+  // analytics storage when the player said no".
+  if (isAnalyticsOptedOut()) return;
 
   const ref = readRef(window.location.search);
   if (ref === null) return;
