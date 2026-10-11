@@ -9,6 +9,7 @@ import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { createProfileReportStore } from "./store";
 import {
   NOTE_MAX_CHARS,
+  PROFILE_REPORT_RETENTION_DAYS,
   REPORT_DAILY_LIMIT,
   REPORT_HOURLY_LIMIT,
   isProfileReportReason,
@@ -114,6 +115,29 @@ describe("resolve", () => {
       found: true,
       changed: false,
     });
+  });
+});
+
+describe("purgeResolved", () => {
+  it("is one DELETE of resolved rows only, bound to the day count", async () => {
+    const { sql, calls } = makeFakeSql([{ n: "3" }]);
+    const out = await createProfileReportStore(sql).purgeResolved(90);
+    expect(out).toEqual({ deleted: 3 });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].text).toMatch(/DELETE FROM profile_reports/);
+    expect(calls[0].text).toMatch(/status <> 'open'/);
+    expect(calls[0].text).toMatch(/resolved_at < now\(\)/);
+    expect(calls[0].values).toEqual([90]);
+  });
+
+  it("counts what is due for a dry run without deleting", async () => {
+    const { sql, calls } = makeFakeSql([{ n: 2 }]);
+    expect(await createProfileReportStore(sql).countPurgeable(90)).toBe(2);
+    expect(calls[0].text).not.toMatch(/DELETE/);
+  });
+
+  it("keeps the documented retention", () => {
+    expect(PROFILE_REPORT_RETENTION_DAYS).toBe(90);
   });
 });
 

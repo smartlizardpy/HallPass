@@ -155,6 +155,35 @@ export function createProfileReportStore(sql: Sql) {
       }));
     },
 
+    /**
+     * Delete resolved reports more than `days` after they were resolved. Open
+     * reports are never touched. Idempotent; a repeat run deletes nothing more.
+     * Rows with a NULL `resolved_at` and a non-open status cannot exist through
+     * the app, but would be kept rather than guessed at.
+     */
+    async purgeResolved(days: number): Promise<{ deleted: number }> {
+      const rows = (await sql`
+        WITH del AS (
+          DELETE FROM profile_reports
+           WHERE status <> 'open'
+             AND resolved_at < now() - make_interval(days => ${days}::int)
+          RETURNING id
+        )
+        SELECT count(*)::int AS n FROM del
+      `) as Row[];
+      return { deleted: toInt(rows[0]?.n) };
+    },
+
+    /** How many resolved reports are past retention (for a dry run). */
+    async countPurgeable(days: number): Promise<number> {
+      const rows = (await sql`
+        SELECT count(*)::int AS n FROM profile_reports
+         WHERE status <> 'open'
+           AND resolved_at < now() - make_interval(days => ${days}::int)
+      `) as Row[];
+      return toInt(rows[0]?.n);
+    },
+
     async openCount(): Promise<number> {
       const rows = (await sql`
         SELECT count(*)::int AS n FROM profile_reports WHERE status = 'open'

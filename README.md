@@ -641,6 +641,10 @@ duplicate, and when a player deletes their account.
   that is already gone counts as deleted. See `app/lib/beta/media-cleanup.ts`.
 - Apply `app/lib/scoreboard/migrations/044_beta_media_expiry.sql` **before**
   deploying: the report queries select `media_expired_at`.
+- The same workflow has a second step, `scripts/run-profile-report-retention.mjs`,
+  which calls **`POST /api/v1/admin/profile-reports/retention`** and deletes
+  resolved (actioned or dismissed) profile reports 90 days after resolution
+  (`PROFILE_REPORT_RETENTION_DAYS`). Open reports are never deleted. Same secret.
 
 ## Deploy notifications
 

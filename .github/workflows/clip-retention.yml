@@ -2,7 +2,9 @@ name: Beta clip retention
 
 # Asks the live site, once a day, to delete beta bug-report clips and screenshots
 # older than the retention period (30 days, `CLIP_RETENTION_DAYS` in
-# `app/lib/beta/config.ts`). All the judgement — which are expired, the delete
+# `app/lib/beta/config.ts`). A second step in the same job, on the same schedule
+# and secret, deletes resolved profile reports 90 days after resolution
+# (`scripts/run-profile-report-retention.mjs`). All the judgement — which are expired, the delete
 # order, what a failure leaves behind — lives on the deployment
 # (`app/lib/beta/media-cleanup.ts`) and is tested there; see
 # `scripts/run-clip-retention.mjs`, which is deliberately thin. The report text is
@@ -78,3 +80,15 @@ jobs:
           HALLPASS_SITE_URL: ${{ vars.HALLPASS_SITE_URL }}
         run: |
           node scripts/run-clip-retention.mjs ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      # Its own step and route so the names stay honest and a failure in one sweep
+      # is reported against that sweep. `!cancelled()` lets it run after the clip
+      # step failed; the job still ends red if either did. Resolved profile reports
+      # are deleted 90 days after resolution (`PROFILE_REPORT_RETENTION_DAYS`).
+      - name: Delete resolved profile reports past retention
+        if: ${{ !cancelled() && env.HAS_ALERTS_SECRET == 'true' }}
+        env:
+          ALERTS_SECRET: ${{ secrets.ALERTS_SECRET }}
+          HALLPASS_SITE_URL: ${{ vars.HALLPASS_SITE_URL }}
+        run: |
+          node scripts/run-profile-report-retention.mjs ${{ inputs.dry_run && '--dry-run' || '' }}
