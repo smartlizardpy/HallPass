@@ -121,6 +121,10 @@ function toSort(value: unknown): SortDir {
  * rather than `players.id` for the reason `007_social_graph.sql` spells out:
  * `players.id` is the Google subject, a stable cross-service identifier for a
  * minor, and it must never reach another player's browser.
+ *
+ * `image` is the Google photo and is non-null only when the other party opted in
+ * (`use_google_photo`) AND is an accepted friend of the reader; otherwise it is
+ * null and `Avatar` shows the meme avatar for `id`.
  */
 export type ChallengeParty = {
   id: string;
