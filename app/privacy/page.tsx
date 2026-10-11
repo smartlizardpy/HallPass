@@ -253,6 +253,21 @@ www.hallpass.games. It is run from England. We
             time in your browser or your notification settings.]
           </li>
           <li>
+            <strong>Games picked for you.</strong> When you are signed in, we put
+            games you are likely to enjoy first in the games list. This is worked
+            out <strong>in your browser</strong>, from the games you play and
+            favourite on that device. It is <strong>not sent to us and not saved
+            to your account</strong>. Nothing is recorded about you when you are
+            not signed in, and signing out of a device deletes it. You can turn
+            this off in settings (which also deletes what the device learned) or
+            reset it at any time. This is a form of profiling, so we tell you
+            about it here and in the games list itself. [Contract: a feature of
+            your account; you can switch it off.]{" "}
+            <Placeholder>SOLICITOR: confirm that signing in as the opt-in is
+            acceptable for profiling of children under the ICO Children&apos;s
+            Code (standard 12, profiling off by default)</Placeholder>
+          </li>
+          <li>
             Survey answers, if you answer one. They are linked to your account
             inside our database so that you can only answer once, but reports
             to our team show answers without your name or email. [Legitimate
@@ -361,6 +376,13 @@ www.hallpass.games. It is run from England. We
             recent games, streak, theme, tab-disguise, catalogue sort and view,
             closed banners, a guest leaderboard name, and notification
             preferences. Strictly for features you use.
+          </li>
+          <li>
+            <strong>Games picked for you (signed in only).</strong> A small
+            record in your browser of how many times you played each game
+            (up to 60 games) and when, used to order your games list. It never
+            leaves your device. Signing out, or turning the setting off, deletes
+            it. See section 3.
           </li>
           <li>
             <strong>Service worker.</strong> HALLPASS can be installed like an
