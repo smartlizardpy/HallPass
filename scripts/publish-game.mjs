@@ -64,7 +64,8 @@
 //   npm run publish-game -- <slug> --staged --from .staging/<slug> --cover cover.png [--yes]
 //   npm run publish-game -- <slug> [--staged --from .staging/<slug>] --republish [--yes]
 //
-// Needs BLOB_READ_WRITE_TOKEN and DATABASE_URL, or a .env.local providing them.
+// Needs BLOB_READ_WRITE_TOKEN and PROD_DATABASE_URL (the Neon main branch), or a
+// .env.local providing them. A DATABASE_URL set on the command line still wins.
 
 import { neon } from "@neondatabase/serverless";
 import { del, head, put } from "@vercel/blob";
@@ -97,7 +98,15 @@ if (args.error) {
 const { slug, staged } = args;
 const confirmed = args.yes;
 
-if (!process.env.BLOB_READ_WRITE_TOKEN || !process.env.DATABASE_URL) {
+// WHICH DATABASE. The blob token is the LIVE store's, so the rows must go to the
+// LIVE database (Neon main) too. `.env.local`'s DATABASE_URL is the DEV branch,
+// for `next dev` and `npm run migrate`, and publishing with it uploads the files
+// live but records them in dev: the live route never sees a new file, so it 404s
+// (last-bell, 2026-10-10: "game.js failed to load"). So a DATABASE_URL given on
+// the command line is used as given, and otherwise only PROD_DATABASE_URL is,
+// never the DATABASE_URL that .env.local provides.
+const explicitDatabaseUrl = process.env.DATABASE_URL;
+if (!process.env.BLOB_READ_WRITE_TOKEN || !(explicitDatabaseUrl || process.env.PROD_DATABASE_URL)) {
   try {
     process.loadEnvFile(path.join(rootDir, ".env.local"));
   } catch {
@@ -110,17 +119,20 @@ if (!process.env.BLOB_READ_WRITE_TOKEN) {
   );
   process.exit(1);
 }
+const databaseUrl = explicitDatabaseUrl || process.env.PROD_DATABASE_URL;
 // Hard requirement, not a warning: a blob published without its index row is a
 // blob the serving route cannot see. Refusing up front beats a half-publish.
-if (!process.env.DATABASE_URL) {
+if (!databaseUrl) {
   console.error(
-    "error: DATABASE_URL is not set and .env.local did not provide it.\n" +
-      "       It is needed to record the published blob in game_blobs; without\n" +
-      "       that row the serving route will not see this upload.",
+    "error: PROD_DATABASE_URL is not set and .env.local did not provide it.\n" +
+      "       It is the LIVE database (Neon main), needed to record the published\n" +
+      "       blob in game_blobs; without that row the serving route will not see\n" +
+      "       this upload. .env.local's DATABASE_URL is the dev branch and is not\n" +
+      "       used here.",
   );
   process.exit(1);
 }
-const sql = neon(process.env.DATABASE_URL);
+const sql = neon(databaseUrl);
 
 const publicDir = path.join(rootDir, "public");
 const liveDir = path.join(publicDir, "games", slug);
