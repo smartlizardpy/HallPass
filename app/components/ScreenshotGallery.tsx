@@ -1,7 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { type GameMedia, mediaPublicPath } from "../lib/game-media-blob";
+import type { GameMedia } from "../lib/game-media-blob";
+import { buildGallerySlides, firstImageIndex } from "../lib/gallery-slides";
+import { GameTrailer } from "./GameTrailer";
 
 /**
  * The store-page screenshot gallery: one large frame plus a scroll-snap thumb
@@ -21,47 +23,51 @@ import { type GameMedia, mediaPublicPath } from "../lib/game-media-blob";
  * Every image carries explicit `width`/`height` from `game_media` so the browser
  * reserves the right box before the bytes arrive — no layout shift.
  */
-export type GallerySlide = {
-  key: string;
-  src: string;
-  alt: string;
-  /** Absent for the cover, whose intrinsic size is not recorded anywhere. */
-  width?: number;
-  height?: number;
-};
-
 export function ScreenshotGallery({
   media,
   title,
   cover = null,
+  video = null,
 }: {
   media: GameMedia[];
   title: string;
-  /** Cover art URL, shown FIRST. `null` when the game has none. */
+  /** Cover art URL, shown after the video. `null` when the game has none. */
   cover?: string | null;
+  /**
+   * The game's gameplay/intro video, shown as the FIRST SLIDE, or `null`. It used
+   * to be a separate toggle above the hero; see `lib/gallery-slides.ts`.
+   *
+   * `poster` and `thumb` are passed in rather than derived so this component never
+   * learns about `CoverImage` or YouTube thumbnails (`GameTrailer` explains why the
+   * poster is our own artwork). `thumb` is the URL for the strip, `null` for a
+   * plain dark tile.
+   */
+  video?: {
+    id: string;
+    label: string;
+    poster: React.ReactNode;
+    thumb: string | null;
+    onPlay?: () => void;
+  } | null;
 }) {
   const [index, setIndex] = useState(0);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const pointerStart = useRef<number | null>(null);
   const swipedRef = useRef(false);
 
-  // Cover first, then the screenshots, as ONE list every render site reads from.
-  // Building it here rather than in the caller keeps the "cover leads" rule in
-  // the component that owns the ordering, and means the arrows, the counter, the
-  // thumb strip and the lightbox cannot disagree about what slide 1 is.
-  const slides: GallerySlide[] = [
-    ...(cover ? [{ key: "cover", src: cover, alt: `${title} cover art` }] : []),
-    ...media.map((item, i) => ({
-      key: item.id,
-      src: mediaPublicPath(item),
-      alt: item.alt || `${title} screenshot ${i + 1}`,
-      width: item.width,
-      height: item.height,
-    })),
-  ];
+  // ONE list every render site reads from — the order is a rule, and it lives in
+  // `lib/gallery-slides.ts` so the arrows, the counter, the thumb strip and the
+  // lightbox cannot disagree about what slide 1 is.
+  const slides = buildGallerySlides({
+    title,
+    cover,
+    media,
+    video: video ? { id: video.id, label: video.label } : null,
+  });
 
   const count = slides.length;
   const current = slides[index] ?? slides[0];
+  const onVideo = current?.kind === "video";
 
   const step = (delta: number) => {
     setIndex((i) => (i + delta + count) % count);
@@ -102,13 +108,34 @@ export function ScreenshotGallery({
       className="min-w-0"
       role="group"
       aria-roledescription="carousel"
-      aria-label={`${title} screenshots`}
+      aria-label={`${title} gallery`}
       tabIndex={0}
       onKeyDown={onKeyDown}
     >
-      {/* Main frame */}
-      <div className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl bg-zinc-900">
-        {slides.map((item, i) => (
+      {/* THE VIDEO SLIDE. Mounted only while it is the current slide, so leaving it
+          stops the video — and nothing from YouTube is requested until Play is
+          pressed (see `GameTrailer`). */}
+      {onVideo && video && (
+        <GameTrailer
+          videoId={video.id}
+          label={video.label}
+          title={title}
+          poster={video.poster}
+          onPlay={video.onPlay}
+          // Only offered when there is somewhere to go back TO.
+          onExit={count > 1 ? () => setIndex(firstImageIndex(slides)) : undefined}
+        />
+      )}
+
+      {/* Main frame. Stays in the page, hidden, while the video slide is showing:
+          the pictures must remain in the HTML for crawlers and no-JS readers. */}
+      <div
+        className={`relative aspect-[16/10] w-full overflow-hidden rounded-2xl bg-zinc-900 ${
+          onVideo ? "hidden" : ""
+        }`}
+      >
+        {slides.map((item, i) =>
+          item.kind !== "image" ? null : (
           // All frames stay mounted and crossfade via opacity: swapping `src`
           // would flash the empty frame on every step, and it also means the
           // SSR'd HTML contains every screenshot for crawlers and no-JS readers.
@@ -127,7 +154,8 @@ export function ScreenshotGallery({
               i === index ? "opacity-100" : "opacity-0"
             }`}
           />
-        ))}
+          ),
+        )}
 
         {/* The artwork itself is the control that opens the lightbox, and it is a
             real <button>, not a div with pointer handlers. As a div there was no
@@ -144,7 +172,7 @@ export function ScreenshotGallery({
             horizontally does not change the slide. */}
         <button
           type="button"
-          aria-label={`View ${current?.alt ?? title} full size`}
+          aria-label={`View ${current?.kind === "image" ? current.alt : title} full size`}
           className="absolute inset-0 cursor-zoom-in focus:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-brand"
           onPointerDown={(e) => {
             pointerStart.current = e.clientX;
@@ -189,7 +217,11 @@ export function ScreenshotGallery({
               <button
                 type="button"
                 onClick={() => setIndex(i)}
-                aria-label={`Show image ${i + 1}`}
+                aria-label={
+                  item.kind === "video"
+                    ? `Show the ${item.label.toLowerCase()} video`
+                    : `Show image ${slides.slice(0, i + 1).filter((x) => x.kind === "image").length}`
+                }
                 aria-current={i === index}
                 className={`relative block aspect-[16/10] w-24 shrink-0 overflow-hidden rounded-lg bg-zinc-900 transition ${
                   i === index
@@ -197,16 +229,49 @@ export function ScreenshotGallery({
                     : "opacity-70 hover:opacity-100"
                 }`}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={item.src}
-                  alt=""
-                  width={item.width}
-                  height={item.height}
-                  loading="lazy"
-                  decoding="async"
-                  className="absolute inset-0 h-full w-full object-cover"
-                />
+                {item.kind === "image" ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={item.src}
+                    alt=""
+                    width={item.width}
+                    height={item.height}
+                    loading="lazy"
+                    decoding="async"
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                ) : (
+                  <>
+                    {/* The game's own artwork (or a plain dark tile), never a
+                        YouTube thumbnail — see `GameTrailer`. */}
+                    {video?.thumb && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={video.thumb}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                    )}
+                    {/* Literal white disc and dark triangle: it sits on artwork,
+                        which does not change colour with the theme. */}
+                    <span className="absolute inset-0 grid place-items-center bg-zinc-900/35">
+                      <span className="grid h-7 w-7 place-items-center rounded-full bg-white/95 shadow">
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 14 14"
+                          fill="currentColor"
+                          className="pointer-events-none ml-0.5 text-zinc-900"
+                          aria-hidden
+                        >
+                          <path d="M3 1.5v11l10-5.5z" />
+                        </svg>
+                      </span>
+                    </span>
+                  </>
+                )}
               </button>
             </li>
           ))}
@@ -223,7 +288,7 @@ export function ScreenshotGallery({
         }}
         className="max-h-[90dvh] max-w-[95vw] rounded-2xl bg-transparent p-0 backdrop:bg-zinc-900/80 backdrop:backdrop-blur-sm"
       >
-        {current && (
+        {current?.kind === "image" && (
           <div className="relative" onClick={(e) => e.stopPropagation()}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
