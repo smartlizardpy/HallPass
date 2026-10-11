@@ -628,6 +628,22 @@ export const games: Game[] = [
     multiplayer: { minPlayers: 1, maxPlayers: 4, voice: true },
     coverUrl: "/game-media/last-bell/hero-22dbdbcc08.png",
   },
+  {
+    slug: "survive-till-dawn-pixel-edition",
+    author: "Ateş Demir",
+    title: "Survive Till Dawn: Pixel Edition",
+    tagline: "Hold the graveyard until sunrise.",
+    description:
+      "Pick a map and a weapon, then survive a full night of pixel-art monster waves, stacking perks and relics until dawn breaks.",
+    category: "Survivor",
+    tags: ["Survivor", "Pixel", "Horror"],
+    gradient: ["#2a0a14", "#c4283c"],
+    accent: "#e8384f",
+    art: "swarm",
+    isNew: true,
+    staged: true,
+    coverUrl: "/game-media/survive-till-dawn-pixel-edition/hero-62a745c884.png",
+  },
 ];
 
 /**
