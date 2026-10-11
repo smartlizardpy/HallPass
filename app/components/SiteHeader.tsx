@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
+import { useStallEscape } from "../lib/use-stall-escape";
 import Link from "next/link";
 import type { Game } from "../lib/games";
 import { captureSearchNow } from "../lib/use-search-capture";
@@ -139,6 +140,8 @@ export function SiteHeader({
   onQueryChange?: (value: string) => void;
 }) {
   const router = useRouter();
+  // The way out if the client router takes a tap here and never commits it.
+  const watchStall = useStallEscape();
   const controlled = typeof query === "string" && Boolean(onQueryChange);
 
   // Same source of truth for "which tab is lit" as the rail: the live pathname,
@@ -253,7 +256,7 @@ export function SiteHeader({
           beside it and the 2xl mark's extra ~20px would come out of the search
           field. It goes back up at `xl`, where there is room. */}
       {!isMobile && (
-        <Link href="/" className="shrink-0">
+        <Link href="/" className="shrink-0" onNavigate={() => watchStall("/")}>
           <Wordmark size="text-xl sm:text-2xl lg:text-xl xl:text-2xl" />
         </Link>
       )}
@@ -286,6 +289,7 @@ export function SiteHeader({
               <li key={entry.href}>
                 <Link
                   href={entry.href}
+                  onNavigate={() => watchStall(entry.href)}
                   aria-current={isActive ? "page" : undefined}
                   className={`flex h-11 items-center whitespace-nowrap rounded-full px-3 text-[15px] font-bold transition xl:px-4 ${
                     isActive
@@ -319,7 +323,9 @@ export function SiteHeader({
               new FormData(e.currentTarget).get("q") ?? "",
             ).trim();
             captureSearchNow(value);
-            router.push(value ? `/?q=${encodeURIComponent(value)}` : "/");
+            const target = value ? `/?q=${encodeURIComponent(value)}` : "/";
+            router.push(target);
+            watchStall(target);
           }}
         >
           {searchInput}
