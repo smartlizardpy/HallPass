@@ -155,3 +155,48 @@ describe("the for-you sort", () => {
     expect(toCatalogSort("foryou")).toBe("foryou");
   });
 });
+
+describe("quality in the default order", () => {
+  const rated = [
+    game({ slug: "plain", title: "Plain" }),
+    game({ slug: "great", title: "Great", quality: 9 }),
+    game({ slug: "poor", title: "Poor", quality: 2 }),
+    game({ slug: "good", title: "Good", quality: 7 }),
+    game({ slug: "mobile-great", title: "Mobile", quality: 10, platform: "mobile" }),
+  ];
+  const rank = (g: Game) => (g.platform === "mobile" ? 2 : 0);
+
+  it("puts better-rated games first and unrated ones in the middle", () => {
+    expect(slugs(sortCatalog(rated.slice(0, 4), { sort: "featured" }))).toEqual([
+      "great",
+      "good",
+      "plain",
+      "poor",
+    ]);
+  });
+
+  it("keeps the playable-here games ahead of a better-rated one that is not", () => {
+    const out = slugs(sortCatalog(rated, { sort: "featured", rank }));
+    expect(out.at(-1)).toBe("mobile-great");
+  });
+
+  it("keeps the catalogue order when nothing is rated", () => {
+    const unrated = ["x", "y", "z"].map((slug) => game({ slug }));
+    expect(slugs(sortCatalog(unrated, { sort: "featured" }))).toEqual(["x", "y", "z"]);
+  });
+
+  it("leaves a chosen order alone", () => {
+    expect(slugs(sortCatalog(rated, { sort: "alpha" }))).toEqual([
+      "good",
+      "great",
+      "mobile-great",
+      "plain",
+      "poor",
+    ]);
+  });
+
+  it("never filters, whatever the ratings", () => {
+    expect(sortCatalog(rated, { sort: "featured" })).toHaveLength(rated.length);
+  });
+});
+

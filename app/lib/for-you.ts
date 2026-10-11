@@ -10,8 +10,8 @@
  * It turns what a player has done on THIS device — favourites, the recently
  * played list, and a rolling per-game play count — into a taste: how much they
  * lean towards each tag and category. Every game is then scored by how well it
- * fits that taste, with a little for newness, for being playable on this device
- * and for being popular, and the result is re-ranked so that ten near-identical
+ * fits that taste, with a little for newness, for being playable on this device,
+ * for being popular and for the quality a super admin has rated it, and the result is re-ranked so that ten near-identical
  * games do not sit in a row.
  *
  * ── WHAT IT DELIBERATELY IS NOT ─────────────────────────────────────────────
@@ -34,6 +34,7 @@
 import type { Game } from "./games";
 import type { DevicePlatform } from "./use-device-platform";
 import { playsFor } from "./plays";
+import { qualityBoost } from "./quality";
 
 /** One game's play history on this device. */
 export type TasteEntry = {
@@ -196,6 +197,10 @@ export function rankForYou(input: ForYouInput): ForYouResult | null {
     if (game.isNew) score += W_NEW;
     if (game.isFeatured) score += W_FEATURED;
     score += W_POPULAR * Math.min(1, Math.log10(1 + playsFor(game, input.playCounts)) / 3);
+    // A super admin's quality rating, bounded and small beside the taste terms:
+    // it breaks ties between similarly relevant games, it never outranks a match.
+    // An unrated game adds nothing (see `quality.ts`).
+    score += qualityBoost(game.quality);
     if (input.device) {
       const fits =
         !game.platform ? null : game.platform === "both" || game.platform === input.device;
