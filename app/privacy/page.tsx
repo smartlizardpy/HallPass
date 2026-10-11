@@ -1,10 +1,14 @@
 /**
  * `/privacy` — the Privacy Policy.
  *
- * DRAFT, written from the code rather than from a template, by someone who is
- * not a lawyer. Every statement of fact below rests on a file a reader can open;
- * where the code could not settle a point it is a `Placeholder` (rendered as a
- * yellow [square-bracket] note), never a guess. Claims and where they come from:
+ * Written from the code rather than from a template. Every statement of fact
+ * below rests on a file a reader can open, and a statement the code cannot back
+ * is worded as what we do NOT yet do, never guessed. Points still undecided (a
+ * fixed PostHog and review-report retention period, hosting regions, the PECR
+ * position on the analytics device ID, a solicitor's review) are tracked as open
+ * items in `docs/dpia.md` and are phrased honestly here rather than shown as
+ * public placeholders. When one is settled, update both. Claims and where they
+ * come from:
  *
  *  - Sign-in and the `players` row (email, Google name, avatar, handle,
  *    username, country, visibility): `app/lib/auth.ts`, `app/lib/players.sql`,
@@ -12,33 +16,31 @@
  *  - Deletion: `deletePlayer` in `app/lib/players.ts`, the form in
  *    `app/play/you/settings/page.tsx`. Scores are kept with the name "Deleted".
  *  - Analytics: `instrumentation-client.ts` (PostHog EU via the `/ingest`
- *    rewrite in `next.config.ts`, no `identify`), `app/lib/growth/first-touch.ts`.
- *    DEPENDS ON THE PARALLEL WORKSTREAM (not in this branch's code when
- *    drafted): the settings Analytics switch, the one-time notice, clearing the
- *    ID on opt-out, and session recording forced off in `posthog.init`. Verify
- *    each against the merged `instrumentation-client.ts` before publishing.
+ *    rewrite in `next.config.ts`, no `identify`, `disable_session_recording`),
+ *    `app/lib/analytics-consent.ts` (the settings switch, one-time notice and
+ *    clearing the ID on opt-out), `app/lib/growth/first-touch.ts`.
  *  - Device storage: the `hp:*` keys listed in the audit (personalization.ts,
  *    streak/store.ts, stealth/config.ts, catalog-prefs.ts, …), `public/sw.js`.
- *  - Avatars: today's code shows the Google photo on leaderboards
- *    (`app/lib/scoreboard/store.ts`), reviews and friends. The text describes
- *    the DECIDED design (default meme avatar from the public id; Google photo
- *    only to accepted friends behind a settings opt-in; never on leaderboards,
- *    reviews, non-friend lookups, /c/ and /i/ pages or co-op rooms, see
- *    `SHARE_AVATAR_WITH_PEERS` in `app/lib/p2p/config.ts`). DEPENDS ON THE
- *    PARALLEL AVATAR WORKSTREAM; re-verify after merge.
+ *  - Avatars: a meme avatar (own pick of meme and colour, else a default from
+ *    the public id) everywhere other players look, `app/lib/avatars.ts`,
+ *    `app/lib/scoreboard/store.ts`; the Google photo only to accepted friends
+ *    behind a settings opt-in (`ownAvatarUrl`); never on leaderboards, reviews,
+ *    non-friend lookups, /c/ and /i/ pages or co-op rooms (see
+ *    `SHARE_AVATAR_WITH_PEERS` in `app/lib/p2p/config.ts`).
  *  - IP addresses: salted hash only, `app/lib/scoreboard/guard.ts`; country via
  *    `app/lib/geo.ts`.
  *  - Co-op: `app/lib/p2p/*` (STUN defaults in `config.ts`; TURN code still
  *    exists in `ice.ts`, so the deployment must have no TURN env set for the
  *    "no relay" statement to hold), `sdk/p2p/src/client.ts`,
- *    `docs/p2p-design.md`, migration `040_p2p_signaling.sql`. The first-use
- *    notice and "no public rooms" depend on the parallel co-op workstream.
+ *    `docs/p2p-design.md`, migration `040_p2p_signaling.sql`. The "no relay"
+ *    statement holds only while the deployment has no TURN env set.
  *  - Reports about profiles and the moderation queue: `app/lib/profile-reports/*`,
  *    `app/api/v1/me/reports/route.ts`, `app/dashboard/(app)/moderation/*`,
  *    `docs/profile-reports-design.md`. Resolved profile reports are deleted 90
  *    days after resolution (`PROFILE_REPORT_RETENTION_DAYS`, run daily by
  *    `.github/workflows/clip-retention.yml`). Review reports
- *    (`app/lib/reviews/*`) have NO retention rule in the code yet.
+ *    (`app/lib/reviews/*`) have NO retention rule in the code yet, and the
+ *    text says so.
  *  - Push, notifications, streak reminders: `app/lib/push/*`,
  *    `app/lib/notifications/*`, `app/lib/streak/*`,
  *    `.github/workflows/streak-reminders.yml`.
@@ -47,9 +49,8 @@
  *    `app/lib/invites/*`, `docs/challenge-sharing-design.md`,
  *    `docs/invites-design.md`.
  *  - Beta programme and recordings: `app/lib/beta/*`, `app/lib/capture/*`,
- *    `docs/game-recorder.md`, `app/api/v1/beta/clips/[id]/route.ts`. The 30-day
- *    and on-account-deletion deletion of clips depends on a PARALLEL
- *    WORKSTREAM (today `deletePlayer` does not touch blobs).
+ *    `docs/game-recorder.md`, `app/api/v1/beta/clips/[id]/route.ts`. 30-day
+ *    sweep: `media-cleanup.ts`; on account deletion: `deletePlayer`.
  *  - Surveys: `app/lib/surveys/*`.
  *
  * Static on purpose: no session or database reads, so it prerenders.
@@ -57,11 +58,7 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  LegalPage,
-  LegalSection,
-  Placeholder,
-} from "../components/legal/LegalPage";
+import { LegalPage, LegalSection } from "../components/legal/LegalPage";
 
 const title = "Privacy Policy";
 const description =
@@ -78,7 +75,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title={title}
-      updated={<>11 October 2026 (draft)</>}
+      updated={<>11 October 2026</>}
       shortVersion={
         <ul>
           <li>
@@ -110,7 +107,7 @@ export default function PrivacyPage() {
           </li>
           <li>
             You can delete your account yourself in your settings. Questions or
-            requests: smartlizardpy@duck.com.
+            requests: legal@hallpass.games.
           </li>
         </ul>
       }
@@ -124,15 +121,8 @@ www.hallpass.games. It is run from England. We
           which means we decide how and why it is used.
         </p>
         <p>
-          Operator: Ozan Kaygusuz
-          <br />
-          Address: <Placeholder>POSTAL ADDRESS</Placeholder>
-          <br />
           Contact for anything in this policy:{" "}
-          smartlizardpy@duck.com
-          <br />
-          ICO registration number (if registered):{" "}
-          <Placeholder>ICO REGISTRATION NUMBER OR NOT REQUIRED</Placeholder>
+          legal@hallpass.games
         </p>
       </LegalSection>
 
@@ -161,26 +151,18 @@ www.hallpass.games. It is run from England. We
             telling the truth. We do not knowingly keep an account belonging to
             anyone under 13. If we learn we have, or a parent or carer tells us,
             we will delete the account. Parents and carers can contact us at{" "}
-            smartlizardpy@duck.com to see, correct or delete their
+            legal@hallpass.games to see, correct or delete their
             child&apos;s data.
           </li>
         </ul>
         <p>
           Our approach follows the ICO&apos;s Children&apos;s Code (the UK
-          &quot;Age Appropriate Design Code&quot;). We have written a draft Data
+          &quot;Age Appropriate Design Code&quot;). We have written a Data
           Protection Impact Assessment (in our code repository at{" "}
-          <code>docs/dpia.md</code>).{" "}
-          <Placeholder>SOLICITOR / OWNER: DPIA sign-off, and the position on
-          having no age check for a service that children use</Placeholder>
-        </p>
-        <p>
-          <Placeholder>SOLICITOR (IMPORTANT): this service is run by an
-          individual who is under 18. Take advice on whether a minor can enter
-          the contracts described in the Terms and be the &quot;controller&quot;
-          of children&apos;s personal data with the duties that carries
-          (registration and fee, responding to requests, breach reporting).
-          Strong suggestion: a parent or guardian (or a company) acts as the
-          legal operator, and this page names them in section 1.</Placeholder>
+          <code>docs/dpia.md</code>), which we update as the site changes. We
+          do not check ages, which is a trade-off we have made knowingly: the
+          more we asked, the more we would have to collect. Instead we collect
+          little and keep children&apos;s settings private by default.
         </p>
       </LegalSection>
 
@@ -262,11 +244,7 @@ www.hallpass.games. It is run from England. We
             this off in settings (which also deletes what the device learned) or
             reset it at any time. This is a form of profiling, so we tell you
             about it here and in the games list itself. [Contract: a feature of
-            your account; you can switch it off.]{" "}
-            <Placeholder>SOLICITOR: confirm that signing in as the opt-in is
-            acceptable for profiling of children under the ICO Children&apos;s
-            Code (standard 12, profiling off by default)</Placeholder>
-          </li>
+            your account; you can switch it off.]</li>
           <li>
             Survey answers, if you answer one. They are linked to your account
             inside our database so that you can only answer once, but reports
@@ -326,10 +304,12 @@ www.hallpass.games. It is run from England. We
             challenge links and invites.
           </li>
           <li>
-            <strong>Avatars.</strong> Everyone gets a default cartoon (&quot;meme&quot;)
-            avatar, chosen from your public ID, so it is not a photo of you.
-            That is what appears on leaderboards, reviews, friends lists and
-            profile lookups by people who are not your friends.
+            <strong>Avatars.</strong> Everyone has a cartoon (&quot;meme&quot;)
+            avatar on a coloured background. You choose which one, and the
+            colour, in your settings; until you do, we give you one based on
+            your public ID. It is not a photo of you. That is what appears on
+            leaderboards, reviews, friends lists and profile lookups by people
+            who are not your friends.
           </li>
           <li>
             <strong>Your real Google profile picture</strong> (often a real
@@ -342,7 +322,7 @@ www.hallpass.games. It is run from England. We
           </li>
           <li>
             <strong>Profile visibility</strong> starts at &quot;friends&quot;:
-            people who are not your friends see only your name and default
+            people who are not your friends see only your name and cartoon
             avatar. You can change it to public or private. Profile pages are marked so
             search engines should not list them.
           </li>
@@ -363,6 +343,7 @@ www.hallpass.games. It is run from England. We
         <p>
           UK rules (PECR) say we must tell you about, and sometimes ask
           permission for, anything we store on your device or read from it.
+          The full list is on our <Link href="/cookies">Cookies page</Link>.
         </p>
         <ul>
           <li>
@@ -396,10 +377,7 @@ www.hallpass.games. It is run from England. We
             you here, in your browser (PostHog&apos;s default is a cookie plus
             local storage). We use it to tell a returning visitor from a new
             one. It does not name you. Switching analytics off in settings
-            clears it. See section 6.{" "}
-            <Placeholder>CONFIRM the exact PostHog storage settings at
-            runtime once the final code is merged</Placeholder>
-          </li>
+            clears it. See section 6.</li>
         </ul>
         <p>
           You can clear all of this in your browser settings at any time. Some
@@ -452,15 +430,10 @@ www.hallpass.games. It is run from England. We
             whether the site works and is used, so we can fix it. Because this
             reads and writes an ID on your device, UK cookie rules (PECR) also
             apply.{" "}
-            <Placeholder>SOLICITOR: PECR position. The owner has chosen
-            on-by-default with a notice and an opt-out. The intended basis is
-            the statistical-purposes exemption added by the Data (Use and
-            Access) Act 2025, which we have only confirmed from secondary
-            sources (not the legislation or ICO guidance itself), and whether
-            it covers a device ID used to count returning visitors, for a
-            service used by children. The alternative is an opt-in banner with
-            analytics off until accepted. Decide before finalising.</Placeholder>
-          </li>
+            We think the statistics exemption in the Data (Use and Access) Act
+            2025 covers a device ID used only to count visits, but the law on
+            this is new. If that changes, we will switch to asking you first,
+            before anything is stored.</li>
         </ul>
         <p>
           We do not use Google Analytics, advertising pixels or social media
@@ -476,8 +449,8 @@ www.hallpass.games. It is run from England. We
           Some games let you play with someone else online. This connects your
           device <strong>directly to theirs</strong> (called peer-to-peer, or
           WebRTC). To do that, devices must learn each other&apos;s network
-          addresses. <strong>That means the other players in your room may be
-          can see your IP address</strong>, which can show roughly where you
+          addresses. <strong>That means the other players in your room may
+          see your IP address</strong>, which can show roughly where you
           are and who your internet provider is. The first time you use co-op
           on a device we show a short notice saying this before anything
           connects.
@@ -512,8 +485,8 @@ www.hallpass.games. It is run from England. We
             Game data goes directly between players and does not pass through
             our servers. We do not record it. Games can use your microphone for voice only if the
             game asks and your browser permission prompt is accepted; you can
-            mute. <Placeholder>CONFIRM whether any live game uses
-            voice</Placeholder>
+            mute. Voice goes directly between players, like game data, and is
+            not recorded.
           </li>
         </ul>
         <p>
@@ -562,8 +535,8 @@ www.hallpass.games. It is run from England. We
           </li>
         </ul>
         <p>
-          <Placeholder>SOLICITOR: parental permission and age rules for
-          under-18 testers; the code has no age or consent step</Placeholder>
+          Testers have to be 13 or over like everyone else. If you are under 18
+          and want to test, please ask a parent or carer first.
         </p>
       </LegalSection>
 
@@ -572,11 +545,10 @@ www.hallpass.games. It is run from England. We
         <ul>
           <li>
             <strong>Vercel</strong> (hosting, and file storage for game files
-            and beta clips). <Placeholder>region</Placeholder>
+            and beta clips).
           </li>
           <li>
-            <strong>Neon</strong> (our database).{" "}
-            <Placeholder>region</Placeholder>
+            <strong>Neon</strong> (our database).
           </li>
           <li>
             <strong>PostHog</strong> (analytics, EU).
@@ -616,9 +588,7 @@ www.hallpass.games. It is run from England. We
           based in or process data in the USA or elsewhere outside the UK. Where
           that happens we rely on the safeguards UK law allows, such as the UK
           extension to the EU-US Data Privacy Framework or standard contract
-          terms. <Placeholder>SOLICITOR: confirm transfer mechanism for each
-          provider</Placeholder>
-        </p>
+          terms.</p>
       </LegalSection>
 
       <LegalSection id="keep" title="10. How long we keep things">
@@ -644,17 +614,16 @@ www.hallpass.games. It is run from England. We
             day. <strong>Reports about reviews</strong> are kept in our
             moderation queue while we look at them, and afterwards as a short
             record of what we decided, so that repeat problems are noticed.{" "}
-            <Placeholder>OWNER: set a retention period for resolved review
-            reports (the code has no deletion rule for them yet)</Placeholder>
-          </li>
+            We have not yet set a fixed deletion date for these records; if you
+            want one removed, ask us.</li>
           <li>
             <strong>Invite links</strong>: removed about an hour after they
             expire. <strong>Co-op setup messages</strong>: minutes.{" "}
             <strong>Notifications</strong>: your latest 100.
           </li>
           <li>
-            <strong>Analytics</strong>: kept by PostHog for{" "}
-            <Placeholder>PostHog retention setting</Placeholder>. Deleting your
+            <strong>Analytics</strong>: kept by PostHog. We have not yet set an automatic deletion
+            period for it, and it contains no names or emails. Deleting your
             account does not delete analytics, which are not tied to you.
             Switching analytics off clears the ID in your browser; ask us if
             you want us to look into removing data already sent.
@@ -696,7 +665,7 @@ www.hallpass.games. It is run from England. We
           <li>withdraw consent (for example, push notifications) at any time.</li>
         </ul>
         <p>
-          Email smartlizardpy@duck.com. We may need to check
+          Email legal@hallpass.games. We may need to check
           it is really you. We will reply within one month. It is free. A
           parent or carer can make a request for a child.
         </p>

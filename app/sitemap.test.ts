@@ -43,5 +43,6 @@ describe("sitemap", () => {
     const urls = (await sitemap()).map((e) => e.url);
     expect(urls).toContain(`${SITE_URL}/privacy`);
     expect(urls).toContain(`${SITE_URL}/terms`);
+    expect(urls).toContain(`${SITE_URL}/cookies`);
   });
 });
