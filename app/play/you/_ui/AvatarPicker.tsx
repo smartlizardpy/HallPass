@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MemeAvatarCircle } from "@/app/components/MemeAvatar";
 import { AVATAR_COLOURS, MEME_AVATARS, getMemeAvatar } from "@/app/lib/avatars";
 
@@ -36,6 +36,18 @@ export function AvatarPicker({
   const [memeId, setMemeId] = useState(initialMeme);
   const [colour, setColour] = useState(initialColour);
   const meme = getMemeAvatar(memeId) ?? MEME_AVATARS[0];
+
+  // The saved choice comes back as new props after the form's redirect. Tell the
+  // site-header chip (a separate client island that fetched identity on mount)
+  // to re-read it. Skips the first run: nothing has changed yet.
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    window.dispatchEvent(new Event("hp:me-changed"));
+  }, [initialMeme, initialColour]);
 
   return (
     <div>
