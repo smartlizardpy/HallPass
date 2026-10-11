@@ -74,7 +74,6 @@ export type ProfileReportRefusal =
 export function parseNote(value: unknown): string | null | undefined {
   if (value === undefined || value === null) return null;
   if (typeof value !== "string") return undefined;
-  // eslint-disable-next-line no-control-regex
   const cleaned = value.replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, "").trim();
   if (cleaned.length > NOTE_MAX_CHARS) return undefined;
   return cleaned.length === 0 ? null : cleaned;
