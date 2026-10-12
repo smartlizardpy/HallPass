@@ -42,6 +42,8 @@ import {
   type ActiveBoard,
 } from "@/app/lib/overview";
 import { agoLabel, hourLabel, peak, share } from "@/app/lib/insights";
+import { conversionRate, durationLabel } from "@/app/lib/coop/config";
+import { getCoopStats } from "@/app/lib/coop/stats";
 import { DashHeader } from "./_ui/DashHeader";
 import { Section } from "./_ui/Section";
 import { TopCountries } from "./_ui/TopCountries";
@@ -80,10 +82,11 @@ export default async function DashboardPage() {
   // here too so no data is fetched for an unauthorized request. Re-checks live role.
   await requireRole(DASHBOARD_MIN_ROLE);
 
-  const [stats, community, games] = await Promise.all([
+  const [stats, community, games, coop] = await Promise.all([
     getDashboardStats(),
     getCommunityStats(),
     resolveGamesIncludingStaged(),
+    getCoopStats(),
   ]);
 
   // One clock for the whole render, so two chips a millisecond apart cannot
@@ -220,6 +223,40 @@ export default async function DashboardPage() {
           {topGames.length === 0 ? <Empty /> : <TopGamesBar data={topGames} />}
         </Section>
       </div>
+
+      {/* Online co-op: PostHog `coop_*` events, full detail on /dashboard/coop. */}
+      <Section
+        title="Co-op"
+        subtitle="online sessions, last 30 days"
+        className="mt-6"
+      >
+        {!coop.configured ? (
+          <Empty hint="Analytics key not configured." />
+        ) : coop.rooms === 0 && coop.sessions === 0 ? (
+          <Empty hint="No co-op sessions reported yet." />
+        ) : (
+          <div className="grid grid-cols-2 items-center gap-4 lg:grid-cols-5">
+            <MiniStat label="Sessions" value={fmt(coop.sessions)} />
+            <MiniStat label="Rooms created" value={fmt(coop.rooms)} />
+            <MiniStat
+              label="Became a session"
+              value={(() => {
+                const c = conversionRate(coop.rooms, coop.sessions);
+                return c === null ? "—" : `${c}%`;
+              })()}
+            />
+            <MiniStat label="Typical length" value={durationLabel(coop.medianSeconds)} />
+            <div className="col-span-2 lg:col-span-1">
+              <Sparkline data={coop.daily.map((d) => d.sessions)} color={C.visitors} />
+            </div>
+          </div>
+        )}
+        <div className="mt-4 text-right">
+          <Link href="/dashboard/coop" className="text-sm font-semibold text-brand hover:text-brand-600">
+            Co-op details →
+          </Link>
+        </div>
+      </Section>
 
       {/*
         The first-party half of the trend. PostHog above counts anonymous plays;
