@@ -34,6 +34,13 @@ interface ConnectOptions {
      * player's consent itself before calling `createRoom`/`joinRoom`.
      */
     ipNotice?: "auto" | "custom";
+    /**
+     * Co-op session counts (rooms made, sessions of two or more players, how long
+     * they last) are reported to the HallPass page that frames the game, which
+     * records them anonymously. No names, ids or room codes are sent. `false`
+     * turns it off. Off on the `local` transport.
+     */
+    telemetry?: boolean;
     /** Local transport only. */
     simulate?: SimulateOptions | null;
     /** Log to the console. */
