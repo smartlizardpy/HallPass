@@ -651,6 +651,20 @@ export const games: Game[] = [
     multiplayer: { minPlayers: 1, maxPlayers: 4 },
     coverUrl: "/game-media/survive-till-dawn-pixel-edition/hero-0f803aa43f.png",
   },
+  {
+    slug: "doodle-dash",
+    author: "Sohan sohan Kan",
+    title: "Doodle Dash",
+    tagline: "Draw your way across the page.",
+    description:
+      "Sketch bridges, ramps and shields with your own pen to guide a stick figure past gaps, spikes and saws to the flag. Spend your ink wisely across 100 hand-drawn levels.",
+    category: "Puzzle",
+    tags: ["Puzzle", "Drawing", "Sketch"],
+    gradient: ["#17172b", "#2563eb"],
+    accent: "#fde047",
+    art: "tether",
+    isNew: true,
+  },
 ];
 
 /**
