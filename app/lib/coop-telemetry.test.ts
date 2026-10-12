@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { TELEMETRY_SOURCE } from "@/sdk/p2p/src/telemetry";
 import { COOP_MESSAGE_SOURCE, parseCoopMessage } from "./coop-telemetry";
 
 const msg = (event: string, props: Record<string, unknown>, gameId: unknown = "last-bell", source: unknown = COOP_MESSAGE_SOURCE) => ({
@@ -56,5 +57,23 @@ describe("parseCoopMessage", () => {
   it("never passes extra properties through", () => {
     const out = parseCoopMessage(msg("session_started", { players: 2, name: "Sam", $set: { a: 1 } }));
     expect(out?.props).toEqual({ game_slug: "last-bell", players: 2 });
+  });
+});
+
+describe("contract with the SDK", () => {
+  it("uses the same message source", () => {
+    expect(TELEMETRY_SOURCE).toBe(COOP_MESSAGE_SOURCE);
+  });
+  it("accepts every report the SDK can make", () => {
+    const reports = [
+      { event: "room_created", props: { max_players: 8 } },
+      { event: "session_started", props: { players: 2 } },
+      { event: "player_joined", props: { players: 8 } },
+      ...(["left", "kicked", "host-left", "timeout", "error"] as const).map((reason) => ({
+        event: "session_ended",
+        props: { duration_s: 0, peak_players: 2, reason },
+      })),
+    ];
+    for (const r of reports) expect(parseCoopMessage({ source: TELEMETRY_SOURCE, gameId: "g", ...r })).not.toBeNull();
   });
 });

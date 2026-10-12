@@ -10,6 +10,7 @@ import { connectFailed, P2PError } from "./errors";
 import { confirmIpNotice } from "./notice";
 import { clampPlayers, RoomImpl } from "./room";
 import { fetchConfig, httpTransport, localTransport, type Transport } from "./signaling";
+import { chooseTelemetry, type TelemetrySink } from "./telemetry";
 import type { Client, ConnectOptions, CreateRoomOptions, JoinRoomOptions, Room, SelfInfo } from "./types";
 
 export { P2P_VERSION as VERSION } from "./version";
@@ -85,6 +86,7 @@ class ClientImpl implements Client {
   private t: Transport;
   private ice: { servers: RTCIceServer[]; expiresAt: number | null; turn: boolean; forceRelay: boolean };
   private refreshTimer?: ReturnType<typeof setTimeout>;
+  private report: TelemetrySink;
 
   constructor(
     private opts: ConnectOptions,
@@ -96,6 +98,7 @@ class ClientImpl implements Client {
     cfg: Awaited<ReturnType<typeof fetchConfig>>,
   ) {
     this.t = transport === "local" ? localTransport() : httpTransport(api, log);
+    this.report = chooseTelemetry(opts.telemetry as boolean | TelemetrySink | undefined, transport, opts.gameId);
     this.ice = {
       // The local transport uses NO ICE servers, so it works offline and talks
       // to nothing outside the machine: tabs connect over host candidates.
@@ -131,7 +134,9 @@ class ClientImpl implements Client {
         precheck: (v, from) => (room ? room.precheck(v, from) : { code: "room-not-found" }),
       });
       room = this.newRoom(code, this.self.id, true, relayOnly);
-      room.hostInit(sig, { max: clampPlayers(opts.maxPlayers ?? 4), meta: JSON.parse(JSON.stringify(meta)), lockOnStart: !!opts.lockOnStart });
+      const max = clampPlayers(opts.maxPlayers ?? 4);
+      room.hostInit(sig, { max, meta: JSON.parse(JSON.stringify(meta)), lockOnStart: !!opts.lockOnStart });
+      this.report({ event: "room_created", props: { max_players: max } });
       this.log("room created", code);
       return room;
     } finally {
@@ -198,6 +203,7 @@ class ClientImpl implements Client {
       },
       turn: this.ice.turn,
       relayOnly,
+      telemetry: this.report,
     });
     this.room = room;
     return room;

@@ -25,6 +25,7 @@ import { env, hasDocument } from "./env";
 import { connectFailed, P2PError, roomError } from "./errors";
 import { PeerLink, type LinkState, type RtcSignal } from "./peer";
 import type { Refusal, Signaling } from "./signaling";
+import type { TelemetrySink } from "./telemetry";
 import type {
   CloseReason,
   LeaveReason,
@@ -98,6 +99,8 @@ export interface RoomDeps {
   /** Whether TURN was available, for explaining a failed connection. */
   turn: boolean;
   relayOnly: boolean;
+  /** Session counts for the framing page (see telemetry.ts). */
+  telemetry: TelemetrySink;
 }
 
 const clone = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T));
@@ -120,6 +123,9 @@ export class RoomImpl implements Room {
   /** Host only: the authoritative state snapshots are made from. */
   private st: Snap;
   private lockOnStart = false;
+  /** Host: when the room first held two players, and the most it ever held. */
+  private sessionAt: number | null = null;
+  private peak = 0;
 
   // host-only bookkeeping
   private pendingJoins = new Map<string, { name: string; avatarUrl: string | null; hello: boolean; welcomed: boolean; timer: ReturnType<typeof setTimeout> }>();
@@ -802,6 +808,17 @@ export class RoomImpl implements Room {
     const full = this.st.players.length + this.pendingJoins.size >= this.st.max;
     const locked = this.st.locked || (this.st.started && this.lockOnStart);
     this.sig?.setLobby({ joinable: !locked && !full, locked, full });
+    this.trackSession();
+  }
+
+  /** Host: a room is a session once it has held two players; remember its peak. */
+  private trackSession(): void {
+    const n = this.st.players.length;
+    if (n > this.peak) this.peak = n;
+    if (n >= 2 && this.sessionAt === null) {
+      this.sessionAt = env.now();
+      this.d.telemetry({ event: "session_started", props: { players: n } });
+    }
   }
 
   // ── internals: every peer ──────────────────────────────────────────────────
@@ -917,6 +934,7 @@ export class RoomImpl implements Room {
     const waiter = this.joinWaiter;
     this.joinWaiter = undefined;
     waiter?.resolve(this);
+    this.d.telemetry({ event: "player_joined", props: { players: Math.max(2, this.view.players.length) } });
     // Deliver after the game's `await joinRoom()` continuation has attached handlers.
     setTimeout(() => {
       if (this.closed) return;
@@ -972,6 +990,10 @@ export class RoomImpl implements Room {
     const waiter = this.joinWaiter;
     this.joinWaiter = undefined;
     waiter?.reject(connectFailed("room-closed"));
+    if (this.sessionAt !== null) {
+      const duration_s = Math.max(0, Math.round((env.now() - this.sessionAt) / 1000));
+      this.d.telemetry({ event: "session_ended", props: { duration_s, peak_players: Math.max(2, this.peak), reason } });
+    }
     if (!silentClose) this.ev.emit("closed", { reason });
     this.d.onClosed();
   }
