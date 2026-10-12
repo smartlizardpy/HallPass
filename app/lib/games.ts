@@ -664,6 +664,7 @@ export const games: Game[] = [
     isNew: true,
     author: "ateş",
     staged: true,
+    multiplayer: { minPlayers: 1, maxPlayers: 4 },
     coverUrl: "/game-media/survive-till-dawn-final-edition/hero-0f803aa43f.png",
   },
 ];
