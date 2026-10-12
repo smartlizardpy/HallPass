@@ -62,6 +62,7 @@ const ITEMS: NavItem[] = [
   // is the one that answers "is any of this working", so it sits with the other
   // things you open to think rather than with the things you open to edit.
   { href: "/dashboard/growth", label: "Growth" },
+  { href: "/dashboard/coop", label: "Co-op" },
   { href: "/dashboard/games", label: "Games" },
   { href: "/dashboard/curation", label: "Curation" },
   { href: "/dashboard/beta", label: "Beta" },

@@ -1,6 +1,6 @@
 # HallPass P2P co-op SDK — design note
 
-Status: v1 (`hallpass-p2p.js` 1.1.0). First consumer: LAST BELL (1–4 player co-op).
+Status: v1 (`hallpass-p2p.js` 1.2.0). First consumer: LAST BELL (1–4 player co-op).
 Contract: section 4 of `HALLPASS_P2P_SDK_PROMPT.md` (kept in the LAST BELL repo).
 Every place this build differs from that contract is listed in `HANDOFF.md`.
 
@@ -13,7 +13,7 @@ Every place this build differs from that contract is listed in `HANDOFF.md`.
 | Identity | Auth.js (Google, JWT sessions). `/api/v1/me` returns `PlayerIdentity` whose `handle` is `effectiveHandle()`, which **falls back to the Google account name** (a real name). The public-safe name is `publicDisplayName()` (handle, else `@username`, else "Player"). | A new `GET /api/v1/p2p/config` returns `publicDisplayName()` for the signed-in player. `/api/v1/me` is not reused. |
 | Existing SDK | `sdk/src` → one IIFE at `/sdk/v1/hallpass.js` (scoreboard, achievements, moments), installs `window.HallPass`, "never throws". | P2P has a different shape (an ES module the game imports, promises that reject with coded errors), so it is a **sibling module in `sdk/p2p/`** sharing the repo's build (tsup), test runner (vitest), lint boundary (`sdk/**` may not import server code) and hosting (`public/sdk/`). It does not ride inside `hallpass.js`: LAST BELL needs a vendorable ES module, and the scoreboard bundle must stay small. |
 | Manifest | `app/lib/games.ts` static `Game[]` (+ DB overrides). | Add optional `multiplayer?: { minPlayers, maxPlayers, voice? }` and a "Players" row on the store page. |
-| Analytics | PostHog, client-side, on the site shell. | Optional in the spec; **not built in v1** (open question). |
+| Analytics | PostHog, client-side, on the site shell. | Not in the original v1. Since 1.2.0 the SDK reports anonymous session counts through the shell; see §8. |
 
 ### Conflicts with the brief, and what was chosen
 
@@ -116,4 +116,28 @@ What was actually run (2026-10-10): all vitest suites; `run.mjs` on Chromium 153
 10. `multiplayer` field on `Game` + store-page row.
 11. Docs: `sdk/README.md` P2P section, `sdk/CHANGELOG.md`, `HANDOFF.md`.
 
-Deliberately excluded: host migration, public room lists, analytics, Metered's proprietary API, server-side name verification, a relay fallback through the host when one mesh link cannot connect (v1 fails the join with `connect-failed` / `peer-unreachable` instead).
+Deliberately excluded: host migration, public room lists, Metered's proprietary API, server-side name verification, a relay fallback through the host when one mesh link cannot connect (v1 fails the join with `connect-failed` / `peer-unreachable` instead).
+
+## 8. Session telemetry (since 1.2.0)
+
+Game traffic is peer to peer, so the server cannot count sessions: it sees the handshake and, 3 minutes after the host goes quiet, nothing. The SDK knows, so it reports. **No Neon table is used** — the numbers are counts and durations and live in PostHog.
+
+```
+game iframe (SDK) ──postMessage──► page shell (CoopTelemetry) ──► posthog.capture('coop_*')
+                                        │ whitelist: app/lib/coop-telemetry.ts
+                                        └ honours the device's analytics opt-out
+```
+
+| SDK event → PostHog event | Sent by | Properties (plus `game_slug`) |
+| --- | --- | --- |
+| `room_created` → `coop_room_created` | host, on `createRoom` | `max_players` |
+| `session_started` → `coop_session_started` | host, when the room first holds 2 players | `players` |
+| `player_joined` → `coop_player_joined` | joiner, when admitted | `players` |
+| `session_ended` → `coop_session_ended` | host, when the room closes (including `pagehide`) | `duration_s`, `peak_players`, `reason` |
+
+* **Why the shell sends it.** It already owns PostHog, the opt-out and the device id `game_started` uses, so co-op lines up with plays and an opted-out device reports nothing. The SDK imports no analytics code.
+* **Why the listener is app-wide** (`app/components/CoopTelemetry.tsx`, root layout) and not tied to the player overlay: a session's end is sent from the game frame's `pagehide`, which fires as the overlay unmounts.
+* **Trust.** Any same-origin script can post the message, so `parseCoopMessage` accepts only the four events, requires every property, bounds each integer, and limits `reason` to the SDK's close reasons. Free text and extra properties are dropped.
+* **Not sent:** names, peer ids, room codes, IPs. Off on the `local` transport, when unframed, and with `connect({ telemetry: false })`.
+* **Known gaps.** A crashed host tab reports a start and no end, so length is of clean ends only (the dashboard shows the unfinished count). Joiners report nothing at the end, so player-minutes are length × peak players, an estimate. Only games vendoring SDK 1.2.0+ report; the demo id `hallpass-p2p-demo` also appears if it is played inside the shell.
+* **Reading it:** `/dashboard/coop` (`app/lib/coop/stats.ts`, definitions in `app/lib/coop/config.ts`) and `run_analytics_hogql`; the MCP schema text carries the definitions.

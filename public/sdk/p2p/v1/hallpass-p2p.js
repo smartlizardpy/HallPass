@@ -1,4 +1,4 @@
-/* HallPass P2P SDK v1.1.0 — peer-to-peer co-op for HallPass games — https://hallpass.gg/sdk/p2p/v1/ — MIT */
+/* HallPass P2P SDK v1.2.0 — peer-to-peer co-op for HallPass games — https://hallpass.gg/sdk/p2p/v1/ — MIT */
 
 // sdk/p2p/src/codes.ts
 var CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -929,6 +929,9 @@ var RoomImpl = class {
     this.closed = false;
     this.links = /* @__PURE__ */ new Map();
     this.lockOnStart = false;
+    /** Host: when the room first held two players, and the most it ever held. */
+    this.sessionAt = null;
+    this.peak = 0;
     // host-only bookkeeping
     this.pendingJoins = /* @__PURE__ */ new Map();
     this.kicked = /* @__PURE__ */ new Set();
@@ -1542,6 +1545,16 @@ var RoomImpl = class {
     const full = this.st.players.length + this.pendingJoins.size >= this.st.max;
     const locked = this.st.locked || this.st.started && this.lockOnStart;
     this.sig?.setLobby({ joinable: !locked && !full, locked, full });
+    this.trackSession();
+  }
+  /** Host: a room is a session once it has held two players; remember its peak. */
+  trackSession() {
+    const n = this.st.players.length;
+    if (n > this.peak) this.peak = n;
+    if (n >= 2 && this.sessionAt === null) {
+      this.sessionAt = env.now();
+      this.d.telemetry({ event: "session_started", props: { players: n } });
+    }
   }
   // ── internals: every peer ──────────────────────────────────────────────────
   /** Optimistically apply my own ready/meta change, and tell the host. */
@@ -1636,6 +1649,7 @@ var RoomImpl = class {
     const waiter = this.joinWaiter;
     this.joinWaiter = void 0;
     waiter?.resolve(this);
+    this.d.telemetry({ event: "player_joined", props: { players: Math.max(2, this.view.players.length) } });
     setTimeout(() => {
       if (this.closed) return;
       if (this.view.started && this.view.start) this.ev.emit("start", clone(this.view.start));
@@ -1684,6 +1698,10 @@ var RoomImpl = class {
     const waiter = this.joinWaiter;
     this.joinWaiter = void 0;
     waiter?.reject(connectFailed("room-closed"));
+    if (this.sessionAt !== null) {
+      const duration_s = Math.max(0, Math.round((env.now() - this.sessionAt) / 1e3));
+      this.d.telemetry({ event: "session_ended", props: { duration_s, peak_players: Math.max(2, this.peak), reason } });
+    }
     if (!silentClose) this.ev.emit("closed", { reason });
     this.d.onClosed();
   }
@@ -2127,8 +2145,27 @@ async function fetchConfig(api, gameId) {
   };
 }
 
+// sdk/p2p/src/telemetry.ts
+var TELEMETRY_SOURCE = "hallpass-p2p-telemetry";
+var noTelemetry = () => {
+};
+function parentTelemetry(gameId) {
+  return (report) => {
+    try {
+      if (typeof window === "undefined" || window.parent === window) return;
+      window.parent.postMessage({ source: TELEMETRY_SOURCE, gameId, ...report }, location.origin);
+    } catch {
+    }
+  };
+}
+function chooseTelemetry(option, transport, gameId) {
+  if (typeof option === "function") return option;
+  if (option === false || transport === "local") return noTelemetry;
+  return parentTelemetry(gameId);
+}
+
 // sdk/p2p/src/version.ts
-var P2P_VERSION = "1.1.0";
+var P2P_VERSION = "1.2.0";
 
 // sdk/p2p/src/client.ts
 var LOCAL_HOSTS = /* @__PURE__ */ new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
@@ -2197,6 +2234,7 @@ var ClientImpl = class {
     this.busy = false;
     this.closed = false;
     this.t = transport === "local" ? localTransport() : httpTransport(api, log);
+    this.report = chooseTelemetry(opts.telemetry, transport, opts.gameId);
     this.ice = {
       // The local transport uses NO ICE servers, so it works offline and talks
       // to nothing outside the machine: tabs connect over host candidates.
@@ -2231,7 +2269,9 @@ var ClientImpl = class {
         precheck: (v, from) => room ? room.precheck(v, from) : { code: "room-not-found" }
       });
       room = this.newRoom(code, this.self.id, true, relayOnly);
-      room.hostInit(sig, { max: clampPlayers(opts.maxPlayers ?? 4), meta: JSON.parse(JSON.stringify(meta)), lockOnStart: !!opts.lockOnStart });
+      const max = clampPlayers(opts.maxPlayers ?? 4);
+      room.hostInit(sig, { max, meta: JSON.parse(JSON.stringify(meta)), lockOnStart: !!opts.lockOnStart });
+      this.report({ event: "room_created", props: { max_players: max } });
       this.log("room created", code);
       return room;
     } finally {
@@ -2292,7 +2332,8 @@ var ClientImpl = class {
         if (this.room === room) this.room = null;
       },
       turn: this.ice.turn,
-      relayOnly
+      relayOnly,
+      telemetry: this.report
     });
     this.room = room;
     return room;

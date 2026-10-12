@@ -325,8 +325,8 @@ other over WebRTC, and HallPass only helps them find each other.
 
 | | |
 | --- | --- |
-| Version | **1.1.0** (`HallPassP2P.version`) |
-| Hosted at | `https://hallpass.gg/sdk/p2p/v1/hallpass-p2p.js`, `hallpass-p2p.min.js` (49 KB, 17 KB gzipped), `hallpass-p2p.d.ts` |
+| Version | **1.2.0** (`HallPassP2P.version`) |
+| Hosted at | `https://hallpass.gg/sdk/p2p/v1/hallpass-p2p.js`, `hallpass-p2p.min.js` (54 KB, 19 KB gzipped), `hallpass-p2p.d.ts` |
 | Source | `sdk/p2p/src/` (build: `npm run build:sdk:p2p`) |
 | Demo / manual test page | `/sdk/p2p/demo/index.html` (coloured dots + chat) |
 | Design | `docs/p2p-design.md` |
@@ -551,6 +551,19 @@ to say something.
 Also: `closed`, `not-host`, `peer-left`, `handler-error`, `message-too-large`,
 `send-buffer-full`, `invalid-argument`, `already-in-room`, `unsupported`,
 `mic-denied`, `mic-unavailable`.
+
+### Session counts (since 1.2.0)
+
+So HallPass can see how many co-op rooms are made and how long people play in
+them (game traffic never touches the server), the SDK reports four anonymous
+events to the page that frames the game: a room was created (`max_players`), it
+reached two players (`players`), a player joined (`players`), and it ended
+(`duration_s`, `peak_players`, `reason`). It is a `postMessage` to the parent
+page, which records it in PostHog if the player has not opted out of analytics;
+no names, peer ids or room codes are sent. Nothing is reported on the `local`
+transport or when the game runs unframed. Pass `telemetry: false` to
+`connect()` to turn it off. A session's end is reported from `pagehide`, so a
+crashed host tab reports a start but no end.
 
 ### Gotchas
 

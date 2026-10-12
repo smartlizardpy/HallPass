@@ -4,6 +4,7 @@ import { Nunito } from "next/font/google";
 import { FeaturePromo } from "./components/FeaturePromo";
 import { SurveyBanner } from "./components/SurveyBanner";
 import { GrowthTracker } from "./components/GrowthTracker";
+import { CoopTelemetry } from "./components/CoopTelemetry";
 import { MobileSplash } from "./components/MobileSplash";
 import { MobileTabBar } from "./components/MobileTabBar";
 import { PWA } from "./components/PWA";
@@ -127,6 +128,7 @@ export default function RootLayout({
             and reports the first play of a new day. See its header for why it is
             not folded into the toast. */}
         <GrowthTracker />
+        <CoopTelemetry />
       </body>
     </html>
   );

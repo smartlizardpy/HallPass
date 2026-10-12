@@ -433,3 +433,42 @@ describe("diagnostics", () => {
     expect(typeof stats[guests[0].selfId].rttMs).toBe("number");
   });
 });
+
+describe("session telemetry", () => {
+  type Report = { event: string; props: Record<string, unknown> };
+  const sink = () => {
+    const reports: Report[] = [];
+    return { reports, extra: { telemetry: ((r: Report) => reports.push(r)) as unknown as boolean } };
+  };
+
+  it("counts a lobby that nobody joined as a room, not a session", async () => {
+    const { reports, extra } = sink();
+    const host = await (await client(newGame(), "Host", extra)).createRoom({ maxPlayers: 3 });
+    await host.leave();
+    expect(reports).toEqual([{ event: "room_created", props: { max_players: 3 } }]);
+  });
+
+  it("reports one session per room: its start, then length, peak and reason", async () => {
+    const { reports, extra } = sink();
+    const { host } = await room(2, { extra });
+    await until(() => reports.some((r) => r.event === "session_started"), 4000, "session start");
+    await host.leave();
+    expect(reports.filter((r) => r.event === "session_started")).toHaveLength(1);
+    expect(reports[0]).toEqual({ event: "room_created", props: { max_players: 4 } });
+    expect(reports.filter((r) => r.event === "player_joined")).toHaveLength(2);
+    const ended = reports.filter((r) => r.event === "session_ended");
+    expect(ended).toHaveLength(1);
+    expect(ended[0].props).toMatchObject({ peak_players: 3, reason: "left" });
+    expect(Number.isInteger(ended[0].props.duration_s)).toBe(true);
+  });
+
+  it("keeps the peak after players leave", async () => {
+    const { reports, extra } = sink();
+    const { host, guests } = await room(2, { extra });
+    await guests[1].leave();
+    await until(() => host.players.length === 2, 4000, "guest to drop");
+    await host.leave();
+    const ended = reports.find((r) => r.event === "session_ended");
+    expect(ended?.props).toMatchObject({ peak_players: 3 });
+  });
+});
