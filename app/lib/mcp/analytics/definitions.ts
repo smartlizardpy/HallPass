@@ -74,6 +74,13 @@ export const METRIC_DEFINITIONS: readonly string[] = [
     "There is no email, real name or photo in any view, and no way to join to " +
     "one. A NULL `player_public_id` means the row is genuinely anonymous, not " +
     "that the join failed.",
+
+  "CO-OP: a ROOM is `coop_room_created`; a SESSION is `coop_session_started`, a " +
+    "room that reached two players, so a lobby nobody joined is a room and not a " +
+    "session. Length is `coop_session_ended.duration_s`, sent only when the host's " +
+    "page closes cleanly: sessions minus ends are crashes, so average length is of " +
+    "the clean ones. Player-minutes (`duration_s * peak_players`) assume everyone " +
+    "stayed. Counts are DEVICES, and only games on P2P SDK 1.2.0 or later report.",
 ] as const;
 
 /** The custom events PostHog carries, and what each one means. */
@@ -91,6 +98,7 @@ export const POSTHOG_EVENTS: readonly { event: string; meaning: string }[] = [
   { event: "fullscreen_toggled", meaning: "Fullscreen toggled inside the player." },
   { event: "feature_promo_shown / feature_promo_closed", meaning: "The in-site promo modal." },
   { event: "challenge_link_shared / _viewed / _started / _result / _escape / _signin", meaning: "The challenge-link share loop, in order of the funnel." },
+  { event: "coop_room_created / coop_session_started / coop_session_ended / coop_player_joined", meaning: "Online co-op, reported by the P2P SDK through the page shell. Properties: game_slug; started/joined carry players, ended carries duration_s, peak_players, reason. See the co-op metric definition." },
   { event: "friends_board_shown", meaning: "The friends leaderboard was rendered." },
   { event: "$exception", meaning: "An uncaught error, captured automatically — from the site AND from the games it hosts." },
   { event: "$pageview / $autocapture", meaning: "PostHog defaults." },
