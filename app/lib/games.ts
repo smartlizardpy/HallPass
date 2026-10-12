@@ -650,6 +650,22 @@ export const games: Game[] = [
     staged: true,
     coverUrl: "/game-media/survive-till-dawn-pixel-edition/hero-62a745c884.png",
   },
+  {
+    slug: "survive-till-dawn-final-edition",
+    title: "Survive Till Dawn: Final Edition",
+    tagline: "The walls are alive. The night is hungry.",
+    description:
+      "Pick a survivor and a haunted realm, then shoot, dash and evolve your way through the night until dawn breaks. Unlock new heroes, coffins and mythic weapons across runs.",
+    category: "Survivor",
+    tags: ["Survivor", "Pixel", "Horror"],
+    gradient: ["#2a0a14", "#ff5470"],
+    accent: "#ffb347",
+    art: "swarm",
+    isNew: true,
+    author: "ateş",
+    staged: true,
+    coverUrl: "/game-media/survive-till-dawn-final-edition/hero-0f803aa43f.png",
+  },
 ];
 
 /**
