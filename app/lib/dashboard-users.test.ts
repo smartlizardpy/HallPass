@@ -81,6 +81,16 @@ describe("getUserRole", () => {
     await expect(getUserRole("nobody@example.com")).resolves.toBeNull();
   });
 
+  it("denies a user whose suspension is still running", async () => {
+    query.mockResolvedValue([{ role: "admin", suspended: true }]);
+    await expect(getUserRole("sus@example.com")).resolves.toBeNull();
+  });
+
+  it("allows a user whose suspension has lapsed", async () => {
+    query.mockResolvedValue([{ role: "admin", suspended: false }]);
+    await expect(getUserRole("back@example.com")).resolves.toBe("admin");
+  });
+
   it("still rejects when the database is unreachable", async () => {
     // Load-bearing: the management callers want this loud. `getSessionRole` is
     // the one that must not throw, and it would be pointless if this softened.

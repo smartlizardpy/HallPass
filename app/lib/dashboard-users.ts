@@ -63,6 +63,8 @@ export interface DashboardUser {
   invitedBy: string | null;
   createdAt: string;
   lastLogin: string | null;
+  /** ISO time the suspension lifts, or null. May be in the past (lapsed). */
+  suspendedUntil: string | null;
 }
 
 /** A row as returned by the driver (column names as keys). */
@@ -104,6 +106,8 @@ function mapUser(row: Row): DashboardUser {
     invitedBy: row.invited_by == null ? null : String(row.invited_by),
     createdAt: toIso(row.created_at),
     lastLogin: row.last_login == null ? null : toIso(row.last_login),
+    suspendedUntil:
+      row.suspended_until == null ? null : toIso(row.suspended_until),
   };
 }
 
@@ -135,9 +139,13 @@ export async function getUserRole(email: string): Promise<Role | null> {
   const target = normalizeEmail(email);
   if (isSuperAdminEmail(target)) return "super_admin";
   const rows = await sql`
-    SELECT role FROM dashboard_users WHERE email = ${target}
+    SELECT role, (suspended_until IS NOT NULL AND suspended_until > now()) AS suspended
+    FROM dashboard_users WHERE email = ${target}
   `;
   if (rows.length === 0) return null;
+  // A suspended user is denied exactly like an unknown one. Checked after the
+  // env allow-list above, so a break-glass super admin can never be locked out.
+  if (rows[0].suspended === true) return null;
   const role = rows[0].role;
   // Narrowed EXPLICITLY rather than through `toRole`, because the two answer
   // different questions. `toRole` maps a row for display and must always produce
@@ -248,7 +256,8 @@ export async function upsertUserOnLogin(u: {
 /** All dashboard users, oldest first (stable for an admin-management table). */
 export async function listUsers(): Promise<DashboardUser[]> {
   const rows = await sql`
-    SELECT email, role, name, image, invited_by, created_at, last_login
+    SELECT email, role, name, image, invited_by, created_at, last_login,
+           suspended_until
     FROM dashboard_users
     ORDER BY created_at ASC
   `;
@@ -432,4 +441,26 @@ function seatResult(row: Row | undefined, limit: number): SeatResult {
 export async function removeUser(email: string): Promise<void> {
   const target = normalizeEmail(email);
   await sql`DELETE FROM dashboard_users WHERE email = ${target}`;
+}
+
+/**
+ * Suspend a user for `days` days from now (or lift it with `null`). The row and
+ * role are untouched; `getUserRole` simply denies them until the time passes.
+ * Re-suspending restarts the clock rather than extending it. `days` is bound as
+ * a value and multiplied in SQL, per the module's no-spliced-fragments rule.
+ */
+export async function setSuspension(
+  email: string,
+  days: number | null,
+): Promise<void> {
+  const target = normalizeEmail(email);
+  if (days === null) {
+    await sql`UPDATE dashboard_users SET suspended_until = NULL WHERE email = ${target}`;
+    return;
+  }
+  await sql`
+    UPDATE dashboard_users
+    SET suspended_until = now() + (${days} * interval '1 day')
+    WHERE email = ${target}
+  `;
 }
