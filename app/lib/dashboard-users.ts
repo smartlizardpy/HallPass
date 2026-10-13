@@ -464,3 +464,24 @@ export async function setSuspension(
     WHERE email = ${target}
   `;
 }
+
+/**
+ * When an ACTIVE suspension on `email` lifts, as an ISO string — or `null` if
+ * they are not suspended (no row, no suspension, or one that has lapsed). Used
+ * only to tell a suspended admin why they were turned away; it grants nothing,
+ * so a failed read resolves to `null` rather than throwing.
+ */
+export async function getActiveSuspension(
+  email: string,
+): Promise<string | null> {
+  const target = normalizeEmail(email);
+  try {
+    const rows = await sql`
+      SELECT suspended_until FROM dashboard_users
+      WHERE email = ${target} AND suspended_until > now()
+    `;
+    return rows.length === 0 ? null : toIso(rows[0].suspended_until);
+  } catch {
+    return null;
+  }
+}
