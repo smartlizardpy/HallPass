@@ -46,7 +46,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { setRoleAction, removeUserAction } from "./actions";
+import {
+  setRoleAction,
+  removeUserAction,
+  suspendUserAction,
+  unsuspendUserAction,
+} from "./actions";
 import type { Role } from "@/app/lib/dashboard-users";
 import type { ConnectorSummary } from "@/app/lib/mcp/oauth/connectors";
 import {
@@ -180,12 +185,15 @@ export function UserRowActions({
   role,
   seats,
   connectors,
+  suspendedUntil,
 }: {
   email: string;
   role: Role;
   seats: Seats;
   /** What this account has connected, or `null` when that read failed. */
   connectors: ConnectorSummary | null;
+  /** ISO time an ACTIVE suspension lifts, or null when not suspended. */
+  suspendedUntil: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -329,6 +337,39 @@ export function UserRowActions({
 
             {/* Connectors -------------------------------------------------- */}
             <ConnectorPanel connectors={connectors} />
+
+            <div className="my-5 h-px bg-border" />
+
+            {/* Suspension ---------------------------------------------------- */}
+            {suspendedUntil ? (
+              <form action={unsuspendUserAction}>
+                <input type="hidden" name="email" value={email} />
+                <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+                  Suspended until {suspendedUntil.slice(0, 10)}.
+                </p>
+                <button
+                  type="submit"
+                  className="mt-3 w-full rounded-full border border-border bg-surface px-5 py-2 text-sm font-bold text-foreground-2 transition hover:bg-surface-2"
+                >
+                  Lift suspension
+                </button>
+              </form>
+            ) : (
+              <form action={suspendUserAction}>
+                <input type="hidden" name="email" value={email} />
+                <input type="hidden" name="days" value="5" />
+                <p className="text-sm text-muted">
+                  Pause this user&apos;s access for 5 days. Their role is kept
+                  and access returns by itself.
+                </p>
+                <button
+                  type="submit"
+                  className="mt-3 w-full rounded-full border border-amber-200 dark:border-amber-900/70 bg-amber-50 dark:bg-amber-950/40 px-5 py-2 text-sm font-bold text-amber-800 dark:text-amber-300 transition hover:bg-amber-100 dark:hover:bg-amber-950/60"
+                >
+                  Suspend for 5 days
+                </button>
+              </form>
+            )}
 
             <div className="my-5 h-px bg-border" />
 

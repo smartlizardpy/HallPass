@@ -454,6 +454,12 @@ export default async function UsersPage({
                             {ROLE_LABEL[user.role]}
                           </span>
                         )}
+                        {user.suspendedUntil &&
+                          new Date(user.suspendedUntil) > new Date() && (
+                            <span className="ml-2 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                              suspended
+                            </span>
+                          )}
                       </td>
                       <td className="px-4 py-3 text-muted">
                         {user.invitedBy ?? "—"}
@@ -481,6 +487,12 @@ export default async function UsersPage({
                             role={user.role}
                             seats={seats}
                             connectors={connectorsFor(connectors, user.email)}
+                            suspendedUntil={
+                              user.suspendedUntil &&
+                              new Date(user.suspendedUntil) > new Date()
+                                ? user.suspendedUntil
+                                : null
+                            }
                           />
                         )}
                       </td>
