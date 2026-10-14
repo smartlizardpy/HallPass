@@ -665,6 +665,21 @@ export const games: Game[] = [
     art: "tether",
     isNew: true,
   },
+  {
+    slug: "battlebadlers",
+    author: "Atlas",
+    title: "Battlebadlers",
+    tagline: "Pick two. Watch them brawl.",
+    description:
+      "Pick two of thirteen oddball fighters, from the Aura Farmer to a scooter-riding Grandpa, and watch them battle it out on their own. Every fighter brings a signature attack and an over-the-top ultimate.",
+    category: "Arcade",
+    tags: ["Arcade", "Fighting", "Auto Battler"],
+    gradient: ["#160a36", "#a855f7"],
+    accent: "#ffd23f",
+    art: "slash",
+    isNew: true,
+    platform: "both",
+  },
 ];
 
 /**
