@@ -50,6 +50,7 @@ import {
   addUser,
   setRole,
   removeUser,
+  setSuspension,
   isSuperAdminEmail,
   type Role,
   type SeatResult,
@@ -239,4 +240,48 @@ export async function removeUserAction(formData: FormData): Promise<void> {
   }
   revalidatePath(USERS_PATH);
   back("ok", "Removed");
+}
+
+/** How long a suspension lasts when the form does not say. */
+const DEFAULT_SUSPEND_DAYS = 5;
+
+/**
+ * Suspend a user for a few days. Their row and role are kept and access lapses
+ * back by itself. Env super admins are refused for the same reason they cannot
+ * be demoted or removed: the allow-list wins on every login, so the suspension
+ * would be a banner promising something that is not true.
+ */
+export async function suspendUserAction(formData: FormData): Promise<void> {
+  await requireRole("super_admin");
+
+  const email = readEmail(formData);
+  if (isSuperAdminEmail(email)) {
+    back("error", "Cannot suspend an env super admin");
+  }
+
+  const raw = Number(formData.get("days") ?? DEFAULT_SUSPEND_DAYS);
+  const days = Number.isInteger(raw) && raw >= 1 && raw <= 365 ? raw : null;
+  if (days === null) back("error", "Suspension must be 1 to 365 days");
+
+  try {
+    await setSuspension(email, days);
+  } catch {
+    back("error", "Suspend failed (database error)");
+  }
+  revalidatePath(USERS_PATH);
+  back("ok", `Suspended for ${days} ${days === 1 ? "day" : "days"}`);
+}
+
+/** Lift a suspension early. */
+export async function unsuspendUserAction(formData: FormData): Promise<void> {
+  await requireRole("super_admin");
+
+  const email = readEmail(formData);
+  try {
+    await setSuspension(email, null);
+  } catch {
+    back("error", "Lift suspension failed (database error)");
+  }
+  revalidatePath(USERS_PATH);
+  back("ok", "Suspension lifted");
 }

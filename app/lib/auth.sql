@@ -33,5 +33,7 @@ CREATE TABLE IF NOT EXISTS dashboard_users (
   image       TEXT,
   invited_by  TEXT,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  last_login  TIMESTAMPTZ
+  last_login  TIMESTAMPTZ,
+  -- While in the future the user is denied as if they had no row. NULL = active.
+  suspended_until TIMESTAMPTZ
 );

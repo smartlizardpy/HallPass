@@ -25,6 +25,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signIn, signOut } from "@/app/lib/auth";
 import { Wordmark } from "@/app/components/Wordmark";
+import { getActiveSuspension } from "@/app/lib/dashboard-users";
 
 export const metadata: Metadata = {
   title: "Sign in · Dashboard",
@@ -50,6 +51,12 @@ export default async function DashboardSignInPage({
   // session keeps the (now rare) error note.
   const signedInAsPlayer = Boolean(session?.user);
 
+  // A suspended admin also lands here with no role. Say so, rather than telling
+  // them the dashboard "is for admins" as if they never had access.
+  const suspendedUntil = session?.user?.email
+    ? await getActiveSuspension(session.user.email)
+    : null;
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-6 py-10">
       <div className="w-full max-w-md rounded-xl border border-border bg-surface p-8 text-center">
@@ -60,9 +67,23 @@ export default async function DashboardSignInPage({
 
         {signedInAsPlayer ? (
           <>
-            <p className="mt-3 text-sm text-muted">
-              You&apos;re signed in as a player, but this dashboard is for admins.
-            </p>
+            {suspendedUntil ? (
+              <p className="mt-3 text-sm font-semibold text-red-700 dark:text-red-300">
+                You are suspended. Your admin access is paused until{" "}
+                {new Date(suspendedUntil).toLocaleDateString("en-GB", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                  timeZone: "Europe/London",
+                })}
+                .
+              </p>
+            ) : (
+              <p className="mt-3 text-sm text-muted">
+                You&apos;re signed in as a player, but this dashboard is for
+                admins.
+              </p>
+            )}
             {session?.user?.email && (
               <p className="mt-2 text-xs text-muted">
                 Signed in as{" "}
