@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
-import { TRENDING_COUNT } from "../lib/categories";
+import { TRENDING_COUNT, inCategory } from "../lib/categories";
 import { type Game } from "../lib/games";
 import { useFavorites, useRecentlyPlayed } from "../lib/personalization";
 import { mobileCatalog, playsOn, useDevicePlatform } from "../lib/use-device-platform";
@@ -225,7 +225,7 @@ function ArcadeRows({
         category !== "All" &&
         category !== "New" &&
         category !== "Trending" &&
-        g.category !== category
+        !inCategory(g, category)
       )
         return false;
       if (!q) return true;

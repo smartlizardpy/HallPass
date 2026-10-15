@@ -5,6 +5,7 @@ import {
   TRENDING_COUNT,
   categoryPath,
   categoryShelf,
+  inCategory,
   resolveCategoryFromSlug,
   routedCategories,
 } from "@/app/lib/categories";
@@ -106,5 +107,21 @@ describe("categoryShelf", () => {
 
   it("returns nothing for a category no game carries", () => {
     expect(categoryShelf("Nonesuch", games)).toEqual([]);
+  });
+});
+
+describe("inCategory", () => {
+  const g = (category: string, tags: string[]) => ({ category, tags }) as unknown as Game;
+
+  it("includes a game whose own category matches", () => {
+    expect(inCategory(g("Puzzle", []), "Puzzle")).toBe(true);
+  });
+
+  it("includes a game that only carries the same-named tag, case-insensitively", () => {
+    expect(inCategory(g("Sandbox", ["puzzle"]), "Puzzle")).toBe(true);
+  });
+
+  it("excludes a game with neither", () => {
+    expect(inCategory(g("Arcade", ["Neon"]), "Puzzle")).toBe(false);
   });
 });

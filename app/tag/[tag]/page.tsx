@@ -19,12 +19,19 @@
  */
 
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { ArcadeShell } from "../../components/ArcadeShell";
 import { TagListing } from "../../components/TagListing";
 import { resolveCategories, resolveGames, resolveTags } from "../../lib/games-store";
 import { SITE_URL as BASE } from "../../lib/site";
-import { landingTags, resolveTagFromSlug, tagPath, tagShelf } from "../../lib/tags";
+import { categoryPath } from "../../lib/categories";
+import {
+  categoryForTag,
+  landingTags,
+  resolveTagFromSlug,
+  tagPath,
+  tagShelf,
+} from "../../lib/tags";
 
 /** How many other tags the page offers as onward navigation. */
 const RELATED_TAGS = 12;
@@ -36,7 +43,8 @@ const RELATED_TAGS = 12;
  * rendering an orphan page nothing links to.
  */
 export async function generateStaticParams() {
-  return landingTags(await resolveTags()).map(({ tag }) => ({
+  const [tags, categories] = await Promise.all([resolveTags(), resolveCategories()]);
+  return landingTags(tags, categories).map(({ tag }) => ({
     tag: tagPath(tag).replace("/tag/", ""),
   }));
 }
@@ -84,13 +92,17 @@ export default async function TagPage({
   const resolved = resolveTagFromSlug(tag, tags);
   if (!resolved) notFound();
 
+  // Folded into the category of the same name: one landing page per intent.
+  const duplicate = categoryForTag(resolved, categories);
+  if (duplicate) permanentRedirect(categoryPath(duplicate));
+
   const shelf = tagShelf(resolved, games);
   // The floor guarantees a shelf, but the two reads above are separate cached
   // calls: a tag counted from one snapshot could in principle be listed by a
   // newer one. An empty shelf is a 404 rather than a page that says nothing.
   if (shelf.length === 0) notFound();
 
-  const related = landingTags(tags)
+  const related = landingTags(tags, categories)
     .filter((t) => t.tag !== resolved)
     .slice(0, RELATED_TAGS);
 

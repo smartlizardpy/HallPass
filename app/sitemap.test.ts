@@ -13,7 +13,10 @@ vi.mock("@/app/lib/games-store", () => ({
   resolveGames: async () =>
     [{ slug: "neon-run", category: "Arcade", tags: ["Neon"] }] as unknown as Game[],
   resolveCategories: async () => ["Arcade"],
-  resolveTags: async () => [{ tag: "Neon", count: 99 }],
+  resolveTags: async () => [
+    { tag: "Neon", count: 99 },
+    { tag: "Arcade", count: 98 },
+  ],
 }));
 
 import { SITE_URL } from "@/app/lib/site";
@@ -44,5 +47,12 @@ describe("sitemap", () => {
     expect(urls).toContain(`${SITE_URL}/privacy`);
     expect(urls).toContain(`${SITE_URL}/terms`);
     expect(urls).toContain(`${SITE_URL}/cookies`);
+  });
+
+  it("lists no tag page that duplicates a category", async () => {
+    const urls = (await sitemap()).map((e) => e.url);
+    expect(urls).toContain(`${SITE_URL}/category/arcade`);
+    expect(urls).not.toContain(`${SITE_URL}/tag/arcade`);
+    expect(urls).toContain(`${SITE_URL}/tag/neon`);
   });
 });

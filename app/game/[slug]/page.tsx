@@ -35,7 +35,8 @@ import {
   resolveTags,
 } from "../../lib/games-store";
 import { SITE_URL as BASE } from "../../lib/site";
-import { landingTags, tagPath, tagSlug } from "../../lib/tags";
+import { categoryPath } from "../../lib/categories";
+import { categoryForTag, landingTags, tagPath, tagSlug } from "../../lib/tags";
 import { getGamePlayCounts } from "../../lib/stats";
 import { youtubeEmbedUrl, youtubeThumbnailUrl, youtubeWatchUrl } from "../../lib/youtube";
 
@@ -170,10 +171,19 @@ export default async function GamePage({
   // floor has no page, so it gets no href and stays the plain text it always
   // was — a link to a 404 is worse than no link.
   const landing = new Set(landingTags(tags).map((t) => tagSlug(t.tag)));
-  const tagLinks = game.tags.map((tag) => ({
-    tag,
-    href: landing.has(tagSlug(tag)) ? tagPath(tag) : null,
-  }));
+  const tagLinks = game.tags.map((tag) => {
+    // A tag that duplicates a category links straight to the category — the
+    // primary landing page — rather than through the tag URL's redirect.
+    const duplicate = categoryForTag(tag, categories);
+    return {
+      tag,
+      href: duplicate
+        ? categoryPath(duplicate)
+        : landing.has(tagSlug(tag))
+          ? tagPath(tag)
+          : null,
+    };
+  });
 
   // Same category first, topped up by play count, self excluded.
   const playsFor = (g: (typeof allGames)[number]) =>

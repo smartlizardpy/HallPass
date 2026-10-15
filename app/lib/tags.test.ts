@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Game } from "@/app/lib/games";
 import {
   TAG_PAGE_MIN_GAMES,
+  categoryForTag,
   landingTags,
   resolveTagFromSlug,
   tagPath,
@@ -119,5 +120,25 @@ describe("tagShelf", () => {
 
   it("returns nothing for a tag no game carries", () => {
     expect(tagShelf("Nonesuch", games)).toEqual([]);
+  });
+});
+
+describe("tags that duplicate a category", () => {
+  const tags = [
+    { tag: "Horror", count: 5 },
+    { tag: "Bullet Hell", count: 3 },
+    { tag: "Neon", count: 4 },
+  ];
+
+  it("matches a category by slug, case- and punctuation-insensitively", () => {
+    expect(categoryForTag("Horror", ["Horror", "Arcade"])).toBe("Horror");
+    expect(categoryForTag("bullet-hell", ["Bullet Hell"])).toBe("Bullet Hell");
+    expect(categoryForTag("Neon", ["Horror"])).toBeNull();
+    expect(categoryForTag("???", ["???"])).toBeNull();
+  });
+
+  it("drops folded tags from the landing set but keeps others", () => {
+    expect(landingTags(tags, ["Horror", "Bullet Hell"]).map((t) => t.tag)).toEqual(["Neon"]);
+    expect(landingTags(tags).map((t) => t.tag)).toHaveLength(3);
   });
 });
