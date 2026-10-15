@@ -22,6 +22,8 @@ export const STATIC_GAME_FILES: ReadonlySet<string> = new Set([
   "cube-clash-3d/index.html",
   "depths-of-aethelgard/cover.png",
   "depths-of-aethelgard/index.html",
+  "doodle-dash/cover.png",
+  "doodle-dash/index.html",
   "duskfall/cover.png",
   "duskfall/index.html",
   "jjk-domain-survival-top-down/cover.png",

@@ -107,3 +107,20 @@ export function categoryShelf(
     return [...games].sort((a, b) => plays(b) - plays(a)).slice(0, TRENDING_COUNT);
   return games.filter((g) => inCategory(g, category));
 }
+
+/**
+ * Plain-language summary of a category for its page, built ONLY from the shelf
+ * itself — no invented claims about what the games are like. The count and the
+ * titles are facts; anything about difficulty, devices or player counts would
+ * have to be checked per game first.
+ */
+export function categorySummary(category: string, shelf: Game[]): string {
+  const n = shelf.length;
+  if (category === "New") {
+    return `The newest additions to HALLPASS: ${n} free browser ${n === 1 ? "game" : "games"} added recently.`;
+  }
+  if (category === "Trending") {
+    return `The ${n} most-played free browser games on HALLPASS right now.`;
+  }
+  return `${n} free ${category.toLowerCase()} ${n === 1 ? "game" : "games"} you can play in your browser on HALLPASS, with no download or account needed.`;
+}

@@ -5,6 +5,7 @@ import {
   TRENDING_COUNT,
   categoryPath,
   categoryShelf,
+  categorySummary,
   inCategory,
   resolveCategoryFromSlug,
   routedCategories,
@@ -123,5 +124,19 @@ describe("inCategory", () => {
 
   it("excludes a game with neither", () => {
     expect(inCategory(g("Arcade", ["Neon"]), "Puzzle")).toBe(false);
+  });
+});
+
+describe("categorySummary", () => {
+  const shelf = (n: number) => Array.from({ length: n }, () => ({}) as Game);
+
+  it("states only the count, pluralised", () => {
+    expect(categorySummary("Horror", shelf(4))).toContain("4 free horror games");
+    expect(categorySummary("Sports", shelf(1))).toContain("1 free sports game ");
+  });
+
+  it("has its own wording for the virtual shelves", () => {
+    expect(categorySummary("New", shelf(3))).toContain("newest");
+    expect(categorySummary("Trending", shelf(6))).toContain("most-played");
   });
 });
