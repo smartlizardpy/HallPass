@@ -34,6 +34,7 @@ import {
   resolveGames,
   resolveTags,
 } from "../../lib/games-store";
+import { snippet } from "../../lib/snippet";
 import { SITE_URL as BASE } from "../../lib/site";
 import { categoryPath } from "../../lib/categories";
 import { categoryForTag, landingTags, tagPath, tagSlug } from "../../lib/tags";
@@ -101,14 +102,12 @@ export async function generateMetadata({
       : null;
 
   // The description is now VISIBLE body copy too, so trim it for the SERP snippet
-  // instead of letting Google cut it mid-word.
-  const description =
-    game.description.length > 155
-      ? `${game.description.slice(0, 152).trimEnd()}…`
-      : game.description;
+  // at a sentence or word boundary instead of letting Google cut it mid-word.
+  const description = snippet(game.description);
 
   return {
-    title: `Play ${game.title} Unblocked — Free Online`,
+    // The site title template appends " · HALLPASS". Name first, then what it is.
+    title: `${game.title} — Free Browser ${game.category} Game`,
     description,
     keywords: [game.title, game.category, ...game.tags, "unblocked", "free"],
     // Load-bearing, not boilerplate: `skipTrailingSlashRedirect: true` means

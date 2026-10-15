@@ -58,7 +58,7 @@ export async function generateMetadata({
   const resolved = resolveTagFromSlug(tag, await resolveTags());
   if (!resolved) return { title: "Tag not found" };
 
-  const title = `${resolved} Games — Play Unblocked Free`;
+  const title = `${resolved} Games — Free Browser Games to Play`;
   const description = `Play free unblocked ${resolved.toLowerCase()} games on HALLPASS. No download, no account, works offline.`;
   return {
     title,
