@@ -1,4 +1,5 @@
 import type { Game } from "@/app/lib/games";
+import { gameGuide, type GameGuide } from "@/app/lib/game-guides";
 
 /**
  * HallPass — the questions a game's store page answers, and their answers.
@@ -60,11 +61,18 @@ function phoneAnswer(game: Game): string | null {
 }
 
 /**
- * The FAQ for one game, in the order it renders. Never empty: the first, third
- * and fourth entries hold for every game in the catalogue.
+ * The FAQ for one game, in the order it renders: its own verified questions (if
+ * it has a guide), then the templated ones. Never empty: the free, download and
+ * school entries hold for every game in the catalogue.
  */
-export function gameFaq(game: Game): FaqEntry[] {
+export function gameFaq(
+  game: Game,
+  guide: GameGuide | null = gameGuide(game.slug),
+): FaqEntry[] {
+  // Questions specific to this game lead: they are the ones the templated four
+  // cannot answer.
   const entries: FaqEntry[] = [
+    ...(guide?.faq ?? []),
     {
       question: `Is ${game.title} free to play?`,
       answer: `Yes. ${game.title} is free, and so is everything else on HALLPASS. There is nothing to pay for and no account is needed to play — signing in only adds scores, streaks and friends.`,

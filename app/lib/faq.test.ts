@@ -62,3 +62,18 @@ describe("gameFaq", () => {
     ).toBeGreaterThan(0);
   });
 });
+
+describe("gameFaq with a guide", () => {
+  const game = { slug: "g", title: "G", tagline: "", description: "", platform: undefined } as unknown as Game;
+
+  it("leads with the game's own verified questions", () => {
+    const own = { question: "How do I win G?", answer: "Reach the exit." };
+    const faq = gameFaq(game, { objective: "x", controls: [], tips: [], faq: [own] });
+    expect(faq[0]).toEqual(own);
+    expect(faq.length).toBeGreaterThan(1);
+  });
+
+  it("is unchanged for a game without a guide", () => {
+    expect(gameFaq(game, null)).toEqual(gameFaq(game));
+  });
+});

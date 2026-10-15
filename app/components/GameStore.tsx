@@ -3,6 +3,7 @@
 import Link from "next/link";
 import posthog from "posthog-js";
 import { gameFaq } from "../lib/faq";
+import { gameGuide } from "../lib/game-guides";
 import type { Game } from "../lib/games";
 import { type GameMedia, mediaPublicPath } from "../lib/game-media-blob";
 import { useFavorites } from "../lib/personalization";
@@ -128,6 +129,7 @@ export function GameStore({
   // is every tag as plain text, which is exactly what this row was before there
   // was anywhere to link to — so a caller that omits the prop loses the links,
   // never the tags.
+  const guide = gameGuide(game.slug);
   const tags = tagLinks.length
     ? tagLinks
     : game.tags.map((tag) => ({ tag, href: null }));
@@ -392,6 +394,49 @@ export function GameStore({
           {game.description}
         </p>
       </section>
+
+      {/* HOW TO PLAY — only for games with a verified guide (`game-guides.ts`).
+          Plain server-renderable markup, so objective and controls are in the
+          HTML crawlers receive. */}
+      {guide && (
+        <section className="mt-5 max-w-3xl rounded-3xl bg-surface p-5 sm:p-6">
+          <h2 className="text-[11px] font-black uppercase tracking-wider text-muted">
+            How to play {game.title}
+          </h2>
+          <p className="mt-3 text-[15px] font-semibold leading-relaxed text-foreground-2">
+            {guide.objective}
+          </p>
+          {guide.controls.length > 0 && (
+            <>
+              <h3 className="mt-4 text-[15px] font-black tracking-tight text-foreground">
+                Controls
+              </h3>
+              <dl className="mt-2 text-[15px] font-semibold leading-relaxed text-foreground-2">
+                {guide.controls.map(({ input, action }) => (
+                  <div key={input} className="mt-1 flex gap-3">
+                    <dt className="w-40 shrink-0 font-black text-foreground">{input}</dt>
+                    <dd>{action}</dd>
+                  </div>
+                ))}
+              </dl>
+            </>
+          )}
+          {guide.tips.length > 0 && (
+            <>
+              <h3 className="mt-4 text-[15px] font-black tracking-tight text-foreground">
+                Tips
+              </h3>
+              <ul className="mt-2 list-disc pl-5 text-[15px] font-semibold leading-relaxed text-foreground-2">
+                {guide.tips.map((tip) => (
+                  <li key={tip} className="mt-1">
+                    {tip}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+      )}
 
       {/* The islands below the fold, in the order a player cares about them: how
           they are doing against people they know, then against everybody, then
