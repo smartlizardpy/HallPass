@@ -98,7 +98,7 @@ export default async function GrowthPage() {
     })),
     // Only the tags that HAVE a page. `landingTags` applies the same floor the
     // route resolves against, so the builder cannot mint a link to a 404.
-    ...landingTags(tags).map(({ tag }) => ({
+    ...landingTags(tags, categories).map(({ tag }) => ({
       path: tagPath(tag),
       label: `${tag} games`,
       group: "Tags",

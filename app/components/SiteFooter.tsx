@@ -44,6 +44,10 @@ export function SiteFooter() {
           </p>
           {/* The legal pages: the first links this footer has carried. */}
           <p className="mt-1 text-muted">
+            <Link href="/about" className="underline underline-offset-2 hover:text-brand">
+              About
+            </Link>
+            {" · "}
             <Link href="/privacy" className="underline underline-offset-2 hover:text-brand">
               Privacy
             </Link>

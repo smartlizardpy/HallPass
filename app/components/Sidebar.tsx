@@ -218,6 +218,11 @@ function hrefForItem(item: string): string {
     : `/category/${encodeURIComponent(item.toLowerCase())}`;
 }
 
+/** True for an unmodified primary-button click, the only kind we intercept. */
+function isPlainLeftClick(e: React.MouseEvent): boolean {
+  return e.button === 0 && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey);
+}
+
 export function Sidebar({
   categories,
   active,
@@ -366,14 +371,24 @@ export function Sidebar({
           return (
             <li key={item}>
               {onSelect ? (
-                <button
-                  type="button"
-                  onClick={() => handleSelect(item)}
+                // A real anchor even in callback mode: the server-rendered HTML
+                // must carry `/category/...` hrefs or crawlers (and no-JS
+                // visitors) get no path to a genre from the homepage. A plain
+                // left-click is still taken over so the grid filters in place;
+                // modified clicks (new tab, etc.) fall through to the browser.
+                <a
+                  href={hrefForItem(item)}
+                  onClick={(e) => {
+                    if (isPlainLeftClick(e)) {
+                      e.preventDefault();
+                      handleSelect(item);
+                    }
+                  }}
                   title={tooltips ? item : undefined}
                   className={itemClass(isActive, collapsed)}
                 >
                   {inner}
-                </button>
+                </a>
               ) : (
                 <Link
                   href={hrefForItem(item)}

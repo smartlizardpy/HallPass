@@ -46,6 +46,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.2,
     },
     {
+      url: `${BASE}/about`,
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
+    {
       url: `${BASE}/terms`,
       changeFrequency: "yearly",
       priority: 0.2,
@@ -69,7 +74,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // `landingTags` applies the floor, so this lists exactly the tags that have a
   // page: a URL here that 404s is worse than a page Google has to find on its
   // own, and the route resolves against the same floor.
-  const tagPages: MetadataRoute.Sitemap = landingTags(tags).map(({ tag }) => ({
+  const tagPages: MetadataRoute.Sitemap = landingTags(tags, categories).map(({ tag }) => ({
     url: `${BASE}${tagPath(tag)}`,
     changeFrequency: "weekly" as const,
     // Below categories, which are the curated axis and carry the nav, and below

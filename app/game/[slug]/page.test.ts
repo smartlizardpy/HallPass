@@ -44,7 +44,12 @@ vi.mock("@/app/lib/games", async (importOriginal) => {
     art: "void",
     ...extra,
   });
-  return { ...real, games: [base("pub"), base("hidden", { staged: true })] };
+  return { ...real, games: [
+      base("pub"),
+      base("hidden", { staged: true }),
+      base("ext", { externalUrl: "https://example.com/ext" }),
+      base("ext-cover", { externalUrl: "https://example.com/x", coverUrl: "/game-media/ext-cover/hero.png" }),
+    ] };
 });
 // The page's other data sources and components are irrelevant to the 404 path.
 vi.mock("../../components/ArcadeShell", () => ({ ArcadeShell: () => null }));
@@ -69,10 +74,36 @@ describe("/game/[slug] and staged games", () => {
   });
 
   it("does not prerender a staged slug", async () => {
-    expect(await generateStaticParams()).toEqual([{ slug: "pub" }]);
+    expect(await generateStaticParams()).toEqual([
+      { slug: "pub" },
+      { slug: "ext" },
+      { slug: "ext-cover" },
+    ]);
   });
 
   it("gives a staged slug the generic not-found metadata, not its title", async () => {
     expect(await generateMetadata(params("hidden"))).toEqual({ title: "Game not found" });
+  });
+});
+
+describe("/game/[slug] social image", () => {
+  it("falls back to the committed cover for a repo game", async () => {
+    const meta = await generateMetadata(params("pub"));
+    expect(meta.openGraph?.images).toEqual([
+      expect.objectContaining({ url: expect.stringMatching(/\/games\/pub\/cover\.png$/) }),
+    ]);
+  });
+
+  it("advertises no image for an external game without a cover (no 404 URL)", async () => {
+    const meta = await generateMetadata(params("ext"));
+    expect(meta.openGraph).not.toHaveProperty("images");
+    expect(meta.twitter).not.toHaveProperty("images");
+  });
+
+  it("uses an external game's own coverUrl when it has one", async () => {
+    const meta = await generateMetadata(params("ext-cover"));
+    expect(meta.openGraph?.images).toEqual([
+      expect.objectContaining({ url: expect.stringMatching(/\/game-media\/ext-cover\/hero\.png$/) }),
+    ]);
   });
 });

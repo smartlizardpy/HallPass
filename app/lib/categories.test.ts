@@ -5,6 +5,8 @@ import {
   TRENDING_COUNT,
   categoryPath,
   categoryShelf,
+  categorySummary,
+  inCategory,
   resolveCategoryFromSlug,
   routedCategories,
 } from "@/app/lib/categories";
@@ -106,5 +108,35 @@ describe("categoryShelf", () => {
 
   it("returns nothing for a category no game carries", () => {
     expect(categoryShelf("Nonesuch", games)).toEqual([]);
+  });
+});
+
+describe("inCategory", () => {
+  const g = (category: string, tags: string[]) => ({ category, tags }) as unknown as Game;
+
+  it("includes a game whose own category matches", () => {
+    expect(inCategory(g("Puzzle", []), "Puzzle")).toBe(true);
+  });
+
+  it("includes a game that only carries the same-named tag, case-insensitively", () => {
+    expect(inCategory(g("Sandbox", ["puzzle"]), "Puzzle")).toBe(true);
+  });
+
+  it("excludes a game with neither", () => {
+    expect(inCategory(g("Arcade", ["Neon"]), "Puzzle")).toBe(false);
+  });
+});
+
+describe("categorySummary", () => {
+  const shelf = (n: number) => Array.from({ length: n }, () => ({}) as Game);
+
+  it("states only the count, pluralised", () => {
+    expect(categorySummary("Horror", shelf(4))).toContain("4 free horror games");
+    expect(categorySummary("Sports", shelf(1))).toContain("1 free sports game ");
+  });
+
+  it("has its own wording for the virtual shelves", () => {
+    expect(categorySummary("New", shelf(3))).toContain("newest");
+    expect(categorySummary("Trending", shelf(6))).toContain("most-played");
   });
 });

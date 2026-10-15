@@ -34,8 +34,10 @@ import {
   resolveGames,
   resolveTags,
 } from "../../lib/games-store";
+import { snippet } from "../../lib/snippet";
 import { SITE_URL as BASE } from "../../lib/site";
-import { landingTags, tagPath, tagSlug } from "../../lib/tags";
+import { categoryPath } from "../../lib/categories";
+import { categoryForTag, landingTags, tagPath, tagSlug } from "../../lib/tags";
 import { getGamePlayCounts } from "../../lib/stats";
 import { youtubeEmbedUrl, youtubeThumbnailUrl, youtubeWatchUrl } from "../../lib/youtube";
 
@@ -57,6 +59,24 @@ function absolute(url: string): string {
   return url.startsWith("http") ? url : `${BASE}${url}`;
 }
 
+/**
+ * The cover to advertise to crawlers when there is no screenshot, or `null`.
+ *
+ * The `/games/<slug>/cover.png` convention only holds for repo games: an
+ * external (dashboard-created) game has no committed file, so advertising that
+ * path in Open Graph and JSON-LD points crawlers at a 404 (tnt-digger-cosmos).
+ * An external game with no `coverUrl` therefore advertises no image at all.
+ */
+function fallbackCover(game: {
+  slug: string;
+  coverUrl?: string;
+  externalUrl?: string;
+}): string | null {
+  if (game.coverUrl) return absolute(game.coverUrl);
+  if (game.externalUrl) return null;
+  return absolute(`/games/${game.slug}/cover.png`);
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -69,6 +89,7 @@ export async function generateMetadata({
   // Prefer a real screenshot for the social card: covers are ~659×561 (nearly
   // square) and get badly cropped by `summary_large_image`.
   const shot = media[0];
+  const cover = fallbackCover(game);
   const image = shot
     ? {
         url: absolute(mediaPublicPath(shot)),
@@ -76,22 +97,17 @@ export async function generateMetadata({
         height: shot.height,
         alt: shot.alt || game.title,
       }
-    : {
-        url: absolute(game.coverUrl ?? `/games/${game.slug}/cover.png`),
-        width: 659,
-        height: 561,
-        alt: game.title,
-      };
+    : cover
+      ? { url: cover, width: 659, height: 561, alt: game.title }
+      : null;
 
   // The description is now VISIBLE body copy too, so trim it for the SERP snippet
-  // instead of letting Google cut it mid-word.
-  const description =
-    game.description.length > 155
-      ? `${game.description.slice(0, 152).trimEnd()}…`
-      : game.description;
+  // at a sentence or word boundary instead of letting Google cut it mid-word.
+  const description = snippet(game.description);
 
   return {
-    title: `Play ${game.title} Unblocked — Free Online`,
+    // The site title template appends " · HALLPASS". Name first, then what it is.
+    title: `${game.title} — Free Browser ${game.category} Game`,
     description,
     keywords: [game.title, game.category, ...game.tags, "unblocked", "free"],
     // Load-bearing, not boilerplate: `skipTrailingSlashRedirect: true` means
@@ -103,13 +119,13 @@ export async function generateMetadata({
       title: game.title,
       description,
       url: `/game/${game.slug}`,
-      images: [image],
+      ...(image ? { images: [image] } : {}),
     },
     twitter: {
       card: "summary_large_image",
       title: game.title,
       description: game.tagline,
-      images: [image.url],
+      ...(image ? { images: [image.url] } : {}),
     },
   };
 }
@@ -154,10 +170,19 @@ export default async function GamePage({
   // floor has no page, so it gets no href and stays the plain text it always
   // was — a link to a 404 is worse than no link.
   const landing = new Set(landingTags(tags).map((t) => tagSlug(t.tag)));
-  const tagLinks = game.tags.map((tag) => ({
-    tag,
-    href: landing.has(tagSlug(tag)) ? tagPath(tag) : null,
-  }));
+  const tagLinks = game.tags.map((tag) => {
+    // A tag that duplicates a category links straight to the category — the
+    // primary landing page — rather than through the tag URL's redirect.
+    const duplicate = categoryForTag(tag, categories);
+    return {
+      tag,
+      href: duplicate
+        ? categoryPath(duplicate)
+        : landing.has(tagSlug(tag))
+          ? tagPath(tag)
+          : null,
+    };
+  });
 
   // Same category first, topped up by play count, self excluded.
   const playsFor = (g: (typeof allGames)[number]) =>
@@ -168,9 +193,12 @@ export default async function GamePage({
     .slice(0, 6);
 
   const url = `${BASE}/game/${game.slug}`;
+  const cover = fallbackCover(game);
   const imageUrls = media.length
     ? media.map((m) => absolute(mediaPublicPath(m)))
-    : [absolute(game.coverUrl ?? `/games/${game.slug}/cover.png`)];
+    : cover
+      ? [cover]
+      : [];
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -180,7 +208,7 @@ export default async function GamePage({
         name: game.title,
         description: game.description,
         url,
-        image: imageUrls,
+        ...(imageUrls.length ? { image: imageUrls } : {}),
         ...(media.length ? { screenshot: imageUrls } : {}),
         genre: game.category,
         keywords: game.tags.join(", "),

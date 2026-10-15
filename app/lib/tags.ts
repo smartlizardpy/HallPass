@@ -71,10 +71,35 @@ export function tagPath(tag: string): string {
  */
 export function landingTags(
   tags: { tag: string; count: number }[],
+  categories: string[] = [],
 ): { tag: string; count: number }[] {
   return tags.filter(
-    (t) => t.count >= TAG_PAGE_MIN_GAMES && tagSlug(t.tag) !== "",
+    (t) =>
+      t.count >= TAG_PAGE_MIN_GAMES &&
+      tagSlug(t.tag) !== "" &&
+      categoryForTag(t.tag, categories) === null,
   );
+}
+
+/**
+ * The category a tag duplicates, or `null`.
+ *
+ * `/category/horror` and `/tag/horror` were two pages with the same title, H1 and
+ * search intent, each canonical to itself and both in the sitemap. The category
+ * is the primary landing page; a tag whose slug equals a category's slug is
+ * folded into it — no page of its own, 308 to the category, absent from the
+ * sitemap and from onward links. (The category shelf includes games carrying the
+ * tag, so none of them lose their place: see `inCategory`.)
+ *
+ * Compared by {@link tagSlug} on both sides, so `Bullet Hell` the category
+ * (`/category/bullet%20hell`) matches `Bullet Hell` the tag (`/tag/bullet-hell`).
+ * Pass the ROUTED/live category names; the virtual `New` and `Trending` shelves
+ * are not categories a tag can duplicate.
+ */
+export function categoryForTag(tag: string, categories: string[]): string | null {
+  const slug = tagSlug(tag);
+  if (slug === "") return null;
+  return categories.find((c) => tagSlug(c) === slug) ?? null;
 }
 
 /**
@@ -91,6 +116,8 @@ export function resolveTagFromSlug(
 ): string | null {
   const wanted = tagSlug(slug);
   if (wanted === "") return null;
+  // Deliberately NOT given the categories: a tag folded into a category still
+  // resolves here so the route can redirect it rather than 404 the old URL.
   return landingTags(tags).find((t) => tagSlug(t.tag) === wanted)?.tag ?? null;
 }
 

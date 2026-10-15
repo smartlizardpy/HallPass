@@ -84,6 +84,18 @@ export const TRENDING_COUNT = 6;
  * caller with no PostHog read still gets a sensible order rather than an empty
  * shelf — the same fallback `playsFor` uses in `Arcade`.
  */
+/**
+ * Whether a game belongs on a (non-virtual) category's page: its own category, or
+ * a tag of the same name. The tag half is what lets `/tag/<x>` redirect to
+ * `/category/<x>` without orphaning the games that were only tagged `<x>` — a
+ * puzzle-tagged sandbox game still appears under Puzzle.
+ */
+export function inCategory(game: Game, category: string): boolean {
+  if (game.category === category) return true;
+  const slug = category.toLowerCase();
+  return game.tags.some((t) => t.toLowerCase() === slug);
+}
+
 export function categoryShelf(
   category: string,
   games: Game[],
@@ -93,5 +105,22 @@ export function categoryShelf(
   if (category === "New") return games.filter((g) => g.isNew);
   if (category === "Trending")
     return [...games].sort((a, b) => plays(b) - plays(a)).slice(0, TRENDING_COUNT);
-  return games.filter((g) => g.category === category);
+  return games.filter((g) => inCategory(g, category));
+}
+
+/**
+ * Plain-language summary of a category for its page, built ONLY from the shelf
+ * itself — no invented claims about what the games are like. The count and the
+ * titles are facts; anything about difficulty, devices or player counts would
+ * have to be checked per game first.
+ */
+export function categorySummary(category: string, shelf: Game[]): string {
+  const n = shelf.length;
+  if (category === "New") {
+    return `The newest additions to HALLPASS: ${n} free browser ${n === 1 ? "game" : "games"} added recently.`;
+  }
+  if (category === "Trending") {
+    return `The ${n} most-played free browser games on HALLPASS right now.`;
+  }
+  return `${n} free ${category.toLowerCase()} ${n === 1 ? "game" : "games"} you can play in your browser on HALLPASS, with no download or account needed.`;
 }
