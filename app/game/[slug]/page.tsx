@@ -57,6 +57,24 @@ function absolute(url: string): string {
   return url.startsWith("http") ? url : `${BASE}${url}`;
 }
 
+/**
+ * The cover to advertise to crawlers when there is no screenshot, or `null`.
+ *
+ * The `/games/<slug>/cover.png` convention only holds for repo games: an
+ * external (dashboard-created) game has no committed file, so advertising that
+ * path in Open Graph and JSON-LD points crawlers at a 404 (tnt-digger-cosmos).
+ * An external game with no `coverUrl` therefore advertises no image at all.
+ */
+function fallbackCover(game: {
+  slug: string;
+  coverUrl?: string;
+  externalUrl?: string;
+}): string | null {
+  if (game.coverUrl) return absolute(game.coverUrl);
+  if (game.externalUrl) return null;
+  return absolute(`/games/${game.slug}/cover.png`);
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -69,6 +87,7 @@ export async function generateMetadata({
   // Prefer a real screenshot for the social card: covers are ~659×561 (nearly
   // square) and get badly cropped by `summary_large_image`.
   const shot = media[0];
+  const cover = fallbackCover(game);
   const image = shot
     ? {
         url: absolute(mediaPublicPath(shot)),
@@ -76,12 +95,9 @@ export async function generateMetadata({
         height: shot.height,
         alt: shot.alt || game.title,
       }
-    : {
-        url: absolute(game.coverUrl ?? `/games/${game.slug}/cover.png`),
-        width: 659,
-        height: 561,
-        alt: game.title,
-      };
+    : cover
+      ? { url: cover, width: 659, height: 561, alt: game.title }
+      : null;
 
   // The description is now VISIBLE body copy too, so trim it for the SERP snippet
   // instead of letting Google cut it mid-word.
@@ -103,13 +119,13 @@ export async function generateMetadata({
       title: game.title,
       description,
       url: `/game/${game.slug}`,
-      images: [image],
+      ...(image ? { images: [image] } : {}),
     },
     twitter: {
       card: "summary_large_image",
       title: game.title,
       description: game.tagline,
-      images: [image.url],
+      ...(image ? { images: [image.url] } : {}),
     },
   };
 }
@@ -168,9 +184,12 @@ export default async function GamePage({
     .slice(0, 6);
 
   const url = `${BASE}/game/${game.slug}`;
+  const cover = fallbackCover(game);
   const imageUrls = media.length
     ? media.map((m) => absolute(mediaPublicPath(m)))
-    : [absolute(game.coverUrl ?? `/games/${game.slug}/cover.png`)];
+    : cover
+      ? [cover]
+      : [];
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -180,7 +199,7 @@ export default async function GamePage({
         name: game.title,
         description: game.description,
         url,
-        image: imageUrls,
+        ...(imageUrls.length ? { image: imageUrls } : {}),
         ...(media.length ? { screenshot: imageUrls } : {}),
         genre: game.category,
         keywords: game.tags.join(", "),
