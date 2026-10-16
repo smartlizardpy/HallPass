@@ -35,7 +35,7 @@ import Link from "next/link";
 import { requireRole } from "@/app/lib/auth";
 import { DASHBOARD_MIN_ROLE } from "@/app/lib/permissions";
 import { resolveGamesIncludingStaged } from "@/app/lib/games-store";
-import { getDashboardStats, type Delta } from "@/app/lib/stats";
+import { getAllTimePlays, getDashboardStats, type Delta } from "@/app/lib/stats";
 import {
   getCommunityStats,
   WINDOW_DAYS,
@@ -82,8 +82,9 @@ export default async function DashboardPage() {
   // here too so no data is fetched for an unauthorized request. Re-checks live role.
   await requireRole(DASHBOARD_MIN_ROLE);
 
-  const [stats, community, games, coop] = await Promise.all([
+  const [stats, allTimePlays, community, games, coop] = await Promise.all([
     getDashboardStats(),
+    getAllTimePlays(),
     getCommunityStats(),
     resolveGamesIncludingStaged(),
     getCoopStats(),
@@ -159,13 +160,18 @@ export default async function DashboardPage() {
       )}
 
       {/* KPI row — each card keeps its delta badge; three gain a sparkline. */}
-      <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <section className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <StatCard
           label="Plays"
           value={fmt(stats.totalPlays)}
           delta={stats.playsDelta}
           spark={playsSeries}
           sparkColor={C.plays}
+        />
+        <StatCard
+          label="Total plays"
+          value={allTimePlays === null ? "—" : fmt(allTimePlays)}
+          hint="All time · anonymous devices"
         />
         <StatCard
           label="Unique visitors"
