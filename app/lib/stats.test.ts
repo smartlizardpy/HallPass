@@ -68,3 +68,33 @@ describe("PostHog fetch lifetimes", () => {
     expect(seen[0].next?.revalidate).toBe(60);
   });
 });
+
+describe("getAllTimePlays", () => {
+  it("counts game_started with no time window, and reads the total", async () => {
+    const queries: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: NextInit) => {
+        queries.push(JSON.parse(String(init.body)).query.query);
+        return Response.json({ results: [["1234"]], columns: ["count()"] });
+      }),
+    );
+    const { getAllTimePlays } = await import("./stats");
+    expect(await getAllTimePlays()).toBe(1234);
+    expect(queries[0]).toContain("game_started");
+    expect(queries[0]).not.toContain("INTERVAL");
+  });
+
+  it("is null, not zero, when PostHog is unreachable", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("boom", { status: 500 })));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { getAllTimePlays } = await import("./stats");
+    expect(await getAllTimePlays()).toBeNull();
+  });
+
+  it("is null when no API key is configured", async () => {
+    vi.stubEnv("POSTHOG_PERSONAL_API_KEY", "");
+    const { getAllTimePlays } = await import("./stats");
+    expect(await getAllTimePlays()).toBeNull();
+  });
+});
