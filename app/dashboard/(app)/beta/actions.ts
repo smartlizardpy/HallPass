@@ -343,7 +343,7 @@ export async function revokeTesterAction(formData: FormData): Promise<void> {
  * assignment pointing at a game that does not exist.
  */
 export async function assignGameAction(formData: FormData): Promise<void> {
-  const { email: actor } = await requireRole(BETA_MIN_ROLE);
+  const { email: actor, playerId: actorPlayerId } = await requireRole(BETA_MIN_ROLE);
 
   const playerId = readString(formData, "playerId");
   const slug = readString(formData, "slug");
@@ -369,7 +369,10 @@ export async function assignGameAction(formData: FormData): Promise<void> {
   //
   // Between the write and the redirect: `back()` throws a control signal, so
   // nothing may sit after it, and `notifyPlayer` never rejects.
-  await notifyPlayer(playerId, {
+  //
+  // NOT WHEN YOU ASSIGNED YOURSELF: you know already, and a notice telling you
+  // about your own click is noise in the one inbox that is meant to be work.
+  if (playerId !== actorPlayerId) await notifyPlayer(playerId, {
     kind: "beta_assignment",
     // The display title where the game is in the static catalogue, the slug
     // otherwise — an external game is exactly the kind most likely to be under
