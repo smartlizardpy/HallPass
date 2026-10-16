@@ -694,7 +694,6 @@ export const games: Game[] = [
     art: "wave",
     isNew: true,
     platform: "desktop",
-    staged: true,
     multiplayer: { minPlayers: 1, maxPlayers: 8 },
     coverUrl: "/game-media/signal-lost/hero-5ed83240f0.png",
   },
