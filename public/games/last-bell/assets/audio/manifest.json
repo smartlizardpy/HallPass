@@ -1,0 +1,25 @@
+{
+  "comment": "LAST BELL audio overrides. Drop an mp3 into assets/audio/ using the exact filename from SOUND_FILES in audio.js (see ELEVENLABS_ASSET_REQUESTS.md), then add its sound id to \"available\". Only listed ids are fetched; anything missing or undecodable silently falls back to the procedural sound. Optional \"files\": { \"<id>\": \"assets/audio/<file>.mp3\" } adds or renames ids (e.g. music_calm, music_tension). \"probeAll\": true tries every known file (404s expected). PA songs (SCHOOLNET → PA System): put your own mp3s in assets/audio/songs/ and list them in \"songs\" as { \"file\": \"assets/audio/songs/my-song.mp3\", \"title\": \"My song\" }; they appear after the built-in music boxes.",
+  "available": [
+    "announcement_intro",
+    "announcement_room000",
+    "announcement_shift",
+    "announcement_late",
+    "caretaker_found_you",
+    "caretaker_still_here",
+    "caretaker_corridor",
+    "caretaker_school_closed",
+    "caretaker_hum",
+    "bell",
+    "caretaker_burp",
+    "caretaker_wheeze"
+  ],
+  "files": {},
+  "songs": [
+    {
+      "file": "assets/audio/songs/aisong.mp3",
+      "title": "Snap"
+    }
+  ],
+  "probeAll": false
+}
