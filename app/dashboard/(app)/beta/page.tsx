@@ -538,6 +538,25 @@ export default async function DashboardBetaPage({
   const gameTitles = Object.fromEntries(titleFor);
   const nameFor = new Map(roster.map((r) => [r.playerId, testerLabel(r)]));
   const active = roster.filter((r) => r.revokedAt == null);
+  // ── YOU CAN ASSIGN A GAME TO YOURSELF ─────────────────────────────────────
+  // Every dashboard role passes the tester guard without a membership row
+  // (`requireBetaTester`), so a beta admin could already play a staged game and
+  // report on it, yet could not be HANDED one: the picker listed the roster
+  // only, and a beta admin cannot put themselves on it (that is the one beta
+  // decision that needs a second admin). Taking a playtest yourself pays
+  // nothing — XP comes from accepted reports, and judging your own stays
+  // blocked by `canConfirmOwnWork` — so it needs no second person either.
+  // `beta_assignments.player_id` references `players`, not the roster, so this
+  // is the picker alone. A session with no `playerId` (minted before it was
+  // pinned) has nothing to assign to, and the form says how to fix that.
+  const testerOptions = [
+    ...(playerId
+      ? [{ playerId, label: nameFor.has(playerId) ? `You (${nameFor.get(playerId)})` : "You" }]
+      : []),
+    ...active
+      .filter((entry) => entry.playerId !== playerId)
+      .map((entry) => ({ playerId: entry.playerId, label: testerLabel(entry) })),
+  ];
   const openReports = reports.filter((r) => r.status === "open");
   // A rejected report has no decision left in it — no XP to pay, no fix to
   // make, no button on its card — so it stops competing for attention with the
@@ -579,10 +598,11 @@ export default async function DashboardBetaPage({
     ...[...assignedTo.keys()].filter(
       (id) => !roster.some((entry) => entry.playerId === id),
     ),
-  ].map((playerId) => ({
-    playerId,
-    label: nameFor.get(playerId) ?? "Not on the roster",
-    rows: assignedTo.get(playerId) ?? [],
+  ].map((id) => ({
+    playerId: id,
+    // Your own playtests are not "Not on the roster" — you assigned them.
+    label: id === playerId ? "You" : (nameFor.get(id) ?? "Not on the roster"),
+    rows: assignedTo.get(id) ?? [],
   }));
 
   const pendingShots = shots.filter((s) => s.status === "pending");
@@ -763,9 +783,10 @@ export default async function DashboardBetaPage({
               : ""
           }`}
         >
-          {active.length === 0 ? (
+          {testerOptions.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-8 text-center text-sm text-muted">
-              Invite a tester first.
+              Invite a tester first, or sign out and back in to assign a game to
+              yourself.
             </p>
           ) : (
             <form
@@ -775,9 +796,9 @@ export default async function DashboardBetaPage({
               <label className="text-xs font-black uppercase tracking-wide text-muted">
                 Tester
                 <select name="playerId" className={`mt-1 ${INPUT}`} required>
-                  {active.map((entry) => (
-                    <option key={entry.playerId} value={entry.playerId}>
-                      {testerLabel(entry)}
+                  {testerOptions.map((option) => (
+                    <option key={option.playerId} value={option.playerId}>
+                      {option.label}
                     </option>
                   ))}
                 </select>
@@ -807,6 +828,12 @@ export default async function DashboardBetaPage({
                   className={`mt-1 ${INPUT}`}
                 />
               </label>
+              {playerId == null && (
+                <p className="text-xs text-muted sm:col-span-3">
+                  Sign out and back in to assign a game to yourself — this
+                  session predates the check that says who you are.
+                </p>
+              )}
             </form>
           )}
 
