@@ -680,6 +680,24 @@ export const games: Game[] = [
     isNew: true,
     platform: "both",
   },
+  {
+    slug: "signal-lost",
+    author: "Ozan Kaygusuz",
+    title: "Signal Lost",
+    tagline: "One signal that shouldn't exist.",
+    description:
+      "Restore six storm-struck radio towers with up to eight operators, then follow a transmission that should not exist into the mountain. Tune, wire, align and route together before the network goes dark.",
+    category: "Horror",
+    tags: ["Horror", "Co-op", "Mystery", "3D"],
+    gradient: ["#0a0f14", "#3a4b57"],
+    accent: "#ffb000",
+    art: "wave",
+    isNew: true,
+    platform: "desktop",
+    staged: true,
+    multiplayer: { minPlayers: 1, maxPlayers: 8 },
+    coverUrl: "/game-media/signal-lost/hero-5ed83240f0.png",
+  },
 ];
 
 /**
