@@ -435,6 +435,38 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   }
 }
 
+/**
+ * Every play PostHog still holds, across every game — the "Total plays" tile.
+ *
+ * Deliberately NOT part of `getDashboardStats`: every other number on that page
+ * is a 30-day window compared with the 30 before it, and this one has no window
+ * and so no delta. Keeping it out also keeps it off the critical path — a slow
+ * all-time scan must never mark the whole dashboard unavailable.
+ *
+ * Counts `game_started` only (see `PLAY_EVENTS`) and so counts anonymous
+ * devices' plays, not signed-in players'. "All-time" is bounded by PostHog's own
+ * event retention.
+ *
+ * Returns `null` — not 0 — when the figure is unknown (no key, or the query
+ * failed), so the dashboard can print "—" instead of claiming nobody ever played.
+ */
+export async function getAllTimePlays(): Promise<number | null> {
+  if (!API_KEY) return null;
+  try {
+    const rows = await hogql<[number]>(
+      `SELECT count() FROM events WHERE event IN ${PLAY_EVENTS}`,
+      "posthog-all-time-plays",
+    );
+    return rows[0] === undefined ? null : Number(rows[0][0]) || 0;
+  } catch (error) {
+    console.error(
+      "Failed to load all-time plays:",
+      error instanceof Error ? error.message : error,
+    );
+    return null;
+  }
+}
+
 export async function getGamePlayCounts(): Promise<PlayCounts> {
   if (!API_KEY) return {};
 
