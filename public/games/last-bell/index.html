@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>LAST BELL</title>
+  <meta name="description" content="LAST BELL — a first-person survival-horror game set in an abandoned school at night.">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="data:,">
+  <link rel="preload" href="assets/ui/barlow-condensed-600.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/ui/barlow-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="style.css">
+  <!-- IMPORT MAP: owned by the main agent. Do not change. -->
+</head>
+<body>
+  <div id="game-canvas-host"></div>
+  <!-- UI markup (S3). ui.js binds everything by id / data-* attributes. -->
+  <div id="ui" class="ui" data-reduced="false">
+
+    <!-- ============================== HUD ============================== -->
+    <div id="hud" class="hud" hidden>
+      <div id="hud-threat" class="hud-threat" aria-hidden="true"></div>
+      <div id="hud-hide" class="hud-hide" data-type="locker" aria-hidden="true">
+        <div class="hud-hide__slats"></div>
+      </div>
+
+      <div id="hud-clock" class="hud-clock" role="timer" aria-label="Time left">
+        <span id="hud-time" class="hud-clock__time">07:00</span>
+        <span class="hud-clock__track"><span id="hud-time-bar" class="hud-clock__bar"></span></span>
+      </div>
+      <p id="hud-notice" class="hud-notice" role="status" aria-live="polite"></p>
+
+      <div class="hud-center" aria-hidden="true">
+        <span id="hud-dot" class="hud-dot"></span>
+      </div>
+      <p id="hud-prompt" class="hud-prompt" aria-live="polite"><kbd id="hud-prompt-key">E</kbd><span id="hud-prompt-text"></span></p>
+      <p id="hud-hint" class="hud-hint"></p>
+      <div id="hud-card" class="hud-card" hidden><p class="hud-card__title"></p><div class="hud-card__lines"></div><p class="hud-card__foot"></p></div>
+      <div id="hud-tip" class="hud-tip" role="status" hidden><b class="hud-tip__title"></b><span class="hud-tip__text"></span></div>
+
+      <ul id="hud-inventory" class="hud-inventory" aria-label="Items">
+        <li class="slot" data-item="keycard" title="Security keycard">
+          <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M13 9V5.5h6V9"/><rect x="4.5" y="9" width="23" height="16" rx="1.5"/><rect x="8" y="13" width="6" height="8"/><path d="M17 14.5h7M17 17.5h5M17 20.5h7"/></svg>
+          <span class="slot__label">Keycard</span>
+        </li>
+        <li class="slot" data-item="fuse" title="Maintenance fuse">
+          <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="9.5" y="11.5" width="13" height="9" rx="1"/><path d="M6 12.5h3.5v7H6zM22.5 12.5H26v7h-3.5z"/><path d="M2.5 16H6M26 16h3.5M13 14.5v3M16 14.5v3M19 14.5v3"/></svg>
+          <span class="slot__label">Fuse</span>
+        </li>
+        <li class="slot" data-item="key" title="Exit key">
+          <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="8.5" cy="16" r="4.5"/><circle cx="8.5" cy="16" r="1.5"/><path d="M13 16h15M24.5 16v4.5M20.5 16v3"/></svg>
+          <span class="slot__label">Exit key</span>
+        </li>
+      </ul>
+
+      <div id="hud-torch" class="hud-torch" role="status" aria-label="Torch: on">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 13.5h12l4-3v11l-4-3H5z"/><path d="M21 10.5h2.5v11H21"/><path d="M8 13.5v5M11 13.5v5"/><path class="hud-torch__beam" d="M25.5 12.5l4-2.5M26 16h4M25.5 19.5l4 2.5"/></svg>
+        <kbd class="hud-torch__key">F</kbd>
+        <span class="hud-torch__cells" aria-hidden="true"><i></i><i></i></span>
+        <span id="hud-torch-label" class="hud-torch__label">Torch</span>
+      </div>
+
+      <div id="hud-mic" class="hud-mic" title="Your microphone: he can hear this" aria-hidden="true" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4M9 21h6"/></svg>
+        <span class="hud-mic__bar"><i></i></span>
+      </div>
+
+      <div id="hud-stamina" class="hud-stamina" aria-hidden="true"><span id="hud-stamina-bar" class="hud-stamina__bar"></span></div>
+
+      <aside id="hud-side" class="hud-side" aria-label="Status">
+        <section id="hud-map" class="hud-map" aria-label="Map" hidden>
+          <p class="hud-side__title">Map</p>
+          <canvas id="hud-map-canvas" class="hud-map__canvas" aria-hidden="true"></canvas>
+        </section>
+        <section id="hud-prox" class="hud-prox" data-level="0" aria-label="Caretaker">
+          <p class="hud-side__title">Caretaker</p>
+          <div class="hud-prox__bar" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+          <p class="hud-prox__read"><span id="hud-prox-word">Somewhere in the building</span><span id="hud-prox-m" class="hud-prox__m"></span></p>
+          <p id="hud-prox-state" class="hud-prox__state"></p>
+        </section>
+        <section id="hud-goals" class="hud-goals" aria-label="To escape">
+          <p class="hud-side__title">To escape</p>
+          <ul class="hud-goals__list">
+            <li data-goal="keycard"><span class="hud-goals__box"></span><span class="hud-goals__text"><b>Find the security keycard</b><small>Library or reception</small></span></li>
+            <li data-goal="fuse"><span class="hud-goals__box"></span><span class="hud-goals__text"><b>Find the maintenance fuse</b><small>Storage room or science lab</small></span></li>
+            <li data-goal="key"><span class="hud-goals__box"></span><span class="hud-goals__text"><b>Find the exit key</b><small>Room 000 opens after two items</small></span></li>
+            <li data-goal="exit"><span class="hud-goals__box"></span><span class="hud-goals__text"><b>Unlock the main entrance</b><small>In reception. Needs all three.</small></span></li>
+          </ul>
+        </section>
+        <section id="hud-team" class="hud-team" aria-label="Your team" hidden>
+          <p class="hud-side__title">Team</p>
+          <ul id="hud-team-list" class="hud-team__list"></ul>
+        </section>
+        <section id="hud-tools" class="hud-tools" aria-label="Tools" hidden>
+          <p class="hud-side__title">Tools</p>
+          <ul id="hud-tools-list" class="hud-tools__list"></ul>
+        </section>
+      </aside>
+    </div>
+
+    <div id="subtitles" class="subtitles" aria-live="polite"></div>
+    <div id="flash" class="flash" aria-hidden="true"></div>
+
+    <!-- ============================ LOADING ============================ -->
+    <section id="screen-loading" class="screen screen--loading" aria-label="Loading">
+      <div class="loading">
+        <p class="wordmark">LAST BELL</p>
+        <div class="loading__track"><span id="loading-bar" class="loading__bar"></span></div>
+        <p id="loading-label" class="loading__label">Loading the school</p>
+      </div>
+      <p class="screen__foot">Headphones recommended.</p>
+    </section>
+
+    <!-- ============================== MENU ============================= -->
+    <section id="screen-menu" class="screen screen--menu" aria-label="Main menu" hidden>
+      <div class="menu-layout">
+        <h1 class="board" aria-label="Last Bell">
+          <span class="board__row board__row--big" aria-hidden="true"><b>L</b><b>A</b><b>S</b><b>T</b></span>
+          <span class="board__row board__row--big" aria-hidden="true"><b>B</b><b>E</b><b>L</b><b>L</b></span>
+          <span class="board__row board__row--small" aria-hidden="true"><b>P</b><b>L</b><b>E</b><b>A</b><b>S</b><b>E</b><i></i><b>S</b><b>I</b><b>G</b><b>N</b><i></i><b>O</b><b>U</b><b>T</b><i></i><b>A</b><b>T</b><i></i><b>R</b><b>E</b><b>C</b><b>E</b><b>P</b><b>T</b><b>I</b><i></i><b>N</b></span>
+        </h1>
+
+        <nav class="menu" aria-label="Main menu">
+          <button class="menu-item" data-action="begin">Begin</button>
+          <button class="menu-item" data-action="coop">Play with friends</button>
+          <button class="menu-item menu-item--value" data-action="difficulty" aria-describedby="difficulty-note">
+            <span>Difficulty</span><span class="menu-item__value"><span class="chev" aria-hidden="true">‹</span><span id="difficulty-value">Normal</span><span class="chev" aria-hidden="true">›</span></span>
+          </button>
+          <p id="difficulty-note" class="menu-note">Seven minutes. He hears most things.</p>
+          <button class="menu-item" data-action="instructions">How to play</button>
+          <button class="menu-item" data-action="settings">Settings</button>
+          <button class="menu-item" data-action="credits">Credits</button>
+        </nav>
+      </div>
+      <p class="screen__foot">Headphones recommended. <span class="no-touch">Mouse and keyboard.</span><span class="touch-only">Hold your tablet sideways.</span> Contains flickering lights: Settings › Reduce flicker.</p>
+    </section>
+
+    <!-- ============================== INTRO ============================ -->
+    <section id="screen-intro" class="screen screen--intro" aria-label="Story" hidden>
+      <article class="intro">
+        <div id="intro-text" class="intro__text typed">
+          <p>The final bell rings.</p>
+          <p>You were meant to leave with everyone else. Now the corridors are dark, every exit is locked, and somewhere below you a ring of keys is jingling.</p>
+          <p>The main entrance needs three things: the security keycard, the maintenance fuse and the exit key.</p>
+          <p>The caretaker is still doing his rounds. Don't let him find you.</p>
+        </div>
+        <ul class="keys-row" aria-label="Controls">
+          <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>Move</span></li>
+          <li><kbd>Shift</kbd><span>Sprint</span></li>
+          <li><kbd>C</kbd><span>Crouch</span></li>
+          <li><kbd>E</kbd><span>Use</span></li>
+          <li><kbd>F</kbd><span>Torch</span></li>
+          <li><kbd>Esc</kbd><span>Pause</span></li>
+        </ul>
+        <button id="intro-begin" class="menu-item menu-item--cta" data-action="start">Click to begin</button>
+      </article>
+    </section>
+
+    <!-- =========================== HOW TO PLAY ========================= -->
+    <section id="screen-instructions" class="screen screen--panel" aria-labelledby="instructions-title" hidden>
+      <div class="panel">
+        <h2 id="instructions-title" class="panel__title">How to play</h2>
+        <div class="panel__body panel__body--split">
+          <div class="howto">
+            <p>Find the <strong>security keycard</strong>, the <strong>maintenance fuse</strong> and the <strong>exit key</strong>, then get to the main entrance before the clock runs out.</p>
+            <p>Once you hold two of them, a room that shouldn't exist opens somewhere in the school. The key is inside.</p>
+            <p>The caretaker listens. Sprinting, doors and heavy breathing carry a long way; crouching barely makes a sound. If he sees you, run. He is fast at first but tires after a long chase: keep sprinting, break his line of sight, then hide.</p>
+            <p>Every minute the building rearranges itself. Nothing you can see will change.</p>
+            <p><strong>With friends</strong> (main menu): share a room code, then work as a team. If he catches someone, he takes them to Room 000, and anyone who reaches them can let them out. Everyone has to get out. <span class="no-touch"><kbd>M</kbd> mutes your microphone, <kbd>V</kbd> waves.</span></p>
+            <p>Tools in the school: the teachers' <strong>SCHOOLNET</strong> computers (the login is on a sticky note somewhere in the same room) show the security cameras, can send him off to check an announcement, and say where things are. Vote in the election and your candidate's promise comes true. Whatever you can use shows up under <strong>Tools</strong>, top right.</p>
+          </div>
+          <table class="controls touch-only">
+            <caption class="visually-hidden">Touch controls</caption>
+            <tbody>
+              <tr><th scope="row">Left thumb</th><td>Move. Push the stick to the edge to run</td></tr>
+              <tr><th scope="row">Right thumb</th><td>Drag to look around</td></tr>
+              <tr><th scope="row">Use</th><td>Open doors, hide, pick things up, leave a hiding place</td></tr>
+              <tr><th scope="row">Torch / Crouch</th><td>Torch on or off; crouch to move slowly and quietly</td></tr>
+              <tr><th scope="row">Hold</th><td>Hold your breath while hidden</td></tr>
+              <tr><th scope="row">PS</th><td>Put down Kaan's PlayStation and switch it on (once you've found it)</td></tr>
+              <tr><th scope="row">II</th><td>Pause</td></tr>
+            </tbody>
+          </table>
+          <table class="controls no-touch">
+            <caption class="visually-hidden">Keyboard and mouse controls</caption>
+            <tbody>
+              <tr><th scope="row"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows</th><td>Move</td></tr>
+              <tr><th scope="row">Mouse</th><td>Look around</td></tr>
+              <tr><th scope="row"><kbd>Shift</kbd> hold</th><td>Sprint. Loud, and it uses stamina</td></tr>
+              <tr><th scope="row"><kbd>C</kbd> tap or hold</th><td>Crouch. Slow and quiet</td></tr>
+              <tr><th scope="row"><kbd>E</kbd></th><td>Open doors, hide, pick things up</td></tr>
+              <tr><th scope="row"><kbd>F</kbd></th><td>Torch on or off</td></tr>
+              <tr><th scope="row"><kbd>G</kbd></th><td>Put down a gadget and switch it on (Kaan's PlayStation)</td></tr>
+              <tr><th scope="row"><kbd>Space</kbd> or right mouse, hold</th><td>Hold your breath while hidden</td></tr>
+              <tr><th scope="row"><kbd>E</kbd> or tap <kbd>Space</kbd></th><td>Leave a hiding place</td></tr>
+              <tr><th scope="row"><kbd>Esc</kbd> or <kbd>P</kbd></th><td>Pause</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="panel__actions">
+          <button class="menu-item" data-action="back">Back</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ SETTINGS =========================== -->
+    <section id="screen-settings" class="screen screen--panel" aria-labelledby="settings-title" hidden>
+      <div class="panel panel--settings">
+        <h2 id="settings-title" class="panel__title">Settings</h2>
+        <div class="panel__body settings">
+          <fieldset class="settings__group">
+            <legend>Controls</legend>
+            <div class="setting" data-setting="sensitivity" data-kind="range" data-min="0.2" data-max="3" data-step="0.05" data-format="mult">
+              <label for="set-sensitivity">Mouse sensitivity</label>
+              <input id="set-sensitivity" type="range"><output for="set-sensitivity"></output>
+            </div>
+            <div class="setting" data-setting="invertY" data-kind="toggle">
+              <span class="setting__label" id="lbl-invertY">Invert vertical look</span>
+              <button class="toggle" role="switch" aria-labelledby="lbl-invertY"></button>
+            </div>
+            <div class="setting" data-setting="fov" data-kind="range" data-min="60" data-max="100" data-step="1" data-format="deg">
+              <label for="set-fov">Field of view</label>
+              <input id="set-fov" type="range"><output for="set-fov"></output>
+            </div>
+          </fieldset>
+          <fieldset class="settings__group">
+            <legend>Sound</legend>
+            <div class="setting" data-setting="masterVolume" data-kind="range" data-min="0" data-max="1" data-step="0.01" data-format="pct">
+              <label for="set-master">Master volume</label>
+              <input id="set-master" type="range"><output for="set-master"></output>
+            </div>
+            <div class="setting" data-setting="musicVolume" data-kind="range" data-min="0" data-max="1" data-step="0.01" data-format="pct">
+              <label for="set-music">Music</label>
+              <input id="set-music" type="range"><output for="set-music"></output>
+            </div>
+            <div class="setting" data-setting="sfxVolume" data-kind="range" data-min="0" data-max="1" data-step="0.01" data-format="pct">
+              <label for="set-sfx">Effects</label>
+              <input id="set-sfx" type="range"><output for="set-sfx"></output>
+            </div>
+            <div class="setting" data-setting="voiceVolume" data-kind="range" data-min="0" data-max="1" data-step="0.01" data-format="pct">
+              <label for="set-voice">Voices</label>
+              <input id="set-voice" type="range"><output for="set-voice"></output>
+            </div>
+            <div class="setting" data-setting="chatVolume" data-kind="range" data-min="0" data-max="1" data-step="0.01" data-format="pct">
+              <label for="set-chat">Friends' voices (co-op)</label>
+              <input id="set-chat" type="range"><output for="set-chat"></output>
+            </div>
+            <div class="setting" data-setting="voiceSynth" data-kind="toggle">
+              <span class="setting__label" id="lbl-voiceSynth">Stand-in voice for missing recordings</span>
+              <button class="toggle" role="switch" aria-labelledby="lbl-voiceSynth"></button>
+            </div>
+            <div class="setting" data-setting="micHearing" data-kind="toggle" title="Talk, laugh or scream and he hears it. Your microphone is only measured; nothing is recorded or sent.">
+              <span class="setting__label" id="lbl-micHearing">The caretaker hears your microphone</span>
+              <button class="toggle" role="switch" aria-labelledby="lbl-micHearing"></button>
+            </div>
+          </fieldset>
+          <fieldset class="settings__group">
+            <legend>Display</legend>
+            <div class="setting" data-setting="quality" data-kind="choice">
+              <span class="setting__label" id="lbl-quality">Graphics quality</span>
+              <div class="choice" role="radiogroup" aria-labelledby="lbl-quality">
+                <button role="radio" data-value="low">Low</button>
+                <button role="radio" data-value="medium">Medium</button>
+                <button role="radio" data-value="high">High</button>
+              </div>
+            </div>
+            <div class="setting" data-setting="reducedEffects" data-kind="toggle">
+              <span class="setting__label" id="lbl-reducedEffects">Reduce flicker, noise and shake</span>
+              <button class="toggle" role="switch" aria-labelledby="lbl-reducedEffects"></button>
+            </div>
+            <div class="setting" data-setting="headBob" data-kind="toggle">
+              <span class="setting__label" id="lbl-headBob">Head bob</span>
+              <button class="toggle" role="switch" aria-labelledby="lbl-headBob"></button>
+            </div>
+            <div class="setting" data-setting="subtitles" data-kind="toggle">
+              <span class="setting__label" id="lbl-subtitles">Subtitles</span>
+              <button class="toggle" role="switch" aria-labelledby="lbl-subtitles"></button>
+            </div>
+            <div class="setting" data-setting="showProximity" data-kind="toggle">
+              <span class="setting__label" id="lbl-showProximity">Caretaker distance meter</span>
+              <button class="toggle" role="switch" aria-labelledby="lbl-showProximity"></button>
+            </div>
+            <div class="setting" data-setting="showObjectives" data-kind="toggle">
+              <span class="setting__label" id="lbl-showObjectives">Escape checklist</span>
+              <button class="toggle" role="switch" aria-labelledby="lbl-showObjectives"></button>
+            </div>
+          </fieldset>
+        </div>
+        <div class="panel__actions">
+          <button class="menu-item" data-action="back">Back</button>
+          <button class="menu-item menu-item--quiet" data-action="reset-settings">Reset to defaults</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== PHOTOSENSITIVITY WARNING ================== -->
+    <section id="screen-warning" class="screen screen--panel" aria-labelledby="warning-title" hidden>
+      <div class="panel panel--narrow">
+        <h2 id="warning-title" class="panel__title">Before you play</h2>
+        <div class="panel__body">
+          <p><strong>Photosensitivity warning.</strong> LAST BELL has flickering lights, brief flashes, screen shake and visual noise. A small number of people can have seizures triggered by flashing lights or patterns, even with no history of epilepsy.</p>
+          <p>If you or anyone in your family has a history of seizures, or you feel dizzy, sick or uncomfortable while playing, stop and take a break.</p>
+          <p>You can turn the effects down now, or later in Settings under <em>Reduce flicker, noise and shake</em>.</p>
+        </div>
+        <div class="panel__actions">
+          <button class="menu-item" data-action="warning-reduce">Reduce effects and continue</button>
+          <button class="menu-item menu-item--quiet" data-action="warning-ok">Continue</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= PLAY WITH FRIENDS ====================== -->
+    <section id="screen-coop" class="screen screen--panel" aria-labelledby="coop-title" hidden>
+      <div class="panel panel--narrow coop">
+        <h2 id="coop-title" class="panel__title">Play with friends</h2>
+        <div id="coop-start" class="panel__body coop__start">
+          <p class="coop__lede">Up to four of you in the same school. If he catches someone, the others can let them out of Room 000. Everyone has to get out.</p>
+          <label class="coop__field"><span>Your name</span><input id="coop-name" maxlength="20" autocomplete="nickname" spellcheck="false"></label>
+          <button class="menu-item" data-action="coop-create">Create a room</button>
+          <div class="coop__join">
+            <input id="coop-code" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="Room code" inputmode="text">
+            <button class="menu-item" data-action="coop-join">Join</button>
+          </div>
+        </div>
+        <div id="coop-room" class="panel__body coop__room" hidden>
+          <p class="coop__code"><span>Room code</span><b id="coop-code-value">----</b><button class="coop__copy" data-action="coop-copy">Copy</button><button id="coop-invite" class="coop__copy" data-action="coop-invite" hidden>Invite friends</button></p>
+          <ul id="coop-players" class="coop__players" aria-label="Players"></ul>
+          <div class="coop__looks" aria-label="Your look">
+            <button class="coop__look" data-action="coop-look-blazer"><span>Blazer</span><i id="coop-look-blazer" class="coop__sw">Navy</i></button>
+            <button class="coop__look" data-action="coop-look-skin"><span>Skin</span><i id="coop-look-skin" class="coop__sw">Tone 1</i></button>
+            <button class="coop__look" data-action="coop-look-hair"><span>Hair</span><i id="coop-look-hair" class="coop__sw">Brown</i></button>
+            <button class="coop__look" data-action="coop-look-style"><span>Hairstyle</span><i id="coop-look-style">Short</i></button>
+          </div>
+          <button class="menu-item menu-item--value" data-action="coop-voice"><span>Voice chat</span><span class="menu-item__value" id="coop-voice-value">Off</span></button>
+          <button id="coop-diff" class="menu-item menu-item--value" data-action="coop-diff"><span>Difficulty</span><span class="menu-item__value" id="coop-diff-value">Normal</span></button>
+          <button id="coop-go" class="menu-item menu-item--cta" data-action="coop-ready" aria-pressed="false">Ready</button>
+          <p id="coop-wait" class="coop__wait">The game starts when everyone is ready.</p>
+        </div>
+        <p id="coop-status" class="coop__status" role="status" aria-live="polite"></p>
+        <div class="panel__actions">
+          <button class="menu-item" data-action="coop-leave">Back</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================= CREDITS =========================== -->
+    <section id="screen-credits" class="screen screen--panel" aria-labelledby="credits-title" hidden>
+      <div class="panel panel--narrow">
+        <h2 id="credits-title" class="panel__title">Credits</h2>
+        <div class="panel__body credits">
+          <p>LAST BELL is a short survival-horror game for the browser.</p>
+          <p>The school, the caretaker, the items and the textures were made for this game in Blender. Voices and some sounds were made with ElevenLabs, the rest with the Web Audio API. Two of the election candidates are fictional people generated with GPT Image; the write-in candidate's photos are lookalike edits of Ozan's photo (GPT Image), used with his permission.</p>
+          <p>Rendered with three.js (MIT licence).<br>
+             Barlow and Barlow Condensed by Jeremy Tribby, Courier Prime by Alan Dague-Greene, both under the SIL Open Font License.</p>
+        </div>
+        <div class="panel__actions">
+          <button class="menu-item" data-action="back">Back</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== PAUSE ============================ -->
+    <section id="screen-pause" class="screen screen--pause" aria-labelledby="pause-title" hidden>
+      <div class="pause">
+        <h2 id="pause-title" class="pause__title">Paused</h2>
+        <p id="pause-status" class="pause__status"></p>
+        <nav class="menu" aria-label="Pause menu">
+          <button class="menu-item" data-action="resume">Resume</button>
+          <button class="menu-item" data-action="instructions">How to play</button>
+          <button class="menu-item" data-action="settings">Settings</button>
+          <button class="menu-item" data-action="restart">Restart</button>
+          <button class="menu-item" data-action="quit">Quit to menu</button>
+        </nav>
+      </div>
+    </section>
+
+    <!-- ========================= VICTORY / GAME OVER =================== -->
+    <section id="screen-victory" class="screen screen--end screen--victory" aria-labelledby="victory-title" hidden>
+      <article class="slip">
+        <header class="slip__head">
+          <span>Late departure slip</span><span id="victory-date"></span>
+        </header>
+        <h2 id="victory-title" class="slip__title">You got out.</h2>
+        <p class="slip__lede">The front doors gave way and the cold air hit you. Behind you, somewhere in the dark, a bell started ringing again.</p>
+        <dl id="victory-stats" class="slip__stats"></dl>
+        <p class="slip__stamp" aria-hidden="true">Signed out</p>
+        <nav class="slip__actions" aria-label="After the game">
+          <button class="menu-item" data-action="restart">Play again</button>
+          <button class="menu-item" data-action="coop-lobby" data-coop-host hidden>Back to the lobby</button>
+          <button class="menu-item" data-action="quit">Main menu</button>
+        </nav>
+      </article>
+    </section>
+
+    <section id="screen-gameover" class="screen screen--end screen--gameover" aria-labelledby="gameover-title" hidden>
+      <article class="slip slip--detention">
+        <header class="slip__head">
+          <span>Detention slip</span><span id="gameover-date"></span>
+        </header>
+        <h2 id="gameover-title" class="slip__title">Kept behind.</h2>
+        <p id="gameover-reason" class="slip__lede">The caretaker found you.</p>
+        <dl id="gameover-stats" class="slip__stats"></dl>
+        <p class="slip__stamp" aria-hidden="true">Detained</p>
+        <nav class="slip__actions" aria-label="After the game">
+          <button class="menu-item" data-action="restart">Try again</button>
+          <button class="menu-item" data-action="coop-lobby" data-coop-host hidden>Back to the lobby</button>
+          <button class="menu-item" data-action="quit">Main menu</button>
+        </nav>
+      </article>
+    </section>
+
+    <!-- ==================== POINTER-LOCK RECOVERY / ERRORS ============== -->
+    <button id="resume-overlay" class="resume-overlay" data-action="resume-lock" hidden>
+      <span class="resume-overlay__title">Click to resume</span>
+      <span class="resume-overlay__text">The game needs the mouse back. Click anywhere to keep playing.</span>
+    </button>
+
+    <section id="screen-error" class="screen screen--panel" aria-labelledby="error-title" hidden>
+      <div class="panel panel--narrow">
+        <h2 id="error-title" class="panel__title">The school won't open</h2>
+        <p id="error-text" class="panel__body"></p>
+      </div>
+    </section>
+
+    <div class="scanlines" aria-hidden="true"></div>
+  </div>
+
+  <noscript><p class="noscript">LAST BELL needs JavaScript and WebGL to run.</p></noscript>
+  <script src="boot-check.js"></script>
+  <script type="module" src="game.js"></script>
+<!-- HallPass Scoreboard — paste once near </body> -->
+<script>
+(function(w){if(w.HallPass&&w.HallPass.version!=="0")return;var q=[];
+function e(n){return function(){var a=[].slice.call(arguments);
+return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
+w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
+submitScore:e("submitScore"),getScores:e("getScores"),
+getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
+unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
+getAchievements:e("getAchievements"),challenge:e("challenge"),moment:e("moment"),
+invite:e("invite"),getLaunch:function(){return null},
+signIn:function(){},signOut:function(){},
+getHandle:function(){return null},setHandle:function(v){return v},
+on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
+off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
+setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:c.n==="invite"?{sent:0,link:null,cancelled:true}:{ok:false,reason:"inert"})})},2000)})(window);
+</script>
+<script src="https://hallpass-rouge.vercel.app/sdk/v1/hallpass.js" data-game="last-bell" defer></script>
+</body>
+</html>
