@@ -34,56 +34,38 @@
  * label is visual noise that trains people to ignore the badge.
  */
 
-import { startTransition, useEffect, useState } from "react";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { openReportCountAction } from "../actions";
+import { usePolling } from "../../_ui/usePolling";
 
-/** How often to re-read while the tab is in the foreground. */
-const POLL_MS = 60_000;
+/** Base wait while the count is changing; it backs off to MAX_MS when it is not. */
+const POLL_MS = 300_000;
+const MAX_MS = 900_000;
+/** No input for this long and the badge stops asking until the admin is back. */
+const IDLE_STOP_MS = 1_800_000;
+
+/** A plain GET, not a Server Function: it runs none of the current page's code. */
+async function readCount(): Promise<number> {
+  const res = await fetch("/api/v1/admin/open-report-count", { cache: "no-store" });
+  if (!res.ok) throw new Error(`open report count ${res.status}`);
+  const body = (await res.json()) as { count: number };
+  return body.count;
+}
 
 export function OpenReportBadge() {
   const pathname = usePathname();
   const [count, setCount] = useState<number | null>(null);
 
-  useEffect(() => {
-    // `cancelled` rather than an AbortController: a Server Function call is not
-    // an abortable fetch we own, so the best we can do is refuse to write the
-    // result of a stale read into state after unmount.
-    let cancelled = false;
-
-    // `startTransition` is the shape the Next.js docs prescribe for invoking a
-    // Server Function from an effect: it keeps the resulting state update
-    // non-urgent, so a slow count can never make the sidebar janky under a
-    // navigation the admin actually asked for.
-    const read = () => {
-      startTransition(async () => {
-        try {
-          const n = await openReportCountAction();
-          if (!cancelled) setCount(n);
-        } catch {
-          // The action already logs server-side. A failed read leaves the last
-          // known count on screen rather than flashing the badge away, which
-          // would read as "queue cleared" — the opposite of the truth.
-        }
-      });
-    };
-
-    read();
-
-    // One guard serves both triggers: the timer must skip hidden tabs, and the
-    // visibility listener fires on hide as well as show.
-    const readIfVisible = () => {
-      if (document.visibilityState === "visible") read();
-    };
-
-    const timer = window.setInterval(readIfVisible, POLL_MS);
-    document.addEventListener("visibilitychange", readIfVisible);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", readIfVisible);
-    };
-  }, [pathname]);
+  // A failed read leaves the last known count on screen rather than flashing the
+  // badge away, which would read as "queue cleared" — the opposite of the truth.
+  usePolling({
+    read: readCount,
+    onData: setCount,
+    baseMs: POLL_MS,
+    maxMs: MAX_MS,
+    idleStopMs: IDLE_STOP_MS,
+    resetKey: pathname,
+  });
 
   if (!count) return null;
 

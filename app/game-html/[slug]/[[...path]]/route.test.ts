@@ -59,6 +59,9 @@ describe("/game-html staged gate", () => {
     expect(mocks.canViewStaged).not.toHaveBeenCalled();
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toBe("https://hp.test/games/pub/index.html");
+    expect(res.headers.get("cache-control")).toBe(
+      "public, max-age=0, s-maxage=60, stale-while-revalidate=300",
+    );
   });
 
   it("keeps the public cache header on a public proxied 200", async () => {

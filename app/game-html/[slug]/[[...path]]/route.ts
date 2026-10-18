@@ -80,6 +80,23 @@ const NOT_FOUND = () =>
  * twin — the game still plays and the recorder still records, minus audio and
  * SDK events.
  */
+/**
+ * The 307 to a public game's static twin. It is the same answer for every viewer
+ * (staged games never reach it), so the CDN may keep it: without a header every
+ * iframe load and bundled asset invoked a function just to return a redirect. The
+ * TTL is short because a blob uploaded after `MIRROR_SYNCED_AT` flips this URL
+ * from "redirect" to "proxy", and that change should land within a minute.
+ */
+function cacheableStaticRedirect(staticUrl: string): Response {
+  return new Response(null, {
+    status: 307,
+    headers: {
+      location: staticUrl,
+      "cache-control": "public, max-age=0, s-maxage=60, stale-while-revalidate=300",
+    },
+  });
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ slug: string; path?: string[] }> },
@@ -163,13 +180,13 @@ export async function GET(
   }
 
   if (source.kind === "static") {
-    return Response.redirect(staticUrl, 307);
+    return cacheableStaticRedirect(staticUrl);
   }
 
   const upstream = await fetch(source.url, { cache: "no-store" });
   if (!upstream.ok || !upstream.body) {
     // A staged game has no public twin to fall back to.
-    return staged ? NOT_FOUND() : Response.redirect(staticUrl, 307);
+    return staged ? NOT_FOUND() : cacheableStaticRedirect(staticUrl);
   }
 
   return new Response(upstream.body, {

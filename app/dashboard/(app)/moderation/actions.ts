@@ -53,12 +53,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
-import { isMissingColumnError, sql } from "@/app/lib/db";
+import { sql } from "@/app/lib/db";
 import {
   createModerationStore,
   type ReviewActionResult,
 } from "@/app/lib/reviews/moderation";
 import { createProfileReportStore } from "@/app/lib/profile-reports/store";
+import { countOpenReports } from "@/app/lib/open-report-count";
 
 const moderation = createModerationStore(sql);
 /** Bound here for the same reason `moderation` is: the factory is a bag of closures over `sql`. */
@@ -441,22 +442,7 @@ export async function unbanAuthorAction(formData: FormData): Promise<void> {
  */
 export async function openReportCountAction(): Promise<number> {
   await requireRole("admin");
-  let total = 0;
-  try {
-    total += await moderation.openReportCount();
-  } catch (error) {
-    console.error("[moderation] open report count failed", error);
-  }
-  // Profile reports are counted separately: the table arrives in its own
-  // migration, and its absence must not zero the review count above.
-  try {
-    total += await profileReports.openCount();
-  } catch (error) {
-    if (!isMissingColumnError(error)) {
-      console.error("[moderation] open profile report count failed", error);
-    }
-  }
-  return total;
+  return countOpenReports();
 }
 
 /* ------------------------------------------------------------ profile reports */
