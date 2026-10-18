@@ -44,12 +44,18 @@
  * Function throws on a database error rather than answering `[]`.
  */
 
-import { startTransition, useEffect, useState } from "react";
+import { useState } from "react";
 import type { AgentActivity } from "@/app/lib/beta";
 import { agentActivityAction } from "../actions";
+import { usePolling } from "../../_ui/usePolling";
 
 /** How often to re-read while the tab is in the foreground. */
 const POLL_MS = 30_000;
+/** Wait when nothing is live, and the ceiling the back-off grows to. */
+const QUIET_MS = 300_000;
+const IDLE_MAX_MS = 600_000;
+/** No input for this long and the feed stops asking until somebody is back. */
+const IDLE_STOP_MS = 900_000;
 
 /** Anything newer than this is "now" rather than a duration. */
 const JUST_NOW_MS = 45_000;
@@ -119,41 +125,17 @@ export function AgentActivityFeed({
     setRows(initial);
   }
 
-  useEffect(() => {
-    // `cancelled` rather than an AbortController: a Server Function call is not
-    // an abortable fetch we own, so the best we can do is refuse to write a
-    // stale read into state after unmount.
-    let cancelled = false;
-
-    const read = () => {
+  usePolling({
+    read: async () => {
       setNow(Date.now());
-      startTransition(async () => {
-        try {
-          const next = await agentActivityAction();
-          if (!cancelled) setRows(next);
-        } catch {
-          // Deliberately silent. The action logs server-side, and the last known
-          // rows staying on screen is the honest degradation — see the docblock.
-        }
-      });
-    };
-
-    // One guard serves both triggers: the timer must skip hidden tabs, and the
-    // visibility listener fires on hide as well as on show.
-    const readIfVisible = () => {
-      if (document.visibilityState === "visible") read();
-    };
-
-    read();
-
-    const timer = window.setInterval(readIfVisible, POLL_MS);
-    document.addEventListener("visibilitychange", readIfVisible);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", readIfVisible);
-    };
-  }, []);
+      return agentActivityAction();
+    },
+    onData: setRows,
+    // Quick while a run is live; a feed with nothing live checks rarely.
+    baseMs: rows.length > 0 ? POLL_MS : QUIET_MS,
+    maxMs: IDLE_MAX_MS,
+    idleStopMs: IDLE_STOP_MS,
+  });
 
   if (rows.length === 0) return null;
 
@@ -215,7 +197,7 @@ export function AgentActivityFeed({
           that is already refreshing itself — and says when it will go, so its
           disappearing reads as "the agent stopped" rather than as a fault. */}
       <p className="mt-2 text-[11px] font-semibold text-muted">
-        Newest first · refreshes every {POLL_MS / 1000}s while this tab is open ·
+        Newest first · refreshes every {POLL_MS / 1000}s while a run is live and this tab is in use ·
         closes when the agent finishes or after {idleMinutes} quiet minutes
       </p>
     </section>

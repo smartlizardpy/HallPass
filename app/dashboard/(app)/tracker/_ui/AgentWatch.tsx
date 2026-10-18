@@ -39,18 +39,22 @@
 
 import {
   createContext,
-  startTransition,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
 import type { TrackerAgentActivity } from "@/app/lib/beta";
 import { trackerAgentActivityAction } from "../actions";
+import { usePolling } from "../../_ui/usePolling";
 
 /** How often to re-read while the tab is in the foreground. */
 const POLL_MS = 30_000;
+/** Wait when nothing is live, and the ceiling the back-off grows to. */
+const QUIET_MS = 300_000;
+const IDLE_MAX_MS = 600_000;
+/** No input for this long and the feed stops asking until somebody is back. */
+const IDLE_STOP_MS = 900_000;
 
 /** Anything newer than this is "now" rather than a duration. */
 const JUST_NOW_MS = 45_000;
@@ -103,42 +107,17 @@ export function AgentWatch({
     setRows(initial);
   }
 
-  useEffect(() => {
-    // `cancelled` rather than an AbortController: a Server Function call is not
-    // an abortable fetch we own, so the best we can do is refuse to write a
-    // stale read into state after unmount.
-    let cancelled = false;
-
-    const read = () => {
+  usePolling({
+    read: async () => {
       setNow(Date.now());
-      startTransition(async () => {
-        try {
-          const next = await trackerAgentActivityAction();
-          if (!cancelled) setRows(next);
-        } catch {
-          // Deliberately silent, and deliberately not `setRows([])`. The action
-          // logs server-side; keeping the last markers is the honest
-          // degradation — see the docblock.
-        }
-      });
-    };
-
-    // One guard serves both triggers: the timer must skip hidden tabs, and the
-    // visibility listener fires on hide as well as on show.
-    const readIfVisible = () => {
-      if (document.visibilityState === "visible") read();
-    };
-
-    read();
-
-    const timer = window.setInterval(readIfVisible, POLL_MS);
-    document.addEventListener("visibilitychange", readIfVisible);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", readIfVisible);
-    };
-  }, []);
+      return trackerAgentActivityAction();
+    },
+    onData: setRows,
+    // Quick while a run is live; a feed with nothing live checks rarely.
+    baseMs: rows.length > 0 ? POLL_MS : QUIET_MS,
+    maxMs: IDLE_MAX_MS,
+    idleStopMs: IDLE_STOP_MS,
+  });
 
   const value = useMemo<Watch>(
     () => ({ byItem: new Map(rows.map((row) => [row.itemId, row])), now }),
