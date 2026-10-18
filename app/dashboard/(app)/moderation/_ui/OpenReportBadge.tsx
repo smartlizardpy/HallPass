@@ -39,7 +39,7 @@ import { usePathname } from "next/navigation";
 import { openReportCountAction } from "../actions";
 
 /** How often to re-read while the tab is in the foreground. */
-const POLL_MS = 60_000;
+const POLL_MS = 300_000;
 
 export function OpenReportBadge() {
   const pathname = usePathname();

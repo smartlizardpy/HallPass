@@ -50,7 +50,7 @@ import type { TrackerAgentActivity } from "@/app/lib/beta";
 import { trackerAgentActivityAction } from "../actions";
 
 /** How often to re-read while the tab is in the foreground. */
-const POLL_MS = 10_000;
+const POLL_MS = 30_000;
 
 /** Anything newer than this is "now" rather than a duration. */
 const JUST_NOW_MS = 45_000;
