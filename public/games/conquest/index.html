@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#07111c" />
+    <meta name="description" content="Conquest: a real-time territory conquest game. Expand, attack and sail your way to ruling the world against 24 rival nations." />
+    <title>Conquest</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2307111c'/%3E%3Cpath d='M14 40l10-16 9 11 7-8 10 13z' fill='%2314e0ff'/%3E%3C/svg%3E" />
+    <script type="module" crossorigin src="./assets/index-Di0RL18e.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-slKhagIn.css">
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="map" aria-label="World map. Tap land to expand or attack."></canvas>
+      <div class="boot" id="boot">Loading the world…</div>
+    </div>
+    <noscript>Conquest needs JavaScript to run.</noscript>
+    <!-- HallPass Scoreboard — paste once near </body> -->
+<script>
+(function(w){if(w.HallPass&&w.HallPass.version!=="0")return;var q=[];
+function e(n){return function(){var a=[].slice.call(arguments);
+return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
+w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
+submitScore:e("submitScore"),getScores:e("getScores"),
+getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
+unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
+getAchievements:e("getAchievements"),challenge:e("challenge"),moment:e("moment"),
+invite:e("invite"),getLaunch:function(){return null},
+signIn:function(){},signOut:function(){},
+getHandle:function(){return null},setHandle:function(v){return v},
+on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
+off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
+setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:c.n==="invite"?{sent:0,link:null,cancelled:true}:{ok:false,reason:"inert"})})},2000)})(window);
+</script>
+    <script src="/sdk/v1/hallpass.js" data-game="conquest" defer></script>
+  </body>
+</html>
