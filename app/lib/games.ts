@@ -680,6 +680,21 @@ export const games: Game[] = [
     isNew: true,
     platform: "both",
   },
+  {
+    slug: "conquest",
+    author: "Ozan Kaygusuz",
+    title: "Conquest",
+    tagline: "Take the world, one border at a time.",
+    description:
+      "Grow a nation on a real world map against 24 rival empires. Expand into open land, time your attacks and send fleets across the sea until the whole world is yours, on Easy, Normal, Hard or Brutal.",
+    category: "Strategy",
+    tags: ["Strategy", "Real-Time", "Naval"],
+    gradient: ["#07111c", "#14e0ff"],
+    accent: "#14e0ff",
+    art: "terrain",
+    isNew: true,
+    platform: "both",
+  },
 ];
 
 /**
