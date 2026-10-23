@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#1b1426" />
+    <meta name="description" content="Ragdoll Hoops: chaotic one-button 2v2 ragdoll basketball. Play a friend on the same screen or take on the computer. First to 5 wins." />
+    <title>Ragdoll Hoops</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231b1426'/%3E%3Ccircle cx='32' cy='34' r='18' fill='%23f08a24' stroke='%237a3a0c' stroke-width='3'/%3E%3Cpath d='M14 34h36M32 16v36' stroke='%237a3a0c' stroke-width='3'/%3E%3C/svg%3E" />
+    <script type="module" crossorigin src="./assets/index-CqleAReC.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CccLIB95.css">
+  </head>
+  <body>
+    <div id="app" class="menu">
+      <canvas id="game" aria-label="Ragdoll Hoops court. Blue presses the left half of the screen or W; Red presses the right half or the Up arrow."></canvas>
+      <div id="touch" aria-hidden="true"></div>
+      <div id="stage"></div>
+    </div>
+    <noscript>Ragdoll Hoops needs JavaScript to run.</noscript>
+    <!-- HallPass Scoreboard - paste once near </body> -->
+<script>
+(function(w){if(w.HallPass&&w.HallPass.version!=="0")return;var q=[];
+function e(n){return function(){var a=[].slice.call(arguments);
+return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
+w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
+submitScore:e("submitScore"),getScores:e("getScores"),
+getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
+unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
+getAchievements:e("getAchievements"),challenge:e("challenge"),moment:e("moment"),
+invite:e("invite"),getLaunch:function(){return null},
+signIn:function(){},signOut:function(){},
+getHandle:function(){return null},setHandle:function(v){return v},
+on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
+off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
+setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
+q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:c.n==="invite"?{sent:0,link:null,cancelled:true}:{ok:false,reason:"inert"})})},2000)})(window);
+</script>
+    <script src="/sdk/v1/hallpass.js" data-game="ragdoll-hoops" defer></script>
+  </body>
+</html>
