@@ -695,6 +695,21 @@ export const games: Game[] = [
     isNew: true,
     platform: "both",
   },
+  {
+    slug: "ragdoll-hoops",
+    author: "Ozan Kaygusuz",
+    title: "Ragdoll Hoops",
+    tagline: "Big buttons. Floppy players. Total chaos.",
+    description:
+      "Wobbly 2v2 basketball: walk left and right, tap to jump, hold to reach, let go to shoot. Take on a friend on the same screen or beat the computer, with a new court, ball and body twist after every basket. First to 5 wins.",
+    category: "Sports",
+    tags: ["Sports", "Local Co-op", "Physics", "Pixel"],
+    gradient: ["#2a2a6a", "#f08a24"],
+    accent: "#ff8a1a",
+    art: "rink",
+    isNew: true,
+    platform: "both",
+  },
 ];
 
 /**
