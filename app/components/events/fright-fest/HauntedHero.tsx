@@ -10,6 +10,7 @@ import { eventDateLabels } from "../../../lib/events/labels";
 
 const LABELS = eventDateLabels(FRIGHT_FEST_THEME);
 import { FRIGHT_FEST_GAMES, FRIGHT_FEST_GAMES_ANNOUNCED } from "./registry";
+import { HeroCountdown } from "./HeroCountdown";
 
 /**
  * The Haunted Arcade hero: a pixel-art night scene, three arcade cabinets, the
@@ -356,6 +357,7 @@ export function HauntedHero({
                   Practise now
                 </Link>
               )}
+          <HeroCountdown />
         </div>
         <p className="ha-when">
           <b>{LABELS.range}</b>
