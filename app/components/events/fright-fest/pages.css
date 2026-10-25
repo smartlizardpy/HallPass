@@ -265,3 +265,121 @@ html[data-hp-skin="haunted"][data-hp-still] .ha-tab-ghost[data-playing] .ha-tab-
   transition: none;
   animation: none;
 }
+
+/* ---- /fright-fest landing page (skin on) ---- */
+html[data-hp-skin="haunted"] .ff-page .ff-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 28px 24px 26px;
+  background: linear-gradient(180deg, #1b1026 0%, #2a1740 100%);
+  color: var(--ha-bone);
+  clip-path: var(--ha-clip-4);
+}
+html[data-hp-skin="haunted"] .ff-page .ff-hero .text-muted,
+html[data-hp-skin="haunted"] .ff-page .ff-hero [data-testid="ff-phase"] {
+  color: var(--ha-lav-2);
+}
+html[data-hp-skin="haunted"] .ff-title {
+  font-family: var(--font-pixel), system-ui, sans-serif;
+  color: var(--ha-amber);
+  letter-spacing: 0.02em;
+}
+html[data-hp-skin="haunted"] .ff-moon {
+  position: absolute;
+  right: 28px;
+  top: 18px;
+  width: 72px;
+  height: 72px;
+  background: var(--spr-moon) no-repeat 0 0 / 100% 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+html[data-hp-skin="haunted"] .ff-bat {
+  position: absolute;
+  right: 120px;
+  top: 40px;
+  width: 36px;
+  height: 24px;
+  background: var(--spr-bat-a) no-repeat 0 0 / 100% 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+html[data-hp-skin="haunted"] .ff-cta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 18px;
+  background: var(--ha-pumpkin);
+  color: #1c1c28;
+  font-weight: 900;
+}
+html[data-hp-skin="haunted"] .ff-cta:hover {
+  background: #ff8f3d;
+}
+html[data-hp-skin="haunted"] .ff-ghost-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--ha-bone);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+html[data-hp-skin="haunted"] .ff-h {
+  font-family: var(--font-pixel), system-ui, sans-serif;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+html[data-hp-skin="haunted"] .ff-cab,
+html[data-hp-skin="haunted"] .ff-step,
+html[data-hp-skin="haunted"] .ff-prize {
+  position: relative;
+  background: var(--surface);
+  border: 2px solid var(--ha-line);
+  clip-path: var(--ha-clip-2);
+}
+html[data-hp-skin="haunted"] .ff-prize {
+  padding: 16px 20px 16px 84px;
+}
+html[data-hp-skin="haunted"] .ff-cab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 22px 12px 18px;
+  text-align: center;
+}
+html[data-hp-skin="haunted"] .ff-q {
+  font-family: var(--font-pixel), system-ui, sans-serif;
+  font-size: 28px;
+  color: var(--ha-amber);
+}
+html[data-hp-skin="haunted"] .ff-ghost {
+  width: 40px;
+  height: 40px;
+  background: var(--spr-ghost) no-repeat 0 0 / 100% 100%;
+  image-rendering: pixelated;
+}
+html[data-hp-skin="haunted"] .ff-box {
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  margin-top: -24px;
+  background: var(--spr-prize-box) no-repeat 0 0 / 100% 100%;
+  image-rendering: pixelated;
+}
+html[data-hp-skin="haunted"] .ff-step {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+}
+html[data-hp-skin="haunted"] .ff-n {
+  font-family: var(--font-pixel), system-ui, sans-serif;
+  font-size: 22px;
+  color: var(--ha-pumpkin);
+}
+
