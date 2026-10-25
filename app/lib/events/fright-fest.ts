@@ -29,6 +29,7 @@ export const FRIGHT_FEST_THEME: ThemeWindow = {
     "/beta",
     "/embed",
     "/oauth",
+    "/offline",
     "/auth",
     "/c",
     "/i",
