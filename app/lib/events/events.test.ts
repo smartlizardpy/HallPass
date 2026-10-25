@@ -170,11 +170,11 @@ describe("theme and championship are independent", () => {
   }
   const APP = join(__dirname, "..", "..");
 
-  it("only the neutral /fright-fest page imports the championship flag", () => {
+  it("no site file imports the championship flag yet", () => {
     const importers = walkSrc(APP)
       .filter((f) => /from\s+["'][^"']*events\/championship["']/.test(readFileSync(f, "utf8")))
       .map((f) => f.slice(APP.length + 1));
-    expect(importers).toEqual(["fright-fest/page.tsx"]);
+    expect(importers).toEqual([]);
   });
 
   it("no theme, skin or shared-component file mentions the championship flag", () => {
