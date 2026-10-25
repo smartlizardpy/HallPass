@@ -47,14 +47,16 @@ export function ProfileHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <section className="rounded-3xl bg-surface p-5 sm:p-8">
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+    <section className="ha-idc ha-phd rounded-3xl bg-surface p-5 sm:p-8">
+      <span aria-hidden="true" className="ha-deco ha-night-strip" />
+      <span aria-hidden="true" className="ha-deco ha-spr ha-cweb" />
+      <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
         <div className="shrink-0">
           <Avatar person={profile} size={96} />
         </div>
 
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-2xl font-black tracking-tight text-foreground sm:text-3xl">
+          <h1 className="ha-h1 truncate text-2xl font-black tracking-tight text-foreground sm:text-3xl">
             {profile.displayName}
           </h1>
           {/* The @username is shown even when it IS the display name (a player

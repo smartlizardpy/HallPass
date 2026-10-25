@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyLine, EmptySprite, type HauntKind } from "./EmptyHaunt";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { PublicProfile } from "../../lib/social/store";
@@ -181,7 +182,7 @@ export function FriendsIsland() {
       {tab === "friends" && (
         <Panel>
           {data.friends.length === 0 ? (
-            <Empty>
+            <Empty kind="ghost" line="It is very quiet in here tonight.">
               No friends yet. Use <strong>Add a friend</strong> to send your first
               request.
             </Empty>
@@ -213,7 +214,7 @@ export function FriendsIsland() {
         <div className="space-y-4">
           <Panel title="Waiting for you">
             {data.incoming.length === 0 ? (
-              <Empty>No one is waiting on you.</Empty>
+              <Empty kind="lantern" line="Nothing is lurking in your inbox.">No one is waiting on you.</Empty>
             ) : (
               <ul className="divide-y divide-border">
                 {data.incoming.map((person) => (
@@ -242,7 +243,7 @@ export function FriendsIsland() {
 
           <Panel title="Sent by you">
             {data.outgoing.length === 0 ? (
-              <Empty>You haven&rsquo;t sent any requests.</Empty>
+              <Empty kind="tomb" line="Rest easy. No requests are haunting anyone.">You haven&rsquo;t sent any requests.</Empty>
             ) : (
               <ul className="divide-y divide-border">
                 {data.outgoing.map((person) => (
@@ -484,8 +485,24 @@ function Panel({ title, children }: { title?: string; children: React.ReactNode 
   );
 }
 
-function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="text-[15px] font-semibold text-muted">{children}</p>;
+function Empty({
+  children,
+  kind,
+  line,
+}: {
+  children: React.ReactNode;
+  kind?: HauntKind;
+  line?: string;
+}) {
+  return (
+    <p className="ha-empty text-[15px] font-semibold text-muted">
+      {kind && <EmptySprite kind={kind} />}
+      <span>
+        {children}
+        {line && <EmptyLine>{line}</EmptyLine>}
+      </span>
+    </p>
+  );
 }
 
 function TabButton({

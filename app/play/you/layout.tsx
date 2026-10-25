@@ -135,7 +135,7 @@ function YouFrame({ children }: { children: React.ReactNode }) {
 
         <div className="text-center">
           <Wordmark size="text-3xl" dotClass="h-2 w-2" />
-          <h1 className="mt-3 text-2xl font-black tracking-tight">Your profile</h1>
+          <h1 className="ha-h1 mt-3 text-2xl font-black tracking-tight">Your profile</h1>
         </div>
 
         {children}
@@ -221,8 +221,10 @@ async function YouShell({ children }: { children: React.ReactNode }) {
   return (
     <YouFrame>
       {/* IDENTITY — persistent across all three tabs. */}
-      <section className="rounded-xl border border-border bg-surface p-6">
-        <div className="flex items-center gap-4">
+      <section className="ha-idc rounded-xl border border-border bg-surface p-6">
+        <span aria-hidden="true" className="ha-deco ha-night-strip" />
+        <span aria-hidden="true" className="ha-deco ha-spr ha-cweb" />
+        <div className="relative flex items-center gap-4">
           {/* Your own avatar: your Google photo only if you opted in (Settings), else a meme avatar. */}
           <span className="flex shrink-0 rounded-full border border-border">
             <Avatar person={{ image: ownAvatarUrl(player), displayName: display }} size={64} />

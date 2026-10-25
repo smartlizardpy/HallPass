@@ -41,7 +41,7 @@ export function RecentPlays({ plays }: { plays: RecentPlayCard[] }) {
   if (plays.length === 0) return null;
 
   return (
-    <section className="rounded-3xl bg-surface p-5 sm:p-6">
+    <section className="ha-pcard rounded-3xl bg-surface p-5 sm:p-6">
       <h2 className="text-[11px] font-black uppercase tracking-wider text-muted">
         Recently played
       </h2>

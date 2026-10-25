@@ -7,6 +7,7 @@ import type { Game } from "../lib/games";
 import { type GameMedia, mediaPublicPath } from "../lib/game-media-blob";
 import { useFavorites } from "../lib/personalization";
 import { useOpenGame } from "./ArcadeShell";
+import { GameEventPanel, GameModeChip } from "./GameEventPanel";
 import { PlatformConfirmSheet, usePlayGuard } from "./PlatformGate";
 import { CoverImage, coverImageSrc } from "./CoverImage";
 import { GameCard } from "./GameCard";
@@ -172,15 +173,21 @@ export function GameStore({
           appears as a thick left rule (see `.game-title-tab`), which is a use
           `--g-accent` is safe for — unlike text, where 8 of 28 catalogue values
           fall below 3:1 on white. */}
-      <div className="game-title-tab mb-3 inline-block max-w-full rounded-2xl bg-surface py-3 pl-4 pr-5 shadow-sm">
-        <h1 className="truncate text-xl font-black leading-tight tracking-tight text-foreground sm:text-2xl">
-          {game.title}
-        </h1>
+      <div className="mb-3 flex max-w-full flex-wrap items-center gap-3">
+        <div className="game-title-tab inline-block min-w-0 max-w-full rounded-2xl bg-surface py-3 pl-4 pr-5 shadow-sm">
+          <h1 className="truncate text-xl font-black leading-tight tracking-tight text-foreground sm:text-2xl">
+            {game.title}
+          </h1>
+        </div>
+        <GameModeChip slug={game.slug} />
       </div>
 
       {/* HERO — media left, metadata rail + Play right. */}
       <section className="game-hero grid gap-5 rounded-3xl p-4 sm:gap-6 sm:p-6 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
-        <div className="min-w-0">
+        {/* Night trees along the card's foot. Decoration, hidden unless skinned. */}
+        <span aria-hidden="true" className="ha-deco ha-spr ha-g-trees" />
+        <div className="min-w-0 ha-gal-wrap">
+          <span aria-hidden="true" className="ha-deco ha-spr ha-g-web" />
           {/* THE MEDIA. One gallery: when the game has a gameplay/intro video it is
               the FIRST SLIDE, in the same frame and thumbnail strip as the
               pictures, rather than a separate Gameplay / Screenshots toggle. A game
@@ -378,6 +385,7 @@ export function GameStore({
               nothing, so neither leaves a gap. */}
           <ChallengedHere slug={game.slug} />
           <FriendsWhoPlay slug={game.slug} />
+          <GameEventPanel slug={game.slug} />
         </aside>
       </section>
 
@@ -452,7 +460,7 @@ export function GameStore({
 
       {related.length > 0 && (
         <section className="mt-10">
-          <h2 className="mb-5 text-lg font-black tracking-tight text-foreground">
+          <h2 className="ha-more-h mb-5 text-lg font-black tracking-tight text-foreground">
             More like this
           </h2>
           <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
