@@ -92,8 +92,6 @@ html[data-hp-skin="haunted"] .ha-rghost {
 }
 html[data-hp-skin="haunted"] .ha-rghost[data-playing] {
   transform: translateX(-28%);
-  pointer-events: auto;
-  cursor: pointer;
 }
 
 /* ---- Eyes (data-ha-moment="eyes"): only where a real gap exists. The nav

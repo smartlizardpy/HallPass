@@ -2,7 +2,7 @@
 
 /**
  * HallPass — the ambient moments runtime for the haunted skin, mounted once in
- * the root layout. Renders nothing except, briefly, the "boo" search reply.
+ * the root layout. Renders nothing except, briefly, the "boo" search reply and the ghost-found reply.
  *
  * It only ever flips `data-playing` on decorations that already exist (they are
  * rendered, hidden and inert, by the region components); the CSS next to each
@@ -69,7 +69,9 @@ export function Moments() {
     () => true,
     () => false,
   );
-  const [boo, setBoo] = useState<{ left: number; top: number } | null>(null);
+  // One reply at a time: the "boo" answer (placed under the search box) or the
+  // doorway-ghost find (bottom of the screen).
+  const [reply, setReply] = useState<{ left: number; top: number; text: string } | null>(null);
 
   useEffect(() => {
     if (!ready) return;
@@ -124,18 +126,35 @@ export function Moments() {
         document.documentElement.getAttribute("data-hp-event") === T.event
       ) {
         const r = t.getBoundingClientRect();
-        setBoo({ left: r.left, top: r.bottom + 6 });
-      } else setBoo(null);
+        setReply({ left: r.left, top: r.bottom + 6, text: "Something answered. Room 000 is open." });
+      } else setReply(null);
+    };
+    let hide = 0;
+    const onFound = () => {
+      setReply({ left: Math.max(12, innerWidth / 2 - 130), top: innerHeight - 76, text: "You found a wandering ghost." });
+      clearTimeout(hide);
+      hide = window.setTimeout(() => setReply(null), 3500);
     };
     document.addEventListener("input", onInput);
-    return () => document.removeEventListener("input", onInput);
+    window.addEventListener("hp:ghost-found", onFound);
+    return () => {
+      document.removeEventListener("input", onInput);
+      window.removeEventListener("hp:ghost-found", onFound);
+      clearTimeout(hide);
+    };
   }, [ready]);
 
-  if (!boo) return null;
+  if (!ready) return null;
+  // The live region is mounted empty and filled afterwards, so screen readers
+  // (which only announce changes inside an existing region) speak the reply.
   return createPortal(
-    <div role="status" className="ha-boo" style={{ left: boo.left, top: boo.top }}>
-      <span aria-hidden="true" className="ha-boo-ghost ha-spr" />
-      <span>Something answered. Room 000 is open.</span>
+    <div role="status" aria-live="polite">
+      {reply && (
+        <div className="ha-boo" style={{ left: reply.left, top: reply.top }}>
+          <span aria-hidden="true" className="ha-boo-ghost ha-spr" />
+          <span>{reply.text}</span>
+        </div>
+      )}
     </div>,
     document.body,
   );
