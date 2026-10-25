@@ -23,6 +23,11 @@ import { themeBootScript } from "./lib/theme/boot";
 import { SITE_URL } from "./lib/site";
 import "./globals.css";
 import "./components/events/fright-fest/haunted.css";
+import "./components/events/fright-fest/header.css";
+import "./components/events/fright-fest/sidebar.css";
+import "./components/events/fright-fest/hero.css";
+import "./components/events/fright-fest/catalogue.css";
+import "./components/events/fright-fest/pages.css";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -105,6 +110,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      // The boot scripts set `data-theme` and the event attributes on <html>
+      // before React hydrates; the server markup cannot know them.
+      suppressHydrationWarning
       className={`${nunito.variable} ${silkscreen.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">

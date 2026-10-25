@@ -82,3 +82,55 @@ html[data-hp-skin="haunted"] .card:hover {
 html[data-hp-skin="haunted"] .card:hover h3 {
   color: var(--ha-hover);
 }
+
+/* Stepped pixel corners (the artifact's pxPoly): clip-path: var(--ha-clip-2). */
+html[data-hp-event="fright-fest"] {
+  --ha-clip-1: polygon(2px 0,calc(100% - 2px) 0,calc(100% - 2px) 1px,calc(100% - 1px) 1px,calc(100% - 1px) 2px,100% 2px,100% calc(100% - 2px),calc(100% - 1px) calc(100% - 2px),calc(100% - 1px) calc(100% - 1px),calc(100% - 2px) calc(100% - 1px),calc(100% - 2px) 100%,2px 100%,2px calc(100% - 1px),1px calc(100% - 1px),1px calc(100% - 2px),0 calc(100% - 2px),0 2px,1px 2px,1px 1px,2px 1px);
+  --ha-clip-2: polygon(4px 0,calc(100% - 4px) 0,calc(100% - 4px) 2px,calc(100% - 2px) 2px,calc(100% - 2px) 4px,100% 4px,100% calc(100% - 4px),calc(100% - 2px) calc(100% - 4px),calc(100% - 2px) calc(100% - 2px),calc(100% - 4px) calc(100% - 2px),calc(100% - 4px) 100%,4px 100%,4px calc(100% - 2px),2px calc(100% - 2px),2px calc(100% - 4px),0 calc(100% - 4px),0 4px,2px 4px,2px 2px,4px 2px);
+  --ha-clip-3: polygon(6px 0,calc(100% - 6px) 0,calc(100% - 6px) 3px,calc(100% - 3px) 3px,calc(100% - 3px) 6px,100% 6px,100% calc(100% - 6px),calc(100% - 3px) calc(100% - 6px),calc(100% - 3px) calc(100% - 3px),calc(100% - 6px) calc(100% - 3px),calc(100% - 6px) 100%,6px 100%,6px calc(100% - 3px),3px calc(100% - 3px),3px calc(100% - 6px),0 calc(100% - 6px),0 6px,3px 6px,3px 3px,6px 3px);
+  --ha-clip-4: polygon(8px 0,calc(100% - 8px) 0,calc(100% - 8px) 4px,calc(100% - 4px) 4px,calc(100% - 4px) 8px,100% 8px,100% calc(100% - 8px),calc(100% - 4px) calc(100% - 8px),calc(100% - 4px) calc(100% - 4px),calc(100% - 8px) calc(100% - 4px),calc(100% - 8px) 100%,8px 100%,8px calc(100% - 4px),4px calc(100% - 4px),4px calc(100% - 8px),0 calc(100% - 8px),0 8px,4px 8px,4px 4px,8px 4px);
+}
+
+/* 1x pixel sprites. Declared as variables: a background image is only fetched
+   when a matching element exists, so nothing downloads outside the event. */
+html[data-hp-event="fright-fest"] {
+  --spr-bat-a: url(/events/fright-fest/bat-a.png);
+  --spr-bat-b: url(/events/fright-fest/bat-b.png);
+  --spr-bat-perch: url(/events/fright-fest/bat-perch.png);
+  --spr-eyes-blink: url(/events/fright-fest/eyes-blink.png);
+  --spr-eyes-open: url(/events/fright-fest/eyes-open.png);
+  --spr-spider: url(/events/fright-fest/spider.png);
+  --spr-railing: url(/events/fright-fest/railing.png);
+  --spr-web-corner: url(/events/fright-fest/web-corner.png);
+  --spr-plaque-000: url(/events/fright-fest/plaque-000.png);
+  --spr-ghost: url(/events/fright-fest/ghost.png);
+  --spr-ghost-wave: url(/events/fright-fest/ghost-wave.png);
+  --spr-ghost-icon: url(/events/fright-fest/ghost-icon.png);
+  --spr-lantern: url(/events/fright-fest/lantern.png);
+  --spr-tomb: url(/events/fright-fest/tomb.png);
+  --spr-pumpkin: url(/events/fright-fest/pumpkin.png);
+  --spr-pumpkin-sm: url(/events/fright-fest/pumpkin-sm.png);
+  --spr-trophy: url(/events/fright-fest/trophy.png);
+  --spr-moon: url(/events/fright-fest/moon.png);
+  --spr-moon-dot: url(/events/fright-fest/moon-dot.png);
+  --spr-moon-dot5: url(/events/fright-fest/moon-dot5.png);
+  --spr-cabinet: url(/events/fright-fest/cabinet.png);
+  --spr-school: url(/events/fright-fest/school.png);
+  --spr-trees: url(/events/fright-fest/trees.png);
+  --spr-prize-box: url(/events/fright-fest/prize-box.png);
+  --spr-fence-tile: url(/events/fright-fest/fence-tile.png);
+}
+html[data-hp-event="fright-fest"] .ha-spr {
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+}
+
+/* Decoration slots (hidden in globals.css) become visible only under the skin.
+   Each region's stylesheet sets its own display/position on top of this. */
+html[data-hp-event="fright-fest"] .ha-deco {
+  display: block;
+}
+html[data-hp-event="fright-fest"] .ha-deco[aria-hidden="true"] {
+  pointer-events: none;
+}

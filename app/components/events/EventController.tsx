@@ -33,7 +33,7 @@ import { useTheme } from "../../lib/theme/store";
 
 export function EventController() {
   const pathname = usePathname();
-  const { look } = useEventLook();
+  const { look, still } = useEventLook();
   const { choice, resolved } = useTheme();
   // The stores answer with a neutral server snapshot during hydration. Acting on
   // it would briefly repaint a Light player in Haunted Dark, so wait one commit
@@ -69,6 +69,11 @@ export function EventController() {
       }
     };
 
+    // "Still mode" is the event's own reduced-motion switch (the CSS treats it
+    // exactly like prefers-reduced-motion); it never touches the OS setting.
+    if (still) html.setAttribute("data-hp-still", "");
+    else html.removeAttribute("data-hp-still");
+
     apply();
     const onVisible = () => {
       if (document.visibilityState === "visible") apply();
@@ -86,7 +91,7 @@ export function EventController() {
       document.removeEventListener("visibilitychange", onVisible);
       if (timer) window.clearTimeout(timer);
     };
-  }, [ready, pathname, look, choice, resolved]);
+  }, [ready, pathname, look, still, choice, resolved]);
 
   return null;
 }

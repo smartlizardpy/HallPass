@@ -3,7 +3,9 @@ import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const ROOT = join(__dirname, "..", "..");
-const HAUNTED = join(ROOT, "components/events/fright-fest/haunted.css");
+const SKIN_DIR = join(ROOT, "components/events/fright-fest");
+const HAUNTED = join(SKIN_DIR, "haunted.css");
+const SKIN_FILES = readdirSync(SKIN_DIR).filter((f) => f.endsWith(".css")).map((f) => join(SKIN_DIR, f));
 const BASE_TOKENS = [
   "--background", "--foreground", "--foreground-2", "--surface", "--surface-2",
   "--border", "--muted", "--brand", "--brand-50", "--brand-100", "--brand-600",
@@ -43,8 +45,9 @@ function selectors(css: string): string[] {
 }
 
 describe("seasonal CSS isolation", () => {
-  it("every selector in haunted.css is scoped to the skin or event attribute", () => {
-    const bad = selectors(readFileSync(HAUNTED, "utf8"))
+  it("every selector in the skin stylesheets is scoped to the skin or event attribute", () => {
+    expect(SKIN_FILES.length).toBeGreaterThan(1);
+    const bad = SKIN_FILES.flatMap((f) => selectors(readFileSync(f, "utf8")))
       .flatMap((s) => s.split(","))
       .map((s) => s.trim())
       .filter((s) => !/^html\[data-hp-(skin|event)/.test(s));
