@@ -1,10 +1,8 @@
 import Link from "next/link";
-import type { Game } from "../../../lib/games";
 import { FRIGHT_FEST_THEME } from "../../../lib/events/fright-fest";
 import { eventDateLabels } from "../../../lib/events/labels";
 
 const LABELS = eventDateLabels(FRIGHT_FEST_THEME);
-import { FRIGHT_FEST_GAMES } from "./registry";
 
 /**
  * The Fright Fest card on the homepage, in the artifact's "upcoming" state. It is
