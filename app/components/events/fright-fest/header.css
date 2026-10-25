@@ -359,3 +359,27 @@ html[data-hp-skin="haunted"] a.ha-phbtn {
   border-radius: 9999px;
   background: var(--ha-night);
 }
+
+/* "boo" in search: a short reply under the box (rendered by components/events/Moments). */
+html[data-hp-skin="haunted"] .ha-boo {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 24px));
+  padding: 10px 14px;
+  background: var(--ha-night);
+  color: var(--ha-bone);
+  border: 2px solid var(--ha-pumpkin-dk);
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: 0 10px 24px -8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+html[data-hp-skin="haunted"] .ha-boo-ghost {
+  flex: none;
+  width: 30px;
+  height: 26px;
+  background-image: var(--spr-ghost-wave);
+}

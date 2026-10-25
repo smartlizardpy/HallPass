@@ -12,6 +12,7 @@ import { StealthController } from "./components/stealth/StealthController";
 import { StreakBeacon } from "./components/streak/StreakBeacon";
 import { StreakToast } from "./components/streak/StreakToast";
 import { EventController } from "./components/events/EventController";
+import { Moments } from "./components/events/Moments";
 import { ThemeController } from "./components/theme/ThemeController";
 import { OnboardingGate } from "./components/OnboardingGate";
 import { WelcomeToast } from "./components/WelcomeToast";
@@ -160,6 +161,9 @@ export default function RootLayout({
             navigation, choice changes and expiry. Knows nothing of the
             championship. */}
         <EventController />
+        {/* The haunted skin's ambient moments and the "boo" search reply. Inert
+            unless the skin is painted; see its header. */}
+        <Moments />
         {/* Renders nothing — listens to the same streak event as the toast above
             and reports the first play of a new day. See its header for why it is
             not folded into the toast. */}
