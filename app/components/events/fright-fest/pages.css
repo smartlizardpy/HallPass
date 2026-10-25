@@ -383,3 +383,39 @@ html[data-hp-skin="haunted"] .ff-n {
   color: var(--ha-pumpkin);
 }
 
+
+html[data-hp-skin="haunted"] .ff-count {
+  margin-top: 4px;
+}
+html[data-hp-skin="haunted"] .ff-count-k {
+  color: var(--ha-lav);
+}
+html[data-hp-skin="haunted"] .ff-count-n {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 8px 0 0;
+}
+html[data-hp-skin="haunted"] .ff-count-c {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 64px;
+  padding: 8px 6px 6px;
+  background: var(--ha-ink);
+  border: 2px solid var(--ha-line);
+  clip-path: var(--ha-clip-1);
+}
+html[data-hp-skin="haunted"] .ff-count-c b {
+  font-family: var(--font-pixel), system-ui, sans-serif;
+  font-size: 26px;
+  line-height: 1.1;
+  color: var(--ha-amber);
+}
+html[data-hp-skin="haunted"] .ff-count-c i {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--ha-lav);
+}

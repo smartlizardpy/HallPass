@@ -14,6 +14,7 @@ import { eventDateLabels } from "../lib/events/labels";
 import { resolveGames } from "../lib/games-store";
 import Link from "next/link";
 import { FrightFestGames } from "./FrightFestGames";
+import { FrightFestCountdown } from "./FrightFestCountdown";
 import { FrightFestPhase } from "./FrightFestPhase";
 
 const L = eventDateLabels(FRIGHT_FEST_THEME);
@@ -60,6 +61,7 @@ export default async function FrightFestPage() {
             <b>The arcade stays open after dark.</b> {L.range} (UK).
           </p>
           <FrightFestPhase />
+          <FrightFestCountdown />
           <div className="flex flex-wrap gap-3 pt-1">
             <Link href="/category/horror" className="ff-cta inline-flex items-center rounded-lg bg-brand px-4 py-2.5 font-bold text-white" prefetch={false}>
               Play something spooky now

@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
+import { countdownAt } from "./countdown";
 import { describe, expect, it, vi } from "vitest";
 import { eventBootScript } from "./boot";
 import { championshipEnabled, FRIGHT_FEST_CHAMPIONSHIP } from "./championship";
@@ -210,5 +211,18 @@ describe("theme and championship are independent", () => {
     expect(FRIGHT_FEST_CHAMPIONSHIP.enabled).toBe(false);
     expect(championshipEnabled()).toBe(false);
     expect(readFileSync(join(__dirname, "championship.ts"), "utf8")).not.toMatch(/^\s*import\s/m);
+  });
+});
+
+describe("countdownAt", () => {
+  const W = { ...T, enabled: true };
+  it("counts to the start, then the end, then stops", () => {
+    expect(countdownAt(W, START - 90_061_000)).toEqual({ to: "start", d: 1, h: 1, m: 1, s: 1 });
+    expect(countdownAt(W, START)?.to).toBe("end");
+    expect(countdownAt(W, END - 1000)).toEqual({ to: "end", d: 0, h: 0, m: 0, s: 1 });
+    expect(countdownAt(W, END)).toBeNull();
+  });
+  it("is null when disabled", () => {
+    expect(countdownAt({ ...W, enabled: false }, START - 1000)).toBeNull();
   });
 });
