@@ -1,7 +1,7 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { eventBootScript } from "./boot";
 import { championshipEnabled, FRIGHT_FEST_CHAMPIONSHIP } from "./championship";
 import { FRIGHT_FEST_THEME } from "./fright-fest";
@@ -158,34 +158,57 @@ describe("eventBootScript mirrors resolveEvent", () => {
 });
 
 describe("theme and championship are independent", () => {
-  it("the theme's decision takes no championship input, in any combination", () => {
-    // Theme on/off × championship on/off: the resolution has no parameter for
-    // the championship, so the five states of the brief reduce to this table.
-    const states: Array<[string, number, boolean]> = [
-      ["off/off", START - 1, false],
-      ["on/off", live, false],
-      ["off/on", START - 1, true],
-      ["on/on", live, true],
-      ["expired/on", END + 1, true],
-    ];
-    for (const [, nowMs, championship] of states) {
-      const withFlag = resolveEvent(T, { ...base, nowMs });
-      expect(withFlag.on).toBe(nowMs >= START && nowMs < END);
-      expect(typeof championship).toBe("boolean");
+  function walkSrc(dir: string, out: string[] = []): string[] {
+    for (const name of readdirSync(dir)) {
+      if (name === "node_modules" || name === ".next") continue;
+      const p = join(dir, name);
+      if (statSync(p).isDirectory()) walkSrc(p, out);
+      else if (/\.(tsx?|css)$/.test(name) && !/\.test\./.test(name)) out.push(p);
     }
+    return out;
+  }
+  const APP = join(__dirname, "..", "..");
+
+  it("only the neutral /fright-fest page imports the championship flag", () => {
+    const importers = walkSrc(APP)
+      .filter((f) => /from\s+["'][^"']*events\/championship["']/.test(readFileSync(f, "utf8")))
+      .map((f) => f.slice(APP.length + 1));
+    expect(importers).toEqual(["fright-fest/page.tsx"]);
   });
 
-  it("the championship ships disabled and reads no clock", () => {
+  it("no theme, skin or shared-component file mentions the championship flag", () => {
+    const themeSide = walkSrc(APP).filter(
+      (f) => f !== join(APP, "lib/events/championship.ts") && f !== join(APP, "fright-fest/page.tsx"),
+    );
+    const offenders = themeSide.filter((f) => /championshipEnabled|FRIGHT_FEST_CHAMPIONSHIP/.test(readFileSync(f, "utf8")));
+    expect(offenders.map((f) => f.slice(APP.length + 1))).toEqual([]);
+  });
+
+  it("the skin's resolution is identical whatever the championship flag says", async () => {
+    // The five states of the brief. Theme state comes from the clock; the
+    // championship cannot reach resolveEvent (above), and this proves it by
+    // swapping the flag module out from under it.
+    const states: Array<[string, number]> = [
+      ["off", START - 1],
+      ["on", live],
+      ["expired", END + 1],
+    ];
+    const before = states.map(([, nowMs]) => resolveEvent(T, { ...base, nowMs }));
+    vi.resetModules();
+    vi.doMock("./championship", () => ({
+      championshipEnabled: () => true,
+      FRIGHT_FEST_CHAMPIONSHIP: { id: "x", enabled: true },
+    }));
+    const look = await import("./look");
+    const after = states.map(([, nowMs]) => look.resolveEvent(T, { ...base, nowMs }));
+    vi.doUnmock("./championship");
+    expect(after).toEqual(before);
+    expect(before.map((r) => r.on)).toEqual([false, true, false]);
+  });
+
+  it("the championship ships disabled and imports nothing", () => {
     expect(FRIGHT_FEST_CHAMPIONSHIP.enabled).toBe(false);
     expect(championshipEnabled()).toBe(false);
-  });
-
-  it("no import crosses between the two sides", () => {
-    const dir = __dirname;
-    const src = (f: string) => readFileSync(join(dir, f), "utf8");
-    expect(src("championship.ts")).not.toMatch(/from\s+["']\.\/(?!championship)/);
-    for (const f of readdirSync(dir).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && f !== "championship.ts")) {
-      expect(src(f), f).not.toMatch(/^\s*(import|export)[^;]*championship/im);
-    }
+    expect(readFileSync(join(__dirname, "championship.ts"), "utf8")).not.toMatch(/^\s*import\s/m);
   });
 });

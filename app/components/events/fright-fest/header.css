@@ -238,6 +238,12 @@ html[data-hp-skin="haunted"] .ha-foot {
 html[data-hp-skin="haunted"] .ha-foot .text-muted {
   color: var(--ha-lav);
 }
+/* The footer card is night in BOTH themes, so foreground-coloured text on it
+   (dark ink in Haunted Light) must read as bone, not vanish. */
+html[data-hp-skin="haunted"] .ha-foot .text-foreground,
+html[data-hp-skin="haunted"] .ha-foot .text-foreground-2 {
+  color: var(--ha-bone);
+}
 html[data-hp-skin="haunted"] .ha-foot a:hover {
   color: var(--ha-amber);
 }

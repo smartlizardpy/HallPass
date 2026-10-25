@@ -26,6 +26,7 @@ export const FRIGHT_FEST_THEME: ThemeWindow = {
   excludedPaths: [
     "/dashboard",
     "/admin",
+    "/beta",
     "/embed",
     "/oauth",
     "/auth",

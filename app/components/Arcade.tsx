@@ -38,9 +38,8 @@ import {
 } from "../lib/catalog-prefs";
 import { CatalogToolbar } from "./CatalogToolbar";
 import { GameListRow } from "./GameListRow";
-import { championshipEnabled } from "../lib/events/championship";
 import { HauntedHero } from "./events/fright-fest/HauntedHero";
-import { ChampionshipBoard } from "./events/fright-fest/ChampionshipBoard";
+import { EventBoard } from "./events/fright-fest/EventBoard";
 import { FRIGHT_FEST_GAMES } from "./events/fright-fest/registry";
 
 /** Rows of the list view before the championship board. */
@@ -411,7 +410,7 @@ function ArcadeRows({
             the skin off is exactly the regular one. */}
         {category === "All" && !query && (
           <>
-            <HauntedHero games={games} competition={championshipEnabled()} />
+            <HauntedHero games={games} />
             <FeaturedBanner game={featured} playCounts={playCounts} />
           </>
         )}
@@ -462,10 +461,7 @@ function ArcadeRows({
               </Link>
             </p>
           )}
-          <FramedLegend
-            show={ordered.some((g) => FRIGHT_FEST_GAMES.some((f) => f.slug === g.slug))}
-            competition={championshipEnabled()}
-          />
+          <FramedLegend show={ordered.some((g) => FRIGHT_FEST_GAMES.some((f) => f.slug === g.slug))} />
           </div>
           {filtered.length === 0 ? (
             <div className="rounded-3xl bg-surface p-16 text-center">
@@ -492,7 +488,7 @@ function ArcadeRows({
               </ul>
               {isHome && ordered.length > LIST_FIRST && (
                 <>
-                  <ChampionshipBoard games={games} />
+                  <EventBoard />
                   <div className="ha-deco ha-fence" aria-hidden="true" />
                   <ul className="mt-0.5 flex flex-col gap-0.5">
                     {ordered.slice(LIST_FIRST).map((g) => (
@@ -527,7 +523,7 @@ function ArcadeRows({
                   which is exactly the single list. */}
               {isHome && ordered.length > gridFirst && (
                 <>
-                  <ChampionshipBoard games={games} />
+                  <EventBoard />
                   <div className="ha-deco ha-fence" aria-hidden="true" />
                   <div className={`mt-6 ${CATALOG_GRID}`}>
                     {ordered.slice(gridFirst).map((g) => (
@@ -656,7 +652,7 @@ function MobileCatalog({
       />
 
       {/* Skin-only: both are `ha-deco`, hidden for everyone else. */}
-      {showEvent && <HauntedHero phone games={catalogue} competition={championshipEnabled()} />}
+      {showEvent && <HauntedHero phone games={catalogue} />}
 
       {favorites.length > 0 && (
         <MobileSection title="Favourites">{grid(favorites)}</MobileSection>
@@ -678,7 +674,7 @@ function MobileCatalog({
               // the two grids are one row-gap (24px) apart: the single list.
               <>
                 {grid(rest.slice(0, 6))}
-                <ChampionshipBoard phone games={catalogue} />
+                <EventBoard phone />
                 <div className="mt-6">{grid(rest.slice(6))}</div>
                 <div className="ha-deco ha-fence" aria-hidden="true" />
               </>
@@ -917,12 +913,12 @@ function HeadingDecor({ ghost }: { ghost: boolean }) {
 
 /** The key for the framed registry games. Neutral while the competition is off:
  *  it says what the frame IS, never that the game counts toward anything. */
-function FramedLegend({ show, competition }: { show: boolean; competition: boolean }) {
+function FramedLegend({ show }: { show: boolean }) {
   if (!show) return null;
   return (
     <span className="ha-deco ha-legend">
       <span className="mk" aria-hidden="true" />
-      {competition ? "Framed games count toward Fright Fest" : "Framed games are the Fright Fest cabinets"}
+      Framed games are the Fright Fest cabinets
     </span>
   );
 }

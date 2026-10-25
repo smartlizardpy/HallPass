@@ -1,14 +1,13 @@
-import { championshipEnabled } from "../lib/events/championship";
 
 /**
  * Fright Fest furniture for the three competition games' store pages: a mode chip
  * beside the title and a small event panel in the rail. Everything here is
  * `ha-deco` (hidden for everyone by globals.css, shown only under the haunted
- * skin), and it is a server-safe, clock-free component: it reads no time, only the
- * championship flag.
+ * skin), and it is a server-safe, clock-free component: it reads neither the
+ * time nor the championship flag.
  *
- * The competition is not built. While `championshipEnabled()` is false the panel
- * says so plainly and offers nothing to press, no scores and no board link.
+ * The competition is not built, so the panel says so plainly and offers nothing
+ * to press, no scores and no board link.
  */
 
 const EVENT_GAMES: Record<string, { mode: string }> = {
@@ -50,9 +49,7 @@ export function GameEventPanel({ slug }: { slug: string }) {
       </div>
       <p>
         <b>Fright Fest mode: {mode}.</b>{" "}
-        {championshipEnabled()
-          ? "This is one of the Fright Fest games."
-          : "Competition coming soon. Nothing is scored or ranked yet, so just play."}
+        Competition coming soon. Nothing is scored or ranked yet, so just play.
       </p>
     </aside>
   );

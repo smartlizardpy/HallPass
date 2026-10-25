@@ -10,8 +10,9 @@
  *    to /dashboard has to drop the skin and the trip back has to restore it.
  *  - A CHANGED CHOICE: the event look menu or the permanent theme (which the
  *    event reads, never writes) changed in this tab or another.
- *  - EXPIRY IN A LONG-LIVED TAB: it re-checks the clock when the tab regains
- *    focus and at the end time, so a tab left open across 1 Nov goes back.
+ *  - THE CLOCK IN A LONG-LIVED TAB: it re-checks when the tab regains focus and
+ *    at the start and end times, so a tab left open across either boundary
+ *    switches the skin on or off by itself.
  *
  * It is the ONLY writer of the event attributes and, while the skin is on, of
  * `data-theme`. `ThemeController` stands down whenever `data-hp-skin` is set, so
@@ -86,12 +87,18 @@ export function EventController() {
     };
     document.addEventListener("visibilitychange", onVisible);
 
-    // Fire once at the end of the window for a tab that stays visible.
+    // Re-evaluate at the next boundary (start, then end) for a tab that stays open
+    // across it. setTimeout caps near 24.8 days; a longer wait is re-armed by the
+    // visibility path above.
+    const now = Date.now();
+    const start = Date.parse(T.startAt);
     const end = Date.parse(T.endAt);
-    const wait = end - Date.now();
-    // setTimeout caps near 24.8 days; a longer wait is re-armed by the visibility path.
+    const next = now < start ? start : end;
+    const wait = next - now;
     const timer =
-      T.enabled && wait > 0 && wait < 2_000_000_000 ? window.setTimeout(apply, wait + 50) : undefined;
+      T.enabled && Number.isFinite(next) && wait > 0 && wait < 2_000_000_000
+        ? window.setTimeout(apply, wait + 50)
+        : undefined;
 
     return () => {
       document.removeEventListener("visibilitychange", onVisible);

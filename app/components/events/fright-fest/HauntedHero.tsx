@@ -27,8 +27,10 @@ import { FRIGHT_FEST_GAMES } from "./registry";
  * pixels, never geometry; until then a flat night colour fills it.
  *
  * ── THE CHAMPIONSHIP IS NOT THIS COMPONENT'S BUSINESS ────────────────────────
- * It only receives `competition` (is the competition live?) from the page and
- * words its copy accordingly. It never imports the championship flag.
+ * The hero always shows the "upcoming" wording ("Rewards to be announced").
+ * It takes no championship input at all, so the haunted site looks the same
+ * whether or not a competition exists. A live competition surface is a separate
+ * component that must not be wired in here.
  *
  * ── THE TORCH ────────────────────────────────────────────────────────────────
  * Pointer (fine pointers only), touch (tap moves the light), keyboard (focus on
@@ -199,13 +201,10 @@ function paintScene(
 
 export function HauntedHero({
   games,
-  competition,
   phone = false,
 }: {
   /** The public, override-aware catalogue the page already holds. */
   games: Game[];
-  /** Whether the competition is live. Decides the copy only. */
-  competition: boolean;
   phone?: boolean;
 }) {
   const ref = useRef<HTMLElement>(null);
@@ -338,35 +337,22 @@ export function HauntedHero({
 
       <div className="ha-copy">
         <h2 className="ha-title">Fright Fest</h2>
-        {competition ? (
-          <p className="ha-line">
-            <b>The arcade stayed open after dark.</b> Play the three haunted cabinets, earn Fright Points, and
-            become the Fright Fest champion.
-          </p>
-        ) : (
-          <p className="ha-line">
+        <p className="ha-line">
             <b>Three haunted cabinets, one champion.</b> Rewards to be announced.
           </p>
-        )}
         <div className="ha-ctas">
           <Link href="/fright-fest" className="ha-btn" prefetch={false}>
-            {competition ? "Enter Fright Fest" : "See how it works"}
+            See how it works
           </Link>
           {!phone &&
-            (competition ? (
-              <Link href="/fright-fest#leaderboards" className="ha-link" prefetch={false}>
-                Leaderboards
-              </Link>
-            ) : (
-              practise && (
+            practise && (
                 <Link href={`/game/${practise.slug}`} className="ha-link" prefetch={false}>
                   Practise now
                 </Link>
-              )
-            ))}
+              )}
         </div>
         <p className="ha-when">
-          <b>{competition ? `Ends ${LABELS.endsAt}` : LABELS.range}</b>
+          <b>{LABELS.range}</b>
         </p>
       </div>
 
