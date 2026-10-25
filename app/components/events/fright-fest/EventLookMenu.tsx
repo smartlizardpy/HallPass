@@ -17,6 +17,8 @@
  * no custom code. Escape closes and returns focus to the trigger.
  */
 
+import { FRIGHT_FEST_THEME } from "../../../lib/events/fright-fest";
+import { eventDateLabels } from "../../../lib/events/labels";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useEventLook } from "@/app/lib/events/look-store";
 import { useTheme } from "@/app/lib/theme/store";
@@ -28,8 +30,7 @@ export const EVENT_LOOKS: readonly { id: EventLook; label: string; hint: string 
   { id: "normal", label: "Normal HallPass", hint: "Turns the seasonal look off" },
 ];
 
-const NOTE =
-  "Saved for this event only. Your usual theme is untouched and comes back on 1 Nov.";
+const NOTE = `Saved for this event only. Your usual theme is untouched and comes back on ${eventDateLabels(FRIGHT_FEST_THEME).restoreShort}.`;
 
 /** The look that is actually in effect when nothing has been chosen yet. */
 function useEffectiveLook(): EventLook {

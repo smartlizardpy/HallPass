@@ -8,14 +8,18 @@
 import type { Metadata } from "next";
 import { ArcadeShell } from "../components/ArcadeShell";
 import { championshipEnabled } from "../lib/events/championship";
+import { FRIGHT_FEST_THEME } from "../lib/events/fright-fest";
+import { eventDateLabels } from "../lib/events/labels";
 import { resolveGames } from "../lib/games-store";
 import { FrightFestGames } from "./FrightFestGames";
 import { FrightFestPhase } from "./FrightFestPhase";
 
+const L = eventDateLabels(FRIGHT_FEST_THEME);
+
 export const metadata: Metadata = {
   title: "Fright Fest 2026",
   description:
-    "Fright Fest 2026 on HallPass: a haunted arcade, 28 Oct to 31 Oct (UK), with three spooky games.",
+    `Fright Fest 2026 on HallPass: a haunted arcade, ${L.startShort} to ${L.endShort} (UK), with three spooky games.`,
   alternates: { canonical: "/fright-fest" },
 };
 

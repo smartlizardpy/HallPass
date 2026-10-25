@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { DeviceSwitch } from "./DeviceSwitch";
 import { FooterCredits } from "./FooterCredits";
+import { FRIGHT_FEST_THEME } from "../lib/events/fright-fest";
+import { eventDateLabels } from "../lib/events/labels";
+
+const LABELS = eventDateLabels(FRIGHT_FEST_THEME);
 import { Wordmark } from "./Wordmark";
 
 /**
@@ -40,7 +44,7 @@ export function SiteFooter() {
         <div className="ha-foot-l flex flex-col items-start gap-2">
           <Wordmark />
           <p aria-hidden="true" className="ha-deco ha-foot-close">
-            The arcade stays open late until Sat 31 Oct.
+            The arcade stays open late until {LABELS.lastDay}.
           </p>
         </div>
         <div className="text-[13px] font-bold text-muted sm:text-right">
