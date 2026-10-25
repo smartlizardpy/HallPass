@@ -31,6 +31,7 @@
 
 import { THEME_OPTIONS } from "@/app/lib/theme/config";
 import { useTheme } from "@/app/lib/theme/store";
+import { EventLookFields } from "@/app/components/events/fright-fest/EventLookMenu";
 
 export function AppearanceCard() {
   const { choice, setTheme } = useTheme();
@@ -82,6 +83,11 @@ export function AppearanceCard() {
             </button>
           );
         })}
+      </div>
+
+      {/* Shown by sidebar.css only while html[data-hp-event] is present. */}
+      <div className="ha-event-look ha-deco mt-5 border-t border-border pt-4">
+        <EventLookFields legend="Fright Fest look (event only)" />
       </div>
     </div>
   );

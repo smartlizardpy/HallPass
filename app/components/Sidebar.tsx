@@ -323,6 +323,22 @@ export function Sidebar({
           in a 64px strip, but its 19px of box does still have a job, which is to
           stop the whole list jumping up by that much the instant the rail is
           hovered. `truncate` keeps it to the one line that height assumes. */}
+      {/* Fright Fest destination: a real link, but `ha-deco` keeps it display:none
+          for everyone until the haunted skin is painted. Not a category, so it
+          is outside the "Browse" list and never the active row. */}
+      <Link
+        href="/fright-fest"
+        onClick={onMobileClose}
+        onNavigate={() => watchStall("/fright-fest")}
+        title={tooltips ? "Fright Fest" : undefined}
+        className={`ha-deco ha-rit ${itemClass(false, collapsed)}`}
+      >
+        <span aria-hidden className="ha-spr ha-rit-ico" />
+        <span className={collapsed ? "sr-only" : "flex-1 truncate text-left"}>Fright Fest</span>
+        <span aria-hidden className="ha-pip" />
+      </Link>
+      <span aria-hidden className="ha-deco ha-rsep" />
+
       <p
         aria-hidden
         className={`truncate px-4 pb-1 text-[11px] font-bold uppercase tracking-wider text-muted ${
@@ -370,6 +386,7 @@ export function Sidebar({
                   type="button"
                   onClick={() => handleSelect(item)}
                   title={tooltips ? item : undefined}
+                  data-active={isActive ? "" : undefined}
                   className={itemClass(isActive, collapsed)}
                 >
                   {inner}
@@ -380,6 +397,7 @@ export function Sidebar({
                   onClick={onMobileClose}
                   onNavigate={() => watchStall(hrefForItem(item))}
                   title={tooltips ? item : undefined}
+                  data-active={isActive ? "" : undefined}
                   className={itemClass(isActive, collapsed)}
                 >
                   {inner}
@@ -438,6 +456,12 @@ export function Sidebar({
           pinned ? "w-48" : "w-16"
         }`}
       >
+        {/* Peeking ghost: decorative, in the margin right of the rail. It sits
+            BEFORE the panel so an expanded rail paints over it, and is only
+            clickable while the runtime has it out (data-playing). */}
+        <span aria-hidden="true" className="ha-deco ha-rgwrap">
+          <span data-ha-moment="ghost-side" className="ha-rghost ha-spr" />
+        </span>
         {/* THE PANEL — the rail you actually see, and an OVERLAY when it is not
             pinned. It is absolutely positioned inside the slot above, so growing
             it from 64px to 192px on hover paints over `main` instead of resizing
@@ -476,7 +500,7 @@ export function Sidebar({
           onBlur={(e) => {
             if (!e.currentTarget.contains(e.relatedTarget)) setFocusInside(false);
           }}
-          className={`absolute inset-y-0 left-0 flex flex-col overflow-hidden border-r border-border bg-surface transition-[width] duration-200 motion-reduce:transition-none ${
+          className={`ha-rail absolute inset-y-0 left-0 flex flex-col overflow-hidden border-r border-border bg-surface transition-[width] duration-200 motion-reduce:transition-none ${
             railExpanded ? "w-48" : "w-16"
           } ${railExpanded && !pinned ? "shadow-xl" : ""}`}
         >
@@ -548,8 +572,12 @@ export function Sidebar({
               unpinned rail keeps its tooltips through the reveal — belt and
               braces for the mouse, next to the `sr-only` labels that serve the
               keyboard. A pinned rail has its labels on screen and needs neither. */}
-          <nav className="flex-1 overflow-y-auto px-3 pb-4">
+          <nav className="ha-rail-nav flex-1 overflow-y-auto px-3 pb-4">
             {renderNavList({ collapsed: !railExpanded, tooltips: !pinned })}
+            {/* Eyes in the gap above the footer: tall screens only (sidebar.css). */}
+            <span aria-hidden="true" data-ha-moment="eyes" className="ha-deco ha-eyes">
+              <span className="ha-spr ha-eyes-spr" />
+            </span>
           </nav>
 
           {/* The last block in the rail — there is deliberately NO copyright line
