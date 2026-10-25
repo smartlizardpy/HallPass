@@ -3,7 +3,9 @@
 /* ---- Appearance entry points: keyed on the EVENT, not the skin, so a player who
    chose Normal HallPass can still reach the way back. ThemeMenuButton renders both
    controls; the prerendered HTML is identical for everyone. ---- */
-html[data-hp-event="fright-fest"] .ha-tm-old {
+/* The normal Light/Dark/System button is only replaced while the skin is painted;
+   on Normal HallPass it must come back beside the Look button. */
+html[data-hp-skin="haunted"] .ha-tm-old {
   display: none;
 }
 html[data-hp-event="fright-fest"] .ha-event-menu.ha-deco,
