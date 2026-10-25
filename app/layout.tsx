@@ -11,11 +11,14 @@ import { PWA } from "./components/PWA";
 import { StealthController } from "./components/stealth/StealthController";
 import { StreakBeacon } from "./components/streak/StreakBeacon";
 import { StreakToast } from "./components/streak/StreakToast";
+import { EventController } from "./components/events/EventController";
 import { ThemeController } from "./components/theme/ThemeController";
 import { OnboardingGate } from "./components/OnboardingGate";
 import { WelcomeToast } from "./components/WelcomeToast";
 import { AnalyticsNotice } from "./components/analytics/AnalyticsNotice";
 import { cloakBootScript } from "./lib/stealth/boot";
+import { eventBootScript } from "./lib/events/boot";
+import { FRIGHT_FEST_THEME } from "./lib/events/fright-fest";
 import { themeBootScript } from "./lib/theme/boot";
 import { SITE_URL } from "./lib/site";
 import "./globals.css";
@@ -101,6 +104,15 @@ export default function RootLayout({
         <Script id="hp-theme-boot" strategy="beforeInteractive">
           {themeBootScript()}
         </Script>
+        {/* Seasonal event skin. Runs right after the theme script so it can
+            override `data-theme` before first paint. The server never reads the
+            clock; see lib/events/boot.ts. Empty (and skipped) when the event is
+            disabled in lib/events/fright-fest.ts. */}
+        {eventBootScript(FRIGHT_FEST_THEME) && (
+          <Script id="hp-event-boot" strategy="beforeInteractive">
+            {eventBootScript(FRIGHT_FEST_THEME)}
+          </Script>
+        )}
         {/* Applies a saved tab cloak during head parse, before first paint, so a
             disguised tab never flashes "HALLPASS" on a cold load. */}
         <Script id="hp-cloak-boot" strategy="beforeInteractive">
@@ -124,6 +136,10 @@ export default function RootLayout({
         {/* Renders nothing — keeps `data-theme` in step with the stored choice
             and with a device whose own preference changes mid-session. */}
         <ThemeController />
+        {/* Renders nothing — keeps the seasonal attributes right across soft
+            navigation, choice changes and expiry. Knows nothing of the
+            championship. */}
+        <EventController />
         {/* Renders nothing — listens to the same streak event as the toast above
             and reports the first play of a new day. See its header for why it is
             not folded into the toast. */}
