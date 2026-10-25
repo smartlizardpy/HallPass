@@ -1,0 +1,84 @@
+/* ============================================================================
+   Fright Fest 2026 — the haunted skin.
+
+   THE ONE FILE that gives base token names (--background, --surface, --brand …)
+   seasonal values. Every selector here starts with `html[data-hp-skin="haunted"]`
+   (or `html[data-hp-event]`), which only the event boot script / EventController
+   write, only inside the event window. Remove the attribute and none of this
+   matches: the permanent palette in app/globals.css is untouched and takes
+   over. A test (app/lib/events/skin-isolation.test.ts) fails the build if a
+   selector here is unscoped or another file assigns a base token under the skin.
+
+   Specificity: `html[data-hp-skin][data-theme=dark]` (0,2,1) beats both the
+   `:root[data-theme="dark"]` block (0,2,0) and the no-attribute media block.
+   ============================================================================ */
+
+/* Haunted Dark — the event default. Near-black with a plum bias. */
+html[data-hp-skin="haunted"][data-theme="dark"] {
+  color-scheme: dark;
+  --background: #0d0a14;
+  --foreground: #efe9f6;
+  --foreground-2: #cdc3dc;
+  --surface: #17121f;
+  --surface-2: #221a2d;
+  --border: #2e2440;
+  --muted: #a698ba;
+  --brand: #8b5cf6;
+  --brand-50: #22163a;
+  --brand-100: #2e1f4d;
+  --ha-frame: #d9600a;
+  --ha-hover: #ffb347;
+  --ha-focus: #ffb347;
+  --ha-glow: 255, 122, 26;
+  --ha-web: 0.9;
+}
+
+/* Haunted Light — dusk rather than midnight. The night stays in its islands. */
+html[data-hp-skin="haunted"][data-theme="light"] {
+  color-scheme: light;
+  --background: #ece4f4;
+  --foreground: #1d1727;
+  --foreground-2: #3d3449;
+  --surface: #ffffff;
+  --surface-2: #e6ddf1;
+  --border: #d3c5e3;
+  --muted: #5d5270;
+  --brand: #7c2eef;
+  --brand-50: #f3ecff;
+  --brand-100: #e4d4ff;
+  --ha-frame: #1b1026;
+  --ha-hover: #a33a07;
+  --ha-focus: #a33a07;
+  --ha-glow: 255, 122, 26;
+  --ha-web: 0.75;
+}
+
+/* The event's own named tokens (new names only). */
+html[data-hp-event="fright-fest"] {
+  --ha-night: #1b1026;
+  --ha-ink: #0b0612;
+  --ha-line: #3a2a52;
+  --ha-bone: #f2e8d5;
+  --ha-lav: #b9a7cf;
+  --ha-lav-2: #ddd3ea;
+  --ha-amber: #ffb347;
+  --ha-pumpkin: #ff7a1a;
+  --ha-pumpkin-dk: #d9600a;
+}
+
+/* Focus rings: amber on Haunted Dark, deep pumpkin on Haunted Light. */
+html[data-hp-skin="haunted"] :focus-visible {
+  outline: 3px solid var(--ha-focus);
+  outline-offset: 2px;
+}
+
+/* Pumpkin hover on every catalogue card, identically, so no ordinary game ever
+   looks like a Halloween game. */
+html[data-hp-skin="haunted"] .card:hover {
+  box-shadow:
+    0 16px 30px -12px rgba(var(--ha-glow), 0.34),
+    0 6px 14px -6px rgba(0, 0, 0, 0.18);
+}
+html[data-hp-skin="haunted"] .card:hover h3 {
+  color: var(--ha-hover);
+}

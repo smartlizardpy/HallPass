@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
-import { Nunito } from "next/font/google";
+import { Nunito, Silkscreen } from "next/font/google";
 import { FeaturePromo } from "./components/FeaturePromo";
 import { SurveyBanner } from "./components/SurveyBanner";
 import { GrowthTracker } from "./components/GrowthTracker";
@@ -22,6 +22,7 @@ import { FRIGHT_FEST_THEME } from "./lib/events/fright-fest";
 import { themeBootScript } from "./lib/theme/boot";
 import { SITE_URL } from "./lib/site";
 import "./globals.css";
+import "./components/events/fright-fest/haunted.css";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -34,6 +35,17 @@ const nunito = Nunito({
   variable: "--font-nunito",
   subsets: ["latin"],
   weight: ["400", "600", "700", "800", "900"],
+});
+
+// Pixel face for the Fright Fest skin only. `preload: false` and a rule that
+// uses it solely under `html[data-hp-skin]` mean a visitor outside the event
+// window never downloads it.
+const silkscreen = Silkscreen({
+  variable: "--font-pixel",
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  preload: false,
+  display: "swap",
 });
 
 const siteName = "HALLPASS";
@@ -93,7 +105,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${nunito.variable} h-full antialiased`}
+      className={`${nunito.variable} ${silkscreen.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         {/* Resolves the saved appearance choice during head parse, before first
