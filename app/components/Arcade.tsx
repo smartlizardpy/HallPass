@@ -38,6 +38,38 @@ import {
 } from "../lib/catalog-prefs";
 import { CatalogToolbar } from "./CatalogToolbar";
 import { GameListRow } from "./GameListRow";
+import { championshipEnabled } from "../lib/events/championship";
+import { HauntedHero } from "./events/fright-fest/HauntedHero";
+import { ChampionshipBoard } from "./events/fright-fest/ChampionshipBoard";
+import { FRIGHT_FEST_GAMES } from "./events/fright-fest/registry";
+
+/** Rows of the list view before the championship board. */
+const LIST_FIRST = 8;
+
+/**
+ * How many columns {@link CATALOG_GRID} currently has (2 / 3 / 5 / 7 at the
+ * breakpoints it declares), so "two rows" means two ROWS at every width. Starts
+ * at the widest layout and corrects after mount, so the prerendered HTML is the
+ * same for every visitor and hydration never mismatches.
+ */
+function useGridColumns(): number {
+  const [cols, setCols] = useState(7);
+  useEffect(() => {
+    const widths = [
+      [1280, 7],
+      [1024, 5],
+      [640, 3],
+    ] as const;
+    const read = () => {
+      const w = window.innerWidth;
+      setCols(widths.find(([min]) => w >= min)?.[1] ?? 2);
+    };
+    read();
+    window.addEventListener("resize", read);
+    return () => window.removeEventListener("resize", read);
+  }, []);
+  return cols;
+}
 
 /** Midnight today, local time, in ms. The day the personal order is computed for. */
 function startOfToday(): number {
@@ -207,13 +239,11 @@ function ArcadeRows({
         .slice(0, TRENDING_COUNT),
     [games, playCounts],
   );
-  const newGames = useMemo(() => games.filter((g) => g.isNew), [games]);
 
   // Personalized rows, resolved from slugs → games (a slug whose game has since
   // left the catalogue is dropped). Empty until localStorage hydrates post-mount.
   // Plain consts (not useMemo): the maps are tiny and the compiler handles reuse.
   const isGame = (g: Game | undefined): g is Game => Boolean(g);
-  const jumpBackIn = recent.map(findGame).filter(isGame).slice(0, 4);
   const favoriteGames = favorites.map(findGame).filter(isGame);
 
   const filtered = useMemo(() => {
@@ -272,6 +302,11 @@ function ArcadeRows({
   // tiebreak under a chosen one — is `sortCatalog`'s decision and is argued out
   // there, next to the comparators it applies.
   const device = useDevicePlatform();
+
+  // The unfiltered home list: the only one the championship board interrupts.
+  const isHome = category === "All" && !query;
+  const columns = useGridColumns();
+  const gridFirst = columns * 2;
 
   // THE PERSONAL ORDER. Only for a player who is signed in, has not switched it
   // off in settings, and has shown interest in enough games for an order to mean
@@ -347,6 +382,8 @@ function ArcadeRows({
   if (device === "mobile") {
     return (
       <MobileCatalog
+        catalogue={games}
+        showEvent={category === "All" && !query}
         games={mobileGames}
         favorites={mobileCatalog(favoriteGames)}
         onPlay={requestPlay}
@@ -368,94 +405,35 @@ function ArcadeRows({
           onCancel={cancelPlay}
         />
 
-        {/* Hero / Featured banner */}
+        {/* Hero / Featured banner. The Fright Fest hero is in the HTML for everyone
+            and hidden (`ha-deco`) unless the skin paints; the skin in turn hides
+            the regular banner (`data-ha-regular`). CSS decides, so the page with
+            the skin off is exactly the regular one. */}
         {category === "All" && !query && (
-          <FeaturedBanner game={featured} playCounts={playCounts} />
+          <>
+            <HauntedHero games={games} competition={championshipEnabled()} />
+            <FeaturedBanner game={featured} playCounts={playCounts} />
+          </>
         )}
+        {/* Pages without a hero get a little night sky instead (skin only). */}
+        {!(category === "All" && !query) && <div className="ha-deco ha-stars" aria-hidden="true" />}
 
-        {/* Jump back in — recently played (per-device). Appears post-hydration. */}
-        {category === "All" && !query && jumpBackIn.length > 0 && (
-          <Section title="Jump back in">
-            <div className={CATALOG_GRID}>
-              {jumpBackIn.map((g) => (
-                <GameCard
-                  key={g.slug}
-                  game={g}
-                  onPlay={requestPlay}
-                  isFavorite={isFavorite(g.slug)}
-                  onToggleFavorite={handleToggleFavorite}
-                />
-              ))}
-            </div>
-          </Section>
-        )}
+        {/* The home page is ONE list (see the "For you" block below): the New games,
+            Popular this week, Jump back in, Your favorites rows and the sponsor strip
+            are gone, so no game repeats further down the page. */}
 
-        {/* Your favorites — local for everyone, server-synced when signed in. */}
-        {category === "All" && !query && favoriteGames.length > 0 && (
-          <Section title="Your favorites">
-            <div className={CATALOG_GRID}>
-              {favoriteGames.map((g) => (
-                <GameCard
-                  key={g.slug}
-                  game={g}
-                  onPlay={requestPlay}
-                  isFavorite={isFavorite(g.slug)}
-                  onToggleFavorite={handleToggleFavorite}
-                />
-              ))}
-            </div>
-          </Section>
-        )}
-
-        {/* New row */}
-        {category === "All" && !query && newGames.length > 0 && (
-          <Section title="New games">
-            <div className={CATALOG_GRID}>
-              {newGames.map((g) => (
-                <GameCard
-                  key={g.slug}
-                  game={g}
-                  onPlay={requestPlay}
-                  isFavorite={isFavorite(g.slug)}
-                  onToggleFavorite={handleToggleFavorite}
-                />
-              ))}
-            </div>
-          </Section>
-        )}
-
-        {/* The home page's ONE sponsor strip. There were three: two of them the
-            same advertiser at the same URL under different copy, plus a slot
-            below the grid, so scrolling the page meant passing an ad three
-            times. One placement, mid-page, between the editorial rows. */}
-        {category === "All" && !query && <FrenchlyAd />}
-
-        {/* Trending row */}
-        {category === "All" && !query && (
-          <Section title="Popular this week">
-            <div className={CATALOG_GRID}>
-              {trending.slice(0, TRENDING_COUNT).map((g) => (
-                <GameCard
-                  key={g.slug}
-                  game={g}
-                  onPlay={requestPlay}
-                  isFavorite={isFavorite(g.slug)}
-                  onToggleFavorite={handleToggleFavorite}
-                />
-              ))}
-            </div>
-          </Section>
-        )}
-
-        {/* All games / filtered — the one row whose order is the visitor's to
+        {/* All games / For you / filtered — the one row whose order is the visitor's to
             choose. The toolbar is withheld when nothing matched: controls for
             ordering an empty list are noise on top of a dead end. */}
         <Section
+          ghost
           title={
             query
               ? `Results for "${query}"`
               : category === "All"
-              ? "All games"
+              ? sort === "foryou" && forYou
+                ? "For you"
+                : "All games"
               : category
           }
           actions={
@@ -471,6 +449,7 @@ function ArcadeRows({
             ) : null
           }
         >
+          <div className="ha-row">
           {sort === "foryou" && forYou && filtered.length > 0 && (
             // Say what the order is and where to change it. This is profiling, even
             // though it never leaves the device, so it is never silent.
@@ -483,6 +462,11 @@ function ArcadeRows({
               </Link>
             </p>
           )}
+          <FramedLegend
+            show={ordered.some((g) => FRIGHT_FEST_GAMES.some((f) => f.slug === g.slug))}
+            competition={championshipEnabled()}
+          />
+          </div>
           {filtered.length === 0 ? (
             <div className="rounded-3xl bg-surface p-16 text-center">
               <p className="text-base font-bold text-muted">
@@ -494,29 +478,71 @@ function ArcadeRows({
             // items. The grid stays a div because a grid of cards is a layout,
             // not an enumeration — the same distinction the store page's rails
             // make.
-            <ul className="flex flex-col gap-0.5">
-              {ordered.map((g) => (
-                <GameListRow
-                  key={g.slug}
-                  game={g}
-                  onPlay={requestPlay}
-                  isFavorite={isFavorite(g.slug)}
-                  onToggleFavorite={handleToggleFavorite}
-                />
-              ))}
-            </ul>
+            <>
+              <ul className="flex flex-col gap-0.5">
+                {(isHome ? ordered.slice(0, LIST_FIRST) : ordered).map((g) => (
+                  <GameListRow
+                    key={g.slug}
+                    game={g}
+                    onPlay={requestPlay}
+                    isFavorite={isFavorite(g.slug)}
+                    onToggleFavorite={handleToggleFavorite}
+                  />
+                ))}
+              </ul>
+              {isHome && ordered.length > LIST_FIRST && (
+                <>
+                  <ChampionshipBoard games={games} />
+                  <div className="ha-deco ha-fence" aria-hidden="true" />
+                  <ul className="mt-0.5 flex flex-col gap-0.5">
+                    {ordered.slice(LIST_FIRST).map((g) => (
+                      <GameListRow
+                        key={g.slug}
+                        game={g}
+                        onPlay={requestPlay}
+                        isFavorite={isFavorite(g.slug)}
+                        onToggleFavorite={handleToggleFavorite}
+                      />
+                    ))}
+                  </ul>
+                </>
+              )}
+            </>
           ) : (
-            <div className={CATALOG_GRID}>
-              {ordered.map((g) => (
-                <GameCard
-                  key={g.slug}
-                  game={g}
-                  onPlay={requestPlay}
-                  isFavorite={isFavorite(g.slug)}
-                  onToggleFavorite={handleToggleFavorite}
-                />
-              ))}
-            </div>
+            <>
+              <div className={CATALOG_GRID}>
+                {(isHome ? ordered.slice(0, gridFirst) : ordered).map((g) => (
+                  <GameCard
+                    key={g.slug}
+                    game={g}
+                    onPlay={requestPlay}
+                    isFavorite={isFavorite(g.slug)}
+                    onToggleFavorite={handleToggleFavorite}
+                  />
+                ))}
+              </div>
+              {/* The championship board sits after the first two rows and the list
+                  carries straight on under it. Hidden (`ha-deco`) unless the skin
+                  paints; with it off the two grids are one row-gap (24px) apart,
+                  which is exactly the single list. */}
+              {isHome && ordered.length > gridFirst && (
+                <>
+                  <ChampionshipBoard games={games} />
+                  <div className="ha-deco ha-fence" aria-hidden="true" />
+                  <div className={`mt-6 ${CATALOG_GRID}`}>
+                    {ordered.slice(gridFirst).map((g) => (
+                      <GameCard
+                        key={g.slug}
+                        game={g}
+                        onPlay={requestPlay}
+                        isFavorite={isFavorite(g.slug)}
+                        onToggleFavorite={handleToggleFavorite}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
           )}
         </Section>
     </>
@@ -544,6 +570,8 @@ function ArcadeRows({
  * written for — a genuinely empty phone catalogue, where `games` itself is empty.
  */
 function MobileCatalog({
+  catalogue,
+  showEvent,
   games,
   favorites,
   onPlay,
@@ -553,6 +581,10 @@ function MobileCatalog({
   isFavorite,
   onToggleFavorite,
 }: {
+  /** The whole public catalogue (the hero resolves its cabinets from it). */
+  catalogue: Game[];
+  /** Fright Fest hero + board: the unfiltered phone home only. */
+  showEvent: boolean;
   games: Game[];
   favorites: Game[];
   onPlay: (slug: string) => void;
@@ -623,6 +655,9 @@ function MobileCatalog({
         onCancel={cancelPlay}
       />
 
+      {/* Skin-only: both are `ha-deco`, hidden for everyone else. */}
+      {showEvent && <HauntedHero phone games={catalogue} competition={championshipEnabled()} />}
+
       {favorites.length > 0 && (
         <MobileSection title="Favourites">{grid(favorites)}</MobileSection>
       )}
@@ -637,7 +672,20 @@ function MobileCatalog({
         </MobileSection>
       ) : (
         rest.length > 0 && (
-          <MobileSection title="Games">{grid(rest)}</MobileSection>
+          <MobileSection title="Games" ghost>
+            {showEvent && rest.length > 6 ? (
+              // The board sits after six games. With the skin off it is hidden and
+              // the two grids are one row-gap (24px) apart: the single list.
+              <>
+                {grid(rest.slice(0, 6))}
+                <ChampionshipBoard phone games={catalogue} />
+                <div className="mt-6">{grid(rest.slice(6))}</div>
+                <div className="ha-deco ha-fence" aria-hidden="true" />
+              </>
+            ) : (
+              grid(rest)
+            )}
+          </MobileSection>
         )
       )}
     </div>
@@ -649,14 +697,17 @@ function MobileCatalog({
 function MobileSection({
   title,
   children,
+  ghost = false,
 }: {
   title: string;
   children: React.ReactNode;
+  ghost?: boolean;
 }) {
   return (
     <section className="px-3 pt-6">
-      <h2 className="mb-4 text-xl font-black tracking-tight text-foreground">
+      <h2 className="ha-h mb-4 text-xl font-black tracking-tight text-foreground">
         {title}
+        <HeadingDecor ghost={ghost} />
       </h2>
       {children}
     </section>
@@ -720,7 +771,7 @@ function FeaturedBanner({
   const plays = playsFor(game, playCounts);
 
   return (
-    <section className="px-3 pt-2 sm:px-8">
+    <section className="px-3 pt-2 sm:px-8" data-ha-regular>
       {/* Prefetch is left at the DEFAULT (`auto`), deliberately unlike the game
           cards, which opt out with `prefetch={false}`. That opt-out is about
           VOLUME: a screen of 28 cards would warm 28 store pages at once, which
@@ -846,109 +897,33 @@ function FeaturedBanner({
   );
 }
 
-/* ===================== Sponsor strips ===================== */
-type Ad = {
-  logo?: string; // image path
-  emoji?: string; // fallback
-  text: string;
-  href: string;
-  cta: string;
-  placeholder?: boolean;
-};
-
-const FRENCHLY_URL = "https://frenchly.vercel.app";
-const FRENCHLY_LOGO = "/ads/frenchly.png";
-
-/**
- * The strip inventory. Only `ADS[0]` is PLACED — the home page carries a single
- * sponsor strip (see {@link FrenchlyAd}). The rest are kept deliberately: entries
- * 1 and 2 are alternate Frenchly copy to rotate in, and entry 3 is the
- * "your ad here" pitch for whenever a second slot is worth selling. They are
- * inventory, not dead code — anything rendering them fires `ad_clicked` through
- * {@link AdStrip} unchanged.
- */
-const ADS: Ad[] = [
-  {
-    logo: FRENCHLY_LOGO,
-    text: "Frenchly — snap your GCSE French vocab list, get flashcards instantly.",
-    href: FRENCHLY_URL,
-    cta: "Try Frenchly",
-  },
-  {
-    logo: FRENCHLY_LOGO,
-    text: "You wrote it 3 times and still don't remember? Frenchly fixes that.",
-    href: FRENCHLY_URL,
-    cta: "Scan vocab",
-  },
-  {
-    logo: FRENCHLY_LOGO,
-    text: "GCSE French in 10 minutes a day — Frenchly builds the quiz for you.",
-    href: FRENCHLY_URL,
-    cta: "Start free",
-  },
-  {
-    emoji: "✨",
-    text: "Your ad here — reach thousands of players every day.",
-    href: "mailto:smartlizardpy@duck.com?subject=Advertise%20on%20HALLPASS",
-    cta: "Get in touch",
-    placeholder: true,
-  },
-];
-
-function AdStrip({ ad }: { ad: Ad }) {
-  const isExternal = ad.href.startsWith("http");
-  const base =
-    "group flex items-center gap-3 rounded-2xl px-4 py-2.5 text-left transition";
-  const skin = ad.placeholder
-    ? "border-2 border-dashed border-border bg-transparent hover:border-brand hover:bg-brand-50"
-    : "border border-border bg-surface hover:border-brand-100 hover:bg-brand-50";
-
+/* ===================== Fright Fest decoration slots ===================== */
+/** Pumpkin at the end of the heading's dashed rule, plus (once per page) a ghost
+ *  behind the heading. Both are `ha-deco`: hidden for everyone, shown by the skin. */
+function HeadingDecor({ ghost }: { ghost: boolean }) {
   return (
-    <a
-      href={ad.href}
-      target={isExternal ? "_blank" : undefined}
-      rel={isExternal ? "noopener noreferrer" : undefined}
-      className={`${base} ${skin}`}
-      onClick={() => posthog.capture("ad_clicked", {
-        ad_cta: ad.cta,
-        ad_href: ad.href,
-        is_placeholder: ad.placeholder ?? false,
-      })}
-    >
-      {ad.logo ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={ad.logo}
-          alt=""
-          className="h-6 w-6 shrink-0 object-contain"
-        />
-      ) : (
-        <span className="text-lg">{ad.emoji}</span>
+    <>
+      {ghost && (
+        <span className="ha-deco ha-hgwrap" aria-hidden="true" data-ha-moment="ghost-heading">
+          <span className="ha-hghost">
+            <span className="ha-spr ha-s-ghost" />
+          </span>
+        </span>
       )}
-      <span className="hidden text-[11px] font-black uppercase tracking-wider text-muted sm:inline">
-        {ad.placeholder ? "Slot" : "Ad"}
-      </span>
-      <span className="hidden h-4 w-px bg-border sm:block" />
-      <span
-        className={`flex-1 truncate text-sm font-bold ${
-          ad.placeholder ? "text-muted" : "text-foreground"
-        }`}
-      >
-        {ad.text}
-      </span>
-      <span className="shrink-0 text-sm font-extrabold text-brand group-hover:text-brand-600">
-        {ad.cta} →
-      </span>
-    </a>
+      <span className="ha-deco ha-hpump ha-spr" aria-hidden="true" />
+    </>
   );
 }
 
-/** The home page's only sponsor placement — `ADS[0]`, rendered once, mid-page. */
-function FrenchlyAd() {
+/** The key for the framed registry games. Neutral while the competition is off:
+ *  it says what the frame IS, never that the game counts toward anything. */
+function FramedLegend({ show, competition }: { show: boolean; competition: boolean }) {
+  if (!show) return null;
   return (
-    <section className="px-3 pt-6 sm:px-8">
-      <AdStrip ad={ADS[0]} />
-    </section>
+    <span className="ha-deco ha-legend">
+      <span className="mk" aria-hidden="true" />
+      {competition ? "Framed games count toward Fright Fest" : "Framed games are the Fright Fest cabinets"}
+    </span>
   );
 }
 
@@ -971,8 +946,11 @@ function Section({
   title,
   actions,
   children,
+  ghost = false,
 }: {
   title: string;
+  /** Fright Fest: a ghost that hides behind this heading (skin-only decoration). */
+  ghost?: boolean;
   /**
    * Controls for this row, laid out opposite the heading. Only the filtered
    * grid passes any: the curated rows each mean one specific thing, and their
@@ -988,8 +966,9 @@ function Section({
           row existed. `flex-wrap` is what makes the toolbar drop to its own
           line rather than squeeze the heading on a narrow desktop window. */}
       <div className="mb-[clamp(12px,2svh,20px)] flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-        <h2 className="text-2xl font-black tracking-tight text-foreground sm:text-[28px]">
+        <h2 className="ha-h text-2xl font-black tracking-tight text-foreground sm:text-[28px]">
           {title}
+          <HeadingDecor ghost={ghost} />
         </h2>
         {actions}
       </div>

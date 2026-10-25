@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { Game } from "../lib/games";
 import { playsOn, useDevicePlatform } from "../lib/use-device-platform";
 import { CoverImage } from "./CoverImage";
+import { frightFestGame } from "./events/fright-fest/registry";
 
 /**
  * One game as a ROW, for the catalogue's list layout.
@@ -48,10 +49,15 @@ export function GameListRow({
   // unknown must render no badge and both states are falsy. Same rule as the card.
   const device = useDevicePlatform();
   const mismatch = device ? playsOn(game, device) === false : false;
+  // Registry games only; inert without the skin (see GameCard).
+  const event = frightFestGame(game.slug);
 
   return (
-    <li className="group relative flex items-center gap-3 rounded-2xl px-2 py-2 transition hover:bg-surface-2">
-      <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-zinc-900 sm:h-16 sm:w-16">
+    <li
+      className="group relative flex items-center gap-3 rounded-2xl px-2 py-2 transition hover:bg-surface-2"
+      data-event-game={event?.slug}
+    >
+      <div className="ha-cv relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-zinc-900 sm:h-16 sm:w-16">
         <CoverImage game={game} initialClass="text-xl" />
       </div>
 
@@ -68,6 +74,12 @@ export function GameListRow({
               `--accent-pink-ink` rather than `--accent-pink` for "New", which is
               the only one of the three that carries text at a contrast the
               brighter pink fails. See `GameCard` for the measurements. */}
+          {event && (
+            <span className="ha-deco ha-chip in" aria-hidden="true">
+              <span className="ha-spr tr" />
+              {event.short}
+            </span>
+          )}
           {game.isNew && (
             <span className="shrink-0 rounded-full bg-accent-pink-ink px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
               New

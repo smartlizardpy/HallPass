@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { Game } from "../lib/games";
 import { playsOn, useDevicePlatform } from "../lib/use-device-platform";
 import { CoverImage } from "./CoverImage";
+import { frightFestGame } from "./events/fright-fest/registry";
 
 export function GameCard({
   game,
@@ -33,10 +34,17 @@ export function GameCard({
   const device = useDevicePlatform();
   const mismatch = device ? playsOn(game, device) === false : false;
 
+  // Fright Fest registry games only (three slugs). Inert without the skin: the
+  // attribute styles nothing and the chip is an `ha-deco` slot hidden for everyone.
+  const event = frightFestGame(game.slug);
+
   return (
     // Root is a DIV so the card link, the hover ▶ and the favorite heart are all
     // SIBLINGS — an interactive element is never nested inside another.
-    <div className="card group relative flex flex-col text-left">
+    <div
+      className="card group relative flex flex-col text-left"
+      data-event-game={event?.slug}
+    >
       {/* The whole card is one plain link to the store page. It used to
           preventDefault and open the player instead, which made the href
           decorative; now the navigation is the actual behaviour, so
@@ -46,7 +54,7 @@ export function GameCard({
         prefetch={false}
         className="flex flex-col text-left"
       >
-        <div className={`relative overflow-hidden rounded-3xl bg-zinc-900 ${aspect}`}>
+        <div className={`ha-cv relative overflow-hidden rounded-3xl bg-zinc-900 ${aspect}`}>
           {/* Cover art + its fallback chain live in CoverImage — `card-art` is
               what the globals.css hover-zoom hooks onto. */}
           <CoverImage game={game} className="card-art" />
@@ -60,6 +68,12 @@ export function GameCard({
               --accent-pink-ink (4.98:1 against white), which globals.css
               documents as the token for pink that carries TEXT. Do not swap it
               back to bg-accent-pink. */}
+          {event && (
+            <span className="ha-deco ha-chip" aria-hidden="true">
+              <span className="ha-spr tr" />
+              {event.short}
+            </span>
+          )}
           <div className="pointer-events-none absolute left-2 top-2 flex gap-1">
             {game.isNew && (
               <span className="rounded-full bg-accent-pink-ink px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white shadow-lg">
