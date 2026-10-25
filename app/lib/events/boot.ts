@@ -29,11 +29,11 @@ var n=Date.now();if(n<${start}||n>=${end})return;
 var p=location.pathname,x=${j(theme.excludedPaths)};
 for(var i=0;i<x.length;i++){if(p===x[i]||p.indexOf(x[i]+"/")===0)return;}
 var l=localStorage.getItem(${j(theme.lookKey)});
-if(l==="normal")return;
-if(l!=="dark"&&l!=="light")l=localStorage.getItem(${j(THEME_KEY)})==="light"?"light":"dark";
 var h=document.documentElement;
 h.setAttribute(${j(EVENT_ATTR)},${j(theme.event)});
 h.setAttribute(${j(EVENT_PHASE_ATTR)},"live");
+if(l==="normal")return;
+if(l!=="dark"&&l!=="light")l=localStorage.getItem(${j(THEME_KEY)})==="light"?"light":"dark";
 h.setAttribute(${j(SKIN_ATTR)},${j(theme.skin)});
 h.setAttribute(${j(THEME_ATTR)},l);
 }catch(e){}})();`;

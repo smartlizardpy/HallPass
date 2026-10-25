@@ -17,7 +17,8 @@ export function parseEventLook(raw: string | null | undefined): EventLook | null
  * The permanent theme (`hp:theme`) is only READ, never written. With no event
  * look chosen: an explicit Light gets Haunted Light; Dark, System and
  * never-chosen all get Haunted Dark (System counts as dark by decision). An
- * explicit event look wins; "normal" turns the skin off for that player.
+ * explicit event look wins; "normal" turns the skin off for that player but leaves the
+ * event marked live, so the appearance menu can still offer the way back.
  */
 export function resolveEvent(
   theme: ThemeWindow,
@@ -28,10 +29,10 @@ export function resolveEvent(
     savedTheme: string | null | undefined;
   },
 ): EventResolution {
-  if (phaseAt(theme, input.nowMs) !== "live") return { on: false };
-  if (isExcludedPath(input.path, theme.excludedPaths)) return { on: false };
+  if (phaseAt(theme, input.nowMs) !== "live") return { live: false, on: false };
+  if (isExcludedPath(input.path, theme.excludedPaths)) return { live: false, on: false };
   const look = parseEventLook(input.eventLook);
-  if (look === "normal") return { on: false };
-  if (look) return { on: true, theme: look };
-  return { on: true, theme: input.savedTheme === "light" ? "light" : "dark" };
+  if (look === "normal") return { live: true, on: false };
+  if (look) return { live: true, on: true, theme: look };
+  return { live: true, on: true, theme: input.savedTheme === "light" ? "light" : "dark" };
 }

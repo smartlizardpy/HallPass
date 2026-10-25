@@ -55,15 +55,21 @@ export function EventController() {
         eventLook: look,
         savedTheme: choice,
       });
-      if (r.on) {
+      // `data-hp-event` = the window is open (the appearance menu may show);
+      // `data-hp-skin` = the haunted look is actually painted. Decoration CSS
+      // keys on the skin, so a player who chose Normal sees the normal site.
+      if (r.live) {
         html.setAttribute(EVENT_ATTR, T.event);
         html.setAttribute(EVENT_PHASE_ATTR, "live");
+      } else {
+        html.removeAttribute(EVENT_ATTR);
+        html.removeAttribute(EVENT_PHASE_ATTR);
+      }
+      if (r.on) {
         html.setAttribute(SKIN_ATTR, T.skin);
         html.setAttribute(THEME_ATTR, r.theme);
       } else {
         const wasOn = html.hasAttribute(SKIN_ATTR);
-        html.removeAttribute(EVENT_ATTR);
-        html.removeAttribute(EVENT_PHASE_ATTR);
         html.removeAttribute(SKIN_ATTR);
         if (wasOn) html.setAttribute(THEME_ATTR, resolved);
       }

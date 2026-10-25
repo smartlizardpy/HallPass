@@ -10,10 +10,15 @@
 /** What a player picked in the event's own appearance menu. */
 export type EventLook = "dark" | "light" | "normal";
 
-/** Whether the skin is painted right now, and in which of its two palettes. */
+/**
+ * `live`: the event window is open on this path (so the player may be offered the
+ * appearance menu, even if they chose Normal). `on`: the skin is painted, and in
+ * which of its two palettes. `on` implies `live`.
+ */
 export type EventResolution =
-  | { on: false }
-  | { on: true; theme: "dark" | "light" };
+  | { live: false; on: false }
+  | { live: true; on: false }
+  | { live: true; on: true; theme: "dark" | "light" };
 
 export interface ThemeWindow {
   /** Stable id of the feature, used for flags and documentation. */

@@ -50,24 +50,24 @@ const base = { nowMs: live, path: "/", eventLook: null, savedTheme: null };
 describe("resolveEvent", () => {
   it("never chosen, system and dark all get Haunted Dark", () => {
     for (const savedTheme of [null, "system", "dark", "garbage"]) {
-      expect(resolveEvent(T, { ...base, savedTheme })).toEqual({ on: true, theme: "dark" });
+      expect(resolveEvent(T, { ...base, savedTheme })).toEqual({ live: true, on: true, theme: "dark" });
     }
   });
 
   it("an explicit Light gets Haunted Light", () => {
-    expect(resolveEvent(T, { ...base, savedTheme: "light" })).toEqual({ on: true, theme: "light" });
+    expect(resolveEvent(T, { ...base, savedTheme: "light" })).toEqual({ live: true, on: true, theme: "light" });
   });
 
   it("the event look wins over the saved theme, and normal turns the skin off", () => {
-    expect(resolveEvent(T, { ...base, savedTheme: "light", eventLook: "dark" })).toEqual({ on: true, theme: "dark" });
-    expect(resolveEvent(T, { ...base, savedTheme: "dark", eventLook: "light" })).toEqual({ on: true, theme: "light" });
-    expect(resolveEvent(T, { ...base, eventLook: "normal" })).toEqual({ on: false });
+    expect(resolveEvent(T, { ...base, savedTheme: "light", eventLook: "dark" })).toEqual({ live: true, on: true, theme: "dark" });
+    expect(resolveEvent(T, { ...base, savedTheme: "dark", eventLook: "light" })).toEqual({ live: true, on: true, theme: "light" });
+    expect(resolveEvent(T, { ...base, eventLook: "normal" })).toEqual({ live: true, on: false });
   });
 
   it("ignores the event look outside the window and on excluded paths", () => {
-    expect(resolveEvent(T, { ...base, nowMs: START - 1, eventLook: "dark" })).toEqual({ on: false });
-    expect(resolveEvent(T, { ...base, nowMs: END, eventLook: "dark" })).toEqual({ on: false });
-    expect(resolveEvent(T, { ...base, path: "/dashboard/x" })).toEqual({ on: false });
+    expect(resolveEvent(T, { ...base, nowMs: START - 1, eventLook: "dark" })).toMatchObject({ on: false });
+    expect(resolveEvent(T, { ...base, nowMs: END, eventLook: "dark" })).toMatchObject({ on: false });
+    expect(resolveEvent(T, { ...base, path: "/dashboard/x" })).toMatchObject({ on: false });
   });
 
   it("parses stored looks tolerantly", () => {
@@ -117,8 +117,10 @@ describe("eventBootScript mirrors resolveEvent", () => {
       if (savedTheme) store["hp:theme"] = savedTheme;
       const attrs = runBoot(T, nowMs, path, store);
       const r = resolveEvent(T, { nowMs, path, eventLook, savedTheme });
-      if (!r.on) {
+      if (!r.live) {
         expect(attrs).toEqual({});
+      } else if (!r.on) {
+        expect(attrs).toEqual({ "data-hp-event": "fright-fest", "data-hp-event-phase": "live" });
       } else {
         expect(attrs).toEqual({
           "data-hp-event": "fright-fest",

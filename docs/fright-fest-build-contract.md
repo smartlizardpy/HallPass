@@ -5,10 +5,16 @@ Read `docs/fright-fest-theme-plan.md` first. Visual source of truth: round 3 str
 (css, runtime js, markup, palette) are in the scratchpad `extract/` folder the lead hands out.
 
 ## Rules
-- The skin is on only when `<html data-hp-event="fright-fest" data-hp-skin="haunted">`
-  (written by `app/lib/events/boot.ts` + `EventController`). `data-theme` is `dark|light`.
+- `<html data-hp-event="fright-fest">` means the event window is open on this page;
+  `data-hp-skin="haunted"` means the haunted look is actually painted (a player can choose
+  "Normal HallPass", leaving only the event attribute). Written by `app/lib/events/boot.ts`
+  + `EventController`. `data-theme` is `dark|light`.
+- ALL decoration and restyling CSS keys on `html[data-hp-skin="haunted"]`. Only the
+  appearance-menu entry points (which must stay reachable to a "Normal" player) key on
+  `html[data-hp-event="fright-fest"]` and are rendered/hidden by that attribute alone.
 - Seasonal CSS lives ONLY in `app/components/events/fright-fest/*.css`; each selector starts
-  with `html[data-hp-event="fright-fest"]` or `html[data-hp-skin="haunted"]` (tested).
+  with `html[data-hp-skin="haunted"]` (or `html[data-hp-event="fright-fest"]` for the menu
+  entry only) (tested).
   Base tokens (`--background`, `--surface`, `--brand`…) are assigned only in `haunted.css`.
   Use the `--ha-*` tokens, `--ha-clip-N` (stepped pixel corners) and `--spr-<name>` sprite
   variables (`background-image: var(--spr-ghost)`, class `ha-spr`) that `haunted.css` defines.
