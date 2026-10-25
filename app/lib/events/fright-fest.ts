@@ -2,7 +2,9 @@
  * Fright Fest 2026 — THE THEME CONFIGURATION. This is the one place to edit.
  *
  * TO SWITCH THE HAUNTED SKIN OFF: set `enabled: false` and ship. It beats the
- * schedule. TO MOVE THE DATES: change `startAt` / `endAt` (UTC, with a `Z`).
+ * schedule. TO MOVE THE DATES: change `startAt` / `opensAt` / `endAt` (UTC,
+ * with a `Z`). The skin paints from `startAt`; the event (countdown target and
+ * the dates in the copy) opens at `opensAt`, so 25–27 Oct is a haunted preview.
  * NOTHING ELSE needs touching, and nothing here is read by the championship:
  * see `championship.ts`, which is deliberately a separate module with its own
  * flag. After `endAt` the skin stops painting by itself; no commit is reverted.
@@ -16,7 +18,8 @@ import type { ThemeWindow } from "./types";
 export const FRIGHT_FEST_THEME: ThemeWindow = {
   id: "fright-fest-2026-theme",
   enabled: true,
-  startAt: "2026-10-28T00:00:00Z",
+  startAt: "2026-10-25T00:00:00Z",
+  opensAt: "2026-10-28T00:00:00Z",
   endAt: "2026-11-01T00:00:00Z",
   event: "fright-fest",
   skin: "haunted",

@@ -28,8 +28,17 @@ export interface ThemeWindow {
    * whatever the clock says.
    */
   enabled: boolean;
-  /** ISO-8601 instant with an explicit `Z`; inclusive. Always UTC. */
+  /**
+   * When the skin starts painting. ISO-8601 instant with an explicit `Z`;
+   * inclusive. Always UTC. May be earlier than {@link opensAt}: a haunted
+   * preview before the event itself opens.
+   */
   startAt: string;
+  /**
+   * When the event itself opens: the countdown target and the first date in the
+   * copy. ISO-8601 with `Z`, within `[startAt, endAt)`. Defaults to `startAt`.
+   */
+  opensAt?: string;
   /** ISO-8601 instant with an explicit `Z`; exclusive. Always UTC. */
   endAt: string;
   /** Value written to `data-hp-event` on `<html>`. */

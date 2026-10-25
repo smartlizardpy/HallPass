@@ -15,8 +15,17 @@ describe("eventDateLabels", () => {
   });
 
   it("follows a moved window", () => {
-    const l = eventDateLabels({ ...FRIGHT_FEST_THEME, startAt: "2026-12-20T00:00:00Z", endAt: "2026-12-27T00:00:00Z" });
+    const l = eventDateLabels({
+      ...FRIGHT_FEST_THEME,
+      startAt: "2026-12-18T00:00:00Z",
+      opensAt: "2026-12-20T00:00:00Z",
+      endAt: "2026-12-27T00:00:00Z",
+    });
     expect(l.startShort).toBe("20 Dec");
     expect(l.endShort).toBe("26 Dec");
+  });
+
+  it("starts at the skin when there is no separate opening", () => {
+    expect(eventDateLabels({ ...FRIGHT_FEST_THEME, opensAt: undefined }).startShort).toBe("25 Oct");
   });
 });

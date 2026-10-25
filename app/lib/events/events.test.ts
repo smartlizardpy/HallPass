@@ -13,6 +13,7 @@ import type { ThemeWindow } from "./types";
 const T = FRIGHT_FEST_THEME;
 const START = Date.parse(T.startAt);
 const END = Date.parse(T.endAt);
+const OPENS = Date.parse(T.opensAt ?? T.startAt);
 
 describe("phaseAt", () => {
   it("is off before, live from the first millisecond, ended from the last", () => {
@@ -22,8 +23,9 @@ describe("phaseAt", () => {
     expect(phaseAt(T, END)).toBe("ended");
   });
 
-  it("is UTC: the window is 28 Oct 00:00Z to 1 Nov 00:00Z", () => {
-    expect(START).toBe(Date.UTC(2026, 9, 28));
+  it("is UTC: the skin paints 25 Oct 00:00Z to 1 Nov 00:00Z, the event opens 28 Oct", () => {
+    expect(START).toBe(Date.UTC(2026, 9, 25));
+    expect(OPENS).toBe(Date.UTC(2026, 9, 28));
     expect(END).toBe(Date.UTC(2026, 10, 1));
   });
 
@@ -216,13 +218,20 @@ describe("theme and championship are independent", () => {
 
 describe("countdownAt", () => {
   const W = { ...T, enabled: true };
-  it("counts to the start, then the end, then stops", () => {
-    expect(countdownAt(W, START - 90_061_000)).toEqual({ to: "start", d: 1, h: 1, m: 1, s: 1 });
-    expect(countdownAt(W, START)?.to).toBe("end");
+  it("counts to the opening, then the end, then stops", () => {
+    expect(countdownAt(W, OPENS - 90_061_000)).toEqual({ to: "start", d: 1, h: 1, m: 1, s: 1 });
+    expect(countdownAt(W, START)).toEqual({ to: "start", d: 3, h: 0, m: 0, s: 0 });
+    expect(countdownAt(W, OPENS)?.to).toBe("end");
     expect(countdownAt(W, END - 1000)).toEqual({ to: "end", d: 0, h: 0, m: 0, s: 1 });
     expect(countdownAt(W, END)).toBeNull();
   });
   it("is null when disabled", () => {
     expect(countdownAt({ ...W, enabled: false }, START - 1000)).toBeNull();
+  });
+  it("opens with the skin when opensAt is omitted, and is null when it falls outside the window", () => {
+    expect(countdownAt({ ...W, opensAt: undefined }, START)?.to).toBe("end");
+    expect(countdownAt({ ...W, opensAt: "2026-10-20T00:00:00Z" }, START - 1000)).toBeNull();
+    expect(countdownAt({ ...W, opensAt: W.endAt }, START - 1000)).toBeNull();
+    expect(countdownAt({ ...W, opensAt: "nope" }, START - 1000)).toBeNull();
   });
 });

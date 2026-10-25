@@ -3,7 +3,8 @@ import type { ThemeWindow } from "./types";
 /**
  * Human-readable dates for the event, DERIVED from the configured window so the
  * copy can never disagree with the clock. Formatted in UK time (the audience's
- * clocks) from the UTC instants in the config; `endAt` is exclusive, so the last
+ * clocks) from the UTC instants in the config. Dates start at `opensAt` (the
+ * event), not `startAt` (the skin's preview); `endAt` is exclusive, so the last
  * minute of the event is one minute earlier. Pure and clock-free: server
  * components may call it.
  */
@@ -11,7 +12,7 @@ const fmt = (opts: Intl.DateTimeFormatOptions, ms: number) =>
   new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", ...opts }).format(ms);
 
 export function eventDateLabels(theme: ThemeWindow) {
-  const start = Date.parse(theme.startAt);
+  const start = Date.parse(theme.opensAt ?? theme.startAt);
   const last = Date.parse(theme.endAt) - 60_000;
   const end = Date.parse(theme.endAt);
   const dm = { day: "numeric", month: "short" } as const;
