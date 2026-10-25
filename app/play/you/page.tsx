@@ -153,7 +153,7 @@ export default async function YouProfilePage() {
 
       {/* BADGES ------------------------------------------------------------ */}
       {stats && (
-        <section className="rounded-xl border border-border bg-surface p-6">
+        <section className="ha-pcard rounded-xl border border-border bg-surface p-6">
           <h2 className="text-sm font-black uppercase tracking-wide text-foreground">
             Badges
           </h2>
@@ -174,7 +174,7 @@ export default async function YouProfilePage() {
       )}
 
       {/* YOUR LEADERBOARDS -------------------------------------------------- */}
-      <section className="rounded-xl border border-border bg-surface p-6">
+      <section className="ha-pcard rounded-xl border border-border bg-surface p-6">
         <h2 className="text-sm font-black uppercase tracking-wide text-foreground">
           Your leaderboards
         </h2>

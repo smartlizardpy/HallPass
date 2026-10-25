@@ -42,7 +42,7 @@ export function AchievementWall({ groups }: { groups: AchievementGroup[] }) {
   if (groups.length === 0) return null;
 
   return (
-    <section className="rounded-3xl bg-surface p-5 sm:p-6">
+    <section className="ha-pcard rounded-3xl bg-surface p-5 sm:p-6">
       <h2 className="text-[11px] font-black uppercase tracking-wider text-muted">
         Achievements
       </h2>

@@ -29,7 +29,15 @@ export function Wordmark({
         hallpass
       </span>
       <span
-        className={`${dotClass} shrink-0 translate-y-[-2px] rounded-full bg-accent-yellow`}
+        className={`${dotClass} ha-wm-dot shrink-0 translate-y-[-2px] rounded-full bg-accent-yellow`}
+      />
+      {/* Fright Fest: the skin swaps the yellow dot for this pixel moon (hidden
+          for everyone else by `.ha-deco`; see events/fright-fest/header.css). */}
+      <span
+        aria-hidden="true"
+        data-ha-moment="moon"
+        data-ha-size={dotClass.includes("h-2") ? "lg" : undefined}
+        className="ha-deco ha-spr ha-wm-moon"
       />
       {tag && (
         <span className="ml-1 self-center rounded-full bg-brand-50 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-brand">

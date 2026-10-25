@@ -362,6 +362,16 @@ export function MobileTabBar() {
         className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border bg-surface/95 backdrop-blur-xl lg:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
+        {/* Fright Fest: a ghost that peeks over the bar once. Decoration only:
+            hidden for everyone by globals.css, aria-hidden, never focusable and
+            pointer-events none, so a tap aimed at a tab can never land on it. */}
+        <span
+          aria-hidden="true"
+          data-ha-moment="ghost-tab"
+          className="ha-deco ha-tab-ghost"
+        >
+          <span className="ha-spr ha-tab-ghost-spr" />
+        </span>
         {/* One tab per `PRIMARY_NAV` entry, in the table's order — never a
             hand-typed copy of the hrefs or the matching rules. `entry.match` is why:
             Friends lives UNDER the You section, so both tabs would light up on

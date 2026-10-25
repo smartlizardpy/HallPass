@@ -277,6 +277,12 @@ body {
   transform: scale(0.98);
 }
 
+/* Seasonal decoration slots. Rendered by shared components for every visitor and
+   hidden here; the event skin (components/events/fright-fest) reveals them. */
+.ha-deco {
+  display: none;
+}
+
 /* Card hover lift */
 .card {
   position: relative;

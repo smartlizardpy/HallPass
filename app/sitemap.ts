@@ -39,6 +39,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.5,
     },
     {
+      // Fright Fest 2026 event page: static, and stays valid after the event.
+      url: `${BASE}/fright-fest`,
+      changeFrequency: "weekly",
+      priority: 0.4,
+    },
+    {
       // The legal pages: static text, listed so they can be found, at the
       // lowest priority. No lastModified, as for every entry above.
       url: `${BASE}/privacy`,

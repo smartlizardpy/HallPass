@@ -1,0 +1,391 @@
+/* Fright Fest skin: header. Every selector must start with html[data-hp-skin="haunted"] (html[data-hp-event="fright-fest"] only for the appearance menu). Never assign base tokens here (haunted.css owns them). */
+
+/* ---- 1 · moon dot on the wordmark. The yellow dot stays in the DOM for everyone;
+   the skin swaps it for the 4x4 pixel moon (scaled 2x). ---- */
+html[data-hp-skin="haunted"] .ha-wm-dot {
+  display: none;
+}
+html[data-hp-skin="haunted"] .ha-wm-moon {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-left: 2px;
+  transform: translateY(-1px);
+  background-image: var(--spr-moon-dot);
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+html[data-hp-skin="haunted"] .ha-wm-moon[data-ha-size="lg"] {
+  width: 10px;
+  height: 10px;
+  background-image: var(--spr-moon-dot5);
+}
+/* It rises into place once on load. */
+html[data-hp-skin="haunted"] header .ha-wm-moon {
+  animation: ha-rise 0.45s steps(3, end) 0.35s both;
+}
+@keyframes ha-rise {
+  from { transform: translateY(6px); opacity: 0; }
+  to { transform: translateY(-1px); opacity: 1; }
+}
+/* Moment: a halo, now and then, like the moon coming out. */
+html[data-hp-skin="haunted"] .ha-wm-moon[data-playing] {
+  animation: ha-halo 2.4s steps(4, end) 1;
+}
+@keyframes ha-halo {
+  0%, 100% { filter: none; }
+  25%, 75% {
+    filter: drop-shadow(0 0 2px rgba(255, 199, 0, 0.9)) drop-shadow(0 0 5px rgba(255, 199, 0, 0.45));
+  }
+}
+
+/* ---- 2 · the Fright Fest tab: a tiny lit marquee. The background is a pseudo
+   element so the stepped corners clip it and not the focus ring. ---- */
+html[data-hp-skin="haunted"] .ha-tab-li {
+  display: block;
+}
+html[data-hp-skin="haunted"] a.ha-tab {
+  --ha-focus: #ffb347;
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  white-space: nowrap;
+  color: var(--ha-amber);
+  font-family: var(--font-pixel), monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+html[data-hp-skin="haunted"] a.ha-tab::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--ha-night);
+  clip-path: var(--ha-clip-1);
+}
+html[data-hp-skin="haunted"] a.ha-tab::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 4px;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, var(--ha-pumpkin) 0 4px, transparent 4px 8px);
+}
+html[data-hp-skin="haunted"] a.ha-tab:hover {
+  color: #ffc77a;
+}
+html[data-hp-skin="haunted"] a.ha-tab:hover::before {
+  background: #2a1b40;
+}
+html[data-hp-skin="haunted"] a.ha-tab:hover::after {
+  background: var(--ha-pumpkin);
+}
+html[data-hp-skin="haunted"] .ha-tab-gi {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  background-image: var(--spr-ghost-icon);
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+/* Moment: the sign flickers once. */
+html[data-hp-skin="haunted"] a.ha-tab[data-playing] {
+  animation: ha-sign 0.9s steps(1, end) 1;
+}
+@keyframes ha-sign {
+  0% { opacity: 1; }
+  12% { opacity: 0.25; }
+  20% { opacity: 1; }
+  44% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* ---- 4 · hover and focus treatments inside the bar ---- */
+html[data-hp-skin="haunted"] header nav a:not(.ha-tab):hover,
+html[data-hp-skin="haunted"] header a[title="What's New"]:hover,
+html[data-hp-skin="haunted"] header button[title="Open a random game"]:hover {
+  background: var(--brand-50);
+  color: var(--foreground);
+}
+html[data-hp-skin="haunted"] header input[type="search"]:focus {
+  box-shadow: inset 0 0 0 2px var(--ha-focus);
+}
+html[data-hp-skin="haunted"][data-theme="dark"] header input[type="search"]::placeholder {
+  color: #c9bfd8;
+}
+
+/* ---- 5 · lv3 extras, all hanging in the margin below the bar ---- */
+/* One cobweb where the header's bottom edge meets the sidebar. */
+html[data-hp-skin="haunted"] .ha-hweb {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  width: 32px;
+  height: 32px;
+  opacity: var(--ha-web);
+  background-image: var(--spr-web-corner);
+  image-rendering: crisp-edges;
+}
+/* The roosting bat. */
+html[data-hp-skin="haunted"] .ha-perch {
+  position: absolute;
+  right: 236px;
+  top: 100%;
+  width: 24px;
+  height: 20px;
+  z-index: 2;
+  background-image: var(--spr-bat-perch);
+  image-rendering: crisp-edges;
+}
+/* The spider's window starts at the header's bottom edge; the thread is clipped. */
+html[data-hp-skin="haunted"] .ha-spwrap {
+  position: absolute;
+  left: 56%;
+  top: 100%;
+  width: 20px;
+  height: 120px;
+  overflow: hidden;
+}
+html[data-hp-skin="haunted"] .ha-spwrap[data-ha-phone] {
+  left: auto;
+  right: 84px;
+}
+html[data-hp-skin="haunted"] .ha-spider {
+  position: absolute;
+  left: 1px;
+  top: 0;
+  width: 18px;
+  height: 18px;
+  transform: translateY(-100%);
+}
+html[data-hp-skin="haunted"] .ha-spider::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  bottom: 16px;
+  width: 2px;
+  height: 240px;
+  background: linear-gradient(to top, rgba(185, 167, 207, 0.7), rgba(185, 167, 207, 0.15));
+}
+html[data-hp-skin="haunted"][data-theme="light"] .ha-spider::before {
+  background: linear-gradient(to top, rgba(58, 42, 82, 0.55), rgba(58, 42, 82, 0.1));
+}
+html[data-hp-skin="haunted"] .ha-spider-spr {
+  display: block;
+  width: 18px;
+  height: 18px;
+  background-image: var(--spr-spider);
+  image-rendering: crisp-edges;
+}
+html[data-hp-skin="haunted"] .ha-spwrap[data-playing] .ha-spider {
+  transform: translateY(82px);
+  transition: transform 1.6s steps(12, end);
+}
+/* The bat lane rests hidden; the bat crosses it once. */
+html[data-hp-skin="haunted"] .ha-batlane {
+  display: none;
+}
+html[data-hp-skin="haunted"] .ha-batlane[data-playing] {
+  display: block;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  height: 24px;
+  overflow: hidden;
+}
+html[data-hp-skin="haunted"] .ha-bat {
+  position: absolute;
+  left: 100%;
+  top: 4px;
+  width: 32px;
+  height: 18px;
+  background-image: var(--spr-bat-a);
+  background-size: 100% 100%;
+  image-rendering: crisp-edges;
+}
+html[data-hp-skin="haunted"] .ha-batlane[data-playing] .ha-bat {
+  animation: ha-fly 3s linear 1 forwards, ha-flap 0.24s steps(1, end) infinite;
+}
+@keyframes ha-fly {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(calc(-25vw - 8px), -6px); }
+  50% { transform: translate(calc(-50vw - 16px), 3px); }
+  75% { transform: translate(calc(-75vw - 24px), -5px); }
+  100% { transform: translate(calc(-100vw - 40px), 0); }
+}
+@keyframes ha-flap {
+  0% { background-image: var(--spr-bat-a); }
+  50% { background-image: var(--spr-bat-b); }
+}
+
+/* ---- 6 · footer: closing-time sky band over a night card ---- */
+html[data-hp-skin="haunted"] .ha-foot {
+  position: relative;
+  background: #0a0611;
+  color: #cbbfdc;
+  border-radius: 0;
+  clip-path: var(--ha-clip-4);
+  padding: 108px 32px 28px;
+}
+html[data-hp-skin="haunted"] .ha-foot .text-muted {
+  color: var(--ha-lav);
+}
+/* The footer card is night in BOTH themes, so foreground-coloured text on it
+   (dark ink in Haunted Light) must read as bone, not vanish. */
+html[data-hp-skin="haunted"] .ha-foot .text-foreground,
+html[data-hp-skin="haunted"] .ha-foot .text-foreground-2 {
+  color: var(--ha-bone);
+}
+html[data-hp-skin="haunted"] .ha-foot a:hover {
+  color: var(--ha-amber);
+}
+html[data-hp-skin="haunted"] .ha-foot-l .text-brand {
+  color: #b79cff;
+}
+html[data-hp-skin="haunted"] .ha-foot-close {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--ha-bone);
+}
+html[data-hp-skin="haunted"] .ha-foot-sky {
+  --ha-focus: #ffb347;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 92px;
+  background: linear-gradient(#160d27 0 34%, #1f1335 34% 67%, #2b1a47 67%);
+}
+html[data-hp-skin="haunted"] .ha-foot-sky > i {
+  position: absolute;
+  display: block;
+  background-repeat: no-repeat;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+html[data-hp-skin="haunted"] .ha-foot-sky > i.ha-foot-trees,
+html[data-hp-skin="haunted"] .ha-foot-sky > i.ha-foot-rail {
+  bottom: 0;
+  background-repeat: repeat-x;
+  background-position: 0 100%;
+}
+html[data-hp-skin="haunted"] .ha-foot-trees {
+  left: 0;
+  width: 62%;
+  height: 84px;
+  background-image: var(--spr-trees);
+  background-size: 288px 84px;
+}
+html[data-hp-skin="haunted"] .ha-foot-rail {
+  right: 0;
+  width: 38%;
+  height: 30px;
+  background-image: var(--spr-railing);
+  background-size: 72px 30px;
+}
+html[data-hp-skin="haunted"] .ha-foot-moon {
+  right: 12%;
+  top: 14px;
+  width: 44px;
+  height: 44px;
+  background-image: var(--spr-moon);
+  background-size: 100% 100%;
+}
+html[data-hp-skin="haunted"] .ha-foot-ghost {
+  right: 22%;
+  bottom: 8px;
+  width: 45px;
+  height: 39px;
+  background-image: var(--spr-ghost-wave);
+  background-size: 100% 100%;
+}
+html[data-hp-skin="haunted"] .ha-foot-plaque {
+  left: 46%;
+  bottom: 14px;
+  width: 52px;
+  height: 24px;
+  background-image: var(--spr-plaque-000);
+  background-size: 100% 100%;
+}
+
+/* ---- Off switches: reduced motion and still mode ---- */
+@media (prefers-reduced-motion: reduce) {
+  html[data-hp-skin="haunted"] header .ha-wm-moon,
+  html[data-hp-skin="haunted"] .ha-wm-moon[data-playing],
+  html[data-hp-skin="haunted"] a.ha-tab[data-playing],
+  html[data-hp-skin="haunted"] .ha-batlane[data-playing] .ha-bat {
+    animation: none;
+  }
+  html[data-hp-skin="haunted"] .ha-batlane[data-playing] { display: none; }
+  html[data-hp-skin="haunted"] .ha-spwrap[data-playing] .ha-spider {
+    transform: translateY(-100%);
+    transition: none;
+  }
+}
+html[data-hp-skin="haunted"][data-hp-still] header .ha-wm-moon,
+html[data-hp-skin="haunted"][data-hp-still] .ha-wm-moon[data-playing],
+html[data-hp-skin="haunted"][data-hp-still] a.ha-tab[data-playing],
+html[data-hp-skin="haunted"][data-hp-still] .ha-batlane[data-playing] .ha-bat {
+  animation: none;
+}
+html[data-hp-skin="haunted"][data-hp-still] .ha-batlane[data-playing] { display: none; }
+html[data-hp-skin="haunted"][data-hp-still] .ha-spwrap[data-playing] .ha-spider {
+  transform: translateY(-100%);
+  transition: none;
+}
+
+/* Credits links stay legible on the night card. */
+html[data-hp-skin="haunted"] .ha-foot a {
+  color: var(--ha-bone);
+}
+html[data-hp-skin="haunted"] .ha-foot p.text-muted a {
+  color: var(--ha-lav);
+}
+html[data-hp-skin="haunted"] .ha-foot p.text-muted a:hover {
+  color: var(--ha-amber);
+}
+
+/* Phone header: a ghost shortcut to /fright-fest (the tab row is lg-only). */
+html[data-hp-skin="haunted"] a.ha-phbtn {
+  --ha-focus: #ffb347;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  background: var(--ha-night);
+}
+
+/* "boo" in search: a short reply under the box (rendered by components/events/Moments). */
+html[data-hp-skin="haunted"] .ha-boo {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 24px));
+  padding: 10px 14px;
+  background: var(--ha-night);
+  color: var(--ha-bone);
+  border: 2px solid var(--ha-pumpkin-dk);
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: 0 10px 24px -8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+html[data-hp-skin="haunted"] .ha-boo-ghost {
+  flex: none;
+  width: 30px;
+  height: 26px;
+  background-image: var(--spr-ghost-wave);
+}

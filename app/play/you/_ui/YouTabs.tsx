@@ -75,7 +75,7 @@ export function YouTabs() {
   return (
     <nav
       aria-label="Your profile sections"
-      className="flex gap-1 rounded-full border border-border bg-surface p-1"
+      className="ha-ytabs flex gap-1 rounded-full border border-border bg-surface p-1"
     >
       {TABS.map((tab) => {
         const current = tab.href === active;

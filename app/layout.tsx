@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
-import { Nunito } from "next/font/google";
+import { Nunito, Silkscreen } from "next/font/google";
 import { FeaturePromo } from "./components/FeaturePromo";
 import { SurveyBanner } from "./components/SurveyBanner";
 import { GrowthTracker } from "./components/GrowthTracker";
@@ -11,14 +11,24 @@ import { PWA } from "./components/PWA";
 import { StealthController } from "./components/stealth/StealthController";
 import { StreakBeacon } from "./components/streak/StreakBeacon";
 import { StreakToast } from "./components/streak/StreakToast";
+import { EventController } from "./components/events/EventController";
+import { Moments } from "./components/events/Moments";
 import { ThemeController } from "./components/theme/ThemeController";
 import { OnboardingGate } from "./components/OnboardingGate";
 import { WelcomeToast } from "./components/WelcomeToast";
 import { AnalyticsNotice } from "./components/analytics/AnalyticsNotice";
 import { cloakBootScript } from "./lib/stealth/boot";
+import { eventBootScript } from "./lib/events/boot";
+import { FRIGHT_FEST_THEME } from "./lib/events/fright-fest";
 import { themeBootScript } from "./lib/theme/boot";
 import { SITE_URL } from "./lib/site";
 import "./globals.css";
+import "./components/events/fright-fest/haunted.css";
+import "./components/events/fright-fest/header.css";
+import "./components/events/fright-fest/sidebar.css";
+import "./components/events/fright-fest/hero.css";
+import "./components/events/fright-fest/catalogue.css";
+import "./components/events/fright-fest/pages.css";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -31,6 +41,17 @@ const nunito = Nunito({
   variable: "--font-nunito",
   subsets: ["latin"],
   weight: ["400", "600", "700", "800", "900"],
+});
+
+// Pixel face for the Fright Fest skin only. `preload: false` and a rule that
+// uses it solely under `html[data-hp-skin]` mean a visitor outside the event
+// window never downloads it.
+const silkscreen = Silkscreen({
+  variable: "--font-pixel",
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  preload: false,
+  display: "swap",
 });
 
 const siteName = "HALLPASS";
@@ -90,7 +111,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${nunito.variable} h-full antialiased`}
+      // The boot scripts set `data-theme` and the event attributes on <html>
+      // before React hydrates; the server markup cannot know them.
+      suppressHydrationWarning
+      className={`${nunito.variable} ${silkscreen.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         {/* Resolves the saved appearance choice during head parse, before first
@@ -101,6 +125,15 @@ export default function RootLayout({
         <Script id="hp-theme-boot" strategy="beforeInteractive">
           {themeBootScript()}
         </Script>
+        {/* Seasonal event skin. Runs right after the theme script so it can
+            override `data-theme` before first paint. The server never reads the
+            clock; see lib/events/boot.ts. Empty (and skipped) when the event is
+            disabled in lib/events/fright-fest.ts. */}
+        {eventBootScript(FRIGHT_FEST_THEME) && (
+          <Script id="hp-event-boot" strategy="beforeInteractive">
+            {eventBootScript(FRIGHT_FEST_THEME)}
+          </Script>
+        )}
         {/* Applies a saved tab cloak during head parse, before first paint, so a
             disguised tab never flashes "HALLPASS" on a cold load. */}
         <Script id="hp-cloak-boot" strategy="beforeInteractive">
@@ -124,6 +157,13 @@ export default function RootLayout({
         {/* Renders nothing — keeps `data-theme` in step with the stored choice
             and with a device whose own preference changes mid-session. */}
         <ThemeController />
+        {/* Renders nothing — keeps the seasonal attributes right across soft
+            navigation, choice changes and expiry. Knows nothing of the
+            championship. */}
+        <EventController />
+        {/* The haunted skin's ambient moments and the "boo" search reply. Inert
+            unless the skin is painted; see its header. */}
+        <Moments />
         {/* Renders nothing — listens to the same streak event as the toast above
             and reports the first play of a new day. See its header for why it is
             not folded into the toast. */}

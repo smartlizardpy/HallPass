@@ -27,6 +27,7 @@
  * turned them down, and the same courtesy applies here.
  */
 
+import { EmptyLine, EmptySprite } from "./EmptyHaunt";
 import { useCallback, useState } from "react";
 import type {
   IncomingChallenge,
@@ -103,8 +104,12 @@ export function ChallengeList({
 
   if (incoming.length === 0 && outgoing.length === 0) {
     return (
-      <p className="text-[15px] font-bold text-muted">
-        No challenges yet. Beat a score, then dare a friend from inside the game.
+      <p className="ha-empty text-[15px] font-bold text-muted">
+        <EmptySprite kind="tomb" />
+        <span>
+          No challenges yet. Beat a score, then dare a friend from inside the game.
+          <EmptyLine>The graveyard of dares is empty.</EmptyLine>
+        </span>
       </p>
     );
   }

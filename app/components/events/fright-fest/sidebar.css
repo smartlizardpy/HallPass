@@ -1,0 +1,154 @@
+/* Fright Fest skin: sidebar. Every selector must start with html[data-hp-skin="haunted"] (html[data-hp-event="fright-fest"] only for the appearance menu). Never assign base tokens here (haunted.css owns them). */
+
+/* ---- Appearance entry points: keyed on the EVENT, not the skin, so a player who
+   chose Normal HallPass can still reach the way back. ThemeMenuButton renders both
+   controls; the prerendered HTML is identical for everyone. ---- */
+/* The normal Light/Dark/System button is only replaced while the skin is painted;
+   on Normal HallPass it must come back beside the Look button. */
+html[data-hp-skin="haunted"] .ha-tm-old {
+  display: none;
+}
+html[data-hp-event="fright-fest"] .ha-event-menu.ha-deco,
+html[data-hp-event="fright-fest"] .ha-event-look.ha-deco {
+  display: block;
+}
+
+/* ---- Darker rail gradient in Haunted Dark ---- */
+html[data-hp-skin="haunted"][data-theme="dark"] .ha-rail {
+  background: linear-gradient(#17121f 0 55%, #140e1d);
+}
+
+/* ---- Fright Fest destination ---- */
+html[data-hp-skin="haunted"] .ha-rit.ha-deco {
+  display: flex;
+  position: relative;
+  background: var(--ha-night);
+  color: var(--ha-bone);
+  --ha-focus: #ffb347;
+}
+html[data-hp-skin="haunted"] .ha-rit.ha-deco:hover {
+  background: #2a1b40;
+  color: var(--ha-bone);
+}
+html[data-hp-skin="haunted"] .ha-rit-ico {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 1px;
+  background-image: var(--spr-ghost-icon);
+}
+html[data-hp-skin="haunted"] .ha-rit .ha-pip {
+  position: absolute;
+  right: 3px;
+  top: 4px;
+  width: 6px;
+  height: 6px;
+  background: var(--ha-pumpkin);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+html[data-hp-skin="haunted"] .ha-rsep.ha-deco {
+  display: block;
+  height: 1px;
+  margin: 4px;
+  background: var(--border);
+}
+
+/* Pumpkin hover on the genre rows, and a pumpkin marker on the current one. */
+html[data-hp-skin="haunted"] .ha-rail-nav li > a:not([data-active]):hover,
+html[data-hp-skin="haunted"] .ha-rail-nav li > button:not([data-active]):hover {
+  color: var(--ha-hover);
+}
+html[data-hp-skin="haunted"] .ha-rail-nav li > [data-active] {
+  position: relative;
+}
+html[data-hp-skin="haunted"] .ha-rail-nav li > [data-active]::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 10px;
+  width: 4px;
+  height: 20px;
+  background: var(--ha-pumpkin);
+}
+
+/* ---- Peeking ghost (data-ha-moment="ghost-side"): slides out from behind the
+   rail's edge, never over a control. Resting: tucked away and unclickable. ---- */
+html[data-hp-skin="haunted"] .ha-rgwrap.ha-deco {
+  position: absolute;
+  left: 100%;
+  top: 58%;
+  width: 40px;
+  height: 42px;
+  overflow: hidden;
+}
+html[data-hp-skin="haunted"] .ha-rghost {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 36px;
+  height: 39px;
+  background-image: var(--spr-ghost);
+  transform: translateX(-100%);
+  transition: transform 0.45s steps(4, end);
+  pointer-events: none;
+}
+html[data-hp-skin="haunted"] .ha-rghost[data-playing] {
+  transform: translateX(-28%);
+}
+
+/* ---- Eyes (data-ha-moment="eyes"): only where a real gap exists. The nav
+   becomes a column so the eyes sit at its foot; they show on tall screens only,
+   so on a 768px laptop the icons fill the rail and the eyes stay hidden. ---- */
+html[data-hp-skin="haunted"] .ha-rail-nav {
+  display: flex;
+  flex-direction: column;
+}
+html[data-hp-skin="haunted"] .ha-rail-nav > * {
+  flex: none;
+}
+html[data-hp-skin="haunted"] .ha-eyes {
+  display: none;
+}
+@media (min-height: 940px) {
+  html[data-hp-skin="haunted"] .ha-eyes.ha-deco {
+    display: grid;
+    place-items: center;
+    position: relative;
+    margin: auto auto 14px;
+    width: 36px;
+    height: 12px;
+    background: #08050d;
+    clip-path: var(--ha-clip-1);
+  }
+}
+html[data-hp-skin="haunted"][data-theme="light"] .ha-eyes.ha-deco {
+  background: #1b1026;
+}
+html[data-hp-skin="haunted"] .ha-eyes-spr {
+  width: 18px;
+  height: 6px;
+  background-image: var(--spr-eyes-open);
+}
+html[data-hp-skin="haunted"] .ha-eyes[data-playing] .ha-eyes-spr {
+  animation: ha-eyes-blink 1.6s steps(1, end) 1;
+}
+@keyframes ha-eyes-blink {
+  0%, 10%, 25%, 40%, 55%, 100% { background-image: var(--spr-eyes-open); }
+  15%, 32%, 47% { background-image: var(--spr-eyes-blink); }
+}
+
+/* ---- Motion off: reduced motion and Still mode ---- */
+@media (prefers-reduced-motion: reduce) {
+  html[data-hp-skin="haunted"] .ha-rghost {
+    transition: none;
+  }
+  html[data-hp-skin="haunted"] .ha-eyes[data-playing] .ha-eyes-spr {
+    animation: none;
+  }
+}
+html[data-hp-skin="haunted"][data-hp-still] .ha-rghost {
+  transition: none;
+}
+html[data-hp-skin="haunted"][data-hp-still] .ha-eyes[data-playing] .ha-eyes-spr {
+  animation: none;
+}

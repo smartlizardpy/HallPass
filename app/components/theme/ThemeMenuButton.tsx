@@ -30,13 +30,18 @@
 
 import { nextThemeChoice, THEME_OPTIONS } from "../../lib/theme/config";
 import { useTheme } from "../../lib/theme/store";
+import { EventLookMenu } from "../events/fright-fest/EventLookMenu";
 
 export function ThemeMenuButton({ onNavigate }: { onNavigate?: () => void }) {
   const { choice, setTheme } = useTheme();
   const option = THEME_OPTIONS.find((entry) => entry.id === choice) ?? THEME_OPTIONS[0];
   const next = THEME_OPTIONS.find((entry) => entry.id === nextThemeChoice(choice));
 
+  // Both controls render from this one slot; `sidebar.css` shows the event menu
+  // and hides the cycle button on html[data-hp-event], so the markup is identical
+  // for everyone and outside the event window nothing changes.
   return (
+    <>
     <button
       type="button"
       onClick={() => {
@@ -44,12 +49,14 @@ export function ThemeMenuButton({ onNavigate }: { onNavigate?: () => void }) {
         onNavigate?.();
       }}
       title={`Theme: ${option.label}${next ? ` — switch to ${next.label}` : ""}`}
-      className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-extrabold text-foreground-2 transition hover:bg-brand-50 hover:text-brand"
+      className="ha-tm-old flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-extrabold text-foreground-2 transition hover:bg-brand-50 hover:text-brand"
     >
       <span aria-hidden className="text-base">
         {option.glyph}
       </span>
       Theme · {option.label}
     </button>
+    <EventLookMenu />
+    </>
   );
 }

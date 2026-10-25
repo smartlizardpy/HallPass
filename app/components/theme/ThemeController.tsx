@@ -26,6 +26,7 @@
  */
 
 import { useEffect } from "react";
+import { SKIN_ATTR } from "../../lib/events/config";
 import { DARK_QUERY, THEME_ATTR } from "../../lib/theme/config";
 import { readSystemTheme, setSystemTheme, useTheme } from "../../lib/theme/store";
 
@@ -47,7 +48,12 @@ export function ThemeController() {
   }, []);
 
   useEffect(() => {
-    document.documentElement.setAttribute(THEME_ATTR, resolved);
+    const html = document.documentElement;
+    // While a seasonal skin is painted, `EventController` owns `data-theme`
+    // (it reads the saved choice but never rewrites it). It hands the attribute
+    // back itself when the skin turns off.
+    if (html.hasAttribute(SKIN_ATTR)) return;
+    html.setAttribute(THEME_ATTR, resolved);
   }, [resolved]);
 
   return null;

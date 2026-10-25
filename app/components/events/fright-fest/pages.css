@@ -1,0 +1,403 @@
+/* Fright Fest skin: pages. Every selector must start with html[data-hp-skin="haunted"] (html[data-hp-event="fright-fest"] only for the appearance menu). Never assign base tokens here (haunted.css owns them). */
+
+/* ---- shared: cobweb in a card's corner, dashed pumpkin heading rule ---- */
+html[data-hp-skin="haunted"] .ha-pcard {
+  position: relative;
+}
+html[data-hp-skin="haunted"] .ha-pcard::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 32px;
+  height: 32px;
+  background: var(--spr-web-corner) no-repeat 0 0 / 100% 100%;
+  image-rendering: pixelated;
+  opacity: var(--ha-web, 0.85);
+  pointer-events: none;
+}
+html[data-hp-skin="haunted"] .ha-h1 {
+  position: relative;
+}
+html[data-hp-skin="haunted"] .ha-h1::after,
+html[data-hp-skin="haunted"] .ha-more-h::after {
+  content: "";
+  position: absolute;
+  bottom: -7px;
+  width: 40px;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, var(--ha-pumpkin) 0 4px, transparent 4px 8px);
+}
+html[data-hp-skin="haunted"] .ha-h1::after {
+  left: 50%;
+  margin-left: -20px;
+}
+html[data-hp-skin="haunted"] .ha-more-h {
+  position: relative;
+  display: inline-block;
+}
+html[data-hp-skin="haunted"] .ha-more-h::after {
+  left: 1px;
+}
+
+/* ---- game page ---- */
+html[data-hp-skin="haunted"] .game-hero {
+  position: relative;
+  isolation: isolate;
+}
+html[data-hp-skin="haunted"] .ha-g-trees {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: -4px;
+  height: 56px;
+  z-index: -1;
+  background-image: var(--spr-trees);
+  background-repeat: repeat-x;
+  background-size: 192px 56px;
+  background-position: 0 100%;
+  opacity: 0.9;
+}
+html[data-hp-skin="haunted"][data-theme="light"] .ha-g-trees {
+  opacity: 0.5;
+  filter: brightness(0.6);
+}
+html[data-hp-skin="haunted"] .ha-gal-wrap {
+  position: relative;
+}
+html[data-hp-skin="haunted"] .ha-g-web {
+  position: absolute;
+  left: -6px;
+  top: -6px;
+  width: 32px;
+  height: 32px;
+  z-index: 3;
+  background-image: var(--spr-web-corner);
+  opacity: var(--ha-web, 0.85);
+}
+html[data-hp-skin="haunted"] .ha-mode-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--ha-night);
+  color: var(--ha-amber);
+  font-family: var(--font-pixel), monospace;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 7px 10px 8px;
+  clip-path: var(--ha-clip-2);
+}
+html[data-hp-skin="haunted"] .ha-mode-chip-ico,
+html[data-hp-skin="haunted"] .ha-evp-ico {
+  display: inline-block;
+  flex: none;
+  background-image: var(--spr-trophy);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+}
+html[data-hp-skin="haunted"] .ha-mode-chip-ico {
+  width: 12px;
+  height: 12px;
+}
+html[data-hp-skin="haunted"] .ha-plaque {
+  display: inline-block;
+  width: 52px;
+  height: 24px;
+  background-image: var(--spr-plaque-000);
+}
+html[data-hp-skin="haunted"] .ha-evp {
+  background: var(--ha-night);
+  color: var(--ha-bone);
+  clip-path: var(--ha-clip-4);
+  overflow: hidden;
+  padding-bottom: 12px;
+}
+html[data-hp-skin="haunted"][data-theme="dark"] .ha-evp {
+  box-shadow: inset 0 0 0 2px #2e2440;
+}
+html[data-hp-skin="haunted"] .ha-evp-mq {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--ha-amber);
+  color: #1c1c28;
+  font-family: var(--font-pixel), monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 6px 14px 8px;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.14);
+}
+html[data-hp-skin="haunted"] .ha-evp-ico {
+  width: 18px;
+  height: 18px;
+}
+html[data-hp-skin="haunted"] .ha-evp p {
+  margin: 0;
+  padding: 10px 14px 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: var(--ha-lav-2);
+}
+html[data-hp-skin="haunted"] .ha-evp p b {
+  color: #fff;
+  font-weight: 900;
+}
+
+/* ---- You / Friends / public profile ---- */
+html[data-hp-skin="haunted"] .ha-idc {
+  position: relative;
+  overflow: hidden;
+  padding-top: 84px;
+}
+html[data-hp-skin="haunted"] .ha-phd {
+  padding-top: 100px;
+}
+html[data-hp-skin="haunted"] .ha-night-strip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 64px;
+  /* Reserved height, drawn by CSS only (no canvas, nothing to paint late): sky
+     bands, a few stars, the moon high on the right, tree canopies along the foot
+     at 2x scene pixels like the hero. */
+  background:
+    var(--spr-moon) no-repeat right 44px top 2px / 44px 44px,
+    var(--spr-trees) repeat-x 0 38px / 192px 56px,
+    radial-gradient(1px 1px at 20% 30%, #d8cbe6 99%, transparent),
+    radial-gradient(1px 1px at 62% 18%, #4d3a6b 99%, transparent),
+    radial-gradient(1px 1px at 78% 40%, #d8cbe6 99%, transparent),
+    radial-gradient(1px 1px at 40% 50%, #4d3a6b 99%, transparent),
+    linear-gradient(#0f0a1a 0 25%, #160d27 25% 50%, #1f1335 50% 75%, #2b1a47 75%);
+  image-rendering: pixelated;
+}
+html[data-hp-skin="haunted"] .ha-phd .ha-night-strip {
+  height: 76px;
+}
+html[data-hp-skin="haunted"] .ha-idc .ha-cweb {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 32px;
+  height: 32px;
+  z-index: 2;
+  background-image: var(--spr-web-corner);
+  opacity: var(--ha-web, 0.85);
+}
+html[data-hp-skin="haunted"] .ha-ytabs {
+  position: relative;
+}
+html[data-hp-skin="haunted"] .ha-ytabs a[aria-current="page"] {
+  box-shadow: inset 0 -3px 0 var(--ha-pumpkin);
+}
+
+/* haunted empty states: sprite beside the real copy, one quiet line after it */
+html[data-hp-skin="haunted"] .ha-empty {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+html[data-hp-skin="haunted"] .ha-empty-spr {
+  flex: none;
+  background-image: var(--spr-ghost);
+}
+html[data-hp-skin="haunted"] .ha-empty-ghost {
+  width: 30px;
+  height: 26px;
+  background-image: var(--spr-ghost);
+}
+html[data-hp-skin="haunted"] .ha-empty-tomb {
+  width: 24px;
+  height: 28px;
+  background-image: var(--spr-tomb);
+}
+html[data-hp-skin="haunted"] .ha-empty-lantern {
+  width: 18px;
+  height: 28px;
+  background-image: var(--spr-lantern);
+}
+html[data-hp-skin="haunted"] .ha-empty-line {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  opacity: 0.85;
+}
+
+/* ---- phone tab bar: a ghost peeks over it once (moment: ghost-tab) ---- */
+html[data-hp-skin="haunted"] .ha-tab-ghost {
+  position: absolute;
+  right: 18%;
+  bottom: 100%;
+  width: 30px;
+  height: 28px;
+  overflow: hidden;
+}
+html[data-hp-skin="haunted"] .ha-tab-ghost-spr {
+  position: absolute;
+  left: 3px;
+  top: 0;
+  width: 24px;
+  height: 26px;
+  background-image: var(--spr-ghost);
+  transform: translateY(100%);
+}
+html[data-hp-skin="haunted"] .ha-tab-ghost[data-playing] .ha-tab-ghost-spr {
+  transform: translateY(22%);
+  transition: transform 0.45s steps(4, end);
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-hp-skin="haunted"] .ha-tab-ghost-spr,
+  html[data-hp-skin="haunted"] .ha-tab-ghost[data-playing] .ha-tab-ghost-spr {
+    transition: none;
+    animation: none;
+  }
+}
+html[data-hp-skin="haunted"][data-hp-still] .ha-tab-ghost-spr,
+html[data-hp-skin="haunted"][data-hp-still] .ha-tab-ghost[data-playing] .ha-tab-ghost-spr {
+  transition: none;
+  animation: none;
+}
+
+/* ---- /fright-fest: one pixel-art night scene with the countdown ---- */
+html[data-hp-skin="haunted"] .ff-scene {
+  position: relative;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  padding-bottom: 150px;
+  background: linear-gradient(180deg, #120a1c 0%, #2a1740 70%, #3b2159 100%);
+  color: var(--ha-bone);
+  clip-path: var(--ha-clip-4);
+}
+html[data-hp-skin="haunted"] .ff-scene .text-muted,
+html[data-hp-skin="haunted"] .ff-scene [data-testid="ff-phase"] {
+  color: var(--ha-lav-2);
+}
+html[data-hp-skin="haunted"] .ff-title {
+  font-family: var(--font-pixel), system-ui, sans-serif;
+  color: var(--ha-amber);
+  letter-spacing: 0.02em;
+}
+html[data-hp-skin="haunted"] .ff-moon {
+  position: absolute;
+  right: 6%;
+  top: 6%;
+  width: 84px;
+  height: 84px;
+  background: var(--spr-moon) no-repeat 0 0 / 100% 100%;
+  image-rendering: pixelated;
+}
+html[data-hp-skin="haunted"] .ff-bat {
+  position: absolute;
+  left: 8%;
+  top: 12%;
+  width: 40px;
+  height: 26px;
+  background: var(--spr-bat-a) no-repeat 0 0 / 100% 100%;
+  image-rendering: pixelated;
+}
+html[data-hp-skin="haunted"] .ff-ghost {
+  position: absolute;
+  left: 7%;
+  bottom: 96px;
+  width: 52px;
+  height: 52px;
+  background: var(--spr-ghost) no-repeat 0 0 / 100% 100%;
+  image-rendering: pixelated;
+}
+html[data-hp-skin="haunted"] .ff-ground {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 130px;
+  pointer-events: none;
+}
+html[data-hp-skin="haunted"] .ff-ground i {
+  position: absolute;
+  bottom: 0;
+  image-rendering: pixelated;
+}
+html[data-hp-skin="haunted"] .ff-trees {
+  left: 0;
+  right: 0;
+  height: 100px;
+  background: var(--spr-trees) repeat-x 0 100% / auto 100%;
+}
+html[data-hp-skin="haunted"] .ff-fence {
+  left: 0;
+  right: 0;
+  height: 36px;
+  background: var(--spr-fence-tile) repeat-x 0 100% / auto 100%;
+}
+html[data-hp-skin="haunted"] .ff-pumpkin {
+  right: 14%;
+  width: 56px;
+  height: 56px;
+  bottom: 8px;
+  background: var(--spr-pumpkin) no-repeat 0 0 / 100% 100%;
+  z-index: 1;
+}
+html[data-hp-skin="haunted"] .ff-count {
+  margin-top: 4px;
+}
+html[data-hp-skin="haunted"] .ff-count-n {
+  justify-content: center;
+}
+html[data-hp-skin="haunted"] .ff-count-k {
+  color: var(--ha-lav);
+}
+html[data-hp-skin="haunted"] .ff-count-n {
+  display: flex;
+  gap: clamp(8px, 2vw, 22px);
+  margin: 16px 0 0;
+}
+html[data-hp-skin="haunted"] .ff-count-c {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 150px;
+  padding: clamp(10px, 2vw, 20px) 8px 10px;
+  background: var(--ha-ink);
+  border: 2px solid var(--ha-line);
+  clip-path: var(--ha-clip-1);
+}
+html[data-hp-skin="haunted"] .ff-count-c b {
+  font-family: var(--font-pixel), system-ui, sans-serif;
+  font-size: clamp(26px, 7.5vw, 76px);
+  line-height: 1.1;
+  color: var(--ha-amber);
+}
+html[data-hp-skin="haunted"] .ff-count-c i {
+  font-style: normal;
+  font-size: clamp(12px, 1.6vw, 16px);
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--ha-lav);
+}
+/* Phone: the four cells stay on one row; moon and bat move into the corners,
+   clear of the title. */
+@media (max-width: 640px) {
+  html[data-hp-skin="haunted"] .ff-moon {
+    right: 10px;
+    top: 10px;
+    width: 44px;
+    height: 44px;
+  }
+  html[data-hp-skin="haunted"] .ff-bat {
+    left: 12px;
+    top: 14px;
+    width: 30px;
+    height: 20px;
+  }
+}
