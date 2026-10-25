@@ -28,8 +28,21 @@ export function SiteFooter() {
       className="mt-16 px-3 py-10 sm:px-8"
       style={{ paddingBottom: "calc(2.5rem + env(safe-area-inset-bottom))" }}
     >
-      <div className="flex flex-col items-start justify-between gap-4 rounded-3xl bg-surface p-6 sm:flex-row sm:items-center sm:p-8">
-        <Wordmark />
+      <div className="ha-foot flex flex-col items-start justify-between gap-4 rounded-3xl bg-surface p-6 sm:flex-row sm:items-center sm:p-8">
+        {/* Fright Fest closing-time sky (hidden unless the skin is on). */}
+        <span aria-hidden="true" className="ha-deco ha-foot-sky">
+          <i className="ha-foot-trees ha-spr" />
+          <i className="ha-foot-rail ha-spr" />
+          <i className="ha-foot-moon ha-spr" />
+          <i className="ha-foot-ghost ha-spr" />
+          <i className="ha-foot-plaque ha-spr" />
+        </span>
+        <div className="ha-foot-l flex flex-col items-start gap-2">
+          <Wordmark />
+          <p aria-hidden="true" className="ha-deco ha-foot-close">
+            The arcade stays open late until Sat 31 Oct.
+          </p>
+        </div>
         <div className="text-[13px] font-bold text-muted sm:text-right">
           <FooterCredits />
           {/* Flat `text-muted`, NOT `text-muted/80`. --muted (#6b6b7b) is

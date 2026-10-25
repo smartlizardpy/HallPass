@@ -157,6 +157,8 @@ export function SiteHeader({
   // the catalogue swap). On a real phone we drop the genre hamburger — the mobile
   // shell has no genres — and the wordmark, leaving the row to the search field.
   const isMobile = useDevicePlatform() === "mobile";
+  // The corner cobweb is left out of the homepage, whose hero fills that corner.
+  const showCornerWeb = path !== "/";
 
   const searchInput = (
     <div className="relative ml-1 min-w-0 flex-1 max-w-2xl sm:ml-0">
@@ -302,6 +304,19 @@ export function SiteHeader({
               </li>
             );
           })}
+          {/* Fright Fest marquee tab. Not part of PRIMARY_NAV (that table is shared
+              with the phone tab bar); hidden for everyone unless the skin is on. */}
+          <li className="ha-deco ha-tab-li">
+            <Link
+              href="/fright-fest"
+              onNavigate={() => watchStall("/fright-fest")}
+              data-ha-moment="sign"
+              className="ha-tab"
+            >
+              <span aria-hidden="true" className="ha-spr ha-tab-gi" />
+              Fright Fest
+            </Link>
+          </li>
         </ul>
       </nav>
 
@@ -384,6 +399,15 @@ export function SiteHeader({
           viewport, where the anchor has to be the last control in the row. */}
       {isMobile ? (
         <div className="ml-1 flex shrink-0 items-center gap-1.5">
+          {/* Fright Fest shortcut for the phone, where the tab row is absent.
+              Hidden unless the skin is on. */}
+          <Link
+            href="/fright-fest"
+            aria-label="Fright Fest"
+            className="ha-deco ha-phbtn"
+          >
+            <span aria-hidden="true" className="ha-spr ha-tab-gi" />
+          </Link>
           <StreakChip />
           <NotificationBell />
         </div>
@@ -423,6 +447,27 @@ export function SiteHeader({
           <AccountMenu />
         </div>
       )}
+
+      {/* Fright Fest header decorations: all margin-only, inert, hidden unless
+          the skin is on. The perch and cobweb sit just under the bar; the spider
+          drops from a thread below it; the bat lane is a clipped strip under it. */}
+      {showCornerWeb && (
+        <span aria-hidden="true" className="ha-deco ha-spr ha-hweb" />
+      )}
+      <span aria-hidden="true" className="ha-deco ha-spr ha-perch" />
+      <span
+        aria-hidden="true"
+        data-ha-moment="spider"
+        className="ha-deco ha-spwrap"
+        data-ha-phone={isMobile ? "" : undefined}
+      >
+        <span className="ha-spider">
+          <span className="ha-spr ha-spider-spr" />
+        </span>
+      </span>
+      <span aria-hidden="true" data-ha-moment="bat" className="ha-deco ha-batlane">
+        <span className="ha-bat" />
+      </span>
     </header>
   );
 }
