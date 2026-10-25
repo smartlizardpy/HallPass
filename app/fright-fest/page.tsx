@@ -1,3 +1,4 @@
+import { FRIGHT_FEST_GAMES_ANNOUNCED } from "../components/events/fright-fest/registry";
 /**
  * /fright-fest. STATIC: no clock, no cookies, no headers. The phase line is a
  * client island (FrightFestPhase); the server output is identical for everyone
@@ -49,7 +50,11 @@ export default async function FrightFestPage() {
           <h2 id="ff-games" className="text-xl font-semibold">
             The competition games
           </h2>
-          <FrightFestGames games={featured} />
+          {FRIGHT_FEST_GAMES_ANNOUNCED ? (
+            <FrightFestGames games={featured} />
+          ) : (
+            <p className="text-muted">Three games will be announced soon.</p>
+          )}
         </section>
 
         <section aria-labelledby="ff-comp" className="space-y-3">
@@ -62,7 +67,7 @@ export default async function FrightFestPage() {
             <>
               <p>The Fright Fest competition is coming soon.</p>
               <ol className="list-decimal space-y-1 pl-5">
-                <li>Play the three games above.</li>
+                <li>{FRIGHT_FEST_GAMES_ANNOUNCED ? "Play the three games above." : "Play the three games once they are announced."}</li>
                 <li>How scoring works: details coming soon.</li>
                 <li>How the standings work: details coming soon.</li>
               </ol>

@@ -1,3 +1,4 @@
+import { FRIGHT_FEST_GAMES_ANNOUNCED } from "./events/fright-fest/registry";
 
 /**
  * Fright Fest furniture for the three competition games' store pages: a mode chip
@@ -17,7 +18,7 @@ const EVENT_GAMES: Record<string, { mode: string }> = {
 };
 
 export function eventModeFor(slug: string): string | null {
-  return EVENT_GAMES[slug]?.mode ?? null;
+  return FRIGHT_FEST_GAMES_ANNOUNCED ? (EVENT_GAMES[slug]?.mode ?? null) : null;
 }
 
 /** The chip (and, on Last Bell only, the Room 000 plaque) next to the title. */

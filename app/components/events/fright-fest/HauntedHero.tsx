@@ -9,7 +9,7 @@ import { FRIGHT_FEST_THEME } from "../../../lib/events/fright-fest";
 import { eventDateLabels } from "../../../lib/events/labels";
 
 const LABELS = eventDateLabels(FRIGHT_FEST_THEME);
-import { FRIGHT_FEST_GAMES } from "./registry";
+import { FRIGHT_FEST_GAMES, FRIGHT_FEST_GAMES_ANNOUNCED } from "./registry";
 
 /**
  * The Haunted Arcade hero: a pixel-art night scene, three arcade cabinets, the
@@ -301,7 +301,13 @@ export function HauntedHero({
     };
   }, [phone]);
 
-  const cabs = FRIGHT_FEST_GAMES.map((ff) => ({ ff, game: games.find((g) => g.slug === ff.slug) }));
+  // Unannounced: the same three cabinets, but unnamed and unlinked.
+  const cabs = FRIGHT_FEST_GAMES.map((real) => ({
+    ff: FRIGHT_FEST_GAMES_ANNOUNCED
+      ? real
+      : { ...real, short: "Mystery game", mq: ["???", "???"] as [string, string], acc: "#8f7bb0" },
+    game: FRIGHT_FEST_GAMES_ANNOUNCED ? games.find((g) => g.slug === real.slug) : undefined,
+  }));
   // On a phone lead with the games a phone can play.
   const ordered = phone
     ? [...cabs].sort((a, b) => Number(b.game?.platform !== "desktop") - Number(a.game?.platform !== "desktop"))
@@ -358,7 +364,7 @@ export function HauntedHero({
 
       <div className="ha-cabs">
         {ordered.map(({ ff, game }) => {
-          const label = game ? `${game.title}: ${ff.short}` : `${ff.short}: coming soon`;
+          const label = game ? `${game.title}: ${ff.short}` : `${ff.short}: to be announced`;
           const src = game ? coverImageSrc(game) : null;
           const inner = (
             <>
@@ -377,9 +383,9 @@ export function HauntedHero({
                 {phone && game?.platform === "desktop" && <span className="pc">PC only</span>}
                 {!game && (
                   <span className="off">
-                    Coming
+                    To be
                     <br />
-                    soon
+                    announced
                   </span>
                 )}
               </span>

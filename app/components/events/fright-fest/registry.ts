@@ -19,6 +19,14 @@ export type FrightFestGame = {
   pos: string;
 };
 
+/**
+ * Whether the three games have been announced. While false the site shows three
+ * unnamed mystery cabinets: no titles, no links, no frames or chips on catalogue
+ * cards or store pages. Flip to true on announcement day. Pure data; independent
+ * of the championship flag and of the theme window.
+ */
+export const FRIGHT_FEST_GAMES_ANNOUNCED = false;
+
 export const FRIGHT_FEST_GAMES: readonly FrightFestGame[] = [
   { slug: "last-bell", short: "Halloween Shift", mq: ["Halloween", "Shift"], acc: "#e8e3d3", pos: "center 30%" },
   { slug: "shadow-core-halloween-dash", short: "Cursed Dash", mq: ["Cursed", "Dash"], acc: "#f43f5e", pos: "center 38%" },
@@ -29,5 +37,5 @@ const BY_SLUG = new Map(FRIGHT_FEST_GAMES.map((g) => [g.slug, g] as const));
 
 /** The registry entry for a catalogue slug, or undefined for every ordinary game. */
 export function frightFestGame(slug: string): FrightFestGame | undefined {
-  return BY_SLUG.get(slug);
+  return FRIGHT_FEST_GAMES_ANNOUNCED ? BY_SLUG.get(slug) : undefined;
 }

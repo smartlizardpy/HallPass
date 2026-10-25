@@ -40,7 +40,7 @@ import { CatalogToolbar } from "./CatalogToolbar";
 import { GameListRow } from "./GameListRow";
 import { HauntedHero } from "./events/fright-fest/HauntedHero";
 import { EventBoard } from "./events/fright-fest/EventBoard";
-import { FRIGHT_FEST_GAMES } from "./events/fright-fest/registry";
+import { FRIGHT_FEST_GAMES, FRIGHT_FEST_GAMES_ANNOUNCED } from "./events/fright-fest/registry";
 
 /** Rows of the list view before the championship board. */
 const LIST_FIRST = 8;
@@ -461,7 +461,7 @@ function ArcadeRows({
               </Link>
             </p>
           )}
-          <FramedLegend show={ordered.some((g) => FRIGHT_FEST_GAMES.some((f) => f.slug === g.slug))} />
+          <FramedLegend show={FRIGHT_FEST_GAMES_ANNOUNCED && ordered.some((g) => FRIGHT_FEST_GAMES.some((f) => f.slug === g.slug))} />
           </div>
           {filtered.length === 0 ? (
             <div className="rounded-3xl bg-surface p-16 text-center">
