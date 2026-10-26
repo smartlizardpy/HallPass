@@ -249,12 +249,12 @@
     if (L2.mode === "desk") {
       (M.desk.slots || []).forEach((p, i) => {
         const sl = slots[i]; if (!sl) return;
-        h += cabinetHTML(sl, i, p, cab, M, L2);
+        h += cabinetHTML(sl, i, p, cab, M);
       });
       // tickets (concept B) or play strips are inside cabinetHTML
       if (d.zones && d.zones.panel && !(state.concept === "c")) h += box(d.zones.panel, "panel", panelHTML(slots, L2, false), `role="region" aria-label="Selected machine"`);
     } else {
-      h += phoneMachines(slots, M, d, L2);
+      h += phoneMachines(slots, M, d);
     }
 
     // eggs
@@ -270,7 +270,7 @@
     return { html: h, fg, dims };
   }
 
-  function cabinetHTML(sl, i, p, cab, M, L2) {
+  function cabinetHTML(sl, i, p, cab, M) {
     const on = i === sel;
     const key = sl.key;
     const g = sl.game;
@@ -312,7 +312,7 @@
     return `<div class="scr anim" aria-hidden="true" style="--x:${cab.screen.x};--y:${cab.screen.y};--w:${sz.w / frames};--h:${sz.h};--frames:${frames};--dur:${(frames / 3).toFixed(2)}s;background-image:url('${base()}${f}')"></div>`;
   }
 
-  function phoneMachines(slots, M, d, L2) {
+  function phoneMachines(slots, M, d) {
     const cab = M.desk.cab;
     const p = d.slot;
     const sl = slots[sel] || slots[0];
@@ -452,7 +452,6 @@
 
   function rulesHTML() {
     if (!champOn()) return "";
-    const pts = D.CONFIG.points;
     const bands = [[1, 1, 100], [2, 2, 80], [3, 3, 65], [4, 5, 40], [6, 10, 20], [11, null, 5]];
     return `<section id="rules" class="sec sec-rules frame-paper" aria-labelledby="ru-h">
       <header class="sec-head"><h2 id="ru-h">How Fright Points work</h2></header>
@@ -480,7 +479,6 @@
       return `<div class="current-shot"><p class="cur-note">Live today on hallpass.games (main), captured 26 Oct 2026 at ${L2.mode === "phone" ? "390 px" : "1366 px"}.</p><img src="${shot}" alt="Screenshot of the current Fright Fest page"></div>`;
     }
     // championship branch: the night card plus FrightFestSections, rebuilt from its markup
-    const pub = D.championship(state); const mine = D.me(state, pub);
     const c = D.countdown(Date.parse(D.CONFIG.opensAt), D.nowFor("upcoming"));
     return `<div class="cur-branch"><p class="cur-note">The fright-fest-championship branch (not merged), rebuilt from its components.</p>
       <section class="cb-card cb-scene"><p class="cb-k">HallPass presents</p><h1 class="cb-title">Fright Fest 2026</h1><p>Fright Fest opens on 28 Oct (UK).</p>
@@ -544,7 +542,7 @@
         ${candyHTML()}
         <footer class="foot"><p>Design prototype for review · concept ${state.concept.toUpperCase()} · ${esc(M.title)}. Links do not leave the prototype.</p></footer>
       </div>`;
-    applyZoom(false);
+    applyZoom();
     wire();
     observeAnims();
   }
@@ -555,7 +553,7 @@
   }
 
   // ------------------------------------------------------------------ zoom (concept C)
-  function applyZoom(animate) {
+  function applyZoom() {
     if (state.concept !== "c" || !L2 || L2.mode !== "desk") return;
     const scene = document.querySelector(".scene");
     if (!scene) return;
@@ -655,7 +653,7 @@
       <img src="art/packroom/composite-desk-${state.season === "calm" ? "normal" : "halloween"}.png" alt="The approved Pack Room: a lit prize counter">
       <p>This is the approved Pack Room, <b>Option A · The Prize Counter</b>, being built separately. In production this doorway is a plain link to <code>/packs</code>; the event page never copies the Pack Room.</p>
       <button type="button" class="btn-sec" data-close>Back to the hall</button></div>`;
-    const close = () => { if (site) site.inert = false; pk.hidden = true; pk.innerHTML = ""; from && from.focus && from.focus(); document.removeEventListener("keydown", onKey); };
+    const close = () => { if (site) site.inert = false; pk.hidden = true; pk.innerHTML = ""; if (from && from.focus) from.focus(); document.removeEventListener("keydown", onKey); };
     const onKey = (e) => {
       if (e.key === "Escape") close();
     };
@@ -688,7 +686,7 @@
   }
   document.addEventListener("visibilitychange", () => document.documentElement.classList.toggle("hidden-tab", document.hidden));
 
-  function post(type, payload) { try { parent.postMessage({ type, state: payload }, "*"); } catch (e) { /* standalone */ } }
+  function post(type, payload) { try { parent.postMessage({ type, state: payload }, "*"); } catch { /* standalone */ } }
   window.addEventListener("message", (e) => {
     const d = e.data;
     if (!d || d.type !== "hall-state") return;
@@ -699,7 +697,7 @@
     render();
     if (d.scrollTo) { const el = document.getElementById(d.scrollTo); if (el) el.scrollIntoView(); else window.scrollTo(0, 0); }
   });
-  try { matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", () => render()); } catch (e) { /* old browsers */ }
+  try { matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", () => render()); } catch { /* old browsers */ }
   let rz = 0;
   window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(render, 80); });
   // tick the ticker once a minute
