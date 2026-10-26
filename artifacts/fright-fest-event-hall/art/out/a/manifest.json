@@ -1,0 +1,329 @@
+{
+  "concept": "a",
+  "title": "The Arcade Hall",
+  "desk": {
+    "w": 434,
+    "h": 230,
+    "scale": 3,
+    "files": {
+      "haunted": "desk-haunted.png",
+      "calm": "desk-calm.png"
+    },
+    "layers": [],
+    "cab": {
+      "w": 58,
+      "h": 96,
+      "screen": {
+        "x": 8,
+        "y": 18,
+        "w": 42,
+        "h": 32
+      },
+      "button": {
+        "x": 5,
+        "y": 68,
+        "w": 48,
+        "h": 15
+      }
+    },
+    "cab_files": {
+      "pattern": "cab-<key>-<off|on>.png",
+      "scr": "scr-<key>.png",
+      "mystery_calm": [
+        "cab-mystery-off-calm.png",
+        "cab-mystery-on-calm.png",
+        "scr-mystery-calm.png"
+      ],
+      "note": "the mystery cabinet has orange eyes in the haunted season; use the -calm files (yellow eyes) when haunted is off"
+    },
+    "slots": [
+      {
+        "x": 118,
+        "y": 60
+      },
+      {
+        "x": 188,
+        "y": 60
+      },
+      {
+        "x": 258,
+        "y": 60
+      }
+    ],
+    "pool": {
+      "dx": -11,
+      "dy": 96,
+      "w": 80,
+      "h": 10,
+      "file": "pool-on.png"
+    },
+    "zones": {
+      "board": {
+        "x": 8,
+        "y": 10,
+        "w": 94,
+        "h": 96,
+        "calm": {
+          "x": 15,
+          "y": 30,
+          "w": 80,
+          "h": 68
+        }
+      },
+      "quest": {
+        "x": 10,
+        "y": 110,
+        "w": 92,
+        "h": 42,
+        "calm": {
+          "x": 16,
+          "y": 134,
+          "w": 80,
+          "h": 14
+        }
+      },
+      "prize": {
+        "x": 334,
+        "y": 24,
+        "w": 94,
+        "h": 132,
+        "calm": {
+          "x": 346,
+          "y": 160,
+          "w": 70,
+          "h": 14
+        }
+      },
+      "sign": {
+        "x": 142,
+        "y": 4,
+        "w": 150,
+        "h": 38
+      },
+      "ticker": {
+        "x": 156,
+        "y": 44,
+        "w": 122,
+        "h": 10
+      },
+      "panel": {
+        "x": 112,
+        "y": 166,
+        "w": 210,
+        "h": 58
+      }
+    },
+    "anims": [
+      {
+        "file": "anim-marquee-haunted.png",
+        "x": 142,
+        "y": 4,
+        "frames": 3,
+        "fps": 4,
+        "season": "haunted"
+      },
+      {
+        "file": "anim-marquee-calm.png",
+        "x": 142,
+        "y": 4,
+        "frames": 3,
+        "fps": 4,
+        "season": "calm"
+      },
+      {
+        "file": "anim-doorlight.png",
+        "x": 326,
+        "y": 52,
+        "frames": 2,
+        "fps": 3,
+        "season": "haunted",
+        "note": "opaque tiles cut from the scene; replaces the doorway interior and spill"
+      },
+      {
+        "file": "anim-ghost.png",
+        "x": 311,
+        "y": 86,
+        "frames": 4,
+        "fps": 4,
+        "season": "haunted",
+        "note": "opaque tiles; sits BEHIND the slot-3 cabinet sprite"
+      },
+      {
+        "file": "anim-dust.png",
+        "x": 338,
+        "y": 60,
+        "frames": 3,
+        "fps": 4,
+        "season": "both",
+        "note": "transparent motes in the door light"
+      }
+    ],
+    "eggs": [
+      {
+        "name": "ghost",
+        "x": 313,
+        "y": 88,
+        "w": 12,
+        "h": 15,
+        "season": "haunted",
+        "note": "peeking from behind slot 3"
+      },
+      {
+        "name": "pumpkin",
+        "x": 322,
+        "y": 147,
+        "w": 10,
+        "h": 9,
+        "season": "haunted",
+        "note": "by the prize door"
+      },
+      {
+        "name": "room000",
+        "x": 317,
+        "y": 127,
+        "w": 18,
+        "h": 10,
+        "season": "both",
+        "note": "tiny brass ROOM 000 plate on the wainscot"
+      }
+    ]
+  },
+  "phone": {
+    "w": 195,
+    "h": 236,
+    "scale": 2,
+    "files": {
+      "haunted": "phone-haunted.png",
+      "calm": "phone-calm.png"
+    },
+    "slot": {
+      "x": 68,
+      "y": 96
+    },
+    "pool": {
+      "dx": -11,
+      "dy": 96
+    },
+    "zones": {
+      "sign": {
+        "x": 22,
+        "y": 4,
+        "w": 150,
+        "h": 30
+      },
+      "ticker": {
+        "x": 34,
+        "y": 36,
+        "w": 126,
+        "h": 9
+      },
+      "panel": {
+        "x": 0,
+        "y": 198,
+        "w": 195,
+        "h": 38
+      },
+      "board_glimpse": {
+        "x": 0,
+        "y": 96,
+        "w": 22,
+        "h": 90
+      },
+      "prize_glimpse": {
+        "x": 170,
+        "y": 60,
+        "w": 25,
+        "h": 132
+      },
+      "window": {
+        "x": 3,
+        "y": 40,
+        "w": 28,
+        "h": 44
+      }
+    },
+    "anims": [
+      {
+        "file": "anim-marquee-phone-haunted.png",
+        "x": 22,
+        "y": 4,
+        "frames": 3,
+        "fps": 4,
+        "season": "haunted"
+      },
+      {
+        "file": "anim-marquee-phone-calm.png",
+        "x": 22,
+        "y": 4,
+        "frames": 3,
+        "fps": 4,
+        "season": "calm"
+      }
+    ]
+  },
+  "elements": {
+    "board": {
+      "file": "el-board.png",
+      "calm_file": "el-board-calm.png",
+      "w": 94,
+      "h": 96,
+      "calm": {
+        "x": 7,
+        "y": 20,
+        "w": 80,
+        "h": 68
+      }
+    },
+    "quest": {
+      "file": "el-quest.png",
+      "calm_file": "el-quest-calm.png",
+      "w": 96,
+      "h": 72,
+      "calm": {
+        "x": 6,
+        "y": 54,
+        "w": 84,
+        "h": 14
+      }
+    },
+    "prize": {
+      "file": "el-prize.png",
+      "calm_file": "el-prize-calm.png",
+      "w": 94,
+      "h": 150,
+      "calm": {
+        "x": 12,
+        "y": 136,
+        "w": 70,
+        "h": 14
+      }
+    }
+  },
+  "frames": {
+    "board": {
+      "file": "frame-board.png",
+      "slice": 16,
+      "fill": "#0b0612"
+    },
+    "quest": {
+      "file": "frame-quest.png",
+      "slice": 16,
+      "fill": "#170b1f"
+    },
+    "prize": {
+      "file": "frame-prize.png",
+      "slice": 16,
+      "fill": "#170b1f"
+    },
+    "paper": {
+      "file": "frame-paper.png",
+      "slice": 16,
+      "fill": "#fff8e7"
+    }
+  },
+  "tile": "tile-wall.png",
+  "palette": {
+    "colours": 40,
+    "notes": "per-scene counts in NOTES.md: {\"desk-haunted\": 40, \"desk-calm\": 33, \"phone-haunted\": 38, \"phone-calm\": 31}"
+  }
+}
