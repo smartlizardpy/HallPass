@@ -89,6 +89,8 @@ export function OpeningLayer({
     }
     const release = acquireOverlayLock();
     const back = document.activeElement as HTMLElement | null;
+    // The button that opened us is inert now; hold focus in the dialog until the pack has landed and can take it.
+    self?.focus({ preventScroll: true });
     reduced.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     return () => {
       for (const el of made) (el as HTMLElement).inert = false;
