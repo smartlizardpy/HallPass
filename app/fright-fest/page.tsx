@@ -59,16 +59,19 @@ export default async function FrightFestPage() {
 
   return (
     <ArcadeShell games={all} categories={categories} activeCategory="">
-      <div className="w-full pb-12">
+      <div className="w-full">
         <Room cabinets={cabinets} summary={SUMMARY} candy={candy} />
-        <div className="ff-page mx-auto w-full max-w-4xl px-3 pt-4 sm:px-8">
+        {/* The hall's wall carries on under the room, full width; `.ff-page` holds the arcade palette (sections.css). */}
+        <div className="ff-wall">
+        <div className="ff-page">
           {SUMMARY ? (
             <FrightFestSections summary={SUMMARY} rewards={rewards} afterProgress={candy ? <CandyHunt candy={candy} /> : null} />
           ) : (
-            <section id="rules" className="rounded-2xl border border-border bg-surface p-6 text-center">
-              <p className="text-base font-bold">Games, scoring and rewards: to be announced.</p>
+            <section id="rules" className="ar-sec ar-board ar-tba">
+              <p>Games, scoring and rewards: to be announced.</p>
             </section>
           )}
+        </div>
         </div>
       </div>
     </ArcadeShell>

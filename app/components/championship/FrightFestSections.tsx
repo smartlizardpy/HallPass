@@ -51,10 +51,11 @@ export function FrightFestSections({
 }) {
   const bands = pointBands(s);
   return (
-    <div className="mt-6 space-y-6">
+    <div className="ar-stack">
       <PhaseBanner summary={s} />
-      <ChampionshipStandings summary={s} />
-      <MyChampionship summary={s} />
+      <ChampionshipStandings summary={s}>
+        <MyChampionship summary={s} />
+      </ChampionshipStandings>
       {afterProgress}
 
       <div className="grid gap-6 md:grid-cols-2">
