@@ -188,3 +188,27 @@ exactly as they are. This is presentation only.
   - check the Open button's bottom edge against the 640 px fold;
   - check focus order, Escape, and the inert room;
   - screenshot every beat.
+
+### As built (26 Oct 2026)
+
+- Built in the order above, one commit per step, plus a fix found by the
+  browser checks: the Open button goes inert when the layer opens, so focus
+  fell to `<body>` during the flight; the layer now holds it until the pack
+  lands.
+- Playwright against the lab on the dev server, at 1366×768 and 1280×720
+  (laptop) and 390×844 and 360×740 (phone, touch), each once in the Fright Fest
+  season with motion and once in the normal season with reduced motion. Each
+  run: Open from the room, tear by dragging (a touch drag on phones), turn all
+  three, the results, back to the room (sealed count down by one, recent pulls
+  updated, focus back on Open); then Open it, the results, Next pack, Escape
+  puts it back; then the browser's Back closes a layer. All eight pass with no
+  console errors and nothing overflowing the layer sideways. Open's bottom edge
+  sits at 638 px at 1366×768 and 607 px at 1280×720.
+- `npm test`: the collectibles suites pass; the two files named above still
+  fail, as before. `npm run lint`: no errors in anything this branch touches;
+  50 errors remain in `public/games/last-bell/` (its bundled three.js and game
+  scripts), the same on `collectibles-pack-opening`.
+- Not done: a real phone, a real screen reader, Safari. In a desktop browser
+  window narrowed to 390 px (no touch) the site header is 477 px wide on every
+  page, so the page scrolls sideways; with touch, as on a phone, it fits. That
+  predates this work and is left alone here.

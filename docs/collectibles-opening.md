@@ -71,7 +71,7 @@ The cards stay DOM, for pixel art at whole-number scales, real text and accessib
 | Timelines | extraction, deal, flip, summary (Web Animations API) | `opening/OpeningFlow.tsx`, `opening/RevealCard.tsx`, `opening/placement.ts`, `opening/motion.ts` |
 | Sound / haptics | gesture-linked cues | `opening/sound.ts`, `opening/haptics.ts` |
 | Card materials | uniform back, tilt-reactive foil | `Card.tsx`, `holo.css`, `useCardTilt.ts` |
-| Pack Room shelf | the same print, as a 2D canvas | `PackPrint.tsx`, `PackRoom.tsx` |
+| Pack Room | the prize counter, the packs as prints, the opening over the room | `room/PrizeCounter.tsx`, `room/OpeningLayer.tsx`, `room/geometry.ts`, `room/room.css` (see `collectibles-pack-room.md`) |
 | Backend result | unchanged | `/api/v1/collection/packs/<id>/open` |
 
 ### Stages
@@ -125,15 +125,17 @@ The cards stay DOM, for pixel art at whole-number scales, real text and accessib
 | Opened | The strip flies off with the release velocity. The wrapper loosens, lowers, and the face-down stack shows in the mouth. | 520 ms, then ~0.6 s |
 | Extracting | The stack is drawn up out of the wrapper (DOM cards between the interior and the canvas front wall). | 0.7 s |
 | Dealing | The cards are dealt from the stack to their places while the wrapper drops away. | 120 ms stagger, 620 ms each |
-| Revealing | Every back is identical. A turn lifts, rotates and settles the card in 860 ms; the face shows at 52 % for every card. Only then does the rarity moment play (0 / 650 / 1000 / 1200 / 1500 ms, common to legendary). Rarest last. | player-driven |
-| Summary | The hand (a row on wide screens, a fan on phones), NEW / Duplicate, collection progress, Open another pack, See your binder, Pack Room, Back to HallPass. | |
+| Revealing | One card at a time, rarest last. Every back is identical. A turn lifts, rotates and settles the card in 860 ms; the face shows at 52 % for every card. Only then does the rarity moment play (0 / 650 / 1000 / 1200 / 1500 ms, common to legendary), with a plate naming the rarity (rare and up), a light behind the card, rays (epic, legendary), and "New for your binder" or "Already in your binder" under it. One button: Turn it over, Next card, See all three. | player-driven |
+| Summary | The best pull in the middle, larger (Best pull badge, rare and up), the others either side; Pack opened, N new for your binder; the set's progress, a segment per card, this pack's new ones lighting up; See them in your binder, Back to the Pack Room, Next pack (n left), How rare is this? | |
 
 ### Screens
 
-- **Wide** (three medium cards fit across): a row; only the next card is a button; the summary follows ~0.7 s after the last turn settles.
-- **Phones** (`chooseFit` in `placement.ts`): one card in front, as large as the height allows (lg, md, then sm), the face-down rest stacked behind, seen cards in a tray below. Tap turns over, then tap or swipe moves on. The card in front takes every touch (`touch-action: none`) so a swipe never scrolls the page.
+Every screen turns the cards over one at a time (`chooseFit` and `placeCards` in `placement.ts`). The card in front sits between room for its plate above and its tag below, as large as the height allows, shrinking by up to a tenth before a smaller size is used; the face-down rest are stacked just behind it. Tap (or the button) turns it over, then tap, swipe or the button moves on. The card in front takes every touch (`touch-action: none`) so a swipe never scrolls the page.
+
+- **Laptops**: the extra-large card (300×420) where there is width, the large one on a Chromebook's shorter screen; the seen cards go to a tray beside it. The results are two columns: the cards, and what they mean.
+- **Phones**: the large card (260×364); the seen cards fade behind it and dots count them. The results scroll: heading, the best pull, a list of all of them (New or Had it), progress, buttons.
 - **Short and wide** (a phone on its side): the title, chips and buttons stand in a column beside the table, the tray sits beside the card, and the card in front shrinks (to no less than 0.6) to fit.
-- The stage fills the screen below the site header and above the tab bar (`--ho-top`, `--hp-bottom-chrome`), so no phone scrolls mid-opening. Checked at 390×844, 320×568 and 844×390.
+- In the Pack Room the opening plays in a full-screen layer over the room (`room/OpeningLayer.tsx`), so no phone scrolls mid-opening. On its own (the lab's `view=open`) the stage fills the screen below the site header and above the tab bar (`--ho-top`, `--hp-bottom-chrome`).
 
 ### Measurements
 
@@ -169,9 +171,8 @@ Headless Chromium with **software WebGL (SwiftShader)** on the dev server (React
 - Nobody has listened to the synthesised sounds; their levels (peaks about −11 to −14 dBFS) are computed, not judged.
 - The touch tear was only driven in Chromium (CDP touch events); WebKit was run with Open it and taps.
 - Two tabs on one pack were only checked against the lab's per-tab mock, which cannot prove the real server's idempotency; the route's own tests cover that.
-- The turning card briefly overlaps "Card N of 3" above it on phones.
 
 ### Preview
 
 `npm run dev`, then `/packs/lab` (development only; it 404s in production):
-`?view=pack&id=<pack id>` is the pack on its own with a bench (Auto tear, Loosen, Tug, Drop away), `?view=room` is the Pack Room, and `?view=open&pack=11111111-2222-4333-8444-5555555555NN` (NN 01–06) is an opening against a mocked player. Add `reset=1` to reseal, `slow=<ms>`, `fail=<n>` or `state=signedout`.
+`?view=pack&id=<pack id>` is the pack on its own with a bench (Auto tear, Loosen, Tug, Drop away), `?view=room` is the Pack Room (Open plays the opening over it, at `?view=room&pack=<id>`), and `?view=open&pack=11111111-2222-4333-8444-5555555555NN` (NN 01–06) is an opening on its own against a mocked player. Add `reset=1` to reseal, `slow=<ms>`, `fail=<n>` or `state=signedout`.

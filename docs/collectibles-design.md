@@ -74,7 +74,7 @@ Slot         = { kind: 'fixed', collectible } | { kind: 'random', pool, rarityWe
 | "Epic or better" | — | — | — | 80% | 20% |
 
 Within a rarity every eligible card is equally likely. Duplicates are possible
-and are shown as duplicates.
+and are shown as such ("Already in your binder").
 
 ### Packs at launch
 
@@ -155,11 +155,13 @@ The catalogue itself needs no API: it is static data, imported by the pages.
 
 ## 5. Interface
 
-Routes: **`/packs`** (Pack Room), **`/packs/open?pack=<id>`** (opening, its
-own route so its JS loads only there; ONE static page for every pack, with the
-id in the query string read only by the client, so an opening never costs a
-server render and an unknown id cannot fill a cache), **`/collection`**
-(binder), and
+Routes: **`/packs`** (the Pack Room, a prize counter; a pack opens over the
+room at **`/packs?pack=<id>`**, the id in the query string read only by the
+client, so an opening never costs a server render and an unknown id cannot
+fill a cache; the opening's code loads only when a pack is pointed at or
+opened, see `collectibles-pack-room.md`), **`/packs/open?pack=<id>`** (the old
+address, kept for links already out there: the room with that opening
+playing), **`/collection`** (binder), and
 **`/collectibles/<id>`** (a public, static page per card for sharing, with no
 owner information).
 
