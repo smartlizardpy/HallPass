@@ -74,6 +74,7 @@ import {
 } from "@/app/components/profile/AchievementWall";
 import { FriendButton } from "@/app/components/profile/FriendButton";
 import { ProfileHeader } from "@/app/components/profile/ProfileHeader";
+import { ProfileShowcase } from "@/app/components/collectibles/ProfileShowcase";
 import { ReportButton } from "@/app/components/profile/ReportButton";
 import {
   RecentPlays,
@@ -281,6 +282,8 @@ export default async function ProfilePage({
           </section>
         )}
 
+        {/* A client island over `/api/`: it renders nothing unless the profile has featured cards. */}
+        <ProfileShowcase username={full.username} />
         <AchievementWall groups={groupByGame(earned, gameBySlug)} />
         <RecentPlays plays={plays} />
       </>

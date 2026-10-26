@@ -248,6 +248,9 @@ export function AccountMenu() {
           <MenuLink href="/play/you" onNavigate={goTo("/play/you")}>
             Your profile
           </MenuLink>
+          <MenuLink href="/collection" onNavigate={goTo("/collection")}>
+            Collection
+          </MenuLink>
           {/* Sits in the same slot as Dashboard: the one entry that is only
               there because of who you are. A tester who is also an admin sees
               both — they are different jobs, not two names for one. */}
