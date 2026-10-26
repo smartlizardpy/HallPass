@@ -231,3 +231,36 @@ together with the hall and the backend.
   css), because it belongs to the event page and not to the championship.
 - **Excluded:** any change to the candy API, store, schema or dashboard; new art;
   changes to `/packs`.
+
+### As built: the section on /fright-fest
+
+Code is in `app/fright-fest/hall/candy/` (the event page's own folder, not
+`components/championship`, which stays free of candy imports): `props.ts`
+(server-built plain props from the candy config and catalogue), `logic.ts`
+(phase, noticeboard words, button states, spend-response wording; unit-tested),
+`CandyHunt.tsx` (the island), `CandyStatus.tsx` (the noticeboard status) and
+`candy.css` (the shelf grid only). `FrightFestSections` takes an `afterProgress`
+slot that `page.tsx` fills; `CANDY_HUNT_OPEN` is now `true`; the plate links to
+`#candy`; `sections.css` frames `#candy` like the prize frame under the haunted
+skin. It ships in the Fright Fest 2026 PR with the hall and the backend.
+
+Decisions:
+- `/fright-fest` stays static. The server render has the rules, earn table and
+  shop with prices; `GET /api/v1/candy/me` is fetched after hydration.
+- The phase comes from the API's `earn.open` / `spend.open` flags once they have
+  arrived, and from the device clock (to the minute) before that. Display only;
+  the database clock decides a spend.
+- Buying is an inline confirm. The `requestId` is minted when it opens and kept
+  for retries of that purchase (a 503 or a dropped connection keeps the confirm
+  open with "Try again"). Escape and Cancel return focus to the item's Buy button.
+- After a successful buy `/me` is read again quietly to refresh "Recent" (this
+  runs the sync again, which is idempotent).
+- A shelf item's affordability is computed from the balance and the static price,
+  not read from the API's `shop`.
+- The "+N new" badge shows the amount of candy credited by that load.
+
+Known issues:
+- The noticeboard status comes from the device clock, so a wrong device clock can
+  show the wrong word there (the section's buttons use the server's flags once
+  they arrive).
+- Pack names on the shelves come from the catalogue as they are.
