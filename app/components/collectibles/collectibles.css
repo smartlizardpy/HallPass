@@ -1,0 +1,716 @@
+/*
+ * HallPass Collectibles — the design system: "stickers slapped on a locker".
+ *
+ * Die-cut stickers and cards with a cream peel border and a hard ink "thickness"
+ * shadow, pixel art inside at whole-number scale. Rarity is a MATERIAL, never
+ * colour alone: each step changes the cut, the pattern and the finish, and every
+ * card also carries a text pill and a 1-5 pip row, readable in greyscale.
+ *
+ *   common     round-cornered sticker   no pattern     flat
+ *   uncommon   notched corner           dashed line    one static glint
+ *   rare       stepped pixel corners    diagonal hatch sheen band (moves on hover/focus)
+ *   epic       scalloped top edge       dot grid       pointer-driven holo
+ *   legendary  crown notch              sunburst       prism foil + sparkles, one slow loop
+ *
+ * Tokens are `--hc-*` on `.hc-root` (every component root carries it). No base
+ * site token is reassigned. Cards are physical objects, so they look the same in
+ * light and dark; only the shadow and the surfaces they sit on change, in both
+ * the attribute and the media form.
+ *
+ * Performance (school Chromebooks): transform and opacity animate, nothing else
+ * does on a loop; the holo layer repaints only on the card under the pointer;
+ * the one loop (legendary) runs only when the component asks for it and pauses
+ * off-screen; no blur on large areas. Reduced motion keeps every rarity cue and
+ * drops the movement.
+ */
+
+.hc-root {
+  --hc-peel: #fff8e7;
+  --hc-peel-2: #f3e6c4;
+  --hc-ink: #23153a;
+  --hc-ink-soft: rgba(35, 21, 58, 0.72);
+  --hc-shadow: rgba(35, 21, 58, 0.9);
+  --hc-surface: #f4efe3;
+  --hc-surface-2: #e9e1cd;
+  --hc-r-common: #7d879b;
+  --hc-r-uncommon: #23955f;
+  --hc-r-rare: #2a6fe0;
+  --hc-r-epic: #8f35e6;
+  --hc-r-legendary: #d99a00;
+  --hc-new: #ff4f6d;
+  font-family: var(--font-nunito), system-ui, sans-serif;
+}
+:root[data-theme="dark"] .hc-root {
+  --hc-shadow: rgba(0, 0, 0, 0.85);
+  --hc-surface: #221a33;
+  --hc-surface-2: #2d2442;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .hc-root {
+    --hc-shadow: rgba(0, 0, 0, 0.85);
+    --hc-surface: #221a33;
+    --hc-surface-2: #2d2442;
+  }
+}
+
+/* ── Sizes (5:7). The art box holds the art at a whole-number scale. ── */
+.hc-card,
+.hc-back,
+.hc-locked {
+  --w: 140px;
+  --h: 196px;
+  --art: 96px;
+  --cap: 13px;
+  position: relative;
+  display: inline-block;
+  width: var(--w);
+  height: var(--h);
+  flex: none;
+}
+:is(.hc-card, .hc-back, .hc-locked)[data-size="md"] {
+  --w: 200px;
+  --h: 280px;
+  --art: 144px;
+  --cap: 16px;
+}
+:is(.hc-card, .hc-back, .hc-locked)[data-size="lg"] {
+  --w: 260px;
+  --h: 364px;
+  --art: 192px;
+  --cap: 19px;
+}
+/* 32 px art: ×3 / ×4 / ×6. 48 px art: ×2 / ×3 / ×4. */
+.hc-card[data-art="32"][data-size="md"] {
+  --art: 128px;
+}
+
+/* ── The die-cut: peel border with the rarity's silhouette ── */
+.hc-cut {
+  position: absolute;
+  inset: 0;
+  border-radius: 18px;
+  filter: drop-shadow(0 3px 0 var(--hc-shadow));
+}
+.hc-shape {
+  position: absolute;
+  inset: 0;
+  background: var(--hc-peel);
+  border-radius: inherit;
+}
+[data-rarity="uncommon"] .hc-shape {
+  border-radius: 14px;
+  clip-path: polygon(0 0, calc(100% - 26px) 0, 100% 26px, 100% 100%, 0 100%);
+}
+[data-rarity="rare"] .hc-shape {
+  border-radius: 0;
+  clip-path: polygon(
+    10px 0, calc(100% - 10px) 0, calc(100% - 10px) 5px, calc(100% - 5px) 5px, calc(100% - 5px) 10px, 100% 10px,
+    100% calc(100% - 10px), calc(100% - 5px) calc(100% - 10px), calc(100% - 5px) calc(100% - 5px), calc(100% - 10px) calc(100% - 5px),
+    calc(100% - 10px) 100%, 10px 100%, 10px calc(100% - 5px), 5px calc(100% - 5px), 5px calc(100% - 10px), 0 calc(100% - 10px),
+    0 10px, 5px 10px, 5px 5px, 10px 5px
+  );
+}
+[data-rarity="epic"] .hc-shape {
+  border-radius: 0 0 16px 16px;
+  -webkit-mask: radial-gradient(circle at 50% 0, transparent 7px, #000 7.5px) 0 0 / 18px 100% repeat-x;
+  mask: radial-gradient(circle at 50% 0, transparent 7px, #000 7.5px) 0 0 / 18px 100% repeat-x;
+}
+[data-rarity="legendary"] .hc-shape {
+  border-radius: 0 0 16px 16px;
+  clip-path: polygon(
+    0 16px, 22% 16px, 31% 2px, 40% 14px, 50% 0, 60% 14px, 69% 2px, 78% 16px, 100% 16px, 100% 100%, 0 100%
+  );
+}
+
+/* ── The face: collection colour, rarity pattern, art, caption ── */
+.hc-face {
+  position: absolute;
+  inset: 7px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--hc-base);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  justify-items: center;
+}
+[data-rarity="rare"] .hc-face {
+  inset: 9px;
+  border-radius: 3px;
+}
+/* The face follows the notch, leaving a 5 px peel along the cut. */
+[data-rarity="uncommon"] .hc-face {
+  clip-path: polygon(0 0, calc(100% - 19px) 0, 100% 19px, 100% 100%, 0 100%);
+}
+[data-rarity="epic"] .hc-face,
+[data-rarity="legendary"] .hc-face {
+  top: 17px;
+}
+[data-rarity="uncommon"] .hc-face {
+  outline: 2px dashed rgba(255, 248, 231, 0.55);
+  outline-offset: -6px;
+}
+[data-rarity="rare"] .hc-face {
+  background-image: repeating-linear-gradient(45deg, transparent 0 7px, rgba(255, 255, 255, 0.09) 7px 9px);
+}
+[data-rarity="epic"] .hc-face {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.16) 1.1px, transparent 1.6px);
+  background-size: 9px 9px;
+}
+[data-rarity="legendary"] .hc-face {
+  background-image: repeating-conic-gradient(from 0deg at 50% 42%, rgba(255, 216, 74, 0.2) 0 7deg, transparent 7deg 20deg);
+}
+
+.hc-num {
+  justify-self: start;
+  margin: 6px 0 0 8px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.32);
+  color: var(--hc-peel);
+  font-family: var(--font-pixel), monospace;
+  font-size: calc(var(--cap) * 0.62);
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+}
+.hc-art {
+  align-self: center;
+  width: var(--art);
+  height: var(--art);
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  position: relative;
+  z-index: 1;
+}
+.hc-cap {
+  width: 100%;
+  padding: 5px 8px 7px;
+  background: var(--hc-peel);
+  color: var(--hc-ink);
+  text-align: center;
+  position: relative;
+  z-index: 2;
+}
+.hc-name {
+  display: block;
+  font-weight: 900;
+  font-size: var(--cap);
+  line-height: 1.12;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hc-meta {
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.hc-pill {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--hc-rc);
+  color: #fff;
+  font-weight: 900;
+  font-size: calc(var(--cap) * 0.66);
+  line-height: 1.55;
+}
+.hc-pips {
+  display: inline-flex;
+  gap: 2px;
+}
+.hc-pips i {
+  width: calc(var(--cap) * 0.42);
+  height: calc(var(--cap) * 0.42);
+  border-radius: 2px;
+  border: 1.5px solid var(--hc-ink);
+  background: transparent;
+}
+.hc-pips i.on {
+  background: var(--hc-ink);
+}
+[data-size="sm"] .hc-pips {
+  display: none;
+}
+
+[data-rarity="common"] {
+  --hc-rc: var(--hc-r-common);
+}
+[data-rarity="uncommon"] {
+  --hc-rc: var(--hc-r-uncommon);
+}
+[data-rarity="rare"] {
+  --hc-rc: var(--hc-r-rare);
+}
+[data-rarity="epic"] {
+  --hc-rc: var(--hc-r-epic);
+}
+[data-rarity="legendary"] {
+  --hc-rc: var(--hc-r-legendary);
+}
+
+/* ── Finishes ── */
+.hc-foil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  mix-blend-mode: overlay;
+}
+/* Uncommon: one static glint. */
+[data-rarity="uncommon"] .hc-foil {
+  background: linear-gradient(125deg, transparent 18%, rgba(255, 255, 255, 0.55) 22%, transparent 27%);
+}
+/* Rare: a sheen band that crosses on hover or focus. */
+[data-rarity="rare"] .hc-foil {
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.6) 50%, transparent 62%) 120% 0 / 250% 100% no-repeat;
+  transition: background-position 700ms ease;
+}
+[data-rarity="rare"]:is(:hover, :focus-visible, [data-live]) .hc-foil,
+:focus-visible > [data-rarity="rare"] .hc-foil {
+  background-position: -20% 0;
+}
+/* Epic: holo follows the pointer (--mx/--my from useHolo), static otherwise. */
+[data-rarity="epic"] .hc-foil {
+  background:
+    linear-gradient(
+        115deg,
+        transparent 20%,
+        rgba(255, 92, 205, 0.55) 34%,
+        rgba(92, 225, 255, 0.55) 46%,
+        rgba(255, 238, 92, 0.55) 58%,
+        transparent 72%
+      )
+      var(--mx, 40%) var(--my, 40%) / 220% 220% no-repeat;
+  opacity: 0.75;
+}
+/* Legendary: prism foil plus sparkles; the loop only where asked for. */
+[data-rarity="legendary"] .hc-foil {
+  background:
+    conic-gradient(
+        from 200deg at var(--mx, 50%) var(--my, 40%),
+        rgba(255, 92, 92, 0.5),
+        rgba(255, 216, 74, 0.5),
+        rgba(92, 255, 160, 0.5),
+        rgba(92, 200, 255, 0.5),
+        rgba(190, 120, 255, 0.5),
+        rgba(255, 92, 92, 0.5)
+      );
+  opacity: 0.6;
+}
+.hc-spark {
+  position: absolute;
+  z-index: 3;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--hc-peel), var(--hc-peel)) 50% 0 / 2px 100% no-repeat,
+    linear-gradient(var(--hc-peel), var(--hc-peel)) 0 50% / 100% 2px no-repeat;
+}
+.hc-spark:nth-of-type(1) {
+  top: 22%;
+  left: 14%;
+}
+.hc-spark:nth-of-type(2) {
+  top: 34%;
+  right: 12%;
+  transform: scale(0.7);
+}
+.hc-spark:nth-of-type(3) {
+  top: 58%;
+  left: 20%;
+  transform: scale(0.55);
+}
+[data-loop="on"] .hc-foil {
+  animation: hc-prism 7s linear infinite;
+}
+[data-loop="on"] .hc-spark {
+  animation: hc-twinkle 2.4s ease-in-out infinite;
+}
+[data-loop="on"] .hc-spark:nth-of-type(2) {
+  animation-delay: 0.8s;
+}
+[data-loop="on"] .hc-spark:nth-of-type(3) {
+  animation-delay: 1.6s;
+}
+[data-loop="paused"] .hc-foil,
+[data-loop="paused"] .hc-spark {
+  animation-play-state: paused;
+}
+@keyframes hc-prism {
+  to {
+    filter: hue-rotate(360deg);
+  }
+}
+@keyframes hc-twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ── Badges on the card ── */
+.hc-badge {
+  position: absolute;
+  z-index: 4;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 2px solid var(--hc-ink);
+  font-weight: 900;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.hc-badge-new {
+  top: -7px;
+  right: -6px;
+  background: var(--hc-new);
+  color: #fff;
+  transform: rotate(6deg);
+}
+.hc-badge-copies {
+  bottom: -7px;
+  right: -6px;
+  background: var(--hc-peel);
+  color: var(--hc-ink);
+}
+.hc-demo {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: calc(100% - 7px);
+  transform: translate(-50%, 50%);
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--hc-ink);
+  color: var(--hc-peel);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.6;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+[data-rarity="epic"] .hc-demo,
+[data-rarity="legendary"] .hc-demo {
+  bottom: calc(100% - 17px);
+}
+
+/* Lift on hover/focus when the card is a control. */
+.hc-hit {
+  display: inline-block;
+  border-radius: 20px;
+  transition: transform 160ms ease;
+}
+.hc-hit:hover,
+.hc-hit:focus-visible {
+  transform: translateY(-3px) rotate(-1deg);
+}
+.hc-hit:focus-visible {
+  outline: 3px solid var(--brand, #7c2eef);
+  outline-offset: 4px;
+}
+
+/* ── Locked silhouette (a card you do not own yet) ── */
+.hc-locked .hc-cut {
+  background: transparent;
+  filter: none;
+}
+.hc-locked .hc-shape {
+  background: var(--hc-surface-2);
+  outline: 2px dashed var(--hc-ink-soft);
+  outline-offset: -6px;
+}
+.hc-locked-mark {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  color: var(--hc-ink-soft);
+  text-align: center;
+}
+:root[data-theme="dark"] .hc-locked-mark {
+  color: rgba(255, 248, 231, 0.6);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .hc-locked-mark {
+    color: rgba(255, 248, 231, 0.6);
+  }
+}
+.hc-locked-q {
+  font-family: var(--font-pixel), monospace;
+  font-size: calc(var(--cap) * 2.4);
+  line-height: 1;
+}
+.hc-locked-n {
+  font-family: var(--font-pixel), monospace;
+  font-size: calc(var(--cap) * 0.7);
+}
+.hc-locked-r {
+  font-weight: 900;
+  font-size: calc(var(--cap) * 0.75);
+}
+
+/* ── Card back (face down, before the reveal). The glow is the TRUE rarity. ── */
+.hc-back .hc-face {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 248, 231, 0.12) 0 24%, transparent 25%),
+    repeating-linear-gradient(-45deg, rgba(255, 248, 231, 0.07) 0 8px, transparent 8px 16px),
+    var(--hc-ink);
+  outline: none;
+}
+.hc-back-mark {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  color: var(--hc-peel);
+  font-weight: 900;
+  font-size: calc(var(--cap) * 1.35);
+  letter-spacing: -0.02em;
+}
+.hc-back-mark b {
+  display: block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 2px solid var(--hc-peel);
+  transform: rotate(-6deg);
+}
+.hc-back[data-rarity] .hc-cut {
+  filter: drop-shadow(0 3px 0 var(--hc-shadow)) drop-shadow(0 0 var(--glow, 0px) var(--hc-rc));
+  transition: filter 400ms ease;
+}
+.hc-back[data-rarity="rare"] {
+  --glow: 6px;
+}
+.hc-back[data-rarity="epic"] {
+  --glow: 10px;
+}
+.hc-back[data-rarity="legendary"] {
+  --glow: 14px;
+}
+
+/* ── Flip (reveal) ── */
+.hc-flip {
+  position: relative;
+  display: inline-block;
+  perspective: 900px;
+}
+.hc-flip-inner {
+  position: relative;
+  display: grid;
+  transform-style: preserve-3d;
+  transition: transform var(--flip-ms, 550ms) cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.hc-flip-inner > * {
+  grid-area: 1 / 1;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.hc-flip-inner > .hc-card {
+  transform: rotateY(180deg);
+}
+.hc-flip[data-flipped] .hc-flip-inner {
+  transform: rotateY(180deg);
+}
+
+/* ── Pack wrappers: one silhouette and material per collection ── */
+.hp-pack {
+  --pw: 220px;
+  --ph: 308px;
+  --emblem: 144px;
+  position: relative;
+  display: inline-block;
+  width: var(--pw);
+  height: var(--ph);
+  flex: none;
+  color: var(--hc-peel);
+  transform: perspective(900px) rotateX(var(--ry, 0deg)) rotateY(var(--rx, 0deg));
+  transform-style: preserve-3d;
+}
+.hp-pack[data-size="sm"] {
+  --pw: 132px;
+  --ph: 185px;
+  --emblem: 96px;
+}
+.hp-pack-body,
+.hp-pack-seal {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: var(--hp-base);
+}
+.hp-pack-body {
+  top: 15%;
+  bottom: 0;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  justify-items: center;
+  align-items: center;
+  padding-bottom: 10%;
+  filter: drop-shadow(0 4px 0 var(--hc-shadow));
+}
+.hp-pack-seal {
+  top: 0;
+  height: 15.5%;
+  transform-origin: 0 100%;
+  filter: drop-shadow(0 3px 0 var(--hc-shadow));
+}
+.hp-pack-seal::after {
+  /* the tear line: a perforation the player tears along */
+  content: "";
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  bottom: 3px;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, rgba(255, 248, 231, 0.75) 0 6px, transparent 6px 11px);
+}
+.hp-pack-emblem {
+  width: var(--emblem);
+  height: var(--emblem);
+  image-rendering: pixelated;
+  position: relative;
+  z-index: 1;
+}
+.hp-pack-name {
+  max-width: 88%;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--hc-peel);
+  color: var(--hc-ink);
+  font-weight: 900;
+  font-size: 13px;
+  line-height: 1.3;
+  text-align: center;
+  position: relative;
+  z-index: 2;
+}
+.hp-pack[data-size="sm"] .hp-pack-name {
+  font-size: 10px;
+}
+.hp-pack-foil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  background: linear-gradient(115deg, transparent 25%, rgba(255, 255, 255, 0.5) 45%, transparent 60%) var(--mx, 30%) var(--my, 30%) / 240% 240% no-repeat;
+}
+
+/* Fright Fest: crimped prize bag, matte night, a yellow moon behind the emblem. */
+.hp-pack[data-wrapper="prize-bag"] {
+  --hp-base: #1a0d29;
+}
+.hp-pack[data-wrapper="prize-bag"] .hp-pack-body {
+  background:
+    radial-gradient(circle at 50% 40%, #ffd84a 0 27%, transparent 27.5%),
+    radial-gradient(circle at 50% 40%, rgba(255, 216, 74, 0.18) 0 38%, transparent 38.5%),
+    var(--hp-base);
+  -webkit-mask: linear-gradient(#000, #000) 0 0 / 100% calc(100% - 9px) no-repeat, conic-gradient(from -45deg at 50% 100%, #000 90deg, transparent 0) 0 100% / 14px 9px repeat-x;
+  mask: linear-gradient(#000, #000) 0 0 / 100% calc(100% - 9px) no-repeat, conic-gradient(from -45deg at 50% 100%, #000 90deg, transparent 0) 0 100% / 14px 9px repeat-x;
+}
+.hp-pack[data-wrapper="prize-bag"] .hp-pack-seal {
+  -webkit-mask: linear-gradient(#000, #000) 0 9px / 100% 100% no-repeat, conic-gradient(from 135deg at 50% 0, #000 90deg, transparent 0) 0 0 / 14px 9px repeat-x;
+  mask: linear-gradient(#000, #000) 0 9px / 100% 100% no-repeat, conic-gradient(from 135deg at 50% 0, #000 90deg, transparent 0) 0 0 / 14px 9px repeat-x;
+}
+
+/* HallPass Originals: a hall-pass tag with a punched hole and a lanyard. */
+.hp-pack[data-wrapper="hall-pass-tag"] {
+  --hp-base: #1b2a4a;
+}
+.hp-pack[data-wrapper="hall-pass-tag"] .hp-pack-body {
+  border-radius: 6px 6px 22px 22px;
+  background:
+    linear-gradient(#ffd84a, #ffd84a) 0 72% / 100% 14px no-repeat,
+    var(--hp-base);
+}
+.hp-pack[data-wrapper="hall-pass-tag"] .hp-pack-seal {
+  border-radius: 22px 22px 0 0;
+  -webkit-mask: radial-gradient(circle at 50% 46%, transparent 9px, #000 9.5px);
+  mask: radial-gradient(circle at 50% 46%, transparent 9px, #000 9.5px);
+}
+.hp-pack[data-wrapper="hall-pass-tag"]::before {
+  content: "";
+  position: absolute;
+  left: calc(50% - 5px);
+  top: -34px;
+  width: 10px;
+  height: 46px;
+  border-radius: 5px;
+  background: repeating-linear-gradient(180deg, #7c2eef 0 8px, #ffd84a 8px 16px);
+}
+
+/* Internet Culture: a browser-window sleeve. */
+.hp-pack[data-wrapper="browser-sleeve"] {
+  --hp-base: #1f3b73;
+}
+.hp-pack[data-wrapper="browser-sleeve"] .hp-pack-seal {
+  border-radius: 12px 12px 0 0;
+  background:
+    radial-gradient(circle, #ff6b6b 0 4px, transparent 4.5px) 12px 50% / 12px 12px no-repeat,
+    radial-gradient(circle, #ffd84a 0 4px, transparent 4.5px) 26px 50% / 12px 12px no-repeat,
+    radial-gradient(circle, #6be37a 0 4px, transparent 4.5px) 40px 50% / 12px 12px no-repeat,
+    linear-gradient(#fff, #fff) 60px 50% / calc(100% - 72px) 40% no-repeat,
+    #7fd1ff;
+}
+.hp-pack[data-wrapper="browser-sleeve"] .hp-pack-body {
+  border-radius: 0 0 12px 12px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px) 0 0 / 100% 12px,
+    var(--hp-base);
+}
+
+/* Brainrot: a lopsided snack sachet, crimped and glossy. */
+.hp-pack[data-wrapper="snack-sachet"] {
+  --hp-base: #ff4fd8;
+  rotate: -2.5deg;
+}
+.hp-pack[data-wrapper="snack-sachet"] .hp-pack-body {
+  border-radius: 0 0 10px 18px;
+  background:
+    linear-gradient(100deg, transparent 12%, rgba(255, 255, 255, 0.35) 14%, transparent 22%),
+    linear-gradient(#7fd16a, #7fd16a) 0 78% / 100% 18px no-repeat,
+    var(--hp-base);
+}
+.hp-pack[data-wrapper="snack-sachet"] .hp-pack-seal {
+  background: repeating-linear-gradient(90deg, #e03fbf 0 3px, var(--hp-base) 3px 6px);
+  border-radius: 14px 6px 0 0;
+}
+
+/* Turkish Internet Culture: a tea-box carton with a tiled border. */
+.hp-pack[data-wrapper="tea-box"] {
+  --hp-base: #c81e3a;
+}
+.hp-pack[data-wrapper="tea-box"] .hp-pack-body {
+  background:
+    linear-gradient(var(--hp-base), var(--hp-base)) 50% 50% / calc(100% - 22px) calc(100% - 22px) no-repeat,
+    repeating-conic-gradient(#f2e8d5 0 25%, #1f3b73 0 50%) 0 0 / 11px 11px;
+}
+.hp-pack[data-wrapper="tea-box"] .hp-pack-seal {
+  background: linear-gradient(#a3162f, #a3162f) 0 0 / 100% 100%;
+  clip-path: polygon(6% 0, 94% 0, 100% 100%, 0 100%);
+}
+
+/* ── Reduced motion: the cues stay, the movement goes ── */
+@media (prefers-reduced-motion: reduce) {
+  .hc-root *,
+  .hc-root {
+    animation: none !important;
+    transition-duration: 1ms !important;
+  }
+  .hp-pack {
+    transform: none;
+  }
+  .hc-hit:hover,
+  .hc-hit:focus-visible {
+    transform: none;
+  }
+}
+:root[data-hp-still] .hc-root *,
+:root[data-hp-still] .hc-root {
+  animation: none !important;
+}
