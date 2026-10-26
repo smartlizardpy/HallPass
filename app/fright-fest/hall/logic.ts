@@ -22,8 +22,8 @@ export type Tone = "idle" | "soon" | "live" | "final";
 export interface TickerLine {
   text: string;
   tone: Tone;
-  /** The word that introduces a countdown after the text ("in", "ends in"), or null when none belongs (before the opening, and while live). */
-  countdownLabel: string | null;
+  /** The words that introduce a countdown after the text: "in" before the opening, "ends in" while live, null in every other phase. */
+  countdownLabel: "in" | "ends in" | null;
 }
 
 const short = (s: ChampionshipSummary) => ({
@@ -61,6 +61,23 @@ export function tickerLine(phase: HallPhase, s: ChampionshipSummary | null, comp
     default:
       return { text: s.labels.range.replace(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun) /g, ""), tone: "idle", countdownLabel: null };
   }
+}
+
+/**
+ * The words in front of the ticker's countdown, or null to hide it.
+ *
+ * The ticker's text follows the championship's phase, which comes from the API
+ * and can trail the clock by the API's cache time. The countdown follows the
+ * clock (`to`). They appear together only when they point at the same moment, so
+ * in the minute after the opening the plate never reads "Opens 28 Oct · ends in
+ * 4d". With the championship switched off there is no phase, and the clock alone
+ * decides.
+ */
+export function tickerCountdownLabel(line: TickerLine, championship: boolean, to: "start" | "end" | null): "in" | "ends in" | null {
+  if (!to) return null;
+  if (!championship) return to === "start" ? "in" : "ends in";
+  const wants = line.countdownLabel === "in" ? "start" : line.countdownLabel === "ends in" ? "end" : null;
+  return wants === to ? line.countdownLabel : null;
 }
 
 /** "1d 02:03:04", or "02:03:04" inside the last day. */

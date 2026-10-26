@@ -14,12 +14,12 @@
  */
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { pad2, useEventCountdown } from "@/app/components/events/fright-fest/useEventCountdown";
+import { useEventCountdown } from "@/app/components/events/fright-fest/useEventCountdown";
 import { opensAtMs } from "@/app/lib/events/countdown";
 import { FRIGHT_FEST_THEME } from "@/app/lib/events/fright-fest";
 import { phaseAt } from "@/app/lib/events/phase";
 import { PHONE_BELOW_PX, DESK, PHONE, placeVars } from "./geometry";
-import { countdownText, tickerLine } from "./logic";
+import { countdownText, tickerCountdownLabel, tickerLine } from "./logic";
 import { useHall } from "./HallProvider";
 
 const subscribe = () => () => {};
@@ -49,8 +49,7 @@ export function Ticker() {
   }, []);
 
   const line = tickerLine(phase, summary, compact);
-  const showCount = !!c && (line.countdownLabel !== null || !summary);
-  const label = c?.to === "start" ? "in" : "ends in";
+  const label = tickerCountdownLabel(line, !!summary, c?.to ?? null);
 
   return (
     <p
@@ -63,13 +62,13 @@ export function Ticker() {
       style={placeVars(DESK.ticker, PHONE.ticker)}
     >
       <span className="hl-ticker-text">{line.text}</span>
-      {showCount && c && (
+      {label && c && (
         <span data-testid="ff-countdown" data-ff-to={c.to} className="hl-ticker-count">
           <span aria-hidden="true">
             {label} {countdownText(c)}
           </span>
           <span className="sr-only">
-            {` ${label} ${c.d} days ${pad2(c.h)} hours ${pad2(c.m)} minutes`}
+            {` ${label} ${c.d} ${c.d === 1 ? "day" : "days"} ${c.h} ${c.h === 1 ? "hour" : "hours"} ${c.m} ${c.m === 1 ? "minute" : "minutes"}`}
           </span>
         </span>
       )}
