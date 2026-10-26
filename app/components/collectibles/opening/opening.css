@@ -1,45 +1,290 @@
 /*
  * The pack-opening stage. Loaded only by OpeningFlow.
  *
- * The stage carries `hc-root`, so the card tokens apply and the cards' own
- * reduced-motion rule (no animation, 1 ms transitions) covers everything here.
- * Under reduced motion the flip and the emerge become short fades instead: the
- * overrides at the bottom out-rank that rule on purpose.
+ * The stage is a dim room in both themes: the foil pack is lit as if it were in
+ * one, and the cards' finishes read best against it. Its height fills the
+ * screen below the site header and above a phone's tab bar (`--ho-top` is
+ * measured by the flow; `--hp-bottom-chrome` is published by the tab bar), so a
+ * phone never has to scroll mid-opening.
+ *
+ * The stage carries `hc-root`, so the card tokens apply. Under reduced motion
+ * movement becomes short fades (bottom of the file).
  */
 
 .ho-stage {
+  --ho-ink: #f4effa;
+  --ho-muted: rgb(244 239 250 / 0.7);
+  --ho-line: rgb(244 239 250 / 0.16);
+  --ho-fill: calc(100dvh - var(--ho-top, 96px) - var(--hp-bottom-chrome, 0px) - 12px);
   position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: clamp(500px, var(--ho-fill), 920px);
+  border-radius: 20px;
+  background:
+    radial-gradient(60% 46% at 50% 46%, color-mix(in srgb, var(--ho-tint) 12%, #22143a) 0%, transparent 100%),
+    linear-gradient(to bottom, #150b25, #0d0718);
+  color: var(--ho-ink);
+  overflow: hidden; /* the torn strip flies off the stage, not over the page */
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+
+.ho-shell {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 16px;
+  padding: 40px 16px;
+  text-align: center;
+}
+
+/* ── Top bar ── */
+.ho-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 0;
+  position: relative;
+  z-index: 4;
+}
+.ho-heading {
+  min-width: 0;
+}
+.ho-title {
+  margin: 0;
+  font-size: clamp(1.05rem, 2.6vw, 1.3rem);
+  font-weight: 900;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+.ho-shell .ho-title {
+  font-size: clamp(1.3rem, 3.4vw, 1.8rem);
+}
+.ho-sub {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ho-muted);
+}
+.ho-tools {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+.ho-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1.5px solid var(--ho-line);
+  background: rgb(255 255 255 / 0.04);
+  color: var(--ho-ink);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.ho-chip:hover {
+  background: rgb(255 255 255 / 0.1);
+}
+.ho-chip[aria-pressed="true"] {
+  border-color: var(--hc-peel);
+  background: var(--hc-peel);
+  color: var(--hc-ink);
+}
+
+/* ── The table: the pack, then the cards ── */
+.ho-table {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 360px;
+}
+.ho-stage[data-stage="summary"] .ho-table {
+  flex: none;
+  min-height: 0;
+  margin-top: 8px;
+  transition: height 480ms cubic-bezier(0.2, 0.8, 0.25, 1);
+}
+
+.ho-pack-wrap {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  z-index: 1;
+}
+/* The pack's shadow on the table. */
+.ho-pack-wrap::after {
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: -5%;
+  height: 9%;
+  z-index: -1;
+  background: radial-gradient(closest-side, rgb(4 0 10 / 0.55), transparent);
+  transition: opacity 300ms ease;
+  pointer-events: none;
+}
+.ho-stage:is([data-stage="opened"], [data-stage="extracting"]) .ho-pack-wrap::after {
+  opacity: 0.6;
+}
+.ho-stage[data-stage="revealing"] .ho-pack-wrap::after {
+  opacity: 0;
+}
+
+/* The face-down stack inside the pouch (behind its front wall). */
+.ho-deck-move {
+  position: absolute;
+  left: 50%;
+  width: 0;
+  height: 0;
+}
+.ho-deck {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 200px;
+  height: 280px;
+  transform-origin: 50% 0;
+}
+.ho-deck-card {
+  position: absolute;
+  inset: 0;
+}
+
+.ho-cards {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.ho-rcard {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 200px;
+  height: 280px;
+  perspective: 1400px;
+  pointer-events: auto;
+  transition: transform 560ms cubic-bezier(0.2, 0.8, 0.25, 1);
+  will-change: transform;
+}
+.ho-rcard[data-size="lg"] {
+  width: 260px;
+  height: 364px;
+}
+.ho-rcard[data-size="sm"] {
+  width: 140px;
+  height: 196px;
+}
+.ho-flipper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: translate 180ms ease;
+}
+.ho-flipper[data-face] {
+  transform: rotateY(180deg);
+}
+.ho-side {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.ho-side-front {
+  transform: rotateY(180deg);
+}
+.ho-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: block;
+  border: 0;
+  padding: 0;
+  border-radius: 16px;
+  background: transparent;
+  cursor: pointer;
+  touch-action: pan-y; /* sideways swipes are ours, vertical ones still scroll */
+  -webkit-tap-highlight-color: transparent;
+}
+/* The card waiting to be turned over lifts toward the pointer, and breathes a little to invite a tap. */
+.ho-rcard:has(> button.ho-hit:hover) .ho-flipper:not([data-face]) {
+  translate: 0 -6px;
+}
+.ho-rcard:has(> button.ho-hit) .ho-flipper:not([data-face]) .ho-side-back {
+  animation: ho-invite 2.8s ease-in-out 600ms infinite;
+}
+
+.ho-cap {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  pointer-events: none;
+  animation: ho-fade 260ms ease both;
+}
+.ho-count {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 4px;
+  z-index: 50;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--ho-muted);
+}
+
+.ho-tag {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1.5px solid var(--ho-line);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--ho-muted);
+  text-transform: uppercase;
+}
+.ho-tag.is-new {
+  border-color: var(--hc-ink);
+  background: var(--hc-new);
+  color: #fff;
+}
+
+/* ── Below the table: hints, actions, results ── */
+.ho-foot {
+  position: relative;
+  z-index: 3;
   display: grid;
   justify-items: center;
   align-content: start;
-  gap: 16px;
-  min-height: 540px;
-  padding: 28px 16px 64px;
-  border-radius: 20px;
-  background:
-    radial-gradient(58% 46% at 50% 44%, color-mix(in srgb, var(--ho-tint) 26%, transparent), transparent 72%),
-    var(--hc-surface);
-  color: var(--foreground);
+  gap: 10px;
+  min-height: 104px;
+  padding: 6px 16px 18px;
   text-align: center;
-  overflow: hidden; /* the torn strip flies off the stage, not over the page */
 }
-
-.ho-title {
-  margin: 0;
-  font-size: clamp(1.35rem, 3.4vw, 1.9rem);
-  font-weight: 900;
-  line-height: 1.15;
-  text-wrap: balance;
-}
-
 .ho-copy {
   margin: 0;
   max-width: 46ch;
-  font-size: 0.95rem;
-  color: var(--foreground-2);
+  font-size: 0.92rem;
+  color: var(--ho-muted);
 }
-
 .ho-notice {
   margin: 0;
   padding: 8px 14px;
@@ -50,17 +295,15 @@
   font-weight: 700;
   font-size: 0.9rem;
 }
-
 .ho-loading {
-  width: 132px;
-  height: 185px;
-  margin-top: 24px;
-  border-radius: 12px;
-  background: var(--hc-surface-2);
-  opacity: 0.7;
+  width: 150px;
+  height: 219px;
+  border-radius: 10px;
+  background: linear-gradient(110deg, rgb(255 255 255 / 0.05) 30%, rgb(255 255 255 / 0.12) 50%, rgb(255 255 255 / 0.05) 70%) 0 0 / 300% 100%;
+  animation: ho-shimmer 1.6s linear infinite;
 }
 
-/* ── Buttons: stickers, like the cards ── */
+/* Buttons: stickers, like the cards. */
 .ho-actions {
   display: flex;
   flex-wrap: wrap;
@@ -70,6 +313,7 @@
 .ho-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 44px;
   padding: 0 20px;
   border-radius: 999px;
@@ -82,7 +326,9 @@
   text-decoration: none;
   box-shadow: 0 3px 0 var(--hc-shadow);
   cursor: pointer;
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
 }
 .ho-btn:hover {
   transform: translateY(-1px);
@@ -92,222 +338,177 @@
   transform: translateY(2px);
   box-shadow: 0 1px 0 var(--hc-shadow);
 }
-.ho-btn:focus-visible,
-.ho-sound:focus-visible,
-.ho-hit:focus-visible,
-.ho-pack:focus-visible,
-.ho-summary h2:focus-visible {
-  outline: 3px solid var(--foreground);
-  outline-offset: 4px;
-}
 .ho-btn-primary {
-  background: var(--accent-yellow);
+  background: var(--accent-yellow, #ffd84a);
+}
+.ho-btn-quiet {
+  border-color: var(--ho-line);
+  background: transparent;
+  color: var(--ho-ink);
+  box-shadow: none;
+}
+.ho-btn-quiet:hover {
+  box-shadow: none;
+  background: rgb(255 255 255 / 0.08);
 }
 .ho-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: default;
   transform: none;
   box-shadow: 0 3px 0 var(--hc-shadow);
 }
-
-.ho-sound {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1.5px solid currentColor;
-  background: transparent;
-  color: var(--foreground-2);
-  font: inherit;
-  font-size: 0.8rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-.ho-sound[aria-pressed="true"] {
-  background: var(--hc-peel);
-  color: var(--hc-ink);
-  border-color: var(--hc-ink);
+:is(.ho-btn, .ho-chip, .ho-hit, .ho-summary h2, .ho-results a):focus-visible {
+  outline: 3px solid #ffd84a;
+  outline-offset: 4px;
 }
 
-/* ── The sealed pack and its back ── */
-.ho-turn {
-  display: grid;
-  place-items: center;
-  min-height: 340px;
-  perspective: 1100px;
-}
-.ho-turn > * {
-  grid-area: 1 / 1;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  transition: transform 520ms cubic-bezier(0.3, 0.7, 0.3, 1);
-}
-.ho-pack {
+/* What's inside: the odds, opening upward over the table. */
+.ho-odds {
   position: relative;
-  border-radius: 12px;
-  cursor: grab;
-  touch-action: none; /* the drag is ours, not a scroll */
-  user-select: none;
-  -webkit-user-select: none;
 }
-/* The tear line, glowing gently so the first-time player knows where to drag. */
-.ho-pack::after {
-  content: "";
+.ho-odds > summary {
+  list-style: none;
+}
+.ho-odds > summary::-webkit-details-marker {
+  display: none;
+}
+.ho-odds-panel {
   position: absolute;
-  left: 4%;
-  right: 4%;
-  top: 14%;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--hc-peel);
-  opacity: 0;
-  pointer-events: none;
-  animation: ho-hint 2.4s ease-in-out 1.2s infinite;
-}
-.ho-pack[data-dragging]::after,
-.ho-pack[data-torn]::after {
-  animation: none;
-  opacity: 0;
-}
-.ho-pack[data-dragging] {
-  cursor: grabbing;
-}
-.ho-pack[data-torn] .hp-pack-body {
-  transition: transform 360ms ease 120ms;
-  transform: translateY(6px) scale(0.98);
-}
-.ho-pack-back {
-  transform: rotateY(180deg);
-  width: 220px;
-  min-height: 308px;
-  padding: 18px 16px;
-  border-radius: 10px;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  translate: -50% 0;
+  z-index: 10;
+  width: min(330px, 88vw);
+  padding: 14px 16px;
+  border-radius: 12px;
   border: 2px solid var(--hc-ink);
   background: var(--hc-peel);
   color: var(--hc-ink);
   box-shadow: 0 4px 0 var(--hc-shadow);
   text-align: left;
   font-size: 0.82rem;
-  line-height: 1.4;
+  line-height: 1.45;
 }
-.ho-pack-back h2 {
-  margin: 0 0 6px;
-  font-size: 1rem;
-  font-weight: 900;
-}
-.ho-pack-back p {
+.ho-odds-panel p {
   margin: 0 0 6px;
 }
-.ho-pack-back ul {
-  margin: 0 0 10px;
+.ho-odds-panel ul {
+  margin: 0 0 8px;
   padding-left: 16px;
-}
-.ho-pack-back li {
-  margin-bottom: 4px;
 }
 .ho-fine {
   font-size: 0.75rem;
   color: var(--hc-ink-soft);
 }
-.ho-turn.is-turned .ho-pack {
-  transform: rotateY(-180deg);
-}
-.ho-turn.is-turned .ho-pack-back {
-  transform: rotateY(0deg);
-}
 
-/* ── The cards ── */
-.ho-row {
-  display: flex;
-  /* Three cards are wider than a phone: wrap (two, then one) rather than shrink,
-     so the pixel art keeps a whole-number scale and the page never scrolls sideways. */
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 18px clamp(10px, 3vw, 28px);
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.ho-slot {
-  display: grid;
-  justify-items: center;
-  gap: 10px;
-  animation: ho-emerge 350ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(var(--i, 0) * 120ms) both;
-}
-.ho-card {
-  position: relative;
-  border-radius: 12px;
-}
-.ho-hit {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  border: 0;
-  padding: 0;
-  border-radius: 12px;
-  background: transparent;
-  cursor: pointer;
-}
-.ho-card:has(.ho-hit) {
-  transition: transform 160ms ease;
-}
-.ho-card:has(.ho-hit:hover) {
-  transform: translateY(-4px);
-}
-.ho-card[data-charging] {
-  animation: ho-charge 600ms ease-in both;
-}
-.ho-tag {
-  padding: 2px 10px;
-  border-radius: 999px;
-  border: 1.5px solid currentColor;
-  font-size: 0.75rem;
-  font-weight: 800;
-  color: var(--foreground-2);
-}
-.ho-tag.is-new {
-  border-color: var(--hc-ink);
-  background: var(--hc-new);
-  color: #fff;
-}
-
+/* The results. */
 .ho-summary {
   display: grid;
   justify-items: center;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 12px;
+  width: 100%;
+  max-width: 560px;
 }
 .ho-summary h2 {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: 1.25rem;
   font-weight: 900;
   border-radius: 6px;
 }
+.ho-results {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ho-results li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgb(255 255 255 / 0.05);
+  text-align: left;
+}
+.ho-results li::before {
+  content: "";
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--ho-r, #b9b4c7);
+}
+.ho-results li[data-rarity="uncommon"] {
+  --ho-r: #7fd16a;
+}
+.ho-results li[data-rarity="rare"] {
+  --ho-r: #7fd1ff;
+}
+.ho-results li[data-rarity="epic"] {
+  --ho-r: #c58bff;
+}
+.ho-results li[data-rarity="legendary"] {
+  --ho-r: #ffd84a;
+}
+.ho-results a {
+  flex: 1;
+  min-width: 0;
+  color: var(--ho-ink);
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-color: var(--ho-line);
+  text-underline-offset: 3px;
+}
+.ho-rarity {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ho-muted);
+}
+/* Wide: the cards above already show all of this, and link to their pages. */
+.ho-results[data-layout="row"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.ho-progress {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  font-size: 0.85rem;
+  color: var(--ho-muted);
+}
+.ho-progress p {
+  margin: 0;
+}
+.ho-progress b {
+  color: var(--ho-ink);
+}
+.ho-bar-track {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.1);
+  overflow: hidden;
+}
+.ho-bar-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ho-tint);
+}
 
-@keyframes ho-hint {
+@keyframes ho-invite {
   0%,
   100% {
-    opacity: 0;
+    translate: 0 0;
   }
   50% {
-    opacity: 0.55;
-  }
-}
-@keyframes ho-emerge {
-  from {
-    opacity: 0;
-    transform: translateY(70px) scale(0.6);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@keyframes ho-charge {
-  to {
-    transform: translateY(-6px) scale(1.04);
+    translate: 0 -3px;
   }
 }
 @keyframes ho-fade {
@@ -315,51 +516,45 @@
     opacity: 0;
   }
 }
-
-/* ── Reduced motion: fades instead of flips, slides and tilts ── */
-@media (prefers-reduced-motion: reduce) {
-  .ho-stage .ho-slot {
-    animation: ho-fade 200ms ease both !important;
-  }
-  .ho-stage .ho-turn > * {
-    transition: opacity 200ms ease !important;
-  }
-  .ho-stage .ho-turn > .ho-pack-back {
-    transform: none;
-    opacity: 0;
-  }
-  .ho-stage .ho-turn.is-turned > .ho-pack {
-    transform: none;
-    opacity: 0;
-  }
-  .ho-stage .ho-turn.is-turned > .ho-pack-back {
-    opacity: 1;
-  }
-  .ho-stage .ho-card .hc-flip-inner,
-  .ho-stage .ho-card .hc-flip-inner > .hc-card {
-    transform: none !important;
-  }
-  .ho-stage .ho-card .hc-flip-inner > * {
-    transition: opacity 200ms ease !important;
-  }
-  .ho-stage .ho-card .hc-flip-inner > .hc-card,
-  .ho-stage .ho-card .hc-flip[data-flipped] .hc-flip-inner > .hc-back {
-    opacity: 0;
-  }
-  .ho-stage .ho-card .hc-flip[data-flipped] .hc-flip-inner > .hc-card {
-    opacity: 1;
-  }
-  .ho-stage .ho-card:has(.ho-hit:hover) {
-    transform: none;
+@keyframes ho-shimmer {
+  to {
+    background-position: -300% 0;
   }
 }
 
 @media (max-width: 680px) {
   .ho-stage {
-    min-height: 480px;
-    padding-top: 52px; /* room for the sound toggle above the title */
+    border-radius: 16px;
   }
-  .ho-turn {
-    min-height: 320px;
+  .ho-bar {
+    padding: 12px 12px 0;
+  }
+  .ho-chip {
+    padding: 0 10px;
+  }
+}
+
+/* ── Reduced motion: places change at once, turning over is a short fade ── */
+@media (prefers-reduced-motion: reduce) {
+  .ho-rcard {
+    transition: none;
+  }
+  .ho-flipper,
+  .ho-flipper[data-face],
+  .ho-side-front {
+    transform: none;
+    transition: none;
+  }
+  .ho-flipper[data-face] .ho-side-back {
+    visibility: hidden;
+  }
+  .ho-rcard .ho-side-back {
+    animation: none !important;
+  }
+  .ho-stage[data-stage="summary"] .ho-table {
+    transition: none;
+  }
+  .ho-loading {
+    animation: none;
   }
 }

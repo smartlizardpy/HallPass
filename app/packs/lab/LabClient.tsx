@@ -15,6 +15,7 @@ import { LabPack } from "./LabPack";
 import { installLabApi, LAB_PACKS } from "./mock";
 
 const openHref = (publicId: string) => `/packs/lab?view=open&pack=${publicId}`;
+const LINKS = { open: openHref, room: "/packs/lab?view=room" };
 
 export function LabClient() {
   // Install synchronously on first render, before any child effect fetches.
@@ -26,7 +27,7 @@ export function LabClient() {
   const view = q.get("view");
   const pack = q.get("pack") ?? "";
 
-  if (view === "open" && pack) return <OpeningFlow key={pack} id={pack} />;
+  if (view === "open" && pack) return <OpeningFlow key={pack} id={pack} links={LINKS} />;
   if (view === "room") return <PackRoom openHref={openHref} />;
   if (view === "pack") return <LabPack id={q.get("id") ?? "hpo-standard"} />;
 
