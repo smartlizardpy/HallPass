@@ -20,7 +20,7 @@
 import "../collectibles.css";
 import "./room.css";
 import Link from "next/link";
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { MyCollection } from "@/app/lib/collectibles";
 import { startSignIn } from "@/app/lib/auth-actions";
 import { CATALOGUE, collectionSymbolSrc, getCollectible, getCollection, getPack, packFoilSrc, packPrintSrc, packVersion } from "@/app/lib/collectibles/catalogue";
@@ -81,6 +81,28 @@ export function PrizeCounter({ openHref = DEFAULT_OPEN }: PrizeCounterProps) {
   const sealedCount = data?.sealed.length ?? 0;
   const featuredRef = useRef<HTMLButtonElement | null>(null);
   const focusFeatured = useRef(false);
+  const roomRef = useRef<HTMLDivElement>(null);
+  /** Where every pack stood just before a swap, so each can glide from there (FLIP). */
+  const before = useRef<Map<string, DOMRect> | null>(null);
+
+  useLayoutEffect(() => {
+    const from = before.current;
+    before.current = null;
+    if (!from || !roomRef.current || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    for (const el of roomRef.current.querySelectorAll<HTMLElement>(".pr-pack[data-pack]")) {
+      const was = from.get(el.dataset.pack ?? "");
+      const now = el.getBoundingClientRect();
+      if (!was || !now.width) continue;
+      const dx = was.left + was.width / 2 - (now.left + now.width / 2);
+      const dy = was.bottom - now.bottom;
+      const k = was.width / now.width;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(k - 1) < 0.01) continue;
+      el.animate([{ transform: `translate(${dx}px, ${dy}px) scale(${k})`, transformOrigin: "50% 100%" }, { transform: "none", transformOrigin: "50% 100%" }], {
+        duration: 420,
+        easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
+      });
+    }
+  }, [featuredId]);
 
   // After bringing a pack forward, the keyboard follows it to the riser.
   useEffect(() => {
@@ -90,6 +112,10 @@ export function PrizeCounter({ openHref = DEFAULT_OPEN }: PrizeCounterProps) {
   }, [featuredId]);
 
   const bringForward = (packId: string) => {
+    if (packId === featured?.packId) return;
+    const rects = new Map<string, DOMRect>();
+    for (const el of roomRef.current?.querySelectorAll<HTMLElement>(".pr-pack[data-pack]") ?? []) rects.set(el.dataset.pack ?? "", el.getBoundingClientRect());
+    before.current = rects;
     focusFeatured.current = true;
     setFeaturedId(packId);
   };
@@ -99,7 +125,7 @@ export function PrizeCounter({ openHref = DEFAULT_OPEN }: PrizeCounterProps) {
   return (
     <section className="pr hc-root" aria-labelledby="pr-title" data-status={state.status}>
       <div className="pr-wall" aria-hidden="true" />
-      <div className="pr-room">
+      <div className="pr-room" ref={roomRef}>
         <div className="pr-art" aria-hidden="true" />
         {(["desk", "phone"] as const).map((comp) =>
           SCENES[comp].loops.map((l) => (
@@ -276,7 +302,7 @@ function Pack({
       )}
     </>
   );
-  const common = { className: "pr-at pr-pack", "data-role": featured ? "featured" : "slot", "data-in": rest["data-in"], style, ...tilt };
+  const common = { className: "pr-at pr-pack", "data-role": featured ? "featured" : "slot", "data-pack": group.packId, "data-in": rest["data-in"], style, ...tilt };
   return featured && href ? (
     <Link {...common} ref={buttonRef as unknown as React.Ref<HTMLAnchorElement>} href={href} aria-label={`Open ${name}`}>
       {body}
@@ -423,11 +449,22 @@ function Odds({ group, label }: { group: PackGroup; label: string }) {
   const [open, setOpen] = useState(false);
   const id = useId();
   const button = useRef<HTMLButtonElement>(null);
+  const wrap = useRef<HTMLSpanElement>(null);
+
+  // A press anywhere else closes it.
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [open]);
   const pack = getPack(group.packId);
   const version = packVersion(group.packId, group.items[0].packVersion)?.version;
   if (!pack || !version) return null;
   return (
-    <span className="pr-odds">
+    <span className="pr-odds" ref={wrap}>
       <button
         ref={button}
         type="button"

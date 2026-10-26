@@ -445,9 +445,9 @@ html[data-hp-skin="haunted"] .pr-loop[data-season="haunted"] {
   font-weight: 900;
 }
 
-/* What's inside: above its button. */
+/* What's inside: centred above the whole panel (or the phone's button row), covering none of it. */
 .pr-odds {
-  position: relative;
+  position: static;
 }
 .pr-odds-pop {
   position: absolute;
