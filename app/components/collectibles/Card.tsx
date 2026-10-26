@@ -66,6 +66,7 @@ export function CollectibleCard({
       data-kind={card.kind}
       data-size={size}
       data-art={px}
+      data-name={card.name.length >= 19 ? "long" : card.name.length >= 15 ? "mid" : undefined}
       style={{ "--hc-base": base } as CSSProperties}
       role={decorative ? undefined : "img"}
       aria-label={decorative ? undefined : cardLabel(card)}

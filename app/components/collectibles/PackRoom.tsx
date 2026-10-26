@@ -59,7 +59,7 @@ export function PackRoom() {
             You have no sealed packs. Packs are earned, never bought, and for now they come as Fright Fest rewards. Any you earn will wait here, with no deadline.
           </p>
         ) : (
-          <ul className="hc-row mt-3" role="list">
+          <ul className="hc-row hc-row-packs mt-3" role="list">
             {sealed.map((p) => {
               const pack = getPack(p.packId);
               if (!pack) return null;
@@ -67,6 +67,9 @@ export function PackRoom() {
                 <li key={p.publicId}>
                   <Link href={`/packs/open/${p.publicId}`} className="hc-link" aria-label={`Open ${pack.name}`}>
                     <PackArt packId={p.packId} size={size} decorative />
+                    <span className="hc-root hc-pack-cta" aria-hidden="true">
+                      Open
+                    </span>
                   </Link>
                 </li>
               );

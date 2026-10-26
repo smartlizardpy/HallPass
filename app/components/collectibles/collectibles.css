@@ -130,6 +130,8 @@
   border-radius: 12px;
   background: var(--hc-base);
   display: grid;
+  /* minmax(0, 1fr): a long name must not widen the column past the face (it would push the art off-centre and hide the ellipsis). */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
   justify-items: center;
 }
@@ -198,6 +200,20 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Long names: a touch smaller, and the longest (the champion cards) wrap to two balanced lines. */
+.hc-card[data-name="mid"] .hc-name {
+  font-size: calc(var(--cap) * 0.9);
+}
+.hc-card[data-name="long"] .hc-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  font-size: calc(var(--cap) * 0.86);
+  line-height: 1.04;
+  white-space: normal;
+  text-wrap: balance;
 }
 .hc-meta {
   margin-top: 3px;
@@ -747,6 +763,8 @@
   gap: 10px;
 }
 .hc-dialog {
+  /* The site's reset zeroes every margin, which pins a modal <dialog> to the top-left corner; auto margins centre it again. */
+  margin: auto;
   width: min(92vw, 420px);
   max-height: 92vh;
   overflow: auto;
@@ -755,6 +773,34 @@
   border-radius: 18px;
   background: var(--surface, #fff);
   color: var(--foreground, #111);
+}
+/* Sealed packs on the Pack Room shelf: room between wrappers, a lift and a label that say "open me". */
+.hc-row-packs {
+  /* rows clear the hall-pass tag's lanyard, which rises above its pack */
+  gap: 48px 20px;
+  padding-top: 26px;
+}
+.hc-row-packs .hc-link {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+.hc-row-packs .hp-pack {
+  transition: translate 160ms ease;
+}
+.hc-row-packs .hc-link:hover .hp-pack,
+.hc-row-packs .hc-link:focus-visible .hp-pack {
+  translate: 0 -5px;
+}
+.hc-pack-cta {
+  padding: 4px 16px;
+  border-radius: 999px;
+  border: 2px solid var(--hc-ink);
+  background: var(--accent-yellow, #ffc700);
+  color: var(--hc-ink);
+  font-weight: 800;
+  font-size: 0.85rem;
+  box-shadow: 0 3px 0 var(--hc-shadow);
 }
 .hc-dialog::backdrop {
   background: rgba(10, 6, 20, 0.7);
