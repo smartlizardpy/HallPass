@@ -75,6 +75,42 @@ export function boardAccepting(
   return { ok: true };
 }
 
+/** Why a finished run will not be recorded. */
+export type NotRecording = NotAccepting | "verification" | "finalised" | "started-before-board-opened";
+
+/**
+ * Whether a run whose token was issued at `issuedAtMs` may be recorded at
+ * `nowMs`. Stricter than `boardAccepting` in one way (the board must still be
+ * open: a pause stops runs in flight, which is what a pause is for) and looser in
+ * one (a run started before the close has `submitGraceSec` to finish, unless
+ * staff have already started verification).
+ */
+export function submissionAccepting(
+  c: ChampionshipConfig,
+  state: EventState | null,
+  game: GameState | undefined,
+  issuedAtMs: number,
+  nowMs: number,
+): { ok: true; late: boolean } | { ok: false; reason: NotRecording } {
+  const phase = championshipPhase(c, state, nowMs);
+  if (phase === "off") return { ok: false, reason: "off" };
+  if (phase === "suspended") return { ok: false, reason: "suspended" };
+  if (phase === "finalised" || phase === "archived") return { ok: false, reason: "finalised" };
+  if (phase === "verification") return { ok: false, reason: "verification" };
+  if (phase === "upcoming") return { ok: false, reason: "upcoming" };
+  if (!game || game.status === "pending") return { ok: false, reason: "board-pending" };
+  if (game.status === "paused") return { ok: false, reason: "board-paused" };
+  if (game.status === "withdrawn") return { ok: false, reason: "board-withdrawn" };
+  const opened = ms(game.openedAt);
+  if (opened === null || issuedAtMs < opened || issuedAtMs < Date.parse(c.opensAt)) {
+    return { ok: false, reason: "started-before-board-opened" };
+  }
+  const close = closeAtMs(c, state);
+  if (issuedAtMs >= close) return { ok: false, reason: "closed" };
+  if (nowMs < close) return { ok: true, late: false };
+  return nowMs < close + c.submitGraceSec * 1000 ? { ok: true, late: true } : { ok: false, reason: "closed" };
+}
+
 /** Boards that count for points: every board that has opened and was not withdrawn. */
 export function countingGames(games: readonly GameState[]): GameState[] {
   return games.filter((g) => (g.status === "open" || g.status === "paused") && g.openedAt !== null);

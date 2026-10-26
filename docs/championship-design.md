@@ -217,8 +217,18 @@ game (same-origin iframe)          HallPass
 ```
 
 - **Tokens:** 32 random bytes, base64url. Only the SHA-256 is stored. Bound to
-  the issuing player, the event and the game, single-use, expiring 30 minutes
-  after issue.
+  the issuing player, the event and the game, single-use, expiring 45 minutes
+  after issue (`tokenTtlSec`).
+- **Finishing grace:** a run whose token was issued before the close may still
+  be recorded for `submitGraceSec` (10 minutes) after it, so nobody is cut off
+  mid-escape at midnight. A run started after the close never gets a token.
+  Starting verification ends the grace; the dashboard does not offer it until
+  the grace has passed. A paused board refuses runs in flight without spending
+  their tokens.
+- **Outcome is shown by HallPass, not the game:** Last Bell does not read the
+  submit result. SDK 1.5 posts the outcome (`hallpass:championship`) to the
+  same-origin parent page, whose overlay shows "Entered: 3rd", "Sign in to
+  enter" or "Held for review".
 - **Idempotency:** a repeat submission of a used token by the same player returns
   the stored outcome (`duplicate: true`), so a network retry is harmless.
 - **Impersonation:** the player is always the session's. A token issued to
@@ -388,7 +398,20 @@ the Last Bell build. The order of the last two does not matter: an old SDK
 answers `supports('leaderboard.boards')` with `undefined`, so the game sends
 nothing.
 
-## 11. Excluded
+## 11. Verification
+
+- Pure rules (phase, grace, validators, ranking, points, eligibility, privacy of
+  the wire shape): vitest, `app/lib/championship/*.test.ts`.
+- Intake (tokens, single use, replay, expiry, grace, pause, gap, ranking): an
+  in-memory store with the same guards, `intake.test.ts`.
+- The SQL itself: the store bundled with esbuild and run against PGlite
+  (Postgres 17 in WASM) with migration 048 applied, covering every statement
+  and guard (59 checks). PGlite is not a repo dependency, so this ran as a
+  one-off; `store.test.ts` pins the privacy and guard clauses in-repo. Found
+  and fixed one bug: `INSERT … ON CONFLICT` checks the proposed row's CHECK
+  constraint before resolving the conflict, which broke pausing a board.
+
+## 12. Excluded
 
 Server-side replay of runs, device fingerprinting, IP logging on runs, physical
 prizes, cross-event leaderboards, team play (the modes are solo), and any

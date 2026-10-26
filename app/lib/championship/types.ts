@@ -142,6 +142,12 @@ export interface ChampionshipConfig {
   rewards: ChampionshipRewards;
   /** Lifetime of a run token, seconds. */
   tokenTtlSec: number;
+  /**
+   * A run STARTED before the close may still be submitted this many seconds
+   * after it, so nobody is cut off mid-run at midnight. A run started after the
+   * close never gets a token at all.
+   */
+  submitGraceSec: number;
 }
 
 /** The stored state of an event, as the store reads it. `null` fields are absent values. */

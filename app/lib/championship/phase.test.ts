@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { championshipBoard, championshipById, championshipsForGame, CHAMPIONSHIPS } from "./config";
 import { clock, formatLastMinute, formatScore, formatTiebreak, msClock, ordinal } from "./format";
 import { FRIGHT_FEST_2026 as C } from "./fright-fest-2026";
-import { boardAccepting, championshipPhase, closeAtMs } from "./phase";
+import { boardAccepting, championshipPhase, closeAtMs, submissionAccepting } from "./phase";
 import { games as catalogue } from "../games";
 import type { EventState, GameState } from "./types";
 
@@ -66,6 +66,32 @@ describe("boardAccepting", () => {
     const later = { ...lb, openedAt: new Date(OPENS + 86_400_000).toISOString() };
     expect(boardAccepting(C, state(), later, OPENS + 1)).toEqual({ ok: false, reason: "board-not-open-yet" });
     expect(boardAccepting(C, state(), later, OPENS + 86_400_000)).toEqual({ ok: true });
+  });
+});
+
+describe("submissionAccepting", () => {
+  const GRACE = C.submitGraceSec * 1000;
+  it("records a run started in the window, during the window", () => {
+    expect(submissionAccepting(C, state(), lb, OPENS + 10, OPENS + 200_000)).toEqual({ ok: true, late: false });
+  });
+  it("gives a run started before the close its grace to finish, and no more", () => {
+    expect(submissionAccepting(C, state(), lb, CLOSES - 60_000, CLOSES + 1)).toEqual({ ok: true, late: true });
+    expect(submissionAccepting(C, state(), lb, CLOSES - 60_000, CLOSES + GRACE - 1)).toEqual({ ok: true, late: true });
+    expect(submissionAccepting(C, state(), lb, CLOSES - 60_000, CLOSES + GRACE)).toEqual({ ok: false, reason: "closed" });
+    expect(submissionAccepting(C, state(), lb, CLOSES, CLOSES + 1)).toEqual({ ok: false, reason: "closed" });
+  });
+  it("ends the grace when staff start verification, or the result is final", () => {
+    expect(submissionAccepting(C, state({ status: "verification" }), lb, CLOSES - 60_000, CLOSES + 1)).toEqual({ ok: false, reason: "verification" });
+    expect(submissionAccepting(C, state({ status: "finalised" }), lb, CLOSES - 60_000, CLOSES + 1)).toEqual({ ok: false, reason: "finalised" });
+  });
+  it("stops runs in flight on a paused or withdrawn board, or a suspended event", () => {
+    expect(submissionAccepting(C, state(), { ...lb, status: "paused" }, OPENS + 10, OPENS + 20)).toEqual({ ok: false, reason: "board-paused" });
+    expect(submissionAccepting(C, state(), { ...lb, status: "withdrawn" }, OPENS + 10, OPENS + 20)).toEqual({ ok: false, reason: "board-withdrawn" });
+    expect(submissionAccepting(C, state({ suspended: true }), lb, OPENS + 10, OPENS + 20)).toEqual({ ok: false, reason: "suspended" });
+  });
+  it("never records a run started before its board opened", () => {
+    const later = { ...lb, openedAt: new Date(OPENS + 86_400_000).toISOString() };
+    expect(submissionAccepting(C, state(), later, OPENS + 10, OPENS + 86_400_010)).toEqual({ ok: false, reason: "started-before-board-opened" });
   });
 });
 
