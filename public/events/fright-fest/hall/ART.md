@@ -45,3 +45,13 @@ or shown (docs/championship-design.md section 6). Copy a game's cabinet files he
 (`cab-<key>-{off,on}.png`, `scr-<key>.png`) in the same change that flips its
 `announced` flag in `app/components/events/fright-fest/registry.ts`, and add its
 art key in `app/fright-fest/hall/props.ts`.
+
+A new art key also needs its sprite rules in `app/fright-fest/hall/hall.css`
+(the `.hl-cab[data-art="..."]` blocks).
+
+## Edge strips
+
+`edge-<scene>-<season>-{l,r}.png` are 1 pixel wide columns cut from the first and
+last column of each scene (the corner cobweb is painted out). hall.css stretches
+them to carry the walls past 3x. They are generated, not drawn: if a scene
+changes, cut them again from the new picture.

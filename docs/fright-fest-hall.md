@@ -194,3 +194,64 @@ game) and scores. Packs are granted through `collectiblesStore.grantPack`,
 which has idempotent keys and `source: 'event'`. A new pack means a new
 catalogue entry; existing odds tables can be reused.
 The detailed plan follows once these are decided.
+
+## 5. As built: PR 3, the hall
+
+What shipped, and where it differs from the plan above.
+
+### Commits
+
+Art, geometry and its test, props builder and pure helpers, the room and its
+client islands, the framed sections with the new page, and this note.
+
+### What was built
+
+- `app/fright-fest/hall/`: `geometry.ts` (the art's numbers), `props.ts`
+  (server-only plain props for announced games), `logic.ts` (ticker text by
+  phase, cabinet copy, board rows, laptop check), `Room.tsx` (server),
+  `HallProvider.tsx` (selection, shared fetch, the one announcer, toast,
+  pausing), `Cabinets.tsx`, `Ticker.tsx`, `Board.tsx`, `Panel.tsx`, `Eggs.tsx`,
+  `hall.css`, `sections.css`, `config.ts` (`CANDY_HUNT_OPEN = false`).
+- `/fright-fest` is still static (`○` in the build). The ticker carries
+  `ff-phase`/`data-ff-phase` and `ff-countdown`/`data-ff-to`. `#rules`,
+  `#standings`, `#rewards` and `#board-<slug>` still work.
+- Sections: framed under the haunted skin, plain base-token cards otherwise.
+  Added the Fright Points explainer, "The next place up, Nth, is X Fright Points
+  ahead." (live only, `lib/championship/gap.ts`), and rewards with pack prints.
+- Removed: the old night scene, its `.ff-*` CSS in `pages.css`, `FrightFestGames`,
+  `FrightFestPhase`, `FrightFestCountdown`.
+
+### Where it differs from the plan
+
+1. **Play is on the cabinet, not in the panel.** The cabinet's front strip is the
+   Play link (same `/game/<slug>` href as the game page), so Play sits above the
+   1366x768 fold. The panel carries chip, title, mode, ranking rule, a phase line
+   and "See its board". One Play link, not two.
+2. **Unannounced cabinets' art is not shipped.** `public/` is served, so their
+   file names would name the games. Their cabinets are the mystery sprite.
+3. **Edge strips** are cut from the scenes (see ART.md), not separate art.
+4. **No new fetch store.** `components/championship/data.ts` already shares one
+   request per URL; I only added an optional `retry` counter for "Try again".
+5. **Gap helper** lives in `lib/championship/gap.ts` (not in the hall) because
+   `MyProgress` uses it.
+6. **Fonts:** Silkscreen (`--font-pixel`) and Nunito, the site's own. The
+   prototype's other pixel fonts are not loaded.
+7. **"Play on a laptop"** uses `Game.platform` and `useDevicePlatform()`. The
+   strip says "Laptop only" and the panel says "Play on a laptop". It reads the
+   resolved catalogue, which in the dev database has no tag for Last Bell, so
+   this path is covered by unit tests, not a screenshot.
+8. **Phone:** one cabinet shows at a time with arrows and dots; the panel, a
+   five-row board and a Pack Room link sit under the room.
+
+### Contrast (text on its own solid plate)
+
+cream on ink 18.9:1, gold 12.8:1, amber 11.2:1, green 16.2:1, lavender 13.9:1,
+rank 2 silver 14.7:1, rank 3 bronze 11.3:1, cream on the "you" row 12.1:1,
+amber on the "you" row 7.2:1, ink on gold (Play, Full standings) 12.8:1.
+
+### Known issues
+
+- The room's ticker uses the theme clock for the countdown and the server phase
+  for the words, so they can differ for a moment around a phase change.
+- Chromium emulation here has no touch device with `hover: none` plus a platform
+  tag, so the phone "Laptop only" label was not seen on screen.
