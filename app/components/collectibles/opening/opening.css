@@ -223,6 +223,11 @@
   touch-action: pan-y; /* sideways swipes are ours, vertical ones still scroll */
   -webkit-tap-highlight-color: transparent;
 }
+/* On a phone the card in front fills the table: every touch on it is ours (swipe, tilt), so a
+   slightly diagonal swipe never scrolls the page mid-reveal. The summary scrolls as usual. */
+.ho-stage[data-layout="focus"]:not([data-stage="summary"]) .ho-hit {
+  touch-action: none;
+}
 /* The card waiting to be turned over lifts toward the pointer, and breathes a little to invite a tap. */
 .ho-rcard:has(> button.ho-hit:hover) .ho-flipper:not([data-face]) {
   translate: 0 -6px;

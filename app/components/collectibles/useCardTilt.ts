@@ -23,11 +23,18 @@ const DAMPING = 0.8;
  *
  * Touch uses pointer events and holds the pointer on press; the card carries
  * `touch-action: none` (holo.css) only when live, so grids still scroll.
+ *
+ * `from` listens somewhere else: an ancestor that also holds a control laid
+ * over the card (the opening's turn button, the summary's link). The card then
+ * follows that element's pointer, and a finger is tracked without capturing
+ * it, so the control still gets its taps and swipes.
  */
-export function useCardTilt(ref: RefObject<HTMLElement | null>, enabled = true) {
+export function useCardTilt(ref: RefObject<HTMLElement | null>, enabled = true, from?: RefObject<HTMLElement | null>) {
   useEffect(() => {
     const el = ref.current;
     if (!el || !enabled || reducedMotion()) return;
+    const src = from?.current ?? el;
+    let finger: number | null = null; // the pressed pointer, when not captured
     const pos: Pose = { ...REST };
     const vel: Pose = { px: 0, py: 0, rx: 0, ry: 0, tilt: 0 };
     let target: Pose = { ...REST };
@@ -92,32 +99,38 @@ export function useCardTilt(ref: RefObject<HTMLElement | null>, enabled = true) 
     };
     const onDown = (e: PointerEvent) => {
       if (e.pointerType === "mouse") return;
-      try {
-        el.setPointerCapture(e.pointerId);
-      } catch {}
+      if (src === el) {
+        try {
+          el.setPointerCapture(e.pointerId);
+        } catch {}
+      } else finger = e.pointerId;
       aim(e);
     };
     const onMove = (e: PointerEvent) => {
       // A finger only steers while pressed; a mouse steers on hover.
-      if (e.pointerType !== "mouse" && !el.hasPointerCapture?.(e.pointerId)) return;
+      if (e.pointerType !== "mouse" && !(src === el ? el.hasPointerCapture?.(e.pointerId) : finger === e.pointerId)) return;
       aim(e);
     };
-    const onLeave = (e: PointerEvent) => {
-      if (e.pointerType === "mouse") release();
+    const onUp = () => {
+      finger = null;
+      release();
     };
-    el.addEventListener("pointerdown", onDown);
-    el.addEventListener("pointermove", onMove);
-    el.addEventListener("pointerleave", onLeave);
-    el.addEventListener("pointerup", release);
-    el.addEventListener("pointercancel", release);
+    const onLeave = (e: PointerEvent) => {
+      if (e.pointerType === "mouse" || finger === e.pointerId) onUp();
+    };
+    src.addEventListener("pointerdown", onDown);
+    src.addEventListener("pointermove", onMove);
+    src.addEventListener("pointerleave", onLeave);
+    src.addEventListener("pointerup", onUp);
+    src.addEventListener("pointercancel", onUp);
     return () => {
-      el.removeEventListener("pointerdown", onDown);
-      el.removeEventListener("pointermove", onMove);
-      el.removeEventListener("pointerleave", onLeave);
-      el.removeEventListener("pointerup", release);
-      el.removeEventListener("pointercancel", release);
+      src.removeEventListener("pointerdown", onDown);
+      src.removeEventListener("pointermove", onMove);
+      src.removeEventListener("pointerleave", onLeave);
+      src.removeEventListener("pointerup", onUp);
+      src.removeEventListener("pointercancel", onUp);
       if (frame) cancelAnimationFrame(frame);
       clear();
     };
-  }, [ref, enabled]);
+  }, [ref, enabled, from]);
 }

@@ -154,7 +154,7 @@ export function RevealCard(props: Props) {
         </div>
         {flipped && (
           <div className="ho-side ho-side-front">
-            <CollectibleCard card={card} size={size} holo="live" loop={size !== "sm"} decorative={!!props.href} />
+            <CollectibleCard card={card} size={size} holo="live" loop={size !== "sm"} decorative={!!props.href} tiltFrom={root} />
           </div>
         )}
       </div>

@@ -21,7 +21,7 @@
 
 import "./collectibles.css";
 import "./holo.css";
-import { useRef, type CSSProperties } from "react";
+import { useRef, type CSSProperties, type RefObject } from "react";
 import type {
   Collectible,
   Rarity,
@@ -59,6 +59,7 @@ export function CollectibleCard({
   holo = "static",
   loop = false,
   decorative = false,
+  tiltFrom,
 }: {
   card: Collectible;
   size?: CardSize;
@@ -73,10 +74,12 @@ export function CollectibleCard({
   loop?: boolean;
   /** Inside a control that already names the card (a link or a button). */
   decorative?: boolean;
+  /** A live card under a control: take the pointer from this ancestor (see useCardTilt). */
+  tiltFrom?: RefObject<HTMLElement | null>;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const isLive = holo === "live" || live;
-  useCardTilt(ref, isLive);
+  useCardTilt(ref, isLive, tiltFrom);
   useOnScreenLoop(ref, loop && card.rarity === "legendary");
   const { base } = collectionColours(card.collection);
   const px = artPixels(card);
