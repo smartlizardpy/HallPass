@@ -1,0 +1,222 @@
+/*
+ * "What's in each pack": the counter under the Pack Room (room/room.css), drawn
+ * as prize cards. Loaded only by PackContents.
+ *
+ * PALETTE. Fixed, like `.pr`: ink, cream, soft lilac and gold, whatever the
+ * light/dark setting or the Fright Fest skin, so no seasonal selector is needed.
+ * Contrast (computed, WCAG 2.x): cream on ink 18.9:1, soft on ink 13.3:1, soft
+ * on the card 12.2:1, gold on ink 12.8:1, and every rarity chip's text on the
+ * chip's ink 8.8:1 or better. Nothing relies on colour: the rarity word and the percentages are text.
+ *
+ * LAYOUT. One column of cards, two from 900 px. A card is the pack's print
+ * (96×140, drawn at 1× or 2× so each art pixel stays square) beside the text.
+ * `.po` pulls 3rem under the shell's bottom padding so the dark runs to the end.
+ */
+
+.po {
+  --po-ink: #0b0612;
+  --po-card: #17102a;
+  --po-cream: #fff8e7;
+  --po-soft: #d8cfe6;
+  --po-gold: #ffc700;
+  --po-line: rgb(255 248 231 / 0.14);
+  --po-common: #b9c1d3;
+  --po-uncommon: #5fd49a;
+  --po-rare: #86b4ff;
+  --po-epic: #c995ff;
+  --po-legendary: #ffc700;
+  scroll-margin-top: 6rem;
+  margin-bottom: -3rem;
+  padding: 36px 12px 64px;
+  color: var(--po-cream);
+  background: var(--po-ink);
+  border-top: 4px solid var(--po-gold);
+}
+.po-in {
+  max-width: 1180px;
+  margin-inline: auto;
+}
+
+/* The lit plate */
+.po-h {
+  display: inline-block;
+  margin: 0;
+  padding: 8px 18px;
+  border: 2px solid var(--po-gold);
+  border-radius: 14px;
+  background: var(--po-card);
+  box-shadow:
+    0 3px 0 rgb(0 0 0 / 0.45),
+    0 0 18px rgb(255 199 0 / 0.25);
+  color: var(--po-gold);
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+.po-intro {
+  max-width: 62ch;
+  margin: 14px 0 0;
+  color: var(--po-soft);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.po-groups {
+  margin-top: 28px;
+  display: grid;
+  gap: 28px;
+}
+.po-group-h {
+  margin: 0 0 12px;
+  color: var(--po-gold);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.po-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+@media (min-width: 900px) {
+  .po-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* A prize card */
+.po-pack {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px;
+  border: 2px solid var(--po-line);
+  border-radius: 14px;
+  background: var(--po-card);
+  box-shadow: 0 3px 0 rgb(0 0 0 / 0.45);
+}
+.po-print {
+  flex: none;
+  width: 96px;
+  height: 140px;
+  image-rendering: pixelated;
+}
+@media (min-width: 600px) and (max-width: 899px), (min-width: 1180px) {
+  .po-print {
+    width: 192px;
+    height: 280px;
+  }
+}
+.po-body {
+  min-width: 0;
+  flex: 1;
+}
+.po-name {
+  margin: 0;
+  color: var(--po-cream);
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+.po-desc {
+  margin: 4px 0 0;
+  color: var(--po-soft);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.po-slots {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+.po-slot {
+  padding: 8px 10px;
+  border: 1px solid var(--po-line);
+  border-radius: 10px;
+  background: var(--po-ink);
+  color: var(--po-soft);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.po-n {
+  color: var(--po-gold);
+  font-weight: 900;
+}
+.po-card {
+  color: var(--po-cream);
+  font-weight: 800;
+}
+
+.po-nb {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+/* The rarity chip: the word stays, the colour only helps */
+.po-chip {
+  display: inline-block;
+  padding: 0 8px;
+  border: 1.5px solid currentColor;
+  border-radius: 999px;
+  background: var(--po-ink);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.po-chip[data-rarity="common"] {
+  color: var(--po-common);
+}
+.po-chip[data-rarity="uncommon"] {
+  color: var(--po-uncommon);
+}
+.po-chip[data-rarity="rare"] {
+  color: var(--po-rare);
+}
+.po-chip[data-rarity="epic"] {
+  color: var(--po-epic);
+}
+.po-chip[data-rarity="legendary"] {
+  color: var(--po-legendary);
+}
+
+/* The stacked bar: segment widths are the percentages (set inline) */
+.po-bar {
+  display: flex;
+  height: 8px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--po-line);
+}
+.po-bar > span {
+  flex-grow: 0;
+  flex-shrink: 0;
+  box-shadow: inset -1px 0 0 var(--po-ink);
+}
+.po-bar > [data-rarity="common"] {
+  background: var(--po-common);
+}
+.po-bar > [data-rarity="uncommon"] {
+  background: var(--po-uncommon);
+}
+.po-bar > [data-rarity="rare"] {
+  background: var(--po-rare);
+}
+.po-bar > [data-rarity="epic"] {
+  background: var(--po-epic);
+}
+.po-bar > [data-rarity="legendary"] {
+  background: var(--po-legendary);
+}
+
+@media (min-width: 640px) {
+  .po {
+    padding-inline: 32px;
+  }
+}
