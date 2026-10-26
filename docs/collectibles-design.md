@@ -173,9 +173,13 @@ inside. Rarity is a *material*, never colour alone:
 |---|---|---|---|---|
 | Common | round-cornered die-cut sticker | none | flat | none |
 | Uncommon | sticker with a notched corner | dashed inner line | one static glint | none |
-| Rare | card, stepped corners | diagonal hatch | static sheen band | sheen on hover/focus |
-| Epic | card, scalloped top edge | dot grid | pointer-driven holo | pointer only |
-| Legendary | card, crown notch | sunburst | prism foil + sparkles | one slow loop, paused off-screen |
+| Rare | card, stepped corners | diagonal hatch | sheen band | sheen follows tilt |
+| Epic | card, scalloped top edge | dot grid | holo | holo follows tilt |
+| Legendary | card, crown notch | sunburst | prism foil + sparkles | follows tilt, plus one slow loop, paused off-screen |
+
+Where a card is the focus (the reveal, the detail page) it tilts toward a
+hovering mouse or a pressed finger, and the foil follows (`useCardTilt.ts`,
+`holo.css`). Grids stay still.
 
 Each card also carries a text rarity pill and a 1–5 pip row, readable in
 greyscale. Tokens are new `--hc-*` names on a `.hc-root` wrapper. No base token
@@ -183,27 +187,31 @@ is reassigned, and dark values come in both the attribute and media forms.
 
 ### Pack wrappers
 
-Each collection has its own silhouette and material, built in CSS around a
-pixel emblem:
+Every pack is the same crimped foil booster; each collection keeps its own
+print (`opening/pack/art.ts`), with its colours, pixel emblem and motif:
 
-- **Fright Fest 2026:** a crimped prize bag, matte night with a yellow moon.
+- **Fright Fest 2026:** a night prize bag with a yellow moon.
 - **HallPass Originals:** a hall-pass tag with a punched hole and lanyard.
-- **Internet Culture:** a browser-window sleeve.
-- **Brainrot:** a lopsided snack sachet.
-- **Turkish Internet Culture:** a tea-box carton with a tiled border.
+- **Internet Culture:** a browser-window print.
+- **Brainrot:** a loud snack-sachet print.
+- **Turkish Internet Culture:** a tea-box print with tiled bands.
 
-The foil is layered gradients with one blend mode, driven by pointer custom
-properties. No WebGL.
+The opening draws the pack in WebGL (with a DOM fallback); the Pack Room shelf
+draws the same print into a 2D canvas.
 
-### Opening, stage by stage
+### Opening
 
-| Stage | What happens | Timing |
-|---|---|---|
-| Inspect | the pack enters; tilts with pointer/drag (±12°); front/back flip button | 400 ms in, then the player's pace |
-| Tear | drag along the seal: the strip separates along a jagged line that follows the pointer, curls and falls away. Forgiving: ±35° cone, commit at 60% or a flick; below threshold it springs back | player-driven, auto-complete 200 ms |
-| Emerge | three face-down cards slide out, staggered | 120 ms stagger, 350 ms each |
-| Reveal | the back already shows the true rarity's glow; tap/Enter to flip | flip 450–800 ms by rarity; extra hold 0/0/150/300/600 ms |
-| Summary | row of three with NEW / DUPLICATE, collection progress, actions | ~900 ms |
+Superseded by **`collectibles-opening.md`** (the physical redesign, Oct 2026):
+the foil pack, the tear, the cards leaving the wrapper, the reveal and the
+summary, with measurements and limitations. Two rules from the first design
+changed:
+
+- **The back of a card says nothing.** Every back has the same silhouette,
+  pattern and timing; the rarity is staged only once the face shows. (It used
+  to show the true rarity's glow before the flip.)
+- **No rarity-timed hold before a flip.** The turn is identical for every card.
+
+Still true from the first design:
 
 - **Always available:** a Tear button and Enter/Space instead of dragging,
   Reveal all, Skip (Esc), keyboard focus order, and an `aria-live` line per
@@ -215,8 +223,8 @@ properties. No WebGL.
 - **No flashes:** glows ramp over ≥ 250 ms, nothing pulses more than twice a
   second, and there is no full-screen white.
 - **Honest presentation:** no near-miss slowdowns, no fake tells, no "one more
-  pack" nag, no countdowns. The rarity cue is the real rarity, fixed before the
-  animation starts.
+  pack" nag, no countdowns. Reveal order is rarest last, fixed by the server's
+  result before the animation starts.
 
 ### Binder
 
@@ -234,8 +242,11 @@ player.
 - Card art: 32×32 or 48×48 PNG (≤ 2 KB each), drawn at integer scale with
   `image-rendering: pixelated`, lazy-loaded.
 - Animate transform and opacity only. Foil repaints only on the focused card.
-  There are no idle loops outside the Pack Room, at most one animated card in
-  view in grids, and no blur filters on large areas.
+  The only idle loop is the legendary card's, on a focused card and paused
+  off-screen; grids animate nothing, and there are no blur filters on large
+  areas. The opening's WebGL pack draws only while
+  something moves, pauses in a hidden tab, and lowers its resolution when
+  frames run long.
 - Pointer handling is throttled to one update per animation frame.
 
 ---

@@ -67,10 +67,11 @@ The cards stay DOM, for pixel art at whole-number scales, real text and accessib
 |---|---|---|
 | State | stages, guards, reveal order, resume | `opening/machine.ts`, `opening/resume.ts` |
 | Input | tear gesture model (pure), pointer plumbing | `opening/tear.ts`, `opening/pack/PackStage.tsx` |
-| Rendering | foil pack: WebGL, or DOM fallback | `opening/pack/gl/*`, `opening/pack/dom.ts`, `opening/pack/art.ts` |
-| Timelines | extraction, deal, flip, summary (Web Animations API) | `opening/reveal/*` |
+| Rendering | foil pack: WebGL, or DOM fallback | `opening/pack/gl/*`, `opening/pack/domPack.ts`, `opening/pack/art.ts`, `opening/pack/mesh.ts`, `opening/pack/surface.ts` |
+| Timelines | extraction, deal, flip, summary (Web Animations API) | `opening/OpeningFlow.tsx`, `opening/RevealCard.tsx`, `opening/placement.ts`, `opening/motion.ts` |
 | Sound / haptics | gesture-linked cues | `opening/sound.ts`, `opening/haptics.ts` |
-| Card materials | uniform back, tilt-reactive foil | `Card.tsx`, `collectibles.css`, `useCardTilt.ts` |
+| Card materials | uniform back, tilt-reactive foil | `Card.tsx`, `holo.css`, `useCardTilt.ts` |
+| Pack Room shelf | the same print, as a 2D canvas | `PackPrint.tsx`, `PackRoom.tsx` |
 | Backend result | unchanged | `/api/v1/collection/packs/<id>/open` |
 
 ### Stages
@@ -112,3 +113,65 @@ The cards stay DOM, for pixel art at whole-number scales, real text and accessib
 - Contents are rolled and stored server-side, once, at open time. The client never chooses them.
 - A refresh at any point cannot reroll. Before the commit the pack is still sealed. After it, the open call returns the stored pulls.
 - A rendering error never loses a pack. The cards are in the binder the moment the open call succeeds, whatever the animation does next.
+
+## 7. As built (26 Oct 2026)
+
+### The sequence
+
+| Step | What the player sees | Timing |
+|---|---|---|
+| Sealed | One crimped foil booster with the collection's print. It tilts toward the pointer (or a finger) and catches the studio light and a pointer light; the thumb dents the foil. | the player's pace |
+| Tear | Drag along the top seal. The torn length of the strip lifts, curls toward the viewer and twists while the rest stays attached; the torn edge and the silver inner film show. Releasing early keeps the tear. | the player's pace; Open it / Enter tears it in 0.62 s |
+| Opened | The strip flies off with the release velocity. The wrapper loosens, lowers, and the face-down stack shows in the mouth. | 520 ms, then ~0.6 s |
+| Extracting | The stack is drawn up out of the wrapper (DOM cards between the interior and the canvas front wall). | 0.7 s |
+| Dealing | The cards are dealt from the stack to their places while the wrapper drops away. | 120 ms stagger, 620 ms each |
+| Revealing | Every back is identical. A turn lifts, rotates and settles the card in 860 ms; the face shows at 52 % for every card. Only then does the rarity moment play (0 / 650 / 1000 / 1200 / 1500 ms, common to legendary). Rarest last. | player-driven |
+| Summary | The hand (a row on wide screens, a fan on phones), NEW / Duplicate, collection progress, Open another pack, See your binder, Pack Room, Back to HallPass. | |
+
+### Screens
+
+- **Wide** (three medium cards fit across): a row; only the next card is a button; the summary follows ~0.7 s after the last turn settles.
+- **Phones** (`chooseFit` in `placement.ts`): one card in front, as large as the height allows (lg, md, then sm), the face-down rest stacked behind, seen cards in a tray below. Tap turns over, then tap or swipe moves on. The card in front takes every touch (`touch-action: none`) so a swipe never scrolls the page.
+- **Short and wide** (a phone on its side): the title, chips and buttons stand in a column beside the table, the tray sits beside the card, and the card in front shrinks (to no less than 0.6) to fit.
+- The stage fills the screen below the site header and above the tab bar (`--ho-top`, `--hp-bottom-chrome`), so no phone scrolls mid-opening. Checked at 390×844, 320×568 and 844×390.
+
+### Measurements
+
+Headless Chromium with **software WebGL (SwiftShader)** on the dev server (React development build), 1280×860 at 2× density, pack 03. rAF frame intervals; 16.7 ms is one 60 Hz refresh. These are pessimistic: a real GPU draws the pack far faster, and CDP CPU throttling slows the page's main thread but not SwiftShader, which renders in the GPU process.
+
+| Phase | 1× CPU: median / p95 | 4× CPU: median / p95 (share > 20 ms) |
+|---|---|---|
+| Idle, sealed | page requests **0** frames | 0 |
+| Pointer over the pack | 16.7 / 33.4 ms | 16.7 / 33.4 (26 %) |
+| Tear | 16.7 / 33.3 ms (14 %) | 16.7 / 33.4 (45 %) |
+| Open, extract, deal | 16.7 / 33.4 ms; one frame up to 100–350 ms | 16.7 / 33.4 (33 %) |
+| Card turn | 16.7 / 16.8 ms | 16.7 / 16.8 (1 %) |
+| Summary | page requests **0** frames | 0 |
+
+- 6× CPU matched 4×. Adaptive quality settled the canvas at 1.25–1.5× density during the tear (from 2×); before it judged a median over 12 frames, the tear's median was 33 ms.
+- Crinkle normal map: 16 / 23 / 40 ms at 256 / 384 / 512 px (Node, Apple silicon). It is generated in an idle callback after the first frame, at 320 px on modest devices.
+- We do **not** claim 60 fps on any device: nothing was measured on a real GPU, phone or Chromebook.
+
+### QA (lab, Chromium; phone flow also in WebKit)
+
+- One open call per attempt, including double and triple clicks, repeated Enter and a click storm on cards and Reveal all.
+- Refresh mid-tear: still sealed. After commit: the same pulls. After turning one card: that card face up, the rest down. In the summary: the summary.
+- `fail=1`: notice, pack visibly whole, the second tear succeeds (2 calls). `slow=3000`: "Opening…", Skip waits for the answer.
+- Skip and Esc from committing, opened, extracting and revealing all land on the same three cards.
+- WebGL context loss and `--disable-webgl`: the DOM pack takes over and the journey completes.
+- After the summary no canvas is left and no animation frame is requested.
+- Keyboard only: Tab, Enter/Space and Esc complete it; focus moves to the next card, waits on the title while nothing is focusable, then lands on the summary heading.
+- Reduced motion: the whole journey works, with fades for movement.
+
+### Known limitations
+
+- No real iPhone, Android phone or Chromebook was used; no real screen reader (VoiceOver, TalkBack) was run, only the accessibility tree and the live-region text.
+- Nobody has listened to the synthesised sounds; their levels (peaks about −11 to −14 dBFS) are computed, not judged.
+- The touch tear was only driven in Chromium (CDP touch events); WebKit was run with Open it and taps.
+- Two tabs on one pack were only checked against the lab's per-tab mock, which cannot prove the real server's idempotency; the route's own tests cover that.
+- The turning card briefly overlaps "Card N of 3" above it on phones.
+
+### Preview
+
+`npm run dev`, then `/packs/lab` (development only; it 404s in production):
+`?view=pack&id=<pack id>` is the pack on its own with a bench (Auto tear, Loosen, Tug, Drop away), `?view=room` is the Pack Room, and `?view=open&pack=11111111-2222-4333-8444-5555555555NN` (NN 01–06) is an opening against a mocked player. Add `reset=1` to reseal, `slow=<ms>`, `fail=<n>` or `state=signedout`.
