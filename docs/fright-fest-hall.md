@@ -142,9 +142,13 @@ Four pieces of work, shipped as four pull requests so each can merge on its own:
 
 ### PR 3: The hall
 Order and commits:
-1. Art. Copy A's PNGs into `public/events/fright-fest/hall/` (haunted and calm,
-   desk and phone). Copy the art script and `NOTES.md` into
-   `public/events/fright-fest/hall/ART.md` / `scripts/art/`.
+1. Art. Copy A's shipping PNGs into `public/events/fright-fest/hall/` (haunted
+   and calm, desk and phone; no composites or previews), with an `ART.md` there
+   in the style of `public/collectibles/ART.md`. It records that the source
+   script is `artifacts/fright-fest-event-hall/art/hall_a.py` on branch
+   `design/fright-fest-event-hall`. Fonts and scripts are not copied into the
+   repo. Cabinet art for games that are not announced yet is not shipped
+   either (see "As built").
 2. `app/fright-fest/hall/geometry.ts` and its test: scene sizes, zones and
    breakpoints from A's manifest, as percentages of the room.
 3. The room as a server component, with `hall.css`: scenes, seasons, labels,
