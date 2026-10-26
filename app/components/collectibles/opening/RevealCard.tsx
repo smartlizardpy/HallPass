@@ -48,6 +48,8 @@ interface Props {
   action?: CardAction | null;
   href?: string;
   hrefLabel?: string;
+  /** The link is a pointer convenience only (the results list carries the accessible one). */
+  hrefHidden?: boolean;
   onFaceShown(): void;
   onSettled(): void;
   buttonRef?(el: HTMLElement | null): void;
@@ -157,7 +159,14 @@ export function RevealCard(props: Props) {
         )}
       </div>
       {props.href ? (
-        <Link ref={props.buttonRef} className="ho-hit" href={props.href} aria-label={props.hrefLabel} />
+        <Link
+          ref={props.buttonRef}
+          className="ho-hit"
+          href={props.href}
+          aria-label={props.hrefHidden ? undefined : props.hrefLabel}
+          aria-hidden={props.hrefHidden || undefined}
+          tabIndex={props.hrefHidden ? -1 : undefined}
+        />
       ) : (
         action && (
           <button

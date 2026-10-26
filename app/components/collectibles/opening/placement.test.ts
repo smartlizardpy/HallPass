@@ -1,18 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { chooseLayout, placeCards, summaryHeight } from "./placement";
+import { CARD_PX, chooseFit, placeCards, summaryHeight } from "./placement";
 
 const md = { w: 200, h: 280 };
 const lg = { w: 260, h: 364 };
 
-describe("chooseLayout", () => {
-  it("deals a row when three cards fit across", () => {
-    expect(chooseLayout({ w: 830, h: 600 }, md)).toBe("row");
+describe("chooseFit", () => {
+  it("deals a row of medium cards when three fit across", () => {
+    expect(chooseFit({ w: 830, h: 600 })).toEqual({ layout: "row", size: "md" });
   });
-  it("goes one at a time on a phone", () => {
-    expect(chooseLayout({ w: 366, h: 600 }, md)).toBe("focus");
+  it("uses a row of small cards on a short, wide screen (a phone on its side)", () => {
+    expect(chooseFit({ w: 820, h: 290 })).toEqual({ layout: "row", size: "sm" });
   });
-  it("goes one at a time when the table is too short for a row and its captions", () => {
-    expect(chooseLayout({ w: 900, h: 340 }, md)).toBe("focus");
+  it("goes one at a time on a phone, as large as the height allows", () => {
+    expect(chooseFit({ w: 366, h: 575 })).toEqual({ layout: "focus", size: "lg" });
+    expect(chooseFit({ w: 366, h: 420 })).toEqual({ layout: "focus", size: "md" });
+    expect(chooseFit({ w: 296, h: 250 })).toEqual({ layout: "focus", size: "sm" });
   });
 });
 
@@ -56,9 +58,39 @@ describe("placeCards: focus (phones)", () => {
     expect(p[0].y).toBeLessThanOrEqual(600);
   });
 
-  it("keeps the card in front on the table on a short phone", () => {
+  it("keeps the card in front, below its count, on the table on a short phone", () => {
     const p = placeCards({ ...base, table: { w: 340, h: 470 }, card: md });
-    expect(p[0].y - md.h / 2).toBeGreaterThanOrEqual(0);
+    expect(p[0].y - md.h / 2).toBeGreaterThanOrEqual(28);
+  });
+
+  it("keeps every card on a small phone's table, the tray clear of the card in front", () => {
+    const sm = CARD_PX.sm;
+    for (const table of [{ w: 296, h: 260 }, { w: 296, h: 330 }]) {
+      const p = placeCards({ ...base, table, card: sm, flipped: [true, false, false], current: 1 });
+      const box = (i: number) => ({ l: p[i].x - (sm.w * p[i].s) / 2, r: p[i].x + (sm.w * p[i].s) / 2, t: p[i].y - (sm.h * p[i].s) / 2, b: p[i].y + (sm.h * p[i].s) / 2 });
+      const [tray, front] = [box(0), box(1)];
+      expect(front.t).toBeGreaterThanOrEqual(28);
+      expect(tray.b).toBeLessThanOrEqual(table.h);
+      expect(tray.r).toBeLessThanOrEqual(table.w);
+      const overlap = tray.l < front.r && tray.r > front.l && tray.t < front.b && tray.b > front.t;
+      expect(overlap).toBe(false);
+    }
+  });
+
+  it("puts the tray beside the card when the table is short and wide", () => {
+    const sm = CARD_PX.sm;
+    const p = placeCards({ ...base, table: { w: 560, h: 240 }, card: sm, flipped: [true, true, false], current: 2 });
+    expect(p[0].x).toBeGreaterThan(p[2].x + sm.w / 2);
+    expect(p[1].y).toBeGreaterThan(p[0].y);
+    for (const i of [0, 1]) expect(p[i].y + (sm.h * p[i].s) / 2).toBeLessThanOrEqual(240);
+  });
+
+  it("shrinks the card in front to fit a table shorter than the card", () => {
+    const sm = CARD_PX.sm;
+    const p = placeCards({ ...base, table: { w: 540, h: 200 }, card: sm });
+    expect(p[0].s).toBeLessThan(1);
+    expect(p[0].y - (sm.h * p[0].s) / 2).toBeGreaterThanOrEqual(28);
+    for (const x of p) expect(x.y + (sm.h * x.s) / 2).toBeLessThanOrEqual(200);
   });
 });
 

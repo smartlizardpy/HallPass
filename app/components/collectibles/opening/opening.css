@@ -21,7 +21,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: clamp(500px, var(--ho-fill), 920px);
+  min-height: clamp(420px, var(--ho-fill), 920px);
   border-radius: 20px;
   background:
     radial-gradient(60% 46% at 50% 46%, color-mix(in srgb, var(--ho-tint) 12%, #22143a) 0%, transparent 100%),
@@ -75,10 +75,11 @@
   gap: 8px;
 }
 .ho-chip {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 34px;
+  min-height: 40px;
   padding: 0 12px;
   border-radius: 999px;
   border: 1.5px solid var(--ho-line);
@@ -88,6 +89,12 @@
   font-size: 0.8rem;
   font-weight: 800;
   cursor: pointer;
+}
+/* A 44 px touch target around the 40 px chip. */
+.ho-chip::after {
+  content: "";
+  position: absolute;
+  inset: -2px -2px;
 }
 .ho-chip:hover {
   background: rgb(255 255 255 / 0.1);
@@ -102,7 +109,7 @@
 .ho-table {
   position: relative;
   flex: 1 1 auto;
-  min-height: 360px;
+  min-height: 240px;
 }
 .ho-stage[data-stage="summary"] .ho-table {
   flex: none;
@@ -275,8 +282,8 @@
   justify-items: center;
   align-content: start;
   gap: 10px;
-  min-height: 104px;
-  padding: 6px 16px 18px;
+  min-height: 88px;
+  padding: 6px 16px 16px;
   text-align: center;
 }
 .ho-copy {
@@ -351,13 +358,13 @@
   box-shadow: none;
   background: rgb(255 255 255 / 0.08);
 }
-.ho-btn:disabled {
+.ho-btn:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.45;
   cursor: default;
   transform: none;
   box-shadow: 0 3px 0 var(--hc-shadow);
 }
-:is(.ho-btn, .ho-chip, .ho-hit, .ho-summary h2, .ho-results a):focus-visible {
+:is(.ho-btn, .ho-chip, .ho-hit, .ho-title, .ho-summary h2, .ho-results a):focus-visible {
   outline: 3px solid #ffd84a;
   outline-offset: 4px;
 }
@@ -427,7 +434,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 12px;
+  padding: 0 12px;
   border-radius: 12px;
   background: rgb(255 255 255 / 0.05);
   text-align: left;
@@ -455,6 +462,9 @@
 .ho-results a {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
   color: var(--ho-ink);
   font-weight: 800;
   text-decoration: underline;
@@ -466,14 +476,9 @@
   font-weight: 700;
   color: var(--ho-muted);
 }
-/* Wide: the cards above already show all of this, and link to their pages. */
+/* Wide: the cards above already say all of this, and are the links to their pages. */
 .ho-results[data-layout="row"] {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+  display: none;
 }
 .ho-progress {
   display: grid;
@@ -531,6 +536,49 @@
   }
   .ho-chip {
     padding: 0 10px;
+  }
+}
+
+/*
+ * A phone on its side has room for the table or for the bar and buttons above and
+ * below it, not both: the table takes the full height and the title, chips and
+ * buttons stand in a column beside it.
+ */
+@media (orientation: landscape) and (max-height: 520px) {
+  .ho-stage:not(.ho-shell) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 36%);
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: clamp(220px, var(--ho-fill), 520px);
+  }
+  .ho-stage:not(.ho-shell) > .ho-table {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    min-height: 0;
+    margin-top: 0;
+  }
+  .ho-stage:not(.ho-shell) > .ho-bar {
+    grid-column: 2;
+    grid-row: 1;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 12px 0 0;
+  }
+  .ho-stage:not(.ho-shell) .ho-heading {
+    flex: 1 1 100%;
+  }
+  .ho-stage:not(.ho-shell) .ho-sub {
+    display: none;
+  }
+  .ho-stage:not(.ho-shell) > .ho-foot {
+    grid-column: 2;
+    grid-row: 2;
+    align-content: center;
+    min-height: 0;
+    padding: 8px 12px 12px 0;
+  }
+  .ho-stage:not(.ho-shell) .ho-copy {
+    font-size: 0.85rem;
   }
 }
 

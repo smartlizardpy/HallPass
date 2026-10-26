@@ -37,7 +37,7 @@ import { revealLine, slotLines } from "@/app/lib/collectibles/opening";
 import { RARITY_LABEL } from "@/app/lib/collectibles/present";
 import { CardBack, type CardSize } from "../Card";
 import { haptics } from "./haptics";
-import { CAPTION, chooseLayout, placeCards, summaryHeight, type Place } from "./placement";
+import { CAPTION, CARD_PX, chooseFit, placeCards, summaryHeight, type Place } from "./placement";
 import { canCommit, canSkip, initialOpening, openFailure, openingReducer, type Pull, type SealedPack } from "./machine";
 import { EASE, isAborted, play, sleep } from "./motion";
 import { seedOf } from "./noise";
@@ -55,7 +55,6 @@ export interface OpeningLinks {
 }
 const DEFAULT_LINKS: OpeningLinks = { open: (p) => `/packs/open?pack=${p}`, room: "/packs" };
 
-const CARD_PX: Record<CardSize, { w: number; h: number }> = { sm: { w: 140, h: 196 }, md: { w: 200, h: 280 }, lg: { w: 260, h: 364 } };
 /** The deck inside the pouch: its top edge (share of the pack's height) and each card's offset in the stack. */
 const DECK_TOP = 0.17;
 const DECK_JIT = [
@@ -143,6 +142,7 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
   const deckCards = useRef<(HTMLDivElement | null)[]>([]);
   const buttons = useRef<(HTMLElement | null)[]>([]);
   const summaryHead = useRef<HTMLHeadingElement>(null);
+  const title = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
     alive.current = true;
@@ -161,12 +161,21 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
 
   // ── Measuring: the stage fills the screen below the site header (and above a phone's tab bar). ──
   const ro = useRef<ResizeObserver | null>(null);
-  const stageRef = useCallback((el: HTMLElement | null) => {
-    stage.current = el;
-    if (!el) return;
-    const fit = () => el.style.setProperty("--ho-top", `${Math.max(0, Math.round(el.getBoundingClientRect().top + window.scrollY))}px`);
-    fit();
+  const fitStage = useCallback(() => {
+    const el = stage.current;
+    if (el) el.style.setProperty("--ho-top", `${Math.max(0, Math.round(el.getBoundingClientRect().top + window.scrollY))}px`);
   }, []);
+  const stageRef = useCallback(
+    (el: HTMLElement | null) => {
+      stage.current = el;
+      fitStage();
+    },
+    [fitStage],
+  );
+  useEffect(() => {
+    window.addEventListener("resize", fitStage);
+    return () => window.removeEventListener("resize", fitStage);
+  }, [fitStage]);
   const tableRef = useCallback((el: HTMLDivElement | null) => {
     ro.current?.disconnect();
     tableEl.current = el;
@@ -246,8 +255,10 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
 
   // ── Layout ──
   const summary = state.stage === "summary";
-  const layout = chooseLayout({ w: table.w, h: openH || table.h }, CARD_PX.md);
-  const revealSize: CardSize = layout === "row" ? "md" : (openH || table.h) >= CARD_PX.lg.h + 140 && table.w >= 300 ? "lg" : "md";
+  // Decided on the table as it is during the opening (the summary shrinks it).
+  const fit = chooseFit({ w: table.w, h: openH || table.h });
+  const layout = fit.layout;
+  const revealSize: CardSize = fit.size;
   const revealSizeRef = useRef(revealSize);
   useEffect(() => {
     if (!summary) revealSizeRef.current = revealSize;
@@ -263,7 +274,7 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
 
   // ── Choreography. Each stage's steps stop the moment the stage changes. ──
   const def = state.pack ? getPack(state.pack.packId) : undefined;
-  const packW = Math.round(Math.max(170, Math.min(300, table.w * 0.74, ((openH || table.h) - 36) / 1.46)));
+  const packW = Math.round(Math.max(140, Math.min(300, table.w * 0.74, ((openH || table.h) - 36) / 1.46)));
   const slotH = packW * 1.46;
   const deckScale = (0.74 * packW) / 300;
 
@@ -409,14 +420,20 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
     return () => window.clearTimeout(t);
   }, [state.stage, layout, allSettled, reduced]);
 
-  // Keep the keyboard on whatever comes next, unless the player has gone elsewhere on the page.
+  // Keep the keyboard on whatever comes next, unless the player has gone elsewhere
+  // on the page. When the focused control goes away (Open it once the tear starts,
+  // the last card's button once it is turned) and nothing replaces it yet, focus
+  // waits on the stage's title rather than falling to the page.
   useEffect(() => {
-    if (!interactive) return;
-    const target = layout === "row" ? buttons.current[nextUnflipped] : buttons.current[front];
+    // Not before the opening starts: arriving on the page must not move focus.
+    if (summary || state.stage === "loading" || state.stage === "sealed") return;
     const active = document.activeElement;
-    const ours = !active || active === document.body || stage.current?.contains(active);
-    if (target && ours) target.focus({ preventScroll: true });
-  }, [interactive, layout, nextUnflipped, front, state.settled]);
+    const lost = !active || active === document.body;
+    if (!lost && !stage.current?.contains(active)) return;
+    const target = interactive ? (layout === "row" ? buttons.current[nextUnflipped] : buttons.current[front]) : null;
+    if (target) target.focus({ preventScroll: true });
+    else if (lost) title.current?.focus({ preventScroll: true });
+  }, [state.stage, summary, interactive, layout, nextUnflipped, front, state.settled]);
 
   // The results: say so, and put the keyboard on them.
   const newCount = state.pulls.filter((p) => p.wasNew).length;
@@ -426,7 +443,8 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
     sounds.complete();
     const t = window.setTimeout(() => {
       setLine(`${summaryTitle}. ${state.pulls.map((p, i) => revealLine(i + 1, state.pulls.length, p.collectibleId, p.wasNew)).join(" ")}`);
-      summaryHead.current?.focus({ preventScroll: true });
+      const active = document.activeElement;
+      if (!active || active === document.body || stage.current?.contains(active)) summaryHead.current?.focus({ preventScroll: true });
     }, 0);
     return () => window.clearTimeout(t);
     // Once, on arriving at the summary.
@@ -546,7 +564,7 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
     >
       <header className="ho-bar">
         <div className="ho-heading">
-          <h1 id="ho-title" className="ho-title">
+          <h1 id="ho-title" ref={title} tabIndex={-1} className="ho-title">
             {def?.name ?? "Your pack"}
           </h1>
           {collection && <p className="ho-sub">{collection.name}</p>}
@@ -613,7 +631,7 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
         )}
 
         {showCards && (
-          <div className="ho-cards" aria-label="Your cards">
+          <div className="ho-cards" role="group" aria-label="Your cards">
             {layout === "focus" && !summary && (
               <p className="ho-count" aria-hidden="true">
                 Card {state.current + 1} of {n}
@@ -636,11 +654,14 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
                   from={deckFrom && !state.resumed ? { place: deckFrom[i], delay: i * DEAL_STAGGER } : null}
                   action={actionFor(i)}
                   href={summary ? `/collectibles/${card.id}` : undefined}
-                  hrefLabel={`View ${card.name}`}
+                  hrefLabel={`${card.name}: ${RARITY_LABEL[card.rarity]}, ${pull.wasNew ? "new" : "duplicate"}. View card`}
+                  hrefHidden={layout !== "row"}
                   buttonRef={(el) => {
                     buttons.current[i] = el;
                   }}
                   onFaceShown={() => {
+                    // A turn still finishing after Skip must not talk over the summary.
+                    if (stateRef.current.stage !== "revealing") return;
                     sounds.reveal(card.rarity);
                     haptics.reveal(card.rarity);
                     announce(revealLine(i + 1, n, pull.collectibleId, pull.wasNew));
@@ -710,13 +731,13 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
                   : !state.flipped[state.current]
                     ? "Tap the card to turn it over."
                     : allFlipped
-                      ? "Tap or swipe to see all three."
+                      ? `Tap or swipe to see all ${n}.`
                       : "Tap or swipe for the next card."}
             </p>
             {state.resumed && <p className="ho-copy">You opened this pack before. Here&apos;s where you left off.</p>}
             <div className="ho-actions">
               {!allFlipped && (
-                <button type="button" className="ho-btn" onClick={() => setRevealAll(true)} disabled={!interactive || revealAll}>
+                <button type="button" className="ho-btn" onClick={() => interactive && setRevealAll(true)} aria-disabled={!interactive || revealAll || undefined}>
                   Reveal all
                 </button>
               )}
