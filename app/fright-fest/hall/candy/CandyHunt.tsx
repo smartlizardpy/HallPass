@@ -45,7 +45,7 @@ type Load = { status: "loading" } | { status: "error" } | { status: "ok"; me: Me
 const RECENT_SHOWN = 5;
 const BTN =
   "rounded-full px-4 py-2 text-sm font-extrabold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed";
-const PRIMARY = `${BTN} bg-brand text-white hover:bg-brand-600 disabled:bg-surface-2 disabled:text-muted disabled:hover:bg-surface-2`;
+const PRIMARY = `${BTN} bg-brand text-white hover:bg-brand-600 disabled:border disabled:border-dashed disabled:border-border disabled:bg-surface disabled:text-muted disabled:hover:bg-surface`;
 const QUIET = `${BTN} border border-border bg-surface text-foreground hover:bg-surface-2`;
 
 function newRequestId(): string {
@@ -385,7 +385,7 @@ function ShopItem({
     <li className="cd-item flex flex-col gap-2 rounded-xl bg-surface-2 p-3">
       {/* eslint-disable-next-line @next/next/no-img-element -- a pixel print; next/image would smooth it */}
       <img src={item.print} alt="" width={72} height={105} loading="lazy" className="hl-print cd-print mx-auto" />
-      <b className="block text-center text-foreground">{item.name}</b>
+      <b className="flex flex-1 items-center justify-center text-center text-foreground">{item.name}</b>
       <span className="block text-center font-black tabular-nums text-foreground">{item.price} candy</span>
       {confirming ? (
         <div
