@@ -189,6 +189,12 @@ Decisions made while building, inside the plan above.
 - **Placings come from the frozen snapshot**, never live standings, and only once
   the championship status is `finalised` or `archived`. The ledger `ref` is
   `<board slug>#<rank>`.
+- **Top earners is how a forger is found.** Achievement unlocks are
+  self-reported (any signed-in player can POST them), so the newest-50 feed will
+  not surface a cheater. `/dashboard/candy` lists the top 25 players by unrevoked
+  credited candy (public name and id only) with their achievement share, spend,
+  balance and the most achievements unlocked in any one minute, each linking to
+  `?player=<publicId>` which shows all of that player's credits for revocation.
 - **"Unrated" means 0.** The column defaults to 0 and the rubric's "Launch a
   game" is also 0, so the dashboard counts achievements that pay nothing.
 - **A sealed pack bought with candy that an admin later revokes is not refunded**
