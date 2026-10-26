@@ -57,9 +57,9 @@
         <figure><figcaption><b>The collection · /collection</b>The binder. The hall links to it only through the prize counter, so the event page never duplicates collectibles UI.</figcaption></figure>
       </div>
       <div class="card"><h3>What carries over between places</h3><ul>
-        <li><b>Camera and scale.</b> Concepts A and B use the Pack Room's front-on camera and its exact canvas (434 × 230 at 3×, 195 wide at 2× on phones). C breaks the camera on purpose for depth.</li>
-        <li><b>Materials.</b> The plum wallpaper with the yellow-dot print, the wood wainscot and the brass trim are shared with the Pack Room script.</li>
-        <li><b>Signs.</b> Every place has one bulb-bordered sign (HALLPASS on the school, PACK ROOM over the counter, FRIGHT FEST in the hall).</li>
+        <li><b>Camera and scale.</b> All three use the Pack Room's canvas (434 × 230 at 3×, 195 wide at 2× on phones). A and B keep its front-on camera; C breaks it on purpose for depth.</li>
+        <li><b>Materials.</b> A reuses the Pack Room's plum wallpaper, wood wainscot and brass trim, so the two rooms read as neighbours. B swaps them for the school's brick, stage curtains and paper; C for neon and dead cabinets. All three keep the night palette and the moon.</li>
+        <li><b>Signs.</b> Every place has one big sign: HALLPASS on the school, PACK ROOM over the counter, FRIGHT FEST in the hall (a bulb marquee in A, a hand-made letter banner in B, broken neon in C).</li>
         <li><b>Mystery stays mystery.</b> Cabinets the homepage shows as "???" stay "???" in the hall until their board opens.</li>
         <li><b>Seasons.</b> All three places swap to a calm version when the haunted skin is off, with identical layout.</li>
       </ul></div>`;

@@ -111,7 +111,7 @@
     const g = slot.game;
     if (!slot.open) return { chip: "Mystery cabinet", line: "A game joins when its Fright Fest mode is ready and its board opens. Its Fright Points count from that moment.", play: false };
     if (!champOn()) return { chip: g.modeShort, line: `Play ${g.mode} any time. Scoring and rewards: to be announced.`, play: true };
-    if (state.phase === "upcoming") return { chip: `Opens ${L.opens}`, line: `Ranked runs open ${L.opens}. You can practise now.`, play: true };
+    if (state.phase === "upcoming") return { chip: `Opens ${L.opens}`, line: `Ranked runs open ${L.opens}, 00:00 UK time. Practise now; nothing counts until then.`, play: true };
     if (state.phase === "live") return { chip: "Ranked · live", line: `Ranked until ${L.lastDay}, 23:59 UK. Your best run counts.`, play: true };
     if (state.phase === "closed") return { chip: "Board closed", line: `Ranked runs have closed. Results are checked and final by ${L.resultsBy}.`, play: true };
     return { chip: "Final", line: "The results are final. The mode stays open for fun.", play: true };
@@ -140,18 +140,18 @@
     if (state.api === "loading") return `<div class="bs-head"><span>Overall</span><span>Pts</span></div><ol class="bs-rows is-loading">${"<li><b>–</b><span>········</span><i>–</i></li>".repeat(rows)}</ol>`;
     if (!pub.available) return `<div class="bs-msg"><b>Scores offline</b><span>The machines still work. Try again in a minute.</span><button class="bs-retry" type="button" data-retry>Try again</button></div>`;
     const o = pub.standings.overall;
-    const tag = state.phase === "closed" ? `<em class="bs-tag">Provisional</em>` : state.phase === "finalised" ? `<em class="bs-tag is-final">Final</em>` : pub.sample ? `<em class="bs-tag is-sample">Sample</em>` : "";
+    const tag = (state.phase === "closed" ? `<em class="bs-tag">Provisional</em>` : state.phase === "finalised" ? `<em class="bs-tag is-final">Final</em>` : "") + (pub.sample ? `<em class="bs-tag is-sample">Sample</em>` : "");
     if (!o.length) {
       const msg = state.phase === "upcoming" ? [`Wakes up ${L.opens}`, "1st place on a board: 100 Fright Points"]
         : state.phase === "live" ? ["No ranked runs yet", "First place is open: 100 Fright Points"]
         : ["No ranked runs", "Nobody posted a ranked run"];
-      return `<div class="bs-head"><span>Overall</span>${tag}</div><div class="bs-msg"><b>${msg[0]}</b><span>${msg[1]}</span></div>`;
+      return `<div class="bs-head"><span>Overall</span><span class="bs-tags">${tag}</span></div><div class="bs-msg"><b>${msg[0]}</b><span>${msg[1]}</span></div>`;
     }
     const you = mine.signedIn && mine.rank ? mine : null;
     const n = you && you.rank > rows ? rows - 1 : rows;
-    const li = o.slice(0, n).map((e) => `<li class="r${e.rank <= 3 ? e.rank : ""}${pub.standings.championPublicId === e.publicId ? " is-champ" : ""}"><b>${e.rank}</b><span>${esc(e.name)}</span><i>${e.points}</i></li>`).join("");
+    const li = o.slice(0, n).map((e) => `<li class="r${e.rank <= 3 ? e.rank : ""}${pub.standings.championPublicId === e.publicId ? " is-champ" : ""}"><b>${e.rank}</b><span title="${esc(e.name)}">${esc(e.name)}</span><i>${e.points}</i></li>`).join("");
     const youLi = you && you.rank > n ? `<li class="is-you"><b>${you.rank}</b><span>You</span><i>${you.points}</i></li>` : "";
-    return `<div class="bs-head"><span>${tag ? "Overall" : "Overall · Fright Points"}</span>${tag}</div><ol class="bs-rows" data-src="GET /api/v1/championship/fright-fest-2026 → standings.overall">${li}${youLi}</ol>`;
+    return `<div class="bs-head"><span>${tag ? "Overall" : "Overall · Fright Points"}</span><span class="bs-tags">${tag}</span></div><ol class="bs-rows" data-src="GET /api/v1/championship/fright-fest-2026 → standings.overall">${li}${youLi}</ol>`;
   }
 
   // ------------------------------------------------------------------ details panel
@@ -202,7 +202,7 @@
     }
     // the ticker; in a layered room it rides in the layer that holds its plate
     const tz = d.zones && (d.zones.ticker || d.zones.front);
-    const tickerBox = tz ? box(tz, `ticker is-${tk.tone}`, `<span>${esc(tk.t)}</span>`, `role="status" data-src="championship config + /api phase"`) : "";
+    const tickerBox = tz ? box(tz, `ticker is-${tk.tone}`, `<span>${esc(tk.t)}</span>`, `data-src="championship config + /api phase"`) : "";
     if (layered) {
       // depth layers sit under every interactive overlay: nothing in them overlaps a cabinet,
       // and the fog must never speckle over a Play strip
@@ -223,7 +223,7 @@
     if (bz) {
       const calm = bz.calm || bz;
       const rowH = L2.board ? 32 : 24;
-      const rows = Math.max(3, Math.floor((calm.h * L2.s - 54) / rowH));
+      const rows = Math.max(3, Math.floor((calm.h * L2.s - (L2.board ? 84 : 72)) / rowH));
       h += box(calm, "board-screen", `<h2 class="sr-only">High scores</h2>${boardScreen(pub, mine, Math.min(rows, L2.mode === "phone" ? 3 : 6))}${champOn() ? `<a class="bs-more" href="#standings">Full standings</a>` : ""}`, `data-zone="board"`);
     }
 
@@ -242,7 +242,7 @@
     const pz = d.zones && d.zones.prize;
     if (pz) {
       h += box(pz, "hot-zone prize-hit", `<a href="#prize-counter" data-peek aria-label="The prize counter: go to the Pack Room"></a>`);
-      if (pz.calm) h += box(pz.calm, "label prize-label", `<span>Prize counter →</span>`);
+      if (pz.calm) h += box(pz.calm, "label prize-label", pz.calm.w * L2.s < 170 ? `<span>Prize<small>counter →</small></span>` : `<span>Prize counter →</span>`);
     }
 
     // cabinets
@@ -252,7 +252,7 @@
         h += cabinetHTML(sl, i, p, cab, M, L2);
       });
       // tickets (concept B) or play strips are inside cabinetHTML
-      if (d.zones && d.zones.panel && !(state.concept === "c")) h += box(d.zones.panel, "panel", panelHTML(slots, L2, false), `role="region" aria-label="Selected machine" aria-live="polite"`);
+      if (d.zones && d.zones.panel && !(state.concept === "c")) h += box(d.zones.panel, "panel", panelHTML(slots, L2, false), `role="region" aria-label="Selected machine"`);
     } else {
       h += phoneMachines(slots, M, d, L2);
     }
@@ -274,7 +274,7 @@
     const on = i === sel;
     const key = sl.key;
     const g = sl.game;
-    const label = sl.open ? `${short(g)}: ${g.mode}. Show details` : "Mystery cabinet. Show details";
+    const label = sl.open ? `${short(g)}: ${g.mode}. Cabinet ${i + 1} of 3` : `Mystery cabinet, not announced. Cabinet ${i + 1} of 3`;
     let h = "";
     const pool = M.desk.pool;
     if (hasArt() && pool) h += ovImg(pool.file || "pool-on.png", "pool", p.x + pool.dx, p.y + pool.dy, on);
@@ -284,14 +284,14 @@
       : `<span class="cab-ph">${sl.open ? esc(short(g)) : "???"}</span>`;
     h += `<div class="cab${on ? " is-on" : ""} k-${key}" style="--x:${p.x};--y:${p.y};--w:${cab.w};--h:${cab.h}" data-slot="${i}">
       ${art}
-      <button class="cab-hit" type="button" aria-pressed="${on}" aria-label="${esc(label)}" data-select="${i}"></button>
+      <button class="cab-hit" type="button" aria-pressed="${on}" aria-label="${esc(label)}" tabindex="${on ? 0 : -1}" data-select="${i}"></button>
     </div>`;
     // the PLAY strip: on the cabinet (A, C) or on the stage front (B)
     const zone = state.concept === "b" && M.desk.zones.tickets ? M.desk.zones.tickets[i]
       : cab.button && cab.button.w ? { x: p.x + cab.button.x, y: p.y + cab.button.y, w: cab.button.w, h: cab.button.h } : null;
     if (zone) {
       const inner = sl.open
-        ? `<a class="play-strip" href="#play-${g.slug}" data-play="${g.slug}" aria-label="Play ${esc(short(g))}">${state.concept === "b" ? "Admit one" : "Play"}</a>`
+        ? `<a class="play-strip" href="#play-${g.slug}" data-play="${g.slug}" aria-label="Play ${esc(short(g))}">${state.concept === "b" ? `<small aria-hidden="true">Admit one</small>Play` : "Play"}</a>`
         : `<span class="play-strip is-soon">Soon</span>`;
       h += box(zone, `play-zone${on ? " is-sel" : ""}`, inner);
     }
@@ -323,7 +323,7 @@
       slots.forEach((s2, i) => {
         h += `<div class="swipe-item" data-index="${i}"><div class="cab${i === sel ? " is-on" : ""} k-${s2.key}" style="--x:${p.x};--y:6;--w:${cab.w};--h:${cab.h}">
           ${hasArt() ? cabArt(s2.key, cab) : `<span class="cab-ph">${s2.open ? esc(short(s2.game)) : "???"}</span>`}
-          <button class="cab-hit" type="button" aria-pressed="${i === sel}" aria-label="${esc(s2.open ? short(s2.game) : "Mystery cabinet")}" data-select="${i}"></button></div></div>`;
+          <button class="cab-hit" type="button" aria-pressed="${i === sel}" aria-label="${esc(s2.open ? short(s2.game) : "Mystery cabinet, not announced")}" tabindex="${i === sel ? 0 : -1}" data-select="${i}"></button></div></div>`;
       });
       h += `</div>`;
       const below = (d.zones && d.zones.panel) || { x: 0, y: p.y + cab.h + 4, w: d.w, h: Math.max(14, d.h - (p.y + cab.h + 4)) };
@@ -353,7 +353,7 @@
     const boards = pub.available ? pub.standings.boards : [];
     const tabs = [{ id: "overall", label: "Overall" }].concat(boards.map((b) => ({ id: b.slug, label: D.CONFIG.games.find((g) => g.slug === b.slug).short || b.title })));
     if (!tabs.find((t) => t.id === tab)) tab = "overall";
-    const stamp = state.phase === "closed" ? `<span class="stamp">Provisional</span>` : state.phase === "finalised" ? `<span class="stamp is-final">Final</span>` : pub.sample ? `<span class="stamp is-sample">Sample data</span>` : "";
+    const stamp = (state.phase === "closed" ? `<span class="stamp">Provisional</span>` : state.phase === "finalised" ? `<span class="stamp is-final">Final</span>` : "") + (pub.sample ? `<span class="stamp is-sample">Sample data</span>` : "");
     let body = "";
     if (state.api === "loading") body = `<div class="tbl-wrap"><table class="tbl is-loading"><tbody>${"<tr><td>–</td><td>········</td><td>–</td></tr>".repeat(8)}</tbody></table></div>`;
     else if (!pub.available) body = `<div class="empty"><b>The scores are offline for a moment.</b><p>Your runs are still being saved. The board comes back by itself; you can also <button type="button" class="link" data-retry>try again</button>.</p></div>`;
@@ -379,39 +379,44 @@
       }
     }
     const pending = pub.available && pub.standings.pendingGames ? `<p class="note">${pub.standings.pendingGames === 1 ? "One more game joins" : pub.standings.pendingGames + " more games join"} when its Fright Fest mode is ready. Unannounced games are not named here.</p>` : "";
-    const meLine = mine.signedIn ? (mine.available && mine.rank ? `<p class="me">You are <b>${D.ordinal(mine.rank)}</b> overall with <b>${mine.points}</b> Fright Points.${mine.eligible ? "" : " Get a result on every open board to be eligible for Overall Champion."}</p>` : `<p class="me">You have no ranked run yet.</p>`) : `<p class="me"><a href="#">Sign in</a> to be ranked. Guests can play the modes, but their runs are not ranked.</p>`;
+    const ahead = mine.signedIn && mine.rank && pub.available ? pub.standings.overall.filter((e) => e.points > mine.points).pop() : null;
+    const gap = ahead && !["closed", "finalised"].includes(state.phase) ? ` The next place up, ${D.ordinal(ahead.rank)}, is ${ahead.points - mine.points} Fright Points ahead.` : "";
+    const meLine = mine.signedIn ? (mine.available && mine.rank ? `<p class="me">You are <b>${D.ordinal(mine.rank)}</b> overall with <b>${mine.points}</b> Fright Points.${gap}${mine.eligible ? "" : " Get a result on every open board to be eligible for Overall Champion."}</p>` : `<p class="me">You have no ranked run yet.</p>`) : `<p class="me"><a href="#">Sign in</a> to be ranked. Guests can play the modes, but their runs are not ranked.</p>`;
     return `<section id="standings" class="sec sec-board frame-board" aria-labelledby="st-h">
       <header class="sec-head"><h2 id="st-h">High scores</h2>${stamp}</header>
+      <p class="sec-lede">Fright Points come from your rank on each game's board, and they decide the champion. They can't be spent.</p>
       <div class="tabs" role="tablist" aria-label="Boards">${tabs.map((t) => `<button type="button" role="tab" aria-selected="${t.id === tab}" data-tabbtn="${t.id}" tabindex="${t.id === tab ? 0 : -1}">${esc(t.label)}</button>`).join("")}</div>
       <div role="tabpanel" data-src="GET /api/v1/championship/fright-fest-2026 (CDN 30 s) + /me (no-store)">${body}</div>${pending}${meLine}
     </section>`;
   }
 
   function candyHTML() {
-    const tierIcons = (t) => t ? `<span class="tier t${t}" aria-label="${D.TIERS[t]} Candy reward">${"<i></i>".repeat(t)}</span>` : "";
+    const tierIcons = (t) => t ? `<span class="tier t${t}" aria-hidden="true">${"<i></i>".repeat(t)}</span>` : "";
+    const named = (g) => !g || state.lineup === "all" || g.slug === "last-bell"; // unannounced games are never named
     const notes = D.QUESTS.map((q, i) => {
       const g = q.game ? D.CONFIG.games.find((x) => x.slug === q.game) : null;
-      const hide = g && state.lineup !== "all" && g.slug !== "last-bell";
-      return `<li class="note-card k-${q.kind}${q.kind === "slot" ? " is-slot" : ""}" style="--tilt:${[-2, 1, -1, 2, -1, 1, -2][i % 7]}">
+      const show = named(g);
+      const src = show ? q.source : "Waits for the game to be announced";
+      return `<li class="note-card k-${q.kind}${q.kind === "slot" ? " is-slot" : ""}" style="--tilt:${[-2, 1, -1, 2, -1, 1, -2][i % 7]}" data-src="${esc(src)}">
         <span class="pin" aria-hidden="true"></span>
-        <p class="nc-game">${g ? esc(hide ? "A mystery cabinet" : short(g)) : "Every open board"}</p>
+        <p class="nc-game">${g ? esc(show ? short(g) : "A mystery cabinet") : "Every open board"}</p>
         <h3>${esc(q.title)}</h3>
-        <p>${esc(hide && q.kind === "slot" ? "Pinned when the game joins and reports achievements to HallPass." : q.text)}</p>
+        <p>${esc(!show && q.kind === "slot" ? "A notice goes up if this game joins and can tell HallPass about your runs." : q.text)}</p>
         <footer>${q.tier ? tierIcons(q.tier) + `<span class="tier-word">${D.TIERS[q.tier]} reward</span>` : `<span class="tier-word">No notice yet</span>`}</footer>
-        <p class="nc-src" data-src="${esc(q.source)}">${esc(q.source)}</p>
       </li>`;
     }).join("");
     return `<section id="candy" class="sec sec-quest frame-quest" aria-labelledby="cd-h">
-      <header class="sec-head"><h2 id="cd-h">Candy Hunt</h2><span class="stamp is-preview">Design preview · not built</span></header>
+      <header class="sec-head"><h2 id="cd-h">Candy Hunt</h2><span class="stamp is-preview">Preview · not open</span></header>
+      <p class="sec-lede">Candy Hunt isn't open. This is a preview of how it could work, and nothing here can be earned.</p>
       <div class="currencies">
         <div class="cur cur-pts"><b>Fright Points</b><p>Earned by your rank on each game's board. They decide the championship. You can't spend them.</p></div>
-        <div class="cur cur-candy"><b>Halloween Candy</b><p>Would be earned from notices like these and swapped for packs at the prize counter. Never bought, never ranked.</p></div>
+        <div class="cur cur-candy"><b>Halloween Candy</b><p>Would be earned from notices like these and traded for packs at the prize counter. Never bought, never ranked.</p></div>
       </div>
       <ul class="notes">${notes}</ul>
-      <ol class="flow" aria-label="How Candy would work">
-        <li class="is-preview">Pin a notice and play</li><li class="is-preview">Earn Candy</li><li class="is-preview">Swap it at the prize counter</li><li>Open your pack</li><li>Keep the cards in your binder</li>
+      <ol class="flow" aria-label="How Candy Hunt would work">
+        <li class="is-preview">Pick a notice and play <small>not open</small></li><li class="is-preview">Earn Candy <small>not open</small></li><li class="is-preview">Trade it at the prize counter <small>not open</small></li><li>Open your pack</li><li>Keep the cards in your binder</li>
       </ol>
-      <p class="boundary"><b>Integration boundary.</b> Notices marked with a source use data HallPass already has (Last Bell achievements, the championship's own progress). Candy balances, amounts and the swap do not exist: rewards are shown as Small, Medium and Large until someone sets them. Shadow Core and Survive Till Dawn report no achievements today, so their notices stay blank.</p>
+      <p class="boundary dev-only"><b>Integration boundary (review note).</b> Notice conditions can use data HallPass already has: Last Bell's achievements and the championship's own progress (MyProgress). Candy balances, amounts and the trade do not exist anywhere, so rewards are shown as Small, Medium and Large. Games that report no achievements to HallPass get blank notices.</p>
     </section>`;
   }
 
@@ -424,7 +429,7 @@
       <li class="pack">
         <img src="art/packs/${p.art}" alt="" width="96" height="140">
         <div><h3>${esc(p.name)}</h3><p class="who">${esc(p.who)}</p>
-          <ul class="slots">${p.slots.map((s) => s.fixed ? `<li class="fixed r-${s.rarity}"><b>Guaranteed</b> ${esc(s.fixed)} <small>${s.rarity}</small></li>` : `<li class="rand"><b>Random</b> ${oddsText(s.random)}</li>`).join("")}</ul>
+          <ul class="slots">${p.slots.map((s) => s.fixed ? `<li class="fixed r-${s.rarity}"><b>Guaranteed</b> ${esc(s.fixed)} <small>${s.rarity}</small></li>` : `<li class="rand"><b>1 random card</b> ${oddsText(s.random)}</li>`).join("")}</ul>
           ${state.phase === "finalised" && pub.sample && p.id === "ff26-overall-winner" && pub.standings.championPublicId ? `<p class="won">Won by ${esc(pub.standings.overall[0].name)} <small>(sample)</small></p>` : ""}
         </div>
       </li>`).join("") : "";
@@ -432,7 +437,7 @@
     return `<section id="prize-counter" class="sec sec-prize frame-prize" aria-labelledby="pz-h">
       <header class="sec-head"><h2 id="pz-h">The prize counter</h2></header>
       <div class="walkup">${door}<div><p>Packs you win wait for you at the prize counter, in the Pack Room. It stays open after Halloween.</p>
-        ${state.auth === "in" && state.data === "sample" ? `<p class="me">You have <b>2 sealed packs</b> <small>(sample · from /api/v1/collection)</small></p>` : ""}
+        ${state.auth === "in" && state.data === "sample" ? `<p class="me">You have <b>2 sealed packs</b> <small>(sample)</small></p>` : ""}
         <a class="btn-sec" href="#prize-counter" data-peek>Walk to the prize counter</a></div></div>
       ${packs ? `<h3 class="sub">Fright Fest rewards</h3><p class="lede">Free digital packs. Nothing is sold and nothing is posted. Packs are given out once the results are final; one player can earn several.</p><ul class="packs">${packs}</ul>${hidden}
       <details class="odds"><summary>Odds for the random cards</summary>${oddsTable()}</details>` : `<p class="lede">Rewards: to be announced.</p>`}
@@ -521,7 +526,7 @@
     const slots = lineup();
     const C = state.concept === "c";
     const zoomPanel = C && L2.mode === "desk"
-      ? `<div class="zoom-panel${zoomed ? " is-open" : ""}${(M.desk.slots[sel] || {}).x > 200 ? " on-left" : ""}" role="region" aria-label="Selected machine" aria-live="polite">${panelHTML(slots, L2, false)}<button type="button" class="btn-ghost" data-unzoom>Back to the hall</button></div>` : "";
+      ? `<div class="zoom-panel${zoomed ? " is-open" : ""}${(M.desk.slots[sel] || {}).x > 200 ? " on-left" : ""}" role="region" aria-label="Selected machine" tabindex="-1">${panelHTML(slots, L2, false)}<button type="button" class="btn-ghost" data-unzoom>Back to the hall</button></div>` : "";
     main.innerHTML = `
       <h1 class="sr-only">Fright Fest 2026</h1>
       <section class="stage" aria-label="The event hall">
@@ -530,13 +535,13 @@
         </div>
         ${zoomPanel}
       </section>
-      ${L2.mode === "phone" ? `<section class="sec phone-panel" aria-label="Selected machine" aria-live="polite">${panelHTML(slots, L2, false)}</section>` : ""}
+      ${L2.mode === "phone" ? `<section class="sec phone-panel" aria-label="Selected machine">${panelHTML(slots, L2, false)}</section>` : ""}
       ${L2.mode === "phone" && !(man().phone.zones || {}).board ? phoneBoard(pub, mine) : ""}
       <div class="below">
         ${standingsHTML(pub, mine)}
-        ${candyHTML()}
         ${prizesHTML(pub)}
         ${rulesHTML()}
+        ${candyHTML()}
         <footer class="foot"><p>Design prototype for review · concept ${state.concept.toUpperCase()} · ${esc(M.title)}. Links do not leave the prototype.</p></footer>
       </div>`;
     applyZoom(false);
@@ -567,15 +572,22 @@
     scene.style.width = 434 * z + "px"; scene.style.height = 230 * z + "px";
     scene.style.transform = `translate(${Math.round(ox)}px, ${Math.round(oy)}px)`;
     scene.classList.add("is-zoomed");
+    scene.querySelectorAll("a, button").forEach((el) => { el.tabIndex = -1; });
   }
 
   // ------------------------------------------------------------------ events
-  function select(i, focus) {
+  // how: "key" (arrow keys: focus stays on the cabinets), "click" (pointer or Enter), null (phone arrows)
+  function select(i, how) {
     const n = lineup().length;
     sel = ((i % n) + n) % n;
-    if (state.concept === "c" && L2 && L2.mode === "desk") zoomed = true;
+    const zoom = state.concept === "c" && L2 && L2.mode === "desk" && how === "click";
+    if (zoom) zoomed = true;
     render();
-    if (focus) { const b = document.querySelector(`[data-select="${sel}"]`); if (b) b.focus(); }
+    const sl = lineup()[sel];
+    announce(sl.open ? `${short(sl.game)} selected. ${gameStatus(sl).chip}.` : "Mystery cabinet selected. Not announced yet.");
+    const zp = document.querySelector(".zoom-panel.is-open");
+    if (zoom && zp) { zp.focus(); return; }
+    const b = document.querySelector(`[data-select="${sel}"]`); if (b && how) b.focus();
     if (L2.mode === "phone" && state.concept === "a") {
       const sw = document.querySelector(".swipe"); if (sw) sw.scrollTo({ left: sel * sw.clientWidth, behavior: "instant" });
     }
@@ -586,8 +598,8 @@
     main.onclick = (e) => {
       const t = e.target.closest("[data-select],[data-step],[data-tabbtn],[data-more],[data-retry],[data-peek],[data-play],[data-tab],[data-unzoom],[data-egg]");
       if (!t) return;
-      if (t.dataset.select !== undefined) { select(+t.dataset.select, false); return; }
-      if (t.dataset.step) { select(sel + +t.dataset.step, false); return; }
+      if (t.dataset.select !== undefined) { select(+t.dataset.select, "click"); return; }
+      if (t.dataset.step) { const k = t.dataset.step; select(sel + +k, null); const st = document.querySelector(`[data-step="${k}"]`); if (st) st.focus(); return; }
       if (t.dataset.tabbtn) { tab = t.dataset.tabbtn; showAll = false; render(); document.querySelector(`[data-tabbtn="${tab}"]`).focus(); return; }
       if (t.dataset.more !== undefined) { showAll = !showAll; render(); return; }
       if (t.dataset.retry !== undefined) { state.api = "ok"; render(); post("hall-state", { api: "ok" }); return; }
@@ -600,7 +612,7 @@
     // arrow keys move between cabinets (roving), Escape leaves the zoom
     main.onkeydown = (e) => {
       const onCab = e.target.matches && e.target.matches("[data-select]");
-      if (onCab && (e.key === "ArrowRight" || e.key === "ArrowLeft")) { e.preventDefault(); select(sel + (e.key === "ArrowRight" ? 1 : -1), true); }
+      if (onCab && (e.key === "ArrowRight" || e.key === "ArrowLeft")) { e.preventDefault(); select(sel + (e.key === "ArrowRight" ? 1 : -1), "key"); }
       if (e.key === "Escape" && zoomed) { zoomed = false; render(); const b = document.querySelector(`[data-select="${sel}"]`); if (b) b.focus(); }
       if (e.target.matches && e.target.matches("[role=tab]") && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
         const tabs = [...document.querySelectorAll("[role=tab]")]; const i = tabs.indexOf(e.target);
@@ -617,12 +629,17 @@
     // parallax (concept C, desk, fine pointer, motion allowed)
     const stage = document.querySelector(".stage");
     if (state.concept === "c" && L2.mode === "desk" && stage && !document.documentElement.classList.contains("rm") && matchMedia("(pointer: fine)").matches) {
+      let raf = 0, nx = 0, ny = 0;
+      const layers = [...document.querySelectorAll(".layer")];
+      stage.classList.add("has-parallax");
       stage.onpointermove = (e) => {
         const r = stage.getBoundingClientRect();
-        const nx = ((e.clientX - r.left) / r.width - 0.5) * 2, ny = ((e.clientY - r.top) / r.height - 0.5) * 2;
-        document.querySelectorAll(".layer").forEach((ly) => {
-          const d = parseFloat(ly.dataset.depth || 0);
-          ly.style.transform = `translate(${Math.round(nx * d * 2) * L2.s}px, ${Math.round(ny * d) * L2.s}px)`;
+        nx = ((e.clientX - r.left) / r.width - 0.5) * 2; ny = ((e.clientY - r.top) / r.height - 0.5) * 2;
+        if (raf) return;
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          // whole room pixels only, so the art never lands between pixels
+          for (const ly of layers) { const d = parseFloat(ly.dataset.depth || 0); ly.style.transform = `translate(${Math.round(nx * d * 2) * L2.s}px, ${Math.round(ny * d) * L2.s}px)`; }
         });
       };
     }
@@ -632,20 +649,26 @@
   function openPeek(from) {
     const pk = document.getElementById("peek");
     pk.hidden = false;
+    const site = document.querySelector(".site"); if (site) site.inert = true;
     pk.innerHTML = `<div class="peek-box" role="dialog" aria-modal="true" aria-labelledby="pk-h">
       <h2 id="pk-h">You walk up to the prize counter</h2>
-      <img src="art/packroom/composite-desk-${state.season === "calm" ? "normal" : "halloween"}.png" alt="The approved Pack Room design, Option A: a lit prize counter with packs on the glass counter">
+      <img src="art/packroom/composite-desk-${state.season === "calm" ? "normal" : "halloween"}.png" alt="The approved Pack Room: a lit prize counter">
       <p>This is the approved Pack Room, <b>Option A · The Prize Counter</b>, being built separately. In production this doorway is a plain link to <code>/packs</code>; the event page never copies the Pack Room.</p>
       <button type="button" class="btn-sec" data-close>Back to the hall</button></div>`;
-    const close = () => { pk.hidden = true; pk.innerHTML = ""; from && from.focus && from.focus(); document.removeEventListener("keydown", onKey); };
+    const close = () => { if (site) site.inert = false; pk.hidden = true; pk.innerHTML = ""; from && from.focus && from.focus(); document.removeEventListener("keydown", onKey); };
     const onKey = (e) => {
       if (e.key === "Escape") close();
-      if (e.key === "Tab") { e.preventDefault(); pk.querySelector("[data-close]").focus(); } // the dialog's only control
     };
     pk.querySelector("[data-close]").onclick = close;
     pk.onclick = (e) => { if (e.target === pk) close(); };
     document.addEventListener("keydown", onKey);
     pk.querySelector("[data-close]").focus();
+  }
+
+  function announce(msg) {
+    let a = document.getElementById("announce");
+    if (!a) { a = document.createElement("div"); a.id = "announce"; a.className = "sr-only"; a.setAttribute("aria-live", "polite"); document.body.appendChild(a); }
+    a.textContent = ""; setTimeout(() => { a.textContent = msg; }, 30);
   }
 
   let toastT = 0;
@@ -676,6 +699,7 @@
     render();
     if (d.scrollTo) { const el = document.getElementById(d.scrollTo); if (el) el.scrollIntoView(); else window.scrollTo(0, 0); }
   });
+  try { matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", () => render()); } catch (e) { /* old browsers */ }
   let rz = 0;
   window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(render, 80); });
   // tick the ticker once a minute

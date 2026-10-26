@@ -39,7 +39,7 @@ def copy_concept(x):
     os.makedirs(out, exist_ok=True)
     sizes = {}
     for name in sorted(os.listdir(src)):
-        if not name.endswith(".png") or ".preview." in name or name.startswith("composite"):
+        if not name.endswith(".png") or ".preview." in name or name.startswith(("composite", "t-")):
             continue
         shutil.copy2(os.path.join(src, name), os.path.join(out, name))
         with Image.open(os.path.join(src, name)) as im:
