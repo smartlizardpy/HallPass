@@ -16,6 +16,7 @@
 import type {
   AuthRedirectOptions,
   ChallengeOptions,
+  ChampionshipSubmitResponse,
   ChallengeResult,
   EventName,
   GetScoresOptions,
@@ -30,6 +31,9 @@ import type {
   MomentResult,
   PlayerIdentity,
   ReadyState,
+  RunStartOptions,
+  RunStartResponse,
+  RunStartResult,
   ScoreEntry,
   SubmitOptions,
   SubmitResponse,
@@ -37,6 +41,14 @@ import type {
 } from "./contract";
 import type { ResolvedConfig } from "./config";
 import { createAchievements } from "./achievements";
+import {
+  CAPABILITIES,
+  boardId,
+  boundMeta,
+  championshipReason,
+  signalParent,
+  supports,
+} from "./championship";
 import {
   AUTH_COMPLETE_PATH,
   openAuthPopup,
@@ -280,8 +292,15 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
       if (typeof score !== "number" || !isFinite(score)) {
         return fail("bad-score");
       }
-      const game = cfg.game;
-      if (!game) {
+      // `board` (1.5) names another board, e.g. an event board; without it the
+      // game's own board, exactly as before.
+      let target = cfg.game;
+      if (opts?.board !== undefined) {
+        const board = boardId(opts.board);
+        if (!board) return fail("bad-board");
+        target = board;
+      }
+      if (!target) {
         return fail("no-game");
       }
 
@@ -289,18 +308,19 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
         handle: opts?.handle,
         promptHandle: opts?.promptHandle,
       });
+      const meta = boundMeta(opts?.meta);
 
       // Same-origin embeds send the session cookie so a signed-in submission is
       // attributed at insert; cross-origin embeds stay anonymous (default omit).
       const sameOrigin = sameOriginApi();
       const res = await postJSON(
-        leaderboardUrl(game),
-        { score, handle },
+        leaderboardUrl(target),
+        meta ? { score, handle, meta } : { score, handle },
         { credentials: sameOrigin ? "include" : "omit" },
       );
 
       if (res.ok) {
-        const body = res.data as Partial<SubmitResponse> | undefined;
+        const body = res.data as (Partial<SubmitResponse> & Partial<ChampionshipSubmitResponse>) | undefined;
         const rank = typeof body?.rank === "number" ? body.rank : undefined;
         // An anonymous same-origin submission may hand back a claim token; hold it
         // in memory so a later sign-in this visit can re-attribute the score.
@@ -308,7 +328,33 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
           rememberClaimToken(body.claimToken);
         }
         const result: SubmitResult = { ok: true, rank };
+        if (typeof body?.championship === "string") {
+          result.championship = body.championship;
+          if (body.status === "accepted" || body.status === "flagged") result.status = body.status;
+          if (typeof body.best === "boolean") result.best = body.best;
+          signalParent(cfg.api, {
+            phase: "submit",
+            ok: true,
+            board: target,
+            championship: body.championship,
+            status: result.status,
+            rank,
+            best: result.best,
+            late: body.late === true,
+          });
+        }
         emitEvent("submitted", result);
+        return result;
+      }
+      const champ = championshipReason(res.data);
+      if (champ) {
+        const data = res.data as { detail?: unknown; championship?: unknown };
+        const detail = typeof data.detail === "string" ? data.detail : undefined;
+        const championship = typeof data.championship === "string" ? data.championship : undefined;
+        signalParent(cfg.api, { phase: "submit", ok: false, board: target, championship, reason: champ, detail });
+        const result = fail(champ, res.error);
+        if (detail) result.detail = detail;
+        if (championship) result.championship = championship;
         return result;
       }
       if (res.status === 429) {
@@ -332,6 +378,45 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
       if (error) result.error = error;
       emitEvent("error", result);
       return result;
+    }
+  }
+
+  /**
+   * Start a run on a board that takes run tokens. Resolves the token or `null`;
+   * never throws. Cross-origin embeds resolve `null` without a request: the
+   * endpoint is cookie-credentialed and the cookie would not flow.
+   */
+  async function runStart(opts?: RunStartOptions): Promise<RunStartResult | null> {
+    try {
+      if (mode === "inert" || !sameOriginApi()) return null;
+      const board = opts?.board !== undefined ? boardId(opts.board) : cfg.game;
+      if (!board) return null;
+      const seed = typeof opts?.seed === "number" && Number.isSafeInteger(opts.seed) ? opts.seed : undefined;
+      const res = await postJSON(
+        leaderboardUrl(board) + "/runs",
+        seed === undefined ? {} : { seed },
+        { credentials: "include" },
+      );
+      if (res.ok) {
+        const body = res.data as Partial<RunStartResponse> | undefined;
+        if (typeof body?.token !== "string" || typeof body.expiresAt !== "string") return null;
+        return { token: body.token, expiresAt: body.expiresAt };
+      }
+      const reason = championshipReason(res.data);
+      if (reason) {
+        const data = res.data as { detail?: unknown; championship?: unknown };
+        signalParent(cfg.api, {
+          phase: "start",
+          ok: false,
+          board,
+          reason,
+          ...(typeof data.detail === "string" ? { detail: data.detail } : {}),
+          ...(typeof data.championship === "string" ? { championship: data.championship } : {}),
+        });
+      }
+      return null;
+    } catch {
+      return null;
     }
   }
 
@@ -595,6 +680,9 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
     mode,
     ready,
     submitScore,
+    runStart,
+    supports,
+    capabilities: CAPABILITIES,
     getScores,
     getHandle: () => getHandle(),
     setHandle: (handle: string) => setHandle(handle),

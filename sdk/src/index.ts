@@ -114,7 +114,7 @@ function settle(call: StubCall, value: unknown): void {
  */
 function safeDefault(name: string, args?: unknown[]): unknown {
   if (name === "getScores" || name === "getAchievements" || name === "unlockMany") return [];
-  if (name === "getPlayer" || name === "setPlayerHandle") return null;
+  if (name === "getPlayer" || name === "setPlayerHandle" || name === "runStart") return null;
   if (name === "unlock" || name === "progress") {
     const key = args && typeof args[0] === "string" ? args[0] : undefined;
     return { ok: false, key, unlocked: false, reason: "network" };

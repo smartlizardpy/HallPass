@@ -405,7 +405,15 @@ export type SubmitReason =
   | "inert" // client is inert (sandboxed / no network)
   | "network" // request failed to reach the server
   | "rate-limited" // server rejected with 429
-  | "http"; // server returned another non-2xx status
+  | "http" // server returned another non-2xx status
+  // Added in 1.5 (append-only), for championship boards:
+  | "bad-board" // `board` was not a valid board id
+  | "signed-out" // championship runs are for signed-in players
+  | "closed" // outside the window, or the board is not open
+  | "no-run" // no valid run token (call `runStart` when the run begins)
+  | "expired" // the run token outlived its lifetime
+  | "rejected" // the server's checks ruled the run out (`detail` says which)
+  | "unavailable"; // the championship is unreachable right now
 
 /** Result of `submitScore`. Always resolved — never rejected. */
 export interface SubmitResult {
@@ -413,6 +421,14 @@ export interface SubmitResult {
   rank?: number;
   error?: string;
   reason?: SubmitReason;
+  /** Championship boards: `flagged` means recorded but held for a staff check. Added in 1.5. */
+  status?: "accepted" | "flagged";
+  /** Championship boards: this run is now the player's best. Added in 1.5. */
+  best?: boolean;
+  /** Championship boards: a finer reason code (e.g. the check that rejected the run). Added in 1.5. */
+  detail?: string;
+  /** Championship boards: the championship id. Added in 1.5. */
+  championship?: string;
 }
 
 export interface SubmitOptions {
@@ -420,6 +436,53 @@ export interface SubmitOptions {
   handle?: string;
   /** When no handle is stored, prompt the player once for initials. Default `true`. */
   promptHandle?: boolean;
+  /**
+   * Submit to this board instead of the game's own (e.g. an event board such as
+   * `last-bell-halloween-shift`). Added in 1.5; check `supports("leaderboard.boards")`.
+   */
+  board?: string;
+  /**
+   * A small plain object sent with the score (at most 4 KB of JSON; larger is
+   * dropped whole). Championship boards read it: it carries the run token from
+   * `runStart` as `meta.token`. Added in 1.5; check `supports("leaderboard.meta")`.
+   */
+  meta?: Record<string, unknown>;
+}
+
+/** Options for `runStart`. Added in 1.5. */
+export interface RunStartOptions {
+  /** The board the run is for. Defaults to the game's own. */
+  board?: string;
+  /** The run's seed, when the board's rules fix one. */
+  seed?: number;
+  /** Accepted and ignored: the game is the configured one. */
+  game?: string;
+}
+
+/** A run token. Pass `token` back as `meta.token` when submitting. Added in 1.5. */
+export interface RunStartResult {
+  token: string;
+  /** ISO-8601. */
+  expiresAt: string;
+}
+
+/**
+ * What the SDK posts to the HallPass page hosting a game (same-origin only)
+ * when a championship run starts or is submitted, so HallPass can tell the
+ * player the outcome in its own words. Added in 1.5.
+ */
+export interface ChampionshipSignal {
+  type: "hallpass:championship";
+  phase: "start" | "submit";
+  ok: boolean;
+  board: string;
+  championship?: string;
+  status?: "accepted" | "flagged";
+  rank?: number;
+  best?: boolean;
+  late?: boolean;
+  reason?: ChampionshipReason;
+  detail?: string;
 }
 
 export interface GetScoresOptions {
@@ -491,7 +554,15 @@ export type UnlockReason =
   | "inert" // client is inert (sandboxed / no network)
   | "network" // request failed to reach the server
   | "rate-limited" // server rejected with 429
-  | "http"; // server returned another non-2xx status
+  | "http" // server returned another non-2xx status
+  // Added in 1.5 (append-only), for championship boards:
+  | "bad-board" // `board` was not a valid board id
+  | "signed-out" // championship runs are for signed-in players
+  | "closed" // outside the window, or the board is not open
+  | "no-run" // no valid run token (call `runStart` when the run begins)
+  | "expired" // the run token outlived its lifetime
+  | "rejected" // the server's checks ruled the run out (`detail` says which)
+  | "unavailable"; // the championship is unreachable right now
 
 /**
  * Payload of the `"achievement"` event, and of `UnlockResult.achievement`: an
@@ -784,6 +855,21 @@ export interface HallPass {
    * `HallPass.moment && HallPass.moment(...)`.
    */
   moment?(name: string, data?: Record<string, unknown>, opts?: MomentOptions): Promise<MomentResult>;
+  /**
+   * Start a run on a board that needs run tokens (a championship board):
+   * `HallPass.runStart({ board: "last-bell-halloween-shift", seed })`. Resolves
+   * `{ token, expiresAt }`, or `null` when the board does not take runs, the
+   * player is signed out, the event is closed, or the embed is cross-origin.
+   * Submit with `meta: { token }`. Never throws. Added in 1.5.
+   */
+  runStart?(opts?: RunStartOptions): Promise<RunStartResult | null>;
+  /**
+   * Whether this SDK has a feature: `"leaderboard.boards"`, `"leaderboard.meta"`,
+   * `"runs"`. Unknown names are `false`. Synchronous. Added in 1.5.
+   */
+  supports?(feature: string): boolean;
+  /** The same features as an object: `{ leaderboard: { boards, meta }, runs }`. Added in 1.5. */
+  readonly capabilities?: { readonly leaderboard: { readonly boards: boolean; readonly meta: boolean }; readonly runs: boolean };
   /**
    * Invite friends into what the player is doing right now — a co-op room, a
    * level, a seed: `HallPass.invite({ data: { room: "ABCD" } })`.
