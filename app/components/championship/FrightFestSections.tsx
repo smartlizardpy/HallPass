@@ -15,7 +15,7 @@
 import Link from "next/link";
 import { pointBands, type ChampionshipSummary } from "@/app/lib/championship/summary";
 import { ordinal } from "@/app/lib/championship/format";
-import type { RewardProps } from "@/app/fright-fest/hall/props";
+import type { RewardProps } from "@/app/lib/championship/reward-view";
 import { MyChampionship } from "./MyProgress";
 import { PhaseBanner } from "./PhaseBanner";
 import { ChampionshipStandings } from "./Standings";
