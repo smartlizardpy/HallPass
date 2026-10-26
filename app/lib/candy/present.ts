@@ -78,3 +78,25 @@ export function shopItems(balance: number, config: CandyConfig = CANDY_FRIGHT_FE
     })
     .sort((a, b) => a.price - b.price);
 }
+
+/** The parts of the definition every surface shows, with `open` flags for `nowMs` (display only; the database clock decides a spend). */
+export function candyInfo(config: CandyConfig, nowMs: number) {
+  const at = (iso: string) => Date.parse(iso);
+  return {
+    event: config.id,
+    title: config.title,
+    earn: { opensAt: config.opensAt, closesAt: config.closesAt, open: nowMs >= at(config.opensAt) && nowMs < at(config.closesAt) },
+    spend: {
+      opensAt: config.opensAt,
+      until: config.spendUntil,
+      untilLabel: config.spendUntilLabel,
+      open: nowMs >= at(config.opensAt) && nowMs < at(config.spendUntil),
+    },
+    rules: {
+      rankedRun: config.rankedRun,
+      allBoards: config.allBoards,
+      placing: config.placing.map((t) => ({ ...t })),
+      maxAchievementCandy: config.maxAchievementCandy,
+    },
+  };
+}
