@@ -206,3 +206,28 @@ Decisions made while building, inside the plan above.
 - **Applying it.** Migration `050_candy.sql` needs 048 and 049 before it. The
   owner runs `scripts/migrate-prod.sh`. `docs/dpia.md` may need a line for the new
   ledger (not edited here).
+
+## 4. The section on /fright-fest (plan)
+
+What players see and use on the event page. It ships in the Fright Fest 2026 PR
+together with the hall and the backend.
+
+- **The noticeboard** in the hall becomes a link to `#candy`
+  (`CANDY_HUNT_OPEN = true`). The server renders the neutral words "Candy Hunt"
+  (the page is static); a small client island adds the status from the clock and
+  the candy config dates: "from 28 Oct", "open", "spend by 30 Nov", "over".
+- **The `#candy` section** sits after "Your Fright Fest" and before "How Fright
+  Points work". `FrightFestSections` takes an optional `afterProgress` slot that
+  `page.tsx` fills, so the championship components import no candy code.
+  Contents: heading and one line, your candy (balance, "+N new", recent), how to
+  earn, the Candy Shop (30 and 100 candy shelves), the rules.
+- **Buying** is an inline confirm in the item, not a modal. A `requestId` is
+  minted when the confirm opens and reused for retries of that purchase.
+  Every spend status (200 incl. `alreadySpent`, 400, 401, 409, 410, 503/network)
+  has its own words; buttons carry a visible reason when disabled.
+- **Static.** All live data is a client fetch of `/api/v1/candy/me` after
+  hydration; the server render shows rules, the earn table and prices only.
+- **Where the code lives:** `app/fright-fest/hall/candy/` (props, logic, island,
+  css), because it belongs to the event page and not to the championship.
+- **Excluded:** any change to the candy API, store, schema or dashboard; new art;
+  changes to `/packs`.
