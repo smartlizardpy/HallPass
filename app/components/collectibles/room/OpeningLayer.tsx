@@ -100,21 +100,27 @@ export function OpeningLayer({
     };
   }, []);
 
-  // The flight: from the riser to the stage's pack slot, once the slot exists.
+  // The flight: from the riser to the stage's pack slot, once the slot has its real size. The stage first
+  // renders before it has measured itself, with the pack at its smallest, and resizes a frame or so later;
+  // a flight aimed at that first box shrank in place and the full-size pack then popped in. So: wait for the
+  // stage to say it is measured, and for the slot to hold still for one frame.
   useEffect(() => {
     if (!arriving || !flight) return;
     let frame = 0;
     let anim: Animation | null = null;
+    let before: DOMRect | null = null;
     const started = performance.now();
     const giveUp = window.setTimeout(() => {
       landed.current = drawn.current = true;
       settle();
     }, GIVE_UP_MS);
     const find = () => {
-      const slot = layer.current?.querySelector<HTMLElement>(".ho-pack-slot");
+      const slot = layer.current?.querySelector<HTMLElement>(".ho-stage[data-measured] .ho-pack-slot");
       const to = slot?.getBoundingClientRect();
       const el = proxy.current;
-      if (!to || !to.width || !el) {
+      const still = !!to && !!before && to.width > 0 && to.left === before.left && to.top === before.top && to.width === before.width && to.height === before.height;
+      if (!to || !still || !el) {
+        before = to ?? null;
         if (performance.now() - started < GIVE_UP_MS) frame = requestAnimationFrame(find);
         return;
       }

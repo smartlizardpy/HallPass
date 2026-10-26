@@ -605,6 +605,8 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
       data-stage={state.stage}
       data-tray={tray}
       data-room={room ? "" : undefined}
+      // Until the table has been measured the pack is drawn at its smallest; the room's flight waits for this.
+      data-measured={table.w > 0 ? "" : undefined}
       style={{ "--ho-tint": tint, "--ho-pack-w": `${packW}px` } as CSSProperties}
       aria-labelledby="ho-title"
       onPointerDownCapture={() => unlockSound()}
