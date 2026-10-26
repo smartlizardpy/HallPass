@@ -57,6 +57,12 @@ const ITEMS: NavItem[] = [
   // beta admin, whose dashboard role cannot write surveys.
   { href: "/dashboard/surveys", label: "Surveys", edit: true },
   { href: "/dashboard/boards", label: "Leaderboards", edit: true },
+  // Next to the boards it extends. Seasonal work, but while an event runs it is
+  // the screen with runs waiting on a human; between events it is the archive.
+  { href: "/dashboard/championship", label: "Championship", edit: true },
+  // Grants, revocations and the catalogue as published. Fright Fest pays its
+  // rewards through it, so it follows the desk that decides them.
+  { href: "/dashboard/collectibles", label: "Collectibles", edit: true },
   // Below the three surfaces with something waiting on them and above the
   // catalogue admin: Growth is a read-only screen nobody is blocked on, but it
   // is the one that answers "is any of this working", so it sits with the other

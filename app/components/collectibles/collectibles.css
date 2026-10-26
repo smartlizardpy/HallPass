@@ -1,0 +1,521 @@
+/*
+ * HallPass Collectibles — the design system: "stickers slapped on a locker".
+ *
+ * Die-cut stickers and cards with a cream peel border and a hard ink "thickness"
+ * shadow, pixel art inside at whole-number scale. Rarity is a MATERIAL, never
+ * colour alone: each step changes the cut, the pattern and the finish, and every
+ * card also carries a text pill and a 1-5 pip row, readable in greyscale.
+ *
+ *   common     round-cornered sticker   no pattern     flat
+ *   uncommon   notched corner           dashed line    one glint that moves with the tilt
+ *   rare       stepped pixel corners    diagonal hatch metallic sheen + brushed foil
+ *   epic       scalloped top edge       dot grid       holo bands + glitter that shift with the tilt
+ *   legendary  crown notch              sunburst       prism holo + glitter + gold rim, one slow loop
+ *
+ * The finishes (and the uniform card back) live in holo.css, driven by --px/--py/--tilt/--rx/--ry.
+ *
+ * Tokens are `--hc-*` on `.hc-root` (every component root carries it). No base
+ * site token is reassigned. Cards are physical objects, so they look the same in
+ * light and dark; only the shadow and the surfaces they sit on change, in both
+ * the attribute and the media form.
+ *
+ * Performance (school Chromebooks): transform and opacity animate, nothing else
+ * does on a loop; the holo layer repaints only on the card under the pointer;
+ * the one loop (legendary) runs only when the component asks for it and pauses
+ * off-screen; no blur on large areas. Reduced motion keeps every rarity cue and
+ * drops the movement.
+ */
+
+.hc-root {
+  --hc-peel: #fff8e7;
+  --hc-peel-2: #f3e6c4;
+  --hc-ink: #23153a;
+  --hc-ink-soft: rgba(35, 21, 58, 0.72);
+  --hc-shadow: rgba(35, 21, 58, 0.9);
+  --hc-surface: #f4efe3;
+  --hc-surface-2: #e9e1cd;
+  --hc-r-common: #7d879b;
+  --hc-r-uncommon: #23955f;
+  --hc-r-rare: #2a6fe0;
+  --hc-r-epic: #8f35e6;
+  --hc-r-legendary: #d99a00;
+  --hc-new: #ff4f6d;
+  font-family: var(--font-nunito), system-ui, sans-serif;
+}
+:root[data-theme="dark"] .hc-root {
+  --hc-shadow: rgba(0, 0, 0, 0.85);
+  --hc-surface: #221a33;
+  --hc-surface-2: #2d2442;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .hc-root {
+    --hc-shadow: rgba(0, 0, 0, 0.85);
+    --hc-surface: #221a33;
+    --hc-surface-2: #2d2442;
+  }
+}
+
+/* ── Sizes (5:7). The art box holds the art at a whole-number scale. ── */
+.hc-card,
+.hc-back,
+.hc-locked {
+  --w: 140px;
+  --h: 196px;
+  --art: 96px;
+  --cap: 13px;
+  position: relative;
+  display: inline-block;
+  width: var(--w);
+  height: var(--h);
+  flex: none;
+}
+:is(.hc-card, .hc-back, .hc-locked)[data-size="md"] {
+  --w: 200px;
+  --h: 280px;
+  --art: 144px;
+  --cap: 16px;
+}
+:is(.hc-card, .hc-back, .hc-locked)[data-size="lg"] {
+  --w: 260px;
+  --h: 364px;
+  --art: 192px;
+  --cap: 19px;
+}
+:is(.hc-card, .hc-back, .hc-locked)[data-size="xl"] {
+  --w: 300px;
+  --h: 420px;
+  --art: 240px;
+  --cap: 21px;
+}
+/* 32 px art: ×3 / ×4 / ×6 / ×7. 48 px art: ×2 / ×3 / ×4 / ×5. */
+.hc-card[data-art="32"][data-size="md"] {
+  --art: 128px;
+}
+.hc-card[data-art="32"][data-size="xl"] {
+  --art: 224px;
+}
+
+/* ── The die-cut: peel border with the rarity's silhouette ── */
+.hc-cut {
+  position: absolute;
+  inset: 0;
+  border-radius: 18px;
+  filter: drop-shadow(0 3px 0 var(--hc-shadow));
+}
+.hc-shape {
+  position: absolute;
+  inset: 0;
+  background: var(--hc-peel);
+  border-radius: inherit;
+}
+[data-rarity="uncommon"] .hc-shape {
+  border-radius: 14px;
+  clip-path: polygon(0 0, calc(100% - 26px) 0, 100% 26px, 100% 100%, 0 100%);
+}
+[data-rarity="rare"] .hc-shape {
+  border-radius: 0;
+  clip-path: polygon(
+    10px 0, calc(100% - 10px) 0, calc(100% - 10px) 5px, calc(100% - 5px) 5px, calc(100% - 5px) 10px, 100% 10px,
+    100% calc(100% - 10px), calc(100% - 5px) calc(100% - 10px), calc(100% - 5px) calc(100% - 5px), calc(100% - 10px) calc(100% - 5px),
+    calc(100% - 10px) 100%, 10px 100%, 10px calc(100% - 5px), 5px calc(100% - 5px), 5px calc(100% - 10px), 0 calc(100% - 10px),
+    0 10px, 5px 10px, 5px 5px, 10px 5px
+  );
+}
+[data-rarity="epic"] .hc-shape {
+  border-radius: 0 0 16px 16px;
+  -webkit-mask: radial-gradient(circle at 50% 0, transparent 7px, #000 7.5px) 0 0 / 18px 100% repeat-x;
+  mask: radial-gradient(circle at 50% 0, transparent 7px, #000 7.5px) 0 0 / 18px 100% repeat-x;
+}
+[data-rarity="legendary"] .hc-shape {
+  border-radius: 0 0 16px 16px;
+  clip-path: polygon(
+    0 16px, 22% 16px, 31% 2px, 40% 14px, 50% 0, 60% 14px, 69% 2px, 78% 16px, 100% 16px, 100% 100%, 0 100%
+  );
+}
+
+/* ── The face: collection colour, rarity pattern, art, caption ── */
+.hc-face {
+  position: absolute;
+  inset: 7px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--hc-base);
+  display: grid;
+  /* minmax(0, 1fr): a long name must not widen the column past the face (it would push the art off-centre and hide the ellipsis). */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
+  justify-items: center;
+}
+[data-rarity="rare"] .hc-face {
+  inset: 9px;
+  border-radius: 3px;
+}
+/* The face follows the notch, leaving a 5 px peel along the cut. */
+[data-rarity="uncommon"] .hc-face {
+  clip-path: polygon(0 0, calc(100% - 19px) 0, 100% 19px, 100% 100%, 0 100%);
+}
+[data-rarity="epic"] .hc-face,
+[data-rarity="legendary"] .hc-face {
+  top: 17px;
+}
+[data-rarity="uncommon"] .hc-face {
+  outline: 2px dashed rgba(255, 248, 231, 0.55);
+  outline-offset: -6px;
+}
+[data-rarity="rare"] .hc-face {
+  background-image: repeating-linear-gradient(45deg, transparent 0 7px, rgba(255, 255, 255, 0.09) 7px 9px);
+}
+[data-rarity="epic"] .hc-face {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.16) 1.1px, transparent 1.6px);
+  background-size: 9px 9px;
+}
+[data-rarity="legendary"] .hc-face {
+  background-image: repeating-conic-gradient(from 0deg at 50% 42%, rgba(255, 216, 74, 0.2) 0 7deg, transparent 7deg 20deg);
+}
+
+.hc-num {
+  justify-self: start;
+  margin: 6px 0 0 8px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.32);
+  color: var(--hc-peel);
+  font-family: var(--font-pixel), monospace;
+  font-size: calc(var(--cap) * 0.62);
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+}
+.hc-art {
+  align-self: center;
+  width: var(--art);
+  height: var(--art);
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  position: relative;
+  z-index: 1;
+}
+.hc-cap {
+  width: 100%;
+  padding: 5px 8px 7px;
+  background: var(--hc-peel);
+  color: var(--hc-ink);
+  text-align: center;
+  position: relative;
+  z-index: 2;
+}
+.hc-name {
+  display: block;
+  font-weight: 900;
+  font-size: var(--cap);
+  line-height: 1.12;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Long names: a touch smaller, and the longest (the champion cards) wrap to two balanced lines. */
+.hc-card[data-name="mid"] .hc-name {
+  font-size: calc(var(--cap) * 0.9);
+}
+.hc-card[data-name="long"] .hc-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  font-size: calc(var(--cap) * 0.86);
+  line-height: 1.04;
+  white-space: normal;
+  text-wrap: balance;
+}
+.hc-meta {
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.hc-pill {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--hc-rc);
+  color: #fff;
+  font-weight: 900;
+  font-size: calc(var(--cap) * 0.66);
+  line-height: 1.55;
+}
+.hc-pips {
+  display: inline-flex;
+  gap: 2px;
+}
+.hc-pips i {
+  width: calc(var(--cap) * 0.42);
+  height: calc(var(--cap) * 0.42);
+  border-radius: 2px;
+  border: 1.5px solid var(--hc-ink);
+  background: transparent;
+}
+.hc-pips i.on {
+  background: var(--hc-ink);
+}
+[data-size="sm"] .hc-pips {
+  display: none;
+}
+
+[data-rarity="common"] {
+  --hc-rc: var(--hc-r-common);
+}
+[data-rarity="uncommon"] {
+  --hc-rc: var(--hc-r-uncommon);
+}
+[data-rarity="rare"] {
+  --hc-rc: var(--hc-r-rare);
+}
+[data-rarity="epic"] {
+  --hc-rc: var(--hc-r-epic);
+}
+[data-rarity="legendary"] {
+  --hc-rc: var(--hc-r-legendary);
+}
+
+/* ── Finishes: foil, glitter, glare and the moment live in holo.css ── */
+.hc-spark {
+  position: absolute;
+  z-index: 3;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--hc-peel), var(--hc-peel)) 50% 0 / 2px 100% no-repeat,
+    linear-gradient(var(--hc-peel), var(--hc-peel)) 0 50% / 100% 2px no-repeat;
+}
+.hc-spark:nth-of-type(1) {
+  top: 22%;
+  left: 14%;
+}
+.hc-spark:nth-of-type(2) {
+  top: 34%;
+  right: 12%;
+  transform: scale(0.7);
+}
+.hc-spark:nth-of-type(3) {
+  top: 58%;
+  left: 20%;
+  transform: scale(0.55);
+}
+[data-loop="on"] .hc-spark {
+  animation: hc-twinkle 2.4s ease-in-out infinite;
+}
+[data-loop="on"] .hc-spark:nth-of-type(2) {
+  animation-delay: 0.8s;
+}
+[data-loop="on"] .hc-spark:nth-of-type(3) {
+  animation-delay: 1.6s;
+}
+[data-loop="paused"] .hc-spark {
+  animation-play-state: paused;
+}
+@keyframes hc-twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ── Badges on the card ── */
+.hc-badge {
+  position: absolute;
+  z-index: 4;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 2px solid var(--hc-ink);
+  font-weight: 900;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.hc-badge-new {
+  top: -7px;
+  right: -6px;
+  background: var(--hc-new);
+  color: #fff;
+  transform: rotate(6deg);
+}
+.hc-badge-copies {
+  bottom: -7px;
+  right: -6px;
+  background: var(--hc-peel);
+  color: var(--hc-ink);
+}
+.hc-demo {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: calc(100% - 7px);
+  transform: translate(-50%, 50%);
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--hc-ink);
+  color: var(--hc-peel);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.6;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+[data-rarity="epic"] .hc-demo,
+[data-rarity="legendary"] .hc-demo {
+  bottom: calc(100% - 17px);
+}
+
+/* Lift on hover/focus when the card is a control. */
+.hc-hit {
+  display: inline-block;
+  border-radius: 20px;
+  transition: transform 160ms ease;
+}
+.hc-hit:hover,
+.hc-hit:focus-visible {
+  transform: translateY(-3px) rotate(-1deg);
+}
+.hc-hit:focus-visible {
+  outline: 3px solid var(--brand, #7c2eef);
+  outline-offset: 4px;
+}
+
+/* ── Locked silhouette (a card you do not own yet) ── */
+.hc-locked .hc-cut {
+  background: transparent;
+  filter: none;
+}
+.hc-locked .hc-shape {
+  background: var(--hc-surface-2);
+  outline: 2px dashed var(--hc-ink-soft);
+  outline-offset: -6px;
+}
+.hc-locked-mark {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  color: var(--hc-ink-soft);
+  text-align: center;
+}
+:root[data-theme="dark"] .hc-locked-mark {
+  color: rgba(255, 248, 231, 0.6);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .hc-locked-mark {
+    color: rgba(255, 248, 231, 0.6);
+  }
+}
+.hc-locked-q {
+  font-family: var(--font-pixel), monospace;
+  font-size: calc(var(--cap) * 2.4);
+  line-height: 1;
+}
+.hc-locked-n {
+  font-family: var(--font-pixel), monospace;
+  font-size: calc(var(--cap) * 0.7);
+}
+.hc-locked-r {
+  font-weight: 900;
+  font-size: calc(var(--cap) * 0.75);
+}
+
+/* ── Card back: see holo.css. Uniform for every card, so a face-down card says nothing about its rarity. ── */
+
+/* ── Flip (reveal) ── */
+.hc-flip {
+  position: relative;
+  display: inline-block;
+  perspective: 900px;
+}
+.hc-flip-inner {
+  position: relative;
+  display: grid;
+  transform-style: preserve-3d;
+  transition: transform var(--flip-ms, 550ms) cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.hc-flip-inner > * {
+  grid-area: 1 / 1;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.hc-flip-inner > .hc-card {
+  transform: rotateY(180deg);
+}
+.hc-flip[data-flipped] .hc-flip-inner {
+  transform: rotateY(180deg);
+}
+
+/* ── Reduced motion: the cues stay, the movement goes ── */
+@media (prefers-reduced-motion: reduce) {
+  .hc-root *,
+  .hc-root {
+    animation: none !important;
+    transition-duration: 1ms !important;
+  }
+  .hc-hit:hover,
+  .hc-hit:focus-visible {
+    transform: none;
+  }
+}
+:root[data-hp-still] .hc-root *,
+:root[data-hp-still] .hc-root {
+  animation: none !important;
+}
+
+/* ── Page-level layout (binder, card page, profile showcase; the Pack Room has room/room.css) ── */
+.hc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(144px, 1fr));
+  gap: 14px 10px;
+  justify-items: center;
+}
+.hc-cell {
+  display: inline-block;
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 12px;
+  cursor: pointer;
+  color: inherit;
+}
+.hc-cell:focus-visible,
+.hc-link:focus-visible {
+  outline: 3px solid #2a6fe0;
+  outline-offset: 3px;
+}
+.hc-link {
+  display: inline-block;
+  border-radius: 12px;
+  text-decoration: none;
+}
+.hc-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.hc-dialog {
+  /* The site's reset zeroes every margin, which pins a modal <dialog> to the top-left corner; auto margins centre it again. */
+  margin: auto;
+  width: min(92vw, 420px);
+  max-height: 92vh;
+  overflow: auto;
+  padding: 0;
+  border: 2px solid currentColor;
+  border-radius: 18px;
+  background: var(--surface, #fff);
+  color: var(--foreground, #111);
+}
+.hc-dialog::backdrop {
+  background: rgba(10, 6, 20, 0.7);
+}
+.hc-dialog-card {
+  display: flex;
+  justify-content: center;
+  padding: 18px 0 6px;
+}

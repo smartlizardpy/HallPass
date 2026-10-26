@@ -4,7 +4,6 @@ import vm from "node:vm";
 import { countdownAt } from "./countdown";
 import { describe, expect, it, vi } from "vitest";
 import { eventBootScript } from "./boot";
-import { championshipEnabled, FRIGHT_FEST_CHAMPIONSHIP } from "./championship";
 import { FRIGHT_FEST_THEME } from "./fright-fest";
 import { isExcludedPath, parseEventLook, resolveEvent } from "./look";
 import { phaseAt } from "./phase";
@@ -23,10 +22,10 @@ describe("phaseAt", () => {
     expect(phaseAt(T, END)).toBe("ended");
   });
 
-  it("is UTC: the skin paints 25 Oct 00:00Z to 1 Nov 00:00Z, the event opens 28 Oct", () => {
+  it("is UTC: the skin paints 25 Oct 00:00Z to 2 Nov 00:00Z, the event opens 28 Oct", () => {
     expect(START).toBe(Date.UTC(2026, 9, 25));
     expect(OPENS).toBe(Date.UTC(2026, 9, 28));
-    expect(END).toBe(Date.UTC(2026, 10, 1));
+    expect(END).toBe(Date.UTC(2026, 10, 2));
   });
 
   it("lets a manual disable beat the schedule", () => {
@@ -171,48 +170,56 @@ describe("theme and championship are independent", () => {
     return out;
   }
   const APP = join(__dirname, "..", "..");
+  const rel = (f: string) => f.slice(APP.length + 1);
+  const THEME = [...walkSrc(join(APP, "lib/events")), ...walkSrc(join(APP, "components/events"))];
+  const CHAMPIONSHIP = [...walkSrc(join(APP, "lib/championship")), ...walkSrc(join(APP, "components/championship"))];
+  /** Shared catalogue and layout files the skin decorates: they may not read the championship switch. */
+  const SHARED = ["components/GameCard.tsx", "components/GameListRow.tsx", "components/GameEventPanel.tsx", "layout.tsx"].map((f) =>
+    join(APP, f),
+  );
 
-  it("no site file imports the championship flag yet", () => {
-    const importers = walkSrc(APP)
-      .filter((f) => /from\s+["'][^"']*events\/championship["']/.test(readFileSync(f, "utf8")))
-      .map((f) => f.slice(APP.length + 1));
-    expect(importers).toEqual([]);
+  it("no theme or skin file imports anything from the championship", () => {
+    const offenders = THEME.filter((f) => /from\s+["'][^"']*championship[^"']*["']/.test(readFileSync(f, "utf8")));
+    expect(offenders.map(rel)).toEqual([]);
   });
 
-  it("no theme, skin or shared-component file mentions the championship flag", () => {
-    const themeSide = walkSrc(APP).filter(
-      (f) => f !== join(APP, "lib/events/championship.ts") && f !== join(APP, "fright-fest/page.tsx"),
+  it("no championship module imports the theme", () => {
+    const offenders = CHAMPIONSHIP.filter((f) =>
+      /from\s+["'][^"']*(?:lib\/events|components\/events|\.\.\/events)\/[^"']*["']/.test(readFileSync(f, "utf8")),
     );
-    const offenders = themeSide.filter((f) => /championshipEnabled|FRIGHT_FEST_CHAMPIONSHIP/.test(readFileSync(f, "utf8")));
-    expect(offenders.map((f) => f.slice(APP.length + 1))).toEqual([]);
+    expect(CHAMPIONSHIP.length).toBeGreaterThan(3);
+    expect(offenders.map(rel)).toEqual([]);
   });
 
-  it("the skin's resolution is identical whatever the championship flag says", async () => {
-    // The five states of the brief. Theme state comes from the clock; the
-    // championship cannot reach resolveEvent (above), and this proves it by
-    // swapping the flag module out from under it.
+  it("no theme, skin or shared catalogue file reads the championship switch", () => {
+    const offenders = [...THEME, ...SHARED].filter((f) =>
+      /championshipEnabled|championshipBoard|FRIGHT_FEST_2026\b/.test(readFileSync(f, "utf8")),
+    );
+    expect(offenders.map(rel)).toEqual([]);
+  });
+
+  it("the skin's resolution is identical whatever the championship switch says", async () => {
+    // Theme state comes from the clock; the championship cannot reach
+    // resolveEvent, and this proves it by flipping the switch under it.
     const states: Array<[string, number]> = [
       ["off", START - 1],
       ["on", live],
       ["expired", END + 1],
     ];
     const before = states.map(([, nowMs]) => resolveEvent(T, { ...base, nowMs }));
-    vi.resetModules();
-    vi.doMock("./championship", () => ({
-      championshipEnabled: () => true,
-      FRIGHT_FEST_CHAMPIONSHIP: { id: "x", enabled: true },
-    }));
-    const look = await import("./look");
-    const after = states.map(([, nowMs]) => look.resolveEvent(T, { ...base, nowMs }));
-    vi.doUnmock("./championship");
-    expect(after).toEqual(before);
+    for (const enabled of [true, false]) {
+      vi.resetModules();
+      vi.doMock("../championship/config", () => ({
+        championshipEnabled: () => enabled,
+        championshipBoard: () => undefined,
+        CHAMPIONSHIPS: [],
+      }));
+      const look = await import("./look");
+      const after = states.map(([, nowMs]) => look.resolveEvent(T, { ...base, nowMs }));
+      vi.doUnmock("../championship/config");
+      expect(after).toEqual(before);
+    }
     expect(before.map((r) => r.on)).toEqual([false, true, false]);
-  });
-
-  it("the championship ships disabled and imports nothing", () => {
-    expect(FRIGHT_FEST_CHAMPIONSHIP.enabled).toBe(false);
-    expect(championshipEnabled()).toBe(false);
-    expect(readFileSync(join(__dirname, "championship.ts"), "utf8")).not.toMatch(/^\s*import\s/m);
   });
 });
 

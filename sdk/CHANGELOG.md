@@ -9,6 +9,27 @@ to the served URL path (`v1` → `/sdk/v1/hallpass.js`).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-26
+
+### Added
+
+- `submitScore(score, { board, meta })`: submit to a named board (an event
+  board such as `last-bell-halloween-shift`) and send a small `meta` object
+  (at most 4 KB of JSON; larger is dropped whole). Without `board` the game's
+  own board, as before.
+- `runStart({ board?, seed? })`: start a run on a board that takes run tokens
+  (a championship board). Resolves `{ token, expiresAt }` or `null`; pass the
+  token back as `meta.token`. Same-origin only; never throws.
+- `supports(feature)` and `capabilities`: feature detection for
+  `"leaderboard.boards"`, `"leaderboard.meta"` and `"runs"`.
+- `SubmitResult` gains `status` (`accepted` | `flagged`), `best`, `detail` and
+  `championship` for event boards, and `submitScore` reasons `bad-board`,
+  `signed-out`, `closed`, `no-run`, `expired`, `rejected` and `unavailable`.
+- On HallPass's own origin, the outcome of an event run is also posted to the
+  hosting page (`hallpass:championship`, addressed to that origin only), so
+  HallPass can tell the player whether the run counted even when the game does
+  not read the result.
+
 ## [1.4.1] - 2026-10-10
 
 ### Fixed

@@ -268,6 +268,41 @@ if (launch && typeof launch.data.room === "string") {
 > snippet before v1.4.0 — that stub has neither method. Re-paste it to drop the
 > guards.
 
+### Event boards and championship runs (optional, since 1.5.0)
+
+An event such as Fright Fest gives a game its own **event board**
+(`last-bell-halloween-shift`), separate from the game's everyday board. Event
+boards take runs only from signed-in players on HallPass, and each run needs a
+**run token** from when it started, so the server can check the run against its
+own clock.
+
+```js
+// When a ranked run begins:
+const run = HallPass.runStart && await HallPass.runStart({ board: "last-bell-halloween-shift", seed: 2026118 });
+
+// When it ends:
+const r = await HallPass.submitScore(timeLeft, {
+  board: "last-bell-halloween-shift",
+  promptHandle: false,
+  meta: { token: run && run.token, time: gameSeconds },
+});
+if (r.ok) toast(r.status === "flagged" ? "Recorded, waiting for a check" : `Entered: #${r.rank}`);
+else if (r.reason === "signed-out") toast("Sign in to enter");
+```
+
+- Feature-detect with `HallPass.supports && HallPass.supports("leaderboard.boards")`
+  (or `HallPass.capabilities.leaderboard.boards`). `"leaderboard.meta"` and
+  `"runs"` are the other two names.
+- `runStart` resolves `{ token, expiresAt }`, or `null` when the board takes no
+  runs, the player is signed out, the event is not open, or the game runs on
+  another domain (the request needs HallPass's session cookie).
+- `meta` is a plain object of at most 4 KB of JSON; anything larger is dropped
+  whole. Each event's own rules say what to put in it; see
+  `docs/championship-integration.md` in the HallPass repo.
+- On HallPass the outcome is also shown to the player by HallPass itself
+  ("Entered: 3rd", "Sign in to enter"), so a game that ignores the result still
+  tells the truth.
+
 ### React to events
 
 ```js
@@ -285,7 +320,9 @@ HallPass
 | `version`                       | `string`                 | SDK major, `"1"` (matches the `/sdk/v1/` URL).                        |
 | `mode`                          | `"loading"\|"live"\|"inert"` | Runtime state.                                                     |
 | `ready(opts?)`                  | `Promise<ReadyState>`    | `opts` may set `{ game, api }` at runtime. Always resolves.            |
-| `submitScore(score, opts?)`     | `Promise<SubmitResult>`  | `opts`: `{ handle?, promptHandle? }`. Resolves `{ ok, rank?, reason? }`. |
+| `submitScore(score, opts?)`     | `Promise<SubmitResult>`  | `opts`: `{ handle?, promptHandle?, board?, meta? }` (`board`, `meta` since 1.5). Resolves `{ ok, rank?, reason? }`; event boards add `status`, `best`, `detail`. |
+| `runStart(opts?)`               | `Promise<{ token, expiresAt } \| null>` | Since 1.5. Start a run on an event board. `opts`: `{ board?, seed? }`. `null` when the board takes no runs or the player cannot enter. |
+| `supports(feature)`             | `boolean`                | Since 1.5. SYNCHRONOUS. `"leaderboard.boards"`, `"leaderboard.meta"`, `"runs"`. Also as `capabilities`. |
 | `getScores(opts?)`              | `Promise<ScoreEntry[]>`  | `opts`: `{ limit?(1–100), period?("all"\|"day"\|"week"), game? }`. `[]` on failure. |
 | `getHandle()`                   | `string \| null`         | The stored player handle.                                             |
 | `setHandle(handle)`             | `string`                 | Sanitises to `[A-Za-z0-9 _-]{1,12}` and persists; returns the result. |
@@ -304,7 +341,9 @@ HallPass
 
 ### `submitScore` reasons
 
-`no-game` · `bad-score` · `inert` · `network` · `rate-limited` · `http`.
+`no-game` · `bad-score` · `inert` · `network` · `rate-limited` · `http`, and
+for event boards (1.5): `bad-board` · `signed-out` · `closed` · `no-run` ·
+`expired` · `rejected` · `unavailable`.
 
 ### `unlock` / `unlockMany` / `progress` reasons
 

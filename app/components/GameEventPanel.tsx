@@ -1,4 +1,4 @@
-import { FRIGHT_FEST_GAMES_ANNOUNCED } from "./events/fright-fest/registry";
+import { frightFestGame } from "./events/fright-fest/registry";
 
 /**
  * Fright Fest furniture for the three competition games' store pages: a mode chip
@@ -7,8 +7,10 @@ import { FRIGHT_FEST_GAMES_ANNOUNCED } from "./events/fright-fest/registry";
  * skin), and it is a server-safe, clock-free component: it reads neither the
  * time nor the championship flag.
  *
- * The competition is not built, so the panel says so plainly and offers nothing
- * to press, no scores and no board link.
+ * It describes the MODE only, in words that stay true whether or not a
+ * competition is running: no scores, no ranks, no board link. A running
+ * championship has its own panel beside this one (`championship/GamePanel`),
+ * which the page adds; this file never learns whether it exists.
  */
 
 const EVENT_GAMES: Record<string, { mode: string }> = {
@@ -18,7 +20,7 @@ const EVENT_GAMES: Record<string, { mode: string }> = {
 };
 
 export function eventModeFor(slug: string): string | null {
-  return FRIGHT_FEST_GAMES_ANNOUNCED ? (EVENT_GAMES[slug]?.mode ?? null) : null;
+  return frightFestGame(slug) ? (EVENT_GAMES[slug]?.mode ?? null) : null;
 }
 
 /** The chip (and, on Last Bell only, the Room 000 plaque) next to the title. */
@@ -49,8 +51,7 @@ export function GameEventPanel({ slug }: { slug: string }) {
         Fright Fest · {mode}
       </div>
       <p>
-        <b>Fright Fest mode: {mode}.</b>{" "}
-        Competition coming soon. Nothing is scored or ranked yet, so just play.
+        <b>Fright Fest mode: {mode}.</b> Pick it from the game&apos;s menu while the arcade is haunted.
       </p>
     </aside>
   );

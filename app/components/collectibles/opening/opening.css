@@ -1,0 +1,971 @@
+/*
+ * The pack-opening stage. Loaded only by OpeningFlow.
+ *
+ * The stage is a dim room in both themes: the foil pack is lit as if it were in
+ * one, and the cards' finishes read best against it. Its height fills the
+ * screen below the site header and above a phone's tab bar (`--ho-top` is
+ * measured by the flow; `--hp-bottom-chrome` is published by the tab bar), so a
+ * phone never has to scroll mid-opening.
+ *
+ * The stage carries `hc-root`, so the card tokens apply. Under reduced motion
+ * movement becomes short fades (bottom of the file).
+ */
+
+.ho-stage {
+  --ho-ink: #f4effa;
+  --ho-muted: rgb(244 239 250 / 0.7);
+  --ho-line: rgb(244 239 250 / 0.16);
+  --ho-fill: calc(100dvh - var(--ho-top, 96px) - var(--hp-bottom-chrome, 0px) - 12px);
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: clamp(420px, var(--ho-fill), 920px);
+  border-radius: 20px;
+  background:
+    radial-gradient(60% 46% at 50% 46%, color-mix(in srgb, var(--ho-tint) 12%, #22143a) 0%, transparent 100%),
+    linear-gradient(to bottom, #150b25, #0d0718);
+  color: var(--ho-ink);
+  overflow: hidden; /* the torn strip flies off the stage, not over the page */
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+
+/* In the Pack Room the stage fills the layer over the dimmed room (room/OpeningLayer): no box of
+   its own, the room's dim is its background. */
+.ho-stage[data-room] {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 1180px;
+  min-height: 0;
+  margin-inline: auto;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+/* The results can be taller than a phone: the stage grows and the layer scrolls. */
+.ho-stage[data-room][data-stage="summary"] {
+  flex: 1 0 auto;
+}
+.ho-stage[data-room].ho-shell {
+  flex: 0 0 auto;
+  margin-block: auto;
+  max-width: min(440px, 100%);
+  border-radius: 20px;
+  background: linear-gradient(to bottom, #150b25, #0d0718);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+}
+
+.ho-shell {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 16px;
+  padding: 40px 16px;
+  text-align: center;
+}
+
+/* ── Top bar ── */
+.ho-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 0;
+  position: relative;
+  z-index: 4;
+}
+.ho-heading {
+  min-width: 0;
+}
+.ho-title {
+  margin: 0;
+  font-size: clamp(1.05rem, 2.6vw, 1.3rem);
+  font-weight: 900;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+.ho-shell .ho-title {
+  font-size: clamp(1.3rem, 3.4vw, 1.8rem);
+}
+.ho-sub {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ho-muted);
+}
+.ho-tools {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+.ho-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1.5px solid var(--ho-line);
+  background: rgb(255 255 255 / 0.04);
+  color: var(--ho-ink);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+/* A 44 px touch target around the 40 px chip. */
+.ho-chip::after {
+  content: "";
+  position: absolute;
+  inset: -2px -2px;
+}
+.ho-chip:hover {
+  background: rgb(255 255 255 / 0.1);
+}
+.ho-chip[aria-pressed="true"] {
+  border-color: var(--hc-peel);
+  background: var(--hc-peel);
+  color: var(--hc-ink);
+}
+
+/* ── The table: the pack, then the cards ── */
+.ho-table {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 240px;
+  /* The pack and the cards are handled, not read: a drag or a long press must not select
+     them (Safari tints a selected canvas with the selection colour). */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.ho-stage[data-stage="summary"] .ho-table {
+  flex: none;
+  min-height: 0;
+  margin-top: 8px;
+  transition: height 480ms cubic-bezier(0.2, 0.8, 0.25, 1);
+}
+
+.ho-pack-wrap {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  z-index: 1;
+}
+/* The pack's shadow on the table. */
+.ho-pack-wrap::after {
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: -5%;
+  height: 9%;
+  z-index: -1;
+  background: radial-gradient(closest-side, rgb(4 0 10 / 0.55), transparent);
+  transition: opacity 300ms ease;
+  pointer-events: none;
+}
+.ho-stage:is([data-stage="opened"], [data-stage="extracting"]) .ho-pack-wrap::after {
+  opacity: 0.6;
+}
+.ho-stage[data-stage="revealing"] .ho-pack-wrap::after {
+  opacity: 0;
+}
+
+/* The face-down stack inside the pouch (behind its front wall). */
+.ho-deck-move {
+  position: absolute;
+  left: 50%;
+  width: 0;
+  height: 0;
+}
+.ho-deck {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 200px;
+  height: 280px;
+  transform-origin: 50% 0;
+}
+.ho-deck-card {
+  position: absolute;
+  inset: 0;
+}
+
+.ho-cards {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.ho-rcard {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 200px;
+  height: 280px;
+  perspective: 1400px;
+  pointer-events: auto;
+  transition:
+    transform 560ms cubic-bezier(0.2, 0.8, 0.25, 1),
+    opacity 320ms ease;
+  will-change: transform;
+}
+.ho-rcard[data-size="lg"] {
+  width: 260px;
+  height: 364px;
+}
+.ho-rcard[data-size="sm"] {
+  width: 140px;
+  height: 196px;
+}
+.ho-rcard[data-size="xl"] {
+  width: 300px;
+  height: 420px;
+}
+.ho-flipper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: translate 180ms ease;
+}
+.ho-flipper[data-face] {
+  transform: rotateY(180deg);
+}
+.ho-side {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.ho-side-front {
+  transform: rotateY(180deg);
+}
+.ho-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: block;
+  border: 0;
+  padding: 0;
+  border-radius: 16px;
+  background: transparent;
+  cursor: pointer;
+  touch-action: pan-y; /* sideways swipes are ours, vertical ones still scroll */
+  -webkit-tap-highlight-color: transparent;
+}
+/* The card in front fills the table: every touch on it is ours (swipe, tilt), so a slightly
+   diagonal swipe never scrolls the page mid-reveal. The summary scrolls as usual. */
+.ho-stage:not([data-stage="summary"]) .ho-hit {
+  touch-action: none;
+}
+/* The card waiting to be turned over lifts toward the pointer, and breathes a little to invite a tap. */
+.ho-rcard:has(> button.ho-hit:hover) .ho-flipper:not([data-face]) {
+  translate: 0 -6px;
+}
+.ho-rcard:has(> button.ho-hit) .ho-flipper:not([data-face]) .ho-side-back {
+  animation: ho-invite 2.8s ease-in-out 600ms infinite;
+}
+
+/* ── The card in front, once its face is up ──
+   Rare and up: a plate with the rarity's name above it and a light behind it; epic and
+   legendary: rays turning in the light. Legendary's plate is gold and larger. The tag
+   under it says whether the card is new to the binder. All of it waits for the face,
+   so nothing gives the card away early. */
+.ho-glow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 1;
+  width: min(760px, 170vw);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  pointer-events: none;
+  --rc: var(--hc-r-rare);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--rc) 46%, transparent), color-mix(in srgb, var(--rc) 14%, transparent) 52%, transparent);
+  animation: ho-fade 420ms ease both;
+}
+.ho-glow[data-rarity="epic"] {
+  --rc: var(--hc-r-epic);
+}
+.ho-glow[data-rarity="legendary"] {
+  --rc: #ffc21a;
+}
+.ho-glow:is([data-rarity="epic"], [data-rarity="legendary"])::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--rc) 55%, white 10%) 0deg 7deg, transparent 7deg 22.5deg);
+  -webkit-mask: radial-gradient(closest-side, #000 18%, rgb(0 0 0 / 0.5) 46%, transparent 72%);
+  mask: radial-gradient(closest-side, #000 18%, rgb(0 0 0 / 0.5) 46%, transparent 72%);
+  opacity: 0.55;
+  animation: ho-spin 40s linear infinite;
+}
+.ho-glow[data-rarity="legendary"]::before {
+  opacity: 0.8;
+}
+@keyframes ho-spin {
+  to {
+    rotate: 1turn;
+  }
+}
+.ho-plate {
+  position: absolute;
+  z-index: 40;
+  margin: 0;
+  translate: -50% -100%;
+  padding: 7px 16px 6px;
+  border: 3px solid #0b0612;
+  outline: 2px solid var(--rc, var(--hc-r-rare));
+  outline-offset: -6px;
+  background: #0b0612;
+  color: #fff;
+  font-family: var(--font-pixel), var(--font-nunito), system-ui, sans-serif;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 4px 0 rgb(0 0 0 / 0.55);
+  animation: ho-plate 380ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  pointer-events: none;
+}
+.ho-plate[data-rarity="rare"] {
+  --rc: var(--hc-r-rare);
+  color: #b9d3ff;
+}
+.ho-plate[data-rarity="epic"] {
+  --rc: var(--hc-r-epic);
+  background: #2a0f45;
+  color: #f0dcff;
+}
+.ho-plate[data-rarity="legendary"] {
+  --rc: #fff3b0;
+  padding: 10px 22px 9px;
+  border-color: #3a2400;
+  background: linear-gradient(180deg, #ffe680 0%, #ffc21a 48%, #e09200 52%, #ffc21a 100%);
+  color: #2a1700;
+  font-size: 28px;
+  box-shadow:
+    0 4px 0 #3a2400,
+    0 0 28px rgb(255 194 26 / 0.45);
+}
+@keyframes ho-plate {
+  from {
+    opacity: 0;
+    scale: 0.6;
+  }
+}
+.ho-under {
+  position: absolute;
+  z-index: 40;
+  margin: 0;
+  translate: -50% 0;
+  white-space: nowrap;
+  animation: ho-fade 260ms ease both;
+  pointer-events: none;
+}
+
+.ho-tag {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1.5px solid var(--ho-line);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--ho-muted);
+  text-transform: uppercase;
+}
+.ho-tag.is-new {
+  border-color: var(--hc-ink);
+  background: var(--hc-new);
+  color: #fff;
+}
+/* Under the card in front: a sentence, not a label. */
+.ho-tag.is-long {
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  letter-spacing: 0;
+  text-transform: none;
+  background: rgb(11 6 18 / 0.7);
+  color: #e8def5;
+}
+.ho-tag.is-long.is-new {
+  background: var(--hc-new);
+  color: #fff;
+}
+
+/* Phones: how far through the pack (the seen cards are behind the one in front). */
+.ho-dots {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+}
+.ho-dots span {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ho-muted);
+}
+.ho-dots span[data-on] {
+  border-color: transparent;
+  background: var(--ho-ink);
+}
+.ho-dots span[data-here] {
+  background: #ffc700;
+}
+.ho-link {
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--ho-muted);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.ho-link:hover {
+  color: var(--ho-ink);
+}
+.ho-link[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
+}
+.ho-go {
+  min-width: 168px;
+}
+
+/* ── Below the table: hints, actions, results ── */
+.ho-foot {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 10px;
+  min-height: 88px;
+  padding: 6px 16px 16px;
+  text-align: center;
+}
+.ho-copy {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 0.92rem;
+  color: var(--ho-muted);
+}
+.ho-notice {
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--hc-peel);
+  color: var(--hc-ink);
+  border: 2px solid var(--hc-ink);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.ho-loading {
+  width: 150px;
+  height: 219px;
+  border-radius: 10px;
+  background: linear-gradient(110deg, rgb(255 255 255 / 0.05) 30%, rgb(255 255 255 / 0.12) 50%, rgb(255 255 255 / 0.05) 70%) 0 0 / 300% 100%;
+  animation: ho-shimmer 1.6s linear infinite;
+}
+
+/* Buttons: stickers, like the cards. */
+.ho-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+.ho-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: 2px solid var(--hc-ink);
+  background: var(--hc-peel);
+  color: var(--hc-ink);
+  font: inherit;
+  font-weight: 800;
+  font-size: 0.95rem;
+  text-decoration: none;
+  box-shadow: 0 3px 0 var(--hc-shadow);
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+.ho-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 0 var(--hc-shadow);
+}
+.ho-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--hc-shadow);
+}
+.ho-btn-primary {
+  background: var(--accent-yellow, #ffd84a);
+}
+.ho-btn-quiet {
+  border-color: var(--ho-line);
+  background: transparent;
+  color: var(--ho-ink);
+  box-shadow: none;
+}
+.ho-btn-quiet:hover {
+  box-shadow: none;
+  background: rgb(255 255 255 / 0.08);
+}
+.ho-btn:is(:disabled, [aria-disabled="true"]) {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+  box-shadow: 0 3px 0 var(--hc-shadow);
+}
+:is(.ho-btn, .ho-chip, .ho-hit, .ho-link, .ho-title, .ho-sum-head h2, .ho-results a):focus-visible {
+  outline: 3px solid #ffd84a;
+  outline-offset: 4px;
+}
+
+/* What's inside: the odds, opening upward over the table. */
+/* The panel centres on the row of buttons, not on "What's inside?" itself, which sits right of
+   centre: centred on the button, a phone-width panel ran off the screen's right edge. */
+.ho-actions:has(> .ho-odds) {
+  position: relative;
+}
+.ho-odds {
+  position: static;
+}
+.ho-odds > summary {
+  list-style: none;
+}
+.ho-odds > summary::-webkit-details-marker {
+  display: none;
+}
+.ho-odds-panel {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  translate: -50% 0;
+  z-index: 10;
+  width: min(330px, calc(100vw - 32px));
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 2px solid var(--hc-ink);
+  background: var(--hc-peel);
+  color: var(--hc-ink);
+  box-shadow: 0 4px 0 var(--hc-shadow);
+  text-align: left;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+.ho-odds-panel p {
+  margin: 0 0 6px;
+}
+.ho-odds-panel ul {
+  margin: 0 0 8px;
+  padding-left: 16px;
+}
+.ho-fine {
+  font-size: 0.75rem;
+  color: var(--hc-ink-soft);
+}
+
+/* The results. */
+/* ── The results ──
+   Laptops: two columns, the cards on the left (the best pull in the middle, larger) and
+   what it means on the right. Phones: the heading, the best pull, a list of all of them,
+   the progress, the buttons, scrolling if need be. */
+.ho-sum-head {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 8px 16px 0;
+  text-align: center;
+  animation: ho-fade 320ms ease both;
+}
+.ho-kicker {
+  margin: 0;
+  color: #ffc700;
+  font-family: var(--font-pixel), var(--font-nunito), system-ui, sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+.ho-sum-head h2 {
+  margin: 0;
+  font-size: clamp(1.45rem, 3.2vw, 2.1rem);
+  font-weight: 900;
+  line-height: 1.1;
+  text-wrap: balance;
+  border-radius: 6px;
+}
+.ho-summary {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 560px;
+  animation: ho-fade 320ms 120ms ease both;
+}
+.ho-best {
+  position: absolute;
+  z-index: 40;
+  margin: 0;
+  translate: -50% -100%;
+  padding: 5px 10px 4px;
+  border: 2px solid #0b0612;
+  background: #ffc700;
+  color: #23153a;
+  font-family: var(--font-pixel), var(--font-nunito), system-ui, sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 3px 0 #0b0612;
+  animation: ho-plate 380ms 360ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  pointer-events: none;
+}
+.ho-cap-under {
+  position: absolute;
+  z-index: 40;
+  margin: 0;
+  translate: -50% 0;
+  color: var(--ho-muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  white-space: nowrap;
+  animation: ho-fade 300ms 420ms ease both;
+  pointer-events: none;
+}
+.ho-prog {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 2px solid rgb(255 255 255 / 0.12);
+  border-radius: 14px;
+  background: rgb(11 6 18 / 0.72);
+  text-align: left;
+}
+.ho-prog p {
+  margin: 0;
+}
+.ho-prog-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-weight: 800;
+}
+.ho-prog-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ho-prog-ct {
+  color: var(--ho-muted);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+.ho-prog-ct b {
+  color: #ffc700;
+  font-size: 1.7rem;
+  font-weight: 900;
+  line-height: 1;
+}
+.ho-prog-new {
+  align-self: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--hc-new);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+.ho-segs {
+  display: flex;
+  gap: 3px;
+}
+.ho-segs i {
+  flex: 1 1 0;
+  height: 9px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.12);
+}
+.ho-segs i[data-on] {
+  background: #ffc700;
+}
+.ho-segs i[data-new] {
+  background: var(--hc-new);
+  animation: ho-seg 360ms calc(var(--k, 0) * 160ms + 560ms) cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+@keyframes ho-seg {
+  from {
+    background: rgb(255 255 255 / 0.12);
+    scale: 1 0.3;
+  }
+}
+.ho-prog-goal {
+  color: var(--ho-muted);
+  font-size: 0.82rem;
+}
+.ho-sum-actions {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+/* Side by side where both fit on one line each, stacked where they don't. */
+.ho-sum-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(198px, 1fr));
+  gap: 10px;
+}
+.ho-sum-row .ho-btn {
+  padding-inline: 14px;
+  white-space: nowrap;
+}
+.ho-sum-actions .ho-link {
+  justify-self: center;
+}
+
+/* Laptops: the cards and what they mean side by side. */
+.ho-stage[data-stage="summary"][data-tray="side"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  grid-template-rows: auto 1fr auto auto 1fr;
+  grid-template-areas:
+    "bar bar"
+    "table ."
+    "table head"
+    "table foot"
+    "table .";
+  column-gap: 32px;
+  padding-inline: 16px 24px;
+}
+.ho-stage[data-stage="summary"][data-tray="side"] > .ho-bar {
+  grid-area: bar;
+}
+.ho-stage[data-stage="summary"][data-tray="side"] > .ho-table {
+  grid-area: table;
+  min-height: 420px;
+  margin: 0;
+}
+.ho-stage[data-stage="summary"][data-tray="side"] > .ho-sum-head {
+  grid-area: head;
+  justify-items: start;
+  padding: 0 0 4px;
+  text-align: left;
+}
+.ho-stage[data-stage="summary"][data-tray="side"] > .ho-foot {
+  grid-area: foot;
+  justify-items: stretch;
+  min-height: 0;
+  padding: 10px 0 0;
+  text-align: left;
+}
+.ho-stage[data-stage="summary"][data-tray="side"] .ho-summary {
+  justify-items: stretch;
+}
+.ho-stage[data-stage="summary"][data-tray="side"] .ho-sum-actions .ho-link {
+  justify-self: start;
+}
+/* The cards themselves say all of this on a laptop, and are the links to their pages. */
+.ho-stage[data-tray="side"] .ho-results {
+  display: none;
+}
+.ho-results {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ho-results li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: rgb(255 255 255 / 0.05);
+  text-align: left;
+}
+.ho-results li::before {
+  content: "";
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--ho-r, #b9b4c7);
+}
+.ho-results li[data-rarity="uncommon"] {
+  --ho-r: #7fd16a;
+}
+.ho-results li[data-rarity="rare"] {
+  --ho-r: #7fd1ff;
+}
+.ho-results li[data-rarity="epic"] {
+  --ho-r: #c58bff;
+}
+.ho-results li[data-rarity="legendary"] {
+  --ho-r: #ffd84a;
+}
+.ho-results a {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--ho-ink);
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-color: var(--ho-line);
+  text-underline-offset: 3px;
+}
+.ho-rarity {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ho-muted);
+}
+.ho-bar-track {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.1);
+  overflow: hidden;
+}
+.ho-bar-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ho-tint);
+}
+
+@keyframes ho-invite {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -3px;
+  }
+}
+@keyframes ho-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes ho-shimmer {
+  to {
+    background-position: -300% 0;
+  }
+}
+
+@media (max-width: 680px) {
+  .ho-stage {
+    border-radius: 16px;
+  }
+  .ho-bar {
+    padding: 12px 12px 0;
+  }
+  .ho-chip {
+    padding: 0 10px;
+  }
+}
+
+/*
+ * A phone on its side has room for the table or for the bar and buttons above and
+ * below it, not both: the table takes the full height and the title, chips and
+ * buttons stand in a column beside it.
+ */
+@media (orientation: landscape) and (max-height: 520px) {
+  .ho-stage:not(.ho-shell) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 36%);
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: clamp(220px, var(--ho-fill), 520px);
+  }
+  .ho-stage[data-room]:not(.ho-shell) {
+    min-height: 0;
+  }
+  .ho-stage:not(.ho-shell) > .ho-table {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    min-height: 0;
+    margin-top: 0;
+  }
+  .ho-stage:not(.ho-shell) > .ho-bar {
+    grid-column: 2;
+    grid-row: 1;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 12px 0 0;
+  }
+  .ho-stage:not(.ho-shell) .ho-heading {
+    flex: 1 1 100%;
+  }
+  .ho-stage:not(.ho-shell) .ho-sub {
+    display: none;
+  }
+  .ho-stage:not(.ho-shell) > .ho-foot {
+    grid-column: 2;
+    grid-row: 2;
+    align-content: center;
+    min-height: 0;
+    padding: 8px 12px 12px 0;
+  }
+  .ho-stage:not(.ho-shell) .ho-copy {
+    font-size: 0.85rem;
+  }
+}
+
+/* ── Reduced motion: places change at once, turning over is a short fade ── */
+@media (prefers-reduced-motion: reduce) {
+  .ho-rcard {
+    transition: none;
+  }
+  .ho-flipper,
+  .ho-flipper[data-face],
+  .ho-side-front {
+    transform: none;
+    transition: none;
+  }
+  .ho-flipper[data-face] .ho-side-back {
+    visibility: hidden;
+  }
+  .ho-rcard .ho-side-back {
+    animation: none !important;
+  }
+  .ho-stage[data-stage="summary"] .ho-table {
+    transition: none;
+  }
+  .ho-loading {
+    animation: none;
+  }
+  .ho-glow::before {
+    animation: none !important;
+  }
+  .ho-plate,
+  .ho-best,
+  .ho-segs i[data-new],
+  .ho-sum-head,
+  .ho-summary,
+  .ho-cap-under {
+    animation: ho-fade 1ms both;
+  }
+}

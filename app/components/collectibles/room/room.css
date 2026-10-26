@@ -1,0 +1,824 @@
+/*
+ * The Pack Room: a pixel-art prize counter with HallPass's own type and buttons
+ * on top (docs/collectibles-pack-room.md). Loaded only by PrizeCounter.
+ *
+ * SIZE. `.pr` is a size container across the content area. From 868 px the
+ * laptop scene (434×230) fills it up to exactly 3× (1302 px); below that the
+ * phone scene (195×358) is used, up to 2.5×. `.pr-room` is a second container,
+ * so `--u` (one art pixel, in CSS px) can size things in the art's own units.
+ * The two widths are mirrored in geometry.ts (PHONE_BELOW_PX, DESK_MAX_PX).
+ *
+ * PLACE. Elements carry their spot as percentages of the room: `--dl --dt --dw
+ * --dh` for the laptop scene and `--pl --pt --pw --ph` for the phone one.
+ * `[data-in="desk"]` / `[data-in="phone"]` belong to one scene only.
+ *
+ * SEASON. `html[data-hp-skin="haunted"]` (the Fright Fest skin, which also
+ * follows the player's look menu) swaps the pictures and the loops. Same layout.
+ *
+ * The scene is pixel art: whole-number scales where they fit, and always
+ * `image-rendering: pixelated`. The HTML on top is never scaled: it keeps its
+ * type sizes and 44 px targets. Loops are background steps (no layout, no
+ * paint outside their box), off under reduced motion.
+ */
+
+.pr {
+  --pr-ink: #0b0612;
+  --pr-cream: #fff8e7;
+  --pr-soft: #d8cfe6;
+  --pr-gold: #ffc700;
+  container: pr / inline-size;
+  position: relative;
+  isolation: isolate;
+  color: var(--pr-cream);
+  background: var(--pr-ink);
+}
+
+/* Past 3× the walls carry on: each side is the art's own edge column, stretched, and fades a little. */
+.pr-wall {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  image-rendering: pixelated;
+  background-image: url(/collectibles/room/a/edge-desk-normal-l.png), url(/collectibles/room/a/edge-desk-normal-r.png);
+  background-position: left top, right top;
+  background-size: 50% 100%, 50% 100%;
+  background-repeat: no-repeat;
+}
+.pr-wall::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgb(11 6 18 / 0.7), rgb(11 6 18 / 0) 18%, rgb(11 6 18 / 0) 82%, rgb(11 6 18 / 0.7));
+}
+html[data-hp-skin="haunted"] .pr-wall {
+  background-image: url(/collectibles/room/a/edge-desk-halloween-l.png), url(/collectibles/room/a/edge-desk-halloween-r.png);
+}
+
+.pr-room {
+  container: room / inline-size;
+  --u: calc(100cqw / 434);
+  position: relative;
+  z-index: 1;
+  width: min(100%, 1302px);
+  margin-inline: auto;
+  aspect-ratio: 434 / 230;
+}
+.pr-art {
+  position: absolute;
+  inset: 0;
+  image-rendering: pixelated;
+  background: url(/collectibles/room/a/desk-normal.png) 0 0 / 100% 100% no-repeat;
+}
+html[data-hp-skin="haunted"] .pr-art {
+  background-image: url(/collectibles/room/a/desk-halloween.png);
+}
+
+.pr-at {
+  position: absolute;
+  left: var(--dl);
+  top: var(--dt);
+  width: var(--dw);
+  height: var(--dh);
+}
+/* Panels hang from a point (their top centre), at their natural size. */
+.pr-anchor {
+  position: absolute;
+  z-index: 12;
+  left: var(--dl);
+  top: var(--dt);
+  translate: -50% 0;
+}
+
+@container pr (width >= 868px) {
+  .pr [data-in="phone"] {
+    display: none !important;
+  }
+}
+@container pr (width < 868px) {
+  .pr [data-in="desk"] {
+    display: none !important;
+  }
+  .pr-wall {
+    background-image: url(/collectibles/room/a/edge-phone-normal-l.png), url(/collectibles/room/a/edge-phone-normal-r.png);
+  }
+  html[data-hp-skin="haunted"] .pr-wall {
+    background-image: url(/collectibles/room/a/edge-phone-halloween-l.png), url(/collectibles/room/a/edge-phone-halloween-r.png);
+  }
+  .pr-room {
+    --u: calc(100cqw / 195);
+    width: min(100%, 487.5px);
+    aspect-ratio: 195 / 358;
+  }
+  .pr-art {
+    background-image: url(/collectibles/room/a/phone-normal.png);
+  }
+  html[data-hp-skin="haunted"] .pr-art {
+    background-image: url(/collectibles/room/a/phone-halloween.png);
+  }
+  .pr-at {
+    left: var(--pl);
+    top: var(--pt);
+    width: var(--pw);
+    height: var(--ph);
+  }
+  .pr-anchor {
+    left: var(--pl);
+    top: var(--pt);
+  }
+}
+
+/* ── The loops: a strip of equal frames, stepped ── */
+.pr-loop {
+  display: block;
+  pointer-events: none;
+  image-rendering: pixelated;
+  background-repeat: no-repeat;
+  background-size: calc(var(--frames) * 100%) 100%;
+  animation: pr-loop var(--dur) steps(var(--frames), jump-none) infinite;
+}
+@keyframes pr-loop {
+  from {
+    background-position-x: 0%;
+  }
+  to {
+    background-position-x: 100%;
+  }
+}
+.pr-loop[data-season="haunted"],
+html[data-hp-skin="haunted"] .pr-loop[data-season="normal"] {
+  display: none;
+}
+html[data-hp-skin="haunted"] .pr-loop[data-season="haunted"] {
+  display: block;
+}
+
+/* ── The packs: the print, lit like a foil pouch ── */
+.pr-pack {
+  --px: 0.5;
+  --py: 0.3;
+  --rx: 0;
+  --ry: 0;
+  z-index: 5;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    translate 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 300ms ease;
+}
+.pr-pack[data-role="featured"] {
+  z-index: 7;
+}
+.pr-pack:hover,
+.pr-pack:focus-visible {
+  translate: 0 -6px;
+}
+.pr-pack:focus-visible {
+  outline: 3px solid var(--pr-gold);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.pr-pack-body {
+  position: absolute;
+  inset: 0;
+  transform: perspective(900px) rotateX(calc(var(--ry) * 1deg)) rotateY(calc(var(--rx) * 1deg));
+  transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.pr-pack[data-live] .pr-pack-body {
+  transition: none;
+}
+.pr-pack-print {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.pr-pack-light,
+.pr-pack-foil,
+.pr-pack-glare {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  -webkit-mask: var(--mask) 0 0 / 100% 100% no-repeat;
+  mask: var(--mask) 0 0 / 100% 100% no-repeat;
+}
+/* The pouch bulges: its edges fall away, the crimps sit flat and darker, two long folds catch the light. */
+.pr-pack-light {
+  background:
+    linear-gradient(90deg, rgb(0 0 0 / 0.42) 0%, rgb(0 0 0 / 0.08) 9%, rgb(255 255 255 / 0.06) 24%, rgb(255 255 255 / 0) 45%, rgb(0 0 0 / 0.05) 70%, rgb(0 0 0 / 0.3) 93%, rgb(0 0 0 / 0.5) 100%),
+    linear-gradient(180deg, rgb(0 0 0 / 0.25) 0 7.1%, rgb(255 255 255 / 0.1) 8.2%, rgb(255 255 255 / 0) 16%, rgb(0 0 0 / 0) 86%, rgb(0 0 0 / 0.22) 94.2%, rgb(0 0 0 / 0.3) 100%),
+    linear-gradient(101deg, transparent 18%, rgb(255 255 255 / 0.07) 21%, transparent 25%, transparent 62%, rgb(255 255 255 / 0.05) 66%, transparent 70%);
+}
+/* Foil: a sheen that follows the light, and a faint prism that wakes when the pack is handled.
+   Overlay, not colour-dodge, so the printed colours keep their hue. */
+.pr-pack-foil {
+  --fa: 0.12;
+  -webkit-mask-image: var(--foil);
+  mask-image: var(--foil);
+  mix-blend-mode: overlay;
+  background:
+    linear-gradient(calc(110deg + var(--rx) * 2deg), transparent calc(var(--px) * 70% - 12%), rgb(255 255 255 / 0.8) calc(var(--px) * 70% + 4%), transparent calc(var(--px) * 70% + 20%)),
+    repeating-linear-gradient(calc(125deg + var(--ry) * 3deg), rgb(255 92 205 / var(--fa)) 0, rgb(255 228 92 / var(--fa)) 6%, rgb(92 255 168 / var(--fa)) 12%, rgb(92 225 255 / var(--fa)) 18%, rgb(157 123 255 / var(--fa)) 24%, rgb(255 92 205 / var(--fa)) 30%);
+  background-size: 100% 100%, 180% 180%;
+  background-position: 0 0, calc(var(--px) * 100%) calc(var(--py) * 100%);
+}
+.pr-pack:hover .pr-pack-foil,
+.pr-pack:focus-visible .pr-pack-foil,
+.pr-pack[data-live] .pr-pack-foil {
+  --fa: 0.4;
+}
+.pr-pack-glare {
+  background: radial-gradient(circle at calc(var(--px) * 100%) calc(var(--py) * 100%), rgb(255 255 255 / 0.34), rgb(255 255 255 / 0.07) 26%, transparent 48%);
+  mix-blend-mode: soft-light;
+  opacity: 0;
+  transition: opacity 200ms;
+}
+.pr-pack:hover .pr-pack-glare,
+.pr-pack:focus-visible .pr-pack-glare,
+.pr-pack[data-live] .pr-pack-glare {
+  opacity: 1;
+}
+.pr-pack-shadow {
+  position: absolute;
+  z-index: -1;
+  left: 8%;
+  right: 8%;
+  bottom: -4%;
+  height: 8%;
+  background: radial-gradient(closest-side, rgb(0 0 0 / 0.62), transparent);
+  pointer-events: none;
+}
+.pr-pack-count {
+  position: absolute;
+  z-index: 3;
+  right: -6%;
+  top: 14%;
+  min-width: 30px;
+  height: 26px;
+  padding: 0 7px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 2px solid var(--pr-ink);
+  background: var(--pr-cream);
+  color: #23153a;
+  box-shadow: 0 2px 0 var(--pr-ink);
+  font-size: 13.5px;
+  font-weight: 900;
+  rotate: 6deg;
+}
+
+/* ── The UI on top: plates, buttons, links ── */
+.pr-plate {
+  border: 2px solid rgb(255 248 231 / 0.14);
+  border-radius: 14px;
+  background: rgb(11 6 18 / 0.96);
+  box-shadow: 0 3px 0 rgb(0 0 0 / 0.45);
+  color: var(--pr-cream);
+}
+.pr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: 2px solid var(--pr-ink);
+  background: var(--pr-cream);
+  color: #23153a;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 900;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 3px 0 var(--pr-ink);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+.pr-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 0 var(--pr-ink);
+}
+.pr-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--pr-ink);
+}
+.pr-primary {
+  background: var(--pr-gold);
+}
+.pr-ghost {
+  border-color: rgb(255 248 231 / 0.35);
+  background: rgb(255 248 231 / 0.08);
+  color: var(--pr-cream);
+  box-shadow: none;
+}
+.pr-ghost:hover {
+  box-shadow: none;
+  background: rgb(255 248 231 / 0.14);
+}
+.pr-btn:focus-visible,
+.pr-chip:focus-visible,
+.pr-link:focus-visible,
+.pr-coll:focus-visible,
+.pr-binder:focus-visible,
+.pr-sheet li button:focus-visible {
+  outline: 3px solid var(--pr-gold);
+  outline-offset: 3px;
+}
+.pr-link {
+  min-height: 44px;
+  padding: 10px 6px;
+  border: 0;
+  background: none;
+  color: var(--pr-soft);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+/* The pack in the light: name over actions, narrow enough to clear the painted signs either side. */
+.pr-info {
+  display: grid;
+  row-gap: 4px;
+  width: max-content;
+  max-width: 300px;
+  padding: 6px 12px 8px;
+  text-align: center;
+}
+.pr-info h2 {
+  margin: 0;
+  overflow: hidden;
+  font-size: 16.5px;
+  font-weight: 900;
+  line-height: 1.15;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.pr-info p {
+  margin: 1px 0 0;
+  color: var(--pr-soft);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-wrap: balance;
+}
+.pr-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+.pr-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  white-space: nowrap;
+}
+.pr-row .pr-btn {
+  padding: 0 16px;
+}
+.pr-row .pr-ghost {
+  background: rgb(11 6 18 / 0.86);
+}
+.pr-note {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: min(320px, 86cqw);
+  padding: 12px 16px 14px;
+  text-align: center;
+}
+.pr-note p {
+  margin: 0;
+}
+.pr-note-title {
+  font-size: 16.5px;
+  font-weight: 900;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+.pr-note-sub {
+  color: var(--pr-soft);
+  font-size: 13px;
+  font-weight: 700;
+  text-wrap: balance;
+}
+.pr-note[aria-busy="true"] .pr-note-title {
+  animation: pr-breathe 1.6s ease-in-out infinite alternate;
+}
+@keyframes pr-breathe {
+  from {
+    opacity: 0.55;
+  }
+}
+
+.pr-chip {
+  position: absolute;
+  z-index: 12;
+  right: 16px;
+  top: 12px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 2px solid rgb(255 248 231 / 0.3);
+  background: rgb(11 6 18 / 0.85);
+  color: var(--pr-cream);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.pr-chip b {
+  color: var(--pr-gold);
+  font-weight: 900;
+}
+
+/* What's inside: centred above the whole panel (or the phone's button row), covering none of it. */
+.pr-odds {
+  position: static;
+}
+.pr-odds-pop {
+  position: absolute;
+  z-index: 16;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  translate: -50% 0;
+  width: min(340px, calc(100vw - 24px));
+  padding: 12px 14px;
+  color: #e8def5;
+  font-size: 13px;
+  text-align: left;
+  white-space: normal;
+}
+.pr-odds-pop[hidden] {
+  display: none;
+}
+.pr-odds-pop b {
+  color: var(--pr-cream);
+  font-size: 14px;
+}
+.pr-odds-pop p {
+  margin: 2px 0 8px;
+  color: #cdc3dc;
+  font-size: 12.5px;
+}
+.pr-odds-pop table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.pr-odds-pop th,
+.pr-odds-pop td {
+  padding: 4px;
+  border-top: 1px solid rgb(255 248 231 / 0.12);
+  text-align: left;
+  vertical-align: top;
+  font-weight: 700;
+}
+.pr-odds-pop th {
+  width: 1%;
+  padding-right: 10px;
+  color: #ffd84a;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+/* ── The boards: recent pulls (left), the collection (right) ── */
+.pr-recent {
+  --mini: calc(var(--u) * 12.5);
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.pr-minis {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: calc(var(--mini) * 0.13);
+  height: calc(var(--mini) * 1.4);
+  overflow: hidden;
+}
+.pr-mini {
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  flex: none;
+  width: var(--mini, 38px);
+  height: calc(var(--mini, 38px) * 1.37);
+  padding: calc(var(--mini, 38px) * 0.08);
+  border-radius: 6px;
+  background: var(--pr-cream);
+  box-shadow: 0 2px 0 var(--pr-ink);
+}
+.pr-mini > span {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 4px;
+}
+.pr-mini img {
+  width: 84%;
+  height: auto;
+  image-rendering: pixelated;
+}
+.pr-mini b {
+  display: block;
+  height: 4px;
+  margin-top: 2px;
+  border-radius: 2px;
+}
+.pr-mini[data-new]::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--pr-ink);
+  background: var(--hc-new);
+}
+.pr-empty {
+  margin: 0;
+  color: #b9a7cf;
+  font-size: 12.5px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.pr-coll {
+  z-index: 12;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-content: center;
+  gap: calc(var(--u) * 3);
+  padding: 0 calc(var(--u) * 2);
+  border-radius: 8px;
+  color: var(--pr-cream);
+  text-decoration: none;
+}
+.pr-coll:hover {
+  background: rgb(255 248 231 / 0.06);
+}
+.pr-coll-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 3px 6px;
+  min-width: 0;
+}
+.pr-coll-row img {
+  width: calc(var(--u) * 10.67);
+  height: auto;
+  image-rendering: pixelated;
+}
+.pr-coll-ct {
+  color: #ffd84a;
+  font-size: clamp(11px, calc(var(--u) * 4.67), 14px);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.pr-bar {
+  grid-column: 1 / 3;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: rgb(255 248 231 / 0.14);
+}
+.pr-bar i {
+  display: block;
+  height: 100%;
+  background: var(--pr-gold);
+}
+
+/* Phones: the count sits on the painted binder's corner and opens it. */
+.pr-binder {
+  z-index: 12;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  min-height: 44px;
+  text-decoration: none;
+}
+.pr-binder b {
+  translate: 8px -10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 2px solid var(--pr-ink);
+  background: var(--pr-gold);
+  color: #23153a;
+  font-size: 12px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+@container pr (width < 868px) {
+  .pr-recent {
+    --mini: calc(var(--u) * 19);
+  }
+}
+
+/* ── All packs: a modal sheet, top right on laptops, along the bottom on phones ── */
+.pr-sheet {
+  position: fixed;
+  inset: 96px 16px auto auto;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(560px, calc(100dvh - 120px));
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  border: 2px solid rgb(255 248 231 / 0.14);
+  border-radius: 14px;
+  background: rgb(11 6 18 / 0.97);
+  color: var(--pr-cream);
+  box-shadow: 0 3px 0 rgb(0 0 0 / 0.45);
+}
+.pr-sheet::backdrop {
+  background: rgb(7 4 13 / 0.55);
+}
+@container pr (width < 868px) {
+  .pr-sheet {
+    inset: auto 12px max(12px, env(safe-area-inset-bottom, 0px)) 12px;
+    width: auto;
+  }
+}
+.pr-sheet-in {
+  padding: 10px 14px 14px;
+}
+.pr-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.pr-sheet h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 900;
+}
+.pr-sheet ul {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.pr-sheet li button {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid rgb(255 248 231 / 0.12);
+  background: rgb(255 248 231 / 0.04);
+  color: var(--pr-cream);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+.pr-sheet li button:hover {
+  background: rgb(255 248 231 / 0.1);
+}
+.pr-sheet li img {
+  image-rendering: pixelated;
+}
+.pr-sheet small {
+  display: block;
+  color: #b9a7cf;
+  font-size: 12px;
+  font-weight: 700;
+}
+.pr-sheet em {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--pr-gold);
+  color: #23153a;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pr-loop,
+  .pr-note[aria-busy="true"] .pr-note-title {
+    animation: none;
+  }
+  .pr-pack,
+  .pr-pack-body,
+  .pr-btn {
+    transition: opacity 200ms ease;
+  }
+  .pr-pack:hover,
+  .pr-pack:focus-visible {
+    translate: none;
+  }
+  .pr-pack-body {
+    transform: none;
+  }
+}
+
+/* ── Opening a pack: the layer over the room (OpeningLayer) ──
+   The room stays visible behind, dimmed with a dither (no blur: Chromebooks), deeper
+   once the cards are out. Above the site chrome; everything else is inert meanwhile. */
+.pr-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  color: #f4effa;
+  outline: none;
+  animation: pr-layer-in 260ms ease both;
+}
+.pr-layer[data-leaving] {
+  animation: pr-layer-out 200ms ease both;
+}
+@keyframes pr-layer-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes pr-layer-out {
+  to {
+    opacity: 0;
+  }
+}
+.pr-layer-dim,
+.pr-layer-dim::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.pr-layer-dim {
+  background:
+    radial-gradient(ellipse 70% 62% at 50% 46%, rgb(13 7 24 / 0.78), rgb(7 4 13 / 0.94) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='2' height='2' fill='%23000' fill-opacity='.35'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%23000' fill-opacity='.35'/%3E%3C/svg%3E");
+  image-rendering: pixelated;
+}
+/* Once the cards are out the room steps further back. */
+.pr-layer-dim::after {
+  content: "";
+  background: rgb(7 4 13 / 0.6);
+  opacity: 0;
+  transition: opacity 600ms ease;
+}
+.pr-layer:has(.ho-stage:is([data-stage="revealing"], [data-stage="summary"])) .pr-layer-dim::after {
+  opacity: 1;
+}
+.pr-layer-flow {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+/* The stand-in: the pack's print, lifted off the riser and carried to the stage. */
+.pr-proxy {
+  position: fixed;
+  z-index: 3;
+  image-rendering: pixelated;
+  transform-origin: 50% 50%;
+  pointer-events: none;
+  filter: drop-shadow(0 18px 18px rgb(0 0 0 / 0.5));
+}
+/* The real pack waits, invisible, until the stand-in has landed and the pack has drawn. */
+.pr-layer[data-arriving] .ho-pack-wrap {
+  visibility: hidden;
+}
+/* The pack that is being opened has left the counter. */
+.pr-pack[data-away] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pr-layer,
+  .pr-layer[data-leaving] {
+    animation-duration: 1ms;
+  }
+  .pr-layer-dim::after {
+    transition: none;
+  }
+}
