@@ -58,6 +58,12 @@ from 28 Oct 00:00 to 2 Nov 00:00 UK, which is the championship's `opensAt` to
    - **One credit per player per board per day.** Award key
      `candy:<event>:daily_best:<playerId>:<boardId>:<YYYY-MM-DD>`; the ledger
      `ref` is `<boardId>#<YYYY-MM-DD>#<rank>`.
+   - **Paid once the UK day is over** (owner decision, 26 Oct). The sync only
+     credits finished UK days, by the database clock, so a day's candy lands on
+     the first sync after midnight UK time. The first build paid on any sync, so
+     a visit to `/fright-fest` mid-day locked in the best score so far, and a
+     better score later that day earned nothing extra. The section tells players
+     the candy arrives after midnight.
    - **Valued at sync time.** Rating a board after players scored still pays
      those earlier days in the window at the next sync. Changing a value never
      re-prices a credit already made.

@@ -49,13 +49,14 @@ describe.skipIf(!enabled)("candy store against Postgres", () => {
   const p2 = `candy-test-p2-${tag}`;
   const p3 = `candy-test-p3-${tag}`;
   const ids: Record<string, string> = {};
-  // The window tests run in their own event, on a window in 2030, so they never meet the wide one above.
+  // The window tests run in their own event, on a window in 2025 (in the past: only finished UK days pay), so they
+  // never meet the wide one above.
   const slugW = `candy-testw-${tag}`;
   const eventW = `candy-testw-${tag}`;
-  const configW: CandyConfig = { ...config, id: eventW, opensAt: "2030-10-28T00:00:00Z", closesAt: "2030-11-02T00:00:00Z" };
+  const configW: CandyConfig = { ...config, id: eventW, opensAt: "2025-10-28T00:00:00Z", closesAt: "2025-11-02T00:00:00Z" };
   const storeW = createCandyStore(sql, configW);
-  const d = ["d1", "d2", "d3", "t1", "t2", "t3", "t4", "t5"].map((k) => `candy-test-${k}-${tag}`);
-  const [d1, d2, d3, t1, t2, t3, t4, t5] = d;
+  const d = ["d1", "d2", "d3", "t1", "t2", "t3", "t4", "t5", "n1"].map((k) => `candy-test-${k}-${tag}`);
+  const [d1, d2, d3, t1, t2, t3, t4, t5, n1] = d;
   let p1Public = "";
   let p2Public = "";
 
@@ -68,9 +69,12 @@ describe.skipIf(!enabled)("candy store against Postgres", () => {
       INSERT INTO championship_runs (event_id, game_slug, player_id, token_hash, expires_at, submitted_at, status, score)
       VALUES (${event}, ${game}, ${playerId}, ${randomBytes(32).toString("hex")}, now() + interval '1 hour', now(), ${status}, 100)
     `;
-  /** A score row. `playerId` null is an anonymous, handle-only score. `at` null is now(). */
+  /**
+   * A score row. `playerId` null is an anonymous, handle-only score. `at` null is this time yesterday, a finished
+   * UK day, because only finished days pay a daily best.
+   */
   const score = (board: string, playerId: string | null, value: number, at: string | null = null) =>
-    sql`INSERT INTO scores (board_id, handle, score, player_id, created_at) VALUES (${board}, ${playerId ? "h-" + tag : "anon"}, ${value}, ${playerId}, COALESCE(${at}::timestamptz, now()))`;
+    sql`INSERT INTO scores (board_id, handle, score, player_id, created_at) VALUES (${board}, ${playerId ? "h-" + tag : "anon"}, ${value}, ${playerId}, COALESCE(${at}::timestamptz, now() - interval '1 day'))`;
   const board = async (key: string, candy: number, sort: "asc" | "desc" = "desc", gameSlug = slug) => {
     const id = `${gameSlug}-${key}`;
     await sql`INSERT INTO boards (id, game_slug, title, sort, candy) VALUES (${id}, ${gameSlug}, ${"Test " + key}, ${sort}, ${candy})`;
@@ -269,7 +273,16 @@ describe.skipIf(!enabled)("candy store against Postgres", () => {
     expect((await ledger(p2)).find((r) => r.kind === "placing")!.ref).toBe("g1#2");
   });
 
-  describe("daily best, in a window of its own (28 Oct to 2 Nov 2030)", () => {
+  it("pays a day only once it is over, so a sync during the day never locks in an early score", async () => {
+    ids.today = await board("today", 10);
+    await sql`INSERT INTO scores (board_id, handle, score, player_id, created_at) VALUES (${ids.today}, ${"h-" + tag}, 50, ${n1}, now())`;
+    expect(await store.sync(n1)).toEqual({ credited: 0, amount: 0 }); // today is not over yet
+    await score(ids.today, n1, 30); // yesterday: a finished day
+    expect(await store.sync(n1)).toEqual({ credited: 1, amount: 10 });
+    expect((await dailyBest(n1)).map((r) => r.award_key)).toHaveLength(1); // today's 50 still waits for midnight
+  });
+
+  describe("daily best, in a window of its own (28 Oct to 2 Nov 2025)", () => {
     const W = { hi: "", lo: "", anon: "", zero: "", pre: "", edge: "", tier40: "", tier2: "" };
 
     beforeAll(async () => {
@@ -284,29 +297,29 @@ describe.skipIf(!enabled)("candy store against Postgres", () => {
     });
 
     it("pays two scores in one UK day once, at the best one's rank as of when it was set", async () => {
-      await score(W.hi, d1, 100, "2030-10-29T09:00:00Z");
-      await score(W.hi, d2, 300, "2030-10-29T08:00:00Z");
-      await score(W.hi, d3, 400, "2030-10-29T12:00:00Z");
-      await score(W.hi, d1, 350, "2030-10-29T15:00:00Z"); // d1's best of the day: 400 is better and earlier, so 2nd
+      await score(W.hi, d1, 100, "2025-10-29T09:00:00Z");
+      await score(W.hi, d2, 300, "2025-10-29T08:00:00Z");
+      await score(W.hi, d3, 400, "2025-10-29T12:00:00Z");
+      await score(W.hi, d1, 350, "2025-10-29T15:00:00Z"); // d1's best of the day: 400 is better and earlier, so 2nd
       expect(await storeW.sync(d1)).toEqual({ credited: 1, amount: 30 });
       const rows = await dailyBest(d1, eventW);
       expect(rows).toHaveLength(1);
-      expect(rows[0].ref).toBe(`${W.hi}#2030-10-29#2`);
-      expect(rows[0].award_key).toBe(`candy:${eventW}:daily_best:${d1}:${W.hi}:2030-10-29`);
+      expect(rows[0].ref).toBe(`${W.hi}#2025-10-29#2`);
+      expect(rows[0].award_key).toBe(`candy:${eventW}:daily_best:${d1}:${W.hi}:2025-10-29`);
       expect(await storeW.sync(d1)).toEqual({ credited: 0, amount: 0 });
     });
 
     it("pays two different days twice", async () => {
-      await score(W.hi, d1, 200, "2030-10-30T10:00:00Z"); // rows by then: 100, 300, 400, 350, 200: three are better, so 4th
+      await score(W.hi, d1, 200, "2025-10-30T10:00:00Z"); // rows by then: 100, 300, 400, 350, 200: three are better, so 4th
       expect(await storeW.sync(d1)).toEqual({ credited: 1, amount: 20 });
       expect((await dailyBest(d1, eventW)).map((r) => [r.ref, r.amount])).toEqual([
-        [`${W.hi}#2030-10-29#2`, 30],
-        [`${W.hi}#2030-10-30#4`, 20],
+        [`${W.hi}#2025-10-29#2`, 30],
+        [`${W.hi}#2025-10-30#4`, 20],
       ]);
     });
 
     it("a later, better score by someone else never changes an existing credit", async () => {
-      await score(W.hi, d2, 999, "2030-10-29T20:00:00Z");
+      await score(W.hi, d2, 999, "2025-10-29T20:00:00Z");
       expect(await storeW.sync(d1)).toEqual({ credited: 0, amount: 0 });
       expect((await dailyBest(d1, eventW)).map((r) => r.amount)).toEqual([30, 20]);
       // and d2's own best of that day (999, rank 1 then) pays in full
@@ -314,28 +327,28 @@ describe.skipIf(!enabled)("candy store against Postgres", () => {
     });
 
     it("ranks an asc board lowest first", async () => {
-      await score(W.lo, d2, 40, "2030-10-29T09:00:00Z");
-      await score(W.lo, d1, 50, "2030-10-29T10:00:00Z");
-      await score(W.lo, d3, 60, "2030-10-29T11:00:00Z");
+      await score(W.lo, d2, 40, "2025-10-29T09:00:00Z");
+      await score(W.lo, d1, 50, "2025-10-29T10:00:00Z");
+      await score(W.lo, d3, 60, "2025-10-29T11:00:00Z");
       for (const p of [d1, d2, d3]) await storeW.sync(p);
       const on = async (p: string) => (await dailyBest(p, eventW)).filter((r) => String(r.ref).startsWith(`${W.lo}#`)).map((r) => [r.ref, r.amount]);
-      expect(await on(d2)).toEqual([[`${W.lo}#2030-10-29#1`, 40]]);
-      expect(await on(d1)).toEqual([[`${W.lo}#2030-10-29#2`, 30]]);
-      expect(await on(d3)).toEqual([[`${W.lo}#2030-10-29#3`, 30]]);
+      expect(await on(d2)).toEqual([[`${W.lo}#2025-10-29#1`, 40]]);
+      expect(await on(d1)).toEqual([[`${W.lo}#2025-10-29#2`, 30]]);
+      expect(await on(d3)).toEqual([[`${W.lo}#2025-10-29#3`, 30]]);
     });
 
     it("an anonymous score ranks but never earns", async () => {
-      await score(W.anon, null, 900, "2030-10-29T08:00:00Z");
-      await score(W.anon, d1, 800, "2030-10-29T09:00:00Z");
+      await score(W.anon, null, 900, "2025-10-29T08:00:00Z");
+      await score(W.anon, d1, 800, "2025-10-29T09:00:00Z");
       await storeW.sync(d1);
       const rows = (await dailyBest(d1, eventW)).filter((r) => String(r.ref).startsWith(`${W.anon}#`));
-      expect(rows.map((r) => [r.ref, r.amount])).toEqual([[`${W.anon}#2030-10-29#2`, 30]]); // pushed to 2nd by the anonymous row
+      expect(rows.map((r) => [r.ref, r.amount])).toEqual([[`${W.anon}#2025-10-29#2`, 30]]); // pushed to 2nd by the anonymous row
       const all = await sql`SELECT count(*)::int AS n FROM candy_ledger WHERE event_id = ${eventW} AND ref LIKE ${W.anon + "#%"}`;
       expect(Number(all[0].n)).toBe(1);
     });
 
     it("a board at 0 pays nothing, and rating it later pays the earlier day on the next sync, without re-pricing", async () => {
-      await score(W.zero, d1, 70, "2030-10-29T09:00:00Z");
+      await score(W.zero, d1, 70, "2025-10-29T09:00:00Z");
       expect(await storeW.sync(d1)).toEqual({ credited: 0, amount: 0 });
       expect(await storeW.setBoardCandy({ boardId: W.zero, candy: 8, actorEmail: actor })).toBe("changed");
       expect(await storeW.sync(d1)).toEqual({ credited: 1, amount: 8 });
@@ -345,16 +358,16 @@ describe.skipIf(!enabled)("candy store against Postgres", () => {
     });
 
     it("pays nothing for days outside the window", async () => {
-      await score(W.edge, d1, 500, "2030-10-27T23:59:59Z"); // the second before opening
-      await score(W.edge, d1, 500, "2030-11-02T00:00:00Z"); // closesAt is exclusive
+      await score(W.edge, d1, 500, "2025-10-27T23:59:59Z"); // the second before opening
+      await score(W.edge, d1, 500, "2025-11-02T00:00:00Z"); // closesAt is exclusive
       expect(await storeW.sync(d1)).toEqual({ credited: 0, amount: 0 });
     });
 
     it("ignores scores from before the event, even to rank: a strong old score does not push an in-window best down", async () => {
-      await score(W.pre, d3, 100000, "2030-10-20T09:00:00Z"); // far better, but set before 28 Oct
-      await score(W.pre, d1, 5, "2030-10-29T09:00:00Z");
+      await score(W.pre, d3, 100000, "2025-10-20T09:00:00Z"); // far better, but set before 28 Oct
+      await score(W.pre, d1, 5, "2025-10-29T09:00:00Z");
       expect(await storeW.sync(d1)).toEqual({ credited: 1, amount: 40 }); // 1st on the Halloween board, not 2nd
-      expect((await dailyBest(d1, eventW)).filter((r) => String(r.ref).startsWith(`${W.pre}#`)).map((r) => r.ref)).toEqual([`${W.pre}#2030-10-29#1`]);
+      expect((await dailyBest(d1, eventW)).filter((r) => String(r.ref).startsWith(`${W.pre}#`)).map((r) => r.ref)).toEqual([`${W.pre}#2025-10-29#1`]);
       expect(await storeW.sync(d3)).toEqual({ credited: 0, amount: 0 }); // d3's in-window scores were paid already; the old 100000 pays nothing
     });
 
@@ -365,7 +378,7 @@ describe.skipIf(!enabled)("candy store against Postgres", () => {
       const id = W[key as "tier40" | "tier2"];
       await sql`
         INSERT INTO scores (board_id, handle, score, player_id, created_at)
-        SELECT ${id}, 'anon', 1000 - i, NULL, '2030-10-28T01:00:00Z'::timestamptz + i * interval '1 minute' FROM generate_series(0, 23) AS i
+        SELECT ${id}, 'anon', 1000 - i, NULL, '2025-10-28T01:00:00Z'::timestamptz + i * interval '1 minute' FROM generate_series(0, 23) AS i
       `;
       const subjects = [
         [t1, 2000, 1, 25], // better: none; 25 rows by then
@@ -374,11 +387,11 @@ describe.skipIf(!enabled)("candy store against Postgres", () => {
         [t4, 990, 14, 28], // better: 13; ceil(28 / 2) = 14, so the top half
         [t5, 978, 27, 29], // better: 26; ceil(29 / 2) = 15, so elsewhere
       ] as const;
-      for (const [i, [p, value2]] of subjects.entries()) await score(id, p, value2, `2030-10-30T10:0${i}:00Z`);
+      for (const [i, [p, value2]] of subjects.entries()) await score(id, p, value2, `2025-10-30T10:0${i}:00Z`);
       for (const [i, [p, , rank, n]] of subjects.entries()) {
         await storeW.sync(p);
         const row = (await dailyBest(p, eventW)).find((r) => String(r.ref).startsWith(`${id}#`))!;
-        expect(row.ref, p).toBe(`${id}#2030-10-30#${rank}`);
+        expect(row.ref, p).toBe(`${id}#2025-10-30#${rank}`);
         expect(row.amount, p).toBe(amounts[i]);
         expect(dailyBestAmount(value, rank, n), p).toBe(amounts[i]); // the TypeScript rule and the SQL agree
       }

@@ -229,6 +229,8 @@ export function createCandyStore(sql: Sql, config: CandyConfig = CANDY_FRIGHT_FE
       // lower id). Its rank counts strictly-better rows on the board's HALLOWEEN board (rows set from `opensAt`, since
       // the leaderboards show only event scores) that were no newer than it, so the payout is the rank the site showed
       // at the time; `n` is those rows, itself included. Scores from before the event never count, not even to rank.
+      // Only FINISHED UK days pay (the database clock decides): a day's best is final once the day is over, so a
+      // sync during the day can never lock in an early score and lose a better one set later that day.
       tx`
         INSERT INTO candy_ledger (player_id, event_id, amount, kind, award_key, ref)
         SELECT ${playerId}::text, ${event}::text,
@@ -255,6 +257,7 @@ export function createCandyStore(sql: Sql, config: CandyConfig = CANDY_FRIGHT_FE
               WHERE s.player_id = ${playerId}
                 AND b.game_slug IS NOT NULL AND b.candy > 0 AND char_length(b.id) <= 120
                 AND s.created_at >= ${config.opensAt}::timestamptz AND s.created_at < ${config.closesAt}::timestamptz
+                AND (s.created_at AT TIME ZONE 'Europe/London')::date < (now() AT TIME ZONE 'Europe/London')::date
               ORDER BY s.board_id, (s.created_at AT TIME ZONE 'Europe/London')::date,
                        CASE WHEN b.sort = 'asc' THEN s.score END ASC,
                        CASE WHEN b.sort <> 'asc' THEN s.score END DESC,

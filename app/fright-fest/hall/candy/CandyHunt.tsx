@@ -254,7 +254,7 @@ export function CandyHunt({ candy }: { candy: CandyProps }) {
             <p>
               Once a day, your best score in each rated game is ranked on that game&apos;s Halloween leaderboard. The higher you
               rank, the more of that game&apos;s candy you get. Only scores set from {labels.opens} count, and the days run from{" "}
-              {labels.opens} to {labels.earnEnds}.
+              {labels.opens} to {labels.earnEnds}. Each day&apos;s candy arrives after midnight, UK time.
             </p>
             <h5 className="ar-nsub">For a game that pays {candy.maxGameCandy} candy</h5>
             <ul className="ar-rows">
