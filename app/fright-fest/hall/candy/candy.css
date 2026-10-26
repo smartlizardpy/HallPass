@@ -1,0 +1,28 @@
+/*
+ * Candy Hunt's shelves. Layout only, and no colours: the section is the base-token
+ * card from CandyHunt.tsx, and sections.css frames it under the haunted skin.
+ * Four across on a laptop, two on a phone, one under 360px.
+ */
+.cd-shelf {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+@media (min-width: 720px) {
+  .cd-shelf {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (max-width: 359px) {
+  .cd-shelf {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.cd-print {
+  width: 72px;
+  height: 105px;
+  image-rendering: pixelated;
+}
+.cd-item {
+  min-width: 0;
+}

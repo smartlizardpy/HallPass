@@ -24,6 +24,7 @@ html[data-hp-skin="haunted"] #standings.hl-sec {
   border-image-source: url(/events/fright-fest/hall/frame-board.png);
   background-color: #0b0612;
 }
+html[data-hp-skin="haunted"] #candy.hl-sec,
 html[data-hp-skin="haunted"] #rewards.hl-sec {
   border-image-source: url(/events/fright-fest/hall/frame-prize.png);
 }
