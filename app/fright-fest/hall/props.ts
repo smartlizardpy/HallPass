@@ -14,11 +14,14 @@
  * on the serialised output). A mystery cabinet carries no data at all.
  */
 
-import { getPack, packPrintSrc, type Rarity } from "@/app/lib/collectibles/catalogue";
+import { getPack, packPrintSrc } from "@/app/lib/collectibles/catalogue";
 import { packViews } from "@/app/lib/collectibles/pages";
+import type { RewardProps } from "@/app/lib/championship/reward-view";
 import type { ChampionshipConfig } from "@/app/lib/championship/types";
 import type { GamePlatform } from "@/app/lib/games";
 import type { FrightFestGame } from "@/app/components/events/fright-fest/registry";
+
+export type { RewardProps, RewardSlotProps } from "@/app/lib/championship/reward-view";
 
 /** One cabinet. A mystery cabinet is `{ open: false }`: there is nothing to say about it. */
 export type CabinetProps =
@@ -41,23 +44,6 @@ export type CabinetProps =
       /** Which devices the catalogue says it plays on, or null while nobody has checked. */
       platform: GamePlatform | null;
     };
-
-export interface RewardSlotProps {
-  kind: "fixed" | "random";
-  /** Fixed slots: the card's name and rarity. */
-  card?: string;
-  rarity?: Rarity;
-}
-
-export interface RewardProps {
-  packId: string;
-  name: string;
-  /** Who earns it, in a few words. */
-  who: string;
-  print: string;
-  /** Guaranteed cards and random slots, in slot order. */
-  slots: RewardSlotProps[];
-}
 
 /**
  * The sprite set for each announced game. A game with no entry here has no
