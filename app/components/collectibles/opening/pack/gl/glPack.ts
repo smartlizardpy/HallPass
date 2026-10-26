@@ -275,15 +275,24 @@ export async function createGLPack(canvas: HTMLCanvasElement, packId: string, se
     if (moving) wake();
   }
 
-  /** Lower the resolution if frames are running long (a modest GPU). */
+  /**
+   * Lower the resolution while frames run long (a modest GPU), judged on the
+   * median of the last dozen frames so one hitch does not count. The cost is
+   * per pixel, so one step goes most of the way: by the square root of the
+   * overrun, to the nearest quarter, and never back up for this pack.
+   */
   function adapt() {
-    if (frameMs.length < 40 || dpr <= 1) return;
-    const avg = frameMs.reduce((a, b) => a + b, 0) / frameMs.length;
-    if (avg > 24) {
-      dprCap = Math.max(1, dpr - 0.25);
+    if (frameMs.length < 12 || dpr <= 1) return;
+    const recent = frameMs.slice(-12).sort((a, b) => a - b);
+    const median = recent[6];
+    if (median > 22) {
+      const want = Math.round(dpr * Math.sqrt(16.7 / median) * 4) / 4;
+      dprCap = Math.max(1, Math.min(dpr - 0.25, want));
       dpr = dprCap;
       frameMs.length = 0;
-      resize(size.packPx, size.w, size.h);
+      // Only the canvas: the print already uploaded is sharp enough, and redrawing it would hitch.
+      canvas.width = Math.max(1, Math.round(size.w * dpr));
+      canvas.height = Math.max(1, Math.round(size.h * dpr));
     }
   }
 
