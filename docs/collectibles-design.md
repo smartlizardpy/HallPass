@@ -265,7 +265,7 @@ the Internet Culture, Brainrot and Turkish concepts. The full list lives in
 2. Catalogue data + demo art + `ART.md`.
 3. `049_collectibles.sql` + fresh-install schema.
 4. Store: grant, open (transaction), binder reads, prefs, admin corrections + tests.
-5. Championship rewards: qualification grants, finalisation grants.
+5. Championship rewards: granted at finalisation from the frozen awards; "Grant rewards" re-runs safely.
 6. Player API routes + tests.
 7. Card and pack components + CSS design system.
 8. Pack Room, binder, public card pages, nav links.

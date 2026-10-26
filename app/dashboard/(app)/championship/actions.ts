@@ -40,6 +40,8 @@ import {
   type ReviewAction,
 } from "@/app/lib/championship/store";
 import type { ChampionshipConfig } from "@/app/lib/championship/types";
+import { collectiblesStore } from "@/app/lib/collectibles";
+import { describeRewards, payChampionshipRewards, type RewardsReport } from "@/app/lib/collectibles/championship-rewards";
 
 const PATH = "/dashboard/championship";
 const MAX_REASON = 300;
@@ -211,5 +213,39 @@ export async function finaliseAction(formData: FormData): Promise<void> {
   if (!outcome.ok) back("error", outcome.why);
   revalidatePath(PATH);
   revalidatePath("/fright-fest");
-  back("ok", `Final. ${outcome.winners} reward${outcome.winners === 1 ? "" : "s"} decided; they are paid out by Collectibles.`);
+  // Pay straight away. A failure here does not undo the result: the banner says
+  // so, and "Grant rewards" finishes the job (every grant is idempotent).
+  const paid = await payRewards(c, email);
+  back("ok", `Final. ${paid.line}`);
+}
+
+/** Pay the frozen result's rewards and log the run. Never throws; returns a banner line and whether all went well. */
+async function payRewards(c: ChampionshipConfig, actorEmail: string): Promise<{ ok: boolean; line: string }> {
+  let report: RewardsReport | { error: "not-final" } | null = null;
+  try {
+    report = await payChampionshipRewards(c, {
+      finalStandings: championshipStore.finalStandings,
+      internalIds: championshipStore.internalIds,
+      grantPack: collectiblesStore.grantPack,
+    });
+  } catch (error) {
+    console.error("[championship] grant rewards failed", error);
+  }
+  if (!report) return { ok: false, line: "Rewards could not be granted (database error). Press Grant rewards to try again." };
+  if ("error" in report) return { ok: false, line: "Nothing to grant: the results are not final." };
+  try {
+    await championshipStore.logAction({ eventId: c.id, actorEmail, action: "grant-rewards", reason: null, data: report });
+  } catch (error) {
+    console.error("[championship] logging the rewards run failed", error);
+  }
+  return { ok: report.failed === 0 && report.unknownPack === 0, line: `Rewards: ${describeRewards(report)}` };
+}
+
+/** Grant (or finish granting) a finalised championship's reward packs. Safe to press again. */
+export async function grantRewardsAction(formData: FormData): Promise<void> {
+  const { email } = await requireRole(SITE_WRITE_ROLE);
+  const c = readChampionship(formData);
+  const { ok, line } = await payRewards(c, email);
+  revalidatePath(PATH);
+  back(ok ? "ok" : "error", line);
 }

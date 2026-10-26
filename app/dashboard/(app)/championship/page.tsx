@@ -43,7 +43,7 @@ import {
 import type { ChampionshipConfig, ChampionshipGame, GameState, RunStatus } from "@/app/lib/championship/types";
 import { DashHeader } from "../_ui/DashHeader";
 import { Section } from "../_ui/Section";
-import { eventAction, finaliseAction, gameAction, reviewAction } from "./actions";
+import { eventAction, finaliseAction, gameAction, grantRewardsAction, reviewAction } from "./actions";
 
 export const metadata: Metadata = {
   title: "Championship",
@@ -265,8 +265,8 @@ function EventPanel({ c, snap, counts }: { c: ChampionshipConfig; snap: EventSna
             <details className="mt-2 rounded-lg border border-border bg-surface-2 p-3">
               <summary className="cursor-pointer text-xs font-bold text-brand">Finalise…</summary>
               <p className="mt-2 text-xs text-foreground-2">
-                Freezes the table shown below as the official result and decides every reward. After this no run can be
-                approved, disqualified or reinstated. Rewards are paid out by Collectibles and can be re-run safely.
+                Freezes the table shown below as the official result and decides every reward, then grants the reward
+                packs. After this no run can be approved, disqualified or reinstated.
               </p>
               <form action={finaliseAction} className="mt-2">
                 <Hidden c={c} fields={{}} />
@@ -277,6 +277,22 @@ function EventPanel({ c, snap, counts }: { c: ChampionshipConfig; snap: EventSna
             </details>
           )}
         </li>
+        {(snap.state.status === "finalised" || snap.state.status === "archived") && (
+          <li className="rounded-lg border border-border p-3 md:col-span-2">
+            <form action={grantRewardsAction} className="flex flex-wrap items-center justify-between gap-2">
+              <Hidden c={c} fields={{}} />
+              <span className="text-sm">
+                <b>Reward packs.</b>{" "}
+                <span className="text-foreground-2">
+                  Granted when you finalised. Press again to finish a run that failed part-way: a pack is never granted twice.
+                </span>
+              </span>
+              <button type="submit" className={BTN_QUIET}>
+                Grant rewards
+              </button>
+            </form>
+          </li>
+        )}
       </ul>
     </Section>
   );

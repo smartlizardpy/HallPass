@@ -17,6 +17,10 @@ const h = vi.hoisted(() => ({
   setEventState: vi.fn(),
   finalise: vi.fn(),
   computeStandings: vi.fn(),
+  finalStandings: vi.fn(),
+  internalIds: vi.fn(),
+  logAction: vi.fn(),
+  grantPack: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -35,11 +39,15 @@ vi.mock("@/app/lib/championship", () => ({
     setGameStatus: h.setGameStatus,
     setEventState: h.setEventState,
     finalise: h.finalise,
+    finalStandings: h.finalStandings,
+    internalIds: h.internalIds,
+    logAction: h.logAction,
   },
   computeStandings: h.computeStandings,
 }));
+vi.mock("@/app/lib/collectibles", () => ({ collectiblesStore: { grantPack: h.grantPack } }));
 
-import { eventAction, finaliseAction, gameAction, reviewAction } from "./actions";
+import { eventAction, finaliseAction, gameAction, grantRewardsAction, reviewAction } from "./actions";
 import { buildStandings } from "@/app/lib/championship/standings";
 import { FRIGHT_FEST_2026 as C } from "@/app/lib/championship/fright-fest-2026";
 
@@ -111,12 +119,33 @@ describe("finalise", () => {
         { runId: 1, gameSlug: "last-bell", playerId: "g-kid", publicId: "pub-kid", name: "@kid", avatar: "", score: 300, tiebreak: 1, submittedAt: "2026-10-30T00:00:00Z" },
       ]),
     );
-    h.finalise.mockResolvedValue(true);
-    await expect(finaliseAction(form({}))).rejects.toThrow(/Final\. 3 rewards decided/);
+    h.finalise.mockImplementation(async ({ snapshot }) => {
+      h.finalStandings.mockResolvedValue(snapshot);
+      return true;
+    });
+    h.internalIds.mockImplementation(async (ids: string[]) => new Map(ids.map((id) => [id, id.replace("pub-", "g-")])));
+    h.grantPack.mockResolvedValue({ created: true, pack: {} });
+    await expect(finaliseAction(form({}))).rejects.toThrow(/Final\. Rewards: 3 rewards: 3 granted now, 0 already granted\./);
+    expect(h.grantPack.mock.calls.map((c) => c[0].grantKey)).toEqual([
+      "fright-fest-2026:overall:g-kid",
+      "fright-fest-2026:champion:last-bell:g-kid",
+      "fright-fest-2026:participation:g-kid",
+    ]);
+    expect(h.logAction).toHaveBeenCalledWith(expect.objectContaining({ action: "grant-rewards", actorEmail: "staff@hallpass" }));
     const snapshot = h.finalise.mock.calls[0][0].snapshot;
     expect(JSON.stringify(snapshot)).not.toMatch(/g-kid|playerId|runId|grantKey/);
     expect(snapshot.awards).toEqual({ overallChampion: "pub-kid", gameChampions: { "last-bell": "pub-kid" }, participants: ["pub-kid"] });
     expect(snapshot.phase).toBe("finalised");
+  });
+  it("grant rewards re-runs safely, and reports a failure without losing the result", async () => {
+    h.finalStandings.mockResolvedValue({ awards: { overallChampion: null, gameChampions: {}, participants: ["pub-a"] } });
+    h.internalIds.mockResolvedValue(new Map([["pub-a", "g-a"]]));
+    h.grantPack.mockResolvedValue({ created: false, pack: {} });
+    await expect(grantRewardsAction(form({}))).rejects.toThrow(/1 reward: 0 granted now, 1 already granted/);
+    h.grantPack.mockRejectedValue(new Error("relation player_packs does not exist"));
+    await expect(grantRewardsAction(form({}))).rejects.toThrow(/error=Rewards: .*1 failed \(press again to finish\)/);
+    h.finalStandings.mockResolvedValue(null);
+    await expect(grantRewardsAction(form({}))).rejects.toThrow(/error=Nothing to grant/);
   });
   it("refuses while runs wait for review", async () => {
     h.readEvent.mockResolvedValue({ state: state({ status: "verification" }), games: [], nowMs: CLOSES + 1e7 });
