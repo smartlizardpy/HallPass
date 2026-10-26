@@ -80,13 +80,6 @@ CREATE TABLE IF NOT EXISTS achievements (
   secret      BOOLEAN NOT NULL DEFAULT false,
 
   position    INTEGER NOT NULL DEFAULT 0,
-
-  -- Halloween Candy paid for unlocking this during Fright Fest 2026 (Candy Hunt,
-  -- docs/candy-hunt.md). 0 pays nothing until a super admin rates it; capped at
-  -- 40, the rubric's maximum. Added to existing databases by 050_candy.sql.
-  candy       SMALLINT NOT NULL DEFAULT 0
-                CONSTRAINT achievements_candy_range CHECK (candy BETWEEN 0 AND 40),
-
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );

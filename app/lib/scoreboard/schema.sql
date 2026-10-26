@@ -37,6 +37,12 @@ CREATE TABLE IF NOT EXISTS boards (
   sort         TEXT NOT NULL DEFAULT 'desc' CHECK (sort IN ('desc','asc')),
   score_label  TEXT NOT NULL DEFAULT 'Score',
   max_score    BIGINT,
+  -- Halloween Candy a player's best score of the day here pays at rank 1 during
+  -- Fright Fest 2026 (Candy Hunt, docs/candy-hunt.md). 0 pays nothing until a
+  -- super admin rates the board; capped at 40, the rubric's maximum. Added to
+  -- existing databases by 050_candy.sql.
+  candy        SMALLINT NOT NULL DEFAULT 0
+                 CONSTRAINT boards_candy_range CHECK (candy BETWEEN 0 AND 40),
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
