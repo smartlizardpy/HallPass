@@ -1,13 +1,16 @@
 /**
- * /fright-fest. STATIC: no clock, no cookies, no headers. The phase line is a
- * client island (FrightFestPhase); the server output is identical for everyone
- * and for every date, so the page never 404s after the event.
+ * /fright-fest. STATIC: no clock, no cookies, no headers. The server output is
+ * identical for everyone and for every date, so the page never 404s after the
+ * event. Everything live is a client island over the shared championship fetch.
  *
- * The approved night scene is the theme's. Below it, while the championship is
- * enabled (a code constant, so the page stays static), come the championship's
- * own sections: live standings, your progress, the points table, schedule,
- * rules and rewards. While it is disabled the scene says "to be announced" and
- * nothing else is shown.
+ * The page is the Arcade Hall (hall/Room.tsx): a pixel-art room with the
+ * cabinets, the ticker, the high-score board and the prize-counter door. Below
+ * it, while the championship is enabled (a code constant, so the page stays
+ * static), come the championship's own sections: live standings, your progress,
+ * the points table, schedule, rules and rewards. While it is disabled the room
+ * says "to be announced" and the page has nothing else.
+ *
+ * Props for the islands come from hall/props.ts, which keeps announced games only.
  */
 import type { Metadata } from "next";
 import { ArcadeShell } from "../components/ArcadeShell";
@@ -16,7 +19,8 @@ import { eventDateLabels } from "../lib/events/labels";
 import { resolveGames } from "../lib/games-store";
 import { FRIGHT_FEST_GAMES } from "../components/events/fright-fest/registry";
 import { Room } from "./hall/Room";
-import { buildCabinets } from "./hall/props";
+import "./hall/sections.css";
+import { buildCabinets, buildRewards } from "./hall/props";
 import { FrightFestSections } from "../components/championship/FrightFestSections";
 import { championshipEnabled } from "../lib/championship/config";
 import { FRIGHT_FEST_2026 } from "../lib/championship/fright-fest-2026";
@@ -39,6 +43,7 @@ export default async function FrightFestPage() {
   const categories = Array.from(new Set(all.map((g) => g.category)));
   // Plain data for the room's client islands: announced games only (hall/props.ts).
   const cabinets = buildCabinets(FRIGHT_FEST_2026, FRIGHT_FEST_GAMES, all);
+  const rewards = buildRewards(FRIGHT_FEST_2026, FRIGHT_FEST_GAMES);
 
   return (
     <ArcadeShell games={all} categories={categories} activeCategory="">
@@ -46,7 +51,7 @@ export default async function FrightFestPage() {
         <Room cabinets={cabinets} summary={SUMMARY} />
         <div className="ff-page mx-auto w-full max-w-4xl px-3 pt-4 sm:px-8">
           {SUMMARY ? (
-            <FrightFestSections summary={SUMMARY} />
+            <FrightFestSections summary={SUMMARY} rewards={rewards} />
           ) : (
             <section id="rules" className="rounded-2xl border border-border bg-surface p-6 text-center">
               <p className="text-base font-bold">Games, scoring and rewards: to be announced.</p>

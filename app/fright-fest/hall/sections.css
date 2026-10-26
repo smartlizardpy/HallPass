@@ -1,0 +1,43 @@
+/*
+ * The championship sections under the room (standings, your progress, points,
+ * schedule, rules, rewards), framed like the room when the haunted skin is on.
+ *
+ * With the skin OFF these are the plain base-token cards they always were
+ * (`rounded-2xl border border-border bg-surface`, from the components), so the
+ * page reads well in light and dark: the pixel frames are dark-purple art, and
+ * only belong on the dark skin. Under the skin the frame carries the card, and the
+ * text inside keeps using the base tokens, which the skin has already repainted.
+ *
+ * This file swaps pictures and borders only. It sets no base token under a
+ * seasonal selector (skin-isolation.test.ts).
+ */
+
+html[data-hp-skin="haunted"] .hl-sec {
+  border: 16px solid transparent;
+  border-image: url(/events/fright-fest/hall/frame-quest.png) 16 fill / 16px / 0 round;
+  background-color: #170b1f;
+  padding: 0 2px 2px;
+  border-radius: 0;
+  image-rendering: pixelated;
+}
+html[data-hp-skin="haunted"] #standings.hl-sec {
+  border-image-source: url(/events/fright-fest/hall/frame-board.png);
+  background-color: #0b0612;
+}
+html[data-hp-skin="haunted"] #rewards.hl-sec {
+  border-image-source: url(/events/fright-fest/hall/frame-prize.png);
+}
+@media (min-width: 640px) {
+  html[data-hp-skin="haunted"] .hl-sec {
+    border-width: 32px;
+    border-image-width: 32px;
+    padding: 0 8px 8px;
+  }
+}
+/* Text must not inherit the pixelated rendering of the frame: only prints and the frame are pixel art. */
+html[data-hp-skin="haunted"] .hl-sec > * {
+  image-rendering: auto;
+}
+.hl-print {
+  image-rendering: pixelated;
+}

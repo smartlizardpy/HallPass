@@ -3,7 +3,7 @@ import type { PublicOverallEntry } from "@/app/lib/championship/standings";
 import { championshipSummary } from "@/app/lib/championship/summary";
 import { FRIGHT_FEST_2026 } from "@/app/lib/championship/fright-fest-2026";
 import type { ChampionshipPhase } from "@/app/lib/championship/types";
-import { boardCapacity, countdownText, boardIsOpen, boardRows, cabinetLabel, cabinetStatus, gapToNextPlace, needsLaptop, selectedAnnouncement, tickerLine } from "./logic";
+import { boardCapacity, countdownText, boardIsOpen, boardRows, cabinetLabel, cabinetStatus, needsLaptop, selectedAnnouncement, tickerLine } from "./logic";
 import type { CabinetProps } from "./props";
 
 const S = championshipSummary(FRIGHT_FEST_2026);
@@ -149,24 +149,5 @@ describe("boardRows", () => {
     const v = boardRows(TABLE, { publicId: "me", rank: 9, points: 5 }, 1, null, false);
     expect(v.rows).toEqual([]);
     expect(v.you?.rank).toBe(9);
-  });
-});
-
-describe("gapToNextPlace", () => {
-  it("says how far ahead the next place up is, while the championship is live", () => {
-    expect(gapToNextPlace(TABLE, { rank: 6, points: 20 }, "live")).toBe("The next place up, 5th, is 20 Fright Points ahead.");
-    expect(gapToNextPlace(TABLE, { rank: 2, points: 80 }, "live")).toBe("The next place up, 1st, is 20 Fright Points ahead.");
-  });
-
-  it("says so when the next place is level on points", () => {
-    expect(gapToNextPlace(TABLE, { rank: 7, points: 20 }, "live")).toBe("The next place up, 6th, has the same Fright Points and is ahead on the tiebreak.");
-  });
-
-  it("says nothing when you lead, are unranked, the phase is not live, or the next place is off the public table", () => {
-    expect(gapToNextPlace(TABLE, { rank: 1, points: 100 }, "live")).toBeNull();
-    expect(gapToNextPlace(TABLE, null, "live")).toBeNull();
-    for (const p of ["upcoming", "closed", "verification", "finalised", "archived", "suspended"] as const) expect(gapToNextPlace(TABLE, { rank: 6, points: 20 }, p)).toBeNull();
-    expect(gapToNextPlace(TABLE, { rank: 60, points: 5 }, "live")).toBeNull();
-    expect(gapToNextPlace(TABLE, { rank: 6, points: 20 }, null)).toBeNull();
   });
 });

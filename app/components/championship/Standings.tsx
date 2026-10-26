@@ -26,7 +26,7 @@ function Player({ name, avatar, publicId, you }: { name: string; avatar: string;
   return (
     <span className="flex min-w-0 items-center gap-2">
       <Avatar person={{ image: avatar, displayName: name, publicId }} size={26} />
-      <span className="truncate font-bold">{name}</span>
+      <span className="truncate font-bold" title={name}>{name}</span>
       {you && <span className="shrink-0 rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-black uppercase text-white">You</span>}
     </span>
   );
@@ -158,13 +158,17 @@ export function ChampionshipStandings({ summary: s }: { summary: ChampionshipSum
   const champion = final && standings?.championPublicId ? standings.overall.find((o) => o.publicId === standings.championPublicId) : null;
 
   return (
-    <section ref={sectionRef} id="standings" aria-labelledby="standings-h" className="scroll-mt-24 rounded-2xl border border-border bg-surface p-4 sm:p-6">
+    <section ref={sectionRef} id="standings" aria-labelledby="standings-h" className="hl-sec scroll-mt-24 rounded-2xl border border-border bg-surface p-4 sm:p-6">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="standings-h" className="text-xl font-black">
           {final ? "Final standings" : "Standings"}
         </h2>
         {standings && !final && phase !== "upcoming" && <p className="text-xs text-muted">Provisional until results are checked</p>}
       </div>
+
+      <p className="mt-2 text-sm text-foreground-2">
+        Fright Points come from your rank on each game&apos;s board, and they decide the champion. They can&apos;t be spent.
+      </p>
 
       {champion && (
         <p className="mt-3 rounded-xl bg-brand/10 px-4 py-3 text-sm">
