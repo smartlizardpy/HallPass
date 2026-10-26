@@ -33,6 +33,13 @@ interface RecentRow {
   at: string;
   revoked: boolean;
 }
+interface GameRow {
+  boardId: string;
+  slug: string;
+  title: string;
+  boardTitle: string;
+  candy: number;
+}
 interface Me {
   signedIn: boolean;
   available?: boolean;
@@ -41,10 +48,13 @@ interface Me {
   recent?: RecentRow[];
   earn: { open: boolean };
   spend: { open: boolean };
+  /** The rated boards, best payers first. Public: signed-out visitors get it too. */
+  games?: GameRow[];
 }
 type Load = { status: "loading" } | { status: "error" } | { status: "ok"; me: Me };
 
 const RECENT_SHOWN = 5;
+const GAMES_SHOWN = 8;
 const PRIMARY = "ar-btn ar-btn-gold";
 const QUIET = "ar-btn";
 
@@ -68,6 +78,7 @@ export function CandyHunt({ candy }: { candy: CandyProps }) {
   const [load, setLoad] = useState<Load>({ status: "loading" });
   const [announce, setAnnounce] = useState("");
   const [showAll, setShowAll] = useState(false);
+  const [showAllGames, setShowAllGames] = useState(false);
   const [confirm, setConfirm] = useState<{ packId: string; requestId: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<{ packId: string; msg: SpendMessage } | null>(null);
@@ -150,6 +161,8 @@ export function CandyHunt({ candy }: { candy: CandyProps }) {
 
   const recent = me?.recent ?? [];
   const rows = showAll ? recent : recent.slice(0, RECENT_SHOWN);
+  const games = me?.games ?? [];
+  const gameRows = showAllGames ? games : games.slice(0, GAMES_SHOWN);
 
   return (
     <section id="candy" aria-labelledby="candy-h" className="ar-sec ar-corkboard scroll-mt-24">
@@ -237,18 +250,56 @@ export function CandyHunt({ candy }: { candy: CandyProps }) {
         <h3 className="ar-sub ar-sub-cork">How to earn</h3>
         <div className="ar-notes">
           <div className="ar-notice">
-            <h4 className="ar-ntitle">Achievements</h4>
+            <h4 className="ar-ntitle">Your best score each day</h4>
+            <p>
+              Once a day, your best score in each rated game is ranked on that game&apos;s Halloween leaderboard. The higher you
+              rank, the more of that game&apos;s candy you get. Only scores set from {labels.opens} count, and the days run from{" "}
+              {labels.opens} to {labels.earnEnds}.
+            </p>
+            <h5 className="ar-nsub">For a game that pays {candy.maxGameCandy} candy</h5>
             <ul className="ar-rows">
-              {candy.rubric.map((t) => (
+              {candy.dailyBest.map((t) => (
                 <li key={t.label}>
                   <span>{t.label}</span>
-                  <b>{t.value}</b>
+                  <b>{t.amount}</b>
                 </li>
               ))}
             </ul>
-            <p className="ar-nfoot">
-              Each game&apos;s achievements have their own value. Unlocks count from {labels.opens} to {labels.earnEnds}.
-            </p>
+            <p className="ar-nfoot">Easier games pay less.</p>
+          </div>
+          <div className="ar-notice" aria-labelledby="candy-games-h">
+            <h4 id="candy-games-h" className="ar-ntitle">
+              Games that pay
+            </h4>
+            {load.status === "loading" ? (
+              <div className="ar-paper-skel ar-games-skel" aria-hidden="true" />
+            ) : load.status === "error" ? (
+              <p>The list of games could not be loaded.</p>
+            ) : games.length === 0 ? (
+              <p>Games are being rated. Check back on {labels.opens}.</p>
+            ) : (
+              <>
+                <ul className="ar-rows">
+                  {gameRows.map((g) => (
+                    <li key={g.boardId}>
+                      <span className="min-w-0">
+                        <Link href={`/game/${g.slug}`} className="ar-glink">
+                          {g.title}
+                        </Link>
+                        {g.boardTitle !== g.title && <small className="ar-faint"> {g.boardTitle}</small>}
+                      </span>
+                      <b>{g.candy}</b>
+                    </li>
+                  ))}
+                </ul>
+                {games.length > GAMES_SHOWN && (
+                  <button type="button" className={`${QUIET} mt-2`} aria-expanded={showAllGames} onClick={() => setShowAllGames((v) => !v)}>
+                    {showAllGames ? "Show fewer" : `Show all (${games.length})`}
+                  </button>
+                )}
+                <p className="ar-nfoot">The most candy each game can pay for a 1st place.</p>
+              </>
+            )}
           </div>
           <div className="ar-notice">
             <h4 className="ar-ntitle">Fright Fest ranked runs</h4>
@@ -286,6 +337,7 @@ export function CandyHunt({ candy }: { candy: CandyProps }) {
                   <ShopItem
                     key={item.packId}
                     item={item}
+                    printPx={candy.printPx}
                     state={buttonState(
                       item.price,
                       {
@@ -340,6 +392,7 @@ type Gate = "loading" | "signed-out" | "unavailable" | "ready";
 
 function ShopItem({
   item,
+  printPx,
   state,
   gate,
   busy,
@@ -354,6 +407,7 @@ function ShopItem({
   onBuy,
 }: {
   item: ShelfItemProps;
+  printPx: { w: number; h: number };
   state: ReturnType<typeof buttonState>;
   gate: Gate;
   busy: boolean;
@@ -375,7 +429,7 @@ function ShopItem({
     <li className="cd-item">
       <div className="cd-stand">
         {/* eslint-disable-next-line @next/next/no-img-element -- a pixel print; next/image would smooth it */}
-        <img src={item.print} alt="" width={72} height={105} loading="lazy" className="hl-print cd-print" />
+        <img src={item.print} alt="" width={printPx.w} height={printPx.h} loading="lazy" className="hl-print cd-print" />
       </div>
       <div className="cd-tag">
         <b>{item.name}</b>
