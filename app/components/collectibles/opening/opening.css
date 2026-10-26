@@ -380,8 +380,13 @@
 }
 
 /* What's inside: the odds, opening upward over the table. */
-.ho-odds {
+/* The panel centres on the row of buttons, not on "What's inside?" itself, which sits right of
+   centre: centred on the button, a phone-width panel ran off the screen's right edge. */
+.ho-actions:has(> .ho-odds) {
   position: relative;
+}
+.ho-odds {
+  position: static;
 }
 .ho-odds > summary {
   list-style: none;
@@ -395,7 +400,7 @@
   left: 50%;
   translate: -50% 0;
   z-index: 10;
-  width: min(330px, 88vw);
+  width: min(330px, calc(100vw - 32px));
   padding: 14px 16px;
   border-radius: 12px;
   border: 2px solid var(--hc-ink);
