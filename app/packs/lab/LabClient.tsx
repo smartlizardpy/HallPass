@@ -11,6 +11,7 @@ import { useState } from "react";
 import { getPack } from "@/app/lib/collectibles/catalogue";
 import { OpeningFlow } from "@/app/components/collectibles/opening/OpeningFlow";
 import { PackRoom } from "@/app/components/collectibles/PackRoom";
+import { LabPack } from "./LabPack";
 import { installLabApi, LAB_PACKS } from "./mock";
 
 const openHref = (publicId: string) => `/packs/lab?view=open&pack=${publicId}`;
@@ -27,6 +28,7 @@ export function LabClient() {
 
   if (view === "open" && pack) return <OpeningFlow key={pack} id={pack} />;
   if (view === "room") return <PackRoom openHref={openHref} />;
+  if (view === "pack") return <LabPack id={q.get("id") ?? "hpo-standard"} />;
 
   return (
     <section className="space-y-4">
@@ -36,6 +38,11 @@ export function LabClient() {
         delay the open call, <code>fail=1</code> to make the first open fail, or <code>state=signedout</code>.
       </p>
       <ul className="grid gap-2 sm:grid-cols-2">
+        <li>
+          <Link className="underline" href="/packs/lab?view=pack&id=hpo-standard">
+            The pack on its own
+          </Link>
+        </li>
         <li>
           <Link className="underline" href="/packs/lab?view=room">
             Pack Room
