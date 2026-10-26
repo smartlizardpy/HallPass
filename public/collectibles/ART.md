@@ -53,6 +53,12 @@ than painting over a PNG, then copy the output here.
 - **Room scenes** come in two seasons with the same layout. Where the packs, the
   stage and the boards sit is in `app/components/collectibles/room/geometry.ts`;
   move something in the art and that file moves with it.
+- The four **Rare** prints (`hpo-rare`, `inet-rare`, `brr-rare`, `tr-rare`, bought
+  with Halloween Candy) are NOT hand-drawn: `scripts/make-rare-pack-prints.py`
+  derives each from its standard print, adding a gold RARE plate over the badge
+  slot and a gold foil frame (the foil mask gains the same). Their silhouettes are
+  the standard ones. Re-run the script rather than painting over them; a
+  hand-drawn Rare print may replace the pair at the same paths.
 - The Turkish Internet Culture print still needs the same content sign-off as
   its cards.
 

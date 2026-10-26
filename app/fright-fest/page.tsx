@@ -1,21 +1,35 @@
 /**
- * /fright-fest. STATIC: no clock, no cookies, no headers. The phase line is a
- * client island (FrightFestPhase); the server output is identical for everyone
- * and for every date, so the page never 404s after the event.
+ * /fright-fest. STATIC: no clock, no cookies, no headers. The server output is
+ * identical for everyone and for every date, so the page never 404s after the
+ * event. Everything live is a client island over the shared championship fetch.
  *
- * The approved night scene is the theme's. Below it, while the championship is
- * enabled (a code constant, so the page stays static), come the championship's
- * own sections: live standings, your progress, the points table, schedule,
- * rules and rewards. While it is disabled the scene says "to be announced" and
- * nothing else is shown.
+ * The page is the Arcade Hall (hall/Room.tsx): a pixel-art room with the
+ * cabinets, the ticker, the high-score board and the prize-counter door. Below
+ * it, while the championship is enabled (a code constant, so the page stays
+ * static), come the championship's own sections: live standings, your progress,
+ * the points table, schedule, rules and rewards. While it is disabled the room
+ * says "to be announced" and the page has nothing else.
+ *
+ * Candy Hunt (hall/candy/) is a section between "Your Fright Fest" and the points
+ * table, passed in through the sections' `afterProgress` slot so the
+ * championship components import nothing about candy; the hall's noticeboard links
+ * to it.
+ *
+ * Props for the islands come from hall/props.ts, which keeps announced games only.
  */
 import type { Metadata } from "next";
 import { ArcadeShell } from "../components/ArcadeShell";
 import { FRIGHT_FEST_THEME } from "../lib/events/fright-fest";
 import { eventDateLabels } from "../lib/events/labels";
 import { resolveGames } from "../lib/games-store";
-import { FrightFestCountdown } from "./FrightFestCountdown";
-import { FrightFestPhase } from "./FrightFestPhase";
+import { FRIGHT_FEST_GAMES } from "../components/events/fright-fest/registry";
+import { Room } from "./hall/Room";
+import { CandyHunt } from "./hall/candy/CandyHunt";
+import { buildCandy } from "./hall/candy/props";
+import { CANDY_HUNT_OPEN } from "./hall/config";
+import { CANDY_FRIGHT_FEST_2026 } from "../lib/candy/fright-fest-2026";
+import "./hall/sections.css";
+import { buildCabinets, buildRewards } from "./hall/props";
 import { FrightFestSections } from "../components/championship/FrightFestSections";
 import { championshipEnabled } from "../lib/championship/config";
 import { FRIGHT_FEST_2026 } from "../lib/championship/fright-fest-2026";
@@ -36,35 +50,29 @@ export const metadata: Metadata = {
 export default async function FrightFestPage() {
   const all = await resolveGames();
   const categories = Array.from(new Set(all.map((g) => g.category)));
+  // Plain data for the room's client islands: announced games only (hall/props.ts).
+  const cabinets = buildCabinets(FRIGHT_FEST_2026, FRIGHT_FEST_GAMES, all);
+  const rewards = buildRewards(FRIGHT_FEST_2026, FRIGHT_FEST_GAMES);
+
+  // Candy Hunt needs the championship's sections to sit in, so it is on only with them.
+  const candy = CANDY_HUNT_OPEN && SUMMARY ? buildCandy(CANDY_FRIGHT_FEST_2026, SUMMARY.labels.resultsBy) : null;
 
   return (
     <ArcadeShell games={all} categories={categories} activeCategory="">
-      <div className="ff-page mx-auto w-full max-w-4xl px-3 pb-12 pt-4 sm:px-8">
-        <section id={SUMMARY ? undefined : "rules"} className="ff-scene space-y-3 rounded-2xl border border-border p-6 text-center sm:p-10">
-          <span aria-hidden="true" className="ha-deco ff-moon ha-spr" />
-          <span aria-hidden="true" className="ha-deco ff-bat ha-spr" />
-          <span aria-hidden="true" className="ha-deco ff-ghost ha-spr" />
-          <p className="ff-kicker text-sm font-bold uppercase tracking-widest text-muted">HallPass presents</p>
-          <h1 className="ff-title text-4xl font-bold sm:text-6xl">Fright Fest 2026</h1>
-          <FrightFestPhase />
-          <FrightFestCountdown />
-          <p className="ff-small text-sm text-muted">
-            {SUMMARY ? (
-              <>
-                Earn Fright Points, top the table, win collectible packs. <a href="#rules">Rules</a> and{" "}
-                <a href="#standings">standings</a> below.
-              </>
-            ) : (
-              "Games, scoring and rewards: to be announced."
-            )}
-          </p>
-          <span aria-hidden="true" className="ha-deco ff-ground">
-            <i className="ff-trees" />
-            <i className="ff-pumpkin" />
-            <i className="ff-fence" />
-          </span>
-        </section>
-        {SUMMARY && <FrightFestSections summary={SUMMARY} />}
+      <div className="w-full">
+        <Room cabinets={cabinets} summary={SUMMARY} candy={candy} />
+        {/* The hall's wall carries on under the room, full width; `.ff-page` holds the arcade palette (sections.css). */}
+        <div className="ff-wall">
+        <div className="ff-page">
+          {SUMMARY ? (
+            <FrightFestSections summary={SUMMARY} rewards={rewards} afterProgress={candy ? <CandyHunt candy={candy} /> : null} />
+          ) : (
+            <section id="rules" className="ar-sec ar-board ar-tba">
+              <p>Games, scoring and rewards: to be announced.</p>
+            </section>
+          )}
+        </div>
+        </div>
       </div>
     </ArcadeShell>
   );

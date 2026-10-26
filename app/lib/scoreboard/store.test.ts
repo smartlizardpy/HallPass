@@ -12,6 +12,11 @@ import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { createStore } from "./store";
 import { memeAvatarFor } from "../avatars";
 import { FRIEND_BOARD_MAX_BOARDS, FRIEND_BOARD_ROWS } from "./config";
+import { FRIGHT_FEST_SEASON } from "./season";
+
+/** What one use of the season predicate binds: from, until, from. */
+const SEASON_BINDS = [FRIGHT_FEST_SEASON.from, FRIGHT_FEST_SEASON.until, FRIGHT_FEST_SEASON.from];
+const SEASON_SQL = "now() >= ?::timestamptz AND now() < ?::timestamptz";
 
 interface RecordedCall {
   text: string;
@@ -256,7 +261,8 @@ describe("getTopScores", () => {
 
     expect(calls[0].text).toContain("ORDER BY score DESC");
     expect(calls[0].text).not.toContain("make_interval");
-    expect(calls[0].values).toEqual(["g", 5]);
+    // Admin/default read: the season bounds bind as NULL, so the floor is -infinity.
+    expect(calls[0].values).toEqual(["g", null, null, null, 5]);
   });
 
   it("selects the asc + week branch (1-week interval, score ASC)", async () => {
@@ -266,7 +272,7 @@ describe("getTopScores", () => {
 
     expect(calls[0].text).toContain("ORDER BY score ASC");
     expect(calls[0].text).toContain("make_interval(0, 0, 1)");
-    expect(calls[0].values).toEqual(["g", 3]);
+    expect(calls[0].values).toEqual(["g", null, null, null, 3]);
   });
 
   it("selects the desc + day branch (1-day interval)", async () => {
@@ -592,14 +598,17 @@ describe("getFriendStandingsForGame", () => {
       },
     ]);
     // The viewer is bound four times (pool seed, both pool branches, is_you),
-    // then the game slug, then the two caps.
+    // then the game slug and the season (best), the viewer again (is_you), the season
+    // again (rank), then the two caps.
     expect(calls[0].values).toEqual([
       "google-sub-1",
       "google-sub-1",
       "google-sub-1",
       "google-sub-1",
       "neon-snake",
+      ...SEASON_BINDS,
       "google-sub-1",
+      ...SEASON_BINDS,
       FRIEND_BOARD_ROWS,
       FRIEND_BOARD_MAX_BOARDS,
     ]);
@@ -717,5 +726,81 @@ describe("public leaderboard never reads the Google photo", () => {
     const store = createStore(sql);
     const [entry] = await store.getTopScores("neon-snake", { limit: 1, period: "all", sort: "desc" });
     expect(entry.avatar).toBe(memeAvatarFor(id));
+  });
+});
+
+describe("the season filter", () => {
+  const rows = () => [] as Record<string, unknown>[];
+
+  it("getTopScores({ seasonal: true }) binds the window in every branch", async () => {
+    for (const period of ["all", "day", "week"] as const) {
+      for (const sort of ["asc", "desc"] as const) {
+        const { sql, calls } = makeFakeSql(rows);
+        await createStore(sql).getTopScores("g", { limit: 5, period, sort, seasonal: true });
+        expect(calls[0].text).toContain(SEASON_SQL);
+        expect(calls[0].text).toContain("'-infinity'::timestamptz");
+        expect(calls[0].values.slice(0, 4)).toEqual(["g", ...SEASON_BINDS]);
+      }
+    }
+  });
+
+  it("getTopScores without seasonal binds NULLs: all-time for admin views", async () => {
+    const { sql, calls } = makeFakeSql(rows);
+    await createStore(sql).getTopScores("g", { limit: 5, period: "all", sort: "desc" });
+    expect(calls[0].values).not.toContain(FRIGHT_FEST_SEASON.from);
+    expect(calls[0].values.slice(0, 4)).toEqual(["g", null, null, null]);
+  });
+
+  it("rankForScore filters", async () => {
+    for (const sort of ["asc", "desc"] as const) {
+      const { sql, calls } = makeFakeSql(() => [{ better: 2 }]);
+      expect(await createStore(sql).rankForScore("g", 10, sort)).toBe(3);
+      expect(calls[0].text).toContain(SEASON_SQL);
+      expect(calls[0].values).toEqual(["g", 10, ...SEASON_BINDS]);
+    }
+  });
+
+  it("appendScore ranks within the season but leaves the rate-limit count alone", async () => {
+    for (const sort of ["asc", "desc"] as const) {
+      const { sql, calls } = makeFakeSql(() => [{ id: "7", rank: "2" }]);
+      await createStore(sql).appendScore("g", { handle: "H", score: 10, ipHash: "ip" }, sort);
+      const text = calls[0].text;
+      // Exactly one use: the rank subquery, not `recent`.
+      expect(text.split(SEASON_SQL).length - 1).toBe(1);
+      expect(text.indexOf(SEASON_SQL)).toBeGreaterThan(text.indexOf("SELECT ins.id"));
+    }
+  });
+
+  it("the friends panel filters both the best and the rank", async () => {
+    const { sql, calls } = makeFakeSql(rows);
+    await createStore(sql).getFriendStandingsForGame("me", "g");
+    expect(calls[0].text.split(SEASON_SQL).length - 1).toBe(2);
+  });
+
+  it("getFriendsNewlyPassed filters the previous best and the friends' bests", async () => {
+    const { sql, calls } = makeFakeSql(rows);
+    await createStore(sql).getFriendsNewlyPassed("me", "b", 120, 55, "desc");
+    expect(calls[0].text.split(SEASON_SQL).length - 1).toBe(2);
+  });
+
+  it("admin and write-side reads carry no season predicate", async () => {
+    const { sql, calls } = makeFakeSql(() => [{ n: 0 }]);
+    const store = createStore(sql);
+    await store.countScores("g");
+    await store.listScoresForModeration("g", 10);
+    await store.clearBoardScores("g");
+    await store.claimScores("p", [1]);
+    await store.getPlayerStandings("p");
+    for (const call of calls) {
+      expect(call.text).not.toContain("timestamptz");
+      expect(call.values).not.toContain(FRIGHT_FEST_SEASON.from);
+    }
+  });
+
+  it("the window is injectable", async () => {
+    const { sql, calls } = makeFakeSql(() => [{ better: 0 }]);
+    const season = { id: "t", from: "2030-01-01T00:00:00Z", until: "2030-01-02T00:00:00Z" };
+    await createStore(sql, { season }).rankForScore("g", 1, "desc");
+    expect(calls[0].values).toEqual(["g", 1, season.from, season.until, season.from]);
   });
 });

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { CATALOGUE, getCollectible } from "./catalogue";
+import { CATALOGUE, currentVersion, getCollectible, RARITIES } from "./catalogue";
+import { RARITY_LABEL } from "./present";
 import { collectionProgress } from "./progress";
-import { batches, binderGroups, cardPath, cardSources, formatOdds, formatProgress, freeSlots, newIds, packViews, type OwnedEntry } from "./pages";
+import { batches, binderGroups, cardPath, cardSources, formatOdds, formatProgress, freeSlots, newIds, packGroups, packViews, slotLine, type OwnedEntry } from "./pages";
 
 const entry = (id: string, extra: Partial<OwnedEntry> = {}): OwnedEntry => ({
   collectibleId: id,
@@ -73,9 +74,47 @@ describe("how a card can be obtained", () => {
   });
   it("marks standard cards as chance in their collection's packs", () => {
     const c = CATALOGUE.collectibles.find((x) => x.collection === "hpo" && x.pool === "standard" && x.rarity === "common")!;
-    expect(cardSources(c)).toEqual([{ pack: CATALOGUE.packs.find((p) => p.id === "hpo-standard")!, how: "chance" }]);
+    // The Rare pack's first slot is a standard roll too, so a common can come from it.
+    expect(cardSources(c)).toEqual([
+      { pack: CATALOGUE.packs.find((p) => p.id === "hpo-standard")!, how: "chance" },
+      { pack: CATALOGUE.packs.find((p) => p.id === "hpo-rare")!, how: "chance" },
+    ]);
   });
   it("builds a share path with only the card id", () => {
     expect(cardPath("ff26-survivor")).toBe("/collectibles/ff26-survivor");
+  });
+});
+
+describe("pack contents text", () => {
+  it("publishes every pack, fixed card, rarity and percentage word for word", () => {
+    for (const { pack, slots } of packViews()) {
+      expect(slots.length).toBeGreaterThan(0);
+      const catalogueSlots = currentVersion(pack).slots;
+      for (const s of slots) {
+        const raw = catalogueSlots[s.n - 1];
+        const line = slotLine(s);
+        if (raw.kind === "fixed") {
+          const card = getCollectible(raw.collectible);
+          expect(card, `${pack.id} slot ${s.n}`).toBeDefined();
+          expect(line).toBe(`Slot ${s.n}. Always ${card!.name} (${RARITY_LABEL[card!.rarity].toLowerCase()}).`);
+        } else {
+          const expected = RARITIES.filter((r) => raw.rarityWeights[r])
+            .map((r) => `${raw.rarityWeights[r]}% ${r}`)
+            .join(", ");
+          expect(line).toBe(`Slot ${s.n}. One card from ${s.poolName}: ${expected}.`);
+        }
+      }
+    }
+  });
+  it("reads the sentence the page has always shown", () => {
+    const ff = packViews().find((v) => v.pack.id === "ff26-participation")!;
+    expect(slotLine(ff.slots[1])).toBe("Slot 2. One card from Fright Fest 2026: 60% common, 25% uncommon, 10% rare, 4% epic, 1% legendary.");
+  });
+  it("groups every pack once: events by name, the rest as everyday", () => {
+    const groups = packGroups();
+    expect(groups.flatMap((g) => g.packs.map((v) => v.pack.id)).sort()).toEqual(packViews().map((v) => v.pack.id).sort());
+    expect(groups[0].title).toBe("Fright Fest 2026 packs");
+    expect(groups[groups.length - 1].title).toBe("Everyday packs");
+    expect(groups[0].packs.every((v) => v.pack.collection === "ff26")).toBe(true);
   });
 });

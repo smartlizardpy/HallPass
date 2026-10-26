@@ -1,0 +1,317 @@
+/*
+ * Candy Hunt's corkboard (`#candy`): a cork field inside the wooden frame, paper
+ * notices pinned to it, and the Candy Shop as a prize-counter shelf. Fixed palette
+ * from `.ff-page` (sections.css, read its header): no base token is used or set.
+ * No rounded corners, no motion. Four packs across a shelf on a laptop, two on a
+ * phone, one under 360px.
+ */
+
+.ar-cork {
+  padding: 14px;
+  background-color: #3a2415;
+  background-image: radial-gradient(#2c1a0f 1.5px, transparent 2px);
+  background-size: 8px 8px;
+  border: 2px solid #1d1008;
+}
+@media (min-width: 640px) {
+  .ar-cork {
+    padding: 22px;
+  }
+}
+.ar-cork .ar-lede {
+  color: #fff8e7;
+}
+.ar-sub-cork {
+  margin-top: 26px;
+  padding-top: 0;
+  border-top: 0;
+}
+.ar-cork-line {
+  margin: 12px 0 0;
+  font-size: 15px;
+  color: #fff8e7;
+}
+.ar-cork-line .ar-link {
+  min-height: 44px;
+}
+
+/* A pinned paper notice. */
+.ar-notice {
+  position: relative;
+  padding: 22px 16px 14px;
+  background: #fff8e7;
+  color: #23153a;
+  border: 2px solid #23153a;
+  box-shadow: 4px 5px 0 rgb(0 0 0 / 0.5);
+  font-size: 15px;
+  line-height: 1.45;
+}
+.ar-notice::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: calc(50% - 6px);
+  width: 12px;
+  height: 12px;
+  background: #c8213f;
+  box-shadow: inset -3px -3px 0 #8f1530, 0 2px 0 rgb(0 0 0 / 0.4);
+}
+.ar-notice p {
+  margin: 0;
+}
+.ar-notice .ar-btn {
+  border-color: #23153a;
+  color: #23153a;
+}
+.ar-notice .ar-btn:hover {
+  background: #23153a;
+  color: #fff8e7;
+}
+.ar-notice .ar-btn-gold {
+  background: var(--ar-accent);
+  color: var(--ar-accent-ink);
+}
+.ar-notice .ar-btn-gold:hover {
+  background: #23153a;
+  color: #fff8e7;
+}
+.ar-ntitle {
+  margin: 0 0 8px;
+  font: 400 15px/1.2 var(--ar-pixel);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6a1f08;
+}
+.ar-nsub {
+  margin: 14px 0 4px;
+  font: 400 12px/1.2 var(--ar-pixel);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #3a2a52;
+}
+.ar-nfoot {
+  margin-top: 10px !important;
+  font-size: 14px;
+  color: #3a2a52;
+}
+.ar-nfoot-top {
+  margin: 0 0 6px !important;
+}
+.ar-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ar-rows li,
+.ar-row-p {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px dashed #b3a29e;
+}
+.ar-rows b {
+  flex: none;
+  font: 400 14px/1.2 var(--ar-pixel);
+  font-variant-numeric: tabular-nums;
+  color: #23153a;
+}
+.ar-faint {
+  color: #4a3a62;
+}
+.ar-tag {
+  font-size: 13px;
+  font-weight: 800;
+}
+.ar-revoked {
+  text-decoration: line-through;
+  color: #4a3a62;
+}
+.ar-strong-line {
+  margin-top: 6px !important;
+  font-weight: 800;
+}
+.ar-paper-skel {
+  height: 3.5rem;
+  background: repeating-linear-gradient(0deg, #efe4cc 0 12px, #f6ecd6 12px 24px);
+}
+.ar-notice .ar-mine-row p {
+  max-width: 52ch;
+}
+
+/* "Your candy": the ticket with the big balance. */
+.ar-ticket-card {
+  margin-bottom: 4px;
+}
+.ar-balance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+.ar-big {
+  font: 400 52px/1 var(--ar-pixel);
+  font-variant-numeric: tabular-nums;
+  color: #23153a;
+}
+.ar-unit {
+  font: 400 16px/1 var(--ar-pixel);
+  text-transform: uppercase;
+  color: #6a1f08;
+}
+.ar-new {
+  padding: 4px 8px;
+  background: #23153a;
+  color: #ffd84a;
+  font: 400 12px/1 var(--ar-pixel);
+  text-transform: uppercase;
+}
+
+.ar-notes {
+  display: grid;
+  gap: 22px;
+}
+@media (min-width: 860px) {
+  .ar-notes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+.ar-rules-note {
+  margin-top: 28px;
+}
+.ar-rules-note .ar-rules {
+  padding-left: 20px;
+  list-style: square;
+}
+
+/* The shop: wooden shelves, packs stand on them, a cream price tag under each. */
+.ar-shelf-wrap {
+  margin-top: 16px;
+}
+.ar-shelf-label {
+  display: inline-block;
+  margin: 0 0 10px;
+  padding: 5px 9px;
+  background: #0b0612;
+  border: 2px solid #ffd84a;
+  font: 400 13px/1.2 var(--ar-pixel);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #ffd84a;
+}
+.cd-shelf {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+@media (min-width: 720px) {
+  .cd-shelf {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (max-width: 359px) {
+  .cd-shelf {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.cd-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 8px;
+}
+/* The plank: the stands butt together (no column gap), so a shelf is one board. */
+.cd-stand {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  margin-inline: -8px;
+  padding: 10px 8px 0;
+  min-height: 150px;
+  border-bottom: 12px solid #8a5a2b;
+  box-shadow: 0 4px 0 #4a2a10;
+}
+/* Exactly 1x of the pack print (96x140): whole art pixels, never scaled. */
+.cd-print {
+  width: 96px;
+  height: 140px;
+  max-width: none;
+  image-rendering: pixelated;
+}
+.cd-tag {
+  flex: 1;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: #fff8e7;
+  border: 2px solid #23153a;
+  color: #23153a;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.25;
+}
+.cd-tag b {
+  font-weight: 800;
+}
+.cd-price {
+  font: 400 14px/1.2 var(--ar-pixel);
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: #6a1f08;
+}
+.cd-buy {
+  width: 100%;
+}
+.cd-reason {
+  display: block;
+  text-align: center;
+  font-size: 14px;
+  color: #fff8e7;
+}
+/* The inline confirm and the outcome: a small pixel plate. */
+.cd-plate {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  background: #0b0612;
+  border: 2px solid var(--ar-accent);
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #fff8e7;
+}
+.cd-plate p {
+  margin: 0;
+}
+.cd-alert {
+  font-weight: 800;
+}
+.cd-plate-btns {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.cd-plate-btns .ar-btn {
+  padding: 0 12px;
+}
+.ar-glink {
+  font-weight: 800;
+  color: #6a1f08;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ar-glink:hover {
+  color: #23153a;
+}
+.ar-games-skel {
+  height: 15rem;
+}
