@@ -16,25 +16,64 @@ Everything is recorded on the server. Candy is earned only while the event runs:
 from 28 Oct 00:00 to 2 Nov 00:00 UK, which is the championship's `opensAt` to
 `closesAt`.
 
-1. **Achievements.** Every game achievement a signed-in player unlocks during
-   the window pays that achievement's **candy value**.
-   - A super admin sets the value per achievement on the dashboard.
-   - The default is 0, which pays nothing until the achievement is rated.
-   - The owner's rubric weighs difficulty, effort, skill and farmability:
+1. **Your best score of the day, ranked on the leaderboard.** (Decided 26 Oct,
+   replacing achievements, which are self-reported and easy to fake.)
+   - **Which boards:** any board that belongs to a game and has a candy value
+     above 0. A super admin sets each board's value (0 to 40) on the Candy desk,
+     using the owner's rubric. The default is 0, which pays nothing until the
+     board is rated. The value is the payout for a rank-1 daily best; the rank
+     tiers scale it.
+   - **Whose scores:** only signed-in players'. An anonymous, handle-only score
+     never earns, but it still counts on the board when ranking.
+   - **The daily best:** for each (player, board, UK calendar day) inside the
+     earning window, the player's best row that day, in the leaderboard's own
+     order (the board's sort, then the earlier `created_at`, then the lower id:
+     `app/lib/scoreboard/rank.ts`). Days are UK days
+     (`Europe/London`); the window is five of them, 28 Oct to 1 Nov.
+   - **Its rank is the rank it held when it was set,** on the Halloween board:
+     `1 + the rows strictly better than it with created_at >= opensAt and
+     created_at <= its own`. This is `rankForScore`'s rule (strictly-better
+     rows, competition-style ties) restricted to rows that existed then, so it
+     is the rank the site showed the player and a later score never changes a
+     payout. `N` is the number of rows in that same span.
+   - **During Fright Fest the leaderboards show only scores set in the event
+     window,** so the rank counts only rows from `opensAt` on. A strong score
+     from before 28 Oct never counts, not even for ranking, and cannot push an
+     in-window best down. (The candy SQL applies this itself; it does not rely
+     on the scoreboard code.)
+   - **The share, by rank:**
 
-     | Achievement | Candy |
+     | Rank | Share |
      |---|---|
-     | Launch a game | 0 |
-     | Basic clicker milestone | 2 |
-     | Easy game completion | 5 |
-     | Normal achievement | 8–12 |
-     | Challenging score or victory | 15–20 |
-     | Difficult achievement | 25–30 |
-     | Exceptional achievement | 40 |
+     | 1st | 100% |
+     | 2nd–3rd | 75% |
+     | 4th–10th | 50% |
+     | Top half (rank ≤ ceil(N/2)) | 25% |
+     | Anywhere else on the board | 5% |
 
-   - An achievement unlocks once, so it pays at most once per player.
-   - Rating an achievement after a player unlocked it during the window still
-     pays them. The credit is made the next time that player's candy is synced.
+   - **The amount** is integer maths, the same in TypeScript and SQL:
+     `max(1, (value * share + 50) / 100)` with integer division, when the value
+     is above 0. A 40-candy board pays 40 / 30 / 20 / 10 / 2. A 2-candy clicker
+     pays 2 / 2 / 1 / 1 / 1.
+   - **One credit per player per board per day.** Award key
+     `candy:<event>:daily_best:<playerId>:<boardId>:<YYYY-MM-DD>`; the ledger
+     `ref` is `<boardId>#<YYYY-MM-DD>#<rank>`.
+   - **Valued at sync time.** Rating a board after players scored still pays
+     those earlier days in the window at the next sync. Changing a value never
+     re-prices a credit already made.
+   - **The owner's rubric** (for choosing a board's value):
+
+     | Game | Candy |
+     |---|---|
+     | Doesn't pay | 0 |
+     | Clicker or idle game | 2 |
+     | Easy game | 5 |
+     | Normal game | 8–12 |
+     | Challenging game | 15–20 |
+     | Difficult game | 25–30 |
+     | Exceptional game | 40 |
+
+   - **Achievements pay nothing.**
 2. **Fright Fest ranked runs.**
    - A player's first accepted ranked run on each counting board pays **10**.
    - A result on every board pays **+20**, once, when the championship is
@@ -76,12 +115,13 @@ These amend collectibles decision 1, "no currency", for this one token.
 - **A spend is atomic with its grant.** It is one transaction behind a
   per-player advisory lock, with no overspending and an idempotent request id
   so a double-tap can't buy twice.
-- **Achievements are reported by games, not verified by the server.**
+- **Scores are submitted by games, not verified by the server,** so the Candy
+  desk's top earners show daily-best totals and the best rank reached.
   - A super admin can revoke any credit, with a reason and an audit row.
   - A balance can then go negative, which blocks spending until it's positive.
   - If a board's only accepted runs are later rejected or disqualified, the
     next sync revokes that run credit.
-- **Changing an achievement's value never re-prices** credits already made.
+- **Changing a board's value never re-prices** credits already made.
 
 ### Deliberately excluded
 - Buying candy.
@@ -94,8 +134,8 @@ These amend collectibles decision 1, "no currency", for this one token.
   `scripts/migrate-prod.sh`.
 
 ### Assumptions
-- Only unlocks during the window count. Earlier unlocks don't, so veterans get
-  no windfall from history.
+- Only scores set during the window count, for earning and for ranking.
+  Earlier scores don't, so veterans get no windfall from history.
 - Values are capped at 40 by the database, the rubric's maximum.
 - Each run, all-boards and placing amount is a single config value
   (`app/lib/candy/fright-fest-2026.ts`), changed by commit.
@@ -109,16 +149,18 @@ These amend collectibles decision 1, "no currency", for this one token.
    - Note in the PR that `docs/dpia.md` may need a line for the new ledger. Do
      not edit the DPIA itself.
 2. **Migration** `app/lib/scoreboard/migrations/050_candy.sql`, with fresh-install
-   DDL in lockstep (`app/lib/achievements.sql`, and a new
+   DDL in lockstep (`app/lib/scoreboard/schema.sql`, and a new
    `app/lib/candy/schema.sql`):
-   - `achievements.candy SMALLINT NOT NULL DEFAULT 0`, CHECK 0–40.
+   - `boards.candy SMALLINT NOT NULL DEFAULT 0`, CHECK 0–40 (it was
+     `achievements.candy` in the first draft; 050 was unreleased, so it was
+     edited in place).
    - `candy_ledger`:
      - id, `player_id` → players (CASCADE), `event_id`;
      - `amount` (signed; credits > 0, spends < 0);
-     - `kind` CHECK (`achievement`, `ranked_run`, `all_boards`, `placing`,
+     - `kind` CHECK (`daily_best`, `ranked_run`, `all_boards`, `placing`,
        `spend`);
      - `award_key` UNIQUE;
-     - `ref` (slug/key/board/pack id);
+     - `ref` (board#day#rank, board slug, slug#rank or pack id);
      - `player_pack_id` for spends;
      - `created_at` (db `now()`);
      - `revoked_at`, `revoked_by`, `revoked_reason`;
@@ -129,14 +171,14 @@ These amend collectibles decision 1, "no currency", for this one token.
    add pack prints if the print pipeline needs them (document what is missing).
 4. **`app/lib/candy/`:**
    - Config: window, spend-by date, prices by pack id, run/all-boards/placing
-     amounts, the rubric tiers for the dashboard.
+     amounts, the daily-best shares and the rubric tiers for the dashboard.
    - Store, injected `sql` as in `collectibles/store.ts`:
      - `sync(playerId)` inserts every missing credit with `ON CONFLICT DO
        NOTHING`, plus run revocations;
      - `balance`;
      - `history`;
      - `spend(playerId, packId, requestId)`;
-     - admin `setAchievementCandy`, `revokeCredit`, and lists.
+     - admin `setBoardCandy`, `revokeCredit`, and lists.
    - Tests with a fake `sql`.
    - An opt-in `store.db.test.ts` for spend concurrency and no-overspend, gated
      like `p2p/store.db.test.ts`.
@@ -144,7 +186,7 @@ These amend collectibles decision 1, "no currency", for this one token.
    - `GET /api/v1/candy/me`: `private, no-store`, same-origin, signed out →
      `{signedIn:false}`. It syncs, then returns:
      - balance, spend-by and whether spending is open;
-     - recent credits (achievement name and game, never another player);
+     - recent credits (game and day, never another player);
      - the shop (pack id, price, affordable).
    - `POST /api/v1/candy/spend {packId, requestId}`:
      - 403 cross-site, 401 signed out, 409 not enough candy, 410 spending
@@ -154,9 +196,9 @@ These amend collectibles decision 1, "no currency", for this one token.
      route tests.
 6. **Dashboard `/dashboard/candy`,** super admin only (`requireRole("super_admin")`
    on the page and every action):
-   - every achievement across games with its candy value, set by rubric
-     presets or a number;
-   - a filter by game and an "unrated" count;
+   - every game's boards with their candy value, set by rubric presets or a
+     number;
+   - a filter by game and a count of boards paying 0;
    - recent credits and spends;
    - revoke a credit with a reason;
    - an audit log.
@@ -173,7 +215,7 @@ These amend collectibles decision 1, "no currency", for this one token.
 
 Decisions made while building, inside the plan above.
 
-- **Sync pulls, nothing pushes.** `sync(playerId)` reads unlocks and accepted runs
+- **Sync pulls, nothing pushes.** `sync(playerId)` reads scores and accepted runs
   and inserts what the ledger lacks. It runs on every `GET /api/v1/candy/me`, in
   one transaction behind the player's advisory lock.
 - **Run credits revoke and restore automatically.** If a board has no accepted run
@@ -189,14 +231,13 @@ Decisions made while building, inside the plan above.
 - **Placings come from the frozen snapshot**, never live standings, and only once
   the championship status is `finalised` or `archived`. The ledger `ref` is
   `<board slug>#<rank>`.
-- **Top earners is how a forger is found.** Achievement unlocks are
-  self-reported (any signed-in player can POST them), so the newest-50 feed will
-  not surface a cheater. `/dashboard/candy` lists the top 25 players by unrevoked
-  credited candy (public name and id only) with their achievement share, spend,
-  balance and the most achievements unlocked in any one minute, each linking to
+- **Top earners is how a forger is found.** Scores are self-submitted by games,
+  so the newest-50 feed will not surface a cheater. `/dashboard/candy` lists the
+  top 25 players by unrevoked credited candy (public name and id only) with their
+  daily-best total and count, best rank, spend and balance, each linking to
   `?player=<publicId>` which shows all of that player's credits for revocation.
-- **"Unrated" means 0.** The column defaults to 0 and the rubric's "Launch a
-  game" is also 0, so the dashboard counts achievements that pay nothing.
+- **"Unrated" means 0.** The column defaults to 0 and the rubric's "Doesn't pay"
+  is also 0, so the dashboard counts boards that pay nothing.
 - **A sealed pack bought with candy that an admin later revokes is not refunded**
   by code; an admin credits the candy back by granting the pack again or by an
   explicit decision. Spends cannot be revoked.
@@ -206,6 +247,40 @@ Decisions made while building, inside the plan above.
 - **Applying it.** Migration `050_candy.sql` needs 048 and 049 before it. The
   owner runs `scripts/migrate-prod.sh`. `docs/dpia.md` may need a line for the new
   ledger (not edited here).
+
+### As built: daily best replaces achievements (26 Oct)
+
+The owner changed how candy is earned before anything shipped. Migration 050 was
+edited in place (it was only on the DEV branch); the DEV database was reset by
+dropping `candy_log` and `candy_ledger`, dropping `achievements.candy`, deleting
+the `050_candy.sql` row from `schema_migrations` and re-running `npm run migrate`.
+
+- **The rules are in the Earning section above.** The code is one SQL statement
+  in `sync`, behind the same transaction and advisory lock as before, with
+  `DISTINCT ON (board, UK day)` for the best row and a join to `scores` for the
+  rank and `N`. The pure helpers `dailyBestPct` and `dailyBestAmount` in
+  `fright-fest-2026.ts` encode the same tiers; the DB test checks the two agree.
+- **Rank as of submission, on the Halloween board.** Ranking against rows that
+  existed at the time keeps the payout equal to what the player saw and stable
+  against later scores. Restricting those rows to the event window matches the
+  leaderboards, which show only event scores during Fright Fest: the ranking is
+  done in the candy SQL, not by changing `app/lib/scoreboard`.
+- **A board id over 120 characters never pays** (the ledger `ref` and award key
+  have length checks). Board ids are slugs, so this does not arise.
+- **`GET /api/v1/candy/me`** has `rules.maxGameCandy` (40) in place of
+  `maxAchievementCandy`, `rules.dailyBest` (the five shares), and `games`
+  (`boardId`, `slug`, `title`, `boardTitle`, `candy` for every rated board,
+  highest first; public). Daily-best entries in `recent` have `kind:
+  "daily_best"`, a label like "Best score on 29 Oct · 3rd" and `game` set to the
+  game title.
+- **The Candy desk** lists boards (game, board, sort, scores and signed-in
+  players in the window, value) and top earners show the daily-best total, count
+  and best rank. "Max unlocks per minute" is gone. Recent credits read
+  "<game> · <date> · <ordinal rank>".
+- **Revocation** stays manual: scores are append-only, so there is no automatic
+  clawback for daily bests.
+- **Out of this change:** the copy on the `/fright-fest` Candy Hunt section still
+  describes achievements and is updated with its restyle.
 
 ## 4. The section on /fright-fest (plan)
 
