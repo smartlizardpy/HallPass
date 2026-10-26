@@ -116,6 +116,72 @@ export function packViews(): PackView[] {
   });
 }
 
+/** One run of a slot's sentence. `as` tells the component what to dress it as; the text is the whole truth. */
+export interface SlotPart {
+  text: string;
+  as?: "card" | "rarity" | "pool" | "odds";
+}
+
+/** "60% common, 25% uncommon, ...": the published odds of a random slot, in words. */
+export function oddsText(odds: readonly { label: string; percent: number }[]): string {
+  return odds.map((o) => `${o.percent}% ${o.label.toLowerCase()}`).join(", ");
+}
+
+/**
+ * A slot's sentence as runs, so the component can style the card, rarity, pool
+ * and odds while the words stay in ONE place. Joined, the runs read exactly:
+ * "Always <card> (<rarity>)." or "One card from <pool>: 60% common, ....".
+ * This is the published odds disclosure: change it only with the catalogue.
+ */
+export function slotParts(s: SlotView): SlotPart[] {
+  if (s.kind === "fixed" && s.card) {
+    return [
+      { text: "Always " },
+      { text: s.card.name, as: "card" },
+      { text: " (" },
+      { text: RARITY_LABEL[s.card.rarity].toLowerCase(), as: "rarity" },
+      { text: ")." },
+    ];
+  }
+  return [
+    { text: "One card from " },
+    { text: s.poolName ?? "", as: "pool" },
+    { text: ": " },
+    { text: oddsText(s.odds ?? []), as: "odds" },
+    { text: "." },
+  ];
+}
+
+/** The slot's full line as plain text, "Slot 1. Always ...". */
+export function slotLine(s: SlotView): string {
+  return `Slot ${s.n}. ${slotParts(s).map((p) => p.text).join("")}`;
+}
+
+export interface PackGroup {
+  /** The collection id for an event's packs, or "everyday". */
+  id: string;
+  title: string;
+  packs: PackView[];
+}
+
+/**
+ * The packs under their subheadings, from catalogue data: a pack whose
+ * collection is an `event` goes under "<event name> packs" (events in the
+ * collection `sort` order), every other pack under "Everyday packs". Pack order
+ * inside a group is the catalogue's. Empty groups are dropped.
+ */
+export function packGroups(views: readonly PackView[] = packViews()): PackGroup[] {
+  const events = CATALOGUE.collections.filter((c) => c.kind === "event").sort((a, b) => a.sort - b.sort);
+  const groups: PackGroup[] = events.map((c) => ({
+    id: c.id,
+    title: `${c.name} packs`,
+    packs: views.filter((v) => v.pack.collection === c.id),
+  }));
+  const eventIds = new Set(events.map((c) => c.id));
+  groups.push({ id: "everyday", title: "Everyday packs", packs: views.filter((v) => !eventIds.has(v.pack.collection)) });
+  return groups.filter((g) => g.packs.length > 0);
+}
+
 export interface Source {
   pack: Pack;
   how: "fixed" | "chance";
