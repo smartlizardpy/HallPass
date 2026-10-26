@@ -172,7 +172,7 @@ describe("theme and championship are independent", () => {
   const APP = join(__dirname, "..", "..");
   const rel = (f: string) => f.slice(APP.length + 1);
   const THEME = [...walkSrc(join(APP, "lib/events")), ...walkSrc(join(APP, "components/events"))];
-  const CHAMPIONSHIP = walkSrc(join(APP, "lib/championship"));
+  const CHAMPIONSHIP = [...walkSrc(join(APP, "lib/championship")), ...walkSrc(join(APP, "components/championship"))];
   /** Shared catalogue and layout files the skin decorates: they may not read the championship switch. */
   const SHARED = ["components/GameCard.tsx", "components/GameListRow.tsx", "components/GameEventPanel.tsx", "layout.tsx"].map((f) =>
     join(APP, f),

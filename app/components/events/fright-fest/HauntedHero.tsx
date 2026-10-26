@@ -9,7 +9,7 @@ import { FRIGHT_FEST_THEME } from "../../../lib/events/fright-fest";
 import { eventDateLabels } from "../../../lib/events/labels";
 
 const LABELS = eventDateLabels(FRIGHT_FEST_THEME);
-import { FRIGHT_FEST_GAMES, FRIGHT_FEST_GAMES_ANNOUNCED } from "./registry";
+import { FRIGHT_FEST_GAMES } from "./registry";
 import { HeroCountdown } from "./HeroCountdown";
 
 /**
@@ -302,12 +302,12 @@ export function HauntedHero({
     };
   }, [phone]);
 
-  // Unannounced: the same three cabinets, but unnamed and unlinked.
+  // An unannounced game keeps its cabinet, unnamed and unlinked.
   const cabs = FRIGHT_FEST_GAMES.map((real) => ({
-    ff: FRIGHT_FEST_GAMES_ANNOUNCED
+    ff: real.announced
       ? real
       : { ...real, short: "Mystery game", mq: ["???", "???"] as [string, string], acc: "#8f7bb0" },
-    game: FRIGHT_FEST_GAMES_ANNOUNCED ? games.find((g) => g.slug === real.slug) : undefined,
+    game: real.announced ? games.find((g) => g.slug === real.slug) : undefined,
   }));
   // On a phone lead with the games a phone can play.
   const ordered = phone

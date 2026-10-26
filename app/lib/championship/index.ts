@@ -167,7 +167,8 @@ export async function getMyProgress(c: ChampionshipConfig, playerId: string): Pr
       points: me?.points ?? 0,
       eligible: me?.eligible ?? false,
       missing: me?.missing ?? standings.boards.filter((b) => b.counting).map((b) => b.slug),
-      boards: standings.boards.map((b) => {
+      // Opened boards only, as in the public standings: a pending game is not named.
+      boards: standings.boards.filter((b) => b.status !== "pending").map((b) => {
         const e = b.entries.find((x) => x.playerId === playerId);
         return {
           slug: b.slug,

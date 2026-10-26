@@ -39,6 +39,22 @@ import { SITE_URL as BASE } from "../../lib/site";
 import { categoryPath } from "../../lib/categories";
 import { categoryForTag, landingTags, tagPath, tagSlug } from "../../lib/tags";
 import { getGamePlayCounts } from "../../lib/stats";
+import { ChampionshipGamePanel } from "../../components/championship/GamePanel";
+import { CHAMPIONSHIPS } from "../../lib/championship/config";
+import { championshipSummary, summaryGame } from "../../lib/championship/summary";
+
+/**
+ * The championship panel for this game's rail, or null. Read from a code
+ * constant, so the page stays static; whether the game's board has joined is a
+ * question for the client island, which asks the API.
+ */
+function championshipPanel(slug: string) {
+  for (const c of CHAMPIONSHIPS) {
+    const game = c.enabled ? summaryGame(c, slug) : null;
+    if (game) return <ChampionshipGamePanel summary={championshipSummary(c)} game={game} />;
+  }
+  return null;
+}
 import { youtubeEmbedUrl, youtubeThumbnailUrl, youtubeWatchUrl } from "../../lib/youtube";
 
 /**
@@ -332,6 +348,7 @@ export default async function GamePage({
           // Mapped into a structural prop rather than passed as the row: GameStore
           // is a client component and `game-videos.ts` is server-only.
           video={video ? { id: video.youtubeId, label: video.label } : null}
+          championship={championshipPanel(game.slug)}
         />
       </ArcadeShell>
     </>

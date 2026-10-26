@@ -95,6 +95,14 @@ describe("submissionAccepting", () => {
   });
 });
 
+describe("run tokens", () => {
+  it("outlive the longest ranked run any board allows", async () => {
+    const { SHADOW_CORE, SURVIVE_TILL_DAWN, LAST_BELL } = await import("./validators");
+    const longest = Math.max(SHADOW_CORE.maxTotalMs / 1000, SURVIVE_TILL_DAWN.nightSec, LAST_BELL.clock);
+    expect(C.tokenTtlSec).toBeGreaterThan(longest + 5 * 60);
+  });
+});
+
 describe("the registry", () => {
   it("finds championship boards and nothing else", () => {
     expect(championshipBoard("last-bell-halloween-shift")?.game.slug).toBe("last-bell");

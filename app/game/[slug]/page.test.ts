@@ -54,6 +54,7 @@ vi.mock("@/app/lib/games", async (importOriginal) => {
 // The page's other data sources and components are irrelevant to the 404 path.
 vi.mock("../../components/ArcadeShell", () => ({ ArcadeShell: () => null }));
 vi.mock("../../components/GameStore", () => ({ GameStore: () => null }));
+vi.mock("../../components/championship/GamePanel", () => ({ ChampionshipGamePanel: () => null }));
 vi.mock("../../lib/game-credits", () => ({ getGameCredit: async () => null, resolveCredit: () => null }));
 vi.mock("../../lib/game-media", () => ({ getGameMedia: async () => [], mediaPublicPath: () => "" }));
 vi.mock("../../lib/beta", () => ({ getGameTesters: async () => [] }));

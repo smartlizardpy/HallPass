@@ -162,8 +162,7 @@ with the games they are missing.
 
 **Verification.** Standings are provisional until an admin finalises them after
 the close. Flagged runs are hidden until reviewed. Disqualifications are
-recorded with a reason. Rewards are paid only from finalised standings, except
-the Participation Pack (§7).
+recorded with a reason. Rewards are paid only from finalised standings (§7).
 
 ---
 
@@ -217,8 +216,8 @@ game (same-origin iframe)          HallPass
 ```
 
 - **Tokens:** 32 random bytes, base64url. Only the SHA-256 is stored. Bound to
-  the issuing player, the event and the game, single-use, expiring 45 minutes
-  after issue (`tokenTtlSec`).
+  the issuing player, the event and the game, single-use, expiring 75 minutes
+  after issue (`tokenTtlSec`, longer than the longest ranked run).
 - **Finishing grace:** a run whose token was issued before the close may still
   be recorded for `submitGraceSec` (10 minutes) after it, so nobody is cut off
   mid-escape at midnight. A run started after the close never gets a token.
@@ -340,10 +339,10 @@ stylesheet.
 Paid out through the collectibles grant service, with idempotent grant keys
 (`fright-fest-2026:participation:<player>` and so on):
 
-- **Participation Pack:** an accepted result on every board in the final lineup.
-  While any board is still `pending` the lineup can grow, so these packs are
-  granted at finalisation. Once no board is pending, they are granted the moment
-  a player qualifies.
+- **Participation Pack:** an accepted result on every board in the final
+  lineup. Granted at finalisation with the others: a pending board could still
+  join and change who qualifies, and one payout moment is easier to explain
+  ("packs are given out once the results are final").
 - **Game Champion Pack** per opened board and **Overall Champion Pack**: only at
   finalisation, from the snapshot. One player can earn several.
 - If the collectibles tables are not there yet, finalisation still records the

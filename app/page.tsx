@@ -3,6 +3,21 @@ import { Arcade } from "./components/Arcade";
 import { SiteJsonLd } from "./components/SiteJsonLd";
 import { resolveCategories, resolveGames } from "./lib/games-store";
 import { getGamePlayCounts } from "./lib/stats";
+import { ChampionshipHomeCard } from "./components/championship/HomeCard";
+import { championshipEnabled } from "./lib/championship/config";
+import { FRIGHT_FEST_2026 } from "./lib/championship/fright-fest-2026";
+import { championshipSummary } from "./lib/championship/summary";
+
+/**
+ * The board slot under the haunted skin: the championship's live card while it
+ * is enabled, otherwise the theme's own card (Arcade's default). Decided here,
+ * from a code constant, so the page stays static and neither the theme nor the
+ * catalogue reads the championship switch.
+ */
+const SUMMARY = championshipEnabled(FRIGHT_FEST_2026.id) ? championshipSummary(FRIGHT_FEST_2026) : null;
+const EVENT_BOARD = SUMMARY
+  ? { desktop: <ChampionshipHomeCard summary={SUMMARY} />, phone: <ChampionshipHomeCard summary={SUMMARY} phone /> }
+  : undefined;
 
 /**
  * The home grid declares its own canonical, and that is the whole reason this
@@ -37,7 +52,7 @@ export default async function Home() {
     <>
       <SiteJsonLd />
       <h1 className="sr-only">Unblocked Games — Play Free Online at HALLPASS</h1>
-      <Arcade games={games} categories={categories} playCounts={playCounts} />
+      <Arcade games={games} categories={categories} playCounts={playCounts} eventBoard={EVENT_BOARD} />
     </>
   );
 }

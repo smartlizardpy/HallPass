@@ -177,6 +177,13 @@ describe("toPublicStandings", () => {
     expect(json).not.toMatch(/playerId|runId|g-a|g-b/);
     expect(json).toMatch(/pub-a/);
   });
+  it("counts a pending game but never names it", () => {
+    const s = buildStandings(C, "live", [open("last-bell")], [run("last-bell", "a", 300, 1)]);
+    const p = toPublicStandings(s, { board: 25, overall: 50 });
+    expect(p.boards.map((b) => b.slug)).toEqual(["last-bell"]);
+    expect(p.pendingGames).toBe(2);
+    expect(JSON.stringify(p)).not.toMatch(/shadow|survive|Cursed|Blood Moon/i);
+  });
   it("applies the limits", () => {
     const s = buildStandings(C, "live", [open("last-bell")], [run("last-bell", "a", 3, 1), run("last-bell", "b", 2, 1), run("last-bell", "c", 1, 1)]);
     const p = toPublicStandings(s, { board: 2, overall: 1 });

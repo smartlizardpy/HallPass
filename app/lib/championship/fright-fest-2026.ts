@@ -31,17 +31,19 @@ export const FRIGHT_FEST_2026: ChampionshipConfig = {
   timeZone: "Europe/London",
   resultsBy: "2026-11-05T00:00:00Z",
   href: "/fright-fest",
-  tokenTtlSec: 45 * 60,
+  // Longer than the longest ranked run any board allows (Cursed Dash caps at
+  // 60 minutes), so no legitimate run outlives its token.
+  tokenTtlSec: 75 * 60,
   submitGraceSec: 10 * 60,
   points: { byRank: [100, 80, 65, 40, 40, 20, 20, 20, 20, 20], others: 5 },
   rewards: {
     participation: "ff26-participation",
     gameChampion: {
-      "last-bell": "ff26-champion-last-bell",
-      "shadow-core-halloween-dash": "ff26-champion-shadow-core",
-      "survive-till-dawn-pixel-edition": "ff26-champion-survive-till-dawn",
+      "last-bell": "ff26-winner-last-bell",
+      "shadow-core-halloween-dash": "ff26-winner-shadow-core",
+      "survive-till-dawn-pixel-edition": "ff26-winner-survive-till-dawn",
     },
-    overallChampion: "ff26-overall-champion",
+    overallChampion: "ff26-overall-winner",
   },
   games: [
     {
