@@ -295,7 +295,8 @@ together with the hall and the backend.
   Points work". `FrightFestSections` takes an optional `afterProgress` slot that
   `page.tsx` fills, so the championship components import no candy code.
   Contents: heading and one line, your candy (balance, "+N new", recent), how to
-  earn, the Candy Shop (30 and 100 candy shelves), the rules.
+  earn, the Candy Shop (30 and 100 candy shelves), the rules. (Since the
+  restyle it is the last object on the page, after the rules notice.)
 - **Buying** is an inline confirm in the item, not a modal. A `requestId` is
   minted when the confirm opens and reused for retries of that purchase.
   Every spend status (200 incl. `alreadySpent`, 400, 401, 409, 410, 503/network)
@@ -339,3 +340,30 @@ Known issues:
   show the wrong word there (the section's buttons use the server's flags once
   they arrive).
 - Pack names on the shelves come from the catalogue as they are.
+
+### As built: the section after the daily-best rules (27 Oct)
+
+The "How to earn" part of `#candy` now says the daily-best rules, not
+achievements. It has four pinned notices:
+
+- **Your best score each day.** One plain paragraph (once a day your best score in
+  each rated game is ranked on that game's Halloween leaderboard; only scores set
+  from 28 Oct count) and the five bands as candy for a 40-candy game
+  (1st 40, 2nd-3rd 30, 4th-10th 20, top half 10, on the board 2), then "Easier
+  games pay less." The amounts are computed on the server in `props.ts`
+  (`buildCandy`) with `dailyBestAmount` from the config's `maxGameCandy`; nothing
+  is typed in the component. `DAILY_BEST_PROBE` picks one rank inside each band.
+- **Games that pay.** The `games` array of `GET /api/v1/candy/me` (rated boards,
+  best payers first; returned to signed-out visitors too): each title links to
+  `/game/<slug>`, a board title that differs is small text, at most 8 rows with a
+  "Show all (N)" toggle (`aria-expanded`). Loading shows a fixed-height skeleton,
+  an empty list says "Games are being rated. Check back on 28 Oct."
+- **Fright Fest ranked runs** and **Final results**, unchanged.
+
+`config.rubric` is an admin tool (the dashboard's presets) and is no longer passed
+to the section: `CandyProps.rubric` and its test are gone. `CandyProps` gained
+`dailyBest`, `maxGameCandy` and `printPx` (`PACK_PRINT_PX`, 96x140).
+
+Shelf prints were drawn at 72x105 (about 0.75x, uneven pixels). They are now
+drawn at exactly 96x140, pixelated, at every width (two per row fit at 390). The
+reward tickets already drew their prints at 96x140.
