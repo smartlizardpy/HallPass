@@ -12,6 +12,14 @@ Halloween-specific, and nothing expires with the haunted skin.
 1. **Free and earned only.** No purchases, no currency, no rerolls, no trading,
    no cash value, no marketplace. Odds are published and never depend on who you
    are, what you own, or how you play.
+
+   **One exception: Halloween Candy** (owner, 26 Oct; `docs/candy-hunt.md`).
+   Candy is a token earned only by playing during Fright Fest 2026, and spent
+   only on packs at published prices and published odds. It is never sold, has
+   no cash value, cannot be traded or gifted, and expires on 30 Nov 2026. Packs
+   bought with it are granted sealed (`source: 'event'`) and open like any other.
+   Nothing else in this decision changes: no purchases, no other currency, no
+   rerolls.
 2. **The catalogue is code; ownership is data.** Collections, collectibles, packs
    and drop tables are typed, reviewed TypeScript in
    `app/lib/collectibles/catalogue/`, like the static game catalogue. Players'
@@ -296,3 +304,8 @@ the Internet Culture, Brainrot and Turkish concepts. The full list lives in
 Trading, gifting, crafting/dust, purchases of any kind, pity timers, streak
 pressure, NFTs, server-generated share images (a static card page is enough for
 now), and a dashboard editor for definitions.
+
+The one currency is Halloween Candy (decision 1, `docs/candy-hunt.md`): earned
+by playing Fright Fest 2026, spent only on packs, expiring 30 Nov 2026. Buying
+candy, gifting or trading it, and any candy outside Fright Fest 2026 remain
+excluded.
