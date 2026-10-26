@@ -30,9 +30,10 @@ Read `docs/fright-fest-theme-plan.md` first. Visual source of truth: round 3 str
 - Moment decorations (bat, spider, eyes, ghosts, marquee flicker, moon glow) carry
   `data-ha-moment="<name>"` and rest in their static state; the runtime (written later by
   the lead) sets `data-playing` on them. Write the resting + `[data-playing]` CSS.
-- Server components must not read the clock. The championship is off: the competition UI
-  uses `championshipEnabled()` from `app/lib/events/championship.ts` ONLY for the board,
-  and nothing in theme code imports it.
+- Server components must not read the clock. The championship lives in
+  `app/lib/championship/` (switch: `enabled` in `fright-fest-2026.ts`) and
+  `app/components/championship/`; nothing in theme code imports either, and
+  championship code imports nothing from the theme (`events.test.ts` enforces both).
 - Do not modify games. Do not touch files outside your region. Do not run git commit/add
   (the lead commits). Run `npx eslint <files>` and `npx tsc --noEmit -p .` on what you
   change. Dev server: http://localhost:3100 (already running; do not start another).
