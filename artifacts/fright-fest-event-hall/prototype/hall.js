@@ -63,6 +63,8 @@
     ghost: "Shh. It only haunts this machine.",
     pumpkin: "This pumpkin has seen every high score since 2025.",
     room000: "Room 000. The door is locked. For now.",
+    "room-000": "Room 000. The door is locked. For now.",
+    "moon-cab": "This one only plays at full moon.",
     mop: "Somebody left the mop. It's not moving. Probably.",
     clock: "The clock always says 3:15. Last bell.",
     cat: "The arcade cat. It is not on the leaderboard.",
@@ -95,11 +97,13 @@
   const L = D.LABELS;
   const short = (g) => g.short || g.title;
 
-  function tickerText(now) {
-    if (!champOn()) return { t: "Scoring and rewards: to be announced", tone: "idle" };
-    if (state.phase === "upcoming") { const c = D.countdown(Date.parse(D.CONFIG.opensAt), now); return { t: `Opens ${L.opens} · in ${c.text}`, tone: "soon" }; }
-    if (state.phase === "live") return { t: `Live · last ranked runs ${L.lastDay} 23:59`, tone: "live" };
-    if (state.phase === "closed") return { t: `Closed · results final by ${L.resultsBy}`, tone: "idle" };
+  let tickerShort = false;
+  // short = a narrow ticker plate
+  function tickerText(now, short) {
+    if (!champOn()) return { t: short ? "Rewards to be announced" : "Scoring and rewards: to be announced", tone: "idle" };
+    if (state.phase === "upcoming") { const c = D.countdown(Date.parse(D.CONFIG.opensAt), now); return { t: short ? `Opens ${L.opens}` : `Opens ${L.opens} · in ${c.text}`, tone: "soon" }; }
+    if (state.phase === "live") return { t: short ? `Live · until ${L.lastDay}` : `Live · last ranked runs ${L.lastDay} 23:59`, tone: "live" };
+    if (state.phase === "closed") return { t: short ? `Closed · final ${L.resultsBy}` : `Closed · results final by ${L.resultsBy}`, tone: "idle" };
     return { t: "Final results are in", tone: "final" };
   }
 
@@ -147,7 +151,7 @@
     const n = you && you.rank > rows ? rows - 1 : rows;
     const li = o.slice(0, n).map((e) => `<li class="r${e.rank <= 3 ? e.rank : ""}${pub.standings.championPublicId === e.publicId ? " is-champ" : ""}"><b>${e.rank}</b><span>${esc(e.name)}</span><i>${e.points}</i></li>`).join("");
     const youLi = you && you.rank > n ? `<li class="is-you"><b>${you.rank}</b><span>You</span><i>${you.points}</i></li>` : "";
-    return `<div class="bs-head"><span>Overall · Fright Points</span>${tag}</div><ol class="bs-rows" data-src="GET /api/v1/championship/fright-fest-2026 → standings.overall">${li}${youLi}</ol>`;
+    return `<div class="bs-head"><span>${tag ? "Overall" : "Overall · Fright Points"}</span>${tag}</div><ol class="bs-rows" data-src="GET /api/v1/championship/fright-fest-2026 → standings.overall">${li}${youLi}</ol>`;
   }
 
   // ------------------------------------------------------------------ details panel
@@ -179,24 +183,40 @@
     const slots = lineup();
     const cab = M.desk.cab;
     const now = D.nowFor(state.phase);
-    const tk = tickerText(now);
+    const tz0 = d.zones && (d.zones.ticker || d.zones.front);
+    tickerShort = !!tz0 && tz0.w * L2.s < 340; // narrow plates (phones, concept C) get the short wording
+    const tk = tickerText(now, tickerShort);
     let h = "";
 
-    // art layers
-    if (hasArt()) {
-      if (state.concept === "c" && L2.mode === "desk" && M.desk.layers) {
-        h += `<div class="layer" data-depth="${M.desk.bgDepth ?? -0.5}">${img(d.files[season], "art")}</div>`;
-      } else {
-        h += img(d.files[season], "art");
-      }
+    // art layers. A layered room (concept C) gets a background layer here and its
+    // foreground layers after the overlays; each animation rides in its own layer so
+    // parallax never separates a sprite from the art under it.
+    const layered = hasArt() && L2.mode === "desk" && Array.isArray(M.desk.layers) && M.desk.layers.length > 0;
+    const inLayer = (name) => (d.anims || []).filter((a) => (a.layer || "bg") === name);
+    if (layered) {
+      h += `<div class="layer" data-depth="${M.desk.bgDepth ?? -0.5}" aria-hidden="true">${img(d.files[season], "art")}${anims(inLayer("bg"), season)}</div>`;
+    } else if (hasArt()) {
+      h += img(d.files[season], "art") + anims(d.anims, season);
     } else {
       h += `<div class="art placeholder" aria-hidden="true"><span>${esc(M.title)} · art in progress</span></div>`;
     }
-    h += anims(d.anims, season);
-
-    // ticker
+    // the ticker; in a layered room it rides in the layer that holds its plate
     const tz = d.zones && (d.zones.ticker || d.zones.front);
-    if (tz) h += box(tz, `ticker is-${tk.tone}`, `<span>${esc(tk.t)}</span>`, `role="status" data-src="championship config + /api phase"`);
+    const tickerBox = tz ? box(tz, `ticker is-${tk.tone}`, `<span>${esc(tk.t)}</span>`, `role="status" data-src="championship config + /api phase"`) : "";
+    if (layered) {
+      // depth layers sit under every interactive overlay: nothing in them overlaps a cabinet,
+      // and the fog must never speckle over a Play strip
+      for (const ly of M.desk.layers) {
+        const file = ly.file || ly[season];
+        if (!file) continue;
+        const fog = ly.name === "fog";
+        const top = ly.y ? `style="top:calc(${ly.y}px*var(--s))"` : "";
+        h += `<div class="layer${fog ? " fog" : ""}" data-depth="${ly.depth}" ${top}><div aria-hidden="true">${img(file, "art" + (fog ? " fog-img" : ""))}${fog ? img(file, "art fog-img fog-2") : anims(inLayer(ly.name), season)}</div>${ly.name === "fg" ? tickerBox : ""}</div>`;
+      }
+    } else {
+      h += tickerBox;
+    }
+
 
     // board (desk always; phone only when the composition has it)
     const bz = d.zones && d.zones.board;
@@ -204,7 +224,7 @@
       const calm = bz.calm || bz;
       const rowH = L2.board ? 32 : 24;
       const rows = Math.max(3, Math.floor((calm.h * L2.s - 54) / rowH));
-      h += box(calm, "board-screen", `<h2 class="sr-only">High scores</h2>${boardScreen(pub, mine, Math.min(rows, L2.mode === "phone" ? 3 : 6))}<a class="bs-more" href="#standings">Full standings</a>`, `data-zone="board"`);
+      h += box(calm, "board-screen", `<h2 class="sr-only">High scores</h2>${boardScreen(pub, mine, Math.min(rows, L2.mode === "phone" ? 3 : 6))}${champOn() ? `<a class="bs-more" href="#standings">Full standings</a>` : ""}`, `data-zone="board"`);
     }
 
     // phone glimpses of the board and the prize door at the edges of the room
@@ -216,7 +236,7 @@
     const qz = d.zones && d.zones.quest;
     if (qz) {
       h += box(qz, "hot-zone quest-hit", `<a href="#candy" aria-label="Candy Hunt noticeboard: see the notices"></a>`);
-      if (qz.calm) h += box(qz.calm, "label quest-label", `<span>Candy Hunt · preview</span>`);
+      if (qz.calm) h += box(qz.calm, "label quest-label", qz.calm.w * L2.s < 170 ? `<span>Candy Hunt<small>preview</small></span>` : `<span>Candy Hunt · preview</span>`);
     }
     // prize hotspot
     const pz = d.zones && d.zones.prize;
@@ -241,19 +261,12 @@
     const eggSeason = (e) => e.season || (HAUNTED_EGGS.has(e.name) ? "haunted" : "both");
     if (L2.mode === "desk") (M.desk.eggs || []).filter((e) => eggSeason(e) === "both" || eggSeason(e) === season).forEach((e) => {
       const line = EGGS[e.name] || "Nothing here. Probably.";
-      h += box(e, "egg", `<button type="button" aria-label="Something in the corner" data-egg="${esc(line)}"></button>`);
+      // pointer-only bonus: kept out of the tab order and the accessibility tree
+      h += box(e, "egg", `<button type="button" tabindex="-1" aria-hidden="true" data-egg="${esc(line)}"></button>`);
     });
 
     const dims = `--s:${L2.s};width:${d.w * L2.s}px;height:${d.h * L2.s}px`;
-    let fg = "";
-    if (hasArt() && state.concept === "c" && L2.mode === "desk" && M.desk.layers) {
-      for (const ly of M.desk.layers) {
-        const file = ly.file || ly[season];
-        if (!file) continue;
-        const top = ly.y ? `style="top:calc(${ly.y}px*var(--s))"` : "";
-        fg += `<div class="layer${ly.name === "fog" ? " fog" : ""}" data-depth="${ly.depth}" ${top}>${img(file, "art" + (ly.name === "fog" ? " fog-img" : ""))}${ly.name === "fog" ? img(file, "art fog-img fog-2") : ""}</div>`;
-      }
-    }
+    const fg = "";
     return { html: h, fg, dims };
   }
 
@@ -321,12 +334,13 @@
       if (hasArt() && pp) h += ovImg(pp.file || "pool-on.png", "pool", p.x + pp.dx, p.y + pp.dy, true);
       h += `<div class="cab is-on k-${sl.key}" style="--x:${p.x};--y:${p.y};--w:${cab.w};--h:${cab.h}">
         ${hasArt() ? cabArt(sl.key, cab) : `<span class="cab-ph">${sl.open ? esc(short(sl.game)) : "???"}</span>`}</div>`;
-      const below = (d.zones && d.zones.tabs) || { x: 0, y: p.y + cab.h + 4, w: d.w, h: Math.max(16, d.h - (p.y + cab.h + 4)) };
+      const below = (d.zones && (d.zones.tabs || d.zones.footer)) || { x: 0, y: p.y + cab.h + 4, w: d.w, h: Math.max(16, d.h - (p.y + cab.h + 4)) };
       if (state.concept === "b") {
         h += box(below, "pass-tabs", slots.map((s2, i) => `<button type="button" class="pass${i === sel ? " on" : ""}" aria-pressed="${i === sel}" data-select="${i}"><small>Hall pass</small>${s2.open ? esc(short(s2.game)) : "???"}</button>`).join(""), `role="group" aria-label="Choose a machine"`);
       } else {
-        h += box({ x: 0, y: p.y + 30, w: 40, h: 50 }, "side-arrow", `<button type="button" class="arrow" data-step="-1" aria-label="Previous machine">◀</button>`);
-        h += box({ x: d.w - 40, y: p.y + 30, w: 40, h: 50 }, "side-arrow", `<button type="button" class="arrow" data-step="1" aria-label="Next machine">▶</button>`);
+        const z = d.zones || {};
+        h += box(z.navL || { x: 0, y: p.y + 30, w: 40, h: 50 }, "side-arrow", `<button type="button" class="arrow" data-step="-1" aria-label="Previous machine">◀</button>`);
+        h += box(z.navR || { x: d.w - 40, y: p.y + 30, w: 40, h: 50 }, "side-arrow", `<button type="button" class="arrow" data-step="1" aria-label="Next machine">▶</button>`);
         h += box(below, "phone-dots", `<span>${slots.map((s2, i) => `<i class="${i === sel ? "on" : ""}"></i>`).join("")}</span><b>${sl.open ? esc(short(sl.game)) : "Mystery cabinet"}</b>`);
       }
     }
@@ -587,7 +601,7 @@
     main.onkeydown = (e) => {
       const onCab = e.target.matches && e.target.matches("[data-select]");
       if (onCab && (e.key === "ArrowRight" || e.key === "ArrowLeft")) { e.preventDefault(); select(sel + (e.key === "ArrowRight" ? 1 : -1), true); }
-      if (e.key === "Escape" && zoomed) { zoomed = false; render(); }
+      if (e.key === "Escape" && zoomed) { zoomed = false; render(); const b = document.querySelector(`[data-select="${sel}"]`); if (b) b.focus(); }
       if (e.target.matches && e.target.matches("[role=tab]") && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
         const tabs = [...document.querySelectorAll("[role=tab]")]; const i = tabs.indexOf(e.target);
         const nx = tabs[(i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length]; tab = nx.dataset.tabbtn; render(); document.querySelector(`[data-tabbtn="${tab}"]`).focus();
@@ -624,7 +638,10 @@
       <p>This is the approved Pack Room, <b>Option A · The Prize Counter</b>, being built separately. In production this doorway is a plain link to <code>/packs</code>; the event page never copies the Pack Room.</p>
       <button type="button" class="btn-sec" data-close>Back to the hall</button></div>`;
     const close = () => { pk.hidden = true; pk.innerHTML = ""; from && from.focus && from.focus(); document.removeEventListener("keydown", onKey); };
-    const onKey = (e) => { if (e.key === "Escape") close(); };
+    const onKey = (e) => {
+      if (e.key === "Escape") close();
+      if (e.key === "Tab") { e.preventDefault(); pk.querySelector("[data-close]").focus(); } // the dialog's only control
+    };
     pk.querySelector("[data-close]").onclick = close;
     pk.onclick = (e) => { if (e.target === pk) close(); };
     document.addEventListener("keydown", onKey);
@@ -662,7 +679,7 @@
   let rz = 0;
   window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(render, 80); });
   // tick the ticker once a minute
-  setInterval(() => { if (state.phase === "upcoming") { const tk = document.querySelector(".ticker span"); if (tk) tk.textContent = tickerText(D.nowFor("upcoming")).t; } }, 30000);
+  setInterval(() => { if (state.phase === "upcoming") { const tk = document.querySelector(".ticker span"); if (tk) tk.textContent = tickerText(D.nowFor("upcoming"), tickerShort).t; } }, 30000);
 
   window.HALL = { state, render, select };
   render();
