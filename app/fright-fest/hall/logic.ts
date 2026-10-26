@@ -154,7 +154,7 @@ export interface BoardMe {
 /** Row sizes in CSS px, mirrored in hall.css (`--hl-row`, `--hl-board-chrome`). */
 export const BOARD_ROW_PX = 24;
 export const BOARD_CHROME_PX = 38;
-export const BOARD_LINK_PX = { fine: 36, coarse: 44 } as const;
+export const BOARD_LINK_PX = { fine: 44, coarse: 48 } as const;
 export const BOARD_MAX_ROWS = 8;
 
 /** How many rows (your pinned row included) fit a board screen this tall. At least one, so a board is never just a heading. */

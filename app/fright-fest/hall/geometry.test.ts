@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { boxStyle, cabinetBoxes, CABINET, DESK, DESK_MAX_PX, FRAMES, PHONE, PHONE_BELOW_PX, PHONE_MAX_PX, pct, POOL, roomScale, type Box } from "./geometry";
+import { boxStyle, cabinetBoxes, CABINET, DESK, DESK_MAX_PX, FRAMES, PHONE, PHONE_BELOW_PX, PHONE_MAX_PX, pct, placeVars, POOL, roomScale, type Box } from "./geometry";
 
 const ART = join(__dirname, "../../../public/events/fright-fest/hall");
 const pngSize = (file: string) => {
@@ -62,6 +62,13 @@ describe("the scenes", () => {
     expect(pngSize("scr-lastbell.png")).toEqual([CABINET.screen.w * CABINET.screenFrames, CABINET.screen.h]);
     expect(pngSize(POOL.file)).toEqual([POOL.w, POOL.h]);
     for (const f of [FRAMES.board, FRAMES.quest, FRAMES.prize, FRAMES.paper]) expect(pngSize(f.file)).toEqual([FRAMES.size, FRAMES.size]);
+  });
+});
+
+describe("placeVars", () => {
+  it("writes the laptop and phone variables, and only those asked for", () => {
+    expect(placeVars({ x: 43.4, y: 23, w: 217, h: 115 }, null)).toEqual({ "--dl": "10%", "--dt": "10%", "--dw": "50%", "--dh": "50%" });
+    expect(Object.keys(placeVars(null, { x: 0, y: 0, w: 195, h: 236 }))).toEqual(["--pl", "--pt", "--pw", "--ph"]);
   });
 });
 

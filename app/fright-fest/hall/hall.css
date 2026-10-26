@@ -1,0 +1,744 @@
+/*
+ * The Arcade Hall: a pixel-art room with HallPass's own type and buttons on top
+ * (docs/fright-fest-hall.md). Loaded only by Room.tsx. Built the way the Pack
+ * Room is (components/collectibles/room/room.css); read that header too.
+ *
+ * SIZE. `.hl` is a size container across the content area. From 868 px the
+ * laptop scene (434x230) fills it up to exactly 3x (1302 px); below that the
+ * phone scene (195x236) is used, up to 2.5x. `.hl-room` is a second container so
+ * `--u` (one art pixel, in CSS px) can size things in the art's own units. The
+ * widths are mirrored in geometry.ts (PHONE_BELOW_PX, DESK_MAX_PX, PHONE_MAX_PX).
+ *
+ * PLACE. Elements carry their spot as percentages of the room: `--dl --dt --dw
+ * --dh` (laptop) and `--pl --pt --pw --ph` (phone), written by geometry.ts's
+ * placeVars. `[data-in="desk"]` / `[data-in="phone"]` belong to one scene only.
+ *
+ * SEASON. `html[data-hp-skin="haunted"]` (the Fright Fest skin, which follows the
+ * player's look menu) swaps the pictures and the loops: the haunted room under the
+ * skin, its calm twin otherwise (the "Normal" look, and the page after 2 Nov).
+ * This file only ever swaps pictures. It sets no base token under a seasonal
+ * selector (skin-isolation.test.ts), and defines its own `--hl-*` variables on
+ * `.hl`, which are the same in both seasons.
+ *
+ * TYPE. Pixel text is Silkscreen (`--font-pixel`) at 12px or more; everything
+ * that reads like prose is Nunito. The HTML on the picture is never scaled: it
+ * keeps its type sizes and its targets (44 px, 48 on a coarse pointer).
+ *
+ * MOTION. Ambient loops are background `steps()` strips. They pause off-screen
+ * and in a hidden tab (HallProvider sets `data-paused`), and every keyframe here
+ * is off under `prefers-reduced-motion` and `html[data-hp-still]`.
+ *
+ * CONTRAST. Every text colour sits on a solid dark plate this file paints
+ * itself (`--hl-ink` or `--hl-plate`), never straight on the art: see the table
+ * in docs/fright-fest-hall.md ("As built").
+ */
+
+.hl {
+  --hl-ink: #0b0612;
+  --hl-plate: #170b1f;
+  --hl-line: #3a2a52;
+  --hl-cream: #fff8e7;
+  --hl-soft: #ddd3ea;
+  --hl-gold: #ffc700;
+  --hl-amber: #ffb347;
+  --hl-green: #8dffa8;
+  --hl-pixel: var(--font-pixel), "Courier New", monospace;
+  --hl-body: var(--font-nunito), system-ui, sans-serif;
+  container: hl / inline-size;
+  position: relative;
+  isolation: isolate;
+  color: var(--hl-cream);
+  background: var(--hl-ink);
+  font-family: var(--hl-body);
+}
+
+.hl-stage {
+  position: relative;
+}
+
+/* Past 3x the walls carry on: each side is the art's own edge column, stretched, fading a little. */
+.hl-wall {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  image-rendering: pixelated;
+  background-image: url(/events/fright-fest/hall/edge-desk-calm-l.png), url(/events/fright-fest/hall/edge-desk-calm-r.png);
+  background-position: left top, right top;
+  background-size: 50% 100%, 50% 100%;
+  background-repeat: no-repeat;
+}
+.hl-wall::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgb(11 6 18 / 0.7), rgb(11 6 18 / 0) 18%, rgb(11 6 18 / 0) 82%, rgb(11 6 18 / 0.7));
+}
+html[data-hp-skin="haunted"] .hl-wall {
+  background-image: url(/events/fright-fest/hall/edge-desk-haunted-l.png), url(/events/fright-fest/hall/edge-desk-haunted-r.png);
+}
+
+.hl-room {
+  container: room / inline-size;
+  --u: calc(100cqw / 434);
+  position: relative;
+  z-index: 1;
+  width: min(100%, 1302px);
+  margin-inline: auto;
+  aspect-ratio: 434 / 230;
+}
+.hl-art {
+  position: absolute;
+  inset: 0;
+  image-rendering: pixelated;
+  background: url(/events/fright-fest/hall/desk-calm.png) 0 0 / 100% 100% no-repeat;
+}
+html[data-hp-skin="haunted"] .hl-art {
+  background-image: url(/events/fright-fest/hall/desk-haunted.png);
+}
+
+/* Anything placed by --dl/--dt/--dw/--dh (laptop) or --pl/--pt/--pw/--ph (phone). */
+.hl-ticker,
+.hl-board[data-fit="room"],
+.hl-quest,
+.hl-cab,
+.hl-door,
+.hl-egg,
+.hl-panel[data-variant="room"],
+.hl-nav,
+.hl-glimpse {
+  position: absolute;
+  left: var(--dl);
+  top: var(--dt);
+  width: var(--dw);
+  height: var(--dh);
+}
+
+@container hl (width >= 868px) {
+  .hl [data-in="phone"] {
+    display: none !important;
+  }
+}
+@container hl (width < 868px) {
+  .hl [data-in="desk"] {
+    display: none !important;
+  }
+  .hl-wall {
+    background-image: url(/events/fright-fest/hall/edge-phone-calm-l.png), url(/events/fright-fest/hall/edge-phone-calm-r.png);
+  }
+  html[data-hp-skin="haunted"] .hl-wall {
+    background-image: url(/events/fright-fest/hall/edge-phone-haunted-l.png), url(/events/fright-fest/hall/edge-phone-haunted-r.png);
+  }
+  .hl-room {
+    --u: calc(100cqw / 195);
+    width: min(100%, 487.5px);
+    aspect-ratio: 195 / 236;
+  }
+  .hl-art {
+    background-image: url(/events/fright-fest/hall/phone-calm.png);
+  }
+  html[data-hp-skin="haunted"] .hl-art {
+    background-image: url(/events/fright-fest/hall/phone-haunted.png);
+  }
+  .hl-ticker,
+  .hl-cab,
+  .hl-door,
+  .hl-nav,
+  .hl-glimpse {
+    left: var(--pl);
+    top: var(--pt);
+    width: var(--pw);
+    height: var(--ph);
+  }
+}
+
+/* ── Focus: one ring for everything in the hall, visible on the art and on gold ── */
+.hl a:focus-visible,
+.hl button:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--hl-ink);
+}
+
+/* ── The loops: a strip of equal frames, stepped ── */
+.hl-loop {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+  image-rendering: pixelated;
+  background-repeat: no-repeat;
+  background-size: calc(var(--frames) * 100%) 100%;
+  animation: hl-loop var(--dur) steps(var(--frames), jump-none) infinite;
+  z-index: 1;
+}
+@keyframes hl-loop {
+  from {
+    background-position-x: 0%;
+  }
+  to {
+    background-position-x: 100%;
+  }
+}
+.hl-loop[data-season="haunted"],
+html[data-hp-skin="haunted"] .hl-loop[data-season="calm"] {
+  display: none;
+}
+html[data-hp-skin="haunted"] .hl-loop[data-season="haunted"] {
+  display: block;
+}
+.hl[data-paused] .hl-loop {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hl-loop {
+    animation: none;
+  }
+}
+html[data-hp-still] .hl-loop {
+  animation: none;
+}
+
+/* ── The ticker, on the marquee's plate ── */
+.hl-ticker {
+  z-index: 4;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding-inline: 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  background: var(--hl-ink);
+  color: var(--hl-cream);
+  font: 400 12px/1 var(--hl-pixel);
+  letter-spacing: 0;
+}
+.hl-ticker-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hl-ticker-count {
+  flex: none;
+  color: var(--hl-amber);
+}
+.hl-ticker-count::before {
+  content: "\00b7";
+  margin-inline: 0.7em;
+}
+.hl-ticker[data-tone="live"] .hl-ticker-text {
+  color: var(--hl-green);
+}
+.hl-ticker[data-tone="soon"] .hl-ticker-text {
+  color: var(--hl-amber);
+}
+.hl-ticker[data-tone="final"] .hl-ticker-text {
+  color: var(--hl-gold);
+}
+
+/* ── Cabinets ── */
+.hl-cabs {
+  display: contents;
+}
+.hl-cab {
+  z-index: 6;
+}
+.hl-cab-btn {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+  background: transparent no-repeat 0 0 / 100% 100%;
+  image-rendering: pixelated;
+  -webkit-tap-highlight-color: transparent;
+}
+.hl-cab-btn:focus-visible {
+  outline-offset: 4px;
+}
+/* One sprite pair per art key. Add a rule pair when a new game's art ships (public/events/fright-fest/hall/ART.md). */
+.hl-cab[data-art="lastbell"][data-on="0"] .hl-cab-btn {
+  background-image: url(/events/fright-fest/hall/cab-lastbell-off.png);
+}
+.hl-cab[data-art="lastbell"][data-on="1"] .hl-cab-btn {
+  background-image: url(/events/fright-fest/hall/cab-lastbell-on.png);
+}
+.hl-cab[data-art="mystery"][data-on="0"] .hl-cab-btn {
+  background-image: url(/events/fright-fest/hall/cab-mystery-off-calm.png);
+}
+.hl-cab[data-art="mystery"][data-on="1"] .hl-cab-btn {
+  background-image: url(/events/fright-fest/hall/cab-mystery-on-calm.png);
+}
+html[data-hp-skin="haunted"] .hl-cab[data-art="mystery"][data-on="0"] .hl-cab-btn {
+  background-image: url(/events/fright-fest/hall/cab-mystery-off.png);
+}
+html[data-hp-skin="haunted"] .hl-cab[data-art="mystery"][data-on="1"] .hl-cab-btn {
+  background-image: url(/events/fright-fest/hall/cab-mystery-on.png);
+}
+.hl-scr {
+  z-index: 1;
+}
+.hl-cab[data-art="lastbell"] .hl-scr {
+  background-image: url(/events/fright-fest/hall/scr-lastbell.png);
+}
+.hl-cab[data-art="mystery"] .hl-scr {
+  background-image: url(/events/fright-fest/hall/scr-mystery-calm.png);
+}
+html[data-hp-skin="haunted"] .hl-cab[data-art="mystery"] .hl-scr {
+  background-image: url(/events/fright-fest/hall/scr-mystery.png);
+}
+.hl-pool {
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  image-rendering: pixelated;
+  background: url(/events/fright-fest/hall/pool-on.png) 0 0 / 100% 100% no-repeat;
+}
+
+/* The strip on a cabinet's lower front: the Play link on the lit one, its name on the rest. */
+.hl-strip {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  pointer-events: none;
+}
+.hl-play {
+  position: relative;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+  text-align: center;
+  font: 400 12px/1 var(--hl-pixel);
+  text-transform: uppercase;
+  color: var(--hl-ink);
+  background: var(--hl-gold);
+  clip-path: polygon(0 4px, 4px 4px, 4px 0, calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 4px calc(100% - 4px), 0 calc(100% - 4px));
+}
+a.hl-play {
+  pointer-events: auto;
+  cursor: pointer;
+  overflow: visible;
+  clip-path: none;
+  box-shadow: inset 0 0 0 3px var(--hl-ink), inset 0 0 0 5px var(--hl-gold);
+}
+a.hl-play:hover {
+  background: var(--hl-cream);
+  box-shadow: inset 0 0 0 3px var(--hl-ink), inset 0 0 0 5px var(--hl-cream);
+}
+/* The 44 px target (48 on a coarse pointer), which the painted strip is shorter than at small scales. */
+a.hl-play::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: max(100%, 44px);
+  translate: 0 -50%;
+}
+.hl-play[data-off] {
+  background: var(--hl-ink);
+  color: var(--hl-cream);
+  box-shadow: inset 0 0 0 2px var(--hl-line);
+}
+@media (pointer: coarse) {
+  a.hl-play::after {
+    height: max(100%, 48px);
+  }
+}
+@container hl (width < 868px) {
+  .hl-cab[data-on="0"] {
+    display: none;
+  }
+}
+
+/* ── The board, on the wall screen ── */
+.hl-board {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--hl-ink);
+  color: var(--hl-cream);
+  overflow: hidden;
+  min-width: 0;
+}
+.hl-board[data-fit="room"] {
+  z-index: 4;
+}
+.hl-board-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 22px;
+  margin: 0;
+  padding: 6px 8px 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font: 400 12px/16px var(--hl-pixel);
+  text-transform: uppercase;
+  color: var(--hl-gold);
+}
+.hl-board-x {
+  display: none;
+}
+@container room (width >= 1000px) {
+  .hl-board-x {
+    display: inline;
+  }
+}
+.hl-tag {
+  flex: none;
+  color: var(--hl-soft);
+  text-transform: none;
+}
+.hl-board-body {
+  flex: 1;
+  min-height: 0;
+  margin: 8px 0;
+  overflow: hidden;
+}
+.hl-board-msg {
+  margin: 0;
+  padding: 0 8px;
+  font: 400 13px/1.3 var(--hl-body);
+  color: var(--hl-soft);
+}
+.hl-board-msg p {
+  margin: 0 0 6px;
+}
+.hl-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hl-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 24px;
+  padding: 0 8px;
+  font: 400 12px/1 var(--hl-pixel);
+}
+.hl-row[data-you] {
+  background: var(--hl-line);
+  color: var(--hl-cream);
+}
+.hl-row[data-pinned] {
+  border-top: 2px solid var(--hl-gold);
+}
+.hl-row[data-rank="1"] .hl-rank {
+  color: var(--hl-gold);
+}
+.hl-row[data-rank="2"] .hl-rank {
+  color: #d9dcf2;
+}
+.hl-row[data-rank="3"] .hl-rank {
+  color: #ffb27a;
+}
+.hl-rank {
+  position: relative;
+  white-space: nowrap;
+}
+.hl-crown {
+  margin-right: 2px;
+  color: var(--hl-gold);
+}
+.hl-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 800 14px/1 var(--hl-body);
+}
+.hl-pts {
+  color: var(--hl-amber);
+}
+.hl-row > i {
+  grid-column: 1 / -1;
+  height: 10px;
+  background: var(--hl-line);
+}
+.hl-board-link {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  min-height: 44px;
+  margin: 0;
+  color: var(--hl-ink);
+  background: var(--hl-gold);
+  font: 400 12px/1 var(--hl-pixel);
+  text-transform: uppercase;
+  text-decoration: none;
+}
+.hl-board-link:hover {
+  background: var(--hl-cream);
+}
+@media (pointer: coarse) {
+  .hl-board-link {
+    min-height: 48px;
+  }
+}
+.hl-btn {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 2px solid var(--hl-gold);
+  background: var(--hl-ink);
+  color: var(--hl-gold);
+  font: 400 12px/1 var(--hl-pixel);
+  text-transform: uppercase;
+  cursor: pointer;
+}
+@media (pointer: coarse) {
+  .hl-btn {
+    min-height: 48px;
+  }
+}
+
+/* ── The noticeboard ── */
+.hl-quest {
+  z-index: 4;
+}
+.hl-quest-soon,
+.hl-quest-link {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  background: var(--hl-ink);
+  color: var(--hl-soft);
+  font: 400 12px/1 var(--hl-pixel);
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.hl-quest-link {
+  color: var(--hl-gold);
+}
+
+/* ── The prize counter door: a link, with its name on the doormat ── */
+.hl-door {
+  z-index: 5;
+  display: block;
+  color: var(--hl-cream);
+  text-decoration: none;
+}
+.hl-door-label {
+  position: absolute;
+  left: 12.8%;
+  top: 90.67%;
+  width: 74.5%;
+  height: 9.33%;
+  display: grid;
+  place-items: center;
+  background: var(--hl-ink);
+  color: var(--hl-cream);
+  font: 400 12px/1 var(--hl-pixel);
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: inset 0 0 0 2px var(--hl-gold);
+}
+.hl-door:hover .hl-door-label {
+  background: var(--hl-gold);
+  color: var(--hl-ink);
+}
+.hl-door-glimpse {
+  min-width: 44px;
+}
+.hl-glimpse {
+  z-index: 5;
+  display: block;
+  min-width: 44px;
+}
+
+/* ── The easter eggs: under every control, pointer only ── */
+.hl-egg {
+  z-index: 2;
+  cursor: default;
+  -webkit-tap-highlight-color: transparent;
+}
+html:not([data-hp-skin="haunted"]) .hl-egg[data-season="haunted"] {
+  display: none;
+}
+.hl-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  z-index: 50;
+  display: none;
+  max-width: calc(100vw - 32px);
+  translate: -50% 0;
+  padding: 10px 14px;
+  background: var(--hl-ink);
+  color: var(--hl-cream);
+  border: 2px solid var(--hl-gold);
+  font: 700 14px/1.3 var(--hl-body);
+  text-align: center;
+  pointer-events: none;
+}
+.hl-toast[data-show] {
+  display: block;
+}
+
+/* ── The details panel ── */
+.hl-panel {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  grid-template-rows: auto;
+  column-gap: 16px;
+  align-content: start;
+  padding: 8px 14px;
+  overflow: hidden;
+  background: var(--hl-ink);
+  color: var(--hl-cream);
+  box-shadow: inset 0 0 0 2px var(--hl-line);
+}
+.hl-panel[data-variant="room"] {
+  z-index: 4;
+}
+.hl-panel > * {
+  margin: 0;
+}
+.hl-panel > .hl-chip,
+.hl-panel > .hl-panel-title,
+.hl-panel > .hl-panel-rule {
+  grid-column: 1;
+}
+.hl-panel > .hl-panel-line,
+.hl-panel > .hl-panel-link {
+  grid-column: 2;
+}
+.hl-panel > .hl-chip {
+  font: 400 12px/16px var(--hl-pixel);
+  text-transform: uppercase;
+  color: var(--hl-amber);
+}
+.hl-panel > .hl-chip[data-open="0"] {
+  color: var(--hl-soft);
+}
+.hl-panel-title {
+  font: 900 17px/1.2 var(--hl-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hl-panel-mode {
+  display: block;
+  font: 400 12px/16px var(--hl-pixel);
+  text-transform: uppercase;
+  color: var(--hl-gold);
+}
+.hl-panel-rule {
+  font: 600 13px/1.3 var(--hl-body);
+  color: var(--hl-soft);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+.hl-panel-line {
+  font: 600 13px/1.3 var(--hl-body);
+  color: var(--hl-cream);
+}
+.hl-panel-warn {
+  color: var(--hl-amber);
+}
+.hl-panel-link {
+  display: inline-grid;
+  align-items: center;
+  justify-self: start;
+  min-height: 44px;
+  color: var(--hl-gold);
+  font: 400 12px/1 var(--hl-pixel);
+  text-transform: uppercase;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+@media (pointer: coarse) {
+  .hl-panel-link {
+    min-height: 48px;
+  }
+}
+
+/* ── The phone's way through the cabinets ── */
+.hl-nav {
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+.hl-nav-btn {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 2px solid var(--hl-gold);
+  background: var(--hl-ink);
+  color: var(--hl-gold);
+  font: 400 24px/1 var(--hl-pixel);
+  cursor: pointer;
+}
+.hl-dots {
+  display: flex;
+  gap: 8px;
+}
+.hl-dots i {
+  width: 10px;
+  height: 10px;
+  background: var(--hl-line);
+}
+.hl-dots i[data-on="1"] {
+  background: var(--hl-gold);
+}
+
+/* ── Under the phone's room: the words ── */
+.hl-below {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px 16px;
+  background: var(--hl-ink);
+}
+.hl-below .hl-panel {
+  grid-template-columns: minmax(0, 1fr);
+  padding: 12px 14px;
+}
+.hl-below .hl-panel > * {
+  grid-column: 1 !important;
+}
+.hl-below .hl-panel-title {
+  white-space: normal;
+}
+.hl-below .hl-board {
+  box-shadow: inset 0 0 0 2px var(--hl-line);
+}
+.hl-below .hl-board-x {
+  display: inline;
+}
+.hl-below-link {
+  display: grid;
+  place-items: center;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 2px solid var(--hl-gold);
+  color: var(--hl-gold);
+  background: var(--hl-ink);
+  font: 400 12px/1.2 var(--hl-pixel);
+  text-align: center;
+  text-transform: uppercase;
+  text-decoration: none;
+}

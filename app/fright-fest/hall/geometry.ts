@@ -154,6 +154,24 @@ export function boxStyle(b: Box, scene: Pick<Scene, "w" | "h">): { left: string;
   return { left: pct(b.x, scene.w), top: pct(b.y, scene.h), width: pct(b.w, scene.w), height: pct(b.h, scene.h) };
 }
 
+/**
+ * Where an element sits in each composition, as the CSS variables hall.css reads
+ * (`--dl/--dt/--dw/--dh` for the laptop scene, `--pl/--pt/--pw/--ph` for the phone
+ * one). Pass `null` for a scene the element does not appear in.
+ */
+export function placeVars(desk: Box | null, phone: Box | null): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (desk) {
+    const s = boxStyle(desk, DESK);
+    Object.assign(out, { "--dl": s.left, "--dt": s.top, "--dw": s.width, "--dh": s.height });
+  }
+  if (phone) {
+    const s = boxStyle(phone, PHONE);
+    Object.assign(out, { "--pl": s.left, "--pt": s.top, "--pw": s.width, "--ph": s.height });
+  }
+  return out;
+}
+
 /** A box moved by an offset, in room pixels (a cabinet's button, a floor pool). */
 export const shift = (b: Box, dx: number, dy: number): Box => ({ ...b, x: b.x + dx, y: b.y + dy });
 

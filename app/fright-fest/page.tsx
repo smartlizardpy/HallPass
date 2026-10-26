@@ -14,8 +14,9 @@ import { ArcadeShell } from "../components/ArcadeShell";
 import { FRIGHT_FEST_THEME } from "../lib/events/fright-fest";
 import { eventDateLabels } from "../lib/events/labels";
 import { resolveGames } from "../lib/games-store";
-import { FrightFestCountdown } from "./FrightFestCountdown";
-import { FrightFestPhase } from "./FrightFestPhase";
+import { FRIGHT_FEST_GAMES } from "../components/events/fright-fest/registry";
+import { Room } from "./hall/Room";
+import { buildCabinets } from "./hall/props";
 import { FrightFestSections } from "../components/championship/FrightFestSections";
 import { championshipEnabled } from "../lib/championship/config";
 import { FRIGHT_FEST_2026 } from "../lib/championship/fright-fest-2026";
@@ -36,35 +37,22 @@ export const metadata: Metadata = {
 export default async function FrightFestPage() {
   const all = await resolveGames();
   const categories = Array.from(new Set(all.map((g) => g.category)));
+  // Plain data for the room's client islands: announced games only (hall/props.ts).
+  const cabinets = buildCabinets(FRIGHT_FEST_2026, FRIGHT_FEST_GAMES, all);
 
   return (
     <ArcadeShell games={all} categories={categories} activeCategory="">
-      <div className="ff-page mx-auto w-full max-w-4xl px-3 pb-12 pt-4 sm:px-8">
-        <section id={SUMMARY ? undefined : "rules"} className="ff-scene space-y-3 rounded-2xl border border-border p-6 text-center sm:p-10">
-          <span aria-hidden="true" className="ha-deco ff-moon ha-spr" />
-          <span aria-hidden="true" className="ha-deco ff-bat ha-spr" />
-          <span aria-hidden="true" className="ha-deco ff-ghost ha-spr" />
-          <p className="ff-kicker text-sm font-bold uppercase tracking-widest text-muted">HallPass presents</p>
-          <h1 className="ff-title text-4xl font-bold sm:text-6xl">Fright Fest 2026</h1>
-          <FrightFestPhase />
-          <FrightFestCountdown />
-          <p className="ff-small text-sm text-muted">
-            {SUMMARY ? (
-              <>
-                Earn Fright Points, top the table, win collectible packs. <a href="#rules">Rules</a> and{" "}
-                <a href="#standings">standings</a> below.
-              </>
-            ) : (
-              "Games, scoring and rewards: to be announced."
-            )}
-          </p>
-          <span aria-hidden="true" className="ha-deco ff-ground">
-            <i className="ff-trees" />
-            <i className="ff-pumpkin" />
-            <i className="ff-fence" />
-          </span>
-        </section>
-        {SUMMARY && <FrightFestSections summary={SUMMARY} />}
+      <div className="w-full pb-12">
+        <Room cabinets={cabinets} summary={SUMMARY} />
+        <div className="ff-page mx-auto w-full max-w-4xl px-3 pt-4 sm:px-8">
+          {SUMMARY ? (
+            <FrightFestSections summary={SUMMARY} />
+          ) : (
+            <section id="rules" className="rounded-2xl border border-border bg-surface p-6 text-center">
+              <p className="text-base font-bold">Games, scoring and rewards: to be announced.</p>
+            </section>
+          )}
+        </div>
       </div>
     </ArcadeShell>
   );
