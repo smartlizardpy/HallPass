@@ -503,7 +503,7 @@
     root.dataset.selkey = (lineup()[sel] || {}).key || "";
     root.style.setProperty("--fs", L2.fs);
     const main = document.getElementById("main");
-    const M = man();
+    const M = man() || {}; // the "current page" views have no room
     if (M.tile && hasArt()) root.style.setProperty("--tile", `url('${base()}${M.tile}')`); else root.style.removeProperty("--tile");
     const fr = M.frames || {};
     for (const k of ["board", "quest", "prize", "paper"]) {

@@ -81,6 +81,14 @@ def main():
     os.makedirs(os.path.join(DST, "packroom"), exist_ok=True)
     for name in ("composite-desk-halloween.png", "composite-desk-normal.png", "composite-phone-halloween.png"):
         shutil.copy2(os.path.join(PACKROOM, "rooms", "a", name), os.path.join(DST, "packroom", name))
+    # curated screenshots for the review shell's Compare and Journey views
+    shots_dir = os.path.normpath(os.path.join(HERE, "..", "shots"))
+    os.makedirs(os.path.join(DST, "shots"), exist_ok=True)
+    for x in ("a", "b", "c"):
+        for name in (f"first-{x}.png", f"first-{x}-today.png", f"phone-{x}.png"):
+            src = os.path.join(shots_dir, name)
+            if os.path.exists(src):
+                shutil.copy2(src, os.path.join(DST, "shots", name))
     if os.path.isdir(SHOTS):
         os.makedirs(os.path.join(DST, "current"), exist_ok=True)
         for name in os.listdir(SHOTS):
