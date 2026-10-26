@@ -24,7 +24,7 @@ import type { Metadata } from "next";
 import { requireRole } from "@/app/lib/auth";
 import { isMissingColumnError, isUnconfiguredDbError } from "@/app/lib/db";
 import { CANDY, candyStore } from "@/app/lib/candy";
-import type { AdminAchievement, AdminLedgerRow, CandyLogEntry, CandyStats } from "@/app/lib/candy/store";
+import type { AdminAchievement, AdminLedgerRow, CandyLogEntry, CandyStats, TopEarner } from "@/app/lib/candy/store";
 import { formatInstant } from "@/app/lib/championship/format";
 import { resolveGamesIncludingStaged } from "@/app/lib/games-store";
 import { DashHeader } from "../_ui/DashHeader";
@@ -43,6 +43,7 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) 
 const TZ = "Europe/London";
 const when = (iso: string | null) => (iso ? formatInstant(iso, TZ) : "");
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const BTN = "rounded-full px-3 py-1 text-xs font-bold transition disabled:opacity-40";
 const BTN_PRIMARY = `${BTN} bg-brand text-white hover:bg-brand-600`;
@@ -79,18 +80,22 @@ export default async function CandyDeskPage({ searchParams }: { searchParams: Se
   const error = one(params.error);
   const gameParam = one(params.game);
   const game = gameParam && SLUG_RE.test(gameParam) ? gameParam : null;
+  const playerParam = one(params.player);
+  const player = playerParam && UUID_RE.test(playerParam) ? playerParam.toLowerCase() : null;
 
   let all: AdminAchievement[] = [];
   let recent: AdminLedgerRow[] = [];
   let log: CandyLogEntry[] = [];
+  let top: TopEarner[] = [];
   let stats: CandyStats | null = null;
   let unavailable: "unconfigured" | "schema" | null = null;
   try {
-    [all, recent, log, stats] = await Promise.all([
+    [all, recent, log, stats, top] = await Promise.all([
       candyStore.listAchievements(null),
-      candyStore.listRecent(50),
+      candyStore.listRecent(player ? 200 : 50, player),
       candyStore.readLog(100),
       candyStore.stats(),
+      candyStore.topEarners(25),
     ]);
   } catch (err) {
     if (isUnconfiguredDbError(err)) unavailable = "unconfigured";
@@ -128,6 +133,7 @@ export default async function CandyDeskPage({ searchParams }: { searchParams: Se
           <>
             <StatsPanel stats={stats} total={all.length} unrated={unrated.length} unratedWithUnlocks={unratedWithUnlocks} />
             <RubricPanel />
+            <TopEarnersPanel rows={top} player={player} />
             <RatingsPanel
               rows={shown}
               slugs={slugs}
@@ -135,7 +141,7 @@ export default async function CandyDeskPage({ searchParams }: { searchParams: Se
               title={title}
               unratedShown={unratedShown.length}
             />
-            <RecentPanel rows={recent} game={game} />
+            <RecentPanel rows={recent} game={game} player={player} />
             <LogPanel log={log} />
           </>
         )}
@@ -274,9 +280,70 @@ function RatingsPanel({
   );
 }
 
-function RecentPanel({ rows, game }: { rows: AdminLedgerRow[]; game: string | null }) {
+function TopEarnersPanel({ rows, player }: { rows: TopEarner[]; player: string | null }) {
   return (
-    <Section title="Recent credits and spends" subtitle={`Newest ${rows.length}, all players, UK time`}>
+    <Section
+      title="Top earners"
+      subtitle="Biggest unrevoked totals first. Achievement unlocks are self-reported, so a high achievement share or many unlocks in one minute is the cheating signal"
+    >
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted">Nobody has been credited yet.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="text-[11px] uppercase tracking-wide text-muted">
+              <tr>
+                <th className="py-1 pr-3">Player</th>
+                <th className="py-1 pr-3 text-right">Credited</th>
+                <th className="py-1 pr-3 text-right">From achievements</th>
+                <th className="py-1 pr-3 text-right">Achievement credits</th>
+                <th className="py-1 pr-3 text-right">Max unlocks / min</th>
+                <th className="py-1 pr-3 text-right">Spent</th>
+                <th className="py-1 pr-3 text-right">Balance</th>
+                <th className="py-1" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {rows.map((r) => (
+                <tr key={r.player.publicId} className={player === r.player.publicId ? "bg-surface-2" : ""}>
+                  <td className="py-1.5 pr-3">
+                    <span className="font-bold">{r.player.name}</span> <code className="text-xs text-muted">{r.player.publicId}</code>
+                  </td>
+                  <td className="py-1.5 pr-3 text-right font-bold">{r.credited}</td>
+                  <td className="py-1.5 pr-3 text-right">{r.fromAchievements}</td>
+                  <td className="py-1.5 pr-3 text-right">{r.achievementCredits}</td>
+                  <td className={`py-1.5 pr-3 text-right ${r.maxUnlocksPerMinute >= 5 ? "font-bold text-red-700 dark:text-red-300" : ""}`}>{r.maxUnlocksPerMinute}</td>
+                  <td className="py-1.5 pr-3 text-right">{r.spent}</td>
+                  <td className="py-1.5 pr-3 text-right">{r.balance}</td>
+                  <td className="py-1.5 text-right">
+                    <a href={`/dashboard/candy?player=${r.player.publicId}#recent`} className="text-xs font-bold text-brand hover:underline">
+                      View credits
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Section>
+  );
+}
+
+function RecentPanel({ rows, game, player }: { rows: AdminLedgerRow[]; game: string | null; player: string | null }) {
+  return (
+    <div id="recent">
+    <Section
+      title={player ? "This player's credits and spends" : "Recent credits and spends"}
+      subtitle={player ? `${rows.length} rows, newest first, UK time. Revoke any credit below` : `Newest ${rows.length}, all players, UK time`}
+    >
+      {player && (
+        <p className="mb-3 text-xs">
+          <a href="/dashboard/candy" className="font-bold text-brand hover:underline">
+            Show everyone again
+          </a>
+        </p>
+      )}
       {rows.length === 0 ? (
         <p className="text-sm text-muted">Nothing has been credited yet.</p>
       ) : (
@@ -321,6 +388,7 @@ function RecentPanel({ rows, game }: { rows: AdminLedgerRow[]; game: string | nu
         </ul>
       )}
     </Section>
+    </div>
   );
 }
 

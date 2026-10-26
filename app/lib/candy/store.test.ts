@@ -47,6 +47,7 @@ async function everyQuery() {
   await s.setAchievementCandy({ achievementId: 3, candy: 10, actorEmail: "a@b" });
   await s.revokeCredit({ ledgerId: 4, actorEmail: "a@b", reason: "r" });
   await s.listRecent();
+  await s.topEarners();
   await s.stats();
   await s.readLog();
   return texts;
@@ -272,6 +273,43 @@ describe("admin", () => {
     const { sql, values } = fakeSql();
     await createCandyStore(sql).listAchievements("last-bell");
     expect(values[0]).toContain("last-bell");
+  });
+});
+
+describe("topEarners and the per-player filter", () => {
+  const row = {
+    credited: 120, from_achievements: 100, achievement_credits: 6, spent: 30, balance: 90, per_minute: 5,
+    p_public_id: "00000000-0000-4000-8000-000000000001", p_handle: null, p_username: null,
+  };
+
+  it("maps rows to public names and totals, counting only unrevoked credits", async () => {
+    const { sql, texts, values } = fakeSql(() => [row]);
+    const out = await createCandyStore(sql).topEarners(10);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ credited: 120, fromAchievements: 100, achievementCredits: 6, spent: 30, balance: 90, maxUnlocksPerMinute: 5 });
+    expect(out[0].player.publicId).toBe(row.p_public_id);
+    expect(Object.keys(out[0].player).sort()).toEqual(["name", "publicId"]);
+    expect(texts[0]).toMatch(/FILTER \(WHERE amount > 0 AND revoked_at IS NULL\)/);
+    expect(texts[0]).toMatch(/date_trunc\('minute', pa\.unlocked_at\)/);
+    expect(texts[0]).toMatch(/ORDER BY t\.credited DESC/);
+    expect(values[0]).toContain("fright-fest-2026");
+    expect(values[0]).toContain(10);
+  });
+
+  it("clamps the limit and defaults to 25", async () => {
+    const a = fakeSql();
+    await createCandyStore(a.sql).topEarners();
+    expect(a.values[0]).toContain(25);
+    const b = fakeSql();
+    await createCandyStore(b.sql).topEarners(9999);
+    expect(b.values[0]).toContain(100);
+  });
+
+  it("listRecent filters to one player by public id when given", async () => {
+    const { sql, texts, values } = fakeSql();
+    await createCandyStore(sql).listRecent(50, row.p_public_id);
+    expect(texts[0]).toMatch(/p\.public_id::text = \?::text/);
+    expect(values[0]).toContain(row.p_public_id);
   });
 });
 

@@ -148,6 +148,19 @@ export interface CandyLogEntry {
   createdAt: string;
 }
 
+export interface TopEarner {
+  player: { publicId: string; name: string };
+  /** Unrevoked credits, all kinds. */
+  credited: number;
+  /** Unrevoked achievement credits: the amount and how many. */
+  fromAchievements: number;
+  achievementCredits: number;
+  spent: number;
+  balance: number;
+  /** The most achievements this player UNLOCKED within any single minute (among those that paid). Forged unlocks tend to arrive in bursts. */
+  maxUnlocksPerMinute: number;
+}
+
 export interface CandyStats {
   /** Players with at least one credit. */
   players: number;
@@ -462,12 +475,12 @@ export function createCandyStore(sql: Sql, config: CandyConfig = CANDY_FRIGHT_FE
   }
 
   /** The newest ledger rows across all players, with PUBLIC names only. */
-  async function listRecent(limit = 50): Promise<AdminLedgerRow[]> {
+  async function listRecent(limit = 50, publicId: string | null = null): Promise<AdminLedgerRow[]> {
     const rows = (await sql`
       SELECT l.id, l.kind, l.amount, l.ref, l.created_at, l.revoked_at, l.revoked_by, l.revoked_reason,
              p.public_id AS p_public_id, p.handle AS p_handle, p.username AS p_username
       FROM candy_ledger l JOIN players p ON p.id = l.player_id
-      WHERE l.event_id = ${event}
+      WHERE l.event_id = ${event} AND (${publicId}::text IS NULL OR p.public_id::text = ${publicId}::text)
       ORDER BY l.created_at DESC, l.id DESC
       LIMIT ${Math.max(1, Math.min(limit, 200))}
     `) as Row[];
@@ -483,6 +496,52 @@ export function createCandyStore(sql: Sql, config: CandyConfig = CANDY_FRIGHT_FE
         revokedBy: str(r.revoked_by),
         revokedReason: str(r.revoked_reason),
         player: { publicId, name: publicScoreName({ handle: str(r.p_handle), username: str(r.p_username), publicId }) },
+      };
+    });
+  }
+
+  /**
+   * Players by unrevoked credited candy, biggest first, with PUBLIC names only.
+   * Achievement unlocks are self-reported, so this is where a forger shows up:
+   * a high achievement total, or many unlocks inside one minute.
+   */
+  async function topEarners(limit = 25): Promise<TopEarner[]> {
+    const rows = (await sql`
+      WITH t AS (
+        SELECT player_id,
+               COALESCE(sum(amount) FILTER (WHERE amount > 0 AND revoked_at IS NULL), 0)::int AS credited,
+               COALESCE(sum(amount) FILTER (WHERE kind = 'achievement' AND revoked_at IS NULL), 0)::int AS from_achievements,
+               count(*) FILTER (WHERE kind = 'achievement' AND revoked_at IS NULL)::int AS achievement_credits,
+               COALESCE(-sum(amount) FILTER (WHERE amount < 0), 0)::int AS spent,
+               COALESCE(sum(amount) FILTER (WHERE revoked_at IS NULL), 0)::int AS balance
+        FROM candy_ledger WHERE event_id = ${event}
+        GROUP BY player_id
+      ), burst AS (
+        SELECT player_id, max(n)::int AS per_minute FROM (
+          SELECT l.player_id, count(*) AS n
+          FROM candy_ledger l
+          JOIN achievements a ON l.ref = a.slug || '/' || a.key
+          JOIN player_achievements pa ON pa.player_id = l.player_id AND pa.achievement_id = a.id
+          WHERE l.event_id = ${event} AND l.kind = 'achievement' AND l.revoked_at IS NULL AND pa.unlocked_at IS NOT NULL
+          GROUP BY l.player_id, date_trunc('minute', pa.unlocked_at)
+        ) m GROUP BY player_id
+      )
+      SELECT t.*, COALESCE(b.per_minute, 0)::int AS per_minute,
+             p.public_id AS p_public_id, p.handle AS p_handle, p.username AS p_username
+      FROM t JOIN players p ON p.id = t.player_id LEFT JOIN burst b ON b.player_id = t.player_id
+      ORDER BY t.credited DESC, t.player_id
+      LIMIT ${Math.max(1, Math.min(limit, 100))}
+    `) as Row[];
+    return rows.map((r) => {
+      const publicId = String(r.p_public_id);
+      return {
+        player: { publicId, name: publicScoreName({ handle: str(r.p_handle), username: str(r.p_username), publicId }) },
+        credited: num(r.credited),
+        fromAchievements: num(r.from_achievements),
+        achievementCredits: num(r.achievement_credits),
+        spent: num(r.spent),
+        balance: num(r.balance),
+        maxUnlocksPerMinute: num(r.per_minute),
       };
     });
   }
@@ -524,7 +583,7 @@ export function createCandyStore(sql: Sql, config: CandyConfig = CANDY_FRIGHT_FE
     });
   }
 
-  return { sync, balance, history, spend, listAchievements, setAchievementCandy, revokeCredit, listRecent, stats, readLog };
+  return { sync, balance, history, spend, listAchievements, setAchievementCandy, revokeCredit, listRecent, topEarners, stats, readLog };
 }
 
 export type CandyStore = ReturnType<typeof createCandyStore>;

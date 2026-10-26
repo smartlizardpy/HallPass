@@ -264,6 +264,16 @@ describe.skipIf(!enabled)("candy store against Postgres", () => {
     const list = await store.listAchievements(slug);
     expect(list.map((a) => a.key).sort()).toEqual(["a", "b", "big", "old"]);
     expect(list.find((a) => a.key === "a")?.unlockedInWindow).toBe(1);
+    const top = await store.topEarners(100);
+    const me = top.find((t) => t.player.publicId === p1Public)!;
+    expect(me.credited).toBeGreaterThan(0);
+    expect(me.achievementCredits).toBeGreaterThanOrEqual(2);
+    expect(me.maxUnlocksPerMinute).toBeGreaterThanOrEqual(1);
+    expect(me.fromAchievements).toBeLessThanOrEqual(me.credited);
+    expect(JSON.stringify(top)).not.toMatch(/candy-test-p\d-/);
+    const only = await store.listRecent(200, p1Public);
+    expect(only.length).toBeGreaterThan(0);
+    expect(only.every((r) => r.player.publicId === p1Public)).toBe(true);
     const stats = await store.stats();
     expect(stats.credited).toBeGreaterThan(0);
   });
