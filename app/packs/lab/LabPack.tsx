@@ -8,11 +8,11 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { getPack } from "@/app/lib/collectibles/catalogue";
+import { CATALOGUE, getPack } from "@/app/lib/collectibles/catalogue";
 import { seedOf } from "@/app/components/collectibles/opening/noise";
 import { PackStage, type PackStageHandle } from "@/app/components/collectibles/opening/pack/PackStage";
 
-const IDS = ["ff26-participation", "ff26-overall-winner", "hpo-standard", "inet-standard", "brr-standard", "tr-standard"];
+const IDS = CATALOGUE.packs.map((p) => p.id);
 
 export function LabPack({ id }: { id: string }) {
   const stage = useRef<PackStageHandle>(null);
@@ -32,7 +32,7 @@ export function LabPack({ id }: { id: string }) {
           </Link>
         ))}
       </nav>
-      <div style={{ ["--ho-pack-w" as string]: "min(300px, 72vw)", padding: "40px 0" }}>
+      <div style={{ ["--ho-pack-w" as string]: "min(288px, 72vw)", padding: "40px 0" }}>
         <PackStage
           key={round}
           ref={stage}
