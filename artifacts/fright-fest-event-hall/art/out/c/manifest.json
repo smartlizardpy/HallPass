@@ -130,10 +130,10 @@
     "anims": [
       {
         "file": "anim-neon.png",
-        "x": 85,
+        "x": 83,
         "y": 13,
-        "w": 8,
-        "h": 14,
+        "w": 7,
+        "h": 12,
         "frames": 12,
         "fps": 6,
         "season": "haunted",
@@ -341,7 +341,7 @@
   "tile": "tile-wall.png",
   "palette": {
     "colours": 99,
-    "calmColours": 97,
+    "calmColours": 96,
     "notes": "fixed palette of 52 colours; haunted-only extras: orange (4), pink neon (4)",
     "contrast": {
       "haunted/board": 16.5,

@@ -502,18 +502,18 @@ def wall_bars(c):
     x, y, w, h = 14, 114, 56, 58
     c.rect(x, y, w, h, GRN[0])  # shadowed wall behind the bars
     for sx in (x, x + 26, x + w - 4):
-        c.rect(sx, y, 4, h, WOOD[3])
-        c.vline(sx, y, y + h - 1, WOOD[5])
-        c.vline(sx + 3, y, y + h - 1, WOOD[1])
+        c.rect(sx, y, 4, h, WOOD[2])
+        c.vline(sx, y, y + h - 1, WOOD[4])
+        c.vline(sx + 3, y, y + h - 1, WOOD[0])
     for ry in range(y + 3, y + h - 2, 4):
-        c.rect(x + 4, ry, 22, 2, WOOD[4])
-        c.hline(x + 4, x + 25, ry, WOOD[5])
+        c.rect(x + 4, ry, 22, 2, WOOD[3])
+        c.hline(x + 4, x + 25, ry, WOOD[4])
         c.hline(x + 4, x + 25, ry + 2, WOOD[0])
-        c.rect(x + 30, ry, 22, 2, WOOD[4])
-        c.hline(x + 30, x + 51, ry, WOOD[5])
+        c.rect(x + 30, ry, 22, 2, WOOD[3])
+        c.hline(x + 30, x + 51, ry, WOOD[4])
         c.hline(x + 30, x + 51, ry + 2, WOOD[0])
-    c.rect(x - 1, y - 2, w + 2, 3, WOOD[3])
-    c.hline(x - 1, x + w, y - 2, WOOD[5])
+    c.rect(x - 1, y - 2, w + 2, 3, WOOD[2])
+    c.hline(x - 1, x + w, y - 2, WOOD[4])
     # bench
     c.rect(18, 160, 50, 3, WOOD[4])
     c.hline(18, 67, 160, WOOD[5])
@@ -771,12 +771,12 @@ def floor(c, hw):
                 c.px(px_, py_, col)
                 c.px(px_ + 1, py_, col)
 
-    fl(218, 40, -80, 230, "#a8861e")
-    fl(218, 40, 520, 230, "#a8861e")
-    fl(218, 40, 16, 230, "#a02a3c")
-    fl(218, 40, 420, 230, "#a02a3c")
-    c.hline(0, W - 1, 207, "#a02a3c")
-    c.hline(0, W - 1, 208, "#a02a3c")
+    fl(218, 40, -80, 230, "#7a6022")
+    fl(218, 40, 520, 230, "#7a6022")
+    fl(218, 40, 16, 230, "#6e2634")
+    fl(218, 40, 420, 230, "#6e2634")
+    c.hline(0, W - 1, 207, "#6e2634")
+    c.hline(0, W - 1, 208, "#6e2634")
     # moonlight patches from the clerestory (cold, dithered); the hall's centre stays dark
     xs, ys = c.grid()
     fm = c.rect_mask(0, 170, W, 60)
@@ -858,8 +858,6 @@ def scene(season="haunted", ghost=0, bat=None, foot=0):
     # warm light spill on the floor from the hatch
     c.dither_mask(c.poly_mask([(340, 170), (416, 170), (424, 184), (332, 184)]) & ~c.rect_mask(349, 164, 60, 20), WARM[0], 0.35)
     chalkboard(c, 350, 166)
-    chair_stack(c, 2, 226, 5)
-    chair_stack(c, 412, 228, 5, flip=True)
     # footlight glow already in stage_front; haunted overlay props
     if hw:
         for px_ in (123, 299):

@@ -233,7 +233,7 @@ def dead_cab(c, P, side, z0, glow=False, pl=1, tint=0.04):
             c.px(x, y, col or pick(RAMP_BG, fld, x, y))
 
 
-def dead_rows(c, P, haunted, track, lz0=2.1, rz0=2.6, outer=True, eyes_l=(1, 2, 4), eyes_r=(0, 2, 3), n=20, blink=None):
+def dead_rows(c, P, haunted, track, lz0=2.1, rz0=2.6, outer=True, eyes_l=(1,), eyes_r=(0,), n=20, blink=None):
     glow_L = {2, 9}; glow_R = {5}
     cabs = [(lz0 + i, -1, i, 1) for i in range(n)] + [(rz0 + i, 1, i, 1) for i in range(n)]
     if outer:
@@ -268,13 +268,13 @@ def eye_draw(c, P, side, z0, state, tr=None):
     for (x, y) in pts:
         if big:
             if state == 0:
-                c.rect(x, y, 2, 2, C["o3"]); c.px(x, y, C["o4"])
+                c.rect(x, y, 2, 2, C["m1"])
             elif state == 1:
-                c.rect(x, y + 1, 2, 1, C["o3"])
+                c.rect(x, y + 1, 2, 1, C["m1"])
             else:
-                c.rect(x, y + 1, 2, 1, C["o1"])
+                c.rect(x, y + 1, 2, 1, C["bm1"])
         else:
-            c.px(x, y, C["o3"] if state < 2 else C["o1"])
+            c.px(x, y, C["m1"] if state < 2 else C["bm1"])
     if tr is not None:
         xs_ = [p[0] for p in pts]; ys_ = [p[1] for p in pts]
         tr["bbox"] = (min(xs_) - 2, min(ys_) - 2, max(xs_) - min(xs_) + 6, 6)
@@ -289,7 +289,7 @@ def poster(c, x0, y0, w, h, kind, side):
         t.circle(w // 2, h // 2 - 2, 3, C["m2"]); t.px(w // 2 - 1, h // 2 - 3, C["m4"])
         t.hline(2, w - 3, h - 4, C["u2"])
     elif kind == "eyes":
-        t.rect(2, h // 2 - 2, 2, 2, C["o3"]); t.rect(w - 4, h // 2 - 2, 2, 2, C["o3"]); t.hline(3, w - 4, h - 4, C["p1"])
+        t.hline(2, 3, h // 2 - 1, C["u3"]); t.hline(w - 4, w - 3, h // 2 - 1, C["u3"]); t.hline(3, w - 4, h - 4, C["p1"])
     elif kind == "q":
         t.text(w // 2, 2, "?", C["u3"], "Micro5", 10, None, "mt"); t.hline(2, w - 3, h - 3, C["p1"])
     else:
@@ -367,9 +367,9 @@ def shrine(season, w=124, h=82, sh=58, ml=12, mt=12):
     for ex_, mir in ((3, False), (w - 10, True)):
         ey = 30
         if H:
-            c.rect(ex_, ey, 7, 5, C["d0"]); c.rect(ex_ + 1, ey + 1, 5, 3, C["m3"])
+            c.rect(ex_, ey, 7, 5, C["d0"]); c.rect(ex_ + 1, ey + 1, 5, 3, C["m1"])
             c.rect(ex_ + (3 if not mir else 2), ey + 1, 2, 3, C["d0"])
-            c.px(ex_ + (3 if not mir else 2), ey + 1, C["o3"])
+            pass
             for i in range(7):
                 c.px(ex_ + (i if not mir else 6 - i), ey - 2 + (i * 2 // 6), C["d0"])
         else:
@@ -404,8 +404,6 @@ def shrine_aura(c, haunted):
         sx = 144 if side < 0 else 281
         c.rect(sx, 44, 9, 22, C["d0"]); c.rect(sx, 44, 9, 22, C["d4"], fill=False)
         c.hline(sx, sx + 8, 38, C["p1"])
-        if haunted:
-            c.px(sx + 2, 54, C["o3"]); c.px(sx + 6, 54, C["o3"])
     for (a, b, cc) in (((176, 9), (170, 2), (166, 0)), ((258, 9), (264, 2), (270, 0))):
         cable(c, bez(a, b, cc, 10), 1, C["d0"], C["d4"])
 
@@ -420,8 +418,7 @@ def pedestal(c, haunted, x0=178, x1=256, ya=84):
         for sx in range(xs_ + 6, xe - 14, 24):
             c.rect(sx, y0 + 3, 18, y1 - y0 - 8, C["d0"])
             c.rect(sx, y0 + 3, 18, y1 - y0 - 8, C["d2"], fill=False)
-            if haunted and k == 1 and sx == xs_ + 6:
-                c.px(sx + 5, y0 + 9, C["o3"]); c.px(sx + 11, y0 + 9, C["o3"])
+            pass
 
 
 # ------------------------------------------------------------------ season ramps
@@ -575,7 +572,7 @@ def sign_img(season, state=0):
     T.fill_mask(rr_mask(T, 1, 5, 116, 23, 2), C["d1"])
     T.rect(1, 5, 116, 23, C["d0"], fill=False)
     T.hline(3, 114, 6, C["d4"])
-    m = fit_mask(118, 30, (6, 8, 106, 12), "FRIGHT FEST", jer(22, 8), spacing=1)
+    m = fit_mask(118, 30, (6, 8, 106, 9), "FRIGHT FEST", jer(22, 8), spacing=1)
     ys_, xs_ = np.nonzero(m)
     cols = np.zeros(118, dtype=bool); cols[np.unique(xs_)] = True
     runs = []; x = 0
@@ -604,7 +601,7 @@ def sign_img(season, state=0):
     else:
         T.fill_mask(fm, C["d3"]); T.fill_mask(fm & erode(fm), C["d2"])
     # wordmark with the raised yellow dot
-    wm = fit_mask(118, 30, (66, 20, 32, 7), "hallpass", [("Micro5", 10)])
+    wm = fit_mask(118, 30, (66, 21, 32, 6), "hallpass", [("Micro5", 10)])
     ys2, xs2 = np.nonzero(wm)
     T.fill_mask(wm, C["b4"])
     T.rect(int(xs2.max()) + 2, int(ys2.min()) + 1, 2, 2, C["w3"])
@@ -1001,8 +998,6 @@ def build_fg(season, ghost_frame=0, sign_state=0):
             c.hline(2 if sg > 0 else 412, 12 if sg > 0 else 431, y, C["d1"])
     c.rect(13, 72, 8, 30, C["d1"]); c.rect(13, 72, 8, 30, C["d2"], fill=False)
     c.rect(413, 70, 8, 30, C["d1"]); c.rect(413, 70, 8, 30, C["d2"], fill=False)
-    if H:
-        c.px(16, 84, C["o3"]); c.px(18, 84, C["o3"])
     # hanging cables and the broken neon tube
     for (x, dy, sag) in ((286, 18, 4), (296, 28, -3), (322, 12, 3), (344, 24, -4), (372, 16, 3), (396, 30, 5), (142, 22, 3), (148, 14, -2)):
         cable(c, bez((x, 0), (x + sag, dy * 1.2), (x + sag * 2, dy), 40), 1 if dy < 20 else 2, C["d0"], C["d3"])
@@ -1068,7 +1063,7 @@ def build_phone(season):
     for (p0, p1, p2, th) in (((80, 96), (62, 120), (20, 170), 2), ((114, 96), (134, 120), (176, 172), 2), ((90, 100), (92, 140), (60, 200), 2), ((104, 100), (108, 140), (140, 204), 2)):
         cable(c, bez(p0, p1, p2), th, C["d0"], C["d3"])
     c.blit(shrine(season, 110, 72, 50, 10, 10), 43, 10)
-    dead_rows(c, P, H, {}, lz0=1.7, rz0=1.7, outer=False, eyes_l={3}, eyes_r={2})
+    dead_rows(c, P, H, {}, lz0=1.7, rz0=1.7, outer=False, eyes_l=(3,), eyes_r=())
     sx, sy = 65, 150
     dd = np.sqrt(((xs - (sx + 32)) / 38.0) ** 2 + ((ys - 252) / 8.0) ** 2)
     dth(c, dd < 1, (1 - dd) * 0.7, C["d4"]); dth(c, dd < 0.6, (0.6 - dd) * 0.8, C["d5"])
