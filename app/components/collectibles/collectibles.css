@@ -714,3 +714,53 @@
 :root[data-hp-still] .hc-root {
   animation: none !important;
 }
+
+/* ── Page-level layout (binder, Pack Room, card page, profile showcase) ── */
+.hc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(144px, 1fr));
+  gap: 14px 10px;
+  justify-items: center;
+}
+.hc-cell {
+  display: inline-block;
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 12px;
+  cursor: pointer;
+  color: inherit;
+}
+.hc-cell:focus-visible,
+.hc-link:focus-visible {
+  outline: 3px solid #2a6fe0;
+  outline-offset: 3px;
+}
+.hc-link {
+  display: inline-block;
+  border-radius: 12px;
+  text-decoration: none;
+}
+.hc-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.hc-dialog {
+  width: min(92vw, 420px);
+  max-height: 92vh;
+  overflow: auto;
+  padding: 0;
+  border: 2px solid currentColor;
+  border-radius: 18px;
+  background: var(--surface, #fff);
+  color: var(--foreground, #111);
+}
+.hc-dialog::backdrop {
+  background: rgba(10, 6, 20, 0.7);
+}
+.hc-dialog-card {
+  display: flex;
+  justify-content: center;
+  padding: 18px 0 6px;
+}
