@@ -16,7 +16,7 @@ every event state.
 
 | Fact | Source |
 |---|---|
-| Live page today: one night-scene card with a big countdown; "Games, scoring and rewards: to be announced". Overflows sideways on a 390 px phone. | `app/fright-fest/page.tsx` (main), live screenshots |
+| Live page today: one night-scene card with a big countdown; "Games, scoring and rewards: to be announced". | `app/fright-fest/page.tsx` (main), live screenshots |
 | Championship (unmerged branch): opens 28 Oct 00:00 UTC, closes 2 Nov 00:00 UTC, results by 5 Nov. | `fright-fest-championship:app/lib/championship/fright-fest-2026.ts` |
 | Fright Points: 100, 80, 65, 40, 40, 20 ×5, then 5 for any other ranked player. Overall Champion needs a result on every opened board. | same |
 | Only Last Bell's Halloween Shift is a real, verified mode. Cursed Dash and Blood Moon do not exist in their games yet; their boards are `pending` and their cabinets stay unnamed "mystery cabinets" until an admin opens them. | `docs/championship-design.md` §1–2, commit c563678 |

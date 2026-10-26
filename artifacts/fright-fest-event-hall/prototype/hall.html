@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en" data-concept="a" data-season="haunted">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fright Fest 2026 · HallPass (design prototype)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Silkscreen:wght@400;700&family=Jersey+10&family=Handjet:wght@400;600;800&family=Pixelify+Sans:wght@500;700&family=Micro+5&display=swap">
+<link rel="stylesheet" href="hall.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the event</a>
+<div class="site">
+  <header class="hp-header">
+    <button class="hp-rail-toggle" type="button" aria-label="Expand the menu">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l5 5-5 5M10 5l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+    </button>
+    <a class="hp-wordmark" href="#" aria-label="HallPass home">hallpass<i></i></a>
+    <nav class="hp-nav" aria-label="Primary">
+      <a href="#">Games</a><a href="#">Friends</a><a href="#">You</a>
+      <a class="hp-ff" href="#main" aria-current="page"><span class="hp-ff-ghost" aria-hidden="true"></span>Fright Fest</a>
+    </nav>
+    <div class="hp-search"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M13 13l4 4" stroke="currentColor" stroke-width="2"/></svg>Search games</div>
+    <div class="hp-actions">
+      <span class="hp-chip" aria-hidden="true">0</span>
+      <a class="hp-signin" href="#" data-auth-out>Sign in</a>
+      <span class="hp-avatar" data-auth-in aria-label="Signed in as sample·you"></span>
+    </div>
+  </header>
+  <nav class="hp-rail" aria-label="Categories">
+    <i></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+  </nav>
+  <main id="main" class="hall" tabindex="-1"></main>
+  <nav class="hp-tabbar" aria-label="Phone">
+    <a href="#"><i></i>Home</a><a href="#"><i></i>Friends</a><a href="#"><i></i>You</a>
+  </nav>
+</div>
+<div class="peek" id="peek" hidden></div>
+<script src="art/manifests.js"></script>
+<script src="data.js"></script>
+<script src="hall.js"></script>
+</body>
+</html>
