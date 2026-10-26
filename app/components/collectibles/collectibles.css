@@ -7,10 +7,12 @@
  * card also carries a text pill and a 1-5 pip row, readable in greyscale.
  *
  *   common     round-cornered sticker   no pattern     flat
- *   uncommon   notched corner           dashed line    one static glint
- *   rare       stepped pixel corners    diagonal hatch sheen band (moves on hover/focus)
- *   epic       scalloped top edge       dot grid       pointer-driven holo
- *   legendary  crown notch              sunburst       prism foil + sparkles, one slow loop
+ *   uncommon   notched corner           dashed line    one glint that moves with the tilt
+ *   rare       stepped pixel corners    diagonal hatch metallic sheen + brushed foil
+ *   epic       scalloped top edge       dot grid       holo bands + glitter that shift with the tilt
+ *   legendary  crown notch              sunburst       prism holo + glitter + gold rim, one slow loop
+ *
+ * The finishes (and the uniform card back) live in holo.css, driven by --px/--py/--tilt/--rx/--ry.
  *
  * Tokens are `--hc-*` on `.hc-root` (every component root carries it). No base
  * site token is reassigned. Cards are physical objects, so they look the same in
@@ -265,55 +267,7 @@
   --hc-rc: var(--hc-r-legendary);
 }
 
-/* ── Finishes ── */
-.hc-foil {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-  mix-blend-mode: overlay;
-}
-/* Uncommon: one static glint. */
-[data-rarity="uncommon"] .hc-foil {
-  background: linear-gradient(125deg, transparent 18%, rgba(255, 255, 255, 0.55) 22%, transparent 27%);
-}
-/* Rare: a sheen band that crosses on hover or focus. */
-[data-rarity="rare"] .hc-foil {
-  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.6) 50%, transparent 62%) 120% 0 / 250% 100% no-repeat;
-  transition: background-position 700ms ease;
-}
-[data-rarity="rare"]:is(:hover, :focus-visible, [data-live]) .hc-foil,
-:focus-visible > [data-rarity="rare"] .hc-foil {
-  background-position: -20% 0;
-}
-/* Epic: holo follows the pointer (--mx/--my from useHolo), static otherwise. */
-[data-rarity="epic"] .hc-foil {
-  background:
-    linear-gradient(
-        115deg,
-        transparent 20%,
-        rgba(255, 92, 205, 0.55) 34%,
-        rgba(92, 225, 255, 0.55) 46%,
-        rgba(255, 238, 92, 0.55) 58%,
-        transparent 72%
-      )
-      var(--mx, 40%) var(--my, 40%) / 220% 220% no-repeat;
-  opacity: 0.75;
-}
-/* Legendary: prism foil plus sparkles; the loop only where asked for. */
-[data-rarity="legendary"] .hc-foil {
-  background:
-    conic-gradient(
-        from 200deg at var(--mx, 50%) var(--my, 40%),
-        rgba(255, 92, 92, 0.5),
-        rgba(255, 216, 74, 0.5),
-        rgba(92, 255, 160, 0.5),
-        rgba(92, 200, 255, 0.5),
-        rgba(190, 120, 255, 0.5),
-        rgba(255, 92, 92, 0.5)
-      );
-  opacity: 0.6;
-}
+/* ── Finishes: foil, glitter, glare and the moment live in holo.css ── */
 .hc-spark {
   position: absolute;
   z-index: 3;
@@ -338,9 +292,6 @@
   left: 20%;
   transform: scale(0.55);
 }
-[data-loop="on"] .hc-foil {
-  animation: hc-prism 7s linear infinite;
-}
 [data-loop="on"] .hc-spark {
   animation: hc-twinkle 2.4s ease-in-out infinite;
 }
@@ -350,14 +301,8 @@
 [data-loop="on"] .hc-spark:nth-of-type(3) {
   animation-delay: 1.6s;
 }
-[data-loop="paused"] .hc-foil,
 [data-loop="paused"] .hc-spark {
   animation-play-state: paused;
-}
-@keyframes hc-prism {
-  to {
-    filter: hue-rotate(360deg);
-  }
 }
 @keyframes hc-twinkle {
   0%,
@@ -471,44 +416,7 @@
   font-size: calc(var(--cap) * 0.75);
 }
 
-/* ── Card back (face down, before the reveal). The glow is the TRUE rarity. ── */
-.hc-back .hc-face {
-  background:
-    radial-gradient(circle at 50% 50%, rgba(255, 248, 231, 0.12) 0 24%, transparent 25%),
-    repeating-linear-gradient(-45deg, rgba(255, 248, 231, 0.07) 0 8px, transparent 8px 16px),
-    var(--hc-ink);
-  outline: none;
-}
-.hc-back-mark {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-content: center;
-  color: var(--hc-peel);
-  font-weight: 900;
-  font-size: calc(var(--cap) * 1.35);
-  letter-spacing: -0.02em;
-}
-.hc-back-mark b {
-  display: block;
-  padding: 4px 12px;
-  border-radius: 999px;
-  border: 2px solid var(--hc-peel);
-  transform: rotate(-6deg);
-}
-.hc-back[data-rarity] .hc-cut {
-  filter: drop-shadow(0 3px 0 var(--hc-shadow)) drop-shadow(0 0 var(--glow, 0px) var(--hc-rc));
-  transition: filter 400ms ease;
-}
-.hc-back[data-rarity="rare"] {
-  --glow: 6px;
-}
-.hc-back[data-rarity="epic"] {
-  --glow: 10px;
-}
-.hc-back[data-rarity="legendary"] {
-  --glow: 14px;
-}
+/* ── Card back: see holo.css. Uniform for every card, so a face-down card says nothing about its rarity. ── */
 
 /* ── Flip (reveal) ── */
 .hc-flip {

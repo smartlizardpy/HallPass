@@ -1,0 +1,338 @@
+/*
+ * Card materials: the tilt-reactive foil and the uniform card back.
+ *
+ * THE VARIABLE CONTRACT. Anything (the pointer hook, the opening's choreography,
+ * a CSS or Web Animation on an ancestor) drives the foil by setting these. They
+ * are registered, so they animate, and they inherit, so a wrapper can drive a card.
+ *
+ *   --px, --py  light position over the card, 0..1 (rest 0.5, 0.5)
+ *   --tilt      tilt magnitude, 0..1 (rest 0)
+ *   --rx, --ry  degrees, plain numbers (rest 0). `.hc-tilt` turns the card
+ *               rotateX(--ry) rotateY(--rx); only while the root has data-tilt.
+ *
+ * Every foil layer below reads only these. `data-holo="live"` adds the glare and
+ * the touch/hover hook; `data-moment` plays a one-shot rarity moment inside the
+ * card bounds. Grids (sm, static) carry ONE blend layer, no filter, no animation.
+ * Textures are our own: layered gradients and radial speckle, no images.
+ */
+
+@property --px {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0.5;
+}
+@property --py {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0.5;
+}
+@property --tilt {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --rx {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --ry {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+/* The legendary loop turns the prism by animating this, not a filter. */
+@property --spin {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* ── The tilt layer sits inside the root, so it composes with an ancestor's transform ── */
+.hc-tilt {
+  position: absolute;
+  inset: 0;
+}
+[data-tilt] > .hc-tilt {
+  transform: perspective(720px) rotateX(calc(var(--ry) * 1deg)) rotateY(calc(var(--rx) * 1deg));
+  will-change: transform;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hc-card[data-holo="live"] {
+    touch-action: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-tilt] > .hc-tilt {
+    transform: none;
+  }
+}
+
+/* ── Foil: under the art (the art window stays crisp), over the card colour ── */
+.hc-face {
+  isolation: isolate;
+}
+.hc-foil {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  --gx: calc(var(--px) * 100%);
+  --gy: calc(var(--py) * 100%);
+}
+.hc-card[data-rarity="common"] .hc-foil,
+.hc-card[data-rarity="common"] .hc-glare {
+  display: none;
+}
+
+/* Uncommon: one restrained glint that travels with the light. */
+.hc-card[data-rarity="uncommon"] .hc-foil {
+  mix-blend-mode: screen;
+  background: linear-gradient(118deg, transparent 43%, rgba(255, 255, 255, 0.28) 48.5%, rgba(255, 255, 255, 0.06) 51.5%, transparent 55%) calc(100% - var(--gx)) 0 / 200% 100% no-repeat;
+}
+
+/* Rare: a metallic sheen over a brushed-foil texture on the frame and background. */
+.hc-card[data-rarity="rare"] .hc-foil {
+  mix-blend-mode: screen;
+  opacity: 0.55;
+  background:
+    linear-gradient(104deg, transparent 28%, rgba(255, 255, 255, 0.55) 43%, rgba(200, 222, 255, 0.2) 50%, rgba(255, 255, 255, 0.4) 57%, transparent 72%) calc(100% - var(--gx)) 0 / 220% 100% no-repeat,
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 3px, rgba(0, 0, 0, 0.05) 3px 4px, transparent 4px 6px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 40%, rgba(0, 0, 0, 0.1));
+}
+
+/* Epic: rainbow bands that slide with the tilt. The glitter is its own un-blended layer (below). */
+.hc-card[data-rarity="epic"] .hc-foil {
+  mix-blend-mode: screen;
+  opacity: 0.42;
+  background:
+    /* Un-tiled: the bands slide by shifting the stops of a repeating gradient, so no tile edge can enter the box. */
+    repeating-linear-gradient(118deg, #ff5ccd calc(var(--gx) * 0.5 + var(--gy) * 0.2), #ffe45c calc(var(--gx) * 0.5 + var(--gy) * 0.2 + 7%), #5cffa8 calc(var(--gx) * 0.5 + var(--gy) * 0.2 + 14%), #5ce1ff calc(var(--gx) * 0.5 + var(--gy) * 0.2 + 21%), #9d7bff calc(var(--gx) * 0.5 + var(--gy) * 0.2 + 28%), #ff5ccd calc(var(--gx) * 0.5 + var(--gy) * 0.2 + 35%)),
+    linear-gradient(118deg, transparent 30%, rgba(255, 255, 255, 0.5) 46%, transparent 62%) calc(100% - var(--gx)) 0 / 220% 100% no-repeat;
+}
+
+/* Legendary: a prism sunburst centred under the light, spun a little by the tilt and by the loop. */
+.hc-card[data-rarity="legendary"] .hc-foil {
+  mix-blend-mode: screen;
+  opacity: 0.36;
+  background:
+    repeating-conic-gradient(from calc(var(--spin) + var(--px) * 40deg) at calc(30% + var(--gx) * 0.4) calc(25% + var(--gy) * 0.35), rgba(255, 255, 255, 0.5) 0 4deg, transparent 4deg 15deg),
+    conic-gradient(from calc(200deg + var(--spin) + var(--px) * 90deg) at calc(25% + var(--gx) * 0.5) calc(20% + var(--gy) * 0.4), #ff6a6a, #ffd84a, #6affa6, #5cc8ff, #be78ff, #ff6a6a);
+}
+
+/* Glitter (epic, legendary; not on grid cards): fine speckle that shifts at two speeds, lit near the light. */
+.hc-card[data-rarity="epic"] .hc-face::before,
+.hc-card[data-rarity="legendary"] .hc-face::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 30% 40%, #fff 0 0.7px, transparent 1.3px) calc(var(--px) * -38px) calc(var(--py) * -26px) / 17px 21px,
+    radial-gradient(circle at 70% 60%, #ffe9a8 0 0.8px, transparent 1.4px) calc(var(--px) * 52px) calc(var(--py) * 34px) / 29px 23px,
+    radial-gradient(circle at 50% 50%, #cfe6ff 0 0.6px, transparent 1.2px) calc(var(--px) * -70px) calc(var(--py) * 60px) / 13px 19px;
+  -webkit-mask: radial-gradient(circle at var(--gx, 50%) var(--gy, 50%), #000 0, rgba(0, 0, 0, 0.55) 45%, rgba(0, 0, 0, 0.18) 100%);
+  mask: radial-gradient(circle at calc(var(--px) * 100%) calc(var(--py) * 100%), #000 0, rgba(0, 0, 0, 0.55) 45%, rgba(0, 0, 0, 0.18) 100%);
+  opacity: calc(0.7 + var(--tilt) * 0.3);
+}
+.hc-card[data-size="sm"] .hc-face::before {
+  display: none;
+}
+
+/* Legendary gold rim: always there (cheap), plus a moving highlight in live/moment. */
+.hc-card[data-rarity="legendary"] .hc-face {
+  box-shadow: inset 0 0 0 2px rgba(255, 214, 90, 0.85), inset 0 0 12px rgba(255, 190, 40, 0.35);
+}
+
+/* ── Glare: only for live cards and the moment. Un-blended alpha, above the art, below the caption. ── */
+.hc-glare {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: none;
+  pointer-events: none;
+  overflow: hidden;
+}
+.hc-card[data-holo="live"] .hc-glare,
+.hc-card[data-moment] .hc-glare {
+  display: block;
+}
+.hc-card[data-holo="live"] .hc-glare {
+  background: radial-gradient(circle at calc(var(--px) * 100%) calc(var(--py) * 100%), rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.06) 38%, transparent 62%);
+  opacity: calc(0.35 + var(--tilt) * 0.65);
+}
+.hc-card[data-holo="live"][data-rarity="legendary"] .hc-glare::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid transparent;
+  border-radius: inherit;
+  background: conic-gradient(from calc(var(--px) * 360deg), #ffe27a, #b8780a, #fff1b0, #b8780a, #ffe27a) border-box;
+  -webkit-mask: linear-gradient(#000 0 0) padding-box exclude, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) exclude, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: calc(0.35 + var(--tilt) * 0.65);
+}
+
+/* The one-shot moment: a diagonal band crosses the face once. Off-card at rest. */
+.hc-glare::before {
+  content: "";
+  position: absolute;
+  top: -10%;
+  bottom: -10%;
+  left: 0;
+  width: 70%;
+  opacity: 0;
+  transform: translateX(-130%) skewX(-18deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75) 50%, transparent);
+}
+.hc-card[data-rarity="epic"] .hc-glare::before {
+  background: linear-gradient(90deg, transparent 5%, rgba(255, 92, 205, 0.6) 25%, rgba(255, 238, 92, 0.7) 40%, rgba(92, 255, 200, 0.7) 55%, rgba(92, 200, 255, 0.6) 72%, transparent 95%);
+}
+.hc-card[data-rarity="legendary"] .hc-glare::before {
+  width: 90%;
+  background: linear-gradient(90deg, transparent 2%, rgba(255, 110, 110, 0.55) 20%, rgba(255, 220, 90, 0.8) 36%, rgba(255, 255, 255, 0.9) 48%, rgba(110, 255, 170, 0.7) 60%, rgba(110, 200, 255, 0.6) 76%, rgba(190, 120, 255, 0.5) 90%, transparent 98%);
+}
+.hc-card[data-moment][data-rarity="uncommon"] .hc-glare::before {
+  animation: hc-sweep 650ms ease-out both;
+}
+.hc-card[data-moment][data-rarity="rare"] .hc-glare::before {
+  animation: hc-sweep 1000ms cubic-bezier(0.3, 0.1, 0.3, 1) both;
+}
+.hc-card[data-moment][data-rarity="epic"] .hc-glare::before {
+  animation: hc-sweep 1200ms cubic-bezier(0.3, 0.1, 0.3, 1) both;
+}
+.hc-card[data-moment][data-rarity="epic"] .hc-glare {
+  animation: hc-flash 1200ms ease-out both;
+}
+.hc-card[data-moment][data-rarity="legendary"] .hc-glare::before {
+  animation: hc-sweep 1500ms cubic-bezier(0.3, 0.1, 0.3, 1) both;
+}
+.hc-card[data-moment][data-rarity="legendary"] .hc-glare {
+  animation: hc-flash 1500ms ease-out both;
+}
+.hc-card[data-moment][data-rarity="legendary"] .hc-spark {
+  animation: hc-burst 1300ms ease-out both;
+}
+.hc-card[data-moment][data-rarity="legendary"] .hc-spark:nth-of-type(2) {
+  animation-delay: 160ms;
+}
+.hc-card[data-moment][data-rarity="legendary"] .hc-spark:nth-of-type(3) {
+  animation-delay: 320ms;
+}
+@keyframes hc-sweep {
+  0% {
+    opacity: 0;
+    transform: translateX(-130%) skewX(-18deg);
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(220%) skewX(-18deg);
+  }
+}
+@keyframes hc-flash {
+  0% {
+    background: rgba(255, 255, 255, 0.35);
+  }
+  100% {
+    background: rgba(255, 255, 255, 0);
+  }
+}
+@keyframes hc-burst {
+  0% {
+    opacity: 0;
+    scale: 0.2;
+  }
+  30% {
+    opacity: 1;
+    scale: 1.7;
+  }
+  100% {
+    opacity: 0.3;
+    scale: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hc-glare {
+    display: none !important;
+  }
+}
+
+/* The loop (legendary, only where one card is the focus): the prism turns, off-screen it pauses. */
+[data-loop="on"] .hc-foil {
+  animation: hc-prism 9s linear infinite;
+}
+[data-loop="paused"] .hc-foil {
+  animation-play-state: paused;
+}
+@keyframes hc-prism {
+  to {
+    --spin: 360deg;
+  }
+}
+
+/* ── The card back: one silhouette, one print, no rarity cue; foil-stamped mark that catches the light ── */
+.hc-back .hc-face {
+  display: block;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 248, 231, 0.1) 0 24%, transparent 25%),
+    repeating-linear-gradient(-45deg, rgba(255, 248, 231, 0.07) 0 8px, transparent 8px 16px),
+    repeating-linear-gradient(45deg, rgba(255, 248, 231, 0.035) 0 1px, transparent 1px 4px),
+    linear-gradient(160deg, #35205a, var(--hc-ink) 55%, #1a0f2d);
+}
+/* A fine inner frame with corner studs: printed detail, identical on every card. */
+.hc-back .hc-face::before {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  border: 1.5px solid rgba(255, 248, 231, 0.3);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle, rgba(255, 248, 231, 0.6) 0 1.6px, transparent 2px) 5px 5px / 8px 8px no-repeat,
+    radial-gradient(circle, rgba(255, 248, 231, 0.6) 0 1.6px, transparent 2px) calc(100% - 5px) 5px / 8px 8px no-repeat,
+    radial-gradient(circle, rgba(255, 248, 231, 0.6) 0 1.6px, transparent 2px) 5px calc(100% - 5px) / 8px 8px no-repeat,
+    radial-gradient(circle, rgba(255, 248, 231, 0.6) 0 1.6px, transparent 2px) calc(100% - 5px) calc(100% - 5px) / 8px 8px no-repeat;
+}
+/* A soft sheen that follows the light: alpha only, no blend. */
+.hc-back .hc-face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.13) 48%, rgba(190, 160, 255, 0.1) 53%, transparent 62%) calc(100% - var(--px) * 100%) 0 / 220% 100% no-repeat;
+}
+.hc-back-mark {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  font-weight: 900;
+  font-size: calc(var(--cap) * 1.35);
+  letter-spacing: -0.02em;
+}
+.hc-back-mark b {
+  display: block;
+  padding: 4px 13px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--hc-ink), var(--hc-ink)) padding-box,
+    linear-gradient(115deg, #fff1b0, #c9a24a calc(var(--px) * 60% + 10%), #fff6d2 calc(var(--px) * 60% + 30%), #b88a2e) border-box;
+  transform: rotate(-6deg);
+  box-shadow: 0 0 0 1px rgba(255, 248, 231, 0.12);
+}
+.hc-back-mark b span {
+  background: linear-gradient(115deg, #fff1b0 0%, #d6b25a calc(var(--px) * 70%), #fffbe6 calc(var(--px) * 70% + 14%), #b88a2e 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}

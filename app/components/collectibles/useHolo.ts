@@ -6,9 +6,10 @@ const reducedMotion = () => typeof window !== "undefined" && window.matchMedia?.
 
 /**
  * Pointer-driven foil and tilt for ONE element: writes `--mx`/`--my` (0-100 %)
- * and `--rx`/`--ry` (degrees, ±`tilt`) as custom properties, at most once per
+ * and `--rx`/`--ry` (plain numbers of degrees, ±`tilt`: holo.css registers `--rx`/`--ry` as `<number>`, so no unit) as custom properties, at most once per
  * animation frame, straight onto the element (no React state, no re-render).
  * Resets on leave. Does nothing under reduced motion, so the foil sits still.
+ * Used by the pack wrapper; cards use `useCardTilt` (spring, touch, `--px/--py`).
  */
 export function useHolo(ref: RefObject<HTMLElement | null>, { enabled = true, tilt = 0 }: { enabled?: boolean; tilt?: number } = {}) {
   useEffect(() => {
@@ -25,8 +26,8 @@ export function useHolo(ref: RefObject<HTMLElement | null>, { enabled = true, ti
       el.style.setProperty("--mx", `${(px * 100).toFixed(1)}%`);
       el.style.setProperty("--my", `${(py * 100).toFixed(1)}%`);
       if (tilt) {
-        el.style.setProperty("--rx", `${((px - 0.5) * 2 * tilt).toFixed(2)}deg`);
-        el.style.setProperty("--ry", `${((0.5 - py) * 2 * tilt).toFixed(2)}deg`);
+        el.style.setProperty("--rx", ((px - 0.5) * 2 * tilt).toFixed(2));
+        el.style.setProperty("--ry", ((0.5 - py) * 2 * tilt).toFixed(2));
       }
       el.dataset.live = "";
     };
