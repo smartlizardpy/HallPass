@@ -812,6 +812,10 @@ html[data-hp-skin="haunted"] .pr-loop[data-season="haunted"] {
   opacity: 0;
   pointer-events: none;
 }
+/* Opened with a click or a tap: focus still moves in, but its rings wait for a key (see OpeningLayer). */
+.pr-layer[data-quiet] :focus-visible {
+  outline: none;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .pr-layer,

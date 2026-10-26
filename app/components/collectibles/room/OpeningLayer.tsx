@@ -40,6 +40,23 @@ const useMounted = () =>
     () => false,
   );
 
+/**
+ * Whether the player's last action was a key press rather than a click or a tap. Focus moves into the
+ * opening by script (onto the pack, so Enter or Space tears it), and Safari draws the focus ring for any
+ * focus a script moves, mouse or not: a pack opened with a click showed a yellow box around it from the
+ * flight to the cards. So the layer keeps its rings quiet unless the opening began from the keyboard,
+ * and turns them on at the first key pressed inside it. Chrome already behaves this way on its own.
+ */
+let keyboardLast = false;
+if (typeof document !== "undefined") {
+  document.addEventListener("keydown", (e) => {
+    if (!e.metaKey && !e.ctrlKey && !e.altKey) keyboardLast = true;
+  }, true);
+  document.addEventListener("pointerdown", () => {
+    keyboardLast = false;
+  }, true);
+}
+
 const FLIGHT_MS = 560;
 /** If the pack has not drawn by then, stop waiting for it and show the stage anyway. */
 const GIVE_UP_MS = 4000;
@@ -69,6 +86,7 @@ export function OpeningLayer({
   const proxy = useRef<HTMLImageElement>(null);
   const reduced = useRef(false);
   const [leaving, setLeaving] = useState(false);
+  const [quiet, setQuiet] = useState(() => !keyboardLast);
   // A stand-in flies only when there is somewhere to fly from, and motion is welcome.
   const [arriving, setArriving] = useState(() => !!flight && typeof window !== "undefined" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const landed = useRef(false);
@@ -100,21 +118,27 @@ export function OpeningLayer({
     };
   }, []);
 
-  // The flight: from the riser to the stage's pack slot, once the slot exists.
+  // The flight: from the riser to the stage's pack slot, once the slot has its real size. The stage first
+  // renders before it has measured itself, with the pack at its smallest, and resizes a frame or so later;
+  // a flight aimed at that first box shrank in place and the full-size pack then popped in. So: wait for the
+  // stage to say it is measured, and for the slot to hold still for one frame.
   useEffect(() => {
     if (!arriving || !flight) return;
     let frame = 0;
     let anim: Animation | null = null;
+    let before: DOMRect | null = null;
     const started = performance.now();
     const giveUp = window.setTimeout(() => {
       landed.current = drawn.current = true;
       settle();
     }, GIVE_UP_MS);
     const find = () => {
-      const slot = layer.current?.querySelector<HTMLElement>(".ho-pack-slot");
+      const slot = layer.current?.querySelector<HTMLElement>(".ho-stage[data-measured] .ho-pack-slot");
       const to = slot?.getBoundingClientRect();
       const el = proxy.current;
-      if (!to || !to.width || !el) {
+      const still = !!to && !!before && to.width > 0 && to.left === before.left && to.top === before.top && to.width === before.width && to.height === before.height;
+      if (!to || !still || !el) {
+        before = to ?? null;
         if (performance.now() - started < GIVE_UP_MS) frame = requestAnimationFrame(find);
         return;
       }
@@ -191,6 +215,8 @@ export function OpeningLayer({
       tabIndex={-1}
       data-arriving={arriving || undefined}
       data-leaving={leaving || undefined}
+      data-quiet={quiet || undefined}
+      onKeyDown={() => quiet && setQuiet(false)}
       onAnimationEnd={(e) => {
         if (leaving && e.target === e.currentTarget) onClose();
       }}
