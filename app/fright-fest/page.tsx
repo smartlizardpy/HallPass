@@ -10,6 +10,11 @@
  * the points table, schedule, rules and rewards. While it is disabled the room
  * says "to be announced" and the page has nothing else.
  *
+ * Candy Hunt (hall/candy/) is a section between "Your Fright Fest" and the points
+ * table, passed in through the sections' `afterProgress` slot so the
+ * championship components import nothing about candy; the hall's noticeboard links
+ * to it.
+ *
  * Props for the islands come from hall/props.ts, which keeps announced games only.
  */
 import type { Metadata } from "next";
@@ -19,6 +24,10 @@ import { eventDateLabels } from "../lib/events/labels";
 import { resolveGames } from "../lib/games-store";
 import { FRIGHT_FEST_GAMES } from "../components/events/fright-fest/registry";
 import { Room } from "./hall/Room";
+import { CandyHunt } from "./hall/candy/CandyHunt";
+import { buildCandy } from "./hall/candy/props";
+import { CANDY_HUNT_OPEN } from "./hall/config";
+import { CANDY_FRIGHT_FEST_2026 } from "../lib/candy/fright-fest-2026";
 import "./hall/sections.css";
 import { buildCabinets, buildRewards } from "./hall/props";
 import { FrightFestSections } from "../components/championship/FrightFestSections";
@@ -45,13 +54,16 @@ export default async function FrightFestPage() {
   const cabinets = buildCabinets(FRIGHT_FEST_2026, FRIGHT_FEST_GAMES, all);
   const rewards = buildRewards(FRIGHT_FEST_2026, FRIGHT_FEST_GAMES);
 
+  // Candy Hunt needs the championship's sections to sit in, so it is on only with them.
+  const candy = CANDY_HUNT_OPEN && SUMMARY ? buildCandy(CANDY_FRIGHT_FEST_2026, SUMMARY.labels.resultsBy) : null;
+
   return (
     <ArcadeShell games={all} categories={categories} activeCategory="">
       <div className="w-full pb-12">
-        <Room cabinets={cabinets} summary={SUMMARY} />
+        <Room cabinets={cabinets} summary={SUMMARY} candy={candy} />
         <div className="ff-page mx-auto w-full max-w-4xl px-3 pt-4 sm:px-8">
           {SUMMARY ? (
-            <FrightFestSections summary={SUMMARY} rewards={rewards} />
+            <FrightFestSections summary={SUMMARY} rewards={rewards} afterProgress={candy ? <CandyHunt candy={candy} /> : null} />
           ) : (
             <section id="rules" className="rounded-2xl border border-border bg-surface p-6 text-center">
               <p className="text-base font-bold">Games, scoring and rewards: to be announced.</p>

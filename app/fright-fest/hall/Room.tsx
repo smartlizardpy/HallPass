@@ -19,6 +19,8 @@ import { Board, BoardGlimpse } from "./Board";
 import { Cabinets, PhoneNav } from "./Cabinets";
 import { Eggs } from "./Eggs";
 import { ART_DIR, boxStyle, DESK, PHONE, placeVars, type Box, type Loop } from "./geometry";
+import { CandyStatus } from "./candy/CandyStatus";
+import type { CandyProps } from "./candy/props";
 import { CANDY_HUNT_OPEN } from "./config";
 import { HallProvider } from "./HallProvider";
 import { Panel } from "./Panel";
@@ -48,7 +50,16 @@ function LoopStrip({ loop, scene }: { loop: Loop; scene: "desk" | "phone" }) {
   );
 }
 
-export function Room({ cabinets, summary }: { cabinets: CabinetProps[]; summary: ChampionshipSummary | null }) {
+export function Room({
+  cabinets,
+  summary,
+  candy,
+}: {
+  cabinets: CabinetProps[];
+  summary: ChampionshipSummary | null;
+  /** The Candy Hunt dates for the noticeboard; `null` leaves the plate a sign. */
+  candy?: CandyProps | null;
+}) {
   return (
     <HallProvider cabinets={cabinets} summary={summary}>
       <h1 className="sr-only">Fright Fest 2026: the Arcade Hall</h1>
@@ -68,11 +79,12 @@ export function Room({ cabinets, summary }: { cabinets: CabinetProps[]; summary:
         <Board fit="room" />
         <BoardGlimpse />
 
-        {/* The noticeboard. Candy Hunt is not built: until CANDY_HUNT_OPEN flips, it is a sign, not a link, and not focusable. */}
+        {/* The noticeboard. Open: a link to #candy, "Candy Hunt" from the server and the status words from the client clock. Not open: a sign, not a link, and not focusable. */}
         <div className="hl-quest" data-in="desk" style={placeVars(DESK.quest.calm, null)}>
-          {CANDY_HUNT_OPEN ? (
+          {CANDY_HUNT_OPEN && candy ? (
             <a className="hl-quest-link" href="#candy">
-              Candy Hunt · open
+              Candy Hunt
+              <CandyStatus dates={candy.dates} labels={candy.labels} />
             </a>
           ) : (
             <span className="hl-quest-soon">Candy Hunt · soon</span>

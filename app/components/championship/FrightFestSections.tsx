@@ -36,13 +36,26 @@ function Card({ id, title, children }: { id?: string; title: string; children: R
  * `rewards` is built on the server from the config's pack ids (fright-fest/hall/props.ts),
  * for announced games only, so this file never sees a game that has not been announced.
  */
-export function FrightFestSections({ summary: s, rewards }: { summary: ChampionshipSummary; rewards: RewardProps[] }) {
+export function FrightFestSections({
+  summary: s,
+  rewards,
+  afterProgress,
+}: {
+  summary: ChampionshipSummary;
+  rewards: RewardProps[];
+  /**
+   * A slot between "Your Fright Fest" and the points table. The page fills it
+   * (with Candy Hunt), so this file imports nothing about candy.
+   */
+  afterProgress?: React.ReactNode;
+}) {
   const bands = pointBands(s);
   return (
     <div className="mt-6 space-y-6">
       <PhaseBanner summary={s} />
       <ChampionshipStandings summary={s} />
       <MyChampionship summary={s} />
+      {afterProgress}
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card title="How Fright Points work">
