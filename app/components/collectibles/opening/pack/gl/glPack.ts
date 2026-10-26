@@ -132,13 +132,32 @@ export async function createGLPack(canvas: HTMLCanvasElement, packId: string, se
     gl.bindTexture(gl.TEXTURE_2D, tex.material);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, art.material);
-    const nm = normalMap(Math.min(512, Math.round(want * 0.75)), seed);
-    gl.activeTexture(gl.TEXTURE2);
-    gl.bindTexture(gl.TEXTURE_2D, tex.normal);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, nm.width, nm.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, nm.data);
+    // Show the pack straight away with smooth foil; the crinkles (tens of ms of
+    // maths) follow in an idle moment so they never hold up the first frame.
+    if (!normalWidth) {
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, tex.normal);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([128, 128, 255, 255]));
+    }
     ready = true;
     wake();
+    const nmWidth = Math.min(modest ? 320 : 512, Math.round(want * 0.75));
+    if (nmWidth <= normalWidth) return;
+    normalWidth = nmWidth;
+    const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1));
+    idle(
+      () => {
+        if (disposed) return;
+        const nm = normalMap(nmWidth, seed);
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D, tex.normal);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, nm.width, nm.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, nm.data);
+        wake();
+      },
+      { timeout: 300 },
+    );
   }
+  let normalWidth = 0;
 
   const seamBytes = new Uint8Array(SEAM_TEX);
   function uploadSeam(seam: Float32Array) {
