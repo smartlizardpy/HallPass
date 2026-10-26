@@ -9,6 +9,7 @@
 
 .ho-stage {
   position: relative;
+  min-width: 0;
   display: grid;
   justify-items: center;
   align-content: start;
@@ -220,8 +221,11 @@
 /* ── The cards ── */
 .ho-row {
   display: flex;
+  /* Three cards are wider than a phone: wrap (two, then one) rather than shrink,
+     so the pixel art keeps a whole-number scale and the page never scrolls sideways. */
+  flex-wrap: wrap;
   justify-content: center;
-  gap: clamp(10px, 3vw, 28px);
+  gap: 18px clamp(10px, 3vw, 28px);
   margin: 12px 0 0;
   padding: 0;
   list-style: none;
