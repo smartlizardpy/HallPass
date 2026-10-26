@@ -21,12 +21,26 @@ describe("catalogue", () => {
     expect(CATALOGUE.packs.map((p) => p.id)).toEqual([
       "ff26-participation", "ff26-winner-last-bell", "ff26-winner-shadow-core", "ff26-winner-survive-till-dawn",
       "ff26-overall-winner", "hpo-standard", "inet-standard", "brr-standard", "tr-standard",
+      "hpo-rare", "inet-rare", "brr-rare", "tr-rare",
     ]);
     for (const p of CATALOGUE.packs) expect(currentVersion(p).size).toBe(3);
   });
 
   it("odds tables sum to 100", () => {
     for (const t of Object.values(ODDS)) expect(Object.values(t).reduce((a, b) => a + b, 0)).toBe(100);
+  });
+
+  it("the four Rare packs are one standard roll then two rare-or-better, from the existing tables", () => {
+    for (const col of ["hpo", "inet", "brr", "tr"]) {
+      const pack = CATALOGUE.packs.find((p) => p.id === `${col}-rare`)!;
+      expect(pack.versions).toHaveLength(1);
+      expect(pack.description).toMatch(/Halloween Candy/);
+      expect(currentVersion(pack).slots).toEqual([
+        { kind: "random", pool: col, rarityWeights: ODDS.standard },
+        { kind: "random", pool: col, rarityWeights: ODDS.rareOrBetter },
+        { kind: "random", pool: col, rarityWeights: ODDS.rareOrBetter },
+      ]);
+    }
   });
 
   it("never lets a commemorative or retired card into a random slot", () => {
