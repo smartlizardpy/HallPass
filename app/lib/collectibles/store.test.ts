@@ -47,6 +47,10 @@ async function everyQuery() {
   await s.revokePack({ publicId: PACK, actorEmail: "a", reason: "r" });
   await s.revokePull({ pullId: 1, actorEmail: "a", reason: "r" });
   await s.readLog();
+  await s.findPlayerForAdmin("alice");
+  await s.findPlayerForAdmin("@Alice");
+  await s.findPlayerForAdmin("22222222-2222-2222-2222-222222222222");
+  await s.listRecentPacks();
   return texts;
 }
 
@@ -86,6 +90,25 @@ describe("collectibles store", () => {
     const revPull = texts.find((t) => t.includes("UPDATE collectible_pulls SET revoked_at"))!;
     expect(revPull).toMatch(/revoked_at IS NULL/);
     expect(revPull).toMatch(/INSERT INTO collectibles_log/);
+  });
+
+  it("the admin lookups ignore profile privacy but never read private columns, and the feed is bounded", async () => {
+    const { sql, texts, values } = fakeSql();
+    const s = createCollectiblesStore(sql);
+    await s.findPlayerForAdmin("@Alice");
+    await s.findPlayerForAdmin("22222222-2222-2222-2222-222222222222");
+    await s.findPlayerForAdmin("   ");
+    await s.listRecentPacks(7);
+    expect(texts).toHaveLength(3);
+    expect(texts[0]).toMatch(/p\.username = \?/);
+    expect(texts[0]).not.toMatch(/profile_visibility/);
+    expect(values[0]).toEqual(["alice"]);
+    expect(texts[1]).toMatch(/p\.public_id = \?::uuid/);
+    expect(texts[2]).toMatch(/FROM player_packs pp JOIN players p/);
+    expect(texts[2]).toMatch(/ORDER BY pp\.granted_at DESC/);
+    expect(texts[2]).toMatch(/LIMIT \?/);
+    expect(values[2]).toEqual([7]);
+    expect(texts[2]).toMatch(/'id', c\.id/);
   });
 
   it("prefs require ownership and the showcase requires a public profile", async () => {

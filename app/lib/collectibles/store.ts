@@ -114,6 +114,26 @@ export interface AdminLogEntry {
   createdAt: string;
 }
 
+/** A player found by an admin: public name and ids only. */
+export interface AdminPlayer {
+  playerId: string;
+  publicId: string;
+  name: string;
+}
+
+export interface AdminPull extends Pull {
+  /** The pull's id: what `revokePull` takes. */
+  id: number;
+  revokedAt: string | null;
+}
+
+/** One pack row on the admin's recent-activity feed, with its player's PUBLIC name. */
+export interface AdminPackRow {
+  pack: PlayerPack;
+  player: { publicId: string; name: string };
+  pulls: AdminPull[];
+}
+
 export interface ShowcasePlayer {
   playerId: string;
   publicId: string;
@@ -421,6 +441,57 @@ export function createCollectiblesStore(sql: Sql) {
     };
   }
 
+  /**
+   * An admin's player lookup: by public id (a uuid) or by username (an optional
+   * leading `@`), REGARDLESS of profile visibility. Public ids and the public
+   * name only; never `name`, `email` or `image`.
+   */
+  async function findPlayerForAdmin(query: string): Promise<AdminPlayer | null> {
+    const q = query.trim().replace(/^@/, "").toLowerCase();
+    if (!q || q.length > 100) return null;
+    const rows = (UUID_RE.test(q)
+      ? await sql`SELECT p.id, p.public_id, p.handle, p.username FROM players p WHERE p.public_id = ${q}::uuid`
+      : await sql`SELECT p.id, p.public_id, p.handle, p.username FROM players p WHERE p.username = ${q}`) as Row[];
+    const r = rows[0];
+    if (!r) return null;
+    const publicId = String(r.public_id);
+    return {
+      playerId: String(r.id),
+      publicId,
+      name: publicScoreName({ handle: str(r.handle), username: str(r.username), publicId }),
+    };
+  }
+
+  /** The newest grants across all players, with the pulls of the opened ones. Public names and ids only. */
+  async function listRecentPacks(limit = 50): Promise<AdminPackRow[]> {
+    const rows = (await sql`
+      SELECT pp.public_id, pp.pack_id, pp.pack_version, pp.source, pp.granted_at, pp.opened_at, pp.revoked_at,
+             p.public_id AS p_public_id, p.handle AS p_handle, p.username AS p_username,
+             COALESCE(
+               (SELECT json_agg(json_build_object('id', c.id, 'slot', c.slot, 'collectible_id', c.collectible_id,
+                                                  'was_new', c.was_new, 'revoked_at', c.revoked_at)
+                                ORDER BY c.slot)
+                  FROM collectible_pulls c WHERE c.player_pack_id = pp.id),
+               '[]'::json
+             ) AS pulls
+      FROM player_packs pp JOIN players p ON p.id = pp.player_id
+      ORDER BY pp.granted_at DESC, pp.id DESC
+      LIMIT ${limit}
+    `) as Row[];
+    return rows.map((r) => {
+      const publicId = String(r.p_public_id);
+      return {
+        pack: mapPack(r),
+        player: { publicId, name: publicScoreName({ handle: str(r.p_handle), username: str(r.p_username), publicId }) },
+        pulls: (Array.isArray(r.pulls) ? (r.pulls as Row[]) : []).map((x) => ({
+          ...mapPull(x),
+          id: Number(x.id),
+          revokedAt: toIso(x.revoked_at),
+        })),
+      };
+    });
+  }
+
   /** The cards a player features, in slot order. Only cards they still own. */
   async function featured(playerId: string): Promise<{ position: number; collectibleId: string }[]> {
     const rows = (await sql`
@@ -503,7 +574,7 @@ export function createCollectiblesStore(sql: Sql) {
 
   return {
     readPack, readPulls, grantPack, adminGrantPack, listSealed, listOpened, openPack, binder,
-    setPrefs, markSeen, findPublicPlayer, featured, revokePack, revokePull, readLog,
+    setPrefs, markSeen, findPublicPlayer, findPlayerForAdmin, listRecentPacks, featured, revokePack, revokePull, readLog,
   };
 }
 
