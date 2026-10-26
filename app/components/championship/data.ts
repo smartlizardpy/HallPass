@@ -37,7 +37,7 @@ export function forgetChampionship(id: string): void {
 
 type Loaded<T> = { data: T | null; loading: boolean };
 
-function useJson<T>(url: string, withCookies: boolean, active: boolean): Loaded<T> {
+function useJson<T>(url: string, withCookies: boolean, active: boolean, retry: number): Loaded<T> {
   const [state, setState] = useState<Loaded<T>>({ data: null, loading: true });
   useEffect(() => {
     if (!active) return;
@@ -48,20 +48,23 @@ function useJson<T>(url: string, withCookies: boolean, active: boolean): Loaded<
     return () => {
       live = false;
     };
-  }, [url, withCookies, active]);
+  }, [url, withCookies, active, retry]);
   return state;
 }
 
-/** Public standings and the server's phase. */
-export function useChampionship(id: string, active = true): Loaded<PublicChampionship> {
-  return useJson<PublicChampionship>(`/api/v1/championship/${encodeURIComponent(id)}`, false, active);
+/**
+ * Public standings and the server's phase. `retry` is a counter the caller bumps
+ * (after `forgetChampionship`) to ask again, for a "try again" button.
+ */
+export function useChampionship(id: string, active = true, retry = 0): Loaded<PublicChampionship> {
+  return useJson<PublicChampionship>(`/api/v1/championship/${encodeURIComponent(id)}`, false, active, retry);
 }
 
 export type MeResponse = { signedIn: false } | ({ signedIn: true } & MyProgress);
 
 /** The viewer's own progress, or `{ signedIn: false }`. */
-export function useMyChampionship(id: string, active = true): Loaded<MeResponse> {
-  return useJson<MeResponse>(`/api/v1/championship/${encodeURIComponent(id)}/me`, true, active);
+export function useMyChampionship(id: string, active = true, retry = 0): Loaded<MeResponse> {
+  return useJson<MeResponse>(`/api/v1/championship/${encodeURIComponent(id)}/me`, true, active, retry);
 }
 
 /** True once the element has been within 200px of the viewport. Never true for a `display: none` element. */

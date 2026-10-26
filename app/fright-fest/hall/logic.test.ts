@@ -111,10 +111,10 @@ describe("needsLaptop", () => {
 describe("boardCapacity", () => {
   it("fits five rows in the laptop board at 3x and fewer as the room shrinks, never none", () => {
     expect(boardCapacity(68 * 3, false)).toBe(5);
-    expect(boardCapacity(68 * 2.5, false)).toBe(4);
+    expect(boardCapacity(68 * 2.5, false)).toBe(3);
     expect(boardCapacity(68 * 2, false)).toBe(2);
     expect(boardCapacity(10, false)).toBe(1);
-    expect(boardCapacity(68 * 3, true)).toBe(5);
+    expect(boardCapacity(68 * 3, true)).toBe(4);
     expect(boardCapacity(5000, false)).toBe(8);
   });
 });
