@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getCollectible, getPack } from "@/app/lib/collectibles/catalogue";
 import { CollectibleCard } from "./Card";
-import { PackArt } from "./Pack";
+import { PackPrint } from "./PackPrint";
 import { SignInPrompt } from "./SignInPrompt";
 import { useMyCollection } from "./useMyCollection";
 
@@ -29,7 +29,7 @@ function usePackSize(): "sm" | "md" {
 
 export function PackRoom({ openHref = (publicId: string) => `/packs/open?pack=${publicId}` }: { openHref?: (publicId: string) => string } = {}) {
   const [state] = useMyCollection();
-  const size = usePackSize();
+  const width = usePackSize() === "md" ? 184 : 148;
 
   if (state.status === "loading") {
     return <div className="h-40 animate-pulse rounded-2xl bg-surface-2 motion-reduce:animate-none" aria-hidden="true" />;
@@ -59,14 +59,14 @@ export function PackRoom({ openHref = (publicId: string) => `/packs/open?pack=${
             You have no sealed packs. Packs are earned, never bought, and for now they come as Fright Fest rewards. Any you earn will wait here, with no deadline.
           </p>
         ) : (
-          <ul className="hc-row hc-row-packs mt-3" role="list">
+          <ul className="hc-shelf mt-4" role="list" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${width + 16}px, 1fr))` }}>
             {sealed.map((p) => {
               const pack = getPack(p.packId);
               if (!pack) return null;
               return (
                 <li key={p.publicId}>
                   <Link href={openHref(p.publicId)} className="hc-link" aria-label={`Open ${pack.name}`}>
-                    <PackArt packId={p.packId} size={size} decorative />
+                    <PackPrint packId={p.packId} width={width} />
                     <span className="hc-root hc-pack-cta" aria-hidden="true">
                       Open
                     </span>
