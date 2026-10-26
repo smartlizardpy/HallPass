@@ -40,6 +40,21 @@ const standardPack = (collection: string, name: string, wrapper: string): Pack =
   ],
 });
 
+/**
+ * The Rare pack, bought with Halloween Candy (docs/candy-hunt.md): slot 1 is a
+ * standard roll, slots 2 and 3 are each rare-or-better. Existing odds tables only.
+ */
+const rarePack = (collection: string, name: string, wrapper: string): Pack => ({
+  id: `${collection}-rare`,
+  collection,
+  name: `${name} Rare Pack`,
+  description: `Bought with Halloween Candy. Three cards from ${name}: one at the usual odds, two rare or better.`,
+  wrapper,
+  versions: [
+    { v: 1, size: 3, slots: [random(collection, ODDS.standard), random(collection, ODDS.rareOrBetter), random(collection, ODDS.rareOrBetter)] },
+  ],
+});
+
 export const PACKS: Pack[] = [
   {
     id: "ff26-participation",
@@ -72,4 +87,8 @@ export const PACKS: Pack[] = [
   standardPack("inet", "Internet Culture", "browser-sleeve"),
   standardPack("brr", "Brainrot", "snack-sachet"),
   standardPack("tr", "Turkish Internet Culture", "tea-box"),
+  rarePack("hpo", "HallPass Originals", "hall-pass-tag"),
+  rarePack("inet", "Internet Culture", "browser-sleeve"),
+  rarePack("brr", "Brainrot", "snack-sachet"),
+  rarePack("tr", "Turkish Internet Culture", "tea-box"),
 ];

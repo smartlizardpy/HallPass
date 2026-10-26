@@ -73,7 +73,11 @@ describe("how a card can be obtained", () => {
   });
   it("marks standard cards as chance in their collection's packs", () => {
     const c = CATALOGUE.collectibles.find((x) => x.collection === "hpo" && x.pool === "standard" && x.rarity === "common")!;
-    expect(cardSources(c)).toEqual([{ pack: CATALOGUE.packs.find((p) => p.id === "hpo-standard")!, how: "chance" }]);
+    // The Rare pack's first slot is a standard roll too, so a common can come from it.
+    expect(cardSources(c)).toEqual([
+      { pack: CATALOGUE.packs.find((p) => p.id === "hpo-standard")!, how: "chance" },
+      { pack: CATALOGUE.packs.find((p) => p.id === "hpo-rare")!, how: "chance" },
+    ]);
   });
   it("builds a share path with only the card id", () => {
     expect(cardPath("ff26-survivor")).toBe("/collectibles/ff26-survivor");
