@@ -20,7 +20,7 @@
  * held by the site's shared overlay lock, focus moved in and given back.
  */
 
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { getPack, packPrintSrc } from "@/app/lib/collectibles/catalogue";
 import { acquireOverlayLock } from "@/app/lib/overlay-lock";
@@ -30,6 +30,15 @@ import type { InRoom } from "../opening/OpeningFlow";
 /** The opening's code, fetched once. Call it early (pointing at a pack) so Open is instant. */
 export const preloadOpening = () => import("../opening/OpeningFlow");
 const OpeningFlow = lazy(() => preloadOpening().then((m) => ({ default: m.OpeningFlow })));
+
+/** False on the server and while hydrating, true after: the portal needs <body>, and must not change what hydrates. */
+const noSubscription = () => () => {};
+const useMounted = () =>
+  useSyncExternalStore(
+    noSubscription,
+    () => true,
+    () => false,
+  );
 
 const FLIGHT_MS = 560;
 /** If the pack has not drawn by then, stop waiting for it and show the stage anyway. */
@@ -55,6 +64,7 @@ export function OpeningLayer({
   onClose(): void;
   onNext(publicId: string): void;
 }) {
+  const mounted = useMounted();
   const layer = useRef<HTMLDivElement>(null);
   const proxy = useRef<HTMLImageElement>(null);
   const reduced = useRef(false);
@@ -165,7 +175,7 @@ export function OpeningLayer({
     [close, onNext, sealed, settle],
   );
 
-  if (typeof document === "undefined") return null;
+  if (!mounted) return null;
   const name = getPack(flight?.packId ?? sealed.find((p) => p.publicId === id)?.packId ?? "")?.name;
   const f = flight?.from;
 

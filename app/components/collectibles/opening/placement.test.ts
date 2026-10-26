@@ -1,114 +1,93 @@
 import { describe, expect, it } from "vitest";
-import { CARD_PX, chooseFit, placeCards, summaryHeight } from "./placement";
+import { BANNER_H, CARD_PX, chooseFit, placeCards, summaryHeight, TAG_H } from "./placement";
 
-const md = { w: 200, h: 280 };
-const lg = { w: 260, h: 364 };
+const { md, lg, xl } = CARD_PX;
+const box = (p: { x: number; y: number; s: number }, c: { w: number; h: number }) => ({
+  l: p.x - (c.w * p.s) / 2,
+  r: p.x + (c.w * p.s) / 2,
+  t: p.y - (c.h * p.s) / 2,
+  b: p.y + (c.h * p.s) / 2,
+});
 
 describe("chooseFit", () => {
-  it("deals a row of medium cards when three fit across", () => {
-    expect(chooseFit({ w: 830, h: 600 })).toEqual({ layout: "row", size: "md" });
+  it("gives a laptop the extra-large card with the tray beside it", () => {
+    expect(chooseFit({ w: 1180, h: 610 })).toEqual({ tray: "side", size: "xl" });
   });
-  it("uses a row of small cards on a short, wide screen (a phone on its side)", () => {
-    expect(chooseFit({ w: 820, h: 290 })).toEqual({ layout: "row", size: "sm" });
+  it("still fits a large card on a Chromebook with its browser bars (about 640 px tall)", () => {
+    expect(chooseFit({ w: 1180, h: 486 })).toEqual({ tray: "side", size: "lg" });
   });
-  it("goes one at a time on a phone, as large as the height allows", () => {
-    expect(chooseFit({ w: 366, h: 575 })).toEqual({ layout: "focus", size: "lg" });
-    expect(chooseFit({ w: 366, h: 420 })).toEqual({ layout: "focus", size: "md" });
-    expect(chooseFit({ w: 296, h: 250 })).toEqual({ layout: "focus", size: "sm" });
+  it("gives a phone the large card and dots", () => {
+    expect(chooseFit({ w: 390, h: 660 })).toEqual({ tray: "dots", size: "lg" });
+    expect(chooseFit({ w: 360, h: 566 })).toEqual({ tray: "dots", size: "lg" });
   });
-});
-
-describe("placeCards: row", () => {
-  const base = { layout: "row" as const, table: { w: 830, h: 600 }, card: md, count: 3, flipped: [false, false, false], current: 0, summary: false };
-
-  it("centres the row and keeps every card on the table", () => {
-    const p = placeCards(base);
-    expect(p.map((x) => Math.round(x.x))).toEqual([187, 415, 643]);
-    for (const x of p) {
-      expect(x.x - md.w / 2).toBeGreaterThanOrEqual(0);
-      expect(x.x + md.w / 2).toBeLessThanOrEqual(830);
-      expect(x.s).toBe(1);
-    }
+  it("steps down on short screens", () => {
+    expect(chooseFit({ w: 366, h: 420 }).size).toBe("md");
+    expect(chooseFit({ w: 296, h: 300 }).size).toBe("sm");
   });
-
-  it("does not move a card when it is turned over", () => {
-    const before = placeCards(base);
-    const after = placeCards({ ...base, flipped: [true, false, false] });
-    expect(after).toEqual(before);
+  it("never uses the extra-large card on a narrow screen", () => {
+    expect(chooseFit({ w: 420, h: 900 }).size).toBe("lg");
   });
 });
 
-describe("placeCards: focus (phones)", () => {
-  const base = { layout: "focus" as const, table: { w: 366, h: 600 }, card: lg, count: 3, flipped: [false, false, false], current: 0, summary: false };
+describe("placeCards: one at a time", () => {
+  const base = { tray: "side" as const, table: { w: 1180, h: 610 }, card: xl, count: 3, flipped: [false, false, false], current: 0, summary: false };
 
-  it("puts the current card in front at full size, the rest stacked behind it", () => {
+  it("puts the card in front between the plate and the tag, the rest stacked just behind it", () => {
     const p = placeCards(base);
-    expect(p[0]).toMatchObject({ x: 183, s: 1, z: 30 });
+    const front = box(p[0], xl);
+    expect(p[0]).toMatchObject({ x: 590, s: 1, z: 30 });
+    expect(front.t).toBeGreaterThanOrEqual(BANNER_H);
+    expect(front.b).toBeLessThanOrEqual(610 - TAG_H);
     expect(p[1].z).toBeLessThan(p[0].z);
     expect(p[2].z).toBeLessThan(p[1].z);
-    expect(p[1].y).toBeGreaterThan(p[0].y);
     expect(p[1].s).toBeLessThan(1);
+    expect(p[1].y - p[0].y).toBeLessThanOrEqual(16);
   });
 
-  it("sends a card that has been seen to the tray, small, below the card in front", () => {
-    const p = placeCards({ ...base, flipped: [true, false, false], current: 1 });
-    expect(p[1]).toMatchObject({ s: 1, z: 30 });
-    expect(p[0].s).toBeLessThan(0.35);
-    expect(p[0].y).toBeGreaterThan(p[1].y + lg.h / 2);
-    expect(p[0].y).toBeLessThanOrEqual(600);
-  });
-
-  it("keeps the card in front, below its count, on the table on a short phone", () => {
-    const p = placeCards({ ...base, table: { w: 340, h: 470 }, card: md });
-    expect(p[0].y - md.h / 2).toBeGreaterThanOrEqual(28);
-  });
-
-  it("keeps every card on a small phone's table, the tray clear of the card in front", () => {
-    const sm = CARD_PX.sm;
-    for (const table of [{ w: 296, h: 260 }, { w: 296, h: 330 }]) {
-      const p = placeCards({ ...base, table, card: sm, flipped: [true, false, false], current: 1 });
-      const box = (i: number) => ({ l: p[i].x - (sm.w * p[i].s) / 2, r: p[i].x + (sm.w * p[i].s) / 2, t: p[i].y - (sm.h * p[i].s) / 2, b: p[i].y + (sm.h * p[i].s) / 2 });
-      const [tray, front] = [box(0), box(1)];
-      expect(front.t).toBeGreaterThanOrEqual(28);
-      expect(tray.b).toBeLessThanOrEqual(table.h);
-      expect(tray.r).toBeLessThanOrEqual(table.w);
-      const overlap = tray.l < front.r && tray.r > front.l && tray.t < front.b && tray.b > front.t;
-      expect(overlap).toBe(false);
+  it("sends a seen card to the tray beside the card in front, small, clear of it and on the table", () => {
+    const p = placeCards({ ...base, flipped: [true, true, false], current: 2 });
+    const front = box(p[2], xl);
+    for (const i of [0, 1]) {
+      const t = box(p[i], xl);
+      expect(t.l).toBeGreaterThan(front.r);
+      expect(t.r).toBeLessThanOrEqual(1180);
+      expect(t.t).toBeGreaterThanOrEqual(0);
+      expect(p[i].s).toBeLessThan(0.25);
     }
-  });
-
-  it("puts the tray beside the card when the table is short and wide", () => {
-    const sm = CARD_PX.sm;
-    const p = placeCards({ ...base, table: { w: 560, h: 240 }, card: sm, flipped: [true, true, false], current: 2 });
-    expect(p[0].x).toBeGreaterThan(p[2].x + sm.w / 2);
     expect(p[1].y).toBeGreaterThan(p[0].y);
-    for (const i of [0, 1]) expect(p[i].y + (sm.h * p[i].s) / 2).toBeLessThanOrEqual(240);
   });
 
-  it("shrinks the card in front to fit a table shorter than the card", () => {
-    const sm = CARD_PX.sm;
-    const p = placeCards({ ...base, table: { w: 540, h: 200 }, card: sm });
+  it("on a phone, fades a seen card behind the one in front", () => {
+    const p = placeCards({ ...base, tray: "dots", table: { w: 390, h: 660 }, card: lg, flipped: [true, false, false], current: 1 });
+    expect(p[1]).toMatchObject({ x: 195, s: 1, z: 30 });
+    expect(p[0].o).toBe(0);
+    expect(p[0].z).toBeLessThan(p[1].z);
+  });
+
+  it("shrinks the card in front a little rather than overlap the plate or the tag", () => {
+    const p = placeCards({ ...base, table: { w: 1180, h: 486 }, card: lg });
+    const front = box(p[0], lg);
     expect(p[0].s).toBeLessThan(1);
-    expect(p[0].y - (sm.h * p[0].s) / 2).toBeGreaterThanOrEqual(28);
-    for (const x of p) expect(x.y + (sm.h * x.s) / 2).toBeLessThanOrEqual(200);
+    expect(p[0].s).toBeGreaterThanOrEqual(0.9);
+    expect(front.t).toBeGreaterThanOrEqual(BANNER_H - 0.5);
+    expect(front.b).toBeLessThanOrEqual(486 - TAG_H + 0.5);
+  });
+
+  it("does not move the card in front when it is turned over", () => {
+    expect(placeCards({ ...base, flipped: [true, false, false] })[0]).toEqual(placeCards(base)[0]);
   });
 });
 
 describe("placeCards: summary", () => {
-  it("fans the hand on a phone without leaving the table's width", () => {
-    const p = placeCards({ layout: "focus", table: { w: 358, h: 300 }, card: lg, count: 3, flipped: [true, true, true], current: 2, summary: true });
+  it("fans the hand without leaving the table's width, the middle card on top", () => {
+    const p = placeCards({ tray: "dots", table: { w: 358, h: 300 }, card: md, count: 3, flipped: [true, true, true], current: 2, summary: true });
     for (const x of p) {
-      const half = (lg.w * x.s) / 2;
+      const half = (md.w * x.s) / 2;
       expect(x.x - half).toBeGreaterThanOrEqual(0);
       expect(x.x + half).toBeLessThanOrEqual(358);
     }
     expect(p[1].z).toBeGreaterThan(p[0].z);
     expect(p[1].z).toBeGreaterThan(p[2].z);
-    expect(p[0].y + (lg.h * p[0].s) / 2).toBeLessThanOrEqual(summaryHeight("focus", lg) + 12);
-  });
-
-  it("keeps the row on wide screens, inside the summary's height", () => {
-    const p = placeCards({ layout: "row", table: { w: 830, h: 360 }, card: md, count: 3, flipped: [true, true, true], current: 2, summary: true });
-    expect(p[0].y + md.h / 2).toBeLessThanOrEqual(summaryHeight("row", md));
+    expect(p[0].y + (md.h * p[0].s) / 2).toBeLessThanOrEqual(summaryHeight(md) + 12);
   });
 });

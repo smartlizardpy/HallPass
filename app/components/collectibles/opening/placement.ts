@@ -4,15 +4,17 @@
  * moment the cards leave the pack to the summary and moves it between these
  * places, so a card is never swapped for another element mid-journey.
  *
- *   row    wide screens: dealt side by side, turned over in place
- *   focus  narrow screens: one card in front, the face-down rest stacked behind
- *          it, the ones already seen in a small tray along the bottom
- *   summary  the same row (wide) or a fanned hand (narrow), above the results
+ * One card at a time on every screen (docs/collectibles-pack-room.md): the
+ * card being revealed in front, as large as the screen allows, with room above
+ * it for the rarity's plate and below it for "New for your binder"; the cards
+ * still face down stacked behind it. The cards already seen go to a tray beside
+ * it where there is room (`side`, laptops), or fade behind it while dots count
+ * them (`dots`, phones). The summary lays them out again (`summary`).
  *
  * Positions are the card's centre in px from the table's top-left.
  */
 
-export type Layout = "row" | "focus";
+export type Tray = "side" | "dots";
 
 export interface Place {
   x: number;
@@ -22,6 +24,8 @@ export interface Place {
   /** Rotation in degrees. */
   r: number;
   z: number;
+  /** Opacity, when not fully shown (a seen card behind the one in front, on a phone). */
+  o?: number;
 }
 
 export interface TableSize {
@@ -34,41 +38,45 @@ export interface CardSize {
   h: number;
 }
 
-export const ROW_GAP = 28;
-/** Room under each card in the row for its caption. */
-export const CAPTION = 56;
-/** Room above the card in front for "Card 2 of 3". */
-export const COUNT_H = 28;
+/** Room above the card in front for the rarity's plate. */
+export const BANNER_H = 72;
+/** Room below it for the "New for your binder" tag. */
+export const TAG_H = 52;
+/** The tray's thumbnails: this wide, this far from the card, this far apart. */
+const THUMB_W = 64;
+const TRAY_GAP = 36;
+const THUMB_GAP = 12;
+/** The card in front may shrink this far to fit before a smaller size is used. */
+const MIN_FIT = 0.9;
 
 /** The card sizes (Card.tsx), so the pixel art stays at a whole-number scale. */
-export const CARD_PX = { sm: { w: 140, h: 196 }, md: { w: 200, h: 280 }, lg: { w: 260, h: 364 } } as const;
+export const CARD_PX = { sm: { w: 140, h: 196 }, md: { w: 200, h: 280 }, lg: { w: 260, h: 364 }, xl: { w: 300, h: 420 } } as const;
 export type CardKey = keyof typeof CARD_PX;
 
+/** The tray goes beside the card when there is room for it on both sides (the card stays centred). */
+const sideFits = (table: TableSize, card: CardSize) => table.w >= card.w + 2 * (TRAY_GAP + THUMB_W + 8);
+
 /**
- * The layout and card size for a table: a row of medium cards if three fit
- * across with their captions, then a row of small ones (a short, wide screen),
- * otherwise one at a time at the largest size that leaves room for the stack
- * and the tray.
+ * The card size and where the seen cards go, for a table: the largest card
+ * whose height fits between the plate and the tag (shrinking a little if need
+ * be), the extra-large one only where there is width to spare.
  */
-export function chooseFit(table: TableSize): { layout: Layout; size: CardKey } {
-  const fitsRow = (c: CardSize) => table.w >= c.w * 3 + ROW_GAP * 2 + 32 && table.h >= c.h + CAPTION + 30;
-  if (fitsRow(CARD_PX.md)) return { layout: "row", size: "md" };
-  if (fitsRow(CARD_PX.sm)) return { layout: "row", size: "sm" };
-  const room = table.h - COUNT_H;
-  if (room >= CARD_PX.lg.h + 110 && table.w >= CARD_PX.lg.w + 40) return { layout: "focus", size: "lg" };
-  if (room >= CARD_PX.md.h + 80 && table.w >= CARD_PX.md.w + 32) return { layout: "focus", size: "md" };
-  return { layout: "focus", size: "sm" };
+export function chooseFit(table: TableSize): { tray: Tray; size: CardKey } {
+  const band = table.h - BANNER_H - TAG_H;
+  const order: CardKey[] = table.w >= 600 ? ["xl", "lg", "md", "sm"] : ["lg", "md", "sm"];
+  const size = order.find((k) => CARD_PX[k].h * MIN_FIT <= band && CARD_PX[k].w + 32 <= table.w) ?? "sm";
+  return { tray: sideFits(table, CARD_PX[size]) ? "side" : "dots", size };
 }
 
-/** Height the table needs in the summary: the row with captions, or the fanned hand. */
-export function summaryHeight(layout: Layout, card: CardSize): number {
-  return layout === "row" ? card.h + CAPTION + 24 : Math.round(fanScale(card) * card.h + 48);
+/** Height the table needs in the summary: the fanned hand. */
+export function summaryHeight(card: CardSize): number {
+  return Math.round(fanScale(card) * card.h + 48);
 }
 
 const fanScale = (card: CardSize) => Math.min(1, 132 / card.w);
 
 export interface PlaceInput {
-  layout: Layout;
+  tray: Tray;
   table: TableSize;
   card: CardSize;
   count: number;
@@ -77,14 +85,16 @@ export interface PlaceInput {
   summary: boolean;
 }
 
-export function placeCards({ layout, table, card, count, flipped, current, summary }: PlaceInput): Place[] {
+/** The card in front: centred between the plate and the tag, shrunk only if the table is too short. */
+export function frontPlace(table: TableSize, card: CardSize): Place {
+  const band = table.h - BANNER_H - TAG_H;
+  const f = Math.min(1, Math.max(0.6, band / card.h));
+  return { x: table.w / 2, y: BANNER_H + Math.max((card.h * f) / 2, band / 2), s: f, r: 0, z: 30 };
+}
+
+export function placeCards({ tray, table, card, count, flipped, current, summary }: PlaceInput): Place[] {
   const out: Place[] = [];
   const mid = (count - 1) / 2;
-  if (layout === "row") {
-    const y = summary ? card.h / 2 + 12 : Math.max(card.h / 2 + 8, (table.h - CAPTION) / 2);
-    for (let i = 0; i < count; i++) out.push({ x: table.w / 2 + (i - mid) * (card.w + ROW_GAP), y, s: 1, r: 0, z: 10 + i });
-    return out;
-  }
 
   if (summary) {
     const s = fanScale(card);
@@ -96,17 +106,8 @@ export function placeCards({ layout, table, card, count, flipped, current, summa
     return out;
   }
 
-  // Focus: the current card in front, face-down ones behind it, seen ones in the
-  // tray: along the bottom, or beside the card when the table is short and wide.
-  let thumb = Math.min(0.3, 64 / card.w);
-  const side = table.h < card.h + COUNT_H + 96 && table.w / 2 >= card.w / 2 + 24 + card.w * thumb + 6;
-  const trayH = side ? 0 : Math.max(56, Math.min(96, table.h - COUNT_H - card.h - 12));
-  if (!side) thumb = Math.min(thumb, (trayH - 10) / card.h);
-  // Beside a tray the table can be shorter than even a small card (a phone on its
-  // side): the card in front shrinks to fit, leaving room for the stack to peek.
-  const peek = side ? 20 : 0;
-  const f = side ? Math.min(1, Math.max(0.6, (table.h - COUNT_H - peek) / card.h)) : 1;
-  const focusY = COUNT_H + Math.max((card.h * f) / 2, (table.h - COUNT_H - trayH - peek) / 2);
+  const front = frontPlace(table, card);
+  const f = front.s;
   const seen: number[] = [];
   const waiting: number[] = [];
   for (let i = 0; i < count; i++) {
@@ -115,16 +116,19 @@ export function placeCards({ layout, table, card, count, flipped, current, summa
     else waiting.push(i);
   }
   const places = new Array<Place>(count);
-  places[current] = { x: table.w / 2, y: focusY, s: f, r: 0, z: 30 };
+  places[current] = front;
+  // Face down behind the card in front, just showing.
   waiting.forEach((i, k) => {
-    places[i] = { x: table.w / 2 + (k + 1) * 3, y: focusY + (k + 1) * 14 * f, s: f * (1 - (k + 1) * 0.045), r: (k % 2 ? -1 : 1) * (1.5 + k), z: 20 - k };
+    places[i] = { x: front.x + (k + 1) * 3, y: front.y + (k + 1) * 8 * f, s: f * (1 - (k + 1) * 0.03), r: (k % 2 ? -1 : 1) * (1.2 + k), z: 20 - k };
   });
-  // The tray keeps cards in reveal order.
-  const trayMid = (count - 1) / 2;
+  // Seen: into the tray in reveal order, or quietly behind the card in front.
+  const thumb = THUMB_W / card.w;
+  const thumbH = card.h * thumb;
   seen.forEach((i) => {
-    places[i] = side
-      ? { x: table.w / 2 + (card.w * f) / 2 + 24 + (card.w * thumb) / 2, y: COUNT_H + 6 + (card.h * thumb) / 2 + i * (card.h * thumb + 10), s: thumb, r: 0, z: 5 + i }
-      : { x: table.w / 2 + (i - trayMid) * (card.w * thumb + 14), y: table.h - trayH / 2, s: thumb, r: 0, z: 5 + i };
+    places[i] =
+      tray === "side"
+        ? { x: front.x + (card.w * f) / 2 + TRAY_GAP + THUMB_W / 2, y: front.y + (i - mid) * (thumbH + THUMB_GAP), s: thumb, r: 0, z: 5 + i }
+        : { x: front.x, y: front.y, s: f * 0.94, r: 0, z: 4 + i, o: 0 };
   });
   return places;
 }

@@ -81,9 +81,18 @@
   --art: 192px;
   --cap: 19px;
 }
-/* 32 px art: ×3 / ×4 / ×6. 48 px art: ×2 / ×3 / ×4. */
+:is(.hc-card, .hc-back, .hc-locked)[data-size="xl"] {
+  --w: 300px;
+  --h: 420px;
+  --art: 240px;
+  --cap: 21px;
+}
+/* 32 px art: ×3 / ×4 / ×6 / ×7. 48 px art: ×2 / ×3 / ×4 / ×5. */
 .hc-card[data-art="32"][data-size="md"] {
   --art: 128px;
+}
+.hc-card[data-art="32"][data-size="xl"] {
+  --art: 224px;
 }
 
 /* ── The die-cut: peel border with the rarity's silhouette ── */

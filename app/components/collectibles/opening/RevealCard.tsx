@@ -146,7 +146,8 @@ export function RevealCard(props: Props) {
       className="ho-rcard"
       data-size={size}
       data-face={flipped || undefined}
-      style={{ transform: placeTransform(place), zIndex: place.z } as CSSProperties}
+      style={{ transform: placeTransform(place), zIndex: place.z, opacity: place.o ?? 1, pointerEvents: place.o === 0 ? "none" : undefined } as CSSProperties}
+      aria-hidden={place.o === 0 || undefined}
     >
       <div ref={flipper} className="ho-flipper" data-face={flipped || undefined}>
         <div className="ho-side ho-side-back">

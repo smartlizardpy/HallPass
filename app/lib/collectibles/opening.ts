@@ -12,11 +12,11 @@ import { getCollectible } from "./catalogue";
 import type { PackVersion, Rarity } from "./catalogue/types";
 import { RARITY_LABEL } from "./present";
 
-/** "Card 2 of 3: Rare, The Caretaker, new." for the live region. */
+/** "Card 2 of 3: Rare, The Caretaker, new for your binder." for the live region. */
 export function revealLine(index: number, total: number, collectibleId: string, wasNew: boolean): string {
   const card = getCollectible(collectibleId);
   if (!card) return `Card ${index} of ${total}.`;
-  return `Card ${index} of ${total}: ${RARITY_LABEL[card.rarity]}, ${card.name}, ${wasNew ? "new" : "duplicate"}.`;
+  return `Card ${index} of ${total}: ${RARITY_LABEL[card.rarity]}, ${card.name}, ${wasNew ? "new for your binder" : "already in your binder"}.`;
 }
 
 /**

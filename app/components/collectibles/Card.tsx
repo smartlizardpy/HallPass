@@ -14,9 +14,9 @@
  * `data-moment` (set and cleared by the caller) plays a one-shot rarity moment.
  * Face down, every card is identical (`CardBack` takes no rarity).
  *
- * Sizes are fixed (`sm` binder grid, `md` reveal, `lg` detail) so the pixel art
- * is always drawn at a whole-number scale: 32 px art at 3×/4×/6×, 48 px at
- * 2×/3×/4×.
+ * Sizes are fixed (`sm` binder grid, `md` small reveal, `lg` detail and phone
+ * reveal, `xl` laptop reveal) so the pixel art is always drawn at a
+ * whole-number scale: 32 px art at 3×/4×/6×/7×, 48 px at 2×/3×/4×/5×.
  */
 
 import "./collectibles.css";
@@ -37,7 +37,7 @@ import {
 import { useOnScreenLoop } from "./useHolo";
 import { useCardTilt } from "./useCardTilt";
 
-export type CardSize = "sm" | "md" | "lg";
+export type CardSize = "sm" | "md" | "lg" | "xl";
 
 function Pips({ rarity }: { rarity: Rarity }) {
   const n = RARITY_RANK[rarity];

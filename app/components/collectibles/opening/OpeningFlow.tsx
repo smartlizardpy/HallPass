@@ -10,8 +10,8 @@
  *               flies off and the mouth eases open while we wait
  *   opened      the face-down stack rises in the mouth
  *   extracting  the stack is drawn out; the empty wrapper drops away
- *   revealing   the cards are dealt (a row on wide screens; one at a time on
- *               phones) and turned over, rarest last
+ *   revealing   the cards are dealt and turned over one at a time, rarest
+ *               last; rare and up get their plate and their light
  *   summary     what you got, what is new, how the collection stands
  *
  * THE RESULT COMES FROM THE SERVER, NEVER FROM THE ANIMATION. The open call is
@@ -34,10 +34,10 @@ import { startSignIn } from "@/app/lib/auth-actions";
 import { getCollectible, getCollection, getPack, packVersion } from "@/app/lib/collectibles/catalogue";
 import type { Collectible } from "@/app/lib/collectibles/catalogue/types";
 import { revealLine, slotLines } from "@/app/lib/collectibles/opening";
-import { RARITY_LABEL } from "@/app/lib/collectibles/present";
+import { RARITY_LABEL, RARITY_RANK } from "@/app/lib/collectibles/present";
 import { CardBack, type CardSize } from "../Card";
 import { haptics } from "./haptics";
-import { CAPTION, CARD_PX, chooseFit, placeCards, summaryHeight, type Place } from "./placement";
+import { CARD_PX, chooseFit, frontPlace, placeCards, summaryHeight, type Place } from "./placement";
 import { canCommit, canSkip, initialOpening, openFailure, openingReducer, type Pull, type SealedPack } from "./machine";
 import { EASE, isAborted, play, sleep } from "./motion";
 import { seedOf } from "./noise";
@@ -145,6 +145,8 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
   const [dealt, setDealt] = useState(false);
   const [deckFrom, setDeckFrom] = useState<Place[] | null>(null);
   const [revealAll, setRevealAll] = useState(false);
+  /** Which cards have shown their face (the plate and the tag wait for it). */
+  const [faces, setFaces] = useState<boolean[]>([]);
 
   const alive = useRef(true);
   const inFlight = useRef(false);
@@ -278,19 +280,19 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
   const summary = state.stage === "summary";
   // Decided on the table as it is during the opening (the summary shrinks it).
   const fit = chooseFit({ w: table.w, h: openH || table.h });
-  const layout = fit.layout;
+  const tray = fit.tray;
   const revealSize: CardSize = fit.size;
   const revealSizeRef = useRef(revealSize);
   useEffect(() => {
     if (!summary) revealSizeRef.current = revealSize;
   });
   const cardPx = CARD_PX[revealSize];
-  /** Phones: the card in front (the machine's name for it is `current`). */
+  /** The card in front (the machine's name for it is `current`). */
   const front = state.current;
   const cards = state.pulls.map((p) => getCollectible(p.collectibleId)).filter((c): c is Collectible => !!c);
   const places = useMemo(
-    () => placeCards({ layout, table: { w: table.w, h: openH || table.h }, card: cardPx, count: cards.length, flipped: state.flipped, current: front, summary }),
-    [layout, table.w, table.h, openH, cardPx, cards.length, state.flipped, front, summary],
+    () => placeCards({ tray, table: { w: table.w, h: openH || table.h }, card: cardPx, count: cards.length, flipped: state.flipped, current: front, summary }),
+    [tray, table.w, table.h, openH, cardPx, cards.length, state.flipped, front, summary],
   );
 
   // ── Choreography. Each stage's steps stop the moment the stage changes. ──
@@ -396,9 +398,7 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
 
   // ── Turning cards over ──
   const allFlipped = state.flipped.length > 0 && state.flipped.every(Boolean);
-  const allSettled = state.settled.length > 0 && state.settled.every(Boolean);
   const midFlip = state.flipped.some((f, i) => f && !state.settled[i]);
-  const nextUnflipped = state.flipped.findIndex((f) => !f);
   const interactive = state.stage === "revealing" && (dealt || state.resumed);
 
   const flip = useCallback(
@@ -416,16 +416,11 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
     const s = stateRef.current;
     if (s.stage !== "revealing") return;
     const next = s.flipped.findIndex((f) => !f);
-    if (layout === "row") {
-      if (next >= 0) flip(next);
-      else if (s.settled.every(Boolean)) dispatch({ type: "finish" });
-      return;
-    }
     if (!s.flipped[s.current]) return flip(s.current);
     if (!s.settled[s.current]) return;
     if (next < 0) dispatch({ type: "finish" });
     else dispatch({ type: "next" });
-  }, [flip, layout]);
+  }, [flip]);
 
   // Reveal all: keep advancing whenever nothing is mid-turn.
   useEffect(() => {
@@ -433,13 +428,6 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
     const t = window.setTimeout(advance, 260);
     return () => window.clearTimeout(t);
   }, [revealAll, interactive, midFlip, advance, front, state.flipped]);
-
-  // Wide screens: once every card is up, the results follow by themselves.
-  useEffect(() => {
-    if (state.stage !== "revealing" || layout !== "row" || !allSettled) return;
-    const t = window.setTimeout(() => dispatch({ type: "finish" }), reduced ? 200 : 700);
-    return () => window.clearTimeout(t);
-  }, [state.stage, layout, allSettled, reduced]);
 
   // Keep the keyboard on whatever comes next, unless the player has gone elsewhere
   // on the page. When the focused control goes away (Open it once the tear starts,
@@ -451,10 +439,10 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
     const active = document.activeElement;
     const lost = !active || active === document.body;
     if (!lost && !stage.current?.contains(active)) return;
-    const target = interactive ? (layout === "row" ? buttons.current[nextUnflipped] : buttons.current[front]) : null;
+    const target = interactive ? buttons.current[front] : null;
     if (target) target.focus({ preventScroll: true });
     else if (lost) title.current?.focus({ preventScroll: true });
-  }, [state.stage, summary, interactive, layout, nextUnflipped, front, state.settled]);
+  }, [state.stage, summary, interactive, front, state.settled]);
 
   // The results: say so, and put the keyboard on them.
   const newCount = state.pulls.filter((p) => p.wasNew).length;
@@ -589,20 +577,28 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
   const n = cards.length;
 
   const actionFor = (i: number): CardAction | null => {
-    if (!interactive) return null;
-    if (layout === "row") return i === nextUnflipped ? { label: `Turn over card ${i + 1} of ${n}`, run: () => flip(i) } : null;
-    if (i !== state.current) return null;
+    if (!interactive || i !== state.current) return null;
     if (!state.flipped[i]) return { label: `Turn over card ${i + 1} of ${n}`, run: () => flip(i) };
     if (!state.settled[i]) return null;
     return { label: allFlipped ? `See all ${n} cards` : "Next card", run: advance, swipe: true };
   };
+  /** The one button under the card: what tapping the card does too. */
+  const goLabel = !state.flipped[front] ? "Turn it over" : allFlipped ? `See all ${n === 3 ? "three" : n}` : "Next card";
+  const goReady = interactive && !midFlip && !revealAll;
+  // The card in front, once its face is up: its plate (rare and up), its light, its tag.
+  const faceUp = (i: number) => !!(faces[i] || state.settled[i]);
+  const frontCard = cards[front];
+  const frontPull = state.pulls[front];
+  const frontAt = frontPlace({ w: table.w, h: openH || table.h }, cardPx);
+  const rank = frontCard ? RARITY_RANK[frontCard.rarity] : 0;
+  const showMoment = state.stage === "revealing" && !!frontCard && faceUp(front);
 
   return (
     <section
       ref={stageRef}
       className="hc-root ho-stage"
       data-stage={state.stage}
-      data-layout={layout}
+      data-tray={tray}
       data-room={room ? "" : undefined}
       style={{ "--ho-tint": tint, "--ho-pack-w": `${packW}px` } as CSSProperties}
       aria-labelledby="ho-title"
@@ -632,7 +628,7 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
         </div>
       </header>
 
-      <div ref={tableRef} className="ho-table" style={summary ? { height: summaryHeight(layout, cardPx) } : undefined}>
+      <div ref={tableRef} className="ho-table" style={summary ? { height: summaryHeight(cardPx) } : undefined}>
         {showPack && def && state.pack && (
           <div ref={packWrap} className="ho-pack-wrap">
             <PackStage
@@ -684,10 +680,29 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
 
         {showCards && (
           <div className="ho-cards" role="group" aria-label="Your cards">
-            {layout === "focus" && !summary && (
-              <p className="ho-count" aria-hidden="true">
-                Card {state.current + 1} of {n}
-                {state.settled[state.current] && <Tag isNew={state.pulls[state.current].wasNew} />}
+            {showMoment && rank >= 3 && (
+              <div
+                key={`glow-${front}`}
+                className="ho-glow"
+                data-rarity={frontCard.rarity}
+                style={{ transform: `translate(${frontAt.x}px, ${frontAt.y}px) translate(-50%, -50%)` }}
+                aria-hidden="true"
+              />
+            )}
+            {showMoment && rank >= 3 && (
+              <p
+                key={`plate-${front}`}
+                className="ho-plate"
+                data-rarity={frontCard.rarity}
+                style={{ left: frontAt.x, top: frontAt.y - (cardPx.h * frontAt.s) / 2 - 14 }}
+                aria-hidden="true"
+              >
+                {RARITY_LABEL[frontCard.rarity]}
+              </p>
+            )}
+            {showMoment && (
+              <p key={`tag-${front}`} className="ho-under" style={{ left: frontAt.x, top: frontAt.y + (cardPx.h * frontAt.s) / 2 + 14 }} aria-hidden="true">
+                <Tag isNew={frontPull.wasNew} long />
               </p>
             )}
             {cards.map((card, i) => {
@@ -707,11 +722,16 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
                   action={actionFor(i)}
                   href={summary ? `/collectibles/${card.id}` : undefined}
                   hrefLabel={`${card.name}: ${RARITY_LABEL[card.rarity]}, ${pull.wasNew ? "new" : "duplicate"}. View card`}
-                  hrefHidden={layout !== "row"}
+                  hrefHidden
                   buttonRef={(el) => {
                     buttons.current[i] = el;
                   }}
                   onFaceShown={() => {
+                    setFaces((f) => {
+                      const next = [...f];
+                      next[i] = true;
+                      return next;
+                    });
                     // A turn still finishing after Skip must not talk over the summary.
                     if (stateRef.current.stage !== "revealing") return;
                     sounds.reveal(card.rarity);
@@ -722,14 +742,6 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
                 />
               );
             })}
-            {layout === "row" &&
-              places.map((p, i) =>
-                state.settled[i] ? (
-                  <div key={state.pulls[i].slot} className="ho-cap" style={{ transform: `translate(${p.x}px, ${p.y + cardPx.h / 2 + 12}px) translateX(-50%)`, height: CAPTION - 16 }}>
-                    <Tag isNew={state.pulls[i].wasNew} />
-                  </div>
-                ) : null,
-              )}
           </div>
         )}
       </div>
@@ -773,23 +785,20 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
         )}
         {state.stage === "revealing" && (
           <>
-            <p className="ho-copy" aria-hidden="true">
-              {!interactive
-                ? " "
-                : layout === "row"
-                  ? allFlipped
-                    ? " "
-                    : "Tap a card to turn it over."
-                  : !state.flipped[state.current]
-                    ? "Tap the card to turn it over."
-                    : allFlipped
-                      ? `Tap or swipe to see all ${n}.`
-                      : "Tap or swipe for the next card."}
-            </p>
             {state.resumed && <p className="ho-copy">You opened this pack before. Here&apos;s where you left off.</p>}
+            {tray === "dots" && n > 1 && (
+              <p className="ho-dots" aria-hidden="true">
+                {state.pulls.map((p, i) => (
+                  <span key={p.slot} data-on={i === front || state.flipped[i] || undefined} data-here={i === front || undefined} />
+                ))}
+              </p>
+            )}
             <div className="ho-actions">
+              <button type="button" className="ho-btn ho-btn-primary ho-go" onClick={() => goReady && advance()} aria-disabled={!goReady || undefined}>
+                {goLabel}
+              </button>
               {!allFlipped && (
-                <button type="button" className="ho-btn" onClick={() => interactive && setRevealAll(true)} aria-disabled={!interactive || revealAll || undefined}>
+                <button type="button" className="ho-link" onClick={() => interactive && setRevealAll(true)} aria-disabled={!interactive || revealAll || undefined}>
                   Reveal all
                 </button>
               )}
@@ -802,7 +811,7 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
             <h2 ref={summaryHead} tabIndex={-1}>
               {summaryTitle}
             </h2>
-            <ul className="ho-results" data-layout={layout}>
+            <ul className="ho-results">
               {state.pulls.map((p) => {
                 const c = getCollectible(p.collectibleId);
                 if (!c) return null;
@@ -877,8 +886,9 @@ function SpeakerIcon({ on }: { on: boolean }) {
   );
 }
 
-function Tag({ isNew }: { isNew: boolean }) {
-  return <span className={`ho-tag${isNew ? " is-new" : ""}`}>{isNew ? "New" : "Duplicate"}</span>;
+function Tag({ isNew, long = false }: { isNew: boolean; long?: boolean }) {
+  const text = long ? (isNew ? "New for your binder" : "Already in your binder") : isNew ? "New" : "Duplicate";
+  return <span className={`ho-tag${isNew ? " is-new" : ""}${long ? " is-long" : ""}`}>{text}</span>;
 }
 
 function Shell({ tint, title, busy = false, inRoom, children }: { tint: string; title: string; busy?: boolean; inRoom: boolean; children: React.ReactNode }) {

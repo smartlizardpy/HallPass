@@ -206,7 +206,9 @@
   height: 280px;
   perspective: 1400px;
   pointer-events: auto;
-  transition: transform 560ms cubic-bezier(0.2, 0.8, 0.25, 1);
+  transition:
+    transform 560ms cubic-bezier(0.2, 0.8, 0.25, 1),
+    opacity 320ms ease;
   will-change: transform;
 }
 .ho-rcard[data-size="lg"] {
@@ -216,6 +218,10 @@
 .ho-rcard[data-size="sm"] {
   width: 140px;
   height: 196px;
+}
+.ho-rcard[data-size="xl"] {
+  width: 300px;
+  height: 420px;
 }
 .ho-flipper {
   position: relative;
@@ -249,9 +255,9 @@
   touch-action: pan-y; /* sideways swipes are ours, vertical ones still scroll */
   -webkit-tap-highlight-color: transparent;
 }
-/* On a phone the card in front fills the table: every touch on it is ours (swipe, tilt), so a
-   slightly diagonal swipe never scrolls the page mid-reveal. The summary scrolls as usual. */
-.ho-stage[data-layout="focus"]:not([data-stage="summary"]) .ho-hit {
+/* The card in front fills the table: every touch on it is ours (swipe, tilt), so a slightly
+   diagonal swipe never scrolls the page mid-reveal. The summary scrolls as usual. */
+.ho-stage:not([data-stage="summary"]) .ho-hit {
   touch-action: none;
 }
 /* The card waiting to be turned over lifts toward the pointer, and breathes a little to invite a tap. */
@@ -262,30 +268,104 @@
   animation: ho-invite 2.8s ease-in-out 600ms infinite;
 }
 
-.ho-cap {
+/* ── The card in front, once its face is up ──
+   Rare and up: a plate with the rarity's name above it and a light behind it; epic and
+   legendary: rays turning in the light. Legendary's plate is gold and larger. The tag
+   under it says whether the card is new to the binder. All of it waits for the face,
+   so nothing gives the card away early. */
+.ho-glow {
   position: absolute;
   left: 0;
   top: 0;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  z-index: 1;
+  width: min(760px, 170vw);
+  aspect-ratio: 1;
+  border-radius: 50%;
   pointer-events: none;
-  animation: ho-fade 260ms ease both;
+  --rc: var(--hc-r-rare);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--rc) 46%, transparent), color-mix(in srgb, var(--rc) 14%, transparent) 52%, transparent);
+  animation: ho-fade 420ms ease both;
 }
-.ho-count {
+.ho-glow[data-rarity="epic"] {
+  --rc: var(--hc-r-epic);
+}
+.ho-glow[data-rarity="legendary"] {
+  --rc: #ffc21a;
+}
+.ho-glow:is([data-rarity="epic"], [data-rarity="legendary"])::before {
+  content: "";
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 4px;
-  z-index: 50;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 8px;
+  inset: 0;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--rc) 55%, white 10%) 0deg 7deg, transparent 7deg 22.5deg);
+  -webkit-mask: radial-gradient(closest-side, #000 18%, rgb(0 0 0 / 0.5) 46%, transparent 72%);
+  mask: radial-gradient(closest-side, #000 18%, rgb(0 0 0 / 0.5) 46%, transparent 72%);
+  opacity: 0.55;
+  animation: ho-spin 40s linear infinite;
+}
+.ho-glow[data-rarity="legendary"]::before {
+  opacity: 0.8;
+}
+@keyframes ho-spin {
+  to {
+    rotate: 1turn;
+  }
+}
+.ho-plate {
+  position: absolute;
+  z-index: 40;
   margin: 0;
-  font-size: 0.82rem;
-  font-weight: 800;
-  color: var(--ho-muted);
+  translate: -50% -100%;
+  padding: 7px 16px 6px;
+  border: 3px solid #0b0612;
+  outline: 2px solid var(--rc, var(--hc-r-rare));
+  outline-offset: -6px;
+  background: #0b0612;
+  color: #fff;
+  font-family: var(--font-pixel), var(--font-nunito), system-ui, sans-serif;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 4px 0 rgb(0 0 0 / 0.55);
+  animation: ho-plate 380ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  pointer-events: none;
+}
+.ho-plate[data-rarity="rare"] {
+  --rc: var(--hc-r-rare);
+  color: #b9d3ff;
+}
+.ho-plate[data-rarity="epic"] {
+  --rc: var(--hc-r-epic);
+  background: #2a0f45;
+  color: #f0dcff;
+}
+.ho-plate[data-rarity="legendary"] {
+  --rc: #fff3b0;
+  padding: 10px 22px 9px;
+  border-color: #3a2400;
+  background: linear-gradient(180deg, #ffe680 0%, #ffc21a 48%, #e09200 52%, #ffc21a 100%);
+  color: #2a1700;
+  font-size: 28px;
+  box-shadow:
+    0 4px 0 #3a2400,
+    0 0 28px rgb(255 194 26 / 0.45);
+}
+@keyframes ho-plate {
+  from {
+    opacity: 0;
+    scale: 0.6;
+  }
+}
+.ho-under {
+  position: absolute;
+  z-index: 40;
+  margin: 0;
+  translate: -50% 0;
+  white-space: nowrap;
+  animation: ho-fade 260ms ease both;
+  pointer-events: none;
 }
 
 .ho-tag {
@@ -303,6 +383,62 @@
   border-color: var(--hc-ink);
   background: var(--hc-new);
   color: #fff;
+}
+/* Under the card in front: a sentence, not a label. */
+.ho-tag.is-long {
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  letter-spacing: 0;
+  text-transform: none;
+  background: rgb(11 6 18 / 0.7);
+  color: #e8def5;
+}
+.ho-tag.is-long.is-new {
+  background: var(--hc-new);
+  color: #fff;
+}
+
+/* Phones: how far through the pack (the seen cards are behind the one in front). */
+.ho-dots {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+}
+.ho-dots span {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ho-muted);
+}
+.ho-dots span[data-on] {
+  border-color: transparent;
+  background: var(--ho-ink);
+}
+.ho-dots span[data-here] {
+  background: #ffc700;
+}
+.ho-link {
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--ho-muted);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.ho-link:hover {
+  color: var(--ho-ink);
+}
+.ho-link[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
+}
+.ho-go {
+  min-width: 168px;
 }
 
 /* ── Below the table: hints, actions, results ── */
@@ -395,7 +531,7 @@
   transform: none;
   box-shadow: 0 3px 0 var(--hc-shadow);
 }
-:is(.ho-btn, .ho-chip, .ho-hit, .ho-title, .ho-summary h2, .ho-results a):focus-visible {
+:is(.ho-btn, .ho-chip, .ho-hit, .ho-link, .ho-title, .ho-summary h2, .ho-results a):focus-visible {
   outline: 3px solid #ffd84a;
   outline-offset: 4px;
 }
@@ -511,10 +647,6 @@
   font-size: 0.78rem;
   font-weight: 700;
   color: var(--ho-muted);
-}
-/* Wide: the cards above already say all of this, and are the links to their pages. */
-.ho-results[data-layout="row"] {
-  display: none;
 }
 .ho-progress {
   display: grid;
@@ -643,5 +775,11 @@
   }
   .ho-loading {
     animation: none;
+  }
+  .ho-glow::before {
+    animation: none !important;
+  }
+  .ho-plate {
+    animation: ho-fade 1ms both;
   }
 }
