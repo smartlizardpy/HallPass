@@ -341,3 +341,50 @@ LED green 16.2, paper ink 16.0, paper heading 10.9, paper soft 12.1, cork cream
 13.7, cork moon 10.5, cork amber 8.2, price tag 10.9, disabled button 9.0 (it has a
 solid ink plate, so it does not sit on the 6.6 of bare cork), focus ring gold on ink 12.8,
 ink ring on paper 16.0.
+
+## 7. Halloween-only game leaderboards (backend only)
+
+During the event window (28 Oct 2026 00:00 to 2 Nov 2026 00:00 UK, the same as the
+championship's `opensAt`/`closesAt` and candy's earning window) a game's board
+counts only scores posted inside it. Older scores are hidden, not deleted. Outside
+the window everything is all-time, as before; the switch needs no deploy.
+
+**Why backend only.** Every game reads and writes its board through the SDK, and
+the store page reads `/api/v1/games/<slug>/leaderboard`. Both responses keep their
+exact shape (same fields and types), so no game, SDK or component changed. Only
+which scores come back does.
+
+**Where it lives.** `app/lib/scoreboard/season.ts` holds the window
+(`FRIGHT_FEST_SEASON`); `store.ts` applies it as one SQL expression that compares
+the window with the DATABASE's `now()` (a wrong device or server clock cannot flip
+it). `season.test.ts` asserts the window equals the championship's and candy's.
+
+**Filtered (player-facing):**
+- top scores on `GET /api/v1/leaderboard/<board>` and
+  `GET /api/v1/games/<slug>/leaderboard` (`getTopScores({ seasonal: true })`);
+- the rank returned by a submit (`appendScore`) and `rankForScore`;
+- the friends panel, best and rank (`getFriendStandingsForGame`);
+- "a friend passed you" (`getFriendsNewlyPassed`), so it agrees with the board.
+
+**Left all-time, on purpose:**
+- writes and the per-IP rate limit; the guard;
+- `/dashboard/boards` (`getTopScores` without `seasonal`), `countScores`,
+  `listScoresForModeration`, `clearBoardScores`;
+- `claimScores` (sign-in score claiming);
+- challenges (their targets and resolution use a player's all-time best);
+- the championship's own boards (a separate system);
+- the profile: `getPlayerStandings` (`/play/you`) and the profile badge counts
+  (`first_places`, `boards_entered`). `/play/you` can therefore show a rank on a
+  board that differs from the game page during the window; this is the one
+  visible disagreement and was left as the spec asked.
+
+**Caching.** The per-board and per-game GETs both send
+`s-maxage=15, stale-while-revalidate=45`, so the switch reaches everyone within
+about a minute. Route handlers are not cached by default and neither opts into
+`force-static`; `public/sw.js` never caches `/api/`; the friends route is
+`no-store`. No other path serves a board.
+
+**Tests.** Fake-`sql` tests in `store.test.ts` and `leaderboard/[slug]/season.test.ts`.
+An opt-in test against a real database, which builds a window around the current
+instant because `now()` cannot be moved:
+`SCOREBOARD_DB_TEST=1 node --env-file=.env.local node_modules/vitest/vitest.mjs run app/lib/scoreboard/store.db.test.ts`.
