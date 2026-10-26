@@ -165,3 +165,32 @@ These amend collectibles decision 1, "no currency", for this one token.
    Migrations: `npm run migrate -- --status`, then `npm run migrate`, which
    applies to the **dev** Neon branch that `.env.local` points at. Never touch
    production; `scripts/migrate-prod.sh` is the owner's.
+
+## 3. As built (backend, catalogue and dashboard)
+
+Decisions made while building, inside the plan above.
+
+- **Sync pulls, nothing pushes.** `sync(playerId)` reads unlocks and accepted runs
+  and inserts what the ledger lacks. It runs on every `GET /api/v1/candy/me`, in
+  one transaction behind the player's advisory lock.
+- **Run credits revoke and restore automatically.** If a board has no accepted run
+  left for the player, its 10 is revoked (`revoked_by = 'system'`); if an accepted
+  run returns, only a system revocation is restored. An admin's revocation stays.
+- **The all-boards bonus is not revoked automatically.** A board can join the
+  lineup later, which must not claw back a bonus already paid. An admin can revoke
+  it by hand. It follows the standings' `eligible` literally, so while only one
+  board is open, one accepted run on it pays the 20.
+- **Placings come from the frozen snapshot**, never live standings, and only once
+  the championship status is `finalised` or `archived`. The ledger `ref` is
+  `<board slug>#<rank>`.
+- **"Unrated" means 0.** The column defaults to 0 and the rubric's "Launch a
+  game" is also 0, so the dashboard counts achievements that pay nothing.
+- **A sealed pack bought with candy that an admin later revokes is not refunded**
+  by code; an admin credits the candy back by granting the pack again or by an
+  explicit decision. Spends cannot be revoked.
+- **Rare pack prints are derived** from the standard prints by
+  `scripts/make-rare-pack-prints.py` (gold RARE plate and foil frame), not
+  hand-drawn.
+- **Applying it.** Migration `050_candy.sql` needs 048 and 049 before it. The
+  owner runs `scripts/migrate-prod.sh`. `docs/dpia.md` may need a line for the new
+  ledger (not edited here).
