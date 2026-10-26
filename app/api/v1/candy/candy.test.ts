@@ -10,13 +10,14 @@ const h = vi.hoisted(() => ({
   auth: vi.fn(),
   spend: vi.fn(),
   getMyCandy: vi.fn(),
+  getGamePayouts: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/app/lib/auth", () => ({ auth: h.auth }));
 vi.mock("@/app/lib/candy", async () => {
   const { CANDY_FRIGHT_FEST_2026 } = await import("@/app/lib/candy/fright-fest-2026");
-  return { CANDY: CANDY_FRIGHT_FEST_2026, candyStore: { spend: h.spend }, getMyCandy: h.getMyCandy };
+  return { CANDY: CANDY_FRIGHT_FEST_2026, candyStore: { spend: h.spend }, getMyCandy: h.getMyCandy, getGamePayouts: h.getGamePayouts };
 });
 
 import { GET as ME } from "@/app/api/v1/candy/me/route";
@@ -37,6 +38,7 @@ const signedIn = () => h.auth.mockResolvedValue({ user: { playerId: "p1" } });
 beforeEach(() => {
   vi.clearAllMocks();
   h.auth.mockResolvedValue(null);
+  h.getGamePayouts.mockResolvedValue([]);
 });
 
 describe("GET /candy/me", () => {
@@ -53,7 +55,13 @@ describe("GET /candy/me", () => {
     expect(res.headers.get("cache-control")).toBe("private, no-store");
     expect(body.signedIn).toBe(false);
     expect(body.spend.untilLabel).toBe("30 Nov 2026, 23:59 UK");
-    expect(body.rules).toMatchObject({ rankedRun: 10, allBoards: 20 });
+    expect(body.rules).toMatchObject({ rankedRun: 10, allBoards: 20, maxGameCandy: 40 });
+    expect(body.rules.maxAchievementCandy).toBeUndefined();
+    expect(body.rules.dailyBest).toEqual([
+      { label: "1st", pct: 100 }, { label: "2nd–3rd", pct: 75 }, { label: "4th–10th", pct: 50 },
+      { label: "Top half", pct: 25 }, { label: "On the board", pct: 5 },
+    ]);
+    expect(body.games).toEqual([]);
     expect(body.shop).toHaveLength(8);
     expect(body.shop.every((i: { affordable: boolean }) => i.affordable === false)).toBe(true);
     expect(h.getMyCandy).not.toHaveBeenCalled();
@@ -61,13 +69,20 @@ describe("GET /candy/me", () => {
 
   it("syncs and returns the player's own candy, private, with no CORS grant", async () => {
     signedIn();
-    h.getMyCandy.mockResolvedValue({ available: true, balance: 42, newlyCredited: { count: 1, amount: 10 }, recent: [], shop: [] });
+    const payout = { boardId: "duskfall-score", slug: "duskfall", title: "Duskfall", boardTitle: "High score", candy: 20 };
+    h.getGamePayouts.mockResolvedValue([payout]);
+    h.getMyCandy.mockResolvedValue({
+      available: true, balance: 42, newlyCredited: { count: 1, amount: 10 }, shop: [],
+      recent: [{ kind: "daily_best", label: "Best score on 29 Oct · 3rd", game: "Duskfall", amount: 15, at: "2026-10-29T10:00:00.000Z", revoked: false }],
+    });
     const res = await me("https://hallpass.games");
     const body = await res.json();
     expect(res.status).toBe(200);
     expect(h.getMyCandy).toHaveBeenCalledWith("p1");
     expect(body).toMatchObject({ signedIn: true, available: true, balance: 42, event: "fright-fest-2026" });
     expect(body.spend.until).toBe("2026-12-01T00:00:00Z");
+    expect(body.games).toEqual([payout]);
+    expect(body.recent[0]).toMatchObject({ kind: "daily_best", label: "Best score on 29 Oct · 3rd", game: "Duskfall" });
     expect(res.headers.get("cache-control")).toBe("private, no-store");
     expect(res.headers.get("access-control-allow-origin")).toBeNull();
     expect(JSON.stringify(body)).not.toMatch(/playerId|"p1"/);

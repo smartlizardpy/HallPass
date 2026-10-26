@@ -16,7 +16,7 @@ import "server-only";
 import { isMissingColumnError, isUnconfiguredDbError, sql } from "@/app/lib/db";
 import { resolveGames } from "@/app/lib/games-store";
 import { CANDY_FRIGHT_FEST_2026 } from "./fright-fest-2026";
-import { achievementSlug, describeEntry, shopItems, type RecentEntry, type ShopItem } from "./present";
+import { describeEntry, gamePayouts, shopItems, type GamePayout, type RecentEntry, type ShopItem } from "./present";
 import { createCandyStore } from "./store";
 
 export const candyStore = createCandyStore(sql);
@@ -24,6 +24,19 @@ export const CANDY = CANDY_FRIGHT_FEST_2026;
 
 function expected(error: unknown): boolean {
   return isMissingColumnError(error) || isUnconfiguredDbError(error);
+}
+
+/** The payout per game (public data). Fail-soft like the rest: no candy column yet, or no database, reads as an empty list. */
+export async function getGamePayouts(): Promise<GamePayout[]> {
+  try {
+    const boards = await candyStore.payingBoards();
+    const titles = new Map<string, string>();
+    for (const g of await resolveGames()) titles.set(g.slug, g.title);
+    return gamePayouts(boards, titles);
+  } catch (error) {
+    if (!expected(error)) console.error("candy.getGamePayouts failed; reading none:", error);
+    return [];
+  }
 }
 
 export interface MyCandy {
@@ -49,7 +62,7 @@ export async function getMyCandy(playerId: string): Promise<MyCandy> {
   try {
     const [balance, history] = await Promise.all([candyStore.balance(playerId), candyStore.history(playerId, 25)]);
     const titles = new Map<string, string>();
-    if (history.some((h) => h.kind === "achievement" && achievementSlug(h.ref))) {
+    if (history.some((h) => h.kind === "daily_best" && h.gameSlug)) {
       for (const g of await resolveGames()) titles.set(g.slug, g.title);
     }
     return {
