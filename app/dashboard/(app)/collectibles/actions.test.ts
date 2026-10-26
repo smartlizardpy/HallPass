@@ -45,7 +45,7 @@ const grant = (over: Record<string, string> = {}) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  h.requireRole.mockResolvedValue({ email: "staff@hallpass", role: "admin", playerId: "g-staff" });
+  h.requireRole.mockResolvedValue({ email: "staff@hallpass", role: "super_admin", playerId: "g-staff" });
   h.findPlayerForAdmin.mockResolvedValue({ playerId: "p1", publicId: "pub-1", name: "@alice" });
   h.adminGrantPack.mockResolvedValue({ created: true, pack: { publicId: PACK } });
   h.revokePack.mockResolvedValue(true);
@@ -58,6 +58,27 @@ describe("the role gate", () => {
     await expect(grantPackAction(grant())).rejects.toThrow(/signin/);
     await expect(revokePackAction(form({ packId: PACK, reason: "x" }))).rejects.toThrow(/signin/);
     await expect(revokePullAction(form({ pullId: "3", reason: "x" }))).rejects.toThrow(/signin/);
+    expect(h.findPlayerForAdmin).not.toHaveBeenCalled();
+    expect(h.adminGrantPack).not.toHaveBeenCalled();
+    expect(h.revokePack).not.toHaveBeenCalled();
+    expect(h.revokePull).not.toHaveBeenCalled();
+  });
+  it("requires super_admin in every action, and writes nothing when the guard redirects", async () => {
+    for (const run of [
+      () => grantPackAction(grant()),
+      () => revokePackAction(form({ packId: PACK, reason: "x" })),
+      () => revokePullAction(form({ pullId: "3", reason: "x" })),
+    ]) {
+      h.requireRole.mockClear();
+      await run().catch(() => {});
+      expect(h.requireRole).toHaveBeenCalledTimes(1);
+      expect(h.requireRole).toHaveBeenCalledWith("super_admin");
+    }
+    vi.clearAllMocks();
+    h.requireRole.mockRejectedValue(new Error("NEXT_REDIRECT /dashboard"));
+    await expect(grantPackAction(grant())).rejects.toThrow(/NEXT_REDIRECT/);
+    await expect(revokePackAction(form({ packId: PACK, reason: "x" }))).rejects.toThrow(/NEXT_REDIRECT/);
+    await expect(revokePullAction(form({ pullId: "3", reason: "x" }))).rejects.toThrow(/NEXT_REDIRECT/);
     expect(h.findPlayerForAdmin).not.toHaveBeenCalled();
     expect(h.adminGrantPack).not.toHaveBeenCalled();
     expect(h.revokePack).not.toHaveBeenCalled();
