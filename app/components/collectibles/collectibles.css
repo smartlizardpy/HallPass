@@ -468,7 +468,7 @@
   animation: none !important;
 }
 
-/* ── Page-level layout (binder, Pack Room, card page, profile showcase) ── */
+/* ── Page-level layout (binder, card page, profile showcase; the Pack Room has room/room.css) ── */
 .hc-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(144px, 1fr));
@@ -510,105 +510,6 @@
   border-radius: 18px;
   background: var(--surface, #fff);
   color: var(--foreground, #111);
-}
-/* Sealed packs on the Pack Room shelf: the printed pouch is the hero, a cream sticker below says "open me". */
-.hc-shelf {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-  gap: 28px 12px;
-  justify-items: center;
-  padding: 6px 0 0;
-  margin: 0;
-  list-style: none;
-}
-.hc-shelf .hc-link {
-  display: grid;
-  justify-items: center;
-  gap: 12px;
-  padding: 6px 6px 2px;
-  border-radius: 14px;
-}
-.hc-print {
-  position: relative;
-  display: block;
-  aspect-ratio: 1 / 1.46;
-  max-width: 100%;
-  filter: drop-shadow(0 7px 5px rgba(35, 21, 58, 0.32));
-  transition: transform 180ms ease, filter 180ms ease;
-}
-.hc-print-canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  transition: opacity 160ms ease;
-}
-.hc-print[data-ready] .hc-print-canvas {
-  opacity: 1;
-}
-.hc-print-sheen {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  pointer-events: none;
-  -webkit-mask: var(--hc-pack-mask, none) center / 100% 100% no-repeat;
-  mask: var(--hc-pack-mask, none) center / 100% 100% no-repeat;
-  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.55) 48%, rgba(255, 255, 255, 0) 58%) -120% 0 / 260% 100% no-repeat;
-  mix-blend-mode: soft-light;
-  transition: opacity 180ms ease;
-}
-.hc-pack-cta {
-  min-height: 44px;
-  min-width: 96px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 22px;
-  border-radius: 999px;
-  border: 2px solid var(--hc-ink);
-  background: var(--hc-peel);
-  color: var(--hc-ink);
-  font-weight: 900;
-  font-size: 0.95rem;
-  box-shadow: 0 3px 0 var(--hc-shadow);
-  transition: transform 120ms ease, box-shadow 120ms ease;
-}
-/* Lift on keyboard focus, and on hover only where there is a real pointer (a tap must not leave a pack tilted). */
-@media (prefers-reduced-motion: no-preference) {
-  .hc-shelf .hc-link:focus-visible .hc-print {
-    transform: translateY(-6px) rotate(-1.5deg);
-    filter: drop-shadow(0 14px 8px rgba(35, 21, 58, 0.3));
-  }
-  .hc-shelf .hc-link:focus-visible .hc-print-sheen {
-    opacity: 1;
-    animation: hc-sheen 900ms ease-out 1 both;
-  }
-  .hc-shelf .hc-link:focus-visible .hc-pack-cta {
-    transform: translateY(2px);
-    box-shadow: 0 1px 0 var(--hc-shadow);
-  }
-}
-@media (prefers-reduced-motion: no-preference) and (hover: hover) {
-  .hc-shelf .hc-link:hover .hc-print {
-    transform: translateY(-6px) rotate(-1.5deg);
-    filter: drop-shadow(0 14px 8px rgba(35, 21, 58, 0.3));
-  }
-  .hc-shelf .hc-link:hover .hc-print-sheen {
-    opacity: 1;
-    animation: hc-sheen 900ms ease-out 1 both;
-  }
-  .hc-shelf .hc-link:hover .hc-pack-cta {
-    transform: translateY(2px);
-    box-shadow: 0 1px 0 var(--hc-shadow);
-  }
-}
-@keyframes hc-sheen {
-  from {
-    background-position: -120% 0;
-  }
-  to {
-    background-position: 120% 0;
-  }
 }
 .hc-dialog::backdrop {
   background: rgba(10, 6, 20, 0.7);
