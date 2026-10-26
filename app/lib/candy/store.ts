@@ -11,14 +11,21 @@
  * is written `ON CONFLICT (award_key) DO NOTHING`, so syncing twice, from two
  * tabs, or from two requests at once pays once.
  *
- * SYNC PULLS, IT IS NOT PUSHED. Nothing calls "award candy" when an achievement
- * unlocks or a run is accepted (those paths belong to other systems, and a hook
- * there could fail the player's real action). Instead `sync(playerId)` reads
- * what those systems already recorded and inserts whatever is missing. That is
- * also why rating an achievement AFTER a player unlocked it still pays them: the
- * next sync finds the unlock. The four sources:
- *   - achievements: `player_achievements.unlocked_at` inside the earning window,
- *     for an achievement whose `candy` is above 0 at sync time;
+ * SYNC PULLS, IT IS NOT PUSHED. Nothing calls "award candy" when a score is set
+ * or a run is accepted (those paths belong to other systems, and a hook there
+ * could fail the player's real action). Instead `sync(playerId)` reads what
+ * those systems already recorded and inserts whatever is missing. That is also
+ * why rating a board AFTER a score was set still pays: the next sync finds it.
+ * The four sources:
+ *   - daily bests: for each (signed-in player, board, UK day) in the earning
+ *     window, the player's best row that day (`scoreboard/rank.ts` order), on a
+ *     board with a `game_slug` and `candy` above 0 at sync time. It pays by the
+ *     rank that row held WHEN IT WAS SET (`1 + strictly-better rows no newer than
+ *     it`, the `rankForScore` rule restricted to rows that existed then and to
+ *     the event window: during Fright Fest the leaderboards show only scores set
+ *     from `opensAt`, so earlier rows never count, not even to rank), so a later
+ *     score never changes a payout. Achievements pay nothing (they are
+ *     self-reported);
  *   - ranked runs: a player's first ACCEPTED run on each counting board;
  *   - all boards: once, when the championship is finalised and the player's
  *     overall entry in the FROZEN snapshot is `eligible` (a result on every
@@ -57,13 +64,16 @@
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { publicScoreName } from "../scoreboard/display-name";
 import { currentVersion, getPack } from "../collectibles/catalogue";
-import { CANDY_FRIGHT_FEST_2026, isAchievementCandy, type CandyConfig } from "./fright-fest-2026";
+import { CANDY_FRIGHT_FEST_2026, isGameCandy, type CandyConfig } from "./fright-fest-2026";
 
 type Sql = NeonQueryFunction<false, false>;
 type Row = Record<string, unknown>;
 
-export const CANDY_KINDS = ["achievement", "ranked_run", "all_boards", "placing", "spend"] as const;
+export const CANDY_KINDS = ["daily_best", "ranked_run", "all_boards", "placing", "spend"] as const;
 export type CandyKind = (typeof CANDY_KINDS)[number];
+
+/** A board id's format (`boards_id_format`). */
+export const BOARD_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 /** A request id is chosen by the client (a uuid); this is the whole alphabet it may use. */
 export const REQUEST_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
@@ -78,7 +88,7 @@ const num = (v: unknown): number => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };
-const kindOf = (v: unknown): CandyKind => ((CANDY_KINDS as readonly string[]).includes(String(v)) ? (v as CandyKind) : "achievement");
+const kindOf = (v: unknown): CandyKind => ((CANDY_KINDS as readonly string[]).includes(String(v)) ? (v as CandyKind) : "daily_best");
 
 /** A reason an admin typed: required, trimmed, at most 500 characters. */
 export function cleanReason(reason: string): string {
@@ -98,10 +108,10 @@ export interface LedgerEntry {
   id: number;
   kind: CandyKind;
   amount: number;
-  /** 'slug/key' for an achievement, a board slug, 'slug#rank' for a placing, a pack id for a spend. */
+  /** '<boardId>#<YYYY-MM-DD>#<rank>' for a daily best, a board slug, 'slug#rank' for a placing, a pack id for a spend. */
   ref: string | null;
-  /** The achievement's name, for an achievement credit. */
-  achievementName: string | null;
+  /** The game of a daily-best credit's board, else null. */
+  gameSlug: string | null;
   createdAt: string;
   revoked: boolean;
 }
@@ -113,15 +123,17 @@ export type SpendResult =
   | { status: "closed"; reason: "not-open-yet" | "expired" }
   | { status: "insufficient"; balance: number; price: number };
 
-export interface AdminAchievement {
-  id: number;
-  slug: string;
-  key: string;
-  name: string;
+export interface AdminBoard {
+  id: string;
+  gameSlug: string;
+  title: string;
+  sort: "asc" | "desc";
+  /** The rank-1 payout; 0 pays nothing. */
   candy: number;
-  secret: boolean;
-  /** Players who unlocked it inside the earning window. */
-  unlockedInWindow: number;
+  /** Scores by signed-in players inside the earning window. */
+  scoresInWindow: number;
+  /** Distinct signed-in players with a score inside the window. */
+  playersInWindow: number;
 }
 
 /** One ledger row on the admin's feed, with the player's PUBLIC name. */
@@ -130,6 +142,8 @@ export interface AdminLedgerRow {
   kind: CandyKind;
   amount: number;
   ref: string | null;
+  /** The game of a daily-best credit's board, else null. */
+  gameSlug: string | null;
   createdAt: string;
   revokedAt: string | null;
   revokedBy: string | null;
@@ -152,13 +166,13 @@ export interface TopEarner {
   player: { publicId: string; name: string };
   /** Unrevoked credits, all kinds. */
   credited: number;
-  /** Unrevoked achievement credits: the amount and how many. */
-  fromAchievements: number;
-  achievementCredits: number;
+  /** Unrevoked daily-best credits: the amount and how many. */
+  dailyBestTotal: number;
+  dailyBestCount: number;
+  /** The best (lowest) rank among those credits, or null when there are none. */
+  bestRank: number | null;
   spent: number;
   balance: number;
-  /** The most achievements this player UNLOCKED within any single minute (among those that paid). Forged unlocks tend to arrive in bursts. */
-  maxUnlocksPerMinute: number;
 }
 
 export interface CandyStats {
@@ -181,7 +195,7 @@ export function createCandyStore(sql: Sql, config: CandyConfig = CANDY_FRIGHT_FE
   };
 
   /**
-   * Bring one player's ledger up to date with what the achievement and
+   * Bring one player's ledger up to date with what the scoreboard and
    * championship systems recorded. Idempotent; safe to call on every page view.
    * ONE transaction (one HTTP round trip): the advisory lock, the two
    * revocation statements, then the four credit inserts.
@@ -210,16 +224,47 @@ export function createCandyStore(sql: Sql, config: CandyConfig = CANDY_FRIGHT_FE
             WHERE r.event_id = l.event_id AND r.player_id = l.player_id AND r.game_slug = l.ref AND r.status = 'accepted'
           )
       `,
-      // Achievements unlocked inside the window, for an achievement rated above 0 now.
+      // Daily bests: one credit per (player, board, UK day) in the window, on a board rated above 0 now.
+      // `best` is the player's top row of that day (rank.ts order: score by the board's sort, earlier created_at,
+      // lower id). Its rank counts strictly-better rows on the board's HALLOWEEN board (rows set from `opensAt`, since
+      // the leaderboards show only event scores) that were no newer than it, so the payout is the rank the site showed
+      // at the time; `n` is those rows, itself included. Scores from before the event never count, not even to rank.
       tx`
         INSERT INTO candy_ledger (player_id, event_id, amount, kind, award_key, ref)
-        SELECT pa.player_id, ${event}::text, a.candy::int, 'achievement',
-               'candy:' || ${event}::text || ':achievement:' || pa.player_id || ':' || a.slug || '/' || a.key,
-               a.slug || '/' || a.key
-        FROM player_achievements pa JOIN achievements a ON a.id = pa.achievement_id
-        WHERE pa.player_id = ${playerId} AND pa.unlocked_at IS NOT NULL
-          AND pa.unlocked_at >= ${config.opensAt}::timestamptz AND pa.unlocked_at < ${config.closesAt}::timestamptz
-          AND a.candy > 0
+        SELECT ${playerId}::text, ${event}::text,
+               GREATEST(1, (d.candy::int * d.pct + 50) / 100),
+               'daily_best',
+               'candy:' || ${event}::text || ':daily_best:' || ${playerId}::text || ':' || d.board_id || ':' || d.day,
+               d.board_id || '#' || d.day || '#' || d.rank
+        FROM (
+          SELECT r.board_id, r.day, r.candy, r.rank,
+                 CASE WHEN r.rank = 1 THEN 100
+                      WHEN r.rank <= 3 THEN 75
+                      WHEN r.rank <= 10 THEN 50
+                      WHEN r.rank <= (r.n + 1) / 2 THEN 25
+                      ELSE 5 END AS pct
+          FROM (
+            SELECT best.board_id, to_char(best.uk_day, 'YYYY-MM-DD') AS day, best.candy,
+                   1 + count(x.id) FILTER (WHERE CASE WHEN best.sort = 'asc' THEN x.score < best.score ELSE x.score > best.score END) AS rank,
+                   count(x.id) AS n
+            FROM (
+              SELECT DISTINCT ON (s.board_id, (s.created_at AT TIME ZONE 'Europe/London')::date)
+                     s.id, s.board_id, s.score, s.created_at, b.sort, b.candy,
+                     (s.created_at AT TIME ZONE 'Europe/London')::date AS uk_day
+              FROM scores s JOIN boards b ON b.id = s.board_id
+              WHERE s.player_id = ${playerId}
+                AND b.game_slug IS NOT NULL AND b.candy > 0 AND char_length(b.id) <= 120
+                AND s.created_at >= ${config.opensAt}::timestamptz AND s.created_at < ${config.closesAt}::timestamptz
+              ORDER BY s.board_id, (s.created_at AT TIME ZONE 'Europe/London')::date,
+                       CASE WHEN b.sort = 'asc' THEN s.score END ASC,
+                       CASE WHEN b.sort <> 'asc' THEN s.score END DESC,
+                       s.created_at ASC, s.id ASC
+            ) best
+            JOIN scores x ON x.board_id = best.board_id
+                         AND x.created_at >= ${config.opensAt}::timestamptz AND x.created_at <= best.created_at
+            GROUP BY best.id, best.board_id, best.uk_day, best.candy, best.sort, best.score
+          ) r
+        ) d
         ON CONFLICT (award_key) DO NOTHING
         RETURNING amount
       `,
@@ -301,9 +346,9 @@ export function createCandyStore(sql: Sql, config: CandyConfig = CANDY_FRIGHT_FE
   /** The player's ledger, newest first (revoked rows included, marked). */
   async function history(playerId: string, limit = 25): Promise<LedgerEntry[]> {
     const rows = (await sql`
-      SELECT l.id, l.kind, l.amount, l.ref, l.created_at, l.revoked_at, a.name AS achievement_name
+      SELECT l.id, l.kind, l.amount, l.ref, l.created_at, l.revoked_at, b.game_slug
       FROM candy_ledger l
-      LEFT JOIN achievements a ON l.kind = 'achievement' AND l.ref = a.slug || '/' || a.key
+      LEFT JOIN boards b ON l.kind = 'daily_best' AND b.id = split_part(l.ref, '#', 1)
       WHERE l.player_id = ${playerId} AND l.event_id = ${event}
       ORDER BY l.created_at DESC, l.id DESC
       LIMIT ${Math.max(1, Math.min(limit, 100))}
@@ -313,7 +358,7 @@ export function createCandyStore(sql: Sql, config: CandyConfig = CANDY_FRIGHT_FE
       kind: kindOf(r.kind),
       amount: num(r.amount),
       ref: str(r.ref),
-      achievementName: str(r.achievement_name),
+      gameSlug: str(r.game_slug),
       createdAt: toIso(r.created_at)!,
       revoked: r.revoked_at != null,
     }));
@@ -391,50 +436,64 @@ export function createCandyStore(sql: Sql, config: CandyConfig = CANDY_FRIGHT_FE
 
   // ── Admin ────────────────────────────────────────────────────────────────
 
-  /** Every achievement across games with its candy value, optionally for one game. */
-  async function listAchievements(slug?: string | null): Promise<AdminAchievement[]> {
+  /** Every board that belongs to a game, with its candy value and window activity, optionally for one game. */
+  async function listBoards(slug?: string | null): Promise<AdminBoard[]> {
     const rows = (await sql`
-      SELECT a.id, a.slug, a.key, a.name, a.candy, a.secret,
-             (SELECT count(*)::int FROM player_achievements pa
-               WHERE pa.achievement_id = a.id AND pa.unlocked_at IS NOT NULL
-                 AND pa.unlocked_at >= ${config.opensAt}::timestamptz AND pa.unlocked_at < ${config.closesAt}::timestamptz) AS unlocked
-      FROM achievements a
-      WHERE (${slug ?? null}::text IS NULL OR a.slug = ${slug ?? null}::text)
-      ORDER BY a.slug, a.position, a.id
+      SELECT b.id, b.game_slug, b.title, b.sort, b.candy,
+             COALESCE(w.scores, 0)::int AS scores, COALESCE(w.players, 0)::int AS players
+      FROM boards b
+      LEFT JOIN LATERAL (
+        SELECT count(*) AS scores, count(DISTINCT s.player_id) AS players
+        FROM scores s
+        WHERE s.board_id = b.id AND s.player_id IS NOT NULL
+          AND s.created_at >= ${config.opensAt}::timestamptz AND s.created_at < ${config.closesAt}::timestamptz
+      ) w ON true
+      WHERE b.game_slug IS NOT NULL AND (${slug ?? null}::text IS NULL OR b.game_slug = ${slug ?? null}::text)
+      ORDER BY b.game_slug, b.title, b.id
       LIMIT 2000
     `) as Row[];
     return rows.map((r) => ({
-      id: num(r.id),
-      slug: String(r.slug),
-      key: String(r.key),
-      name: String(r.name),
+      id: String(r.id),
+      gameSlug: String(r.game_slug),
+      title: String(r.title),
+      sort: r.sort === "asc" ? "asc" : "desc",
       candy: num(r.candy),
-      secret: r.secret === true,
-      unlockedInWindow: num(r.unlocked),
+      scoresInWindow: num(r.scores),
+      playersInWindow: num(r.players),
     }));
   }
 
+  /** The boards that pay (a game, `candy` above 0): public data, the payout per game. */
+  async function payingBoards(): Promise<{ id: string; gameSlug: string; title: string; candy: number }[]> {
+    const rows = (await sql`
+      SELECT id, game_slug, title, candy FROM boards
+      WHERE game_slug IS NOT NULL AND candy > 0
+      ORDER BY candy DESC, game_slug, id
+      LIMIT 500
+    `) as Row[];
+    return rows.map((r) => ({ id: String(r.id), gameSlug: String(r.game_slug), title: String(r.title), candy: num(r.candy) }));
+  }
+
   /**
-   * Set an achievement's candy value (0 to the ceiling), logged in the same
-   * statement. Credits already made are never re-priced; the next sync pays
-   * players who unlocked it earlier at the NEW value, only where they have no
-   * credit yet.
+   * Set a board's candy value (0 to the ceiling), logged in the same statement.
+   * Credits already made are never re-priced; the next sync pays earlier days in
+   * the window at the NEW value, only where the player has no credit yet.
    */
-  async function setAchievementCandy(input: { achievementId: number; candy: number; actorEmail: string }): Promise<SetValueResult> {
-    if (!isAchievementCandy(config, input.candy)) throw new Error(`Candy must be a whole number from 0 to ${config.maxAchievementCandy}`);
-    if (!Number.isSafeInteger(input.achievementId) || input.achievementId <= 0) throw new Error("Invalid achievement id");
+  async function setBoardCandy(input: { boardId: string; candy: number; actorEmail: string }): Promise<SetValueResult> {
+    if (!isGameCandy(config, input.candy)) throw new Error(`Candy must be a whole number from 0 to ${config.maxGameCandy}`);
+    if (!BOARD_ID_RE.test(input.boardId) || input.boardId.length > 120) throw new Error("Invalid board id");
     const rows = (await sql`
       WITH old AS (
-        SELECT id, slug, key, candy FROM achievements WHERE id = ${input.achievementId}
+        SELECT id, game_slug, candy FROM boards WHERE id = ${input.boardId} AND game_slug IS NOT NULL
       ), upd AS (
-        UPDATE achievements a SET candy = ${input.candy}::smallint, updated_at = now()
+        UPDATE boards b SET candy = ${input.candy}::smallint, updated_at = now()
         FROM old
-        WHERE a.id = old.id AND old.candy <> ${input.candy}::int
-        RETURNING a.id
+        WHERE b.id = old.id AND old.candy <> ${input.candy}::int
+        RETURNING b.id
       ), log AS (
         INSERT INTO candy_log (actor_email, action, data)
         SELECT ${input.actorEmail}, 'set-value',
-               json_build_object('achievementId', old.id, 'slug', old.slug, 'key', old.key, 'from', old.candy, 'to', ${input.candy}::int)::jsonb
+               json_build_object('boardId', old.id, 'slug', old.game_slug, 'from', old.candy, 'to', ${input.candy}::int)::jsonb
         FROM old JOIN upd ON upd.id = old.id
         RETURNING id
       )
@@ -477,9 +536,10 @@ export function createCandyStore(sql: Sql, config: CandyConfig = CANDY_FRIGHT_FE
   /** The newest ledger rows across all players, with PUBLIC names only. */
   async function listRecent(limit = 50, publicId: string | null = null): Promise<AdminLedgerRow[]> {
     const rows = (await sql`
-      SELECT l.id, l.kind, l.amount, l.ref, l.created_at, l.revoked_at, l.revoked_by, l.revoked_reason,
+      SELECT l.id, l.kind, l.amount, l.ref, l.created_at, l.revoked_at, l.revoked_by, l.revoked_reason, bd.game_slug,
              p.public_id AS p_public_id, p.handle AS p_handle, p.username AS p_username
       FROM candy_ledger l JOIN players p ON p.id = l.player_id
+      LEFT JOIN boards bd ON l.kind = 'daily_best' AND bd.id = split_part(l.ref, '#', 1)
       WHERE l.event_id = ${event} AND (${publicId}::text IS NULL OR p.public_id::text = ${publicId}::text)
       ORDER BY l.created_at DESC, l.id DESC
       LIMIT ${Math.max(1, Math.min(limit, 200))}
@@ -491,6 +551,7 @@ export function createCandyStore(sql: Sql, config: CandyConfig = CANDY_FRIGHT_FE
         kind: kindOf(r.kind),
         amount: num(r.amount),
         ref: str(r.ref),
+        gameSlug: str(r.game_slug),
         createdAt: toIso(r.created_at)!,
         revokedAt: toIso(r.revoked_at),
         revokedBy: str(r.revoked_by),
@@ -502,33 +563,24 @@ export function createCandyStore(sql: Sql, config: CandyConfig = CANDY_FRIGHT_FE
 
   /**
    * Players by unrevoked credited candy, biggest first, with PUBLIC names only.
-   * Achievement unlocks are self-reported, so this is where a forger shows up:
-   * a high achievement total, or many unlocks inside one minute.
+   * Scores are self-submitted, so this is where a forger shows up: a high
+   * daily-best total with rank 1 on many boards.
    */
   async function topEarners(limit = 25): Promise<TopEarner[]> {
     const rows = (await sql`
       WITH t AS (
         SELECT player_id,
                COALESCE(sum(amount) FILTER (WHERE amount > 0 AND revoked_at IS NULL), 0)::int AS credited,
-               COALESCE(sum(amount) FILTER (WHERE kind = 'achievement' AND revoked_at IS NULL), 0)::int AS from_achievements,
-               count(*) FILTER (WHERE kind = 'achievement' AND revoked_at IS NULL)::int AS achievement_credits,
+               COALESCE(sum(amount) FILTER (WHERE kind = 'daily_best' AND revoked_at IS NULL), 0)::int AS daily_best_total,
+               count(*) FILTER (WHERE kind = 'daily_best' AND revoked_at IS NULL)::int AS daily_best_count,
+               min(CASE WHEN kind = 'daily_best' AND revoked_at IS NULL THEN split_part(ref, '#', 3)::int END) AS best_rank,
                COALESCE(-sum(amount) FILTER (WHERE amount < 0), 0)::int AS spent,
                COALESCE(sum(amount) FILTER (WHERE revoked_at IS NULL), 0)::int AS balance
         FROM candy_ledger WHERE event_id = ${event}
         GROUP BY player_id
-      ), burst AS (
-        SELECT player_id, max(n)::int AS per_minute FROM (
-          SELECT l.player_id, count(*) AS n
-          FROM candy_ledger l
-          JOIN achievements a ON l.ref = a.slug || '/' || a.key
-          JOIN player_achievements pa ON pa.player_id = l.player_id AND pa.achievement_id = a.id
-          WHERE l.event_id = ${event} AND l.kind = 'achievement' AND l.revoked_at IS NULL AND pa.unlocked_at IS NOT NULL
-          GROUP BY l.player_id, date_trunc('minute', pa.unlocked_at)
-        ) m GROUP BY player_id
       )
-      SELECT t.*, COALESCE(b.per_minute, 0)::int AS per_minute,
-             p.public_id AS p_public_id, p.handle AS p_handle, p.username AS p_username
-      FROM t JOIN players p ON p.id = t.player_id LEFT JOIN burst b ON b.player_id = t.player_id
+      SELECT t.*, p.public_id AS p_public_id, p.handle AS p_handle, p.username AS p_username
+      FROM t JOIN players p ON p.id = t.player_id
       ORDER BY t.credited DESC, t.player_id
       LIMIT ${Math.max(1, Math.min(limit, 100))}
     `) as Row[];
@@ -537,11 +589,11 @@ export function createCandyStore(sql: Sql, config: CandyConfig = CANDY_FRIGHT_FE
       return {
         player: { publicId, name: publicScoreName({ handle: str(r.p_handle), username: str(r.p_username), publicId }) },
         credited: num(r.credited),
-        fromAchievements: num(r.from_achievements),
-        achievementCredits: num(r.achievement_credits),
+        dailyBestTotal: num(r.daily_best_total),
+        dailyBestCount: num(r.daily_best_count),
+        bestRank: r.best_rank == null ? null : num(r.best_rank),
         spent: num(r.spent),
         balance: num(r.balance),
-        maxUnlocksPerMinute: num(r.per_minute),
       };
     });
   }
@@ -583,7 +635,7 @@ export function createCandyStore(sql: Sql, config: CandyConfig = CANDY_FRIGHT_FE
     });
   }
 
-  return { sync, balance, history, spend, listAchievements, setAchievementCandy, revokeCredit, listRecent, topEarners, stats, readLog };
+  return { sync, balance, history, spend, listBoards, payingBoards, setBoardCandy, revokeCredit, listRecent, topEarners, stats, readLog };
 }
 
 export type CandyStore = ReturnType<typeof createCandyStore>;

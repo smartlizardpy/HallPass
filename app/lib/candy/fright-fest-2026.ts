@@ -10,6 +10,11 @@
  * 28 Oct 00:00 to 2 Nov 00:00 UK. It is read from `FRIGHT_FEST_2026` rather than
  * retyped, so a moved championship moves the candy with it.
  *
+ * DAILY BEST. Once per UK day per board, a signed-in player's best score that day
+ * earns candy by where it ranked on that game's leaderboard when it was set. The
+ * board's own value (0 to 40, set on the Candy desk) is the rank-1 payout and the
+ * tiers below scale it. Achievements pay nothing: they are self-reported.
+ *
  * THE SPEND-BY DATE is "30 Nov 2026, 23:59 UK". London is on GMT in November, so
  * that is 23:59Z, and the instant below (1 Dec 00:00Z) is EXCLUSIVE: a spend at
  * 23:59:30 on the 30th is still inside it. The database clock decides, never the
@@ -32,6 +37,12 @@ export interface RubricTier {
   presets: readonly number[];
 }
 
+/** One rank band of the daily-best payout, as a percentage of the board's value. */
+export interface DailyBestTier {
+  label: string;
+  pct: number;
+}
+
 export interface CandyConfig {
   /** Also the championship id: the ledger's `event_id`. */
   id: string;
@@ -51,8 +62,10 @@ export interface CandyConfig {
   allBoards: number;
   /** Paid per counting board once the championship is finalised, by final rank. */
   placing: readonly PlacingTier[];
-  /** The ceiling for one achievement's value, enforced by the database too. */
-  maxAchievementCandy: number;
+  /** The ceiling for one board's value, enforced by the database too. */
+  maxGameCandy: number;
+  /** The daily-best shares: 1st, 2nd-3rd, 4th-10th, top half, anywhere else. For display; `dailyBestPct` is the rule. */
+  dailyBest: readonly DailyBestTier[];
   rubric: readonly RubricTier[];
 }
 
@@ -82,15 +95,22 @@ export const CANDY_FRIGHT_FEST_2026: CandyConfig = {
     { from: 2, to: 3, amount: 30 },
     { from: 4, to: 10, amount: 20 },
   ],
-  maxAchievementCandy: 40,
+  maxGameCandy: 40,
+  dailyBest: [
+    { label: "1st", pct: 100 },
+    { label: "2nd–3rd", pct: 75 },
+    { label: "4th–10th", pct: 50 },
+    { label: "Top half", pct: 25 },
+    { label: "On the board", pct: 5 },
+  ],
   rubric: [
-    { label: "Launch a game", presets: [0] },
-    { label: "Basic clicker milestone", presets: [2] },
-    { label: "Easy game completion", presets: [5] },
-    { label: "Normal achievement", presets: [8, 10, 12] },
-    { label: "Challenging score or victory", presets: [15, 20] },
-    { label: "Difficult achievement", presets: [25, 30] },
-    { label: "Exceptional achievement", presets: [40] },
+    { label: "Doesn't pay", presets: [0] },
+    { label: "Clicker or idle game", presets: [2] },
+    { label: "Easy game", presets: [5] },
+    { label: "Normal game", presets: [8, 10, 12] },
+    { label: "Challenging game", presets: [15, 20] },
+    { label: "Difficult game", presets: [25, 30] },
+    { label: "Exceptional game", presets: [40] },
   ],
 };
 
@@ -100,9 +120,32 @@ export function placingAmount(config: CandyConfig, rank: number): number {
   return config.placing.find((t) => rank >= t.from && rank <= t.to)?.amount ?? 0;
 }
 
-/** Whether `candy` is a legal achievement value: an integer from 0 to the ceiling. */
-export function isAchievementCandy(config: CandyConfig, candy: number): boolean {
-  return Number.isInteger(candy) && candy >= 0 && candy <= config.maxAchievementCandy;
+/** Whether `candy` is a legal board value: an integer from 0 to the ceiling. */
+export function isGameCandy(config: CandyConfig, candy: number): boolean {
+  return Number.isInteger(candy) && candy >= 0 && candy <= config.maxGameCandy;
+}
+
+/**
+ * The share (percent of the board's value) a daily best at `rank` earns on a board
+ * that had `n` rows when it was set: 1st 100, 2nd-3rd 75, 4th-10th 50, the top
+ * half (rank <= ceil(n/2)) 25, anywhere else on the board 5. The SQL in the store
+ * encodes the same bands; the DB test checks the two agree.
+ */
+export function dailyBestPct(rank: number, n: number): number {
+  if (!Number.isInteger(rank) || rank < 1) return 0;
+  if (rank === 1) return 100;
+  if (rank <= 3) return 75;
+  if (rank <= 10) return 50;
+  if (Number.isInteger(n) && rank <= Math.ceil(n / 2)) return 25;
+  return 5;
+}
+
+/** What a daily best earns: `max(1, (value * pct + 50) / 100)` in integer maths, or 0 when the board pays nothing. */
+export function dailyBestAmount(value: number, rank: number, n: number): number {
+  if (!Number.isInteger(value) || value <= 0) return 0;
+  const pct = dailyBestPct(rank, n);
+  if (pct === 0) return 0;
+  return Math.max(1, Math.floor((value * pct + 50) / 100));
 }
 
 /** The award key of one credit: `candy:<event>:<kind>:<player>:<ref>`. The SQL builds the same string. */
