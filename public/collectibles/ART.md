@@ -14,6 +14,11 @@ themselves; only the catalogue's `art.status` flips (see "Replacing a card").
 | Rare, epic and legendary card | 48 x 48 | `public/collectibles/<collection>/<id>.png` |
 | Pack emblem | 48 x 48 | `public/collectibles/packs/<collection>.png` |
 | Collection symbol | 16 x 16 | `public/collectibles/symbols/<collection>.png` |
+| Pack print (front) | 96 x 140 | `public/collectibles/packs/print/<pack id>.png` |
+| Pack foil mask | 96 x 140 | `public/collectibles/packs/print/<pack id>-foil.png` |
+| Pack Room scene (laptop) | 434 x 230 | `public/collectibles/room/a/desk-<normal or halloween>.png` |
+| Pack Room scene (phone) | 195 x 358 | `public/collectibles/room/a/phone-<normal or halloween>.png` |
+| Pack Room loops | strips of equal frames | `public/collectibles/room/a/anim-*.png` |
 
 Rules for every image:
 
@@ -28,6 +33,28 @@ Rules for every image:
 
 The Internet Culture, Brainrot and Turkish Internet Culture concepts also need a
 human content sign-off before their final art is published.
+
+## Pack prints and the Pack Room
+
+These are **final art** for the Pack Room redesign (docs/collectibles-pack-room.md),
+drawn as pixel art from scratch in October 2026; the card art above is still demo
+art. Their sources are the Python scripts in
+`artifacts/collectibles-redesign-src/art/` (`pack_*.py`, `room_a.py`, on the
+shared `pxkit.py`), with the fonts they draw lettering from in
+`artifacts/collectibles-redesign-src/fonts/`. Edit a script and re-run it rather
+than painting over a PNG, then copy the output here.
+
+- **Prints** share one anatomy: the top crimp is rows 0-9, the bottom crimp the
+  last 8 rows, and the tear notch is centred on row 16 (the opening's
+  `TEAR.seamV`, 0.118, is the middle of that row). The silhouette is in the
+  alpha channel.
+- **Foil masks** are white where the print is foil (logo, moon, medal, frame).
+  The opening turns them into the pack's metal and gloss (`opening/pack/art.ts`).
+- **Room scenes** come in two seasons with the same layout. Where the packs, the
+  stage and the boards sit is in `app/components/collectibles/room/geometry.ts`;
+  move something in the art and that file moves with it.
+- The Turkish Internet Culture print still needs the same content sign-off as
+  its cards.
 
 ## Collections
 
