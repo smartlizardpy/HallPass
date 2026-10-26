@@ -27,7 +27,7 @@ function usePackSize(): "sm" | "md" {
   return size;
 }
 
-export function PackRoom() {
+export function PackRoom({ openHref = (publicId: string) => `/packs/open?pack=${publicId}` }: { openHref?: (publicId: string) => string } = {}) {
   const [state] = useMyCollection();
   const size = usePackSize();
 
@@ -65,7 +65,7 @@ export function PackRoom() {
               if (!pack) return null;
               return (
                 <li key={p.publicId}>
-                  <Link href={`/packs/open?pack=${p.publicId}`} className="hc-link" aria-label={`Open ${pack.name}`}>
+                  <Link href={openHref(p.publicId)} className="hc-link" aria-label={`Open ${pack.name}`}>
                     <PackArt packId={p.packId} size={size} decorative />
                     <span className="hc-root hc-pack-cta" aria-hidden="true">
                       Open
