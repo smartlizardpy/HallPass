@@ -701,29 +701,7 @@ html[data-hp-skin="haunted"] .ar-booth {
   color: var(--ar-paper-head);
 }
 
-/* ---------------------------------------------------------------- LEGACY (removed as each object is restyled) */
-html[data-hp-skin="haunted"] .hl-sec {
-  border: 16px solid transparent;
-  border-image: url(/events/fright-fest/hall/frame-quest.png) 16 fill / 16px / 0 round;
-  background-color: #170b1f;
-  padding: 0 2px 2px;
-  border-radius: 0;
-  image-rendering: pixelated;
-}
-html[data-hp-skin="haunted"] #candy.hl-sec,
-html[data-hp-skin="haunted"] #rewards.hl-sec {
-  border-image-source: url(/events/fright-fest/hall/frame-prize.png);
-}
-@media (min-width: 640px) {
-  html[data-hp-skin="haunted"] .hl-sec {
-    border-width: 32px;
-    border-image-width: 32px;
-    padding: 0 8px 8px;
-  }
-}
-html[data-hp-skin="haunted"] .hl-sec > * {
-  image-rendering: auto;
-}
+/* Prints stand on the page as pixel art; text never inherits this. */
 .hl-print {
   image-rendering: pixelated;
 }

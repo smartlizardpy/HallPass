@@ -11,8 +11,10 @@
  * a dropped response can never buy twice; a new confirm gets a new id. The
  * words for every response are in logic.ts (`spendMessage`).
  *
- * Base tokens only: with the haunted skin off it is an ordinary HallPass card.
- * sections.css frames it under the skin.
+ * Drawn as the arcade's corkboard (sections.css, `.ar-*`; candy.css for the shelf):
+ * pinned paper notices and a prize-counter shelf. Fixed palette, no base tokens.
+ * Only the markup and its classes changed from the plain-card version; every
+ * behaviour, state, label and accessibility feature is the same.
  */
 
 import Link from "next/link";
@@ -43,10 +45,8 @@ interface Me {
 type Load = { status: "loading" } | { status: "error" } | { status: "ok"; me: Me };
 
 const RECENT_SHOWN = 5;
-const BTN =
-  "rounded-full px-4 py-2 text-sm font-extrabold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed";
-const PRIMARY = `${BTN} bg-brand text-white hover:bg-brand-600 disabled:border disabled:border-dashed disabled:border-border disabled:bg-surface disabled:text-muted disabled:hover:bg-surface`;
-const QUIET = `${BTN} border border-border bg-surface text-foreground hover:bg-surface-2`;
+const PRIMARY = "ar-btn ar-btn-gold";
+const QUIET = "ar-btn";
 
 function newRequestId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -56,7 +56,7 @@ function newRequestId(): string {
 function SignInForm({ label }: { label: string }) {
   return (
     <form action={startSignIn}>
-      <button type="submit" className="rounded-full bg-brand px-5 py-2.5 text-sm font-extrabold text-white transition hover:bg-brand-600">
+      <button type="submit" className="ar-btn ar-btn-gold">
         {label}
       </button>
     </form>
@@ -152,28 +152,28 @@ export function CandyHunt({ candy }: { candy: CandyProps }) {
   const rows = showAll ? recent : recent.slice(0, RECENT_SHOWN);
 
   return (
-    <section id="candy" aria-labelledby="candy-h" className="hl-sec scroll-mt-24 rounded-2xl border border-border bg-surface p-4 sm:p-6">
-      <h2 id="candy-h" className="text-xl font-black">
-        Candy Hunt
-      </h2>
-      <p className="mt-2 max-w-prose text-sm leading-relaxed text-foreground-2">
-        Earn Halloween Candy by playing from {labels.opens} to {labels.earnEnds}. Spend it on packs until {labels.spendUntil}. Unspent
-        candy melts after that.
-      </p>
-      <p role="status" className="sr-only">
-        {announce}
-      </p>
+    <section id="candy" aria-labelledby="candy-h" className="ar-sec ar-corkboard scroll-mt-24">
+      <div className="ar-cork">
+        <div className="ar-head">
+          <h2 id="candy-h">Candy Hunt</h2>
+        </div>
+        <p className="ar-lede">
+          Earn Halloween Candy by playing from {labels.opens} to {labels.earnEnds}. Spend it on packs until {labels.spendUntil}. Unspent
+          candy melts after that.
+        </p>
+        <p role="status" className="sr-only">
+          {announce}
+        </p>
 
-      <div className="mt-5 space-y-6 text-sm leading-relaxed text-foreground-2">
         {/* Your candy */}
-        <div aria-labelledby="candy-mine-h" className="rounded-xl bg-surface-2 p-4">
-          <h3 id="candy-mine-h" className="text-[11px] font-black uppercase tracking-wider text-muted">
+        <div aria-labelledby="candy-mine-h" className="ar-notice ar-ticket-card">
+          <h3 id="candy-mine-h" className="ar-ntitle">
             Your candy
           </h3>
           {load.status === "loading" ? (
-            <div className="mt-2 h-14 animate-pulse rounded-lg bg-surface motion-reduce:animate-none" aria-hidden="true" />
+            <div className="ar-paper-skel" aria-hidden="true" />
           ) : load.status === "error" ? (
-            <div className="mt-2 flex flex-wrap items-center gap-3">
+            <div className="ar-mine-row">
               <p>Your candy could not be loaded.</p>
               <button
                 type="button"
@@ -187,44 +187,38 @@ export function CandyHunt({ candy }: { candy: CandyProps }) {
               </button>
             </div>
           ) : !load.me.signedIn ? (
-            <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-              <p className="max-w-prose">
-                <b className="text-foreground">Sign in to collect candy.</b> Guests can play, but only signed-in players earn it.
+            <div className="ar-mine-row">
+              <p>
+                <b>Sign in to collect candy.</b> Guests can play, but only signed-in players earn it.
               </p>
               <SignInForm label="Sign in to collect candy" />
             </div>
           ) : !load.me.available ? (
-            <p className="mt-2">Candy is not available right now. Your candy is safe; check back soon.</p>
+            <p>Candy is not available right now. Your candy is safe; check back soon.</p>
           ) : (
-            <div className="mt-1">
-              <p className="flex flex-wrap items-baseline gap-x-3">
-                <span className="text-5xl font-black tabular-nums text-foreground" data-testid="candy-balance">
+            <div>
+              <p className="ar-balance">
+                <span className="ar-big" data-testid="candy-balance">
                   {balance}
                 </span>
-                <span className="font-bold text-foreground">candy</span>
-                {(load.me.newlyCredited?.count ?? 0) > 0 && (
-                  <span className="rounded-full bg-brand-100 px-2 py-0.5 text-xs font-black text-brand-600">
-                    +{load.me.newlyCredited?.amount} new
-                  </span>
-                )}
+                <span className="ar-unit">candy</span>
+                {(load.me.newlyCredited?.count ?? 0) > 0 && <span className="ar-new">+{load.me.newlyCredited?.amount} new</span>}
               </p>
-              {balance < 0 && <p className="mt-1 font-bold text-foreground">Spending is paused until your balance is above 0.</p>}
-              <h4 className="mt-4 text-[11px] font-black uppercase tracking-wider text-muted">Recent</h4>
+              {balance < 0 && <p className="ar-strong-line">Spending is paused until your balance is above 0.</p>}
+              <h4 className="ar-nsub">Recent</h4>
               {recent.length === 0 ? (
-                <p className="mt-1">Nothing yet. Play a game from {labels.opens} and your candy lands here.</p>
+                <p>Nothing yet. Play a game from {labels.opens} and your candy lands here.</p>
               ) : (
                 <>
-                  <ul className="mt-1 divide-y divide-border/60">
+                  <ul className="ar-rows">
                     {rows.map((r, i) => (
-                      <li key={`${r.at}-${i}`} className="flex items-baseline justify-between gap-3 py-1.5">
+                      <li key={`${r.at}-${i}`}>
                         <span className="min-w-0">
-                          <span className={r.revoked ? "line-through opacity-70" : "text-foreground"}>{r.label}</span>
-                          {r.game && <span className="text-muted"> · {r.game}</span>}
-                          {r.revoked && <span className="ml-2 text-xs font-bold text-muted">revoked</span>}
+                          <span className={r.revoked ? "ar-revoked" : ""}>{r.label}</span>
+                          {r.game && <span className="ar-faint"> · {r.game}</span>}
+                          {r.revoked && <span className="ar-faint ar-tag"> revoked</span>}
                         </span>
-                        <span className={`shrink-0 font-black tabular-nums ${r.revoked ? "line-through opacity-70" : "text-foreground"}`}>
-                          {r.amount > 0 ? `+${r.amount}` : r.amount}
-                        </span>
+                        <b className={r.revoked ? "ar-revoked" : ""}>{r.amount > 0 ? `+${r.amount}` : r.amount}</b>
                       </li>
                     ))}
                   </ul>
@@ -240,58 +234,54 @@ export function CandyHunt({ candy }: { candy: CandyProps }) {
         </div>
 
         {/* How to earn */}
-        <div>
-          <h3 className="text-base font-black text-foreground">How to earn</h3>
-          <div className="mt-2 grid gap-x-8 gap-y-4 md:grid-cols-2">
-            <div>
-              <h4 className="text-[11px] font-black uppercase tracking-wider text-muted">Achievements</h4>
-              <ul className="mt-1">
-                {candy.rubric.map((t) => (
-                  <li key={t.label} className="flex justify-between gap-3 border-b border-border/60 py-1.5">
-                    <span>{t.label}</span>
-                    <b className="shrink-0 tabular-nums text-foreground">{t.value}</b>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-2">
-                Each game&apos;s achievements have their own value. Unlocks count from {labels.opens} to {labels.earnEnds}.
-              </p>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-[11px] font-black uppercase tracking-wider text-muted">Fright Fest ranked runs</h4>
-                <p className="mt-1 flex justify-between gap-3 border-b border-border/60 py-1.5">
-                  <span>Your first ranked run on each board</span>
-                  <b className="shrink-0 tabular-nums text-foreground">{candy.rankedRun}</b>
-                </p>
-              </div>
-              <div>
-                <h4 className="text-[11px] font-black uppercase tracking-wider text-muted">Final results</h4>
-                <p className="mt-1">Paid once the results are final, by {labels.resultsBy}.</p>
-                <ul className="mt-1">
-                  {candy.placing.map((p) => (
-                    <li key={p.label} className="flex justify-between gap-3 border-b border-border/60 py-1.5">
-                      <span>{p.label} on each board</span>
-                      <b className="shrink-0 tabular-nums text-foreground">{p.amount}</b>
-                    </li>
-                  ))}
-                  <li className="flex justify-between gap-3 border-b border-border/60 py-1.5">
-                    <span>A result on every board</span>
-                    <b className="shrink-0 tabular-nums text-foreground">+{candy.allBoards}</b>
-                  </li>
-                </ul>
-              </div>
-            </div>
+        <h3 className="ar-sub ar-sub-cork">How to earn</h3>
+        <div className="ar-notes">
+          <div className="ar-notice">
+            <h4 className="ar-ntitle">Achievements</h4>
+            <ul className="ar-rows">
+              {candy.rubric.map((t) => (
+                <li key={t.label}>
+                  <span>{t.label}</span>
+                  <b>{t.value}</b>
+                </li>
+              ))}
+            </ul>
+            <p className="ar-nfoot">
+              Each game&apos;s achievements have their own value. Unlocks count from {labels.opens} to {labels.earnEnds}.
+            </p>
+          </div>
+          <div className="ar-notice">
+            <h4 className="ar-ntitle">Fright Fest ranked runs</h4>
+            <p className="ar-rows ar-row-p">
+              <span>Your first ranked run on each board</span>
+              <b>{candy.rankedRun}</b>
+            </p>
+          </div>
+          <div className="ar-notice">
+            <h4 className="ar-ntitle">Final results</h4>
+            <p className="ar-nfoot ar-nfoot-top">Paid once the results are final, by {labels.resultsBy}.</p>
+            <ul className="ar-rows">
+              {candy.placing.map((p) => (
+                <li key={p.label}>
+                  <span>{p.label} on each board</span>
+                  <b>{p.amount}</b>
+                </li>
+              ))}
+              <li>
+                <span>A result on every board</span>
+                <b>+{candy.allBoards}</b>
+              </li>
+            </ul>
           </div>
         </div>
 
         {/* The shop */}
         <div id="candy-shop">
-          <h3 className="text-base font-black text-foreground">The Candy Shop</h3>
+          <h3 className="ar-sub ar-sub-cork">The Candy Shop</h3>
           {candy.shelves.map((shelf) => (
-            <div key={shelf.price} className="mt-3">
-              <h4 className="text-[11px] font-black uppercase tracking-wider text-muted">{shelf.price} candy</h4>
-              <ul className="cd-shelf mt-2">
+            <div key={shelf.price} className="ar-shelf-wrap">
+              <h4 className="ar-shelf-label">{shelf.price} candy</h4>
+              <ul className="cd-shelf">
                 {shelf.items.map((item) => (
                   <ShopItem
                     key={item.packId}
@@ -322,18 +312,18 @@ export function CandyHunt({ candy }: { candy: CandyProps }) {
               </ul>
             </div>
           ))}
-          <p className="mt-3">
-            <Link href="/packs#pack-odds" className="font-bold underline">
+          <p className="ar-cork-line">
+            <Link href="/packs#pack-odds" className="ar-link">
               What&apos;s in each pack
             </Link>
           </p>
-          <p>Bought packs arrive sealed in your Pack Room.</p>
+          <p className="ar-cork-line">Bought packs arrive sealed in your Pack Room.</p>
         </div>
 
         {/* The rules */}
-        <div>
-          <h3 className="text-base font-black text-foreground">The rules</h3>
-          <ul className="mt-2 list-disc space-y-1 pl-5">
+        <div className="ar-notice ar-rules-note">
+          <h3 className="ar-ntitle">The rules</h3>
+          <ul className="ar-rules">
             <li>Candy is earned only by playing.</li>
             <li>It is never sold and has no cash value.</li>
             <li>It can&apos;t be traded or gifted.</li>
@@ -382,16 +372,20 @@ function ShopItem({
   const label = gate === "loading" ? "Buy" : gate === "unavailable" ? "Unavailable" : state.label;
   const disabled = gate !== "ready" && gate !== "signed-out" ? true : state.disabled || (busy && !inFlight);
   return (
-    <li className="cd-item flex flex-col gap-2 rounded-xl bg-surface-2 p-3">
-      {/* eslint-disable-next-line @next/next/no-img-element -- a pixel print; next/image would smooth it */}
-      <img src={item.print} alt="" width={72} height={105} loading="lazy" className="hl-print cd-print mx-auto" />
-      <b className="flex flex-1 items-center justify-center text-center text-foreground">{item.name}</b>
-      <span className="block text-center font-black tabular-nums text-foreground">{item.price} candy</span>
+    <li className="cd-item">
+      <div className="cd-stand">
+        {/* eslint-disable-next-line @next/next/no-img-element -- a pixel print; next/image would smooth it */}
+        <img src={item.print} alt="" width={72} height={105} loading="lazy" className="hl-print cd-print" />
+      </div>
+      <div className="cd-tag">
+        <b>{item.name}</b>
+        <span className="cd-price">{item.price} candy</span>
+      </div>
       {confirming ? (
         <div
           role="group"
           aria-label={`Confirm: ${item.name}`}
-          className="space-y-2 rounded-lg border border-border bg-surface p-2 text-center"
+          className="cd-plate"
           onKeyDown={(e) => {
             if (e.key === "Escape") {
               e.stopPropagation();
@@ -399,15 +393,15 @@ function ShopItem({
             }
           }}
         >
-          <p className="text-foreground">
+          <p>
             Spend {item.price} candy on the {item.name}?
           </p>
           {retry && (
-            <p role="alert" className="font-bold text-foreground">
+            <p role="alert" className="cd-alert">
               {retry.text}
             </p>
           )}
-          <div className="flex flex-wrap justify-center gap-2">
+          <div className="cd-plate-btns">
             <button ref={confirmBtn} type="button" className={PRIMARY} disabled={busy} onClick={onBuy}>
               {busy ? "Buying…" : retry ? "Try again" : "Buy it"}
             </button>
@@ -419,10 +413,10 @@ function ShopItem({
       ) : (
         <>
           {outcome && (
-            <div ref={outcomeRef} tabIndex={-1} className="rounded-lg border border-border bg-surface p-2 text-center text-foreground outline-none focus-visible:outline-2 focus-visible:outline-brand">
-              <p className="font-bold">{outcome.text}</p>
+            <div ref={outcomeRef} tabIndex={-1} className="cd-plate">
+              <p className="cd-alert">{outcome.text}</p>
               {outcome.sealed && (
-                <Link href="/packs" className="font-bold underline">
+                <Link href="/packs" className="ar-link">
                   Open your Pack Room
                 </Link>
               )}
@@ -436,14 +430,14 @@ function ShopItem({
           <button
             ref={setBuyRef}
             type="button"
-            className={PRIMARY}
+            className={`${PRIMARY} cd-buy`}
             disabled={disabled}
             aria-label={disabled ? undefined : `Buy the ${item.name} for ${item.price} candy`}
             onClick={onOpen}
           >
             {label}
           </button>
-          {state.reason && gate === "ready" && <span className="block text-center text-xs text-muted">{state.reason}</span>}
+          {state.reason && gate === "ready" && <span className="cd-reason">{state.reason}</span>}
         </>
       )}
     </li>
