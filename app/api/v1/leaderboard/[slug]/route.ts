@@ -29,6 +29,12 @@
  *
  * `canViewStaged()` (and so `auth()` for the gate) runs only on that staged
  * branch. A public board keeps today's code path, cost and headers.
+ *
+ * CHAMPIONSHIP BOARDS. A board id that belongs to an enabled championship
+ * (`championshipBoard`, e.g. `last-bell-halloween-shift`) is handed to
+ * `app/lib/championship/http.ts` before anything here touches `boards` or
+ * `scores`. Its runs live in `championship_runs`, need a signed-in player and a
+ * run token, and are answered same-origin and uncached; see that module.
  */
 
 import {
@@ -49,6 +55,8 @@ import { resolveChallengesForScore } from "@/app/lib/challenges";
 import { notifyChallengesBeaten } from "@/app/lib/challenges/notify";
 import { notifyFriendsPassed } from "@/app/lib/scoreboard/friend-passed-notify";
 import { getPublicIdentity, upsertPlayerOnLogin } from "@/app/lib/players";
+import { championshipBoard } from "@/app/lib/championship/config";
+import { getChampionshipBoard, postChampionshipScore } from "@/app/lib/championship/http";
 import type { Session } from "next-auth";
 import type {
   ApiError,
@@ -126,6 +134,9 @@ export async function GET(
   const limit = limitParam === null ? DEFAULT_LIMIT : clampLimit(Number(limitParam));
   const period = normalizePeriod(url.searchParams.get("period"));
 
+  const championship = championshipBoard(slug);
+  if (championship) return getChampionshipBoard(championship, limit);
+
   try {
     const board = await store.getBoard(slug);
     if (!board) return boardNotInitialized();
@@ -163,6 +174,8 @@ export async function POST(
   } catch {
     return jsonResponse({ error: "Invalid JSON body" } satisfies ApiError, 400);
   }
+  const championship = championshipBoard(slug);
+  if (championship) return postChampionshipScore(req, championship, payload);
   const { score, handle } = (payload ?? {}) as { score?: unknown; handle?: unknown };
 
   let board;

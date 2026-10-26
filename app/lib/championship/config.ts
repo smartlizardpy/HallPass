@@ -24,15 +24,19 @@ export function championshipEnabled(id: string): boolean {
   return BY_ID.get(id)?.enabled === true;
 }
 
+/** A championship board: the event and the game it belongs to. */
+export interface ChampionshipBoardEntry {
+  championship: ChampionshipConfig;
+  game: ChampionshipGame;
+}
+
 /**
  * The enabled championship and game that own a board id, or `undefined` for every
  * ordinary board. This is what the leaderboard route asks before it touches
  * `scores`: a board id that is a championship board never reaches the ordinary
  * path, whether or not the championship is currently accepting runs.
  */
-export function championshipBoard(
-  boardId: string,
-): { championship: ChampionshipConfig; game: ChampionshipGame } | undefined {
+export function championshipBoard(boardId: string): ChampionshipBoardEntry | undefined {
   for (const championship of CHAMPIONSHIPS) {
     if (!championship.enabled) continue;
     const game = championship.games.find((g) => g.board === boardId);

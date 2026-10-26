@@ -233,6 +233,57 @@ export interface ApiError {
   error: string;
 }
 
+// ---- Wire types: championship boards (added in SDK 1.5, append-only) --------
+//
+// A championship board (e.g. `last-bell-halloween-shift`) answers on the same
+// leaderboard URL as any board, but takes runs only from signed-in players with
+// a run token from `POST /api/v1/leaderboard/<board>/runs`. Its GET is the
+// ordinary `LeaderboardResponse`.
+
+/** Why a championship run did not start or did not count. */
+export type ChampionshipReason =
+  | "signed-out" // no session: championship runs are for signed-in players
+  | "closed" // outside the window, the board is not open, or results are being checked
+  | "no-run" // no valid run token with the submission
+  | "expired" // the run token outlived its lifetime
+  | "rejected" // the server's checks rule the run out (`detail` says which)
+  | "rate-limited" // too many runs or submissions in a short time
+  | "unavailable"; // the championship store is unreachable; try later
+
+/** `POST /api/v1/leaderboard/<board>/runs` success body. */
+export interface RunStartResponse {
+  token: string;
+  /** ISO-8601. */
+  expiresAt: string;
+  board: string;
+  championship: string;
+}
+
+/** `POST /api/v1/leaderboard/<board>` success body for a championship board. */
+export interface ChampionshipSubmitResponse {
+  ok: true;
+  championship: string;
+  /** `flagged`: recorded, held for a staff check before it ranks. */
+  status: "accepted" | "flagged";
+  /** The player's place on the board now (accepted runs only). */
+  rank?: number;
+  /** This run is now the player's best on the board. */
+  best: boolean;
+  /** Recorded in the grace after the close. */
+  late: boolean;
+  /** This answer replays an earlier submission of the same run. */
+  duplicate: boolean;
+  score: number;
+}
+
+/** Error body for a championship board. */
+export interface ChampionshipError extends ApiError {
+  reason: ChampionshipReason;
+  /** A finer code, e.g. the check that rejected a run or why the board is closed. */
+  detail?: string;
+  championship: string;
+}
+
 // ---- Wire types: achievements -----------------------------------------------
 //
 // NAME COLLISION, ON PURPOSE: `PlayerAchievement` and `UnlockReason` below are
