@@ -6,6 +6,7 @@ import type { Game } from "../lib/games";
 import { acquireOverlayLock } from "../lib/overlay-lock";
 import { recordPlayServerSide, recordRecentPlay } from "../lib/personalization";
 import { recordPlay as recordStreakPlay } from "../lib/streak/store";
+import { ChampionshipRunToast } from "./championship/RunToast";
 
 /**
  * The fullscreen game player.
@@ -313,6 +314,11 @@ export function PlayerOverlay({
           allow="autoplay; fullscreen; gamepad; pointer-lock"
           allowFullScreen
         />
+
+        {/* What happened to a ranked championship run, in words. Same-origin
+            games only: the SDK only signals a HallPass page it shares an origin
+            with, and the toast only reads this frame's messages. */}
+        {!isExternal && <ChampionshipRunToast frameWrap={frameWrapRef} gameKey={game.slug} />}
 
         {/* Block-detection fallback: the frame didn't load in time, so it may be
             refusing to embed. Offer a centred CTA to open the game directly. */}
