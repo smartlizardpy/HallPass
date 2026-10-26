@@ -20,9 +20,10 @@
  *   - achievements: `player_achievements.unlocked_at` inside the earning window,
  *     for an achievement whose `candy` is above 0 at sync time;
  *   - ranked runs: a player's first ACCEPTED run on each counting board;
- *   - all boards: an accepted run on every counting board (the standings'
- *     `eligible`), once;
- *   - placings: only when the championship is finalised, from the FROZEN
+ *   - all boards: once, when the championship is finalised and the player's
+ *     overall entry in the FROZEN snapshot is `eligible` (a result on every
+ *     board);
+ *   - placings: only when the championship is finalised, from the same FROZEN
  *     snapshot (never from live standings), by final rank.
  * A counting board is `open` or `paused` with an `opened_at`, exactly as
  * `championship/phase.ts#countingGames` defines it.
@@ -33,9 +34,11 @@
  * back (a reinstated run). Only a system revocation is ever restored; an admin's
  * stays. Both run in the same transaction as the sync, behind the same advisory
  * lock a spend takes, so a revocation can never slip between a spend's balance
- * check and its debit. The all-boards bonus is NOT revoked automatically: boards
- * can join the lineup later, which must not claw back a bonus already paid (an
- * admin can revoke it by hand).
+ * check and its debit. The all-boards bonus and placings are never revoked
+ * automatically: they are paid from the verified, frozen final results, so they
+ * are final the moment they are paid (an admin can still revoke one by hand).
+ * They are deliberately not paid from live boards: one early run on a single
+ * open board would otherwise earn "a result on every board".
  *
  * A SPEND IS ONE TRANSACTION. `spend` takes a per-player advisory lock, then runs
  * ONE statement that checks the balance, grants the sealed pack (a `player_packs`
@@ -222,23 +225,19 @@ export function createCandyStore(sql: Sql, config: CandyConfig = CANDY_FRIGHT_FE
         ON CONFLICT (award_key) DO NOTHING
         RETURNING amount
       `,
-      // A result on every counting board (the standings' `eligible`), once.
+      // A result on every board, from the FROZEN snapshot: the player's overall entry is `eligible`.
       tx`
         INSERT INTO candy_ledger (player_id, event_id, amount, kind, award_key, ref)
         SELECT ${playerId}::text, ${event}::text, ${config.allBoards}::int, 'all_boards',
                'candy:' || ${event}::text || ':all_boards:' || ${playerId}::text, NULL::text
-        WHERE EXISTS (
-            SELECT 1 FROM championship_games g
-            WHERE g.event_id = ${event} AND g.status IN ('open','paused') AND g.opened_at IS NOT NULL
-          )
-          AND NOT EXISTS (
-            SELECT 1 FROM championship_games g
-            WHERE g.event_id = ${event} AND g.status IN ('open','paused') AND g.opened_at IS NOT NULL
-              AND NOT EXISTS (
-                SELECT 1 FROM championship_runs r
-                WHERE r.event_id = g.event_id AND r.game_slug = g.game_slug AND r.player_id = ${playerId} AND r.status = 'accepted'
-              )
-          )
+        FROM championship_events ev
+        CROSS JOIN LATERAL jsonb_array_elements(
+          CASE WHEN jsonb_typeof(ev.final_standings->'overall') = 'array' THEN ev.final_standings->'overall' ELSE '[]'::jsonb END
+        ) AS o(entry)
+        WHERE ev.id = ${event} AND ev.status IN ('finalised','archived') AND ev.final_standings IS NOT NULL
+          AND (o.entry->>'eligible') = 'true'
+          AND (o.entry->>'publicId') = (SELECT p.public_id::text FROM players p WHERE p.id = ${playerId})
+        LIMIT 1
         ON CONFLICT (award_key) DO NOTHING
         RETURNING amount
       `,

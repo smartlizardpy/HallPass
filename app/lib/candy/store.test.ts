@@ -132,8 +132,10 @@ describe("candy store", () => {
     expect(run).toMatch(/r\.status = 'accepted'/);
     expect(run).toMatch(/g\.status IN \('open','paused'\) AND g\.opened_at IS NOT NULL/);
     const all = texts.find((t) => t.includes(":all_boards:") && t.includes("INSERT"))!;
-    expect(all).toMatch(/NOT EXISTS/);
-    expect(all).toMatch(/r\.status = 'accepted'/);
+    expect(all).toMatch(/ev\.status IN \('finalised','archived'\) AND ev\.final_standings IS NOT NULL/);
+    expect(all).toMatch(/final_standings->'overall'/);
+    expect(all).toMatch(/o\.entry->>'eligible'\) = 'true'/);
+    expect(all).not.toMatch(/championship_runs/); // never from live boards
     const j = texts.findIndex((t) => t.includes(":placing:"));
     expect(texts[j]).toMatch(/ev\.status IN \('finalised','archived'\) AND ev\.final_standings IS NOT NULL/);
     expect(texts[j]).toMatch(/final_standings->'boards'/);

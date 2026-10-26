@@ -117,40 +117,40 @@ describe.skipIf(!enabled)("candy store against Postgres", () => {
     expect(await early.sync(p1)).toEqual({ credited: 0, amount: 0 });
   });
 
-  it("pays the first accepted run per counting board, and +20 once every counting board has a result", async () => {
+  it("pays the first accepted run per counting board, and never the all-boards bonus from live boards", async () => {
     await run(p1, "g1");
     await run(p1, "g1"); // a second accepted run on the same board pays nothing more
     await run(p1, "g3"); // a pending board does not count
     expect(await store.sync(p1)).toEqual({ credited: 1, amount: 10 });
     expect(await store.balance(p1)).toBe(25);
     await run(p1, "g2");
-    expect(await store.sync(p1)).toEqual({ credited: 2, amount: 30 }); // g2 run + all boards
+    expect(await store.sync(p1)).toEqual({ credited: 1, amount: 10 }); // g2 run only: a run on every live board no longer pays the bonus
     expect(await store.sync(p1)).toEqual({ credited: 0, amount: 0 });
-    expect(await store.balance(p1)).toBe(55);
-    expect((await ledger(p1)).filter((r) => r.kind === "all_boards")).toHaveLength(1);
+    expect(await store.balance(p1)).toBe(35);
+    expect((await ledger(p1)).filter((r) => r.kind === "all_boards")).toHaveLength(0);
   });
 
   it("revokes a run credit when the board has no accepted run left, and restores it if one returns", async () => {
     await sql`UPDATE championship_runs SET status = 'disqualified' WHERE player_id = ${p1} AND game_slug = 'g2'`;
     await store.sync(p1);
-    expect(await store.balance(p1)).toBe(45);
+    expect(await store.balance(p1)).toBe(25);
     const g2 = (await ledger(p1)).find((r) => r.ref === "g2")!;
     expect(g2.revoked_by).toBe("system");
     await sql`UPDATE championship_runs SET status = 'accepted' WHERE player_id = ${p1} AND game_slug = 'g2'`;
     await store.sync(p1);
-    expect(await store.balance(p1)).toBe(55);
+    expect(await store.balance(p1)).toBe(35);
     expect((await ledger(p1)).find((r) => r.ref === "g2")!.revoked_at).toBeNull();
   });
 
   it("an admin revocation lowers the balance, is logged, stays revoked through a sync, and cannot touch a spend", async () => {
     const before = await store.balance(p1);
-    const row = (await ledger(p1)).find((r) => r.kind === "all_boards")!;
+    const row = (await ledger(p1)).find((r) => r.kind === "ranked_run" && r.ref === "g1")!;
     const id = Number((await sql`SELECT id FROM candy_ledger WHERE award_key = ${String(row.award_key)}`)[0].id);
     expect(await store.revokeCredit({ ledgerId: id, actorEmail: actor, reason: "Test revocation" })).toBe(true);
     expect(await store.revokeCredit({ ledgerId: id, actorEmail: actor, reason: "Again" })).toBe(false);
-    expect(await store.balance(p1)).toBe(before - 20);
+    expect(await store.balance(p1)).toBe(before - 10);
     await store.sync(p1);
-    expect(await store.balance(p1)).toBe(before - 20);
+    expect(await store.balance(p1)).toBe(before - 10);
     const log = await store.readLog(50);
     expect(log.some((l) => l.action === "revoke-credit" && l.reason === "Test revocation")).toBe(true);
     expect((await store.listRecent(200)).some((r) => r.id === id && r.revokedBy === actor)).toBe(true);
@@ -226,6 +226,10 @@ describe.skipIf(!enabled)("candy store against Postgres", () => {
     const before1 = await store.balance(p1);
     expect((await ledger(p1)).filter((r) => r.kind === "placing")).toHaveLength(0);
     const snapshot = {
+      overall: [
+        { publicId: p1Public, eligible: true },
+        { publicId: p2Public, eligible: false },
+      ],
       boards: [
         { slug: "g1", counting: true, entries: [{ rank: 1, publicId: p1Public }, { rank: 2, publicId: p2Public }] },
         { slug: "g2", counting: true, entries: [{ rank: 5, publicId: p1Public }] },
@@ -235,12 +239,16 @@ describe.skipIf(!enabled)("candy store against Postgres", () => {
     await sql`UPDATE championship_events SET status = 'verification' WHERE id = ${event}`;
     await store.sync(p1);
     expect(await store.balance(p1)).toBe(before1); // verification is not final
+    expect((await ledger(p1)).filter((r) => r.kind === "all_boards")).toHaveLength(0);
     await sql`UPDATE championship_events SET status = 'finalised', final_standings = ${JSON.stringify(snapshot)}::jsonb, finalised_at = now() WHERE id = ${event}`;
     const before2 = await store.balance(p2);
-    expect(await store.sync(p1)).toEqual({ credited: 2, amount: 60 }); // 1st on g1 (40) + 5th on g2 (20); g3 does not count
+    // 1st on g1 (40) + 5th on g2 (20) + the all-boards bonus (20, eligible in the snapshot); g3 does not count
+    expect(await store.sync(p1)).toEqual({ credited: 3, amount: 80 });
     expect(await store.sync(p1)).toEqual({ credited: 0, amount: 0 });
     expect(await store.sync(p2)).toEqual({ credited: 1, amount: 30 }); // 2nd on g1
-    expect(await store.balance(p1)).toBe(before1 + 60);
+    expect(await store.balance(p1)).toBe(before1 + 80);
+    expect((await ledger(p1)).filter((r) => r.kind === "all_boards")).toHaveLength(1);
+    expect((await ledger(p2)).filter((r) => r.kind === "all_boards")).toHaveLength(0); // not eligible
     expect(await store.balance(p2)).toBe(before2 + 30);
     expect((await ledger(p2)).find((r) => r.kind === "placing")!.ref).toBe("g1#2");
   });

@@ -37,7 +37,10 @@ from 28 Oct 00:00 to 2 Nov 00:00 UK, which is the championship's `opensAt` to
      pays them. The credit is made the next time that player's candy is synced.
 2. **Fright Fest ranked runs.**
    - A player's first accepted ranked run on each counting board pays **10**.
-   - A result on every counting board pays **+20** (the standings' `eligible`).
+   - A result on every board pays **+20**, once, when the championship is
+     finalised: the player's overall entry in the frozen final standings is
+     `eligible`. It is not paid from live boards, so one early run on a single
+     open board earns the 10 for that board and nothing more.
 3. **Placing,** paid once results are final (phase `finalised`), on each board:
    - **1st: 40**
    - **2nd–3rd: 30**
@@ -176,10 +179,13 @@ Decisions made while building, inside the plan above.
 - **Run credits revoke and restore automatically.** If a board has no accepted run
   left for the player, its 10 is revoked (`revoked_by = 'system'`); if an accepted
   run returns, only a system revocation is restored. An admin's revocation stays.
-- **The all-boards bonus is not revoked automatically.** A board can join the
-  lineup later, which must not claw back a bonus already paid. An admin can revoke
-  it by hand. It follows the standings' `eligible` literally, so while only one
-  board is open, one accepted run on it pays the 20.
+- **The all-boards bonus is paid from the frozen snapshot, like placings.** Once
+  the status is `finalised` or `archived`, a player whose entry in
+  `final_standings->'overall'` has `eligible = true` gets the 20, once (same
+  award key). It is never paid from live boards, because while only one board is
+  open a single run would otherwise earn "a result on every board". Paid from
+  verified final results it is final, so there is no clawback logic; an admin can
+  still revoke one by hand.
 - **Placings come from the frozen snapshot**, never live standings, and only once
   the championship status is `finalised` or `archived`. The ledger `ref` is
   `<board slug>#<rank>`.
