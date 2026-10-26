@@ -217,8 +217,8 @@ game (same-origin iframe)          HallPass
 ```
 
 - **Tokens:** 32 random bytes, base64url. Only the SHA-256 is stored. Bound to
-  the issuing player, the event and the game, single-use, expiring 45 minutes
-  after issue (`tokenTtlSec`).
+  the issuing player, the event and the game, single-use, expiring 75 minutes
+  after issue (`tokenTtlSec`, longer than the longest ranked run).
 - **Finishing grace:** a run whose token was issued before the close may still
   be recorded for `submitGraceSec` (10 minutes) after it, so nobody is cut off
   mid-escape at midnight. A run started after the close never gets a token.

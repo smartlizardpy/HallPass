@@ -31,7 +31,9 @@ export const FRIGHT_FEST_2026: ChampionshipConfig = {
   timeZone: "Europe/London",
   resultsBy: "2026-11-05T00:00:00Z",
   href: "/fright-fest",
-  tokenTtlSec: 45 * 60,
+  // Longer than the longest ranked run any board allows (Cursed Dash caps at
+  // 60 minutes), so no legitimate run outlives its token.
+  tokenTtlSec: 75 * 60,
   submitGraceSec: 10 * 60,
   points: { byRank: [100, 80, 65, 40, 40, 20, 20, 20, 20, 20], others: 5 },
   rewards: {
