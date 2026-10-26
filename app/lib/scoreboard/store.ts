@@ -16,6 +16,33 @@
  *   fully-written query templates, and only ever interpolate bound values
  *   (`slug`, `score`, `handle`, `limit`, window size, ...).
  *
+ * ── THE SEASON FILTER (Fright Fest) ────────────────────────────────────────
+ *   While a {@link Season} is open, the PLAYER-FACING reads count only scores
+ *   with `created_at >= season.from`: `getTopScores({ seasonal: true })` (the two
+ *   public leaderboard routes opt in), the rank `appendScore` returns and
+ *   `rankForScore`, `getFriendStandingsForGame` (best AND rank) and
+ *   `getFriendsNewlyPassed` (so a "passed you" notice agrees with the board the
+ *   player sees). Older rows are hidden, never deleted.
+ *
+ *   It is ONE SQL expression, repeated in each template because fragments cannot
+ *   be spliced (rule above):
+ *
+ *     AND created_at >= (CASE WHEN now() >= $from AND now() < $until
+ *                             THEN $from ELSE '-infinity' END)
+ *
+ *   so the DATABASE clock decides whether the window is open, no deploy is needed
+ *   to switch, and outside the window the floor is -infinity and every read is
+ *   all-time. `getTopScores` without `seasonal` binds NULLs, which makes the CASE
+ *   fall to '-infinity' the same way. The existing `idx_scores_board_*` indexes
+ *   still lead with `board_id`; the added bound is a cheap residual filter on the
+ *   rows of one board (and `idx_scores_board_created` can serve it as a range).
+ *
+ *   NOT filtered, on purpose: writes (`appendScore` still inserts and its
+ *   rate-limit count is unchanged), moderation and admin reads (`countScores`,
+ *   `listScoresForModeration`, `clearBoardScores`, `getTopScores` without
+ *   `seasonal`), `claimScores`, and `getPlayerStandings` (the profile's all-time
+ *   standings).
+ *
  * BIGINT note: Postgres `int8`/`bigint` columns (`score`, `max_score`, and any
  * `count(*)`) come back from the driver as STRINGS to avoid precision loss, so
  * every numeric egress is funnelled through `Number(...)`.
@@ -37,6 +64,7 @@ import {
   type RateLimit,
 } from "./config";
 import { publicGuestName, publicScoreName } from "./display-name";
+import { FRIGHT_FEST_SEASON, type Season } from "./season";
 
 /** The subset of the Neon query function the store needs: callable as a tag. */
 type Sql = NeonQueryFunction<false, false>;
@@ -49,6 +77,17 @@ export interface TopScoresOptions {
   limit: number;
   period: Period;
   sort: SortDir;
+  /**
+   * Count only the current season's scores (see `season.ts`). The two PUBLIC
+   * leaderboard routes set it; it defaults to false so the dashboard's board
+   * view and any future admin read stay all-time without being edited.
+   */
+  seasonal?: boolean;
+}
+
+/** Store options. `season` is injectable so a DB test can put a window around now. */
+export interface StoreOptions {
+  season?: Season;
 }
 
 /** A score about to be written. `ipHash` is null only when un-hashable. */
@@ -153,7 +192,9 @@ function mapBoard(row: Row): BoardConfig {
  * Build a store bound to a specific `sql` query function. The real wiring lives
  * in `index.ts` (`createStore(sql)` from `db.ts`); tests pass a fake `sql`.
  */
-export function createStore(sql: Sql) {
+export function createStore(sql: Sql, { season = FRIGHT_FEST_SEASON }: StoreOptions = {}) {
+  const sf = season.from;
+  const su = season.until;
   /**
    * Idempotent board provisioning. `ON CONFLICT (id) DO UPDATE` upserts, and
    * `(xmax = 0) AS created` is the canonical Postgres trick for "was this row
@@ -241,9 +282,19 @@ export function createStore(sql: Sql) {
    */
   async function getTopScores(
     boardId: string,
-    { limit, period, sort }: TopScoresOptions,
+    { limit, period, sort, seasonal = false }: TopScoresOptions,
   ): Promise<ScoreEntry[]> {
-    const rows = await selectTopRows(boardId, limit, period, sort);
+    // Admin callers leave `seasonal` off and bind NULLs, which makes the
+    // season predicate in every template false-proof: `now() >= NULL` is NULL,
+    // the CASE falls to '-infinity', and the read is all-time.
+    const rows = await selectTopRows(
+      boardId,
+      limit,
+      period,
+      sort,
+      seasonal ? season.from : null,
+      seasonal ? season.until : null,
+    );
     return rows.map((row, index) => {
       const rank = index + 1;
       if (row.player_id != null) {
@@ -297,7 +348,14 @@ export function createStore(sql: Sql) {
    * `scores`, so it stays unqualified. Only `boardId` and `limit` are ever bound
    * — the join and dedup introduce no spliced fragment.
    */
-  function selectTopRows(boardId: string, limit: number, period: Period, sort: SortDir) {
+  function selectTopRows(
+    boardId: string,
+    limit: number,
+    period: Period,
+    sort: SortDir,
+    f: string | null,
+    u: string | null,
+  ) {
     if (sort === "asc") {
       if (period === "day") {
         return sql`
@@ -306,7 +364,10 @@ export function createStore(sql: Sql) {
               s.handle, s.score, s.player_id, p.handle AS p_handle, p.username AS p_username,
               p.public_id AS p_public_id, p.avatar_meme AS p_avatar_meme, p.avatar_colour AS p_avatar_colour, s.created_at, s.id
             FROM scores s LEFT JOIN players p ON p.id = s.player_id
-            WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 0, 1)
+            WHERE s.board_id = ${boardId}
+              AND s.created_at >= (CASE WHEN now() >= ${f}::timestamptz AND now() < ${u}::timestamptz
+                THEN ${f}::timestamptz ELSE '-infinity'::timestamptz END)
+              AND s.created_at >= now() - make_interval(0, 0, 0, 1)
             ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score ASC, s.created_at ASC, s.id ASC
           ) best
           ORDER BY score ASC, created_at ASC, id ASC
@@ -320,7 +381,10 @@ export function createStore(sql: Sql) {
               s.handle, s.score, s.player_id, p.handle AS p_handle, p.username AS p_username,
               p.public_id AS p_public_id, p.avatar_meme AS p_avatar_meme, p.avatar_colour AS p_avatar_colour, s.created_at, s.id
             FROM scores s LEFT JOIN players p ON p.id = s.player_id
-            WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 1)
+            WHERE s.board_id = ${boardId}
+              AND s.created_at >= (CASE WHEN now() >= ${f}::timestamptz AND now() < ${u}::timestamptz
+                THEN ${f}::timestamptz ELSE '-infinity'::timestamptz END)
+              AND s.created_at >= now() - make_interval(0, 0, 1)
             ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score ASC, s.created_at ASC, s.id ASC
           ) best
           ORDER BY score ASC, created_at ASC, id ASC
@@ -334,6 +398,8 @@ export function createStore(sql: Sql) {
               p.public_id AS p_public_id, p.avatar_meme AS p_avatar_meme, p.avatar_colour AS p_avatar_colour, s.created_at, s.id
           FROM scores s LEFT JOIN players p ON p.id = s.player_id
           WHERE s.board_id = ${boardId}
+            AND s.created_at >= (CASE WHEN now() >= ${f}::timestamptz AND now() < ${u}::timestamptz
+              THEN ${f}::timestamptz ELSE '-infinity'::timestamptz END)
           ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score ASC, s.created_at ASC, s.id ASC
         ) best
         ORDER BY score ASC, created_at ASC, id ASC
@@ -348,7 +414,10 @@ export function createStore(sql: Sql) {
             s.handle, s.score, s.player_id, p.handle AS p_handle, p.username AS p_username,
               p.public_id AS p_public_id, p.avatar_meme AS p_avatar_meme, p.avatar_colour AS p_avatar_colour, s.created_at, s.id
           FROM scores s LEFT JOIN players p ON p.id = s.player_id
-          WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 0, 1)
+          WHERE s.board_id = ${boardId}
+            AND s.created_at >= (CASE WHEN now() >= ${f}::timestamptz AND now() < ${u}::timestamptz
+              THEN ${f}::timestamptz ELSE '-infinity'::timestamptz END)
+            AND s.created_at >= now() - make_interval(0, 0, 0, 1)
           ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score DESC, s.created_at ASC, s.id ASC
         ) best
         ORDER BY score DESC, created_at ASC, id ASC
@@ -362,7 +431,10 @@ export function createStore(sql: Sql) {
             s.handle, s.score, s.player_id, p.handle AS p_handle, p.username AS p_username,
               p.public_id AS p_public_id, p.avatar_meme AS p_avatar_meme, p.avatar_colour AS p_avatar_colour, s.created_at, s.id
           FROM scores s LEFT JOIN players p ON p.id = s.player_id
-          WHERE s.board_id = ${boardId} AND s.created_at >= now() - make_interval(0, 0, 1)
+          WHERE s.board_id = ${boardId}
+            AND s.created_at >= (CASE WHEN now() >= ${f}::timestamptz AND now() < ${u}::timestamptz
+              THEN ${f}::timestamptz ELSE '-infinity'::timestamptz END)
+            AND s.created_at >= now() - make_interval(0, 0, 1)
           ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score DESC, s.created_at ASC, s.id ASC
         ) best
         ORDER BY score DESC, created_at ASC, id ASC
@@ -376,6 +448,8 @@ export function createStore(sql: Sql) {
               p.public_id AS p_public_id, p.avatar_meme AS p_avatar_meme, p.avatar_colour AS p_avatar_colour, s.created_at, s.id
         FROM scores s LEFT JOIN players p ON p.id = s.player_id
         WHERE s.board_id = ${boardId}
+          AND s.created_at >= (CASE WHEN now() >= ${f}::timestamptz AND now() < ${u}::timestamptz
+            THEN ${f}::timestamptz ELSE '-infinity'::timestamptz END)
         ORDER BY COALESCE('p:' || s.player_id, 'g:' || s.handle), score DESC, s.created_at ASC, s.id ASC
       ) best
       ORDER BY score DESC, created_at ASC, id ASC
@@ -394,10 +468,14 @@ export function createStore(sql: Sql) {
         ? await sql`
             SELECT count(*)::int AS better FROM scores
             WHERE board_id = ${boardId} AND score < ${score}
+              AND created_at >= (CASE WHEN now() >= ${sf}::timestamptz AND now() < ${su}::timestamptz
+                THEN ${sf}::timestamptz ELSE '-infinity'::timestamptz END)
           `
         : await sql`
             SELECT count(*)::int AS better FROM scores
             WHERE board_id = ${boardId} AND score > ${score}
+              AND created_at >= (CASE WHEN now() >= ${sf}::timestamptz AND now() < ${su}::timestamptz
+                THEN ${sf}::timestamptz ELSE '-infinity'::timestamptz END)
           `;
     return Number(rows[0]?.better ?? 0) + 1;
   }
@@ -441,6 +519,8 @@ export function createStore(sql: Sql) {
             SELECT ins.id AS id, (
               SELECT count(*) FROM scores
               WHERE board_id = ${boardId} AND score < ${score}
+                AND created_at >= (CASE WHEN now() >= ${sf}::timestamptz AND now() < ${su}::timestamptz
+                  THEN ${sf}::timestamptz ELSE '-infinity'::timestamptz END)
             ) + 1 AS rank
             FROM ins
           `
@@ -459,6 +539,8 @@ export function createStore(sql: Sql) {
             SELECT ins.id AS id, (
               SELECT count(*) FROM scores
               WHERE board_id = ${boardId} AND score > ${score}
+                AND created_at >= (CASE WHEN now() >= ${sf}::timestamptz AND now() < ${su}::timestamptz
+                  THEN ${sf}::timestamptz ELSE '-infinity'::timestamptz END)
             ) + 1 AS rank
             FROM ins
           `;
@@ -704,6 +786,8 @@ export function createStore(sql: Sql) {
         JOIN boards b ON b.id = s.board_id
         JOIN pool ON pool.player_id = s.player_id
         WHERE b.game_slug = ${gameSlug}
+          AND s.created_at >= (CASE WHEN now() >= ${sf}::timestamptz AND now() < ${su}::timestamptz
+            THEN ${sf}::timestamptz ELSE '-infinity'::timestamptz END)
         GROUP BY s.board_id, s.player_id, b.sort
       ),
       ranked AS (
@@ -726,6 +810,8 @@ export function createStore(sql: Sql) {
         (r.player_id = ${playerId}) AS is_you,
         1 + (SELECT count(*) FROM scores o
               WHERE o.board_id = r.board_id
+                AND o.created_at >= (CASE WHEN now() >= ${sf}::timestamptz AND now() < ${su}::timestamptz
+                  THEN ${sf}::timestamptz ELSE '-infinity'::timestamptz END)
                 AND (CASE WHEN b.sort = 'asc' THEN o.score < r.best ELSE o.score > r.best END)
             ) AS rank
       FROM ranked r
@@ -798,6 +884,8 @@ export function createStore(sql: Sql) {
         SELECT CASE WHEN ${sort}::text = 'asc' THEN min(score) ELSE max(score) END AS prev
         FROM scores
         WHERE board_id = ${boardId} AND player_id = ${playerId} AND id <> ${insertedId}
+          AND created_at >= (CASE WHEN now() >= ${sf}::timestamptz AND now() < ${su}::timestamptz
+            THEN ${sf}::timestamptz ELSE '-infinity'::timestamptz END)
       ),
       friends AS (
         SELECT CASE WHEN f.player_a = ${playerId} THEN f.player_b ELSE f.player_a END AS friend_id
@@ -811,6 +899,8 @@ export function createStore(sql: Sql) {
         FROM scores s
         JOIN friends ON friends.friend_id = s.player_id
         WHERE s.board_id = ${boardId}
+          AND s.created_at >= (CASE WHEN now() >= ${sf}::timestamptz AND now() < ${su}::timestamptz
+            THEN ${sf}::timestamptz ELSE '-infinity'::timestamptz END)
         GROUP BY s.player_id
       )
       SELECT b.player_id, b.best
