@@ -110,6 +110,11 @@
   position: relative;
   flex: 1 1 auto;
   min-height: 240px;
+  /* The pack and the cards are handled, not read: a drag or a long press must not select
+     them (Safari tints a selected canvas with the selection colour). */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 .ho-stage[data-stage="summary"] .ho-table {
   flex: none;

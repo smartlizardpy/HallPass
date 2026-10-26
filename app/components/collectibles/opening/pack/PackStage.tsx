@@ -197,6 +197,10 @@ export function PackStage(props: Props) {
   // ── Pointer input ──
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!props.interactive || mode.current === "done" || (e.pointerType === "mouse" && e.button !== 0)) return;
+    // A drag on the pack is a gesture, not a text selection. Safari would otherwise select the
+    // page around the pack as the mouse moves, and paint its selection colour over the canvas.
+    if (e.pointerType === "mouse") e.preventDefault();
+    window.getSelection()?.removeAllRanges();
     const p = toPack(e.clientX, e.clientY, e.timeStamp);
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
