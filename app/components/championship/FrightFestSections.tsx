@@ -12,8 +12,10 @@
  * page, and the skin repaints the tokens when it is on.
  */
 
+import Link from "next/link";
 import { pointBands, type ChampionshipSummary } from "@/app/lib/championship/summary";
 import { ordinal } from "@/app/lib/championship/format";
+import type { RewardProps } from "@/app/fright-fest/hall/props";
 import { MyChampionship } from "./MyProgress";
 import { PhaseBanner } from "./PhaseBanner";
 import { ChampionshipStandings } from "./Standings";
@@ -21,7 +23,7 @@ import { ChampionshipStandings } from "./Standings";
 function Card({ id, title, children }: { id?: string; title: string; children: React.ReactNode }) {
   const hid = `${id ?? title.toLowerCase().replace(/\W+/g, "-")}-h`;
   return (
-    <section id={id} aria-labelledby={hid} className="scroll-mt-24 rounded-2xl border border-border bg-surface p-4 sm:p-6">
+    <section id={id} aria-labelledby={hid} className="hl-sec scroll-mt-24 rounded-2xl border border-border bg-surface p-4 sm:p-6">
       <h2 id={hid} className="text-xl font-black">
         {title}
       </h2>
@@ -30,7 +32,11 @@ function Card({ id, title, children }: { id?: string; title: string; children: R
   );
 }
 
-export function FrightFestSections({ summary: s }: { summary: ChampionshipSummary }) {
+/**
+ * `rewards` is built on the server from the config's pack ids (fright-fest/hall/props.ts),
+ * for announced games only, so this file never sees a game that has not been announced.
+ */
+export function FrightFestSections({ summary: s, rewards }: { summary: ChampionshipSummary; rewards: RewardProps[] }) {
   const bands = pointBands(s);
   return (
     <div className="mt-6 space-y-6">
@@ -119,17 +125,38 @@ export function FrightFestSections({ summary: s }: { summary: ChampionshipSummar
 
       <Card id="rewards" title="Rewards">
         <p>Rewards are HallPass collectible packs: digital, free, and yours to keep after Halloween. Nothing is sold and nothing is posted.</p>
-        <ul className="grid gap-3 sm:grid-cols-3">
-          <li className="rounded-xl bg-surface-2 p-3">
-            <b className="block text-foreground">Participation Pack</b>A result on every game in the championship.
-          </li>
-          <li className="rounded-xl bg-surface-2 p-3">
-            <b className="block text-foreground">Game Champion Pack</b>1st place on a game&apos;s board when the results are final.
-          </li>
-          <li className="rounded-xl bg-surface-2 p-3">
-            <b className="block text-foreground">Overall Champion Pack</b>The Fright Fest champion, with a commemorative card only they can get.
-          </li>
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {rewards.map((r) => (
+            <li key={r.packId} className="hl-prize flex gap-3 rounded-xl bg-surface-2 p-3">
+              {/* eslint-disable-next-line @next/next/no-img-element -- a 96x140 pixel print; next/image would smooth it */}
+              <img src={r.print} alt="" width={96} height={140} loading="lazy" className="hl-print h-[140px] w-[96px] shrink-0 [image-rendering:pixelated]" />
+              <div className="min-w-0">
+                <b className="block text-foreground">{r.name}</b>
+                <span className="block">{r.who}</span>
+                <ul className="mt-2 space-y-1">
+                  {r.slots.map((sl, i) => (
+                    <li key={i} className="text-xs">
+                      {sl.kind === "fixed" ? (
+                        <>
+                          <span className="font-bold text-foreground">Guaranteed:</span> {sl.card}
+                          {sl.rarity ? ` (${sl.rarity})` : ""}
+                        </>
+                      ) : (
+                        <>
+                          <span className="font-bold text-foreground">Random:</span> 1 random card
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </li>
+          ))}
         </ul>
+        <p>
+          Random cards are drawn at the published odds: <Link href="/packs#pack-odds" className="font-bold underline">see the odds</Link>. There is no
+          prize for second place.
+        </p>
         <p>One player can earn several. Packs are given out once the results are final.</p>
       </Card>
     </div>

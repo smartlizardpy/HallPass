@@ -8,7 +8,6 @@
  * the summary already carries.
  */
 
-import { ordinal } from "@/app/lib/championship/format";
 import type { PublicOverallEntry } from "@/app/lib/championship/standings";
 import type { ChampionshipSummary } from "@/app/lib/championship/summary";
 import type { ChampionshipPhase } from "@/app/lib/championship/types";
@@ -188,18 +187,4 @@ export function boardRows(
   if (!me || top.some((e) => e.publicId === me.publicId)) return { rows: top.map(row), you: null };
   const pinned: BoardRow = { rank: me.rank, name: "You", points: me.points, publicId: me.publicId, champion: false, you: true };
   return { rows: overall.slice(0, Math.max(0, cap - 1)).map(row), you: pinned };
-}
-
-// ── The gap to the next place ──────────────────────────────────────────────
-
-/** "The next place up, 13th, is 15 Fright Points ahead." Only while the table can still move. */
-export function gapToNextPlace(overall: readonly PublicOverallEntry[], me: { rank: number; points: number } | null, phase: HallPhase): string | null {
-  if (!me || phase !== "live" || me.rank <= 1) return null;
-  const above = overall.filter((e) => e.rank < me.rank);
-  const next = above.reduce<PublicOverallEntry | null>((best, e) => (!best || e.rank > best.rank ? e : best), null);
-  // The public table is capped, and a place the page cannot see is not worth guessing at.
-  if (!next || next.rank !== me.rank - 1) return null;
-  const gap = next.points - me.points;
-  if (gap > 0) return `The next place up, ${ordinal(next.rank)}, is ${gap} Fright Points ahead.`;
-  return `The next place up, ${ordinal(next.rank)}, has the same Fright Points and is ahead on the tiebreak.`;
 }

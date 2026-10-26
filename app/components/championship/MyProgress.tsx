@@ -11,6 +11,7 @@
 
 import { startSignIn } from "@/app/lib/auth-actions";
 import { formatScore, ordinal } from "@/app/lib/championship/format";
+import { gapToNextPlace } from "@/app/lib/championship/gap";
 import { clockPhase, type ChampionshipSummary } from "@/app/lib/championship/summary";
 import type { RunStatus } from "@/app/lib/championship/types";
 import { useChampionship, useMinute, useMyChampionship } from "./data";
@@ -36,9 +37,11 @@ export function MyChampionship({ summary: s }: { summary: ChampionshipSummary })
   const { data: pub } = useChampionship(s.id);
   const boards = pub?.standings?.boards ?? [];
   const boardOf = new Map(boards.map((b) => [b.slug, b]));
+  // The gap line is for a live table only: nothing can move once the close has passed.
+  const gap = me && me.signedIn && me.rank !== null ? gapToNextPlace(pub?.standings?.overall ?? [], { rank: me.rank, points: me.points }, pub?.available ? pub.phase : null) : null;
 
   return (
-    <section aria-labelledby="mine-h" className="rounded-2xl border border-border bg-surface p-4 sm:p-6">
+    <section aria-labelledby="mine-h" className="hl-sec rounded-2xl border border-border bg-surface p-4 sm:p-6">
       <h2 id="mine-h" className="text-xl font-black">
         Your Fright Fest
       </h2>
@@ -71,6 +74,7 @@ export function MyChampionship({ summary: s }: { summary: ChampionshipSummary })
                   Still to play: {me.missing.map((slug) => boardOf.get(slug)?.title ?? "a game").join(", ")}. The champion needs a result on every game.
                 </span>
               ) : null}
+              {gap && <span className="text-foreground-2"> {gap}</span>}
             </p>
           ) : (
             <p className="text-sm text-foreground-2">No ranked run yet. Play a Fright Fest mode while signed in and your best run lands on its board.</p>
