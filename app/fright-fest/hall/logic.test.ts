@@ -3,7 +3,7 @@ import type { PublicOverallEntry } from "@/app/lib/championship/standings";
 import { championshipSummary } from "@/app/lib/championship/summary";
 import { FRIGHT_FEST_2026 } from "@/app/lib/championship/fright-fest-2026";
 import type { ChampionshipPhase } from "@/app/lib/championship/types";
-import { boardCapacity, countdownText, boardIsOpen, boardRows, cabinetLabel, cabinetStatus, needsLaptop, selectedAnnouncement, tickerLine } from "./logic";
+import { boardCapacity, countdownText, boardIsOpen, boardRows, cabinetLabel, cabinetStatus, needsLaptop, selectedAnnouncement, tickerCountdownLabel, tickerLine } from "./logic";
 import type { CabinetProps } from "./props";
 
 const S = championshipSummary(FRIGHT_FEST_2026);
@@ -56,6 +56,27 @@ describe("tickerLine", () => {
   it("is shorter on a phone's plate and says 'to be announced' while the championship is off", () => {
     expect(tickerLine("verification", S, true).text.length).toBeLessThan(tickerLine("verification", S, false).text.length);
     expect(tickerLine("live", null, false)).toEqual({ text: "Scoring and rewards: to be announced", tone: "idle", countdownLabel: null });
+  });
+
+  it("shows the countdown only when the phase and the clock point at the same moment", () => {
+    const at = (p: ChampionshipPhase | null, to: "start" | "end" | null) => tickerCountdownLabel(tickerLine(p, S, false), true, to);
+    expect(at("upcoming", "start")).toBe("in");
+    expect(at("live", "end")).toBe("ends in");
+    // The API still says upcoming in the minute after the opening: no "Opens 28 Oct · ends in 4d".
+    expect(at("upcoming", "end")).toBeNull();
+    expect(at("live", "start")).toBeNull();
+    for (const p of [null, "closed", "verification", "finalised", "archived", "suspended"] as const) {
+      expect(at(p, "start")).toBeNull();
+      expect(at(p, "end")).toBeNull();
+    }
+    expect(at("live", null)).toBeNull();
+  });
+
+  it("lets the clock alone decide while the championship is off", () => {
+    const off = tickerLine(null, null, false);
+    expect(tickerCountdownLabel(off, false, "start")).toBe("in");
+    expect(tickerCountdownLabel(off, false, "end")).toBe("ends in");
+    expect(tickerCountdownLabel(off, false, null)).toBeNull();
   });
 
   it("writes a countdown", () => {
