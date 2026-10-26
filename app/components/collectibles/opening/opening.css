@@ -43,6 +43,10 @@
   background: none;
   box-shadow: none;
 }
+/* The results can be taller than a phone: the stage grows and the layer scrolls. */
+.ho-stage[data-room][data-stage="summary"] {
+  flex: 1 0 auto;
+}
 .ho-stage[data-room].ho-shell {
   flex: 0 0 auto;
   margin-block: auto;
@@ -531,7 +535,7 @@
   transform: none;
   box-shadow: 0 3px 0 var(--hc-shadow);
 }
-:is(.ho-btn, .ho-chip, .ho-hit, .ho-link, .ho-title, .ho-summary h2, .ho-results a):focus-visible {
+:is(.ho-btn, .ho-chip, .ho-hit, .ho-link, .ho-title, .ho-sum-head h2, .ho-results a):focus-visible {
   outline: 3px solid #ffd84a;
   outline-offset: 4px;
 }
@@ -581,18 +585,208 @@
 }
 
 /* The results. */
+/* ── The results ──
+   Laptops: two columns, the cards on the left (the best pull in the middle, larger) and
+   what it means on the right. Phones: the heading, the best pull, a list of all of them,
+   the progress, the buttons, scrolling if need be. */
+.ho-sum-head {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 8px 16px 0;
+  text-align: center;
+  animation: ho-fade 320ms ease both;
+}
+.ho-kicker {
+  margin: 0;
+  color: #ffc700;
+  font-family: var(--font-pixel), var(--font-nunito), system-ui, sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+.ho-sum-head h2 {
+  margin: 0;
+  font-size: clamp(1.45rem, 3.2vw, 2.1rem);
+  font-weight: 900;
+  line-height: 1.1;
+  text-wrap: balance;
+  border-radius: 6px;
+}
 .ho-summary {
   display: grid;
   justify-items: center;
-  gap: 12px;
+  gap: 14px;
   width: 100%;
   max-width: 560px;
+  animation: ho-fade 320ms 120ms ease both;
 }
-.ho-summary h2 {
+.ho-best {
+  position: absolute;
+  z-index: 40;
   margin: 0;
-  font-size: 1.25rem;
+  translate: -50% -100%;
+  padding: 5px 10px 4px;
+  border: 2px solid #0b0612;
+  background: #ffc700;
+  color: #23153a;
+  font-family: var(--font-pixel), var(--font-nunito), system-ui, sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 3px 0 #0b0612;
+  animation: ho-plate 380ms 360ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  pointer-events: none;
+}
+.ho-cap-under {
+  position: absolute;
+  z-index: 40;
+  margin: 0;
+  translate: -50% 0;
+  color: var(--ho-muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  white-space: nowrap;
+  animation: ho-fade 300ms 420ms ease both;
+  pointer-events: none;
+}
+.ho-prog {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 2px solid rgb(255 255 255 / 0.12);
+  border-radius: 14px;
+  background: rgb(11 6 18 / 0.72);
+  text-align: left;
+}
+.ho-prog p {
+  margin: 0;
+}
+.ho-prog-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-weight: 800;
+}
+.ho-prog-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ho-prog-ct {
+  color: var(--ho-muted);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+.ho-prog-ct b {
+  color: #ffc700;
+  font-size: 1.7rem;
   font-weight: 900;
-  border-radius: 6px;
+  line-height: 1;
+}
+.ho-prog-new {
+  align-self: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--hc-new);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+.ho-segs {
+  display: flex;
+  gap: 3px;
+}
+.ho-segs i {
+  flex: 1 1 0;
+  height: 9px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.12);
+}
+.ho-segs i[data-on] {
+  background: #ffc700;
+}
+.ho-segs i[data-new] {
+  background: var(--hc-new);
+  animation: ho-seg 360ms calc(var(--k, 0) * 160ms + 560ms) cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+@keyframes ho-seg {
+  from {
+    background: rgb(255 255 255 / 0.12);
+    scale: 1 0.3;
+  }
+}
+.ho-prog-goal {
+  color: var(--ho-muted);
+  font-size: 0.82rem;
+}
+.ho-sum-actions {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+/* Side by side where both fit on one line each, stacked where they don't. */
+.ho-sum-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(198px, 1fr));
+  gap: 10px;
+}
+.ho-sum-row .ho-btn {
+  padding-inline: 14px;
+  white-space: nowrap;
+}
+.ho-sum-actions .ho-link {
+  justify-self: center;
+}
+
+/* Laptops: the cards and what they mean side by side. */
+.ho-stage[data-stage="summary"][data-tray="side"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  grid-template-rows: auto 1fr auto auto 1fr;
+  grid-template-areas:
+    "bar bar"
+    "table ."
+    "table head"
+    "table foot"
+    "table .";
+  column-gap: 32px;
+  padding-inline: 16px 24px;
+}
+.ho-stage[data-stage="summary"][data-tray="side"] > .ho-bar {
+  grid-area: bar;
+}
+.ho-stage[data-stage="summary"][data-tray="side"] > .ho-table {
+  grid-area: table;
+  min-height: 420px;
+  margin: 0;
+}
+.ho-stage[data-stage="summary"][data-tray="side"] > .ho-sum-head {
+  grid-area: head;
+  justify-items: start;
+  padding: 0 0 4px;
+  text-align: left;
+}
+.ho-stage[data-stage="summary"][data-tray="side"] > .ho-foot {
+  grid-area: foot;
+  justify-items: stretch;
+  min-height: 0;
+  padding: 10px 0 0;
+  text-align: left;
+}
+.ho-stage[data-stage="summary"][data-tray="side"] .ho-summary {
+  justify-items: stretch;
+}
+.ho-stage[data-stage="summary"][data-tray="side"] .ho-sum-actions .ho-link {
+  justify-self: start;
+}
+/* The cards themselves say all of this on a laptop, and are the links to their pages. */
+.ho-stage[data-tray="side"] .ho-results {
+  display: none;
 }
 .ho-results {
   display: grid;
@@ -647,19 +841,6 @@
   font-size: 0.78rem;
   font-weight: 700;
   color: var(--ho-muted);
-}
-.ho-progress {
-  display: grid;
-  gap: 6px;
-  width: 100%;
-  font-size: 0.85rem;
-  color: var(--ho-muted);
-}
-.ho-progress p {
-  margin: 0;
-}
-.ho-progress b {
-  color: var(--ho-ink);
 }
 .ho-bar-track {
   display: block;
@@ -779,7 +960,12 @@
   .ho-glow::before {
     animation: none !important;
   }
-  .ho-plate {
+  .ho-plate,
+  .ho-best,
+  .ho-segs i[data-new],
+  .ho-sum-head,
+  .ho-summary,
+  .ho-cap-under {
     animation: ho-fade 1ms both;
   }
 }

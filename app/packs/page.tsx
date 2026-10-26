@@ -19,7 +19,7 @@ export default function PacksPage() {
   return (
     <CollectiblesShell wide>
       <PrizeCounter />
-      <section aria-labelledby="hc-contents-h" className="mx-auto w-full max-w-4xl px-3 pt-8 sm:px-8">
+      <section id="pack-odds" aria-labelledby="hc-contents-h" className="mx-auto w-full max-w-4xl scroll-mt-24 px-3 pt-8 sm:px-8">
         <h2 id="hc-contents-h" className="text-lg font-black">
           What&apos;s in each pack
         </h2>

@@ -37,7 +37,7 @@ import { revealLine, slotLines } from "@/app/lib/collectibles/opening";
 import { RARITY_LABEL, RARITY_RANK } from "@/app/lib/collectibles/present";
 import { CardBack, type CardSize } from "../Card";
 import { haptics } from "./haptics";
-import { CARD_PX, chooseFit, frontPlace, placeCards, summaryHeight, type Place } from "./placement";
+import { bestPull, CARD_PX, chooseFit, frontPlace, placeCards, summaryHeight, type Place } from "./placement";
 import { canCommit, canSkip, initialOpening, openFailure, openingReducer, type Pull, type SealedPack } from "./machine";
 import { EASE, isAborted, play, sleep } from "./motion";
 import { seedOf } from "./noise";
@@ -290,9 +290,12 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
   /** The card in front (the machine's name for it is `current`). */
   const front = state.current;
   const cards = state.pulls.map((p) => getCollectible(p.collectibleId)).filter((c): c is Collectible => !!c);
+  const ranks = cards.map((c) => RARITY_RANK[c.rarity]).join();
+  const best = useMemo(() => bestPull(ranks ? ranks.split(",").map(Number) : []), [ranks]);
+  // The results lay the cards out in the table as it is then (a column of its own on laptops).
   const places = useMemo(
-    () => placeCards({ tray, table: { w: table.w, h: openH || table.h }, card: cardPx, count: cards.length, flipped: state.flipped, current: front, summary }),
-    [tray, table.w, table.h, openH, cardPx, cards.length, state.flipped, front, summary],
+    () => placeCards({ tray, table: { w: table.w, h: summary ? table.h : openH || table.h }, card: cardPx, count: cards.length, flipped: state.flipped, current: front, summary, best }),
+    [tray, table.w, table.h, openH, cardPx, cards.length, state.flipped, front, summary, best],
   );
 
   // ── Choreography. Each stage's steps stop the moment the stage changes. ──
@@ -446,7 +449,7 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
 
   // The results: say so, and put the keyboard on them.
   const newCount = state.pulls.filter((p) => p.wasNew).length;
-  const summaryTitle = newCount > 0 ? `${newCount} new for your binder` : `All ${state.pulls.length} were already in your binder`;
+  const summaryTitle = newCount > 0 ? `${newCount} new for your binder` : "Nothing new this time";
   useEffect(() => {
     if (!summary) return;
     sounds.complete();
@@ -574,6 +577,8 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
   const showDeck = state.stage === "opened" || state.stage === "extracting";
   const showCards = (state.stage === "revealing" || summary) && table.w > 0 && cards.length === state.pulls.length;
   const prog = progress.find((p) => p.collection === def?.collection);
+  /** Cards from this pack that were new to the set the progress box is about. */
+  const freshInSet = state.pulls.filter((p) => p.wasNew && getCollectible(p.collectibleId)?.collection === def?.collection).length;
   const n = cards.length;
 
   const actionFor = (i: number): CardAction | null => {
@@ -628,7 +633,17 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
         </div>
       </header>
 
-      <div ref={tableRef} className="ho-table" style={summary ? { height: summaryHeight(cardPx) } : undefined}>
+      {summary && (
+        <div className="ho-sum-head">
+          <p className="ho-kicker">{state.resumed ? "Opened before" : "Pack opened"}</p>
+          <h2 ref={summaryHead} tabIndex={-1}>
+            {summaryTitle}
+          </h2>
+          <p className="ho-copy">{state.resumed ? "You opened this pack before. Here's what was inside." : `${def?.name ?? "Your pack"}. The cards are in your binder now.`}</p>
+        </div>
+      )}
+
+      <div ref={tableRef} className="ho-table" style={summary && tray === "dots" ? { height: summaryHeight(cardPx) } : undefined}>
         {showPack && def && state.pack && (
           <div ref={packWrap} className="ho-pack-wrap">
             <PackStage
@@ -700,6 +715,20 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
                 {RARITY_LABEL[frontCard.rarity]}
               </p>
             )}
+            {summary && cards[best] && RARITY_RANK[cards[best].rarity] >= 3 && places[best] && (
+              <p className="ho-best" style={{ left: places[best].x, top: places[best].y - (cardPx.h * places[best].s) / 2 - 10 }} aria-hidden="true">
+                Best pull
+              </p>
+            )}
+            {summary &&
+              tray === "side" &&
+              places.map((p, i) =>
+                state.pulls[i] ? (
+                  <p key={`cap-${state.pulls[i].slot}`} className="ho-cap-under" style={{ left: p.x, top: p.y + (cardPx.h * p.s) / 2 + 10 }} aria-hidden="true">
+                    {state.pulls[i].wasNew ? <Tag isNew /> : "Already in your binder"}
+                  </p>
+                ) : null,
+              )}
             {showMoment && (
               <p key={`tag-${front}`} className="ho-under" style={{ left: frontAt.x, top: frontAt.y + (cardPx.h * frontAt.s) / 2 + 14 }} aria-hidden="true">
                 <Tag isNew={frontPull.wasNew} long />
@@ -722,7 +751,7 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
                   action={actionFor(i)}
                   href={summary ? `/collectibles/${card.id}` : undefined}
                   hrefLabel={`${card.name}: ${RARITY_LABEL[card.rarity]}, ${pull.wasNew ? "new" : "duplicate"}. View card`}
-                  hrefHidden
+                  hrefHidden={tray === "dots"}
                   buttonRef={(el) => {
                     buttons.current[i] = el;
                   }}
@@ -807,10 +836,6 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
         )}
         {summary && (
           <div className="ho-summary">
-            {state.resumed && <p className="ho-copy">You opened this pack before. Here&apos;s what was inside.</p>}
-            <h2 ref={summaryHead} tabIndex={-1}>
-              {summaryTitle}
-            </h2>
             <ul className="ho-results">
               {state.pulls.map((p) => {
                 const c = getCollectible(p.collectibleId);
@@ -824,48 +849,36 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
                 );
               })}
             </ul>
-            {prog && collection && (
-              <div className="ho-progress">
-                <p>
-                  {collection.name}: <b>{prog.owned}</b> of {prog.total} collected
-                </p>
-                <span className="ho-bar-track" aria-hidden="true">
-                  <span style={{ width: `${Math.min(100, Math.max(2, prog.percent))}%` }} />
-                </span>
-              </div>
-            )}
-            {room ? (
-              <div className="ho-actions">
-                <Link href="/collection" className="ho-btn ho-btn-primary">
-                  See them in your binder
-                </Link>
-                <button type="button" className="ho-btn" onClick={room.close}>
-                  Back to the Pack Room
-                </button>
-                {others[0] && (
-                  <button type="button" className="ho-btn" onClick={() => room.next(others[0].publicId)}>
-                    Next pack ({others.length} left)
+            {prog && collection && <Progress name={collection.name} owned={prog.owned} total={prog.total} fresh={freshInSet} />}
+            <div className="ho-sum-actions">
+              <Link href="/collection" className="ho-btn ho-btn-primary">
+                See them in your binder
+              </Link>
+              <div className="ho-sum-row">
+                {room ? (
+                  <button type="button" className="ho-btn" onClick={room.close}>
+                    Back to the Pack Room
                   </button>
+                ) : (
+                  <Link href={links.room} className="ho-btn">
+                    Back to the Pack Room
+                  </Link>
                 )}
+                {others[0] &&
+                  (room ? (
+                    <button type="button" className="ho-btn" onClick={() => room.next(others[0].publicId)}>
+                      Next pack ({others.length} left)
+                    </button>
+                  ) : (
+                    <Link href={links.open(others[0].publicId)} className="ho-btn">
+                      Next pack ({others.length} left)
+                    </Link>
+                  ))}
               </div>
-            ) : (
-            <div className="ho-actions">
-              {others[0] && (
-                <Link href={links.open(others[0].publicId)} className="ho-btn ho-btn-primary">
-                  Open another pack
-                </Link>
-              )}
-              <Link href="/collection" className={`ho-btn${others[0] ? "" : " ho-btn-primary"}`}>
-                See your binder
-              </Link>
-              <Link href={links.room} className="ho-btn">
-                Pack Room
-              </Link>
-              <Link href="/" className="ho-btn ho-btn-quiet">
-                Back to HallPass
+              <Link href="/packs#pack-odds" className="ho-link">
+                How rare is this? See the odds
               </Link>
             </div>
-            )}
           </div>
         )}
       </div>
@@ -874,6 +887,34 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; l
         {line}
       </p>
     </section>
+  );
+}
+
+/** How the set stands after this pack: a segment per card, the ones this pack added lit up in turn. */
+function Progress({ name, owned, total, fresh }: { name: string; owned: number; total: number; fresh: number }) {
+  const before = owned - fresh;
+  return (
+    <div className="ho-prog">
+      <p className="ho-prog-head">
+        <span className="ho-prog-name">{name}</span>
+        <span className="ho-prog-ct">
+          <b>{owned}</b> of {total}
+        </span>
+        {fresh > 0 && <span className="ho-prog-new">+{fresh} new</span>}
+      </p>
+      {total <= 40 ? (
+        <span className="ho-segs" aria-hidden="true">
+          {Array.from({ length: total }, (_, i) => (
+            <i key={i} data-on={i < owned || undefined} data-new={(i >= before && i < owned) || undefined} style={{ "--k": i - before } as CSSProperties} />
+          ))}
+        </span>
+      ) : (
+        <span className="ho-bar-track" aria-hidden="true">
+          <span style={{ width: `${Math.min(100, Math.max(2, (owned / Math.max(1, total)) * 100))}%` }} />
+        </span>
+      )}
+      <p className="ho-prog-goal">{owned >= total ? "Set complete!" : `${total - owned} still to find. Every pack is free, and the odds are the same for everyone.`}</p>
+    </div>
   );
 }
 
@@ -887,7 +928,7 @@ function SpeakerIcon({ on }: { on: boolean }) {
 }
 
 function Tag({ isNew, long = false }: { isNew: boolean; long?: boolean }) {
-  const text = long ? (isNew ? "New for your binder" : "Already in your binder") : isNew ? "New" : "Duplicate";
+  const text = long ? (isNew ? "New for your binder" : "Already in your binder") : isNew ? "New" : "Had it";
   return <span className={`ho-tag${isNew ? " is-new" : ""}${long ? " is-long" : ""}`}>{text}</span>;
 }
 

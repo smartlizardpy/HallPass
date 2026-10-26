@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { BANNER_H, CARD_PX, chooseFit, placeCards, summaryHeight, TAG_H } from "./placement";
+import { BADGE_H, BANNER_H, bestPull, CAPTION_H, CARD_PX, chooseFit, placeCards, summaryHeight, TAG_H } from "./placement";
 
-const { md, lg, xl } = CARD_PX;
+const { lg, xl } = CARD_PX;
 const box = (p: { x: number; y: number; s: number }, c: { w: number; h: number }) => ({
   l: p.x - (c.w * p.s) / 2,
   r: p.x + (c.w * p.s) / 2,
@@ -78,16 +78,48 @@ describe("placeCards: one at a time", () => {
   });
 });
 
-describe("placeCards: summary", () => {
-  it("fans the hand without leaving the table's width, the middle card on top", () => {
-    const p = placeCards({ tray: "dots", table: { w: 358, h: 300 }, card: md, count: 3, flipped: [true, true, true], current: 2, summary: true });
-    for (const x of p) {
-      const half = (md.w * x.s) / 2;
-      expect(x.x - half).toBeGreaterThanOrEqual(0);
-      expect(x.x + half).toBeLessThanOrEqual(358);
+describe("bestPull", () => {
+  it("is the rarest card, and of equals the last turned over", () => {
+    expect(bestPull([1, 3, 5])).toBe(2);
+    expect(bestPull([4, 4, 1])).toBe(1);
+    expect(bestPull([2])).toBe(0);
+  });
+});
+
+describe("placeCards: results", () => {
+  const flipped = [true, true, true];
+
+  it("on a laptop puts the best pull in the middle, larger, with the others level at the bottom either side", () => {
+    const table = { w: 640, h: 520 };
+    const p = placeCards({ tray: "side", table, card: xl, count: 3, flipped, current: 2, summary: true, best: 2 });
+    const [a, b, best] = [box(p[0], xl), box(p[1], xl), box(p[2], xl)];
+    expect(p[2].x).toBeCloseTo(320, 5);
+    expect(p[2].s).toBeGreaterThan(p[0].s);
+    expect(a.r).toBeLessThan(best.l);
+    expect(b.l).toBeGreaterThan(best.r);
+    expect(a.b).toBeCloseTo(best.b, 5);
+    expect(b.b).toBeCloseTo(best.b, 5);
+    for (const x of [a, b, best]) {
+      expect(x.l).toBeGreaterThanOrEqual(0);
+      expect(x.r).toBeLessThanOrEqual(table.w);
     }
-    expect(p[1].z).toBeGreaterThan(p[0].z);
-    expect(p[1].z).toBeGreaterThan(p[2].z);
-    expect(p[0].y + (md.h * p[0].s) / 2).toBeLessThanOrEqual(summaryHeight(md) + 12);
+    expect(best.t).toBeGreaterThanOrEqual(BADGE_H - 0.5);
+    expect(best.b).toBeLessThanOrEqual(table.h - CAPTION_H + 0.5);
+  });
+
+  it("shrinks the three together to fit a narrow column", () => {
+    const p = placeCards({ tray: "side", table: { w: 520, h: 520 }, card: xl, count: 3, flipped, current: 2, summary: true, best: 0 });
+    expect(box(p[1], xl).l).toBeGreaterThanOrEqual(0);
+    expect(box(p[2], xl).r).toBeLessThanOrEqual(520);
+    expect(p[0].x).toBeCloseTo(260, 5);
+  });
+
+  it("on a phone shows the best pull alone, under its badge, within the summary's height", () => {
+    const p = placeCards({ tray: "dots", table: { w: 358, h: 300 }, card: lg, count: 3, flipped, current: 2, summary: true, best: 1 });
+    expect(p[1]).toMatchObject({ x: 179, z: 30 });
+    expect(box(p[1], lg).t).toBeGreaterThanOrEqual(BADGE_H - 0.5);
+    expect(box(p[1], lg).b).toBeLessThanOrEqual(summaryHeight(lg));
+    expect(p[0].o).toBe(0);
+    expect(p[2].o).toBe(0);
   });
 });

@@ -9,7 +9,11 @@
  * it for the rarity's plate and below it for "New for your binder"; the cards
  * still face down stacked behind it. The cards already seen go to a tray beside
  * it where there is room (`side`, laptops), or fade behind it while dots count
- * them (`dots`, phones). The summary lays them out again (`summary`).
+ * them (`dots`, phones).
+ *
+ * The results: on laptops the three side by side, bottoms level, the best pull
+ * in the middle and larger, under its badge; on phones the best pull alone
+ * (a list under it names all of them).
  *
  * Positions are the card's centre in px from the table's top-left.
  */
@@ -68,12 +72,26 @@ export function chooseFit(table: TableSize): { tray: Tray; size: CardKey } {
   return { tray: sideFits(table, CARD_PX[size]) ? "side" : "dots", size };
 }
 
-/** Height the table needs in the summary: the fanned hand. */
+/** Room above the best pull for its badge, and below every result for its caption. */
+export const BADGE_H = 40;
+export const CAPTION_H = 34;
+const RESULT_GAP = 24;
+/** Phones: the best pull is shown at the binder's card size. */
+const PHONE_BEST_W = CARD_PX.sm.w;
+
+/** Height the table needs in the summary on a phone: the best pull under its badge. Laptops fill their column. */
 export function summaryHeight(card: CardSize): number {
-  return Math.round(fanScale(card) * card.h + 48);
+  return Math.round((PHONE_BEST_W / card.w) * card.h + BADGE_H + 12);
 }
 
-const fanScale = (card: CardSize) => Math.min(1, 132 / card.w);
+/** The best pull: the rarest, and of those the last one turned over. */
+export function bestPull(ranks: readonly number[]): number {
+  let best = 0;
+  ranks.forEach((r, i) => {
+    if (r >= ranks[best]) best = i;
+  });
+  return best;
+}
 
 export interface PlaceInput {
   tray: Tray;
@@ -83,6 +101,8 @@ export interface PlaceInput {
   flipped: boolean[];
   current: number;
   summary: boolean;
+  /** The summary's best pull (`bestPull`). */
+  best?: number;
 }
 
 /** The card in front: centred between the plate and the tag, shrunk only if the table is too short. */
@@ -92,19 +112,9 @@ export function frontPlace(table: TableSize, card: CardSize): Place {
   return { x: table.w / 2, y: BANNER_H + Math.max((card.h * f) / 2, band / 2), s: f, r: 0, z: 30 };
 }
 
-export function placeCards({ tray, table, card, count, flipped, current, summary }: PlaceInput): Place[] {
-  const out: Place[] = [];
+export function placeCards({ tray, table, card, count, flipped, current, summary, best = count - 1 }: PlaceInput): Place[] {
   const mid = (count - 1) / 2;
-
-  if (summary) {
-    const s = fanScale(card);
-    const step = Math.min(card.w * s * 0.82, (table.w - card.w * s - 24) / Math.max(1, count - 1));
-    for (let i = 0; i < count; i++) {
-      const d = i - mid;
-      out.push({ x: table.w / 2 + d * step, y: (card.h * s) / 2 + 20 + Math.abs(d) * 8, s, r: d * 7, z: 10 + (d === 0 ? 5 : i) });
-    }
-    return out;
-  }
+  if (summary) return placeResults(tray, table, card, count, best);
 
   const front = frontPlace(table, card);
   const f = front.s;
@@ -129,6 +139,35 @@ export function placeCards({ tray, table, card, count, flipped, current, summary
       tray === "side"
         ? { x: front.x + (card.w * f) / 2 + TRAY_GAP + THUMB_W / 2, y: front.y + (i - mid) * (thumbH + THUMB_GAP), s: thumb, r: 0, z: 5 + i }
         : { x: front.x, y: front.y, s: f * 0.94, r: 0, z: 4 + i, o: 0 };
+  });
+  return places;
+}
+
+function placeResults(tray: Tray, table: TableSize, card: CardSize, count: number, best: number): Place[] {
+  const places = new Array<Place>(count);
+  if (tray === "dots") {
+    const s = PHONE_BEST_W / card.w;
+    const y = BADGE_H + (card.h * s) / 2;
+    for (let i = 0; i < count; i++) places[i] = i === best ? { x: table.w / 2, y, s, r: 0, z: 30 } : { x: table.w / 2, y, s: s * 0.94, r: 0, z: 4 + i, o: 0 };
+    return places;
+  }
+  // The best pull at the large size, the others at the medium size, scaled down together if the column is narrow or short.
+  const others = [...Array(count).keys()].filter((i) => i !== best);
+  let sb = Math.min(CARD_PX.lg.w / card.w, (table.h - BADGE_H - CAPTION_H) / card.h);
+  let so = sb * (CARD_PX.md.w / CARD_PX.lg.w);
+  const width = card.w * (sb + others.length * so) + RESULT_GAP * others.length;
+  const k = Math.min(1, (table.w - 16) / width);
+  sb *= k;
+  so *= k;
+  const bottom = BADGE_H + (table.h - BADGE_H - CAPTION_H + card.h * sb) / 2;
+  const cx = table.w / 2;
+  places[best] = { x: cx, y: bottom - (card.h * sb) / 2, s: sb, r: 0, z: 30 };
+  // The others either side, in the order they were turned over: left, right, further left, further right.
+  others.forEach((i, n) => {
+    const side = n % 2 === 0 ? -1 : 1;
+    const step = Math.floor(n / 2);
+    const x = cx + side * ((card.w * sb) / 2 + RESULT_GAP + (card.w * so) / 2 + step * (card.w * so + RESULT_GAP));
+    places[i] = { x, y: bottom - (card.h * so) / 2, s: so, r: 0, z: 20 - n };
   });
   return places;
 }
