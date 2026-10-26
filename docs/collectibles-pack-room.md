@@ -208,7 +208,17 @@ exactly as they are. This is presentation only.
   fail, as before. `npm run lint`: no errors in anything this branch touches;
   50 errors remain in `public/games/last-bell/` (its bundled three.js and game
   scripts), the same on `collectibles-pack-opening`.
-- Not done: a real phone, a real screen reader, Safari. In a desktop browser
+- Found in Safari on the live site the same day, and fixed:
+  - The flight aimed at the stage's first, unmeasured layout (the pack at
+    140 px), so the stand-in shrank in place and the full-size pack popped in.
+    The stage now marks itself `data-measured`, and the flight waits for that
+    and for one still frame.
+  - Safari draws the focus ring for focus moved by script, so a pack opened
+    with a click wore a yellow box. The layer keeps rings quiet
+    (`data-quiet`) unless the opening began from the keyboard, until a key is
+    pressed inside it.
+  - The browser checks now also run in WebKit (laptop sizes).
+- Not done: a real phone, a real screen reader, Safari on iOS. In a desktop browser
   window narrowed to 390 px (no touch) the site header is 477 px wide on every
   page, so the page scrolls sideways; with touch, as on a phone, it fits. That
   predates this work and is left alone here.
