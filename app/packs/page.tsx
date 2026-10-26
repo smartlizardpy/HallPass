@@ -1,12 +1,13 @@
 /**
- * /packs: the Pack Room. STATIC. Sealed packs and recent openings arrive in the
- * `PackRoom` client island over `/api/`; the odds below are the catalogue's own,
- * so the page prints the same numbers the server rolls with.
+ * /packs: the Pack Room. STATIC. The room is drawn here; the player's sealed
+ * packs and recent pulls arrive in the `PrizeCounter` client island over
+ * `/api/`. The odds below are the catalogue's own, so the page prints the same
+ * numbers the server rolls with.
  */
 import type { Metadata } from "next";
 import { CollectiblesShell } from "@/app/components/collectibles/CollectiblesShell";
 import { PackContents } from "@/app/components/collectibles/PackContents";
-import { PackRoom } from "@/app/components/collectibles/PackRoom";
+import { PrizeCounter } from "@/app/components/collectibles/room/PrizeCounter";
 
 export const metadata: Metadata = {
   title: "Pack Room",
@@ -16,13 +17,9 @@ export const metadata: Metadata = {
 
 export default function PacksPage() {
   return (
-    <CollectiblesShell>
-      <header>
-        <h1 className="text-3xl font-black">Pack Room</h1>
-        <p className="mt-1 text-sm text-foreground-2">Packs are free. You earn them by playing, and you never have to buy anything.</p>
-      </header>
-      <PackRoom />
-      <section aria-labelledby="hc-contents-h">
+    <CollectiblesShell wide>
+      <PrizeCounter />
+      <section aria-labelledby="hc-contents-h" className="mx-auto w-full max-w-4xl px-3 pt-8 sm:px-8">
         <h2 id="hc-contents-h" className="text-lg font-black">
           What&apos;s in each pack
         </h2>

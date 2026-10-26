@@ -10,7 +10,7 @@ import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { getPack } from "@/app/lib/collectibles/catalogue";
 import { OpeningFlow } from "@/app/components/collectibles/opening/OpeningFlow";
-import { PackRoom } from "@/app/components/collectibles/PackRoom";
+import { PrizeCounter } from "@/app/components/collectibles/room/PrizeCounter";
 import { LabPack } from "./LabPack";
 import { installLabApi, LAB_PACKS } from "./mock";
 
@@ -27,10 +27,18 @@ export function LabClient() {
   const view = q.get("view");
   const pack = q.get("pack") ?? "";
 
-  if (view === "open" && pack) return <OpeningFlow key={pack} id={pack} links={LINKS} />;
-  if (view === "room") return <PackRoom openHref={openHref} />;
-  if (view === "pack") return <LabPack id={q.get("id") ?? "hpo-standard"} />;
+  // The room runs the full width of the content area; everything else sits in the reading column.
+  if (view === "room") return <PrizeCounter openHref={openHref} />;
+  return <div className="mx-auto w-full max-w-4xl space-y-6 px-3 pt-4 sm:px-8">{body()}</div>;
 
+  function body() {
+    if (view === "open" && pack) return <OpeningFlow key={pack} id={pack} links={LINKS} />;
+    if (view === "pack") return <LabPack id={q.get("id") ?? "hpo-standard"} />;
+    return <Index />;
+  }
+}
+
+function Index() {
   return (
     <section className="space-y-4">
       <h1 className="text-2xl font-black">Pack opening lab</h1>

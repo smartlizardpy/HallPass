@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: "Pack lab", robots: { index: false, f
 export default function PackLabPage() {
   if (process.env.NODE_ENV === "production") notFound();
   return (
-    <CollectiblesShell>
+    <CollectiblesShell wide>
       <Suspense>
         <LabClient />
       </Suspense>

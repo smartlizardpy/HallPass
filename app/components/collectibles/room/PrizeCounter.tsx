@@ -1,0 +1,555 @@
+"use client";
+
+/**
+ * The Pack Room: an arcade prize counter after school
+ * (docs/collectibles-pack-room.md).
+ *
+ * One painted scene with HTML on top. The newest kind of sealed pack stands on
+ * the riser under the lamp, and the others stand along the counter (choosing
+ * one brings it forward). An info panel under the pack says what it is, with
+ * Open and What's inside?. The left board shows recent pulls; the right board is
+ * the collection's progress and the way into the binder.
+ *
+ * The scene is drawn by the server. Its size, its two compositions (laptop and
+ * phone) and its two seasons are CSS (room.css), so nothing shifts when the
+ * player's packs arrive from `/api/v1/collection`, and only one season's
+ * pictures download. Every position comes from `geometry.ts`, in the art's own
+ * pixels, as percentages of the room.
+ */
+
+import "../collectibles.css";
+import "./room.css";
+import Link from "next/link";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import type { MyCollection } from "@/app/lib/collectibles";
+import { startSignIn } from "@/app/lib/auth-actions";
+import { CATALOGUE, collectionSymbolSrc, getCollectible, getCollection, getPack, packFoilSrc, packPrintSrc, packVersion } from "@/app/lib/collectibles/catalogue";
+import type { Rarity } from "@/app/lib/collectibles/catalogue/types";
+import { slotLines } from "@/app/lib/collectibles/opening";
+import { RARITY_LABEL } from "@/app/lib/collectibles/present";
+import { useMyCollection } from "../useMyCollection";
+import { arrange, boxStyle, groupSealed, packBox, pct, SCENES, type Box, type PackGroup } from "./geometry";
+
+export interface PrizeCounterProps {
+  /** Where Open takes a pack. */
+  openHref?: (publicId: string) => string;
+}
+
+const DEFAULT_OPEN = (publicId: string) => `/packs/open?pack=${publicId}`;
+
+/** CSS variables that place an element in each composition (room.css reads `--d*` on laptops, `--p*` on phones). */
+function at(desk: Box | null, phone: Box | null): CSSProperties {
+  const v: Record<string, string> = {};
+  if (desk) {
+    const s = boxStyle(desk, SCENES.desk);
+    Object.assign(v, { "--dl": s.left, "--dt": s.top, "--dw": s.width, "--dh": s.height });
+  }
+  if (phone) {
+    const s = boxStyle(phone, SCENES.phone);
+    Object.assign(v, { "--pl": s.left, "--pt": s.top, "--pw": s.width, "--ph": s.height });
+  }
+  return v as CSSProperties;
+}
+const only = (desk: boolean, phone: boolean) => (desk && phone ? undefined : desk ? "desk" : "phone");
+
+const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+
+/** "Fright Fest 2026 · earned 28 Oct – 1 Nov · 3 cards · 2 sealed", without repeating what the name says. */
+function packLine(group: PackGroup): string {
+  const pack = getPack(group.packId);
+  const col = pack ? getCollection(pack.collection) : undefined;
+  if (!pack || !col) return "";
+  const stem = col.name.replace(/\s*\d{4}$/, "");
+  const version = packVersion(group.packId, group.items[0].packVersion)?.version;
+  return [
+    pack.name.startsWith(stem) ? null : col.name,
+    col.availableFrom && col.availableUntil ? `earned ${fmtDay(col.availableFrom)} – ${fmtDay(col.availableUntil)}` : null,
+    `${version?.size ?? 3} cards`,
+    group.items.length > 1 ? `${group.items.length} sealed` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+export function PrizeCounter({ openHref = DEFAULT_OPEN }: PrizeCounterProps) {
+  const [state] = useMyCollection();
+  const data = state.status === "ready" ? state.data : null;
+  const [featuredId, setFeaturedId] = useState<string | null>(null);
+  const groups = useMemo(() => groupSealed(data?.sealed ?? []), [data]);
+  const desk = arrange(groups, featuredId, SCENES.desk.slots.length);
+  const featured = desk.featured;
+  const sealedCount = data?.sealed.length ?? 0;
+  const featuredRef = useRef<HTMLButtonElement | null>(null);
+  const focusFeatured = useRef(false);
+
+  // After bringing a pack forward, the keyboard follows it to the riser.
+  useEffect(() => {
+    if (!focusFeatured.current) return;
+    focusFeatured.current = false;
+    featuredRef.current?.focus({ preventScroll: true });
+  }, [featuredId]);
+
+  const bringForward = (packId: string) => {
+    focusFeatured.current = true;
+    setFeaturedId(packId);
+  };
+  const sheet = useRef<HTMLDialogElement>(null);
+  const openSheet = () => sheet.current?.showModal();
+
+  return (
+    <section className="pr hc-root" aria-labelledby="pr-title" data-status={state.status}>
+      <div className="pr-wall" aria-hidden="true" />
+      <div className="pr-room">
+        <div className="pr-art" aria-hidden="true" />
+        {(["desk", "phone"] as const).map((comp) =>
+          SCENES[comp].loops.map((l) => (
+            <span
+              key={`${comp}-${l.file}`}
+              className="pr-loop"
+              data-in={comp}
+              data-season={l.season}
+              aria-hidden="true"
+              style={
+                {
+                  ...at(comp === "desk" ? l : null, comp === "phone" ? l : null),
+                  "--frames": l.frames,
+                  "--dur": `${(l.frames / l.fps).toFixed(3)}s`,
+                  backgroundImage: `url(/collectibles/room/a/${l.file})`,
+                } as CSSProperties
+              }
+            />
+          )),
+        )}
+
+        <h1 id="pr-title" className="sr-only">
+          Pack Room
+        </h1>
+        <p className="sr-only">Packs are free. You earn them by playing, and you never have to buy anything.</p>
+
+        {featured && (
+          <Pack
+            key={`f-${featured.packId}`}
+            group={featured}
+            featured
+            style={at(packBox(SCENES.desk.featured), packBox(SCENES.phone.featured))}
+            buttonRef={featuredRef}
+            href={openHref(featured.items[0].publicId)}
+          />
+        )}
+        {desk.counter.map((g, i) => (
+          <Pack
+            key={`s-${g.packId}`}
+            group={g}
+            data-in={only(i < SCENES.desk.slots.length, i < SCENES.phone.slots.length)}
+            style={at(SCENES.desk.slots[i] ? packBox(SCENES.desk.slots[i]) : null, SCENES.phone.slots[i] ? packBox(SCENES.phone.slots[i]) : null)}
+            onChoose={() => bringForward(g.packId)}
+          />
+        ))}
+
+        <Panel state={state.status} featured={featured} openHref={openHref} sealedCount={sealedCount} onAll={openSheet} />
+        {featured && (
+          <button type="button" className="pr-chip" data-in="desk" onClick={openSheet} aria-haspopup="dialog">
+            <b>{sealedCount}</b> sealed · All packs
+          </button>
+        )}
+
+        {data && (
+          <>
+            <RecentBoard data={data} />
+            <CollectionBoard data={data} />
+          </>
+        )}
+      </div>
+      <AllPacks ref={sheet} groups={groups} featuredId={featured?.packId ?? null} count={sealedCount} onChoose={bringForward} />
+    </section>
+  );
+}
+
+// ── All packs: every kind of sealed pack, including the ones that don't fit on the counter ──
+
+function AllPacks({
+  ref,
+  groups,
+  featuredId,
+  count,
+  onChoose,
+}: {
+  ref: React.RefObject<HTMLDialogElement | null>;
+  groups: PackGroup[];
+  featuredId: string | null;
+  count: number;
+  onChoose(packId: string): void;
+}) {
+  const close = () => ref.current?.close();
+  return (
+    // A modal <dialog>: the browser keeps focus inside it, makes the room inert, and closes it on Escape.
+    <dialog
+      ref={ref}
+      className="pr-sheet hc-root"
+      aria-labelledby="pr-sheet-title"
+      onClick={(e) => {
+        // A click on the backdrop (the dialog box itself, outside its content) closes it.
+        if (e.target === e.currentTarget) close();
+      }}
+    >
+      <div className="pr-sheet-in">
+        <div className="pr-sheet-head">
+          <h2 id="pr-sheet-title">Your sealed packs ({count})</h2>
+          <button type="button" className="pr-link" onClick={close}>
+            Close
+          </button>
+        </div>
+        <ul>
+          {groups.map((g) => {
+            const pack = getPack(g.packId);
+            const col = pack ? getCollection(pack.collection) : undefined;
+            if (!pack) return null;
+            const here = g.packId === featuredId;
+            return (
+              <li key={g.packId}>
+                <button
+                  type="button"
+                  aria-current={here || undefined}
+                  onClick={() => {
+                    close();
+                    onChoose(g.packId);
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- pixel art at a whole-number scale */}
+                  <img src={packPrintSrc(pack.id)} alt="" width={24} height={35} />
+                  <span>
+                    {pack.name}
+                    <small>
+                      {col?.name}
+                      {g.items.length > 1 ? ` · ×${g.items.length}` : ""}
+                    </small>
+                  </span>
+                  {here && <em>In the light</em>}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </dialog>
+  );
+}
+
+// ── The packs ──
+
+function Pack({
+  group,
+  featured = false,
+  style,
+  href,
+  onChoose,
+  buttonRef,
+  ...rest
+}: {
+  group: PackGroup;
+  featured?: boolean;
+  style: CSSProperties;
+  href?: string;
+  onChoose?(): void;
+  buttonRef?: React.RefObject<HTMLButtonElement | null>;
+  "data-in"?: string;
+}) {
+  const pack = getPack(group.packId);
+  const tilt = useTilt(featured);
+  if (!pack) return null;
+  const n = group.items.length;
+  const name = `${pack.name}${n > 1 ? `, ${n} sealed` : ""}`;
+  const body = (
+    <>
+      <span className="pr-pack-body" style={{ "--mask": `url(${packPrintSrc(pack.id)})`, "--foil": `url(${packFoilSrc(pack.id)})` } as CSSProperties}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- pixel art at a whole-number scale; next/image would resample it */}
+        <img className="pr-pack-print" src={packPrintSrc(pack.id)} alt="" width={96} height={140} draggable={false} decoding="async" />
+        <span className="pr-pack-light" />
+        <span className="pr-pack-foil" />
+        <span className="pr-pack-glare" />
+      </span>
+      <span className="pr-pack-shadow" aria-hidden="true" />
+      {n > 1 && (
+        <span className="pr-pack-count" aria-hidden="true">
+          ×{n}
+        </span>
+      )}
+    </>
+  );
+  const common = { className: "pr-at pr-pack", "data-role": featured ? "featured" : "slot", "data-in": rest["data-in"], style, ...tilt };
+  return featured && href ? (
+    <Link {...common} ref={buttonRef as unknown as React.Ref<HTMLAnchorElement>} href={href} aria-label={`Open ${name}`}>
+      {body}
+    </Link>
+  ) : (
+    <button {...common} type="button" onClick={onChoose} aria-label={`${name}. Bring it forward`}>
+      {body}
+    </button>
+  );
+}
+
+/** The pack in the light leans toward the pointer and its foil follows (one update per frame). */
+function useTilt(on: boolean) {
+  const frame = useRef(0);
+  if (!on) return {};
+  const set = (el: HTMLElement, x: number, y: number) => {
+    el.style.setProperty("--px", x.toFixed(3));
+    el.style.setProperty("--py", y.toFixed(3));
+    el.style.setProperty("--rx", ((x - 0.5) * 14).toFixed(2));
+    el.style.setProperty("--ry", ((0.5 - y) * 10).toFixed(2));
+  };
+  return {
+    onPointerMove(e: React.PointerEvent<HTMLElement>) {
+      if (e.pointerType !== "mouse") return;
+      const el = e.currentTarget;
+      const r = el.getBoundingClientRect();
+      const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+      const y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+      cancelAnimationFrame(frame.current);
+      frame.current = requestAnimationFrame(() => {
+        el.dataset.live = "";
+        set(el, x, y);
+      });
+    },
+    onPointerLeave(e: React.PointerEvent<HTMLElement>) {
+      const el = e.currentTarget;
+      cancelAnimationFrame(frame.current);
+      delete el.dataset.live;
+      set(el, 0.5, 0.3);
+    },
+  };
+}
+
+// ── The info panel: under the pack on laptops, a row of buttons on phones ──
+
+function Panel({
+  state,
+  featured,
+  openHref,
+  sealedCount,
+  onAll,
+}: {
+  state: string;
+  featured: PackGroup | null;
+  openHref(id: string): string;
+  sealedCount: number;
+  onAll(): void;
+}) {
+  const deskBox = SCENES.desk.featured;
+  const phoneBox = SCENES.phone.featured;
+  // Centred under the riser; on laptops it tucks up over the riser's lip so Open clears a Chromebook's fold.
+  const deskAt = { "--dl": pct(deskBox.x + deskBox.w / 2, SCENES.desk.w), "--dt": pct(deskBox.y + deskBox.h - 20 / 3, SCENES.desk.h) } as CSSProperties;
+  const phoneAt = { "--pl": pct(phoneBox.x + phoneBox.w / 2, SCENES.phone.w), "--pt": pct(phoneBox.y + phoneBox.h - 4, SCENES.phone.h) } as CSSProperties;
+  // With no pack in the light, the message stands where the pack would.
+  const emptyAt = {
+    "--dl": pct(deskBox.x + deskBox.w / 2, SCENES.desk.w),
+    "--dt": pct(deskBox.y + deskBox.h * 0.35, SCENES.desk.h),
+    "--pl": pct(phoneBox.x + phoneBox.w / 2, SCENES.phone.w),
+    "--pt": pct(phoneBox.y + phoneBox.h * 0.3, SCENES.phone.h),
+  } as CSSProperties;
+
+  if (state === "loading") {
+    return (
+      <div className="pr-anchor pr-plate pr-note" style={emptyAt} aria-busy="true">
+        <p className="pr-note-title">Getting your packs…</p>
+      </div>
+    );
+  }
+  if (state === "signedOut") {
+    return (
+      <div className="pr-anchor pr-plate pr-note" style={emptyAt}>
+        <p className="pr-note-title">Sign in to see your packs</p>
+        <p className="pr-note-sub">Packs are free and earned by playing. Any you earn wait here.</p>
+        <form action={startSignIn}>
+          <button type="submit" className="pr-btn pr-primary">
+            Sign in
+          </button>
+        </form>
+      </div>
+    );
+  }
+  if (state === "unavailable") {
+    return (
+      <div className="pr-anchor pr-plate pr-note" style={emptyAt} role="status">
+        <p className="pr-note-title">Your packs aren&apos;t available right now</p>
+        <p className="pr-note-sub">Nothing is lost. Try again in a little while.</p>
+      </div>
+    );
+  }
+  if (!featured) {
+    return (
+      <div className="pr-anchor pr-plate pr-note" style={emptyAt}>
+        <p className="pr-note-title">No sealed packs right now</p>
+        <p className="pr-note-sub">Packs are earned by playing, never bought. New ones wait here with no deadline.</p>
+        <Link href="/collection" className="pr-btn pr-ghost">
+          See your binder
+        </Link>
+      </div>
+    );
+  }
+
+  const pack = getPack(featured.packId);
+  if (!pack) return null;
+  const href = openHref(featured.items[0].publicId);
+  return (
+    <>
+      <div className="pr-anchor pr-plate pr-info" data-in="desk" style={deskAt}>
+        <div className="pr-info-text">
+          <h2>{pack.name}</h2>
+          <p>{packLine(featured)}</p>
+        </div>
+        <div className="pr-actions">
+          <Link href={href} className="pr-btn pr-primary" aria-label={`Open ${pack.name}`}>
+            Open
+          </Link>
+          <Odds group={featured} label="What's inside?" />
+        </div>
+      </div>
+      <div className="pr-anchor pr-row" data-in="phone" style={phoneAt}>
+        <Link href={href} className="pr-btn pr-primary" aria-label={`Open ${pack.name}`}>
+          Open
+        </Link>
+        <Odds group={featured} label="Odds" />
+        <button type="button" className="pr-btn pr-ghost" onClick={onAll} aria-haspopup="dialog" aria-label={`All packs: ${sealedCount} sealed`}>
+          All {sealedCount}
+        </button>
+      </div>
+    </>
+  );
+}
+
+/** What's inside: the pack's published odds, slot by slot, in a popover above the button. */
+function Odds({ group, label }: { group: PackGroup; label: string }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const button = useRef<HTMLButtonElement>(null);
+  const pack = getPack(group.packId);
+  const version = packVersion(group.packId, group.items[0].packVersion)?.version;
+  if (!pack || !version) return null;
+  return (
+    <span className="pr-odds">
+      <button
+        ref={button}
+        type="button"
+        className="pr-btn pr-ghost"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && open) {
+            e.stopPropagation();
+            setOpen(false);
+          }
+        }}
+      >
+        {label}
+      </button>
+      <div
+        id={id}
+        className="pr-plate pr-odds-pop"
+        role="region"
+        aria-label={`What's inside ${pack.name}`}
+        hidden={!open}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.stopPropagation();
+            setOpen(false);
+            button.current?.focus();
+          }
+        }}
+      >
+        <b>What&apos;s inside</b>
+        <p>{version.size} cards, decided by the server when you open it. The odds are the same for every player, and within a rarity every card is equally likely.</p>
+        <table>
+          <tbody>
+            {slotLines(version).map((line) => {
+              const [head, ...tail] = line.split(": ");
+              return (
+                <tr key={line}>
+                  <th scope="row">{head}</th>
+                  <td>{tail.join(": ")}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </span>
+  );
+}
+
+// ── The boards ──
+
+const RARITY_VAR: Record<Rarity, string> = {
+  common: "var(--hc-r-common)",
+  uncommon: "var(--hc-r-uncommon)",
+  rare: "var(--hc-r-rare)",
+  epic: "var(--hc-r-epic)",
+  legendary: "var(--hc-r-legendary)",
+};
+
+/** A pulled card as a little sticker: its art on the collection's colour, a rarity bar, a dot when new. */
+export function Mini({ collectibleId, isNew }: { collectibleId: string; isNew: boolean }) {
+  const card = getCollectible(collectibleId);
+  if (!card) return null;
+  const col = getCollection(card.collection);
+  return (
+    <span className="pr-mini" data-new={isNew || undefined} role="img" aria-label={`${card.name}, ${RARITY_LABEL[card.rarity]}${isNew ? ", new" : ""}`}>
+      <span style={{ background: col?.theme.colours[0] }}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- pixel art at a whole-number scale */}
+        <img src={card.art.src} alt="" width={32} height={32} loading="lazy" />
+      </span>
+      <b style={{ background: RARITY_VAR[card.rarity] }} />
+    </span>
+  );
+}
+
+function RecentBoard({ data }: { data: MyCollection }) {
+  const pulls = data.recent.flatMap((o) => [...o.pulls].sort((a, b) => a.slot - b.slot)).slice(0, 12);
+  return (
+    <div className="pr-at pr-recent" style={at(SCENES.desk.recent, SCENES.phone.recent)}>
+      <h2 className="sr-only">Recent pulls</h2>
+      {pulls.length === 0 ? (
+        <p className="pr-empty">Your first pulls land here</p>
+      ) : (
+        <div className="pr-minis">
+          {pulls.map((p, i) => (
+            <Mini key={`${p.collectibleId}-${i}`} collectibleId={p.collectibleId} isNew={p.wasNew} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CollectionBoard({ data }: { data: MyCollection }): ReactNode {
+  const owned = data.progress.reduce((n, p) => n + p.owned, 0);
+  const total = CATALOGUE.collectibles.length;
+  const label = `Your binder: ${owned} of ${total} cards. Open your binder`;
+  return (
+    <>
+      <Link href="/collection" className="pr-at pr-coll" data-in="desk" style={at(SCENES.desk.collection, null)} aria-label={label}>
+        {data.progress.map((p) => {
+          const col = getCollection(p.collection);
+          return (
+            <span key={p.collection} className="pr-coll-row" title={col?.name}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- pixel art at a whole-number scale */}
+              <img src={collectionSymbolSrc(p.collection)} alt="" width={16} height={16} />
+              <span className="pr-coll-ct">
+                {p.owned}/{p.total}
+              </span>
+              <span className="pr-bar">
+                <i style={{ width: `${p.total ? (p.owned / p.total) * 100 : 0}%` }} />
+              </span>
+            </span>
+          );
+        })}
+      </Link>
+      <Link href="/collection" className="pr-at pr-binder" data-in="phone" style={at(null, SCENES.phone.collection)} aria-label={label}>
+        <b>
+          {owned}/{total}
+        </b>
+      </Link>
+    </>
+  );
+}
