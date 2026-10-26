@@ -60,9 +60,6 @@ const ITEMS: NavItem[] = [
   // Next to the boards it extends. Seasonal work, but while an event runs it is
   // the screen with runs waiting on a human; between events it is the archive.
   { href: "/dashboard/championship", label: "Championship", edit: true },
-  // Grants, revocations and the catalogue as published. Fright Fest pays its
-  // rewards through it, so it follows the desk that decides them.
-  { href: "/dashboard/collectibles", label: "Collectibles", edit: true },
   // Below the three surfaces with something waiting on them and above the
   // catalogue admin: Growth is a read-only screen nobody is blocked on, but it
   // is the one that answers "is any of this working", so it sits with the other
@@ -83,6 +80,13 @@ const ITEMS: NavItem[] = [
 
 // Super-admin-only links, appended when the caller holds that role.
 //
+// Collectibles sits FIRST: it is the one link here that is a day-to-day work
+// surface (grants, revocations, the audit log) rather than an account or
+// emergency screen, so it earns the shortest reach in the block. It lives here
+// and not in the main list because its page and actions are guarded at
+// `super_admin`; a site admin would only be redirected. Fright Fest rewards are
+// still paid by site admins through the Championship desk, not through this one.
+//
 // "Blob ops" sits LAST, below Logs, and that is the right place for it rather
 // than an oversight: it is the screen you open when something has already gone
 // wrong (the advanced-operation allowance is spent and publishing is failing),
@@ -90,6 +94,7 @@ const ITEMS: NavItem[] = [
 // would cost the surfaces people actually use a shorter reach in exchange for a
 // link that should ideally never be clicked.
 const SUPER_ADMIN_ITEMS: NavItem[] = [
+  { href: "/dashboard/collectibles", label: "Collectibles" },
   { href: "/dashboard/users", label: "Users" },
   { href: "/dashboard/logs", label: "Logs" },
   { href: "/dashboard/blob", label: "Blob ops" },

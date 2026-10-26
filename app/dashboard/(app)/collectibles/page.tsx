@@ -5,6 +5,11 @@
  * pack versions immutable and reviewed), grant a pack, revoke a sealed pack or
  * a pull, the newest grants and openings, and the audit log.
  *
+ * WHO CAN OPEN IT. Super admins only, here and in every action in `actions.ts`.
+ * The owner wants grants and revocations limited to super admins, so a plain
+ * site admin is redirected to their own home. Site admins still pay event
+ * rewards: the championship desk grants through the store directly.
+ *
  * PRIVACY. Players appear by public name and public id only; the store selects
  * nothing else. The emails in the audit log are staff dashboard accounts, which
  * is the point of an audit log.
@@ -19,7 +24,6 @@
 
 import type { Metadata } from "next";
 import { requireRole } from "@/app/lib/auth";
-import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { isMissingColumnError, isUnconfiguredDbError } from "@/app/lib/db";
 import { collectiblesStore } from "@/app/lib/collectibles";
 import { CATALOGUE, cardsIn, currentVersion, getCollectible, type Pack, type Slot } from "@/app/lib/collectibles/catalogue";
@@ -70,7 +74,7 @@ function Banner({ tone, children }: { tone: "ok" | "error" | "warn"; children: R
 const cardName = (id: string) => getCollectible(id)?.name ?? id;
 
 export default async function CollectiblesDeskPage({ searchParams }: { searchParams: SearchParams }) {
-  await requireRole(SITE_WRITE_ROLE);
+  await requireRole("super_admin");
   const params = await searchParams;
   const ok = one(params.ok);
   const error = one(params.error);

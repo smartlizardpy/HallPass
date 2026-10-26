@@ -253,13 +253,14 @@ player.
 
 ---
 
-## 6. Administration (`/dashboard/collectibles`, role `admin`)
+## 6. Administration (`/dashboard/collectibles`, role `super_admin`)
 
 Catalogue browser (art status, odds, versions), grant a pack to a player (by
 username or public id, reason required), revoke a sealed pack or a pull (reason
 required), grant history, opening history, audit log. Definitions are not
 editable from the dashboard. They change by commit, which keeps versions
-immutable and reviewed.
+immutable and reviewed. Only super admins can open the desk, grant or revoke;
+site admins still pay championship rewards, which grant through the store directly.
 
 ## 7. Art pipeline
 

@@ -5,8 +5,12 @@
  *
  * The house shape of `championship/actions.ts`:
  *
- *   1. `requireRole(SITE_WRITE_ROLE)` FIRST, before any form field is read.
- *      Server actions are reachable by direct POST; this is the gate.
+ *   1. `requireRole("super_admin")` FIRST, before any form field is read.
+ *      Server actions are reachable by direct POST; this is the gate. It is
+ *      `super_admin`, not `SITE_WRITE_ROLE`: the owner wants grants and
+ *      revocations limited to super admins. (Event rewards are paid by the
+ *      championship desk, which calls the store directly at `SITE_WRITE_ROLE`
+ *      and does not come through here.)
  *   2. Validate every field (pack id against the catalogue, ids against their
  *      format, the reason present). A bad value is a banner, never a 500 and
  *      never an unchecked value reaching Postgres.
@@ -27,7 +31,6 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
-import { SITE_WRITE_ROLE } from "@/app/lib/permissions";
 import { collectiblesStore } from "@/app/lib/collectibles";
 import { getPack } from "@/app/lib/collectibles/catalogue";
 import { UUID_RE } from "@/app/lib/collectibles/store";
@@ -48,7 +51,7 @@ function readReason(formData: FormData): string {
 }
 
 export async function grantPackAction(formData: FormData): Promise<void> {
-  const { email } = await requireRole(SITE_WRITE_ROLE);
+  const { email } = await requireRole("super_admin");
   const query = String(formData.get("player") ?? "").trim();
   if (!query || query.length > 100) back("error", "Give a username or a public id.");
   const pack = getPack(String(formData.get("pack") ?? ""));
@@ -84,7 +87,7 @@ export async function grantPackAction(formData: FormData): Promise<void> {
 }
 
 export async function revokePackAction(formData: FormData): Promise<void> {
-  const { email } = await requireRole(SITE_WRITE_ROLE);
+  const { email } = await requireRole("super_admin");
   const publicId = String(formData.get("packId") ?? "").trim();
   if (!UUID_RE.test(publicId)) back("error", "That pack id was not valid.");
   const reason = readReason(formData);
@@ -102,7 +105,7 @@ export async function revokePackAction(formData: FormData): Promise<void> {
 }
 
 export async function revokePullAction(formData: FormData): Promise<void> {
-  const { email } = await requireRole(SITE_WRITE_ROLE);
+  const { email } = await requireRole("super_admin");
   const raw = String(formData.get("pullId") ?? "").trim();
   const pullId = /^\d{1,15}$/.test(raw) ? Number(raw) : NaN;
   if (!Number.isSafeInteger(pullId) || pullId <= 0) back("error", "That pull id was not valid.");
