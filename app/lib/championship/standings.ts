@@ -256,8 +256,11 @@ export type PublicBoardEntry = Omit<BoardEntry, "playerId" | "runId">;
 export type PublicBoard = Omit<Board, "entries"> & { entries: PublicBoardEntry[] };
 export type PublicOverallEntry = Omit<OverallEntry, "playerId">;
 export interface PublicStandings extends Omit<Standings, "boards" | "overall"> {
+  /** Boards that have opened (open, paused or withdrawn). A pending game is not named in public. */
   boards: PublicBoard[];
   overall: PublicOverallEntry[];
+  /** How many games are still waiting to join: counted, never named. */
+  pendingGames: number;
 }
 
 /** One board row without its internal ids. Fields are listed, not spread, so a new internal field cannot leak by default. */
@@ -274,14 +277,23 @@ export function publicEntry(e: BoardEntry): PublicBoardEntry {
   };
 }
 
-/** Strip every internal id. The only sanctioned path from `Standings` to a response. */
+/**
+ * Strip every internal id. The only sanctioned path from `Standings` to a response.
+ *
+ * A PENDING game is left out entirely, counted in `pendingGames` instead: until
+ * its event mode passes verification it may never join, and the site does not
+ * announce a game it cannot promise (the haunted hero shows it as a mystery
+ * cabinet for the same reason). It earns nothing while pending, so the table
+ * loses nothing.
+ */
 export function toPublicStandings(s: Standings, limits: { board: number; overall: number }): PublicStandings {
   return {
     championship: s.championship,
     phase: s.phase,
     championPublicId: s.championPublicId,
     lineupFinal: s.lineupFinal,
-    boards: s.boards.map((b) => ({
+    pendingGames: s.boards.filter((b) => b.status === "pending").length,
+    boards: s.boards.filter((b) => b.status !== "pending").map((b) => ({
       slug: b.slug,
       board: b.board,
       title: b.title,

@@ -411,7 +411,7 @@ function ReviewQueue({ c, runs }: { c: ChampionshipConfig; runs: AdminRun[] }) {
                   </form>
                   <form action={reviewAction} className="flex flex-1 items-center gap-2">
                     <Hidden c={c} fields={{ action: "disqualify-run", runId: run.id }} />
-                    <input name="reason" required maxLength={300} placeholder="Why disqualify (required)" className={INPUT} />
+                    <input name="reason" required maxLength={300} placeholder="Why disqualify (required; the player sees this)" className={INPUT} />
                     <button type="submit" className={BTN_DANGER}>Disqualify</button>
                   </form>
                 </div>
@@ -536,7 +536,7 @@ function RunsPanel({ c, runs, statusFilter, gameFilter }: { c: ChampionshipConfi
               {!run.isOwn && (run.status === "accepted" || run.status === "disqualified") && (
                 <form action={reviewAction} className="mt-2 flex max-w-xl items-center gap-2">
                   <Hidden c={c} fields={{ action: run.status === "accepted" ? "disqualify-run" : "reinstate-run", runId: run.id }} />
-                  <input name="reason" required maxLength={300} placeholder="Reason (required)" className={INPUT} />
+                  <input name="reason" required maxLength={300} placeholder="Reason (required; the player sees it)" className={INPUT} />
                   <button type="submit" className={run.status === "accepted" ? BTN_DANGER : BTN_QUIET}>
                     {run.status === "accepted" ? "Disqualify" : "Reinstate"}
                   </button>

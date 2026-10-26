@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
@@ -40,7 +40,7 @@ import { CatalogToolbar } from "./CatalogToolbar";
 import { GameListRow } from "./GameListRow";
 import { HauntedHero } from "./events/fright-fest/HauntedHero";
 import { EventBoard } from "./events/fright-fest/EventBoard";
-import { FRIGHT_FEST_GAMES, FRIGHT_FEST_GAMES_ANNOUNCED } from "./events/fright-fest/registry";
+import { frightFestGame } from "./events/fright-fest/registry";
 
 /** Rows of the list view before the championship board. */
 const LIST_FIRST = 8;
@@ -132,11 +132,19 @@ export function Arcade({
   categories,
   initialCategory = "All",
   playCounts = {},
+  eventBoard,
 }: {
   games: Game[];
   categories: string[];
   initialCategory?: string;
   playCounts?: Record<string, number>;
+  /**
+   * What fills the home page's board slot, desktop and phone. The page decides
+   * (the theme's `EventBoard`, or a running championship's card) so this
+   * catalogue reads neither the championship switch nor its data. Defaults to
+   * the theme's card.
+   */
+  eventBoard?: { desktop: ReactNode; phone: ReactNode };
 }) {
   const router = useRouter();
   const [category, setCategoryState] = useState(initialCategory);
@@ -181,6 +189,7 @@ export function Arcade({
         category={category}
         query={query}
         playCounts={playCounts}
+        board={eventBoard ?? { desktop: <EventBoard />, phone: <EventBoard phone /> }}
       />
     </ArcadeShell>
   );
@@ -195,11 +204,13 @@ function ArcadeRows({
   category,
   query,
   playCounts,
+  board,
 }: {
   games: Game[];
   category: string;
   query: string;
   playCounts: Record<string, number>;
+  board: { desktop: ReactNode; phone: ReactNode };
 }) {
   const openGame = useOpenGame();
 
@@ -383,6 +394,7 @@ function ArcadeRows({
       <MobileCatalog
         catalogue={games}
         showEvent={category === "All" && !query}
+        eventBoard={board.phone}
         games={mobileGames}
         favorites={mobileCatalog(favoriteGames)}
         onPlay={requestPlay}
@@ -461,7 +473,7 @@ function ArcadeRows({
               </Link>
             </p>
           )}
-          <FramedLegend show={FRIGHT_FEST_GAMES_ANNOUNCED && ordered.some((g) => FRIGHT_FEST_GAMES.some((f) => f.slug === g.slug))} />
+          <FramedLegend show={ordered.some((g) => frightFestGame(g.slug))} />
           </div>
           {filtered.length === 0 ? (
             <div className="rounded-3xl bg-surface p-16 text-center">
@@ -488,7 +500,7 @@ function ArcadeRows({
               </ul>
               {isHome && ordered.length > LIST_FIRST && (
                 <>
-                  <EventBoard />
+                  {board.desktop}
                   <div className="ha-deco ha-fence" aria-hidden="true" />
                   <ul className="mt-0.5 flex flex-col gap-0.5">
                     {ordered.slice(LIST_FIRST).map((g) => (
@@ -523,7 +535,7 @@ function ArcadeRows({
                   which is exactly the single list. */}
               {isHome && ordered.length > gridFirst && (
                 <>
-                  <EventBoard />
+                  {board.desktop}
                   <div className="ha-deco ha-fence" aria-hidden="true" />
                   <div className={`mt-6 ${CATALOG_GRID}`}>
                     {ordered.slice(gridFirst).map((g) => (
@@ -568,6 +580,7 @@ function ArcadeRows({
 function MobileCatalog({
   catalogue,
   showEvent,
+  eventBoard,
   games,
   favorites,
   onPlay,
@@ -581,6 +594,8 @@ function MobileCatalog({
   catalogue: Game[];
   /** Fright Fest hero + board: the unfiltered phone home only. */
   showEvent: boolean;
+  /** The board slot's phone variant (see `Arcade`'s `eventBoard`). */
+  eventBoard: ReactNode;
   games: Game[];
   favorites: Game[];
   onPlay: (slug: string) => void;
@@ -674,7 +689,7 @@ function MobileCatalog({
               // the two grids are one row-gap (24px) apart: the single list.
               <>
                 {grid(rest.slice(0, 6))}
-                <EventBoard phone />
+                {eventBoard}
                 <div className="mt-6">{grid(rest.slice(6))}</div>
                 <div className="ha-deco ha-fence" aria-hidden="true" />
               </>

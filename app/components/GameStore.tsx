@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import posthog from "posthog-js";
 import { gameFaq } from "../lib/faq";
@@ -49,6 +50,7 @@ export function GameStore({
   credit = null,
   testers = [],
   video = null,
+  championship = null,
 }: {
   game: Game;
   media: GameMedia[];
@@ -62,6 +64,12 @@ export function GameStore({
    * plain-text spec-sheet row this had before there was a `/tag/` route at all.
    */
   tagLinks?: { tag: string; href: string | null }[];
+  /**
+   * A running championship's panel for this game, built by the PAGE (which may
+   * read the championship switch; this shared component does not). Rendered in
+   * the rail under the event panel. `null` for every other game.
+   */
+  championship?: ReactNode;
   related: Game[];
   plays: number;
   /**
@@ -388,6 +396,7 @@ export function GameStore({
           <ChallengedHere slug={game.slug} />
           <FriendsWhoPlay slug={game.slug} />
           <GameEventPanel slug={game.slug} />
+          {championship}
         </aside>
       </section>
 
