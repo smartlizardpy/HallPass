@@ -271,3 +271,41 @@ amber on the "you" row 7.2:1, ink on gold (Play, Full standings) 12.8:1.
   `GameEventPanel` and `Arcade` import it into client bundles. `/fright-fest`
   loads none of those chunks (checked in the built HTML and RSC payload), but
   other pages do. Fix: keep unannounced entries out of the client registry.
+
+## 6. Arcade sections: everything below the room
+
+The owner's verdict on the first build of the sections was "it looks like a SaaS
+design". The room is right; the sections under it were the site's plain cards
+(rounded corners, Nunito everywhere, pill tabs, avatars, white cards on the Normal
+look). They are restyled to design A ("The Arcade Hall") so the page is one place.
+
+### Plan what
+
+- Scope: everything below the room on `/fright-fest`, in both looks and both OS
+  themes: `FrightFestSections`, `Standings`, `MyProgress`, `PhaseBanner` (used by
+  nothing but `FrightFestSections`, checked by grep; `GamePanel` has its own
+  markup), the Candy Hunt island, `sections.css`, `candy.css`.
+- The hall's wall carries on full width under the room (`tile-wall.png`), so there
+  is no plain gap. The room does not change.
+- Objects, in design A's order: phase strip (LED plate), High scores (CRT board,
+  with "Your Fright Fest" as its footer plate), the prize counter (gold-bulb
+  frame, booth art, reward tickets), How Fright Points work (cream paper notice,
+  schedule and rules merged), Candy Hunt (corkboard of pinned notices and a shelf).
+- Style: no rounded corners, 2 to 3 px borders, 16 px frames on phones and 32 px
+  from 640 px, Silkscreen for labels, numbers, tabs and buttons, Nunito for
+  sentences, square 44 px buttons (gold primary, outlined secondary, dashed
+  disabled with a visible reason), a 2 px gold focus outline with an offset.
+- Palette: fixed, defined on `.ff-page` as `--ar-*` (never a base token, never
+  under a seasonal selector), identical in light and dark OS themes. Haunted look:
+  orange accent. Normal look: gold accent (`html[data-hp-skin="haunted"]` switches
+  only the accent and the art).
+- Excluded: the room, data, fetching, behaviour, the candy API, other pages, new art.
+
+### Plan how
+
+1. This plan and the wall + palette scaffold (`page.tsx`, `sections.css`).
+2. Phase strip and High scores with the footer plate.
+3. The prize counter.
+4. How Fright Points work (paper).
+5. Candy Hunt: corkboard and shelf.
+6. Phone, contrast and focus pass, and the "As built" note below.
