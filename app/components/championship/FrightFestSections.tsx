@@ -134,7 +134,8 @@ export function FrightFestSections({
           <ul className="ar-rules">
             <li id="schedule">
               <b>When:</b> ranked runs count from {s.labels.opens} to {s.labels.lastMinute} UK time. A run you started before the close has{" "}
-              {s.submitGraceMin} more minutes to finish. Results are checked after the close and final by {s.labels.resultsBy} UK time.
+              {s.submitGraceMin} more minutes to finish. Results are checked after the close and final by {s.labels.resultsBy}{" "}
+              UK time.
               Times are the server&apos;s, never your device&apos;s clock. A game that joins later counts from the moment it joins.
             </li>
             <li>
@@ -151,7 +152,8 @@ export function FrightFestSections({
               Runs that look impossible are not counted; unusual ones are held until a person checks them.
             </li>
             <li>
-              <b>Checks and results:</b> standings are provisional until the results are checked after the close. A run can be
+              <b>Checks and results:</b>{" "}
+              standings are provisional until the results are checked after the close. A run can be
               disqualified, always with a reason you can see in &ldquo;Your Fright Fest&rdquo;. Staff cannot review their own runs.
             </li>
             <li>

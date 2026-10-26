@@ -309,3 +309,36 @@ look). They are restyled to design A ("The Arcade Hall") so the page is one plac
 4. How Fright Points work (paper).
 5. Candy Hunt: corkboard and shelf.
 6. Phone, contrast and focus pass, and the "As built" note below.
+
+### As built (arcade sections)
+
+- `page.tsx` wraps the sections in `.ff-wall` (the room's `tile-wall.png` at 2x,
+  full width), then `.ff-page` (the palette, 1120 px max). `FrightFestSections`
+  renders, in design A's order: phase strip, High scores (with "Your Fright Fest"
+  inside it as the footer plate: `MyChampionship` is `ChampionshipStandings`'
+  `children`, anchor `#mine`), the prize counter (`#rewards`), the paper notice
+  (`#rules`, schedule at `#schedule`), then Candy Hunt (`#candy`, `#candy-shop`),
+  which moved from between "Your Fright Fest" and the points table to the end, as
+  in the design. All classes are `.ar-*` / `.cd-*`, in `sections.css` and
+  `candy/candy.css`.
+- Both looks and both OS themes share one fixed palette; the look only changes
+  `--ar-accent` (haunted orange `#ff7a1a`, Normal gold `#ffc700`) and the booth art.
+- Phone: frames 16 px, the board drops the per-game columns, the paper columns
+  stack, the shelf is two packs across.
+- Frames used: `frame-board` (high scores), `frame-prize` (prize counter),
+  `frame-paper` (rules), `frame-quest` (Candy Hunt). No frame was missing.
+
+Where it differs from design A: no "Show all" link on the board (the API's table is
+shown whole and a toggle would be new behaviour); the heading reads "Final high
+scores" once final; the rules say "the board shows your HallPass handle or
+@username" (avatars are gone from the table, so the old words "and your avatar"
+would be false); Candy Hunt's lede, earn notices and shop are the real ones, not
+the preview notices the prototype drew.
+
+Contrast (text on its own plate, all at least 7:1 except one at 6.6:1 that is
+replaced below): cream on ink 18.9, soft 13.9, lavender 9.0, moon 14.5, bronze 9.9,
+your row amber on its band 8.5, amber 11.2, ink on orange 7.4, ink on gold 12.4,
+LED green 16.2, paper ink 16.0, paper heading 10.9, paper soft 12.1, cork cream
+13.7, cork moon 10.5, cork amber 8.2, price tag 10.9, disabled button 9.0 (it has a
+solid ink plate; on bare cork it would have been 6.6), focus ring gold on ink 12.8,
+ink ring on paper 16.0.

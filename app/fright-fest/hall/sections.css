@@ -74,6 +74,7 @@ html[data-hp-skin="haunted"] .ff-page {
 
 .ar-stack {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 36px;
   min-width: 0;
 }
@@ -221,7 +222,7 @@ html[data-hp-skin="haunted"] .ff-page {
 .ar-btn:disabled {
   border-style: dashed;
   border-color: var(--ar-lav);
-  background: transparent;
+  background: #0b0612;
   color: var(--ar-lav);
   box-shadow: none;
   cursor: not-allowed;
