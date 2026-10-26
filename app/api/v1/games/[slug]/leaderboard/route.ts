@@ -44,6 +44,14 @@
  * catalogue to turn one empty response into a different empty response buys
  * nothing on a public cacheable read.
  *
+ * ── FRIGHT FEST SEASON ─────────────────────────────────────────────────────
+ *
+ * Each board is read with `seasonal: true`, so while the season window is open
+ * (`scoreboard/season.ts`, decided by the database clock) the panel lists only
+ * scores posted inside it, in step with the per-board route. The `period: "all"`
+ * field keeps its meaning to the client: it never selected a window, and the body
+ * shape is unchanged.
+ *
  * ── STAGED GAMES ARE WITHHELD, WITHOUT BREAKING THE RULE ABOVE ─────────────
  *
  * A staged (beta-only) game answers `{ boards: [] }` with `no-store`, and so
@@ -120,6 +128,7 @@ export async function GET(
           limit: GAME_BOARD_ROWS,
           period: "all",
           sort: board.sort,
+          seasonal: true,
         });
         return {
           boardId: board.slug,

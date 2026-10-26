@@ -13,6 +13,12 @@
  * NOT cached by default in this Next.js, and we deliberately do not opt into
  * `force-static` — each request reads the database at request time.
  *
+ * FRIGHT FEST SEASON. While the season window is open (`scoreboard/season.ts`;
+ * the DATABASE clock decides) the GET lists, and the POST ranks against, only
+ * scores posted inside it. The body is the same shape either way: nothing in the
+ * SDK or the games can tell, except which scores come back. The 15s cache above
+ * is what bounds how long the switch takes to reach everyone.
+ *
  * STAGED GAMES. A board is STAGED when the game it is linked to (`game_slug`) is
  * — see `app/lib/game-staging.ts`. The board id carries no game, so the link is
  * read off the board row the route already fetches, and only a board that HAS a
@@ -142,7 +148,7 @@ export async function GET(
     if (!board) return boardNotInitialized();
     const access = await stagedAccess(board.gameSlug);
     if (access === "denied") return boardNotInitialized();
-    const scores = await store.getTopScores(slug, { limit, period, sort: board.sort });
+    const scores = await store.getTopScores(slug, { limit, period, sort: board.sort, seasonal: true });
     const body: LeaderboardResponse = {
       game: board.slug,
       title: board.title,
