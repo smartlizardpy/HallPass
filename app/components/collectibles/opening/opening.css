@@ -1,0 +1,361 @@
+/*
+ * The pack-opening stage. Loaded only by OpeningFlow.
+ *
+ * The stage carries `hc-root`, so the card tokens apply and the cards' own
+ * reduced-motion rule (no animation, 1 ms transitions) covers everything here.
+ * Under reduced motion the flip and the emerge become short fades instead: the
+ * overrides at the bottom out-rank that rule on purpose.
+ */
+
+.ho-stage {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 16px;
+  min-height: 540px;
+  padding: 28px 16px 64px;
+  border-radius: 20px;
+  background:
+    radial-gradient(58% 46% at 50% 44%, color-mix(in srgb, var(--ho-tint) 26%, transparent), transparent 72%),
+    var(--hc-surface);
+  color: var(--foreground);
+  text-align: center;
+  overflow: hidden; /* the torn strip flies off the stage, not over the page */
+}
+
+.ho-title {
+  margin: 0;
+  font-size: clamp(1.35rem, 3.4vw, 1.9rem);
+  font-weight: 900;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.ho-copy {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 0.95rem;
+  color: var(--foreground-2);
+}
+
+.ho-notice {
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--hc-peel);
+  color: var(--hc-ink);
+  border: 2px solid var(--hc-ink);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.ho-loading {
+  width: 132px;
+  height: 185px;
+  margin-top: 24px;
+  border-radius: 12px;
+  background: var(--hc-surface-2);
+  opacity: 0.7;
+}
+
+/* ── Buttons: stickers, like the cards ── */
+.ho-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+.ho-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: 2px solid var(--hc-ink);
+  background: var(--hc-peel);
+  color: var(--hc-ink);
+  font: inherit;
+  font-weight: 800;
+  font-size: 0.95rem;
+  text-decoration: none;
+  box-shadow: 0 3px 0 var(--hc-shadow);
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.ho-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 0 var(--hc-shadow);
+}
+.ho-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--hc-shadow);
+}
+.ho-btn:focus-visible,
+.ho-sound:focus-visible,
+.ho-hit:focus-visible,
+.ho-pack:focus-visible,
+.ho-summary h2:focus-visible {
+  outline: 3px solid var(--foreground);
+  outline-offset: 4px;
+}
+.ho-btn-primary {
+  background: var(--accent-yellow);
+}
+.ho-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
+  box-shadow: 0 3px 0 var(--hc-shadow);
+}
+
+.ho-sound {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1.5px solid currentColor;
+  background: transparent;
+  color: var(--foreground-2);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ho-sound[aria-pressed="true"] {
+  background: var(--hc-peel);
+  color: var(--hc-ink);
+  border-color: var(--hc-ink);
+}
+
+/* ── The sealed pack and its back ── */
+.ho-turn {
+  display: grid;
+  place-items: center;
+  min-height: 340px;
+  perspective: 1100px;
+}
+.ho-turn > * {
+  grid-area: 1 / 1;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transition: transform 520ms cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+.ho-pack {
+  position: relative;
+  border-radius: 12px;
+  cursor: grab;
+  touch-action: none; /* the drag is ours, not a scroll */
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* The tear line, glowing gently so the first-time player knows where to drag. */
+.ho-pack::after {
+  content: "";
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  top: 14%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--hc-peel);
+  opacity: 0;
+  pointer-events: none;
+  animation: ho-hint 2.4s ease-in-out 1.2s infinite;
+}
+.ho-pack[data-dragging]::after,
+.ho-pack[data-torn]::after {
+  animation: none;
+  opacity: 0;
+}
+.ho-pack[data-dragging] {
+  cursor: grabbing;
+}
+.ho-pack[data-torn] .hp-pack-body {
+  transition: transform 360ms ease 120ms;
+  transform: translateY(6px) scale(0.98);
+}
+.ho-pack-back {
+  transform: rotateY(180deg);
+  width: 220px;
+  min-height: 308px;
+  padding: 18px 16px;
+  border-radius: 10px;
+  border: 2px solid var(--hc-ink);
+  background: var(--hc-peel);
+  color: var(--hc-ink);
+  box-shadow: 0 4px 0 var(--hc-shadow);
+  text-align: left;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+.ho-pack-back h2 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  font-weight: 900;
+}
+.ho-pack-back p {
+  margin: 0 0 6px;
+}
+.ho-pack-back ul {
+  margin: 0 0 10px;
+  padding-left: 16px;
+}
+.ho-pack-back li {
+  margin-bottom: 4px;
+}
+.ho-fine {
+  font-size: 0.75rem;
+  color: var(--hc-ink-soft);
+}
+.ho-turn.is-turned .ho-pack {
+  transform: rotateY(-180deg);
+}
+.ho-turn.is-turned .ho-pack-back {
+  transform: rotateY(0deg);
+}
+
+/* ── The cards ── */
+.ho-row {
+  display: flex;
+  justify-content: center;
+  gap: clamp(10px, 3vw, 28px);
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ho-slot {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  animation: ho-emerge 350ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(var(--i, 0) * 120ms) both;
+}
+.ho-card {
+  position: relative;
+  border-radius: 12px;
+}
+.ho-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border: 0;
+  padding: 0;
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+}
+.ho-card:has(.ho-hit) {
+  transition: transform 160ms ease;
+}
+.ho-card:has(.ho-hit:hover) {
+  transform: translateY(-4px);
+}
+.ho-card[data-charging] {
+  animation: ho-charge 600ms ease-in both;
+}
+.ho-tag {
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1.5px solid currentColor;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--foreground-2);
+}
+.ho-tag.is-new {
+  border-color: var(--hc-ink);
+  background: var(--hc-new);
+  color: #fff;
+}
+
+.ho-summary {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.ho-summary h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 900;
+  border-radius: 6px;
+}
+
+@keyframes ho-hint {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+@keyframes ho-emerge {
+  from {
+    opacity: 0;
+    transform: translateY(70px) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ho-charge {
+  to {
+    transform: translateY(-6px) scale(1.04);
+  }
+}
+@keyframes ho-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ── Reduced motion: fades instead of flips, slides and tilts ── */
+@media (prefers-reduced-motion: reduce) {
+  .ho-stage .ho-slot {
+    animation: ho-fade 200ms ease both !important;
+  }
+  .ho-stage .ho-turn > * {
+    transition: opacity 200ms ease !important;
+  }
+  .ho-stage .ho-turn > .ho-pack-back {
+    transform: none;
+    opacity: 0;
+  }
+  .ho-stage .ho-turn.is-turned > .ho-pack {
+    transform: none;
+    opacity: 0;
+  }
+  .ho-stage .ho-turn.is-turned > .ho-pack-back {
+    opacity: 1;
+  }
+  .ho-stage .ho-card .hc-flip-inner,
+  .ho-stage .ho-card .hc-flip-inner > .hc-card {
+    transform: none !important;
+  }
+  .ho-stage .ho-card .hc-flip-inner > * {
+    transition: opacity 200ms ease !important;
+  }
+  .ho-stage .ho-card .hc-flip-inner > .hc-card,
+  .ho-stage .ho-card .hc-flip[data-flipped] .hc-flip-inner > .hc-back {
+    opacity: 0;
+  }
+  .ho-stage .ho-card .hc-flip[data-flipped] .hc-flip-inner > .hc-card {
+    opacity: 1;
+  }
+  .ho-stage .ho-card:has(.ho-hit:hover) {
+    transform: none;
+  }
+}
+
+@media (max-width: 680px) {
+  .ho-stage {
+    min-height: 480px;
+    padding-top: 52px; /* room for the sound toggle above the title */
+  }
+  .ho-turn {
+    min-height: 320px;
+  }
+}

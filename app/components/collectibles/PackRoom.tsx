@@ -3,7 +3,7 @@
 /**
  * The Pack Room's per-player half: sealed packs and recent openings. A client
  * island on the static `/packs` page (see `useMyCollection`). Opening happens
- * at `/packs/open/<publicId>`; this only links there.
+ * at `/packs/open?pack=<publicId>`; this only links there.
  */
 
 import { useEffect, useState } from "react";
@@ -65,7 +65,7 @@ export function PackRoom() {
               if (!pack) return null;
               return (
                 <li key={p.publicId}>
-                  <Link href={`/packs/open/${p.publicId}`} className="hc-link" aria-label={`Open ${pack.name}`}>
+                  <Link href={`/packs/open?pack=${p.publicId}`} className="hc-link" aria-label={`Open ${pack.name}`}>
                     <PackArt packId={p.packId} size={size} decorative />
                     <span className="hc-root hc-pack-cta" aria-hidden="true">
                       Open

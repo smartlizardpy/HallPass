@@ -155,8 +155,11 @@ The catalogue itself needs no API: it is static data, imported by the pages.
 
 ## 5. Interface
 
-Routes: **`/packs`** (Pack Room), **`/packs/open/<id>`** (opening, its own
-route so its JS loads only there), **`/collection`** (binder), and
+Routes: **`/packs`** (Pack Room), **`/packs/open?pack=<id>`** (opening, its
+own route so its JS loads only there; ONE static page for every pack, with the
+id in the query string read only by the client, so an opening never costs a
+server render and an unknown id cannot fill a cache), **`/collection`**
+(binder), and
 **`/collectibles/<id>`** (a public, static page per card for sharing, with no
 owner information).
 
