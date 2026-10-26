@@ -249,9 +249,25 @@ cream on ink 18.9:1, gold 12.8:1, amber 11.2:1, green 16.2:1, lavender 13.9:1,
 rank 2 silver 14.7:1, rank 3 bronze 11.3:1, cream on the "you" row 12.1:1,
 amber on the "you" row 7.2:1, ink on gold (Play, Full standings) 12.8:1.
 
+### Fixed in review
+
+- **The ticker's words and countdown could disagree.** The words follow the
+  server phase and the countdown follows the theme clock, so for the API's cache
+  time after the opening the plate could read "Opens 28 Oct" with "ends in 4d".
+  `tickerCountdownLabel` (in `logic.ts`, tested) now hides the countdown until
+  both point at the same moment. Screen readers hear "1 day 3 hours", not
+  "1 days 03 hours".
+- **The championship sections imported the hall.** `FrightFestSections` took its
+  reward types from `hall/props.ts`, which imports the theme's registry. The types
+  now live in `lib/championship/reward-view.ts`.
+
 ### Known issues
 
-- The room's ticker uses the theme clock for the countdown and the server phase
-  for the words, so they can differ for a moment around a phase change.
 - Chromium emulation here has no touch device with `hover: none` plus a platform
   tag, so the phone "Laptop only" label was not seen on screen.
+- **Predates this PR, not on this page:** the theme's registry
+  (`components/events/fright-fest/registry.ts`) carries the unannounced games'
+  mode names ("Cursed Dash", "Blood Moon"), and `GameCard`, `GameListRow`,
+  `GameEventPanel` and `Arcade` import it into client bundles. `/fright-fest`
+  loads none of those chunks (checked in the built HTML and RSC payload), but
+  other pages do. Fix: keep unannounced entries out of the client registry.
