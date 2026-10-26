@@ -335,10 +335,9 @@ scores" once final; the rules say "the board shows your HallPass handle or
 would be false); Candy Hunt's lede, earn notices and shop are the real ones, not
 the preview notices the prototype drew.
 
-Contrast (text on its own plate, all at least 7:1 except one at 6.6:1 that is
-replaced below): cream on ink 18.9, soft 13.9, lavender 9.0, moon 14.5, bronze 9.9,
+Contrast (text on its own plate, all at least 7:1): cream on ink 18.9, soft 13.9, lavender 9.0, moon 14.5, bronze 9.9,
 your row amber on its band 8.5, amber 11.2, ink on orange 7.4, ink on gold 12.4,
 LED green 16.2, paper ink 16.0, paper heading 10.9, paper soft 12.1, cork cream
 13.7, cork moon 10.5, cork amber 8.2, price tag 10.9, disabled button 9.0 (it has a
-solid ink plate; on bare cork it would have been 6.6), focus ring gold on ink 12.8,
+solid ink plate, so it does not sit on the 6.6 of bare cork), focus ring gold on ink 12.8,
 ink ring on paper 16.0.
