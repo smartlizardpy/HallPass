@@ -22,18 +22,11 @@ import { packGroups, slotParts, type SlotView } from "@/app/lib/collectibles/pag
 
 function Slot({ slot }: { slot: SlotView }) {
   const parts = slotParts(slot);
-  /* A fixed slot's " (rarity)." is kept on one line so a bracket is never left alone at a line end. */
-  const nowrapFrom = slot.kind === "fixed" ? parts.findIndex((p) => p.as === "rarity") - 1 : -1;
-  const runs = parts.map((p, i) =>
-    p.as === "card" ? (
-      <strong key={i} className="po-card">
-        {p.text}
-      </strong>
-    ) : p.as === "rarity" && slot.card ? (
-      <span key={i} className="po-chip" data-rarity={slot.card.rarity}>
-        {p.text}
-      </span>
-    ) : p.as === "pool" ? (
+  /* A fixed slot reads " (rarity)." aloud (sr-only) and shows the rarity as a chip with no brackets or full stop (aria-hidden). */
+  const tail = slot.kind === "fixed" ? parts.findIndex((p) => p.as === "rarity") - 1 : -1;
+  const lead = tail > 0 ? parts.slice(0, tail) : parts;
+  const runs = lead.map((p, i) =>
+    p.as === "card" || p.as === "pool" ? (
       <strong key={i} className="po-card">
         {p.text}
       </strong>
@@ -43,15 +36,15 @@ function Slot({ slot }: { slot: SlotView }) {
   );
   return (
     <li className="po-slot" data-kind={slot.kind}>
-      <b className="po-n">Slot {slot.n}.</b>{" "}
-      {nowrapFrom > 0 ? (
+      <b className="po-n">Slot {slot.n}.</b> {runs}
+      {tail > 0 && slot.card ? (
         <>
-          {runs.slice(0, nowrapFrom)}
-          <span className="po-nb">{runs.slice(nowrapFrom)}</span>
+          <span className="sr-only">{parts.slice(tail).map((p) => p.text).join("")}</span>
+          <span className="po-chip" data-rarity={slot.card.rarity} aria-hidden="true">
+            {parts[tail + 1].text}
+          </span>
         </>
-      ) : (
-        runs
-      )}
+      ) : null}
       {slot.kind === "random" && slot.odds ? (
         <span className="po-bar" aria-hidden="true">
           {slot.odds.map((o) => (
