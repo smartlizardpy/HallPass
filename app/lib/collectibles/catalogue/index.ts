@@ -36,3 +36,10 @@ export function packVersion(packId: string, v: number): { pack: Pack; version: P
 
 export const packEmblemSrc = (collection: string) => `/collectibles/packs/${collection}.png`;
 export const collectionSymbolSrc = (collection: string) => `/collectibles/symbols/${collection}.png`;
+
+/** Every pack's print is pixel art at this size; the site draws it at whole-number scales. */
+export const PACK_PRINT_PX = { w: 96, h: 140 } as const;
+/** The front of a pack, with its silhouette in alpha (public/collectibles/ART.md). */
+export const packPrintSrc = (packId: string) => `/collectibles/packs/print/${packId}.png`;
+/** White where the print is foil: the opening turns it into the wrapper's metal and gloss. */
+export const packFoilSrc = (packId: string) => `/collectibles/packs/print/${packId}-foil.png`;

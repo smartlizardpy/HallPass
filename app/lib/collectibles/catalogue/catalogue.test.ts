@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CATALOGUE, cardsIn, collectionSymbolSrc, currentVersion, eligibleCards, packEmblemSrc, validateCatalogue } from "./index";
+import { CATALOGUE, cardsIn, collectionSymbolSrc, currentVersion, eligibleCards, PACK_PRINT_PX, packEmblemSrc, packFoilSrc, packPrintSrc, validateCatalogue } from "./index";
 import { computeLock, type CatalogueLock } from "./lock";
 import { rollPack, rollSlot } from "./roll";
 import { ODDS } from "./odds";
@@ -74,6 +74,21 @@ describe("catalogue", () => {
       expect(pngSize(join(PUBLIC, packEmblemSrc(col.id)))).toEqual([48, 48]);
       expect(pngSize(join(PUBLIC, collectionSymbolSrc(col.id)))).toEqual([16, 16]);
       expect(cardsIn(col.id).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("has a print and a foil mask for every pack, at the print size", () => {
+    const pngSize = (path: string) => {
+      const b = readFileSync(path);
+      return [b.readUInt32BE(16), b.readUInt32BE(20)];
+    };
+    for (const p of CATALOGUE.packs) {
+      for (const src of [packPrintSrc(p.id), packFoilSrc(p.id)]) {
+        const file = join(PUBLIC, src);
+        expect(existsSync(file), src).toBe(true);
+        expect(statSync(file).size, `${src} over 8 KB`).toBeLessThanOrEqual(8192);
+        expect(pngSize(file), src).toEqual([PACK_PRINT_PX.w, PACK_PRINT_PX.h]);
+      }
     }
   });
 });
