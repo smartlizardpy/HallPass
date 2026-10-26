@@ -24,7 +24,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/app/lib/auth";
 import { CANDY, candyStore } from "@/app/lib/candy";
-import { isAchievementCandy } from "@/app/lib/candy/fright-fest-2026";
+import { BOARD_ID_RE } from "@/app/lib/candy/store";
+import { isGameCandy } from "@/app/lib/candy/fright-fest-2026";
 
 const PATH = "/dashboard/candy";
 const MAX_REASON = 500;
@@ -45,9 +46,8 @@ const readGame = (formData: FormData): string | null => {
 export async function setCandyValueAction(formData: FormData): Promise<void> {
   const { email } = await requireRole("super_admin");
   const game = readGame(formData);
-  const rawId = String(formData.get("achievementId") ?? "").trim();
-  const achievementId = /^\d{1,15}$/.test(rawId) ? Number(rawId) : NaN;
-  if (!Number.isSafeInteger(achievementId) || achievementId <= 0) back("error", "That achievement id was not valid.", game);
+  const boardId = String(formData.get("boardId") ?? "").trim();
+  if (!BOARD_ID_RE.test(boardId) || boardId.length > 120) back("error", "That board id was not valid.", game);
 
   // A typed number wins over the preset picker; at least one is required.
   const typed = String(formData.get("candy") ?? "").trim();
@@ -55,19 +55,19 @@ export async function setCandyValueAction(formData: FormData): Promise<void> {
   const raw = typed !== "" ? typed : preset;
   if (raw === "") back("error", "Pick a rubric value or type a number.", game);
   const candy = /^\d{1,3}$/.test(raw) ? Number(raw) : NaN;
-  if (!isAchievementCandy(CANDY, candy)) back("error", `Candy must be a whole number from 0 to ${CANDY.maxAchievementCandy}.`, game);
+  if (!isGameCandy(CANDY, candy)) back("error", `Candy must be a whole number from 0 to ${CANDY.maxGameCandy}.`, game);
 
   let outcome: "changed" | "unchanged" | "not-found" | null = null;
   try {
-    outcome = await candyStore.setAchievementCandy({ achievementId, candy, actorEmail: email });
+    outcome = await candyStore.setBoardCandy({ boardId, candy, actorEmail: email });
   } catch (error) {
     console.error("[candy] set value failed", error);
   }
   if (outcome === null) back("error", `Could not save the value (${DB_HINT}).`, game);
-  if (outcome === "not-found") back("error", "No such achievement.", game);
+  if (outcome === "not-found") back("error", "No such board (or it does not belong to a game).", game);
   if (outcome === "unchanged") back("ok", `Already ${candy}: nothing changed.`, game);
   revalidatePath(PATH);
-  back("ok", `Set to ${candy} candy. Players who unlocked it earlier are paid at their next sync; credits already made keep their amount.`, game);
+  back("ok", `Set to ${candy} candy. Scores from earlier days in the window are paid at each player's next sync; credits already made keep their amount.`, game);
 }
 
 export async function revokeCreditAction(formData: FormData): Promise<void> {

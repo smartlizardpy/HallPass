@@ -1,15 +1,16 @@
 /**
  * HallPass dashboard — the Candy Hunt desk (`/dashboard/candy`), SUPER ADMIN only.
  *
- * Rate every achievement across games (the owner's rubric as presets, or any
- * number from 0 to 40), filter by game, see how many still pay nothing, watch the
- * newest credits and spends, revoke a credit with a reason, and read the audit
- * log. Rules and amounts live in `app/lib/candy/fright-fest-2026.ts` and change
- * by commit; only the per-achievement values are edited here.
+ * Rate every game's leaderboard (the owner's rubric as presets, or any number
+ * from 0 to 40: the top payout of a player's best score of the day, which the
+ * rank tiers scale), filter by game, see how many boards still pay nothing, watch
+ * the newest credits and spends, revoke a credit with a reason, and read the
+ * audit log. Rules and amounts live in `app/lib/candy/fright-fest-2026.ts` and
+ * change by commit; only the per-board values are edited here.
  *
  * "UNRATED" MEANS 0. The column defaults to 0 and 0 is also a legitimate rating
- * (the rubric's "Launch a game"), so the two cannot be told apart; the count is
- * of achievements that pay nothing, and the panel says so.
+ * ("Doesn't pay"), so the two cannot be told apart; the count is of boards that
+ * pay nothing, and the panel says so.
  *
  * PRIVACY. Players appear by public name and public id only; the store selects
  * nothing else. The emails in the audit log are staff dashboard accounts, which
@@ -24,7 +25,8 @@ import type { Metadata } from "next";
 import { requireRole } from "@/app/lib/auth";
 import { isMissingColumnError, isUnconfiguredDbError } from "@/app/lib/db";
 import { CANDY, candyStore } from "@/app/lib/candy";
-import type { AdminAchievement, AdminLedgerRow, CandyLogEntry, CandyStats, TopEarner } from "@/app/lib/candy/store";
+import type { AdminBoard, AdminLedgerRow, CandyLogEntry, CandyStats, TopEarner } from "@/app/lib/candy/store";
+import { dailyBestWhen } from "@/app/lib/candy/present";
 import { formatInstant } from "@/app/lib/championship/format";
 import { resolveGamesIncludingStaged } from "@/app/lib/games-store";
 import { DashHeader } from "../_ui/DashHeader";
@@ -33,7 +35,7 @@ import { revokeCreditAction, setCandyValueAction } from "./actions";
 
 export const metadata: Metadata = {
   title: "Candy",
-  description: "Rate achievements in candy, revoke credits, read the audit log.",
+  description: "Rate each game's leaderboard in candy, revoke credits, read the audit log.",
   robots: { index: false, follow: false },
 };
 
@@ -71,7 +73,7 @@ function Banner({ tone, children }: { tone: "ok" | "error" | "warn"; children: R
   return <div role={tone === "error" ? "alert" : "status"} className={`mb-6 rounded-xl border px-4 py-3 text-sm ${cls}`}>{children}</div>;
 }
 
-const KIND_TONE = { achievement: "brand", ranked_run: "green", all_boards: "green", placing: "amber", spend: "zinc" } as const;
+const KIND_TONE = { daily_best: "brand", ranked_run: "green", all_boards: "green", placing: "amber", spend: "zinc" } as const;
 
 export default async function CandyDeskPage({ searchParams }: { searchParams: SearchParams }) {
   await requireRole("super_admin");
@@ -83,7 +85,7 @@ export default async function CandyDeskPage({ searchParams }: { searchParams: Se
   const playerParam = one(params.player);
   const player = playerParam && UUID_RE.test(playerParam) ? playerParam.toLowerCase() : null;
 
-  let all: AdminAchievement[] = [];
+  let all: AdminBoard[] = [];
   let recent: AdminLedgerRow[] = [];
   let log: CandyLogEntry[] = [];
   let top: TopEarner[] = [];
@@ -91,7 +93,7 @@ export default async function CandyDeskPage({ searchParams }: { searchParams: Se
   let unavailable: "unconfigured" | "schema" | null = null;
   try {
     [all, recent, log, stats, top] = await Promise.all([
-      candyStore.listAchievements(null),
+      candyStore.listBoards(null),
       candyStore.listRecent(player ? 200 : 50, player),
       candyStore.readLog(100),
       candyStore.stats(),
@@ -107,11 +109,11 @@ export default async function CandyDeskPage({ searchParams }: { searchParams: Se
   for (const g of await resolveGamesIncludingStaged()) titles.set(g.slug, g.title);
   const title = (slug: string) => titles.get(slug) ?? slug;
 
-  const slugs = [...new Set(all.map((a) => a.slug))].sort((a, b) => title(a).localeCompare(title(b)));
-  const shown = game ? all.filter((a) => a.slug === game) : all;
-  const unrated = all.filter((a) => a.candy === 0);
-  const unratedShown = shown.filter((a) => a.candy === 0);
-  const unratedWithUnlocks = unrated.filter((a) => a.unlockedInWindow > 0).length;
+  const slugs = [...new Set(all.map((b) => b.gameSlug))].sort((a, b) => title(a).localeCompare(title(b)));
+  const shown = game ? all.filter((b) => b.gameSlug === game) : all;
+  const unrated = all.filter((b) => b.candy === 0);
+  const unratedShown = shown.filter((b) => b.candy === 0);
+  const unratedWithScores = unrated.filter((b) => b.scoresInWindow > 0).length;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -131,7 +133,7 @@ export default async function CandyDeskPage({ searchParams }: { searchParams: Se
       <div className="space-y-6">
         {!unavailable && (
           <>
-            <StatsPanel stats={stats} total={all.length} unrated={unrated.length} unratedWithUnlocks={unratedWithUnlocks} />
+            <StatsPanel stats={stats} total={all.length} unrated={unrated.length} unratedWithScores={unratedWithScores} />
             <RubricPanel />
             <TopEarnersPanel rows={top} player={player} />
             <RatingsPanel
@@ -141,7 +143,7 @@ export default async function CandyDeskPage({ searchParams }: { searchParams: Se
               title={title}
               unratedShown={unratedShown.length}
             />
-            <RecentPanel rows={recent} game={game} player={player} />
+            <RecentPanel rows={recent} game={game} player={player} title={title} />
             <LogPanel log={log} />
           </>
         )}
@@ -150,7 +152,7 @@ export default async function CandyDeskPage({ searchParams }: { searchParams: Se
   );
 }
 
-function StatsPanel({ stats, total, unrated, unratedWithUnlocks }: { stats: CandyStats | null; total: number; unrated: number; unratedWithUnlocks: number }) {
+function StatsPanel({ stats, total, unrated, unratedWithScores }: { stats: CandyStats | null; total: number; unrated: number; unratedWithScores: number }) {
   const cell = (label: string, value: number | string) => (
     <div className="rounded-lg border border-border bg-surface-2 px-3 py-2">
       <div className="text-[11px] font-bold uppercase tracking-wide text-muted">{label}</div>
@@ -164,13 +166,13 @@ function StatsPanel({ stats, total, unrated, unratedWithUnlocks }: { stats: Cand
         {cell("Candy credited", stats?.credited ?? 0)}
         {cell("Candy spent", stats?.spent ?? 0)}
         {cell("Candy revoked", stats?.revoked ?? 0)}
-        {cell("Achievements", total)}
+        {cell("Boards", total)}
         {cell("Paying nothing (0)", unrated)}
       </div>
-      {unratedWithUnlocks > 0 && (
+      {unratedWithScores > 0 && (
         <p className="mt-3 text-xs text-amber-800 dark:text-amber-300">
-          {unratedWithUnlocks} achievement{unratedWithUnlocks === 1 ? " that pays" : "s that pay"} nothing {unratedWithUnlocks === 1 ? "has" : "have"} already been
-          unlocked in the window. Rating {unratedWithUnlocks === 1 ? "it pays" : "them pays"} those players at their next sync.
+          {unratedWithScores} board{unratedWithScores === 1 ? "" : "s"} that pay{unratedWithScores === 1 ? "s" : ""} nothing already {unratedWithScores === 1 ? "has" : "have"} signed-in scores in
+          the window. Rating {unratedWithScores === 1 ? "it pays" : "them pays"} those players their daily bests at their next sync.
         </p>
       )}
     </Section>
@@ -179,7 +181,7 @@ function StatsPanel({ stats, total, unrated, unratedWithUnlocks }: { stats: Cand
 
 function RubricPanel() {
   return (
-    <Section title="The rubric" subtitle="Difficulty, effort, skill and farmability. Pick a band's value from the dropdown on a row, or type a number from 0 to 40">
+    <Section title="The rubric" subtitle="A board's value is what a rank-1 best score of the day pays. Pick a band's value from the dropdown on a row, or type a number from 0 to 40">
       <ul className="grid gap-2 sm:grid-cols-2">
         {CANDY.rubric.map((t) => (
           <li key={t.label} className="flex items-center justify-between rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-xs">
@@ -189,7 +191,8 @@ function RubricPanel() {
         ))}
       </ul>
       <p className="mt-3 text-xs text-muted">
-        A game launch is 0. Changing a value never re-prices credits already made. Run {CANDY.rankedRun}, all boards {CANDY.allBoards} and placing{" "}
+        Once a day per board, a player&apos;s best score ranks on that game&apos;s leaderboard and pays a share of the board&apos;s value:{" "}
+        {CANDY.dailyBest.map((t) => `${t.label} ${t.pct}%`).join(", ")} (at least 1). Changing a value never re-prices credits already made. Run {CANDY.rankedRun}, all boards {CANDY.allBoards} and placing{" "}
         {CANDY.placing.map((t) => `${t.from === t.to ? t.from : `${t.from}-${t.to}`}: ${t.amount}`).join(", ")} are set in code.
       </p>
     </Section>
@@ -203,7 +206,7 @@ function RatingsPanel({
   title,
   unratedShown,
 }: {
-  rows: AdminAchievement[];
+  rows: AdminBoard[];
   slugs: string[];
   game: string | null;
   title: (slug: string) => string;
@@ -211,7 +214,7 @@ function RatingsPanel({
 }) {
   return (
     <Section
-      title="Achievement values"
+      title="Board values"
       subtitle={`${rows.length} shown · ${unratedShown} paying nothing (0 is both "not rated yet" and "rated 0")`}
     >
       <form method="get" className="mb-4 flex flex-wrap items-center gap-2">
@@ -231,25 +234,26 @@ function RatingsPanel({
         </button>
       </form>
       {rows.length === 0 ? (
-        <p className="text-sm text-muted">No achievements{game ? " for this game" : ""} yet. Games provision them on their own dashboard page.</p>
+        <p className="text-sm text-muted">No boards{game ? " for this game" : ""} yet. A game&apos;s leaderboard appears here once the game has one.</p>
       ) : (
         <ul className="divide-y divide-border">
-          {rows.map((a) => (
-            <li key={a.id} className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm">
+          {rows.map((b) => (
+            <li key={b.id} className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-bold">{a.name}</span>
-                  {a.secret && <Chip tone="zinc">secret</Chip>}
-                  {a.candy === 0 ? <Chip tone="amber">pays 0</Chip> : <Chip tone="green">{a.candy} candy</Chip>}
+                  <span className="font-bold">{title(b.gameSlug)}</span>
+                  <span>{b.title}</span>
+                  <Chip tone="zinc">{b.sort === "asc" ? "lower wins" : "higher wins"}</Chip>
+                  {b.candy === 0 ? <Chip tone="amber">pays 0</Chip> : <Chip tone="green">{b.candy} candy</Chip>}
                 </div>
                 <div className="text-xs text-muted">
-                  {title(a.slug)} · <code>{a.slug}/{a.key}</code> · {a.unlockedInWindow} unlocked in the window
+                  <code>{b.id}</code> · {b.scoresInWindow} score{b.scoresInWindow === 1 ? "" : "s"} from {b.playersInWindow} signed-in player{b.playersInWindow === 1 ? "" : "s"} in the window
                 </div>
               </div>
               <form action={setCandyValueAction} className="flex flex-wrap items-center gap-2">
-                <input type="hidden" name="achievementId" value={a.id} />
+                <input type="hidden" name="boardId" value={b.id} />
                 <input type="hidden" name="game" value={game ?? ""} />
-                <select name="preset" defaultValue="" aria-label={`Rubric value for ${a.name}`} className={INPUT}>
+                <select name="preset" defaultValue="" aria-label={`Rubric value for ${b.title}`} className={INPUT}>
                   <option value="">Rubric…</option>
                   {CANDY.rubric.flatMap((t) => t.presets.map((p) => (
                     <option key={`${t.label}-${p}`} value={p}>
@@ -261,11 +265,11 @@ function RatingsPanel({
                   name="candy"
                   type="number"
                   min={0}
-                  max={CANDY.maxAchievementCandy}
+                  max={CANDY.maxGameCandy}
                   step={1}
                   inputMode="numeric"
-                  placeholder={`${a.candy}`}
-                  aria-label={`Candy for ${a.name}`}
+                  placeholder={`${b.candy}`}
+                  aria-label={`Candy for ${b.title}`}
                   className={`${INPUT} w-20`}
                 />
                 <button type="submit" className={BTN_PRIMARY}>
@@ -284,7 +288,7 @@ function TopEarnersPanel({ rows, player }: { rows: TopEarner[]; player: string |
   return (
     <Section
       title="Top earners"
-      subtitle="Biggest unrevoked totals first. Achievement unlocks are self-reported, so a high achievement share or many unlocks in one minute is the cheating signal"
+      subtitle="Biggest unrevoked totals first. Scores are self-submitted, so a big daily-best total with rank 1 on many boards is the cheating signal"
     >
       {rows.length === 0 ? (
         <p className="text-sm text-muted">Nobody has been credited yet.</p>
@@ -295,9 +299,9 @@ function TopEarnersPanel({ rows, player }: { rows: TopEarner[]; player: string |
               <tr>
                 <th className="py-1 pr-3">Player</th>
                 <th className="py-1 pr-3 text-right">Credited</th>
-                <th className="py-1 pr-3 text-right">From achievements</th>
-                <th className="py-1 pr-3 text-right">Achievement credits</th>
-                <th className="py-1 pr-3 text-right">Max unlocks / min</th>
+                <th className="py-1 pr-3 text-right">Daily-best total</th>
+                <th className="py-1 pr-3 text-right">Daily-best credits</th>
+                <th className="py-1 pr-3 text-right">Best rank</th>
                 <th className="py-1 pr-3 text-right">Spent</th>
                 <th className="py-1 pr-3 text-right">Balance</th>
                 <th className="py-1" />
@@ -310,9 +314,9 @@ function TopEarnersPanel({ rows, player }: { rows: TopEarner[]; player: string |
                     <span className="font-bold">{r.player.name}</span> <code className="text-xs text-muted">{r.player.publicId}</code>
                   </td>
                   <td className="py-1.5 pr-3 text-right font-bold">{r.credited}</td>
-                  <td className="py-1.5 pr-3 text-right">{r.fromAchievements}</td>
-                  <td className="py-1.5 pr-3 text-right">{r.achievementCredits}</td>
-                  <td className={`py-1.5 pr-3 text-right ${r.maxUnlocksPerMinute >= 5 ? "font-bold text-red-700 dark:text-red-300" : ""}`}>{r.maxUnlocksPerMinute}</td>
+                  <td className="py-1.5 pr-3 text-right">{r.dailyBestTotal}</td>
+                  <td className="py-1.5 pr-3 text-right">{r.dailyBestCount}</td>
+                  <td className="py-1.5 pr-3 text-right">{r.bestRank ?? "-"}</td>
                   <td className="py-1.5 pr-3 text-right">{r.spent}</td>
                   <td className="py-1.5 pr-3 text-right">{r.balance}</td>
                   <td className="py-1.5 text-right">
@@ -330,7 +334,7 @@ function TopEarnersPanel({ rows, player }: { rows: TopEarner[]; player: string |
   );
 }
 
-function RecentPanel({ rows, game, player }: { rows: AdminLedgerRow[]; game: string | null; player: string | null }) {
+function RecentPanel({ rows, game, player, title }: { rows: AdminLedgerRow[]; game: string | null; player: string | null; title: (slug: string) => string }) {
   return (
     <div id="recent">
     <Section
@@ -358,7 +362,13 @@ function RecentPanel({ rows, game, player }: { rows: AdminLedgerRow[]; game: str
                     {r.amount > 0 ? "+" : ""}
                     {r.amount}
                   </span>
-                  {r.ref && <code className="text-xs text-muted">{r.ref}</code>}
+                  {r.kind === "daily_best" ? (
+                    <span className="text-xs">
+                      {r.gameSlug ? title(r.gameSlug) : "Daily best"} · {dailyBestWhen(r.ref)}
+                    </span>
+                  ) : (
+                    r.ref && <code className="text-xs text-muted">{r.ref}</code>
+                  )}
                   <span>
                     {r.player.name} <code className="text-xs text-muted">{r.player.publicId}</code>
                   </span>

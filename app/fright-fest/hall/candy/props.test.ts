@@ -14,8 +14,8 @@ describe("buildCandy", () => {
     expect(P.labels).toEqual({ opens: "28 Oct", earnEnds: "1 Nov", spendEnds: "30 Nov", spendUntil: C.spendUntilLabel, resultsBy: "Wed 4 Nov" });
   });
   it("shows the rubric as ranges and the placings", () => {
-    expect(P.rubric.map((r) => `${r.label} ${r.value}`)).toContain("Normal achievement 8–12");
-    expect(P.rubric[0]).toEqual({ label: "Launch a game", value: "0" });
+    expect(P.rubric.map((r) => `${r.label} ${r.value}`)).toContain("Normal game 8–12");
+    expect(P.rubric[0]).toEqual({ label: "Doesn't pay", value: "0" });
     expect(P.placing).toEqual([
       { label: "1st", amount: 40 },
       { label: "2nd–3rd", amount: 30 },

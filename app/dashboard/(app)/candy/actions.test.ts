@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   requireRole: vi.fn(),
-  setAchievementCandy: vi.fn(),
+  setBoardCandy: vi.fn(),
   revokeCredit: vi.fn(),
 }));
 
@@ -22,7 +22,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/app/lib/auth", () => ({ requireRole: h.requireRole }));
 vi.mock("@/app/lib/candy", async () => {
   const { CANDY_FRIGHT_FEST_2026 } = await import("@/app/lib/candy/fright-fest-2026");
-  return { CANDY: CANDY_FRIGHT_FEST_2026, candyStore: { setAchievementCandy: h.setAchievementCandy, revokeCredit: h.revokeCredit } };
+  return { CANDY: CANDY_FRIGHT_FEST_2026, candyStore: { setBoardCandy: h.setBoardCandy, revokeCredit: h.revokeCredit } };
 });
 
 import { revokeCreditAction, setCandyValueAction } from "./actions";
@@ -32,13 +32,13 @@ const form = (fields: Record<string, string>) => {
   for (const [k, v] of Object.entries(fields)) f.set(k, v);
   return f;
 };
-const set = (over: Record<string, string> = {}) => form({ achievementId: "7", candy: "12", game: "last-bell", ...over });
+const set = (over: Record<string, string> = {}) => form({ boardId: "duskfall-score", candy: "12", game: "last-bell", ...over });
 const revoke = (over: Record<string, string> = {}) => form({ ledgerId: "9", reason: "Farmed with a script", game: "last-bell", ...over });
 
 beforeEach(() => {
   vi.clearAllMocks();
   h.requireRole.mockResolvedValue({ email: "owner@hallpass", role: "super_admin", playerId: "g-owner" });
-  h.setAchievementCandy.mockResolvedValue("changed");
+  h.setBoardCandy.mockResolvedValue("changed");
   h.revokeCredit.mockResolvedValue(true);
 });
 
@@ -48,7 +48,7 @@ describe("the role gate", () => {
     await expect(setCandyValueAction(set())).rejects.toThrow(/NEXT_REDIRECT \/dashboard/);
     await expect(revokeCreditAction(revoke())).rejects.toThrow(/NEXT_REDIRECT \/dashboard/);
     expect(h.requireRole).toHaveBeenCalledWith("super_admin");
-    expect(h.setAchievementCandy).not.toHaveBeenCalled();
+    expect(h.setBoardCandy).not.toHaveBeenCalled();
     expect(h.revokeCredit).not.toHaveBeenCalled();
   });
 
@@ -62,43 +62,49 @@ describe("the role gate", () => {
 describe("setting a value", () => {
   it("saves a typed number, taking the actor from the session and not the form", async () => {
     await expect(setCandyValueAction(set({ actorEmail: "forged@evil", email: "forged@evil" }))).rejects.toThrow(/Set to 12 candy/);
-    expect(h.setAchievementCandy).toHaveBeenCalledWith({ achievementId: 7, candy: 12, actorEmail: "owner@hallpass" });
+    expect(h.setBoardCandy).toHaveBeenCalledWith({ boardId: "duskfall-score", candy: 12, actorEmail: "owner@hallpass" });
   });
 
   it("takes a rubric preset when no number is typed, and a typed number wins over the preset", async () => {
     await expect(setCandyValueAction(set({ candy: "", preset: "25" }))).rejects.toThrow(/Set to 25/);
-    expect(h.setAchievementCandy).toHaveBeenLastCalledWith(expect.objectContaining({ candy: 25 }));
+    expect(h.setBoardCandy).toHaveBeenLastCalledWith(expect.objectContaining({ candy: 25 }));
     await expect(setCandyValueAction(set({ candy: "3", preset: "25" }))).rejects.toThrow(/Set to 3/);
-    expect(h.setAchievementCandy).toHaveBeenLastCalledWith(expect.objectContaining({ candy: 3 }));
+    expect(h.setBoardCandy).toHaveBeenLastCalledWith(expect.objectContaining({ candy: 3 }));
   });
 
   it("accepts the bounds 0 and 40 and refuses anything else before the database", async () => {
     await expect(setCandyValueAction(set({ candy: "0" }))).rejects.toThrow(/Set to 0/);
     await expect(setCandyValueAction(set({ candy: "40" }))).rejects.toThrow(/Set to 40/);
-    h.setAchievementCandy.mockClear();
+    h.setBoardCandy.mockClear();
     for (const bad of ["41", "-1", "2.5", "abc", "1e2", "999", "0x10"]) {
       await expect(setCandyValueAction(set({ candy: bad }))).rejects.toThrow(/whole number from 0 to 40/);
     }
     await expect(setCandyValueAction(set({ candy: "", preset: "" }))).rejects.toThrow(/Pick a rubric value/);
-    expect(h.setAchievementCandy).not.toHaveBeenCalled();
+    expect(h.setBoardCandy).not.toHaveBeenCalled();
   });
 
-  it("refuses a malformed achievement id", async () => {
-    for (const bad of ["", "0", "-3", "1.5", "abc", "99999999999999999"]) {
-      await expect(setCandyValueAction(set({ achievementId: bad }))).rejects.toThrow(/achievement id/);
+  it("refuses a malformed board id", async () => {
+    for (const bad of ["", "Duskfall", "has space", "-lead", "x;DROP TABLE boards", "a".repeat(121)]) {
+      await expect(setCandyValueAction(set({ boardId: bad }))).rejects.toThrow(/board id/);
     }
-    expect(h.setAchievementCandy).not.toHaveBeenCalled();
+    expect(h.setBoardCandy).not.toHaveBeenCalled();
   });
 
   it("reports unchanged, missing and database failures, and keeps the game filter on the way back", async () => {
-    h.setAchievementCandy.mockResolvedValueOnce("unchanged");
+    h.setBoardCandy.mockResolvedValueOnce("unchanged");
     await expect(setCandyValueAction(set())).rejects.toThrow(/NEXT_REDIRECT \/dashboard\/candy\?game=last-bell&ok=Already 12/);
-    h.setAchievementCandy.mockResolvedValueOnce("not-found");
-    await expect(setCandyValueAction(set())).rejects.toThrow(/No such achievement/);
-    h.setAchievementCandy.mockRejectedValueOnce(new Error("neon down"));
+    h.setBoardCandy.mockResolvedValueOnce("not-found");
+    await expect(setCandyValueAction(set())).rejects.toThrow(/No such board/);
+    h.setBoardCandy.mockRejectedValueOnce(new Error("neon down"));
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     await expect(setCandyValueAction(set())).rejects.toThrow(/050_candy/);
     err.mockRestore();
+  });
+
+  it("logs through the store with the actor from the session, so every change is audited", async () => {
+    await expect(setCandyValueAction(set({ candy: "5" }))).rejects.toThrow(/Set to 5/);
+    expect(h.setBoardCandy).toHaveBeenCalledTimes(1);
+    expect(h.setBoardCandy.mock.calls[0][0]).toEqual({ boardId: "duskfall-score", candy: 5, actorEmail: "owner@hallpass" });
   });
 
   it("drops a game filter that is not a slug", async () => {
