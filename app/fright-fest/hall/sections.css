@@ -537,6 +537,170 @@ html[data-hp-skin="haunted"] .ff-page {
   color: var(--ar-green);
 }
 
+/* ---------------------------------------------------------------- the prize counter */
+
+.ar-walkup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 20px 28px;
+}
+.ar-booth {
+  flex: none;
+  width: 188px;
+  height: 300px;
+  image-rendering: pixelated;
+  background: url(/events/fright-fest/hall/el-prize-calm.png) center / 100% 100% no-repeat;
+}
+html[data-hp-skin="haunted"] .ar-booth {
+  background-image: url(/events/fright-fest/hall/el-prize.png);
+}
+.ar-walkup-text {
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+  max-width: 46ch;
+}
+.ar-walkup-text p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ar-cream);
+}
+.ar-sub {
+  margin: 28px 0 8px;
+  padding-top: 18px;
+  border-top: 2px dashed var(--ar-line-2);
+  font: 400 18px/1.2 var(--ar-pixel);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ar-moon);
+}
+.ar-tickets {
+  display: grid;
+  gap: 14px;
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+}
+@media (min-width: 720px) {
+  .ar-tickets {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.ar-ticket {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 12px;
+  border: 2px solid var(--ar-line-2);
+  background: #0b0612;
+}
+.ar-print {
+  flex: none;
+  width: 96px;
+  height: 140px;
+  image-rendering: pixelated;
+}
+.ar-ticket-name {
+  display: block;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1.25;
+  color: var(--ar-cream);
+}
+.ar-ticket-who {
+  display: block;
+  margin: 4px 0 10px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ar-soft);
+}
+.ar-slots {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ar-cream);
+}
+.ar-chip {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 3px 6px;
+  border: 2px solid var(--ar-moon);
+  font: 400 12px/1.1 var(--ar-pixel);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ar-moon);
+}
+.ar-chip-rand {
+  border-style: dashed;
+  border-color: var(--ar-lav);
+  color: var(--ar-soft);
+}
+
+/* ---------------------------------------------------------------- the paper notice */
+
+.ar-paper .ar-head {
+  margin-bottom: 14px;
+}
+.ar-paper-grid {
+  display: grid;
+  gap: 22px 32px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ar-paper-ink);
+}
+@media (min-width: 800px) {
+  .ar-paper-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  }
+}
+.ar-paper-grid p {
+  margin: 0 0 12px;
+}
+.ar-ptbl {
+  width: 100%;
+  margin: 0 0 14px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.ar-ptbl th {
+  padding: 6px 4px;
+  border-bottom: 2px solid var(--ar-paper-ink);
+  text-align: left;
+  font: 400 12px/1.2 var(--ar-pixel);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ar-paper-ink);
+}
+.ar-ptbl td {
+  padding: 8px 4px;
+  border-bottom: 1px solid #cfc0a6;
+}
+.ar-ptbl .ar-num {
+  text-align: right;
+  font: 400 14px/1.2 var(--ar-pixel);
+}
+.ar-rules {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0 0 0 20px;
+  font-size: 15px;
+  list-style: square;
+}
+.ar-rules b {
+  color: var(--ar-paper-head);
+}
+.ar-paper a {
+  color: var(--ar-paper-head);
+}
+
 /* ---------------------------------------------------------------- LEGACY (removed as each object is restyled) */
 html[data-hp-skin="haunted"] .hl-sec {
   border: 16px solid transparent;
