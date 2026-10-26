@@ -28,7 +28,7 @@ export function LabClient() {
   const pack = q.get("pack") ?? "";
 
   // The room runs the full width of the content area; everything else sits in the reading column.
-  if (view === "room") return <PrizeCounter openHref={openHref} />;
+  if (view === "room") return <PrizeCounter openHref={(id) => `/packs/lab?view=room&pack=${id}`} />;
   return <div className="mx-auto w-full max-w-4xl space-y-6 px-3 pt-4 sm:px-8">{body()}</div>;
 
   function body() {

@@ -53,7 +53,19 @@ export interface OpeningLinks {
   open(publicId: string): string;
   room: string;
 }
-const DEFAULT_LINKS: OpeningLinks = { open: (p) => `/packs/open?pack=${p}`, room: "/packs" };
+const DEFAULT_LINKS: OpeningLinks = { open: (p) => `/packs?pack=${p}`, room: "/packs" };
+
+/** The opening playing over the Pack Room (room/OpeningLayer) rather than on a page of its own. */
+export interface InRoom {
+  /** Back to the counter. */
+  close(): void;
+  /** Open another sealed pack, in the same place. */
+  next(publicId: string): void;
+  /** The sealed packs as the room last saw them: one of these starts sealed at once, with no round trip first. */
+  sealed: SealedPack[];
+  /** The pack has drawn its first frame (WebGL or the fallback), so the room's stand-in can go. */
+  onPackReady?(): void;
+}
 
 /** The deck inside the pouch: its top edge (share of the pack's height) and each card's offset in the stack. */
 const DECK_TOP = 0.17;
@@ -110,8 +122,11 @@ function useMedia(query: string): boolean {
   );
 }
 
-export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?: OpeningLinks }) {
-  const [state, dispatch] = useReducer(openingReducer, undefined, initialOpening);
+export function OpeningFlow({ id, links = DEFAULT_LINKS, room }: { id: string; links?: OpeningLinks; room?: InRoom }) {
+  // In the room the pack is already known to be sealed; the server still decides everything when it is opened.
+  const [state, dispatch] = useReducer(openingReducer, room?.sealed.find((p) => p.publicId === id), (known) =>
+    known && getPack(known.packId) ? openingReducer(initialOpening(), { type: "loaded-sealed", pack: known }) : initialOpening(),
+  );
   const stateRef = useRef(state);
   useEffect(() => {
     stateRef.current = state;
@@ -120,7 +135,7 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
   const sounds = useMemo(() => packSounds(), []);
 
   const [loadKey, setLoadKey] = useState(0);
-  const [others, setOthers] = useState<SealedPack[]>([]);
+  const [others, setOthers] = useState<SealedPack[]>(() => (room?.sealed ?? []).filter((p) => p.publicId !== id && getPack(p.packId)));
   const [progress, setProgress] = useState<Progress[]>([]);
   const [line, setLine] = useState("");
   const [sound, setSound] = useState(false);
@@ -224,6 +239,12 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
     const col = await loadCollection();
     if (alive.current && col.body?.progress) setProgress(col.body.progress);
   }, []);
+
+  // Started sealed from the room's list: the collection's progress still comes from the server.
+  const startedSealed = useRef(state.stage === "sealed");
+  useEffect(() => {
+    if (startedSealed.current) void refreshProgress();
+  }, [refreshProgress]);
 
   // ── The one server call: when the tear completes (or Open it / Enter finishes it). ──
   const commit = useCallback(async () => {
@@ -473,6 +494,17 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
     return () => window.removeEventListener("keydown", onKey);
   }, [skippable, skip]);
 
+  // In the room, Escape puts the pack back (or leaves the results) when nothing is under way.
+  const closable = !!room && ["sealed", "summary", "signed-out", "missing", "revoked", "error"].includes(state.stage);
+  useEffect(() => {
+    if (!closable || !room) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !e.defaultPrevented) room.close();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [closable, room]);
+
   const toggleSound = () => {
     const on = !sound;
     setSound(on);
@@ -488,20 +520,27 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
 
   if (state.stage === "loading") {
     return (
-      <Shell tint={tint} title="Getting your pack…" busy>
+      <Shell tint={tint} inRoom={!!room} title="Getting your pack…" busy>
         <div className="ho-loading" aria-hidden="true" />
       </Shell>
     );
   }
   if (state.stage === "signed-out") {
     return (
-      <Shell tint={tint} title="Sign in to open your packs">
+      <Shell tint={tint} inRoom={!!room} title="Sign in to open your packs">
         <p className="ho-copy">Packs belong to your HallPass account, so you need to be signed in to open them.</p>
-        <form action={startSignIn}>
-          <button type="submit" className="ho-btn ho-btn-primary">
-            Sign in
-          </button>
-        </form>
+        <div className="ho-actions">
+          <form action={startSignIn}>
+            <button type="submit" className="ho-btn ho-btn-primary">
+              Sign in
+            </button>
+          </form>
+          {room && (
+            <button type="button" className="ho-btn" onClick={room.close}>
+              Back to the Pack Room
+            </button>
+          )}
+        </div>
       </Shell>
     );
   }
@@ -513,7 +552,7 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
           ? "HallPass staff withdrew this pack, so it can't be opened."
           : "Your packs couldn't be loaded just now. Nothing is lost.";
     return (
-      <Shell tint={tint} title={state.stage === "error" ? "Something went wrong" : "Can't open this pack"}>
+      <Shell tint={tint} inRoom={!!room} title={state.stage === "error" ? "Something went wrong" : "Can't open this pack"}>
         <p className="ho-copy">{copy}</p>
         <div className="ho-actions">
           {state.stage === "error" && (
@@ -528,9 +567,15 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
               Try again
             </button>
           )}
-          <Link href={links.room} className="ho-btn">
-            Pack Room
-          </Link>
+          {room ? (
+            <button type="button" className="ho-btn" onClick={room.close}>
+              Back to the Pack Room
+            </button>
+          ) : (
+            <Link href={links.room} className="ho-btn">
+              Pack Room
+            </Link>
+          )}
         </div>
       </Shell>
     );
@@ -558,6 +603,7 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
       className="hc-root ho-stage"
       data-stage={state.stage}
       data-layout={layout}
+      data-room={room ? "" : undefined}
       style={{ "--ho-tint": tint, "--ho-pack-w": `${packW}px` } as CSSProperties}
       aria-labelledby="ho-title"
       onPointerDownCapture={() => unlockSound()}
@@ -570,6 +616,11 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
           {collection && <p className="ho-sub">{collection.name}</p>}
         </div>
         <div className="ho-tools">
+          {room && closable && (
+            <button type="button" className="ho-chip" onClick={room.close} aria-keyshortcuts="Escape">
+              {summary ? "Close" : "Put it back"}
+            </button>
+          )}
           {skippable && (
             <button type="button" className="ho-chip" onClick={skip} aria-keyshortcuts="Escape">
               Skip
@@ -607,6 +658,7 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
               }}
               onCommit={() => void commit()}
               onHandle={(k) => sounds.crinkle(k)}
+              onRenderer={() => room?.onPackReady?.()}
             >
               {showDeck && (
                 <div ref={deckMove} className="ho-deck-move" style={{ top: `${DECK_TOP * 100}%` }}>
@@ -773,6 +825,21 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
                 </span>
               </div>
             )}
+            {room ? (
+              <div className="ho-actions">
+                <Link href="/collection" className="ho-btn ho-btn-primary">
+                  See them in your binder
+                </Link>
+                <button type="button" className="ho-btn" onClick={room.close}>
+                  Back to the Pack Room
+                </button>
+                {others[0] && (
+                  <button type="button" className="ho-btn" onClick={() => room.next(others[0].publicId)}>
+                    Next pack ({others.length} left)
+                  </button>
+                )}
+              </div>
+            ) : (
             <div className="ho-actions">
               {others[0] && (
                 <Link href={links.open(others[0].publicId)} className="ho-btn ho-btn-primary">
@@ -789,6 +856,7 @@ export function OpeningFlow({ id, links = DEFAULT_LINKS }: { id: string; links?:
                 Back to HallPass
               </Link>
             </div>
+            )}
           </div>
         )}
       </div>
@@ -813,10 +881,16 @@ function Tag({ isNew }: { isNew: boolean }) {
   return <span className={`ho-tag${isNew ? " is-new" : ""}`}>{isNew ? "New" : "Duplicate"}</span>;
 }
 
-function Shell({ tint, title, busy = false, children }: { tint: string; title: string; busy?: boolean; children: React.ReactNode }) {
+function Shell({ tint, title, busy = false, inRoom, children }: { tint: string; title: string; busy?: boolean; inRoom: boolean; children: React.ReactNode }) {
   return (
-    <section className="hc-root ho-stage ho-shell" style={{ "--ho-tint": tint } as CSSProperties} aria-busy={busy || undefined} aria-labelledby="ho-title">
-      <h1 id="ho-title" className="ho-title">
+    <section
+      className="hc-root ho-stage ho-shell"
+      data-room={inRoom ? "" : undefined}
+      style={{ "--ho-tint": tint } as CSSProperties}
+      aria-busy={busy || undefined}
+      aria-labelledby="ho-title"
+    >
+      <h1 id="ho-title" className="ho-title" tabIndex={-1}>
         {title}
       </h1>
       {children}

@@ -20,22 +20,28 @@
 import "../collectibles.css";
 import "./room.css";
 import Link from "next/link";
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { MyCollection } from "@/app/lib/collectibles";
 import { startSignIn } from "@/app/lib/auth-actions";
 import { CATALOGUE, collectionSymbolSrc, getCollectible, getCollection, getPack, packFoilSrc, packPrintSrc, packVersion } from "@/app/lib/collectibles/catalogue";
 import type { Rarity } from "@/app/lib/collectibles/catalogue/types";
 import { slotLines } from "@/app/lib/collectibles/opening";
 import { RARITY_LABEL } from "@/app/lib/collectibles/present";
+import type { SealedPack } from "../opening/machine";
 import { useMyCollection } from "../useMyCollection";
 import { arrange, boxStyle, groupSealed, packBox, pct, SCENES, type Box, type PackGroup } from "./geometry";
+import { OpeningLayer, preloadOpening, type Flight } from "./OpeningLayer";
 
 export interface PrizeCounterProps {
-  /** Where Open takes a pack. */
+  /** The link behind Open, for a new tab or before the page is interactive. A plain click opens the pack here, over the room. */
   openHref?: (publicId: string) => string;
 }
 
-const DEFAULT_OPEN = (publicId: string) => `/packs/open?pack=${publicId}`;
+const DEFAULT_OPEN = (publicId: string) => `/packs?pack=${publicId}`;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** A click the page may take over: not a new tab, not a new window. */
+const plainClick = (e: React.MouseEvent) => !e.defaultPrevented && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
 
 /** CSS variables that place an element in each composition (room.css reads `--d*` on laptops, `--p*` on phones). */
 function at(desk: Box | null, phone: Box | null): CSSProperties {
@@ -72,7 +78,7 @@ function packLine(group: PackGroup): string {
 }
 
 export function PrizeCounter({ openHref = DEFAULT_OPEN }: PrizeCounterProps) {
-  const [state] = useMyCollection();
+  const [state, , reload] = useMyCollection();
   const data = state.status === "ready" ? state.data : null;
   const [featuredId, setFeaturedId] = useState<string | null>(null);
   const groups = useMemo(() => groupSealed(data?.sealed ?? []), [data]);
@@ -122,6 +128,41 @@ export function PrizeCounter({ openHref = DEFAULT_OPEN }: PrizeCounterProps) {
   const sheet = useRef<HTMLDialogElement>(null);
   const openSheet = () => sheet.current?.showModal();
 
+  // ── Opening, over the room. The URL says which pack (`?pack=`), so Back closes it and a refresh resumes it. ──
+  const [flight, setFlight] = useState<Flight | null>(null);
+  /** This page added the history entry, so closing is a step back rather than a replace. */
+  const pushed = useRef(false);
+  const open = (e: React.MouseEvent, group: PackGroup) => {
+    if (!plainClick(e)) return;
+    e.preventDefault();
+    const publicId = group.items[0].publicId;
+    const body = roomRef.current?.querySelector(`.pr-pack[data-role="featured"] .pr-pack-body`);
+    const from = body?.getBoundingClientRect();
+    setFlight(from && from.width ? { publicId, packId: group.packId, from } : null);
+    void preloadOpening();
+    const u = new URL(window.location.href);
+    u.searchParams.set("pack", publicId);
+    window.history.pushState(null, "", `${u.pathname}${u.search}`);
+    pushed.current = true;
+  };
+  const closed = useCallback(() => {
+    pushed.current = false;
+    setFlight(null);
+    void reload();
+  }, [reload]);
+
+  // Fetch the opening's code while the player looks around, so Open never waits for it.
+  useEffect(() => {
+    if (!data?.sealed.length) return;
+    const w = window as Window & { requestIdleCallback?: (cb: () => void) => number; cancelIdleCallback?: (h: number) => void };
+    if (w.requestIdleCallback) {
+      const h = w.requestIdleCallback(() => void preloadOpening());
+      return () => w.cancelIdleCallback?.(h);
+    }
+    const t = window.setTimeout(() => void preloadOpening(), 1500);
+    return () => window.clearTimeout(t);
+  }, [data?.sealed.length]);
+
   return (
     <section className="pr hc-root" aria-labelledby="pr-title" data-status={state.status}>
       <div className="pr-wall" aria-hidden="true" />
@@ -160,6 +201,8 @@ export function PrizeCounter({ openHref = DEFAULT_OPEN }: PrizeCounterProps) {
             style={at(packBox(SCENES.desk.featured), packBox(SCENES.phone.featured))}
             buttonRef={featuredRef}
             href={openHref(featured.items[0].publicId)}
+            onOpen={(e) => open(e, featured)}
+            away={flight?.packId === featured.packId}
           />
         )}
         {desk.counter.map((g, i) => (
@@ -172,7 +215,7 @@ export function PrizeCounter({ openHref = DEFAULT_OPEN }: PrizeCounterProps) {
           />
         ))}
 
-        <Panel state={state.status} featured={featured} openHref={openHref} sealedCount={sealedCount} onAll={openSheet} />
+        <Panel state={state.status} featured={featured} openHref={openHref} onOpen={open} sealedCount={sealedCount} onAll={openSheet} />
         {featured && (
           <button type="button" className="pr-chip" data-in="desk" onClick={openSheet} aria-haspopup="dialog">
             <b>{sealedCount}</b> sealed · All packs
@@ -187,8 +230,64 @@ export function PrizeCounter({ openHref = DEFAULT_OPEN }: PrizeCounterProps) {
         )}
       </div>
       <AllPacks ref={sheet} groups={groups} featuredId={featured?.packId ?? null} count={sealedCount} onChoose={bringForward} />
+      <Suspense fallback={null}>
+        <RoomOpening sealed={data?.sealed ?? NONE} flight={flight} pushedRef={pushed} onClosed={closed} />
+      </Suspense>
     </section>
   );
+}
+
+const NONE: SealedPack[] = [];
+
+/**
+ * Reads `?pack=` and plays that pack's opening over the room. On its own, in a
+ * Suspense boundary, so reading the query string never stops the server from
+ * drawing the room itself.
+ */
+function RoomOpening({
+  sealed,
+  flight,
+  pushedRef,
+  onClosed,
+}: {
+  sealed: SealedPack[];
+  flight: Flight | null;
+  pushedRef: React.RefObject<boolean>;
+  onClosed(): void;
+}) {
+  const router = useRouter();
+  const raw = useSearchParams().get("pack") ?? "";
+  const id = UUID_RE.test(raw) ? raw : null;
+
+  // However it closed (Close, Escape, the browser's Back), the room catches up.
+  const was = useRef<string | null>(null);
+  useEffect(() => {
+    if (was.current && !id) onClosed();
+    was.current = id;
+  }, [id, onClosed]);
+
+  const close = useCallback(() => {
+    if (pushedRef.current) {
+      pushedRef.current = false;
+      window.history.back();
+    } else if (window.location.pathname === "/packs/open") {
+      // Arrived on the old opening link: the room's own address from here on.
+      router.replace("/packs", { scroll: false });
+    } else {
+      const u = new URL(window.location.href);
+      u.searchParams.delete("pack");
+      window.history.replaceState(null, "", `${u.pathname}${u.search}`);
+    }
+  }, [pushedRef, router]);
+
+  const next = useCallback((publicId: string) => {
+    const u = new URL(window.location.href);
+    u.searchParams.set("pack", publicId);
+    window.history.replaceState(null, "", `${u.pathname}${u.search}`);
+  }, []);
+
+  if (!id) return null;
+  return <OpeningLayer id={id} sealed={sealed} flight={flight?.publicId === id ? flight : null} onClose={close} onNext={next} />;
 }
 
 // ── All packs: every kind of sealed pack, including the ones that don't fit on the counter ──
@@ -268,6 +367,8 @@ function Pack({
   featured = false,
   style,
   href,
+  onOpen,
+  away = false,
   onChoose,
   buttonRef,
   ...rest
@@ -276,6 +377,8 @@ function Pack({
   featured?: boolean;
   style: CSSProperties;
   href?: string;
+  onOpen?(e: React.MouseEvent): void;
+  away?: boolean;
   onChoose?(): void;
   buttonRef?: React.RefObject<HTMLButtonElement | null>;
   "data-in"?: string;
@@ -302,9 +405,25 @@ function Pack({
       )}
     </>
   );
-  const common = { className: "pr-at pr-pack", "data-role": featured ? "featured" : "slot", "data-pack": group.packId, "data-in": rest["data-in"], style, ...tilt };
+  const common = {
+    className: "pr-at pr-pack",
+    "data-role": featured ? "featured" : "slot",
+    "data-pack": group.packId,
+    "data-in": rest["data-in"],
+    "data-away": away || undefined,
+    style,
+    ...tilt,
+  };
   return featured && href ? (
-    <Link {...common} ref={buttonRef as unknown as React.Ref<HTMLAnchorElement>} href={href} aria-label={`Open ${name}`}>
+    <Link
+      {...common}
+      ref={buttonRef as unknown as React.Ref<HTMLAnchorElement>}
+      href={href}
+      aria-label={`Open ${name}`}
+      onClick={onOpen}
+      onPointerEnter={() => void preloadOpening()}
+      onFocus={() => void preloadOpening()}
+    >
       {body}
     </Link>
   ) : (
@@ -352,12 +471,14 @@ function Panel({
   state,
   featured,
   openHref,
+  onOpen,
   sealedCount,
   onAll,
 }: {
   state: string;
   featured: PackGroup | null;
   openHref(id: string): string;
+  onOpen(e: React.MouseEvent, group: PackGroup): void;
   sealedCount: number;
   onAll(): void;
 }) {
@@ -417,6 +538,11 @@ function Panel({
   const pack = getPack(featured.packId);
   if (!pack) return null;
   const href = openHref(featured.items[0].publicId);
+  const openProps = {
+    onClick: (e: React.MouseEvent) => onOpen(e, featured),
+    onPointerEnter: () => void preloadOpening(),
+    onFocus: () => void preloadOpening(),
+  };
   return (
     <>
       <div className="pr-anchor pr-plate pr-info" data-in="desk" style={deskAt}>
@@ -425,14 +551,14 @@ function Panel({
           <p>{packLine(featured)}</p>
         </div>
         <div className="pr-actions">
-          <Link href={href} className="pr-btn pr-primary" aria-label={`Open ${pack.name}`}>
+          <Link href={href} className="pr-btn pr-primary" aria-label={`Open ${pack.name}`} {...openProps}>
             Open
           </Link>
           <Odds group={featured} label="What's inside?" />
         </div>
       </div>
       <div className="pr-anchor pr-row" data-in="phone" style={phoneAt}>
-        <Link href={href} className="pr-btn pr-primary" aria-label={`Open ${pack.name}`}>
+        <Link href={href} className="pr-btn pr-primary" aria-label={`Open ${pack.name}`} {...openProps}>
           Open
         </Link>
         <Odds group={featured} label="Odds" />
