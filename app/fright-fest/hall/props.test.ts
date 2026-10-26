@@ -1,0 +1,84 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { FRIGHT_FEST_GAMES, type FrightFestGame } from "@/app/components/events/fright-fest/registry";
+import { FRIGHT_FEST_2026 } from "@/app/lib/championship/fright-fest-2026";
+import { games as GAMES } from "@/app/lib/games";
+import { buildCabinets, buildRewards } from "./props";
+
+const C = FRIGHT_FEST_2026;
+const ART = join(__dirname, "../../../public/events/fright-fest/hall");
+/** Every word that names a game that is not announced today (its title, mode, slug or cover). */
+const SECRETS = /shadow|cursed|survive|blood moon|dawn|halloween dash|\bstd\b|shadowcore/i;
+const registry = (announced: (slug: string) => boolean): FrightFestGame[] => FRIGHT_FEST_GAMES.map((g) => ({ ...g, announced: announced(g.slug) }));
+
+describe("the cabinets", () => {
+  it("names only the announced game and leaves the others as bare mystery cabinets", () => {
+    const cabinets = buildCabinets(C, FRIGHT_FEST_GAMES, GAMES);
+    expect(cabinets).toHaveLength(3);
+    expect(cabinets.filter((c) => c.open).map((c) => c.open && c.slug)).toEqual(["last-bell"]);
+    expect(cabinets.filter((c) => !c.open)).toEqual([{ open: false }, { open: false }]);
+    expect(JSON.stringify(cabinets)).not.toMatch(SECRETS);
+  });
+
+  it("drops every game when none is announced, and still builds three cabinets", () => {
+    const cabinets = buildCabinets(C, registry(() => false), GAMES);
+    expect(cabinets).toEqual([{ open: false }, { open: false }, { open: false }]);
+  });
+
+  it("names a game only because the registry says it is announced, in the registry's order", () => {
+    const cabinets = buildCabinets(C, registry((slug) => slug !== "last-bell"), GAMES);
+    expect(cabinets[0]).toEqual({ open: false });
+    expect(cabinets.filter((c) => c.open)).toHaveLength(2);
+  });
+
+  it("carries the play link, the ranking rule and the platform of Last Bell, and no validator", () => {
+    const [lastBell] = buildCabinets(C, FRIGHT_FEST_GAMES, GAMES);
+    expect(lastBell).toMatchObject({ open: true, slug: "last-bell", title: "Last Bell", mode: "The Halloween Shift", playHref: "/game/last-bell", art: "lastbell", platform: "desktop" });
+    expect(JSON.stringify(lastBell)).not.toMatch(/validate|function/);
+  });
+
+  it("has cabinet art on disk for every announced game, in both seasons' sets", () => {
+    for (const c of buildCabinets(C, FRIGHT_FEST_GAMES, GAMES)) {
+      if (!c.open) continue;
+      for (const f of [`cab-${c.art}-off.png`, `cab-${c.art}-on.png`, `scr-${c.art}.png`]) expect(existsSync(join(ART, f)), f).toBe(true);
+    }
+  });
+
+  it("ships no cabinet art for a game that is not announced", () => {
+    for (const g of FRIGHT_FEST_GAMES.filter((x) => !x.announced)) {
+      for (const art of ["shadowcore", "std"]) {
+        expect(existsSync(join(ART, `cab-${art}-on.png`)), `${g.slug} ${art}`).toBe(false);
+      }
+    }
+  });
+});
+
+describe("the rewards", () => {
+  it("lists the participation pack, an announced game's champion pack and the overall champion pack", () => {
+    const rewards = buildRewards(C, FRIGHT_FEST_GAMES);
+    expect(rewards.map((r) => r.packId)).toEqual(["ff26-participation", "ff26-winner-last-bell", "ff26-overall-winner"]);
+    for (const r of rewards) expect(r.print).toBe(`/collectibles/packs/print/${r.packId}.png`);
+  });
+
+  it("keeps guaranteed cards and random slots apart, and gives the random slots no odds or card", () => {
+    const [participation, , overall] = buildRewards(C, FRIGHT_FEST_GAMES);
+    expect(participation.slots.map((s) => s.kind)).toEqual(["fixed", "random", "random"]);
+    expect(overall.slots.map((s) => s.kind)).toEqual(["fixed", "fixed", "random"]);
+    for (const s of [...participation.slots, ...overall.slots]) {
+      if (s.kind === "random") expect(s).toEqual({ kind: "random" });
+      else expect(s.card && s.rarity).toBeTruthy();
+    }
+  });
+
+  it("never names an unannounced game's champion pack, its card or its print", () => {
+    expect(JSON.stringify(buildRewards(C, FRIGHT_FEST_GAMES))).not.toMatch(SECRETS);
+    const none = buildRewards(C, registry(() => false));
+    expect(none.map((r) => r.packId)).toEqual(["ff26-participation", "ff26-overall-winner"]);
+    expect(JSON.stringify(none)).not.toMatch(SECRETS);
+  });
+
+  it("has no runner-up reward", () => {
+    expect(JSON.stringify(buildRewards(C, registry(() => true)))).not.toMatch(/runner|second place|2nd/i);
+  });
+});
