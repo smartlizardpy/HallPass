@@ -20,9 +20,9 @@ describe("awards", () => {
     ]);
     const awards = awardsFrom(C, s);
     expect(awards.map((a) => [a.kind, a.publicId, a.packId, a.gameSlug ?? null])).toEqual([
-      ["overall-champion", "pub-both", "ff26-overall-champion", null],
-      ["game-champion", "pub-solo", "ff26-champion-last-bell", "last-bell"],
-      ["game-champion", "pub-both", "ff26-champion-shadow-core", SC],
+      ["overall-champion", "pub-both", "ff26-overall-winner", null],
+      ["game-champion", "pub-solo", "ff26-winner-last-bell", "last-bell"],
+      ["game-champion", "pub-both", "ff26-winner-shadow-core", SC],
       ["participation", "pub-both", "ff26-participation", null],
     ]);
     expect(awards.map((a) => a.grantKey)).toEqual([

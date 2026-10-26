@@ -39,11 +39,11 @@ export const FRIGHT_FEST_2026: ChampionshipConfig = {
   rewards: {
     participation: "ff26-participation",
     gameChampion: {
-      "last-bell": "ff26-champion-last-bell",
-      "shadow-core-halloween-dash": "ff26-champion-shadow-core",
-      "survive-till-dawn-pixel-edition": "ff26-champion-survive-till-dawn",
+      "last-bell": "ff26-winner-last-bell",
+      "shadow-core-halloween-dash": "ff26-winner-shadow-core",
+      "survive-till-dawn-pixel-edition": "ff26-winner-survive-till-dawn",
     },
-    overallChampion: "ff26-overall-champion",
+    overallChampion: "ff26-overall-winner",
   },
   games: [
     {

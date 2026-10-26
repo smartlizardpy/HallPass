@@ -483,7 +483,7 @@ boards.
 | `meta.event` | `fright-fest-2026` | `fright-fest-2026` | `fright-fest-2026` |
 | `meta.mode` | not checked | `cursed-dash` | `blood-moon` |
 | Co-op | not ranked | n/a | rejected |
-| Reward ids | `ff26-champion-last-bell` | `ff26-champion-shadow-core` | `ff26-champion-survive-till-dawn` |
+| Reward pack ids | `ff26-winner-last-bell` | `ff26-winner-shadow-core` | `ff26-winner-survive-till-dawn` |
 
 Points per board: 100, 80, 65, 40, 40, 20, 20, 20, 20, 20 for places 1 to 10,
 and 5 for everyone else who is ranked. Participation reward: `ff26-participation`.
