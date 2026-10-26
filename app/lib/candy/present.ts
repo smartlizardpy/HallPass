@@ -1,0 +1,80 @@
+/**
+ * HallPass — how a ledger row reads to the player. Pure.
+ *
+ * The ledger stores a machine `ref`; the player sees a sentence. Another
+ * player's name never appears here: a row is always the caller's own.
+ */
+
+import { FRIGHT_FEST_2026 } from "../championship/fright-fest-2026";
+import { getPack } from "../collectibles/catalogue";
+import { CANDY_FRIGHT_FEST_2026, type CandyConfig } from "./fright-fest-2026";
+import type { LedgerEntry } from "./store";
+
+export interface ShopItem {
+  packId: string;
+  name: string;
+  /** The collection the pack draws from. */
+  collection: string;
+  price: number;
+  /** The balance covers the price right now. */
+  affordable: boolean;
+}
+
+export interface RecentEntry {
+  kind: LedgerEntry["kind"];
+  label: string;
+  /** The game's title, for an achievement credit; otherwise `null`. */
+  game: string | null;
+  amount: number;
+  at: string;
+  /** A revoked credit stays on the list, struck through, and does not count. */
+  revoked: boolean;
+}
+
+const ordinal = (n: number) => {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return `${n}th`;
+  return `${n}${["th", "st", "nd", "rd"][n % 10 > 3 ? 0 : n % 10]}`;
+};
+
+const boardTitle = (slug: string) => FRIGHT_FEST_2026.games.find((g) => g.slug === slug)?.title ?? slug;
+
+/** The game slug of an achievement credit's ref (`slug/key`). */
+export const achievementSlug = (ref: string | null): string | null => (ref && ref.includes("/") ? ref.split("/")[0] : null);
+
+export function describeEntry(e: LedgerEntry, gameTitles: ReadonlyMap<string, string>): RecentEntry {
+  let label: string;
+  let game: string | null = null;
+  switch (e.kind) {
+    case "achievement": {
+      const slug = achievementSlug(e.ref);
+      game = slug ? (gameTitles.get(slug) ?? slug) : null;
+      label = e.achievementName ?? "Achievement";
+      break;
+    }
+    case "ranked_run":
+      label = `First ranked run: ${boardTitle(e.ref ?? "")}`;
+      break;
+    case "all_boards":
+      label = "A result on every board";
+      break;
+    case "placing": {
+      const [slug, rank] = (e.ref ?? "").split("#");
+      label = Number(rank) > 0 ? `Placed ${ordinal(Number(rank))} on ${boardTitle(slug)}` : `Placed on ${boardTitle(slug)}`;
+      break;
+    }
+    default:
+      label = `Bought ${getPack(e.ref ?? "")?.name ?? "a pack"}`;
+  }
+  return { kind: e.kind, label, game, amount: e.amount, at: e.createdAt, revoked: e.revoked };
+}
+
+/** The shelf, cheapest first (catalogue order within a price). */
+export function shopItems(balance: number, config: CandyConfig = CANDY_FRIGHT_FEST_2026): ShopItem[] {
+  return Object.entries(config.prices)
+    .flatMap(([packId, price]) => {
+      const pack = getPack(packId);
+      return pack ? [{ packId, name: pack.name, collection: pack.collection, price, affordable: balance >= price }] : [];
+    })
+    .sort((a, b) => a.price - b.price);
+}
