@@ -174,7 +174,7 @@
 }
 @media (min-width: 860px) {
   .ar-notes {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: start;
   }
 }
@@ -233,13 +233,15 @@
   align-items: flex-end;
   margin-inline: -8px;
   padding: 10px 8px 0;
-  min-height: 130px;
+  min-height: 150px;
   border-bottom: 12px solid #8a5a2b;
   box-shadow: 0 4px 0 #4a2a10;
 }
+/* Exactly 1x of the pack print (96x140): whole art pixels, never scaled. */
 .cd-print {
-  width: 72px;
-  height: 105px;
+  width: 96px;
+  height: 140px;
+  max-width: none;
   image-rendering: pixelated;
 }
 .cd-tag {
@@ -300,4 +302,16 @@
 }
 .cd-plate-btns .ar-btn {
   padding: 0 12px;
+}
+.ar-glink {
+  font-weight: 800;
+  color: #6a1f08;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ar-glink:hover {
+  color: #23153a;
+}
+.ar-games-skel {
+  height: 15rem;
 }

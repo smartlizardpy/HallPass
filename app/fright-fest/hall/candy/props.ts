@@ -6,9 +6,9 @@
  * nothing is typed here.
  */
 
-import { packPrintSrc } from "@/app/lib/collectibles/catalogue";
+import { PACK_PRINT_PX, packPrintSrc } from "@/app/lib/collectibles/catalogue";
 import { shopItems } from "@/app/lib/candy/present";
-import type { CandyConfig } from "@/app/lib/candy/fright-fest-2026";
+import { dailyBestAmount, type CandyConfig } from "@/app/lib/candy/fright-fest-2026";
 import { ordinal } from "@/app/lib/championship/format";
 
 export interface CandyDates {
@@ -40,7 +40,12 @@ export interface ShelfItemProps {
 export interface CandyProps {
   dates: CandyDates;
   labels: CandyLabels;
-  rubric: { label: string; value: string }[];
+  /** What the most valuable game pays at each daily-best band, in candy (computed from the config). */
+  dailyBest: { label: string; amount: number }[];
+  /** The most a game can pay: the value the `dailyBest` amounts are for. */
+  maxGameCandy: number;
+  /** A pack print's native size: the shelf draws prints at exactly 1x. */
+  printPx: { w: number; h: number };
   rankedRun: number;
   allBoards: number;
   placing: { label: string; amount: number }[];
@@ -49,12 +54,18 @@ export interface CandyProps {
 
 const day = (ms: number) => new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", day: "numeric", month: "short" }).format(ms);
 
-/** [8, 10, 12] -> "8–12"; [2] -> "2". */
-export function valueRange(presets: readonly number[]): string {
-  const lo = Math.min(...presets);
-  const hi = Math.max(...presets);
-  return lo === hi ? String(lo) : `${lo}–${hi}`;
-}
+/**
+ * One (rank, board size) inside each of `config.dailyBest`'s five bands, in order:
+ * 1st; 2nd-3rd; 4th-10th; the top half (11th on a board of 100); anywhere else (51st).
+ * The amounts come from `dailyBestAmount`, so the rule itself lives only in the config.
+ */
+const DAILY_BEST_PROBE: readonly [rank: number, n: number][] = [
+  [1, 100],
+  [2, 100],
+  [4, 100],
+  [11, 100],
+  [51, 100],
+];
 
 /** (2, 3) -> "2nd–3rd"; (1, 1) -> "1st". */
 export function rankRange(from: number, to: number): string {
@@ -74,7 +85,9 @@ export function buildCandy(config: CandyConfig, resultsByLabel: string): CandyPr
       spendUntil: config.spendUntilLabel,
       resultsBy: resultsByLabel.replace(/, .*$/, ""),
     },
-    rubric: config.rubric.map((t) => ({ label: t.label, value: valueRange(t.presets) })),
+    dailyBest: config.dailyBest.map((t, i) => ({ label: t.label, amount: dailyBestAmount(config.maxGameCandy, ...DAILY_BEST_PROBE[i]) })),
+    maxGameCandy: config.maxGameCandy,
+    printPx: { w: PACK_PRINT_PX.w, h: PACK_PRINT_PX.h },
     rankedRun: config.rankedRun,
     allBoards: config.allBoards,
     placing: config.placing.map((t) => ({ label: rankRange(t.from, t.to), amount: t.amount })),
