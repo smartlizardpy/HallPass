@@ -142,6 +142,8 @@ export function PackStage(props: Props) {
       mode.current = "done";
       tear.current = { ...tear.current, progress: 1, dragging: false, side: tear.current.side ?? "left" };
       show();
+      renderer.current?.setTilt(0, 0);
+      renderer.current?.setDent(0.5, 0.5, 0);
       cb.current.onCommit();
       const r = renderer.current;
       window.setTimeout(() => r?.detach(vx, vy), reducedMotion ? 0 : 90);
@@ -150,7 +152,9 @@ export function PackStage(props: Props) {
   );
 
   const autoTear = useCallback(() => {
-    if (mode.current === "done" || !cb.current.interactive) return;
+    // Not while a tear (by hand or by key) is already under way, nor once it is done.
+    if (mode.current === "done" || mode.current === "tear" || !cb.current.interactive) return;
+    renderer.current?.setTilt(0, 0);
     mode.current = "tear";
     cb.current.onTearStart();
     const dur = reducedMotion ? 0 : 620;
