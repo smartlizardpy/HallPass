@@ -11,7 +11,7 @@
 // Nothing here changes the Caretaker: he only sees world.getLightLevel, which is a fixed 0.5 (his default)
 // except during a blackout's fixed window (0.2 everywhere, every run). Haunts make no 'noise' events.
 
-import { HALLOWEEN, DEBUG_PANEL, eventPhase } from './config.js';
+import { HALLOWEEN, DEBUG_PANEL, eventPhase, rankedOpensLabel } from './config.js';
 import { Gaze } from './visibility.js';
 import { SpotCatalog } from './spots.js';
 import { HorrorLights } from './lighting.js';
@@ -274,7 +274,7 @@ export class HalloweenMode {
     const ph = eventPhase();
     if (this.debugUsed || DEBUG_PANEL || this.game.debug) return `Debug · not ranked · build ${HW_BUILD}`;
     if (this.game.seed !== HALLOWEEN.seed) return 'Custom school · not ranked';
-    if (ph !== 'live') return ph === 'upcoming' ? 'Practice · ranked runs open 28 Oct' : 'Practice';
+    if (ph !== 'live') return ph === 'practice' && rankedOpensLabel() ? `Practice · ranked runs open ${rankedOpensLabel()}` : 'Practice';
     return 'Ranked run';
   }
 
@@ -318,7 +318,7 @@ export class HalloweenMode {
     let rank;
     if (result !== 'escaped') rank = 'Escape to post a time.';
     else if (out?.ranked) rank = out.submitted === 'sent' ? 'Ranked · sent to the Fright Fest board.' : 'Ranked · saved here (the Fright Fest board isn’t open to this game yet).';
-    else if (flags.length === 1 && flags[0] === 'phase') rank = eventPhase() === 'upcoming' ? 'Practice run · ranked runs open 28 Oct.' : 'Practice run · the event is over.';
+    else if (flags.length === 1 && flags[0] === 'phase') rank = eventPhase() === 'practice' && rankedOpensLabel() ? `Practice run · ranked runs open ${rankedOpensLabel()}.` : 'Practice run · the event is over.';
     else rank = 'Not ranked · ' + flags.map((f) => ({ speed: 'timer check failed', route: 'impossible route time', debug: 'debug tools used', rules: 'not the event school', phase: 'outside the event', hidden: 'tab hidden' })[f] || f).join(', ') + '.';
     sec.innerHTML = `
       <h3 class="hw-result__title">The Halloween Shift</h3>

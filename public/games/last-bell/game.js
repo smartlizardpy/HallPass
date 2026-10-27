@@ -45,7 +45,7 @@ import { Net } from './net.js';
 import { Assistant } from './assistant.js';
 import { Floor2 } from './floor2.js';
 import { FloorTwoCutscene } from './cutscene-f2.js';
-import { HALLOWEEN, halloweenAvailable } from './halloween/config.js';
+import { HALLOWEEN, halloweenAvailable, loadHallPassEvent, onHalloweenChange } from './halloween/config.js';
 
 // boot-check.js watches for this: the module graph loaded and the game is starting
 if (window.__lastBell) window.__lastBell.started = true;
@@ -246,6 +246,8 @@ class Game {
       const total = (parts.world + parts.enemy + parts.items + parts.assistant) / 4;
       this.ui.showLoading?.(Math.min(0.99, total), 'Unlocking the building…');
     };
+    // Ask HallPass whether the event is on, alongside the loading (it adds no wait unless the SDK is slow: 2.5 s cap).
+    const eventAnswer = loadHallPassEvent(2500);
     const results = await Promise.allSettled([
       this.world.load(progress('world')),
       this.enemy.load(progress('enemy')),
@@ -259,6 +261,14 @@ class Game {
     }
     this.world.setQuality?.(this.settings.quality);
     this._applyShadows();
+    await eventAnswer; // never rejects; the menu's halloweenAvailable() reads what HallPass said
+    // HallPass flipped the event: follow it at the menu. A run in progress (or its screens) is never interrupted;
+    // the next enterMenu() reads the new answer.
+    onHalloweenChange((on) => {
+      if (this.state !== 'menu') return;
+      this.ui.setHalloween?.(on);
+      if (on) this.loadHalloween().catch(() => {});
+    });
     this.ui.showLoading?.(1, 'Ready');
     this.ui.hideLoading?.();
     requestAnimationFrame(this._frame);
@@ -648,7 +658,7 @@ class Game {
     // Must run inside the user gesture (Start/Restart click) for pointer lock + audio.
     this.audio.unlock?.();
     if (!opts.noLock) this.player.lockPointer?.();
-    const mode = opts.mode === 'halloween' && !opts.coop ? 'halloween' : 'normal';
+    const mode = opts.mode === 'halloween' && !opts.coop && halloweenAvailable() ? 'halloween' : 'normal'; // a restart after HallPass switched the event off becomes a normal run
     if (mode === 'halloween' && !this.halloween) {
       // first Halloween run: fetch the module, then start (the pointer is already locked)
       this.ui.showLoading?.(0.5, 'Unlocking the building…');
