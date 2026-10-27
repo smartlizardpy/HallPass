@@ -9,11 +9,15 @@ describe("the words", () => {
   });
   it("print a pack's contents with the published odds", () => {
     expect(slotLines(packVersion("ff26-participation", 1)!.version)).toEqual([
-      "Card 1: Survivor 2026, always",
+      "Card 1: SURVIVOR (participation), always",
       "Cards 2–3: Common 60%, Uncommon 25%, Rare 10%, Epic 4%, Legendary 1%",
     ]);
+    expect(slotLines(packVersion("ff26-participation", 2)!.version)).toEqual([
+      "Card 1: SURVIVOR (participation), always",
+      "Cards 2–3: Common 60%, Uncommon 25%, Rare 10%, Epic 5%",
+    ]);
     expect(slotLines(packVersion("ff26-overall-winner", 1)!.version)).toEqual([
-      "Card 1: Overall Champion 2026, always",
+      "Card 1: THE GOLDEN TICKET (Overall Champion), always",
       "Card 2: The Last Bell, always",
       "Card 3: Epic 80%, Legendary 20%",
     ]);

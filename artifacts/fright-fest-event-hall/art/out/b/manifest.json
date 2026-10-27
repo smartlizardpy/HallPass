@@ -1,0 +1,343 @@
+{
+  "concept": "b",
+  "title": "The School Hall",
+  "desk": {
+    "w": 434,
+    "h": 230,
+    "scale": 3,
+    "files": {
+      "haunted": "desk-haunted.png",
+      "calm": "desk-calm.png"
+    },
+    "layers": [],
+    "cab": {
+      "w": 48,
+      "h": 84,
+      "screen": {
+        "x": 7,
+        "y": 14,
+        "w": 34,
+        "h": 32
+      },
+      "button": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      }
+    },
+    "slots": [
+      {
+        "x": 140,
+        "y": 62
+      },
+      {
+        "x": 193,
+        "y": 62
+      },
+      {
+        "x": 246,
+        "y": 62
+      }
+    ],
+    "pool": {
+      "dx": -8,
+      "dy": 76,
+      "file": "pool-on.png"
+    },
+    "spot": {
+      "dx": -8,
+      "dy": -6,
+      "file": "spot-on.png"
+    },
+    "zones": {
+      "board": {
+        "x": 10,
+        "y": 38,
+        "w": 96,
+        "h": 72,
+        "calm": {
+          "x": 16,
+          "y": 54,
+          "w": 84,
+          "h": 50
+        }
+      },
+      "quest": {
+        "x": 328,
+        "y": 38,
+        "w": 96,
+        "h": 66,
+        "calm": {
+          "x": 336,
+          "y": 86,
+          "w": 80,
+          "h": 12
+        }
+      },
+      "prize": {
+        "x": 332,
+        "y": 108,
+        "w": 92,
+        "h": 56,
+        "calm": {
+          "x": 350,
+          "y": 166,
+          "w": 56,
+          "h": 12
+        }
+      },
+      "sign": {
+        "x": 136,
+        "y": 38,
+        "w": 162,
+        "h": 18
+      },
+      "ticker": {
+        "x": 150,
+        "y": 172,
+        "w": 134,
+        "h": 9
+      },
+      "panel": {
+        "x": 120,
+        "y": 184,
+        "w": 194,
+        "h": 44
+      },
+      "tickets": [
+        {
+          "x": 140,
+          "y": 152,
+          "w": 48,
+          "h": 15
+        },
+        {
+          "x": 193,
+          "y": 152,
+          "w": 48,
+          "h": 15
+        },
+        {
+          "x": 246,
+          "y": 152,
+          "w": 48,
+          "h": 15
+        }
+      ]
+    },
+    "anims": [
+      {
+        "file": "anim-ghost.png",
+        "x": 294,
+        "y": 100,
+        "frames": 4,
+        "fps": 4,
+        "season": "haunted"
+      },
+      {
+        "file": "anim-bats.png",
+        "x": 228,
+        "y": 3,
+        "frames": 4,
+        "fps": 5,
+        "season": "haunted"
+      },
+      {
+        "file": "anim-footlights.png",
+        "x": 108,
+        "y": 143,
+        "frames": 2,
+        "fps": 3,
+        "season": "haunted"
+      },
+      {
+        "file": "anim-dust.png",
+        "x": 30,
+        "y": 174,
+        "frames": 3,
+        "fps": 3,
+        "season": "both",
+        "note": "transparent motes in the left moon shaft"
+      }
+    ],
+    "eggs": [
+      {
+        "name": "ghost",
+        "x": 294,
+        "y": 102,
+        "w": 14,
+        "h": 16,
+        "note": "peeks from behind the right curtain (haunted only)"
+      },
+      {
+        "name": "keys",
+        "x": 74,
+        "y": 146,
+        "w": 20,
+        "h": 26,
+        "note": "the caretaker's key ring on the mop bucket (a Last Bell nod)"
+      },
+      {
+        "name": "clock",
+        "x": 209,
+        "y": 6,
+        "w": 16,
+        "h": 16,
+        "note": "stopped at 3:15, the last bell"
+      },
+      {
+        "name": "room000",
+        "x": 396,
+        "y": 130,
+        "w": 26,
+        "h": 22,
+        "note": "ROOM 000 plaque with an arrow, beside the hatch"
+      },
+      {
+        "name": "pumpkin",
+        "x": 299,
+        "y": 136,
+        "w": 13,
+        "h": 12,
+        "note": "pumpkin on the stage lip (haunted only)"
+      }
+    ]
+  },
+  "phone": {
+    "w": 195,
+    "h": 252,
+    "scale": 2,
+    "files": {
+      "haunted": "phone-haunted.png",
+      "calm": "phone-calm.png"
+    },
+    "slot": {
+      "x": 73,
+      "y": 112
+    },
+    "spot": {
+      "dx": -16,
+      "dy": -70,
+      "file": "spot-phone.png"
+    },
+    "pool": {
+      "dx": -8,
+      "dy": 76,
+      "file": "pool-on.png"
+    },
+    "zones": {
+      "sign": {
+        "x": 16,
+        "y": 18,
+        "w": 163,
+        "h": 18
+      },
+      "front": {
+        "x": 0,
+        "y": 196,
+        "w": 195,
+        "h": 18
+      },
+      "tabs": {
+        "x": 0,
+        "y": 218,
+        "w": 195,
+        "h": 34
+      }
+    },
+    "anims": [
+      {
+        "file": "anim-ghost-phone.png",
+        "x": 138,
+        "y": 134,
+        "frames": 4,
+        "fps": 4,
+        "season": "haunted"
+      },
+      {
+        "file": "anim-bats-phone.png",
+        "x": 58,
+        "y": 1,
+        "frames": 4,
+        "fps": 5,
+        "season": "haunted"
+      }
+    ]
+  },
+  "elements": {
+    "board": {
+      "file": "el-board.png",
+      "w": 96,
+      "h": 78,
+      "calm": {
+        "x": 6,
+        "y": 22,
+        "w": 84,
+        "h": 50
+      }
+    },
+    "quest": {
+      "file": "el-quest.png",
+      "w": 96,
+      "h": 80,
+      "calm": {
+        "x": 8,
+        "y": 62,
+        "w": 80,
+        "h": 12
+      }
+    },
+    "prize": {
+      "file": "el-prize.png",
+      "w": 92,
+      "h": 78,
+      "calm": {
+        "x": 18,
+        "y": 60,
+        "w": 56,
+        "h": 12
+      }
+    }
+  },
+  "frames": {
+    "board": {
+      "file": "frame-board.png",
+      "slice": 16,
+      "fill": "#07070c"
+    },
+    "quest": {
+      "file": "frame-quest.png",
+      "slice": 16,
+      "fill": "#2a1a18"
+    },
+    "prize": {
+      "file": "frame-prize.png",
+      "slice": 16,
+      "fill": "#1a1020"
+    },
+    "paper": {
+      "file": "frame-paper.png",
+      "slice": 16,
+      "fill": "#1b1830"
+    }
+  },
+  "tile": "tile-wall.png",
+  "extra": {
+    "mystery_calm": {
+      "cab": "cab-mystery-on-calm.png",
+      "scr": "scr-mystery-calm.png"
+    },
+    "calm_fill": "#150e20"
+  },
+  "palette": {
+    "colours": 48,
+    "per_scene": {
+      "desk-haunted": 48,
+      "desk-calm": 40,
+      "phone-haunted": 48,
+      "phone-calm": 40
+    },
+    "notes": "scene colours only (cabinets are separate sprites)"
+  }
+}

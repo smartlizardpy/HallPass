@@ -141,7 +141,7 @@ export default async function BoardDetailPage({
   // no code change — mirroring how `/llms-full.txt` resolves its base URL. Falls
   // back to the canonical host if the proxy headers are somehow absent.
   const hdrs = await headers();
-  const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host") ?? "hallpass.gg";
+  const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host") ?? "hallpass.games";
   const proto = hdrs.get("x-forwarded-proto") ?? "https";
   const integrationPrompt = buildIntegrationPrompt({
     slug: board.slug,

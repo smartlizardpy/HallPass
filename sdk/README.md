@@ -11,7 +11,7 @@ preview with no network or storage the SDK goes _inert_ and quietly no-ops
 never break the game it is embedded in.
 
 The runtime is served from a version-stable URL:
-`https://hallpass.gg/sdk/v1/hallpass.js`.
+`https://hallpass.games/sdk/v1/hallpass.js`.
 
 ## Install
 
@@ -38,7 +38,7 @@ off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});retur
 setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
 q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:c.n==="invite"?{sent:0,link:null,cancelled:true}:{ok:false,reason:"inert"})})},2000)})(window);
 </script>
-<script src="https://hallpass.gg/sdk/v1/hallpass.js" data-game="YOUR-SLUG" defer></script>
+<script src="https://hallpass.games/sdk/v1/hallpass.js" data-game="YOUR-SLUG" defer></script>
 ```
 
 The stub means calls made before the real script finishes loading are queued and
@@ -322,7 +322,8 @@ HallPass
 | `ready(opts?)`                  | `Promise<ReadyState>`    | `opts` may set `{ game, api }` at runtime. Always resolves.            |
 | `submitScore(score, opts?)`     | `Promise<SubmitResult>`  | `opts`: `{ handle?, promptHandle?, board?, meta? }` (`board`, `meta` since 1.5). Resolves `{ ok, rank?, reason? }`; event boards add `status`, `best`, `detail`. |
 | `runStart(opts?)`               | `Promise<{ token, expiresAt } \| null>` | Since 1.5. Start a run on an event board. `opts`: `{ board?, seed? }`. `null` when the board takes no runs or the player cannot enter. |
-| `supports(feature)`             | `boolean`                | Since 1.5. SYNCHRONOUS. `"leaderboard.boards"`, `"leaderboard.meta"`, `"runs"`. Also as `capabilities`. |
+| `supports(feature)`             | `boolean`                | Since 1.5. SYNCHRONOUS. `"leaderboard.boards"`, `"leaderboard.meta"`, `"runs"`, `"event"` (1.7). Also as `capabilities`. |
+| `getEvent(opts?)`               | `Promise<EventState \| null>` | Since 1.7. Is Halloween on? `null` means unreachable: treat as NO event. See "Seasonal event" below. |
 | `getScores(opts?)`              | `Promise<ScoreEntry[]>`  | `opts`: `{ limit?(1–100), period?("all"\|"day"\|"week"), game? }`. `[]` on failure. |
 | `getHandle()`                   | `string \| null`         | The stored player handle.                                             |
 | `setHandle(handle)`             | `string`                 | Sanitises to `[A-Za-z0-9 _-]{1,12}` and persists; returns the result. |
@@ -365,7 +366,7 @@ other over WebRTC, and HallPass only helps them find each other.
 | | |
 | --- | --- |
 | Version | **1.2.0** (`HallPassP2P.version`) |
-| Hosted at | `https://hallpass.gg/sdk/p2p/v1/hallpass-p2p.js`, `hallpass-p2p.min.js` (54 KB, 19 KB gzipped), `hallpass-p2p.d.ts` |
+| Hosted at | `https://hallpass.games/sdk/p2p/v1/hallpass-p2p.js`, `hallpass-p2p.min.js` (54 KB, 19 KB gzipped), `hallpass-p2p.d.ts` |
 | Source | `sdk/p2p/src/` (build: `npm run build:sdk:p2p`) |
 | Demo / manual test page | `/sdk/p2p/demo/index.html` (coloured dots + chat) |
 | Design | `docs/p2p-design.md` |
@@ -663,3 +664,27 @@ HallPass. Presence is host-authoritative and lives on the data channels. See
 ## License
 
 MIT (see the published package).
+
+
+## Seasonal event (Halloween / Fright Fest), since 1.7
+
+Do not keep your own Halloween dates. Ask HallPass:
+
+```js
+const ev = await HallPass.getEvent();          // { active, event, phase, startAt, opensAt, endAt, serverTime } | null
+const halloween = !!(ev && ev.active);          // null (unreachable) means NO event
+
+HallPass.on("event", (ev) => setHalloween(ev.active)); // sticky; fires again when HallPass flips it
+```
+
+- `active` is the only thing to branch on. While it is `false` the event does not
+  exist: `event` and the dates are `null`, so there is nothing to show.
+- An admin can switch it Off from the dashboard at any time, in the middle of the
+  event. The game must then drop Halloween completely (menu entry, decorations,
+  event board), not just hide a banner.
+- Listening with `on("event")` re-checks every minute while the tab is visible, so
+  an open game follows the switch. A player who reloads sees it immediately.
+- `opensAt` is when the event itself opens; before it, a game may treat runs as
+  practice. Use `serverTime`, not the device clock, if you need "now".
+- If HallPass cannot be reached (`null`), or the SDK is older than 1.7
+  (`supports("event")` is falsy), show the normal game.

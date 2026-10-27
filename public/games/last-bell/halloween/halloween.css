@@ -1,0 +1,259 @@
+/* LAST BELL — The Halloween Shift (HallPass Fright Fest 2026). Loaded by ui.setHalloween(true) only. */
+
+:root {
+  --hw-orange: #d0661e;
+  --hw-ember: #ff8a3c;
+  --hw-rot: #6b2a8a;
+}
+
+/* ---- menu: the letter board gets a row of orange letters, the entry glows like a lantern ---- */
+.menu--hw .board__row--hw b {
+  color: var(--hw-orange);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .85), 0 0 14px rgba(255, 122, 38, .35);
+}
+.menu--hw .board__row--hw b:nth-of-type(7n + 3) { animation: hw-letter 7.3s steps(1) infinite; }
+@keyframes hw-letter {
+  0%, 93% { opacity: 1; }
+  94% { opacity: .35; }
+  96% { opacity: .9; }
+  97% { opacity: .2; }
+  100% { opacity: 1; }
+}
+.menu-item--hw { color: var(--hw-orange); }
+.menu-item--hw:hover, .menu-item--hw:focus-visible {
+  color: var(--hw-ember);
+  text-decoration-color: rgba(255, 138, 60, .6);
+  text-shadow: 0 0 18px rgba(255, 122, 38, .4);
+}
+[data-reduced="true"] .menu--hw .board__row--hw b { animation: none; }
+@media (prefers-reduced-motion: reduce) { .menu--hw .board__row--hw b { animation: none; } }
+
+/* ---- settings ---- */
+.setting--hw .setting__label { color: var(--hw-orange); }
+
+/* ---- intro card ---- */
+.intro--hw [data-intro="halloween"] { color: var(--ink); }
+.intro--hw #hw-intro-rules { color: var(--ink-dim); font-size: .92em; }
+
+/* ---- HUD: a small tag under the clock ---- */
+.hw-chip {
+  position: absolute;
+  top: 78px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font: 400 var(--t-xs, 12px)/1 var(--f-cond);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: rgba(208, 102, 30, .78);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.hw-chip__rank { color: var(--ink-faint); letter-spacing: .08em; }
+.touch .hw-chip { top: 64px; }
+
+/* ---- end slips ---- */
+.slip--hw {
+  background:
+    repeating-linear-gradient(180deg, transparent 0 27px, rgba(51, 80, 140, .1) 27px 28px),
+    radial-gradient(90% 60% at 85% 100%, rgba(208, 102, 30, .2), transparent 70%),
+    radial-gradient(120% 80% at 30% 20%, rgba(255, 255, 255, .1), rgba(0, 0, 0, .16)),
+    var(--paper);
+}
+.slip--hw .slip__stamp { color: var(--hw-orange); }
+.slip--hw.slip--detention .slip__stamp { color: var(--danger); }
+.hw-result {
+  margin: -6px 0 20px;
+  padding: 12px 0 0;
+  border-top: 2px solid rgba(208, 102, 30, .55);
+}
+.hw-result__title {
+  margin: 0 0 6px;
+  font: 600 var(--t-s, 14px)/1 var(--f-cond);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: #8a3d0d;
+}
+.hw-result__stats { display: grid; grid-template-columns: auto 1fr; margin: 0 0 8px; }
+.hw-result__stats > div { display: contents; }
+.hw-result__stats dt, .hw-result__stats dd { margin: 0; padding: 3px 0; border-bottom: 1px dotted rgba(42, 39, 32, .45); }
+.hw-result__stats dt { padding-right: 18px; color: rgba(42, 39, 32, .72); }
+.hw-result__stats dd { text-align: right; }
+.hw-result__rank { margin: 0 0 6px; font-size: var(--t-s, 14px); }
+.hw-result__link {
+  font: 400 var(--t-m, 16px)/1 var(--f-cond);
+  letter-spacing: .04em;
+  color: #8a3d0d;
+  text-underline-offset: 4px;
+}
+.hw-result__link:hover, .hw-result__link:focus-visible { color: #b14d10; }
+
+/* ---- dev-only director panel (localhost + ?hwdebug=1) ---- */
+.hw-debug {
+  position: fixed;
+  right: 8px;
+  top: 8px;
+  z-index: 9999;
+  width: min(560px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  padding: 8px 10px;
+  font: 11px/1.35 var(--f-type);
+  color: #e8e3d3;
+  background: rgba(10, 8, 6, .9);
+  border: 1px solid rgba(208, 102, 30, .6);
+}
+.hw-debug header { font: 600 13px/1.2 var(--f-cond); color: var(--hw-orange); margin-bottom: 4px; }
+.hw-debug small { color: var(--ink-faint); font-weight: 400; }
+.hw-debug pre { margin: 4px 0; white-space: pre-wrap; }
+.hw-debug__row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; }
+.hw-debug button, .hw-debug select { font: 11px var(--f-type); background: #221a14; color: #e8e3d3; border: 1px solid #5a3a20; padding: 2px 6px; }
+
+/* Bodycam signal loss (sequences.js signal_lost): black, rolling static, a camera-style label. Never strobes:
+   the static drifts, it doesn't flash. */
+.hw-nosignal {
+  position: fixed; inset: 0; z-index: 40; pointer-events: none; display: grid; place-items: center;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, #111 0%, #000 75%);
+  animation: hw-roll 0.9s steps(6) infinite;
+}
+.hw-nosignal[hidden] { display: none; }
+.hw-nosignal span {
+  font: 600 22px/1 ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: 0.3em; color: #d8d8d0;
+  padding: 6px 12px; background: rgba(0, 0, 0, 0.6); text-shadow: 2px 0 rgba(255, 0, 0, 0.35), -2px 0 rgba(0, 255, 255, 0.3);
+}
+@keyframes hw-roll { from { background-position: 0 0, 0 0; } to { background-position: 0 18px, 0 0; } }
+@media (prefers-reduced-motion: reduce) { .hw-nosignal { animation: none; } }
+
+/* The scare gallery (dev only, gallery.js) */
+.hw-gallery {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  overflow: auto;
+  padding: 28px max(16px, 4vw) 40px;
+  color: #ece6d6;
+  background: rgba(6, 5, 4, .94);
+  font: 14px/1.45 var(--f-type, system-ui, sans-serif);
+}
+.hw-gallery[hidden] { display: none; }
+.hw-gallery__head { display: flex; gap: 16px; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; margin-bottom: 8px; }
+.hw-gallery h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: .04em; color: #e3833a; text-transform: uppercase; }
+.hw-gallery__head p { margin: 0; max-width: 62ch; color: #b9b1a0; }
+.hw-gallery kbd { padding: 0 5px; border: 1px solid #6c6255; border-radius: 3px; font: inherit; }
+.hw-gallery__acts { display: flex; gap: 8px; }
+.hw-gallery__acts button {
+  padding: 8px 14px; font: inherit; color: #ece6d6; cursor: pointer;
+  background: #1d1915; border: 1px solid #5b4b3a; border-radius: 4px;
+}
+.hw-gallery__acts button:hover { border-color: #e3833a; }
+.hw-gallery h2 { margin: 26px 0 10px; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: #8f8574; }
+.hw-gallery__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.hw-gallery__card {
+  display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; text-align: left; cursor: pointer;
+  font: inherit; color: inherit; background: #15120f; border: 1px solid #3a3129; border-radius: 6px;
+  transition: border-color .15s, background .15s;
+}
+.hw-gallery__card:hover, .hw-gallery__card:focus-visible { border-color: #e3833a; background: #1f1915; outline: none; }
+.hw-gallery__card strong { font-size: 15px; color: #f3ede0; }
+.hw-gallery__card span { color: #b9b1a0; font-size: 13px; }
+.hw-gallery__card em { margin-top: auto; color: #e3833a; font-style: normal; font-size: 12px; }
+.hw-gallery__out { min-height: 1.4em; margin-top: 20px; color: #e3833a; }
+@media (prefers-reduced-motion: reduce) { .hw-gallery__card { transition: none; } }
+
+/* Blood on the bodycam lens (blood.lens): out-of-focus drops that land, run down and dry off */
+.hw-lens { position: fixed; inset: 0; z-index: 30; pointer-events: none; overflow: hidden; }
+.hw-lens__drop {
+  position: absolute; width: calc(46px * var(--s, 1)); height: calc(54px * var(--s, 1));
+  border-radius: 48% 52% 46% 54% / 58% 56% 44% 42%;
+  background: radial-gradient(ellipse at 38% 34%, rgba(205, 70, 70, .55) 0 8%, rgba(128, 12, 16, .88) 22%, rgba(84, 6, 9, .9) 58%, rgba(60, 4, 6, 0) 74%);
+  filter: blur(2.5px);
+  transform: scale(.2);
+  opacity: 0;
+  animation: hw-lens-land .12s ease-out forwards, hw-lens-run 5.5s .35s cubic-bezier(.5, 0, .9, .6) forwards, hw-lens-dry 3s 6.2s ease-in forwards;
+}
+.hw-lens__drop::after {
+  content: ''; position: absolute; left: 38%; top: 70%; width: 24%; height: 0;
+  border-radius: 0 0 50% 50%;
+  background: linear-gradient(rgba(110, 8, 12, .85), rgba(80, 6, 8, .6) 80%, rgba(80, 6, 8, 0));
+  animation: hw-lens-trail 5.5s .35s cubic-bezier(.5, 0, .9, .6) forwards;
+}
+.hw-lens__drop--big { filter: blur(3.5px); }
+@keyframes hw-lens-land { to { transform: scale(1); opacity: 1; } }
+@keyframes hw-lens-run { from { translate: 0 0; } to { translate: 0 var(--run, 24vh); } }
+@keyframes hw-lens-trail { from { height: 0; } to { height: var(--run, 24vh); transform: translateY(calc(-1 * var(--run, 24vh))); } }
+@keyframes hw-lens-dry { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .hw-lens__drop { animation: hw-lens-land .12s ease-out forwards, hw-lens-dry 3s 4s ease-in forwards; }
+  .hw-lens__drop::after { animation: none; }
+}
+
+/* The Halloween Shift's content warning (screen-hwwarning, before its intro) */
+.hw-warning .panel__title { color: #e3833a; }
+.hw-warning__age { display: flex; align-items: center; gap: 12px; }
+.hw-warning__age strong {
+  flex: none; display: inline-grid; place-items: center; width: 52px; height: 52px; border-radius: 50%;
+  border: 3px solid #c4243f; color: #f3ede0; font-size: 18px; letter-spacing: .02em;
+}
+.hw-warning__list { margin: 0 0 1em; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; }
+.hw-warning__list strong, .hw-warning .panel__body > p strong { color: #f3ede0; }
+.hw-warning kbd { padding: 0 5px; border: 1px solid #6c6255; border-radius: 3px; font: inherit; }
+
+/* Scare gallery: scores on the cards (review.js) */
+.hw-gallery__acts button.is-main { border-color: #e3833a; color: #f3ede0; background: #3a2212; }
+.hw-gallery__sum { margin-top: 6px !important; color: #e3833a !important; font-size: 13px; }
+.hw-gallery__score { align-self: flex-start; padding: 1px 7px; border-radius: 3px; font-size: 11px; letter-spacing: .04em; color: #8f8574; border: 1px solid #3a3129; }
+.hw-gallery__score.is-good { color: #0f0d0b; background: #7fbf6a; border-color: #7fbf6a; }
+.hw-gallery__score.is-mid { color: #0f0d0b; background: #e3b23a; border-color: #e3b23a; }
+.hw-gallery__score.is-low { color: #f3ede0; background: #9c2433; border-color: #9c2433; }
+
+/* Scare review: the strip while one plays, the rating card after */
+.hw-review-bar {
+  position: fixed; top: 14px; left: 14px; z-index: 9990; max-width: min(560px, calc(100vw - 28px));
+  display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 8px 12px;
+  color: #ece6d6; background: rgba(10, 8, 6, .82); border: 1px solid #5b4b3a; border-left: 3px solid #e3833a; border-radius: 4px;
+  font: 13px/1.4 var(--f-type, system-ui, sans-serif); pointer-events: none;
+}
+.hw-review-bar[hidden] { display: none; }
+.hw-review-bar b { color: #e3833a; letter-spacing: .06em; text-transform: uppercase; font-size: 11px; }
+.hw-review-bar i { color: #b9b1a0; font-style: normal; }
+.hw-review-bar span { color: #8f8574; font-size: 12px; }
+.hw-review-bar kbd, .hw-review kbd { padding: 0 4px; border: 1px solid #6c6255; border-radius: 3px; font: inherit; font-size: 11px; }
+.hw-review {
+  position: fixed; inset: 0; z-index: 10001; display: grid; place-items: end center; padding: 16px 16px 6vh;
+  background: linear-gradient(to top, rgba(6, 5, 4, .9) 0, rgba(6, 5, 4, .55) 55%, rgba(6, 5, 4, .15) 100%);
+  font: 14px/1.45 var(--f-type, system-ui, sans-serif); color: #ece6d6;
+}
+.hw-review[hidden] { display: none; }
+.hw-review__card {
+  width: min(640px, 100%); display: flex; flex-direction: column; gap: 12px; padding: 18px 20px;
+  background: #15120f; border: 1px solid #5b4b3a; border-radius: 8px; box-shadow: 0 18px 60px rgba(0, 0, 0, .6);
+}
+.hw-review__count { margin: 0; color: #8f8574; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.hw-review__name { margin: -6px 0 0; font-size: 22px; color: #f3ede0; }
+.hw-review__what { margin: -6px 0 0; color: #b9b1a0; }
+.hw-review fieldset { margin: 0; padding: 0; border: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.hw-review legend { padding: 0; margin-bottom: 6px; color: #e3833a; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.hw-review button {
+  font: inherit; color: #ece6d6; cursor: pointer; background: #1d1915; border: 1px solid #4a3e33; border-radius: 4px; padding: 6px 10px;
+}
+.hw-review button:hover, .hw-review button:focus-visible { border-color: #e3833a; outline: none; }
+.hw-review__scores button { flex: 1 1 96px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 6px; }
+.hw-review__scores b { font-size: 20px; }
+.hw-review__scores span { font-size: 11px; color: #b9b1a0; }
+.hw-review__scores button[aria-pressed="true"] { background: #e3833a; border-color: #e3833a; color: #0f0d0b; }
+.hw-review__scores button[aria-pressed="true"] span { color: #2a1a0c; }
+.hw-review__tags button { font-size: 12px; padding: 4px 9px; border-radius: 999px; }
+.hw-review__tags button[aria-pressed="true"] { background: #6b1f29; border-color: #c4243f; color: #f3ede0; }
+.hw-review__note { display: flex; flex-direction: column; gap: 4px; color: #e3833a; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.hw-review__note input {
+  font: 14px/1.4 var(--f-type, system-ui, sans-serif); letter-spacing: 0; text-transform: none; color: #ece6d6;
+  padding: 8px 10px; background: #0f0d0b; border: 1px solid #4a3e33; border-radius: 4px;
+}
+.hw-review__note input:focus { border-color: #e3833a; outline: none; }
+.hw-review__acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.hw-review__acts .is-main { background: #3a2212; border-color: #e3833a; }
+.hw-review__status { margin: 0; min-height: 1.2em; color: #8f8574; font-size: 12px; }

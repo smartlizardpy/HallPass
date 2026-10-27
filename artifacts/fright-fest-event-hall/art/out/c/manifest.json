@@ -1,0 +1,364 @@
+{
+  "concept": "c",
+  "title": "The Possessed Arcade",
+  "desk": {
+    "w": 434,
+    "h": 230,
+    "scale": 3,
+    "bgDepth": -0.5,
+    "files": {
+      "haunted": "desk-bg-haunted.png",
+      "calm": "desk-bg-calm.png"
+    },
+    "flat": {
+      "haunted": "desk-haunted.png",
+      "calm": "desk-calm.png"
+    },
+    "layers": [
+      {
+        "name": "fg",
+        "haunted": "desk-fg-haunted.png",
+        "calm": "desk-fg-calm.png",
+        "depth": 1
+      },
+      {
+        "name": "fog",
+        "file": "fog.png",
+        "y": 150,
+        "depth": 0.5
+      }
+    ],
+    "cab": {
+      "w": 64,
+      "h": 104,
+      "screen": {
+        "x": 9,
+        "y": 18,
+        "w": 46,
+        "h": 42
+      },
+      "button": {
+        "x": 8,
+        "y": 72,
+        "w": 48,
+        "h": 15
+      }
+    },
+    "slots": [
+      {
+        "x": 40,
+        "y": 96
+      },
+      {
+        "x": 185,
+        "y": 90
+      },
+      {
+        "x": 330,
+        "y": 96
+      }
+    ],
+    "pool": {
+      "dx": -8,
+      "dy": 88,
+      "w": 80,
+      "h": 28,
+      "file": "pool-on.png"
+    },
+    "zones": {
+      "sign": {
+        "x": 16,
+        "y": 4,
+        "w": 118,
+        "h": 30
+      },
+      "ticker": {
+        "x": 24,
+        "y": 36,
+        "w": 102,
+        "h": 9
+      },
+      "board": {
+        "x": 155,
+        "y": 8,
+        "w": 124,
+        "h": 82,
+        "calm": {
+          "x": 167,
+          "y": 20,
+          "w": 100,
+          "h": 58
+        }
+      },
+      "quest": {
+        "x": 118,
+        "y": 84,
+        "w": 46,
+        "h": 88,
+        "calm": {
+          "x": 122,
+          "y": 154,
+          "w": 38,
+          "h": 12
+        }
+      },
+      "prize": {
+        "x": 272,
+        "y": 62,
+        "w": 46,
+        "h": 84,
+        "calm": {
+          "x": 277,
+          "y": 134,
+          "w": 36,
+          "h": 10
+        },
+        "neon": {
+          "x": 270,
+          "y": 50,
+          "w": 50,
+          "h": 12
+        }
+      },
+      "panel": {
+        "x": 120,
+        "y": 182,
+        "w": 194,
+        "h": 42
+      }
+    },
+    "anims": [
+      {
+        "file": "anim-neon.png",
+        "x": 83,
+        "y": 13,
+        "w": 7,
+        "h": 12,
+        "frames": 12,
+        "fps": 6,
+        "season": "haunted",
+        "layer": "fg",
+        "note": "one letter of FEST: lit for 10 frames, then off, then dim (one short stutter every 2 s)"
+      },
+      {
+        "file": "anim-eyes.png",
+        "x": 176,
+        "y": 100,
+        "w": 9,
+        "h": 6,
+        "frames": 3,
+        "fps": 3,
+        "season": "haunted",
+        "layer": "bg",
+        "note": "eyes on a dead cabinet blink"
+      },
+      {
+        "file": "anim-ghost.png",
+        "x": 396,
+        "y": 62,
+        "w": 18,
+        "h": 22,
+        "frames": 3,
+        "fps": 3,
+        "season": "haunted",
+        "layer": "fg",
+        "note": "the ghost bobs and waves from behind the right cabinet"
+      },
+      {
+        "file": "anim-shimmer.png",
+        "x": 155,
+        "y": 8,
+        "w": 124,
+        "h": 82,
+        "frames": 3,
+        "fps": 4,
+        "season": "both",
+        "layer": "bg",
+        "note": "glints slide along the shrine's side bezels, outside the calm screen"
+      },
+      {
+        "file": "anim-dust.png",
+        "x": 98,
+        "y": 0,
+        "w": 92,
+        "h": 180,
+        "frames": 3,
+        "fps": 3,
+        "season": "both",
+        "layer": "bg",
+        "note": "dust motes drift in the moon shaft"
+      }
+    ],
+    "eggs": [
+      {
+        "name": "ghost",
+        "x": 396,
+        "y": 62,
+        "w": 18,
+        "h": 22,
+        "note": "peeks out from behind the right foreground cabinet (haunted only)"
+      },
+      {
+        "name": "moon-cab",
+        "x": 165,
+        "y": 89,
+        "w": 8,
+        "h": 35,
+        "note": "the nearest dead cabinet on the left row (partly behind the booth); the page may flash a yellow moon on its dark screen"
+      },
+      {
+        "name": "room-000",
+        "x": 326,
+        "y": 100,
+        "w": 26,
+        "h": 12,
+        "note": "ROOM 000 plaque on the right wall, beside the prize doorway"
+      },
+      {
+        "name": "pumpkin",
+        "x": 256,
+        "y": 80,
+        "w": 10,
+        "h": 9,
+        "note": "pumpkin on a dead cabinet (haunted only)"
+      }
+    ],
+    "variants": {
+      "mystery_calm": {
+        "off": "cab-mystery-off-calm.png",
+        "on": "cab-mystery-on-calm.png",
+        "scr": "scr-mystery-calm.png"
+      }
+    }
+  },
+  "phone": {
+    "w": 195,
+    "h": 300,
+    "scale": 2,
+    "files": {
+      "haunted": "phone-haunted.png",
+      "calm": "phone-calm.png"
+    },
+    "slot": {
+      "x": 65,
+      "y": 150
+    },
+    "zones": {
+      "board": {
+        "x": 43,
+        "y": 10,
+        "w": 110,
+        "h": 72,
+        "calm": {
+          "x": 53,
+          "y": 20,
+          "w": 90,
+          "h": 50
+        }
+      },
+      "navL": {
+        "x": 0,
+        "y": 180,
+        "w": 40,
+        "h": 50
+      },
+      "navR": {
+        "x": 155,
+        "y": 180,
+        "w": 40,
+        "h": 50
+      },
+      "footer": {
+        "x": 0,
+        "y": 258,
+        "w": 195,
+        "h": 42
+      }
+    },
+    "anims": []
+  },
+  "elements": {
+    "board": {
+      "file": "el-board.png",
+      "calmFile": "el-board-calm.png",
+      "w": 124,
+      "h": 82,
+      "calm": {
+        "x": 12,
+        "y": 12,
+        "w": 100,
+        "h": 58
+      }
+    },
+    "quest": {
+      "file": "el-quest.png",
+      "calmFile": "el-quest-calm.png",
+      "w": 46,
+      "h": 88,
+      "calm": {
+        "x": 4,
+        "y": 70,
+        "w": 38,
+        "h": 12
+      }
+    },
+    "prize": {
+      "file": "el-prize.png",
+      "calmFile": "el-prize-calm.png",
+      "w": 50,
+      "h": 96,
+      "calm": {
+        "x": 7,
+        "y": 84,
+        "w": 36,
+        "h": 10
+      }
+    }
+  },
+  "frames": {
+    "board": {
+      "file": "frame-board.png",
+      "slice": 16,
+      "fill": "#0b0612"
+    },
+    "quest": {
+      "file": "frame-quest.png",
+      "slice": 16,
+      "fill": "#1b1030"
+    },
+    "prize": {
+      "file": "frame-prize.png",
+      "slice": 16,
+      "fill": "#0b0612"
+    },
+    "paper": {
+      "file": "frame-paper.png",
+      "slice": 16,
+      "fill": "#dccfbf",
+      "textInk": "#0b0612"
+    }
+  },
+  "tile": "tile-wall.png",
+  "palette": {
+    "colours": 99,
+    "calmColours": 96,
+    "notes": "fixed palette of 52 colours; haunted-only extras: orange (4), pink neon (4)",
+    "contrast": {
+      "haunted/board": 16.5,
+      "haunted/quest": 16.5,
+      "haunted/prize": 16.5,
+      "haunted/ticker": 16.5,
+      "haunted/button1": 16.5,
+      "haunted/button2": 16.5,
+      "haunted/button3": 16.5,
+      "calm/board": 16.5,
+      "calm/quest": 16.5,
+      "calm/prize": 16.5,
+      "calm/ticker": 16.5,
+      "calm/button1": 16.5,
+      "calm/button2": 16.5,
+      "calm/button3": 16.5,
+      "phone/board": 16.5
+    }
+  }
+}

@@ -34,10 +34,16 @@ export function validateCatalogue(cat: Catalogue): string[] {
     if (!collectionIds.has(c.collection)) bad(`${c.id}: unknown collection "${c.collection}"`);
     if (!c.id.startsWith(`${c.collection}-`)) bad(`${c.id}: id must start with "${c.collection}-"`);
     if (!(RARITIES as readonly string[]).includes(c.rarity)) bad(`${c.id}: unknown rarity "${c.rarity}"`);
-    if (!c.name.trim() || !c.caption.trim()) bad(`${c.id}: name and caption are required`);
+    const full = c.art.layout === "full";
+    // A full-layout card's name and caption are part of its finished art, so only the name is required.
+    if (!c.name.trim() || (!full && !c.caption.trim())) bad(`${c.id}: name${full ? "" : " and caption"} required`);
     if (c.caption.length > 120) bad(`${c.id}: caption is over 120 characters`);
     if (!ART_STATUS.includes(c.art.status)) bad(`${c.id}: art status must be demo or final`);
-    if (c.art.src !== `/collectibles/${c.collection}/${c.id}.png`) bad(`${c.id}: art.src must be /collectibles/${c.collection}/${c.id}.png`);
+    if (full) {
+      const re = (suffix: string) => new RegExp(`^/collectibles/${c.collection}/${c.id}${suffix}\\.[0-9a-f]{8}\\.webp$`);
+      if (!re("").test(c.art.src)) bad(`${c.id}: full art.src must be /collectibles/${c.collection}/${c.id}.<hash>.webp`);
+      if (!c.art.thumb || !re("-thumb").test(c.art.thumb)) bad(`${c.id}: full art.thumb must be /collectibles/${c.collection}/${c.id}-thumb.<hash>.webp`);
+    } else if (c.art.src !== `/collectibles/${c.collection}/${c.id}.png`) bad(`${c.id}: art.src must be /collectibles/${c.collection}/${c.id}.png`);
     if (!c.art.alt.trim()) bad(`${c.id}: art.alt is required`);
     (numbers.get(c.collection) ?? numbers.set(c.collection, []).get(c.collection)!).push(c.number);
   }
@@ -53,6 +59,7 @@ export function validateCatalogue(cat: Catalogue): string[] {
     packIds.add(p.id);
     if (!collectionIds.has(p.collection)) bad(`pack ${p.id}: unknown collection "${p.collection}"`);
     if (!p.versions.length) bad(`pack ${p.id}: no versions`);
+    const latest = p.versions.length;
     p.versions.forEach((ver, i) => {
       const at = `pack ${p.id} v${ver.v}`;
       if (ver.v !== i + 1) bad(`${at}: versions must be numbered 1..n in order`);
@@ -70,7 +77,9 @@ export function validateCatalogue(cat: Catalogue): string[] {
           const total = entries.reduce((sum, [, w]) => sum + w, 0);
           if (entries.some(([r, w]) => !RARITIES.includes(r) || !Number.isInteger(w) || w < 0)) bad(`${at} slot ${n + 1}: weights must be non-negative integers by known rarity`);
           if (total !== 100) bad(`${at} slot ${n + 1}: weights sum to ${total}, not 100`);
-          for (const [r, w] of entries) {
+          // Earlier versions are published and immutable. A pool may have moved on since (cards retired):
+          // the roller covers a sealed one (see roll.ts), so only the version new grants pin is held to this.
+          for (const [r, w] of ver.v === latest ? entries : []) {
             if (w > 0 && !eligibleCards(cat, slot.pool).some((c) => c.rarity === r)) {
               bad(`${at} slot ${n + 1}: can roll ${r} but no eligible ${r} card exists in ${slot.pool}`);
             }

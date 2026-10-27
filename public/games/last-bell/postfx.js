@@ -5,6 +5,11 @@
 // encode, 15-bit colour quantisation with ordered dithering on the low-res pixel grid,
 // vignette, threat tint, scanlines, chromatic aberration, VHS tracking wobble, grain,
 // glitch tearing, flash and fade. "Reduced effects" keeps only the calm parts.
+// Redaction (seasonal extension, halloween/blood.js): postfx.redact = up to 4 screen boxes, each with an
+// optional 6x6 cell mask (box.mask = [bits 0-17, bits 18-35]) so cells with something in front stay sharp
+// { minX, minY, maxX, maxY, blocks? } (0..1, y up) are mosaicked like censored bodycam footage: an ellipse of
+// coarse blocks aligned to each box (`blocks` tall, default 10). Empty (the default) costs nothing.
+// Hold (seasonal): postfx.hold = s (at most 0.2) skips drawing so the last frame stays up: a bodycam stutter.
 
 import * as THREE from './lib/three/three.module.js';
 import { QUALITY } from './config.js';
@@ -31,6 +36,9 @@ uniform vec3 uFlashColor;
 uniform float uReduced;
 uniform float uExposure;
 uniform float uLevels;
+uniform vec4 uRedact[4];
+uniform int uRedactN;
+uniform vec3 uRedactK[4];   // per box: 6x6 grid of cells (bits 0-17 | 18-35); a cell is censored only when its bit is set; z: blocks tall
 varying vec2 vUv;
 
 float hash12(vec2 p) {
@@ -76,12 +84,68 @@ void main() {
   float tear = step(0.93 - uGlitch * 0.35, hash12(vec2(floor(uv.y * 18.0), t20)));
   uv.x += fx * (lineNoise * (0.0007 + uGlitch * 0.03) + band * 0.0025 + tear * uGlitch * (hash12(vec2(t20, row)) - 0.5) * 0.12);
 
-  // --- chromatic aberration ---
+  // --- redaction mosaic (bodycam-style censor boxes) ---
+  float redacted = 0.0;
+  float rblk = 0.0;
+  vec2 rcuv = uv;
+  for (int i = 0; i < 4; i++) {
+    if (i >= uRedactN) break;
+    vec4 b = uRedact[i];
+    vec2 size = max(b.zw - b.xy, vec2(1e-4));
+    vec3 kk = uRedactK[i];
+    float blk = max(2.0, size.y * uRes.y / max(kk.z, 4.0)); // about 10 blocks tall (heads finer), in low-res pixels
+    vec2 cell = floor((uv - b.xy) * uRes / blk);
+    vec2 cuv = b.xy + (cell + 0.5) * blk / uRes;
+    vec2 e = (cuv - (b.xy + b.zw) * 0.5) / (size * 0.5);
+    if (dot(e, e) <= 1.0 && all(greaterThanEqual(uv, b.xy - blk / uRes)) && all(lessThanEqual(uv, b.zw + blk / uRes))) {
+      // the mask cells this block overlaps: censored if any of them shows the surface (the safe side);
+      // a block wholly over something standing in front of it (lockers, a door frame) stays sharp
+      vec2 hb = vec2(blk) / uRes * 0.5;
+      vec2 m0 = floor(clamp((cuv - hb - b.xy) / size, 0.0, 0.999) * 6.0);
+      vec2 m1 = floor(clamp((cuv + hb - b.xy) / size, 0.0, 0.999) * 6.0);
+      vec2 k = kk.xy;
+      float on = 0.0;
+      for (int yy = 0; yy < 6; yy++) {
+        for (int xx = 0; xx < 6; xx++) {
+          if (float(xx) < m0.x || float(xx) > m1.x || float(yy) < m0.y || float(yy) > m1.y) continue;
+          float idx = float(yy) * 6.0 + float(xx);
+          float word = idx < 18.0 ? k.x : k.y;
+          on = max(on, mod(floor(word / exp2(mod(idx, 18.0))), 2.0));
+        }
+      }
+      if (on > 0.5) {
+        rcuv = cuv;
+        rblk = blk;
+        redacted = 1.0;
+      }
+    }
+  }
+
+  // --- chromatic aberration (or, inside a censor box, the block's averaged colour) ---
   float ca = fx * (0.0009 + uThreat * 0.0025 + uGlitch * 0.012);
   vec3 col;
-  col.r = texture2D(tDiffuse, uv + vec2(ca, 0.0)).r;
-  col.g = texture2D(tDiffuse, uv).g;
-  col.b = texture2D(tDiffuse, uv - vec2(ca, 0.0)).b;
+  if (redacted > 0.5) {
+    // 3x3 samples, weighted towards the reddest: a block with any blood in it reads as blood, so censored gore
+    // is a red mosaic (the playtest: a plain average turned big blood into a beige block that read as a glitch)
+    vec2 o = vec2(rblk) / uRes * 0.33;
+    vec3 acc = vec3(0.0);
+    float wsum = 0.0;
+    for (int yy = -1; yy <= 1; yy++) {
+      for (int xx = -1; xx <= 1; xx++) {
+        vec3 c = texture2D(tDiffuse, rcuv + vec2(float(xx) * o.x, float(yy) * o.y)).rgb;
+        float red = max(0.0, c.r - max(c.g, c.b) - 0.03);
+        float w = 1.0 + 40.0 * red;
+        acc += c * w;
+        wsum += w;
+      }
+    }
+    col = acc / wsum;
+    uv = rcuv;
+  } else {
+    col.r = texture2D(tDiffuse, uv + vec2(ca, 0.0)).r;
+    col.g = texture2D(tDiffuse, uv).g;
+    col.b = texture2D(tDiffuse, uv - vec2(ca, 0.0)).b;
+  }
 
   // --- tone + encode ---
   col = filmic(col * uExposure);
@@ -126,6 +190,8 @@ export class PostFX {
     this.flash = 0;
     this.flashDecay = 2.5;
     this.exposure = 1.0;
+    this.redact = null; // seasonal: censor boxes (see header)
+    this.hold = 0; // seasonal: s to keep the last frame on screen (a bodycam stutter on a scare); never with reduced effects
     this.internal = new THREE.Vector2(640, 360);
     this.out = new THREE.Vector2(1280, 720);
 
@@ -155,6 +221,9 @@ export class PostFX {
         uReduced: { value: 0 },
         uExposure: { value: this.exposure },
         uLevels: { value: 31 },
+        uRedact: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
+        uRedactN: { value: 0 },
+        uRedactK: { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] },
       },
     });
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.material);
@@ -206,6 +275,11 @@ export class PostFX {
 
   render(scene, camera, dt) {
     this.time += dt;
+    if (this.hold > 0) {
+      // the canvas keeps showing the last frame while nothing is drawn
+      this.hold = this.reduced ? 0 : Math.min(this.hold, 0.2) - dt;
+      if (this.hold > 0) return;
+    }
     this.glitch = Math.max(0, this.glitch - dt * 1.6);
     this.flash = Math.max(0, this.flash - dt * this.flashDecay);
     const u = this.material.uniforms;
@@ -215,6 +289,14 @@ export class PostFX {
     u.uFade.value = this.fade;
     u.uFlash.value = this.flash;
     u.uExposure.value = this.exposure;
+    const rd = this.redact;
+    const rn = rd ? Math.min(4, rd.length) : 0;
+    for (let i = 0; i < rn; i++) {
+      u.uRedact.value[i].set(rd[i].minX, rd[i].minY, rd[i].maxX, rd[i].maxY);
+      const k = rd[i].mask; // [bits 0-17, bits 18-35]; none = every cell
+      u.uRedactK.value[i].set(k ? k[0] : 262143, k ? k[1] : 262143, rd[i].blocks || 10);
+    }
+    u.uRedactN.value = rn;
 
     const r = this.renderer;
     r.setRenderTarget(this.target);

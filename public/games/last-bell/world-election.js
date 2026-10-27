@@ -137,7 +137,7 @@ export class ElectionPosters {
   // ------------------------------------------------------------------------------ banner
   clearBanner() {
     if (!this.banner) return;
-    this.world.root.remove(this.banner);
+    this.banner?.parent?.remove(this.banner);
     this.banner.geometry.dispose();
     this.banner = null;
   }
@@ -195,7 +195,7 @@ export class ElectionPosters {
     mesh.position.set((b.minX + b.maxX) / 2, Math.min(WALL_HEIGHT - BANNER_H / 2 - 0.04, BANNER_BOTTOM + BANNER_H / 2 + 0.06), (b.minZ + b.maxZ) / 2);
     mesh.rotation.y = alongX ? 0 : Math.PI / 2;
     this.banner = mesh;
-    this.world.root.add(mesh);
+    this.world.floorGroup(0).add(mesh);
   }
 }
 
@@ -593,7 +593,7 @@ function drawBanner(ctx, W, H, results = false) {
     ctx.fillRect((W / n) * i, 0, W / n, 16);
     ctx.fillRect((W / n) * i, H - 16, W / n, 16);
   }
-  const text = (results ? 'Results are in: Tövbe wins (99.7%)' : ELECTION.banner || 'Student Council Election').toUpperCase();
+  const text = (results ? 'Results are in: Ozzy wins (99.7%)' : ELECTION.banner || 'Student Council Election').toUpperCase();
   ctx.fillStyle = results ? '#7a1010' : '#1d2433';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';

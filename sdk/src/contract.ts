@@ -405,6 +405,37 @@ export interface AchievementsResponse {
   enabled?: boolean;
 }
 
+/**
+ * What HallPass says about the seasonal event (Fright Fest / Halloween) RIGHT NOW,
+ * from `GET /api/v1/event`. Added in 1.7 (append-only).
+ *
+ * `active` is the only field a game needs to branch on. While it is `false` the
+ * event does not exist: `event` and every date are `null`, so a game that keyed
+ * on any of them has nothing to show. HallPass flips it from the dashboard (or by
+ * the event's own dates), so a game never keeps a calendar of its own.
+ */
+export interface EventState {
+  /** Show the event, or do not. */
+  active: boolean;
+  /** The event's stable name (`"fright-fest"`) while active, else `null`. */
+  event: string | null;
+  /** `"live"` while active; `"ended"` once the window closed; else `"off"`. */
+  phase: "off" | "live" | "ended";
+  /** ISO-8601 instants (UTC) while active, else `null`. */
+  startAt: string | null;
+  /** When the event itself opens; before this a game may treat runs as practice. */
+  opensAt: string | null;
+  endAt: string | null;
+  /** HallPass's clock (ISO-8601), so a game can ignore a wrong device clock. */
+  serverTime: string;
+}
+
+/** Options for `getEvent`. Added in 1.7 (append-only). */
+export interface GetEventOptions {
+  /** Skip the short in-page cache and ask HallPass again. */
+  refresh?: boolean;
+}
+
 // ---- Client SDK surface (window.HallPass) -----------------------------------
 
 /** Why a `submitScore` call did not land. */
@@ -523,7 +554,8 @@ export type EventName =
   | "error"
   | "auth"
   | "achievement"
-  | "challenge";
+  | "challenge"
+  | "event";
 
 /**
  * Payload for the `"auth"` event: fired when the signed-in player changes. Carries
@@ -887,7 +919,19 @@ export interface HallPass {
    */
   supports?(feature: string): boolean;
   /** The same features as an object: `{ leaderboard: { boards, meta }, runs }`. Added in 1.5. */
-  readonly capabilities?: { readonly leaderboard: { readonly boards: boolean; readonly meta: boolean }; readonly runs: boolean };
+  readonly capabilities?: { readonly leaderboard: { readonly boards: boolean; readonly meta: boolean }; readonly runs: boolean; readonly event?: boolean };
+  /**
+   * Is the seasonal event (Halloween / Fright Fest) on right now? Resolves the
+   * {@link EventState}, or `null` when HallPass could not be reached and nothing
+   * has been learned yet. TREAT `null` AS "NO EVENT": show the normal game, never
+   * the event. Never throws. Cached in the page for about 30 s.
+   *
+   * Listening with `on("event", cb)` is the live version: it is STICKY like
+   * `"ready"` (a late listener gets the last state at once) and fires again when
+   * HallPass flips the event on or off, so a game left open follows the
+   * dashboard switch. Feature-detect with `supports("event")`. Added in 1.7.
+   */
+  getEvent?(opts?: GetEventOptions): Promise<EventState | null>;
   /**
    * Invite friends into what the player is doing right now — a co-op room, a
    * level, a seed: `HallPass.invite({ data: { room: "ABCD" } })`.

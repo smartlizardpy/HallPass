@@ -28,7 +28,7 @@ export interface CoopPromptInput {
   gameId: string;
   /** Human title of the game. */
   title: string;
-  /** Origin to load the SDK from, e.g. `https://hallpass.gg`. A trailing slash is dropped. */
+  /** Origin to load the SDK from, e.g. `https://hallpass.games`. A trailing slash is dropped. */
   baseUrl: string;
 }
 

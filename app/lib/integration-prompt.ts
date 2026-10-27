@@ -105,7 +105,7 @@ export interface IntegrationPromptInput {
   sort: "desc" | "asc";
   /** Label shown next to the number, e.g. "Score", "Time". */
   scoreLabel: string;
-  /** Origin to load the SDK from and submit to, e.g. `https://hallpass.gg`. No trailing slash. */
+  /** Origin to load the SDK from and submit to, e.g. `https://hallpass.games`. No trailing slash. */
   baseUrl: string;
 }
 

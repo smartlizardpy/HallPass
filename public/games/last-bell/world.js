@@ -19,6 +19,18 @@
 //   room.variant, World.FALLBACK_SEEDS
 //   game.assetBase  optional prefix for asset URLs (pages in sub-folders, e.g. '../' for _dev/)
 //
+// Floors (Second Floor update, CONTRACTS §13.1). Floor 0 is this procedural school (every older field
+// keeps meaning floor 0); floor 1 is the fixed upstairs (world-floor2.js); world-stairs.js joins them.
+//   floors[0|1] { index, y, layout, rooms, doors, hidingSpots, patrolPoints, colliders, los, bounds, group }
+//   floor2 (=== floors[1]): + anchors, anchor(id), playerSpawn (gated: floor2Enabled()), boards, readers
+//   floorOf(pos) (y > FLOOR_SPLIT_Y -> 1), groundAt(x, z, floorHint), floorGroup(f)
+//   moveCircle(pos, delta, r, out?, opts?)  opts = floor | { floor, enemy } (default: floorOf(pos));
+//                       enemy: true adds the stairwell bulkheads
+//   isWalkable(x, z, r, floor = 0), getRoomAt(x, z, floor = 0), getNav(floor = 0) (nav.zone 1 = stair flight)
+//   lineOfSight(a, b, opts): per floor by height; between floors only through a stairwell's open shaft
+//   setStairState('A', 'locked'|'open') / ('B', 'chained'|'open'), getStairState(id)
+//   setDoorLocked(door, locked), setEmergencyLights('security'|'stairA', on), visibleFloors [bool, bool]
+//
 // Events emitted: door:open {door, by[, push]}, door:close {door, by}, door:locked {door},
 //   noise {position, radius: 8, source: 'door'} (player door use; locked rattle radius 4),
 //   world:transform {changed, description}, world:room000 {position}, subtitle (notes).
@@ -29,16 +41,17 @@
 //   game.player.position / game.enemy.position (ajar doors swing open when brushed; doors refuse to
 //   close on someone). setQuality() also sets camera.far = drawDistance + 6 and fog density.
 //
-// Kits (assets/environment): school_kit.glb (architecture, set pieces) + props_kit.glb (furniture).
+// Kits (assets/environment): school_kit.glb (architecture, set pieces) + props_kit.glb (furniture) +
+// floor2_kit.glb (Floor 2 rooms: art, security, library, offices; materials shared by name).
 // Static geometry is merged per material into two layers ('S' shell never changes, 'D' dressing/edges
 // rebuilt on transforms) -> ~35 draw calls for the whole level; doors, hiding-spot doors, chalkboards,
 // notes and the instanced light panels / moonlight are separate objects.
 import * as THREE from './lib/three/three.module.js';
-import { CELL, WALL_HEIGHT, PLAYER, ENEMY, QUALITY, NAV_RES } from './config.js';
+import { CELL, WALL_HEIGHT, PLAYER, ENEMY, QUALITY, NAV_RES, FLOOR_Y, FLOOR_SPLIT_Y, ASSISTANT, STAIRS } from './config.js';
 import { generateLayout, ET, RNG, hashSeed } from './world-layout.js';
 import { Kit, StaticBatcher, placeMatrix } from './world-kit.js';
 import { addVertexSnap } from './assets.js';
-import { Colliders, LosGrid, NavGridBuilder, resolveCircle, circleBlocked } from './world-grid.js';
+import { Colliders, LosGrid, NavGridBuilder, resolveCircle, circleBlocked, resolveLeaves, leafBlocked, setLeafSegment } from './world-grid.js';
 import { Dresser, NOTES, CHALK_CREEPY } from './world-dress.js';
 import { LightSystem } from './world-lights.js';
 import { SignSystem } from './world-signs.js';
@@ -46,6 +59,10 @@ import { ElectionPosters } from './world-election.js';
 import { Graffiti } from './world-graffiti.js';
 import { Environment, drawChalk } from './environment.js';
 import { WorldTransformer } from './world-transform.js';
+import { Floor2 } from './world-floor2.js';
+import { StairSystem } from './world-stairs.js';
+
+const LOS_SPLIT = 3.4; // sight-line points above this are upstairs (eyes on floor 0 stay below 3.2)
 
 const _v = new THREE.Vector3();
 const _p = { x: 0, z: 0 };
@@ -77,6 +94,18 @@ class Door {
     this.collider = null;
     this.n = { x: 0, z: 1 };
     this.baseRot = 0;
+    this.floor = data.floor || 0;
+    this.leafNode = data.leafNode || null;
+    this.offset = 0; // along the edge (the library's double doors)
+    this.pair = null; // the other leaf of a double door: opens / closes with this one
+    // leaf collider at the current angle (world-grid.js resolveLeaves); hinge/leafLen/swing set by _placeDoor
+    this.hinge = { x: 0, z: 0 };
+    this.leafLen = 1.16;
+    this.leafSeg = { ax: 0, az: 0, bx: 0, bz: 0, nx: 0, nz: 0, minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
+  }
+  /** The leaf has swung out of the doorway line, so its own thin collider takes over from the doorway box. */
+  get leafSolid() {
+    return this.active !== false && Math.abs(this.angle) > 0.06;
   }
   open(by = 'world') {
     if (this.isLocked) {
@@ -88,18 +117,28 @@ class Door {
     this.isOpen = true;
     this.target = this.openAngle;
     if (!wasOpen) this.world._doorEvent(this, 'door:open', by);
+    if (this.pair && !this._pairing) { this.pair._pairing = true; this.pair.open(by); this.pair._pairing = false; }
     return true;
   }
   close(by = 'world') {
     if (!this.isOpen) return true;
-    if (this.world._doorBlocked(this)) return false;
+    if (this.world._doorBlocked(this) || (this.pair && !this._pairing && this.pair.isOpen && this.world._doorBlocked(this.pair))) return false;
     this.isOpen = false;
     this.target = 0;
     this.world._doorEvent(this, 'door:close', by);
+    if (this.pair && !this._pairing) { this.pair._pairing = true; this.pair.close(by); this.pair._pairing = false; }
     return true;
   }
   toggle(by = 'world') {
     return this.isOpen ? this.close(by) : this.open(by);
+  }
+  /** The leaf has finished swinging open (≥ 90 % of the way). AI waits for this before walking through. */
+  get fullyOpen() {
+    return this.isOpen && Math.abs(this.angle) >= Math.abs(this.openAngle) * 0.9;
+  }
+  /** Strict sight: shut, ajar or still swinging leaves block; fully open ones don't. */
+  get blocksSight() {
+    return !(this.active !== false && this.fullyOpen);
   }
 }
 
@@ -110,11 +149,12 @@ class HideSpot {
     this.type = data.type;
     this.position = new THREE.Vector3(data.position.x, data.position.y, data.position.z);
     this.yaw = Math.atan2(-data.look.x, -data.look.z);
-    this.exitPosition = new THREE.Vector3(data.exit.x, 0, data.exit.z);
+    this.exitPosition = new THREE.Vector3(data.exit.x, data.exit.y || 0, data.exit.z);
     this.front = new THREE.Vector3(data.front.x, data.front.y, data.front.z);
+    this.floor = room?.floor || 0;
     this.object = new THREE.Group();
     this.object.name = 'hide-' + data.type;
-    this.object.position.set(data.front.x, 0, data.front.z);
+    this.object.position.set(data.front.x, data.exit.y || 0, data.front.z);
     this.occupied = false;
     this.room = room;
     this.doors = [];
@@ -137,6 +177,26 @@ export class World {
     this.root = new THREE.Group();
     this.root.name = 'world';
     this.scene.add(this.root);
+    // one group per floor (only the camera's floor renders; both while in a stairwell); shared things
+    // (lights, the stairs) hang straight off root
+    this.floorRoots = [new THREE.Group(), new THREE.Group()];
+    this.floorRoots.forEach((g, i) => { g.name = 'floor' + i; this.root.add(g); });
+    this.visibleFloors = [true, true];
+    this.showAllFloors = false; // dev views (world-test.html) draw both floors
+    const w = this;
+    this._f0 = {
+      index: 0, y: 0, hidePrefix: 'hide', group: this.floorRoots[0],
+      get layout() { return w.layout; }, get rooms() { return w.rooms; }, get doors() { return w._doorsOf(0); },
+      get hidingSpots() { return w.hidingSpots; }, get patrolPoints() { return w.patrolPoints; },
+      get colliders() { return w.colliders; }, get los() { return w.los; }, get navb() { return w.navb; },
+      get static() { return w.static; }, get bounds() { return w.bounds; },
+      getNav: () => w.getNav(0), getRoomAt: (x, z) => w.getRoomAt(x, z, 0),
+    };
+    this.floors = [this._f0, null];
+    this.floor2 = null;
+    this._floorDoors = [[], []];
+    this.stairs = new StairSystem(this);
+    this.sharedStatic = null;
     this.env = new Environment(this.scene);
     this.lights = new LightSystem(this);
     this.signs = new SignSystem(this); // corridor wayfinding (main agent)
@@ -164,8 +224,8 @@ export class World {
     this._levelTextures = [];
     this._subs = [];
     if (this.events) {
-      this._subs.push(this.events.on('hide:enter', ({ spot }) => { if (spot && this.hidingSpots.includes(spot)) { spot.occupied = true; spot.playDoor(); } }));
-      this._subs.push(this.events.on('hide:exit', ({ spot }) => { if (spot && this.hidingSpots.includes(spot)) { spot.occupied = false; spot.playDoor(); } }));
+      this._subs.push(this.events.on('hide:enter', ({ spot }) => { if (spot && this._isHide(spot)) { spot.occupied = true; spot.playDoor(); } }));
+      this._subs.push(this.events.on('hide:exit', ({ spot }) => { if (spot && this._isHide(spot)) { spot.occupied = false; spot.playDoor(); } }));
       this._subs.push(this.events.on('exit:unlocked', () => this.setExitState('unlocked')));
       this._subs.push(this.events.on('lights:flicker', (p) => this.lights.pulse(p?.intensity ?? 1, p?.duration ?? 1)));
       this._subs.push(this.events.on('settings:change', ({ settings }) => { if (settings && settings.quality && settings.quality !== this.quality) this.setQuality(settings.quality); }));
@@ -225,6 +285,9 @@ export class World {
       this._build(World.FALLBACK_SEEDS[0], true);
       this.layoutSeed = World.FALLBACK_SEEDS[0];
     }
+    this._indexDoors();
+    this._buildUpstairs();
+    this._buildLights();
     this.stats.generateMs = performance.now() - t0;
     this.stats.attempts = this._failLog.length + 1;
     this.signs?.refresh();
@@ -242,7 +305,7 @@ export class World {
     const maxX = L.W * CELL, maxZ = L.H * CELL;
     this.bounds = { minX: 0, minZ: 0, maxX, maxZ };
     // chunkSize 0: one merged mesh per material per layer (lowest draw calls; GPUs handle the vertex count)
-    this.static = new StaticBatcher(this.kit, this.root, 0);
+    this.static = new StaticBatcher(this.kit, this.floorRoots[0], 0);
     this.colliders = new Colliders(-1, -1, maxX + 1, maxZ + 1);
     this.los = new LosGrid(-1, -1, maxX + 1, maxZ + 1);
     this.navb = new NavGridBuilder(maxX, maxZ);
@@ -271,14 +334,25 @@ export class World {
     this.doors = [];
     for (const d of L.doors) {
       if (d.kind !== 'door') continue;
-      const door = new Door(this, this.doors.length, { locked: d.locked, hingeSign: rng.chance(0.5) ? 1 : -1 });
+      let hingeSign = rng.chance(0.5) ? 1 : -1;
+      // Stair A's ground-floor door starts open into the stairwell: hinge it on the flight-2 side (u > 0, the
+      // boxed-in underside on this floor) so the open leaf lies along that wall instead of across the way
+      // to flight 1. The roll is still made above so the rest of the seed is unchanged.
+      if (d.stair === 'A' && this.stairs?.frames?.A) {
+        const ei = L.edgeInfo(d.edge), U = this.stairs.frames.A.U;
+        const tu = ei.horiz ? U.x : U.z; // the edge tangent (x or z) projected on u
+        if (Math.abs(tu) > 0.5) hingeSign = tu > 0 ? -1 : 1; // hinge = centre - t * 0.58 * hingeSign
+      }
+      const door = new Door(this, this.doors.length, { locked: d.locked, hingeSign });
       door.layoutDoor = d;
       this.doors.push(door);
       this._placeDoor(door, d.edge, d.room, d.corridor);
       if (d.start === 'open') { door.isOpen = true; door.angle = door.target = door.openAngle; }
       else if (d.start === 'ajar' && !d.locked) { door.isOpen = true; door.angle = door.target = door.ajarAngle; }
       door.pivot.rotation.y = door.baseRot + door.angle;
+      this._updateLeaf(door);
     }
+    this._indexDoors();
 
     // static dressing
     for (const room of this.rooms) {
@@ -301,9 +375,57 @@ export class World {
     // grids
     this._rasterAll();
 
+    // spawns, items, exit
+    if (!this._placeGameplay(rng) && !force) return false;
+    if (!this._validate() && !force) return false;
+    this._rebuildInteractables();
+    this.env.setMode('normal');
+    this.stats.static = this.static.computeStats();
+    this.stats.colliders = this.colliders.count;
+    return true;
+  }
+
+  // ------------------------------------------------------------------------------- upstairs + lights
+  _indexDoors() {
+    this._floorDoors = [this.doors.filter((d) => (d.floor || 0) === 0), this.doors.filter((d) => d.floor === 1)];
+  }
+
+  _doorsOf(f) { return this._floorDoors[f] || this._floorDoors[0]; }
+
+  _newDoor(data) {
+    const door = new Door(this, this.doors.length, data);
+    this.doors.push(door);
+    (this._floorDoors[door.floor] || (this._floorDoors[door.floor] = [])).push(door); // queries mid-build see it
+    return door;
+  }
+
+  _removeFromParent(o) { o?.parent?.remove(o); }
+
+  /** Floor 2 + the stairs (fixed architecture; seeded details from the layout seed). */
+  _buildUpstairs() {
+    for (const room of this.rooms) room.floor = 0;
+    for (const p of this.patrolPoints) p.floor = 0;
+    if (!this.floor2) this.floor2 = new Floor2(this);
+    this.sharedStatic = new StaticBatcher(this.kit, this.root, 0);
+    try {
+      this.floor2.build(this.layoutSeed);
+      this.floors[1] = this.floor2;
+    } catch (err) {
+      console.error('[world] floor 2 build failed', err);
+      this.floor2.dispose();
+      this.floors[1] = null;
+    }
+    this._indexDoors();
+    this.stairs.build();
+    this._rebuildInteractables();
+  }
+
+  /** Every floor's fittings in one light system (the pool only picks fittings on the camera's floor). */
+  _buildLights() {
+    const L = this.layout;
     // lights
     const fixtures = [];
-    for (const room of this.rooms) for (const f of room.fixtures) fixtures.push({ ...f, dangling: false });
+    for (const room of this.rooms) for (const f of room.fixtures) fixtures.push({ ...f, floor: 0, dangling: false });
     // dangling broken fixtures have no panel (their housing model hangs open)
     for (const owner of this.rooms.map((r) => 'shell:' + r.id)) {
       const pls = this.static.getOwner(owner) || [];
@@ -314,8 +436,14 @@ export class World {
         if (f) f.dangling = true;
       }
     }
+    if (this.floors[1]) for (const f of this.floor2.fixtures) fixtures.push({ ...f, floor: 1 });
+    const stairRoom = (f, floor) => (this.floors[floor]?.rooms || []).find((r) => r.stairId === f.id)?.id ?? -1;
+    for (const f of this.stairs.fixtures(stairRoom)) fixtures.push(f);
     this.lights.build(fixtures, this.kit);
-    if (this.room000) this.lights.setRoomEnabled(this.room000.id, false);
+    if (this.room000) this.lights.setRoomEnabled(this.room000.id, false, 0);
+    this.lights.setEmergency('security', true);
+    this.lights.setEmergency('stairA', this.stairs.getState('A') !== 'open');
+    this.lights.setMode('normal');
     // moonlight pools under exterior windows
     const moon = [];
     for (let e = 0; e < L.nEdges; e++) {
@@ -327,17 +455,9 @@ export class World {
       moon.push({ x: ei.mx + n.x * 1.25, z: ei.mz + n.z * 1.25, rot: Math.atan2(n.x, n.z) });
       void rb;
     }
+    if (this.floors[1]) moon.push(...this.floor2.moon);
     this.env.buildMoonlight(moon);
 
-    // spawns, items, exit
-    if (!this._placeGameplay(rng) && !force) return false;
-    if (!this._validate() && !force) return false;
-    this._rebuildInteractables();
-    this.lights.setMode('normal');
-    this.env.setMode('normal');
-    this.stats.static = this.static.computeStats();
-    this.stats.colliders = this.colliders.count;
-    return true;
   }
 
   // ------------------------------------------------------------------------------- owners
@@ -359,13 +479,13 @@ export class World {
 
   _disposeRoomExtras(data) {
     for (const b of data.boards) {
-      this.root.remove(b.mesh);
+      this._removeFromParent(b.mesh);
       b.mesh.material.map?.dispose();
       b.mesh.material.dispose();
     }
     for (const h of data.hides) {
-      this.root.remove(h.object);
-      for (const d of h.doors) this.root.remove(d.pivot);
+      this._removeFromParent(h.object);
+      for (const d of h.doors) this._removeFromParent(d.pivot);
     }
     data.boards = [];
     data.hides = [];
@@ -432,8 +552,8 @@ export class World {
     const newCols = oldCols.filter((c) => !(c.maxX > r.minX && c.minX < r.maxX && c.maxZ > r.minZ && c.minZ < r.maxZ));
     const removedHides = data.hides.filter((h) => inR(h.front.x, h.front.z));
     for (const h of removedHides) {
-      for (const d of h.doors) this.root.remove(d.pivot);
-      if (!h.doors.length) this.root.remove(h.object);
+      for (const d of h.doors) this._removeFromParent(d.pivot);
+      if (!h.doors.length) this._removeFromParent(h.object);
       h.removed = true;
     }
     data.hides = data.hides.filter((h) => !h.removed);
@@ -444,8 +564,8 @@ export class World {
     return () => {
       for (const h of removedHides) {
         h.removed = false;
-        for (const d of h.doors) this.root.add(d.pivot);
-        if (!h.doors.length) this.root.add(h.object);
+        for (const d of h.doors) this.floorRoots[0].add(d.pivot);
+        if (!h.doors.length) this.floorRoots[0].add(h.object);
       }
       data.hides = oldHides;
       if (hadUse) data.out.edgeUse.add(e);
@@ -472,7 +592,7 @@ export class World {
     return [col * 0.5, row / 8, col * 0.5 + 0.5, (row + 1) / 8];
   }
 
-  _makeBoard(b, seed) {
+  _makeBoard(b, seed, F = this._f0) {
     const old = b.style === 'old';
     const canvas = document.createElement('canvas');
     canvas.width = old ? 128 : 256;
@@ -491,7 +611,7 @@ export class World {
     mesh.matrixAutoUpdate = false;
     mesh.matrix.copy(b.m);
     mesh.matrixWorldNeedsUpdate = true;
-    this.root.add(mesh);
+    F.group.add(mesh);
     return { mesh, canvas, tex, text: b.text, style: b.style };
   }
 
@@ -501,31 +621,33 @@ export class World {
     board.tex.needsUpdate = true;
   }
 
-  _makeHide(h, room) {
-    const spot = new HideSpot('hide' + (this._hideCounter = (this._hideCounter || 0) + 1), h, room);
+  _makeHide(h, room, F = this._f0) {
+    const n = (F._hideCounter = (F._hideCounter || 0) + 1);
+    const spot = new HideSpot(F.hidePrefix + n, h, room);
     for (const pv of h.pivots) {
       const pivot = new THREE.Group();
       pivot.position.set(pv.x, pv.y, pv.z);
       pivot.rotation.y = pv.rot;
       const leaf = this.kit.makeObject(pv.node || h.doorNode);
       pivot.add(leaf);
-      this.root.add(pivot);
+      F.group.add(pivot);
       spot.doors.push({ pivot, base: pv.rot, open: pv.open });
     }
     if (spot.doors.length) spot.object = spot.doors[0].pivot;
-    else this.root.add(spot.object);
+    else F.group.add(spot.object);
     return spot;
   }
 
-  _placeDoor(door, e, roomId, corridorId) {
-    const L = this.layout;
+  _placeDoor(door, e, roomId, corridorId, F = this._f0) {
+    const L = F.layout;
     const ei = L.edgeInfo(e);
     const [ra] = L.edgeRooms(e);
     const roomOnA = ra === roomId;
     const n = ei.horiz ? { x: 0, z: roomOnA ? -1 : 1 } : { x: roomOnA ? -1 : 1, z: 0 };
     const t = ei.horiz ? { x: 1, z: 0 } : { x: 0, z: 1 };
     const hs = door.hingeSign;
-    const c = { x: ei.mx, z: ei.mz };
+    const off = door.offset || 0;
+    const c = { x: ei.mx + t.x * off, z: ei.mz + t.z * off };
     const hinge = { x: c.x - t.x * 0.58 * hs, z: c.z - t.z * 0.58 * hs };
     const dir = { x: t.x * hs, z: t.z * hs };
     const th0 = Math.atan2(-dir.z, dir.x);
@@ -536,17 +658,22 @@ export class World {
     door.baseRot = th0;
     door.openAngle = sgn * 1.72;
     door.ajarAngle = sgn * 0.75;
-    door.position.set(c.x, 0, c.z);
+    door.position.set(c.x, F.y, c.z);
     door.yaw = Math.atan2(-n.x, -n.z);
-    door.roomA = this.rooms[corridorId] || null;
-    door.roomB = this.rooms[roomId] || null;
+    door.roomA = F.rooms[corridorId] || null;
+    door.roomB = F.rooms[roomId] || null;
     if (!door.leaf) {
-      door.leaf = this.kit.makeObject('door_leaf', door.kind === 'room000' ? this._door000Material() : null);
+      const node = door.leafNode && this.kit.has(door.leafNode) ? door.leafNode : 'door_leaf';
+      door.leaf = this.kit.makeObject(node, door.kind === 'room000' ? this._door000Material() : null);
       door.pivot.add(door.leaf);
-      this.root.add(door.pivot);
+      F.group.add(door.pivot);
     }
-    door.pivot.position.set(hinge.x, 0, hinge.z);
+    door.pivot.position.set(hinge.x, F.y, hinge.z);
     door.pivot.rotation.y = th0 + door.angle;
+    door.hinge.x = hinge.x;
+    door.hinge.z = hinge.z;
+    if (this.kit.has('door_leaf')) door.leafLen = this.kit.bbox('door_leaf').max.x;
+    this._updateLeaf(door);
     door.collider = ei.horiz
       ? { minX: c.x - 0.6, maxX: c.x + 0.6, minZ: c.z - 0.1, maxZ: c.z + 0.1, kind: 'door', door, h: 99 }
       : { minX: c.x - 0.1, maxX: c.x + 0.1, minZ: c.z - 0.6, maxZ: c.z + 0.6, kind: 'door', door, h: 99 };
@@ -562,7 +689,12 @@ export class World {
         door.toggle('player');
       },
     };
-    door.interactable.position.set(c.x, 1.1, c.z);
+    door.interactable.position.set(c.x, F.y + 1.1, c.z);
+  }
+
+  /** Keep the leaf collider on the leaf's current angle (call whenever door.angle changes). */
+  _updateLeaf(door) {
+    setLeafSegment(door.leafSeg, door.hinge.x, door.hinge.z, door.baseRot + door.angle, door.leafLen, Math.sign(door.openAngle) || 1);
   }
 
   _door000Material() {
@@ -595,13 +727,13 @@ export class World {
       pivot.rotation.y = side < 0 ? 0 : Math.PI;
       pivot.userData.base = pivot.rotation.y;
       pivot.userData.side = side;
-      this.root.add(pivot);
+      this.floorRoots[0].add(pivot);
       leaves.push(pivot);
     }
     const chain = this.kit.makeObject('entrance_chain');
     chain.position.set(ei.mx, 0, ei.mz);
     chain.rotation.y = Math.PI; // chain modelled on the -Y (Blender) side -> face inside (-z)
-    this.root.add(chain);
+    this.floorRoots[0].add(chain);
     this.entrance = { leaves, chain, state: 'locked', anim: 0, edge: e };
     this._entranceRot = rot;
   }
@@ -622,8 +754,9 @@ export class World {
   }
 
   _rasterRegion(x0, z0, x1, z1) {
-    this.los.rasterize(this.colliders, this.doors, x0, z0, x1, z1);
-    this.navb.rasterize(this.colliders, this.doors, ENEMY.radius, (x, z) => this._inside(x, z), x0, z0, x1, z1);
+    const ds = this._doorsOf(0);
+    this.los.rasterize(this.colliders, ds, x0, z0, x1, z1);
+    this.navb.rasterize(this.colliders, ds, ENEMY.radius, (x, z) => this._inside(x, z), x0, z0, x1, z1);
   }
 
   _rasterAll() {
@@ -631,7 +764,18 @@ export class World {
     this.navb.nav.version++;
   }
 
-  getNav() { return this.navb ? this.navb.nav : null; }
+  getNav(floor = 0) {
+    if (floor === 1) return this.floors[1] ? this.floor2.getNav() : null;
+    return this.navb ? this.navb.nav : null;
+  }
+
+  /** Re-raster one floor's LOS + nav grids in a rect (doors locked/unlocked, stair closures). */
+  _rasterFloorRegion(floor, x0, z0, x1, z1) {
+    if (floor === 1) { this.floor2?.raster(x0, z0, x1, z1); return; }
+    if (!this.navb) return;
+    this._rasterRegion(x0, z0, x1, z1);
+    this.navb.nav.version++;
+  }
 
   // ------------------------------------------------------------------------------- gameplay placement
   _walkPoint(x, z, maxDist = 1.6) {
@@ -773,7 +917,7 @@ export class World {
   }
 
   _makeNotes(rng) {
-    for (const n of this._notes || []) this.root.remove(n.mesh);
+    for (const n of this._notes || []) this._removeFromParent(n.mesh);
     this._notes = [];
     const paper = this.kit.materials.get('m_paper');
     const surfaces = [];
@@ -797,7 +941,7 @@ export class World {
       const mesh = new THREE.Mesh(this._noteGeo, paper);
       mesh.position.set(s.x + rng.range(-0.1, 0.1), s.y + 0.004, s.z + rng.range(-0.1, 0.1));
       mesh.rotation.y = rng.range(0, Math.PI * 2);
-      this.root.add(mesh);
+      this.floorRoots[0].add(mesh);
       const text = texts[i % texts.length];
       const note = {
         id: 'note' + i, kind: 'note', position: mesh.position.clone().setY(s.y + 0.05), range: PLAYER.interactRange, object: mesh,
@@ -854,6 +998,7 @@ export class World {
     need('exit', this.exit?.position, 2.0);
     for (const room of this.rooms) {
       if (room.type === 'room000' && !this.room000Revealed) continue;
+      if (room.type === 'stairwell') continue; // Stair B's foot is gated (world-stairs.js)
       if (!this._roomReached(mark, room)) { res.ok = false; res.problems.push('room:' + room.name); }
     }
     if (this.room000) {
@@ -970,6 +1115,7 @@ export class World {
     const door = new Door(this, this.doors.length, { kind: 'room000', hingeSign: 1 });
     door.kind = 'room000';
     this.doors.push(door);
+    this._indexDoors();
     L.doors.push({ id: L.doors.length, edge: r0.edge, corridor: r0.corridor, room: r0.roomId, kind: 'door', cx: r0.cx, cz: r0.cz, locked: false, start: 'closed' });
     L.edgeDoor[r0.edge] = L.doors.length - 1;
     this._placeDoor(door, r0.edge, r0.roomId, r0.corridor);
@@ -986,9 +1132,38 @@ export class World {
   }
 
   // ------------------------------------------------------------------------------- queries
-  moveCircle(pos, delta, radius, out) {
+  floorGroup(f) { return this.floorRoots[f] || this.floorRoots[0]; }
+
+  /** 0 | 1 from a feet position's height (the switch happens on the stairs' half landing). */
+  floorOf(pos) { return pos && pos.y > FLOOR_SPLIT_Y ? 1 : 0; }
+
+  /** Walking surface height: the stair ramp in a stairwell, else the floor's level. */
+  groundAt(x, z, floorHint = 0) {
+    const g = this.stairs.groundAt(x, z, floorHint);
+    return g != null ? g : FLOOR_Y[floorHint] || 0;
+  }
+
+  /** Is the run allowed to start upstairs? ?floor2=1 forces it (0 forbids) until player.js sets floorAware. */
+  floor2Enabled() {
+    if (!this.floors[1]) return false;
+    try {
+      const q = new URLSearchParams(globalThis.location?.search || '');
+      if (q.has('floor2')) return q.get('floor2') !== '0';
+    } catch { /* no location (tests) */ }
+    return !!this.game?.player?.floorAware;
+  }
+
+  _F(f) { return f === 1 && this.floor2?.layout ? this.floor2 : this._f0; } // (floor 2 queries itself while building)
+
+  moveCircle(pos, delta, radius, out, opts) {
     out = out || new THREE.Vector3();
-    if (!this.colliders) return out.set(pos.x + delta.x, pos.y, pos.z + delta.z);
+    const fl = typeof opts === 'number' ? opts : opts && (opts.floor === 0 || opts.floor === 1) ? opts.floor : this.floorOf(pos);
+    const F = this._F(fl);
+    const cols = F.colliders;
+    if (!cols) return out.set(pos.x + delta.x, pos.y, pos.z + delta.z);
+    const doors = this._doorsOf(F.index);
+    // enemies also hit the bulkheads at the stair flights (CONTRACTS §13.1)
+    const ecol = opts && opts.enemy ? this.stairs.enemyCols?.[F.index] || null : null;
     const dx = delta.x, dz = delta.z;
     const len = Math.hypot(dx, dz);
     const step = Math.max(0.05, radius * 0.5);
@@ -996,42 +1171,90 @@ export class World {
     _p.x = pos.x;
     _p.z = pos.z;
     const sx = dx / steps, sz = dz / steps;
-    resolveCircle(this.colliders, _p, radius);
+    // door leaves after the walls, then the walls again: a leaf may shove you along, never into a wall
+    const solve = () => {
+      resolveCircle(cols, _p, radius);
+      if (ecol && resolveCircle(ecol, _p, radius)) resolveCircle(cols, _p, radius);
+      if (resolveLeaves(doors, _p, radius)) resolveCircle(cols, _p, radius);
+    };
+    solve();
     for (let s = 0; s < steps; s++) {
       _p.x += sx;
       _p.z += sz;
-      resolveCircle(this.colliders, _p, radius);
+      solve();
     }
     // never leave the building footprint
+    const B = F.bounds;
     if (_p.x < 0.15) _p.x = 0.15;
     if (_p.z < 0.15) _p.z = 0.15;
-    if (_p.x > this.bounds.maxX - 0.15) _p.x = this.bounds.maxX - 0.15;
-    if (_p.z > this.bounds.maxZ - 0.15) _p.z = this.bounds.maxZ - 0.15;
+    if (_p.x > B.maxX - 0.15) _p.x = B.maxX - 0.15;
+    if (_p.z > B.maxZ - 0.15) _p.z = B.maxZ - 0.15;
     out.set(_p.x, pos.y, _p.z);
     return out;
   }
 
-  isWalkable(x, z, radius = 0) {
-    if (!this.layout || !this._inside(x, z)) return false;
-    return !circleBlocked(this.colliders, x, z, radius);
+  isWalkable(x, z, radius = 0, floor = 0) {
+    const F = this._F(floor);
+    if (!F.layout) return false;
+    if (F === this._f0 ? !this._inside(x, z) : !F._inside(x, z)) return false;
+    return !circleBlocked(F.colliders, x, z, radius) && !(radius > 0 && leafBlocked(this._doorsOf(F.index), x, z, radius));
   }
 
-  lineOfSight(a, b) {
+  /** opts.strict: the AI's perception rules (see LosGrid.query). Each floor has its own grid; points are
+   *  upstairs above LOS_SPLIT. Between floors only through a stairwell's open shaft (over the flights). */
+  lineOfSight(a, b, opts) {
     if (!this.los) return true;
-    return this.los.query(a.x, a.y, a.z, b.x, b.y, b.z, this.doors);
+    const strict = !!opts?.strict;
+    if (!this.floors[1]) return this.los.query(a.x, a.y, a.z, b.x, b.y, b.z, this.doors, strict);
+    const la = a.y >= LOS_SPLIT ? 1 : 0, lb = b.y >= LOS_SPLIT ? 1 : 0;
+    if (la === lb) {
+      const F = this._F(la), Y = F.y;
+      return F.los.query(a.x, a.y - Y, a.z, b.x, b.y - Y, b.z, this.doors, strict);
+    }
+    const t = (LOS_SPLIT - a.y) / (b.y - a.y);
+    const px = a.x + (b.x - a.x) * t, pz = a.z + (b.z - a.z) * t;
+    if (!this.stairs.isFlight(px, pz)) return false; // the slab is in the way everywhere else
+    const lo = la === 0 ? a : b, hi = la === 0 ? b : a;
+    const Y = FLOOR_Y[1];
+    return this.los.query(lo.x, lo.y, lo.z, px, LOS_SPLIT, pz, this.doors, strict) &&
+      this.floor2.los.query(px, LOS_SPLIT - Y, pz, hi.x, hi.y - Y, hi.z, this.doors, strict);
   }
 
-  getRoomAt(x, z) {
+  getRoomAt(x, z, floor = 0) {
+    if (floor === 1) return this.floors[1] ? this.floor2.getRoomAt(x, z) : null;
     if (!this.layout) return null;
     const r = this.layout.roomAt(Math.floor(x / CELL), Math.floor(z / CELL));
     return r >= 0 ? this.rooms[r] : null;
   }
 
+  // ------------------------------------------------------------------------------- stairs / doors / lights
+  setStairState(id, state) { return this.stairs.setState(id, state); }
+  getStairState(id) { return this.stairs.getState(id); }
+
+  /** Card-reader doors (Floor 2) and any other door: nav treats locked doors as walls. */
+  setDoorLocked(door, locked = true) {
+    if (!door) return false;
+    door.isLocked = !!locked;
+    const p = door.position;
+    this._rasterFloorRegion(door.floor || 0, p.x - 1.5, p.z - 1.5, p.x + 1.5, p.z + 1.5);
+    return true;
+  }
+
+  /** Dim red emergency lighting: 'security' (until the power is back), 'stairA' (until the shutter opens). */
+  setEmergencyLights(key, on) { this.lights.setEmergency(key, on); }
+
   // ------------------------------------------------------------------------------- interactables
+  _isHide(spot) { return this.hidingSpots.includes(spot) || !!this.floors[1]?.hidingSpots.includes(spot); }
+
+  /** A hiding place by id on either floor (co-op names them: 'hide7', 'f2hide3'). */
+  getHide(id) { return this.allHidingSpots().find((h) => h.id === id) || null; }
+
+  allHidingSpots() { return this.floors[1] ? this.hidingSpots.concat(this.floor2.hidingSpots) : this.hidingSpots; }
+
   _rebuildInteractables() {
     const list = [];
     for (const d of this.doors) if (d.active) list.push(d.interactable);
-    for (const h of this.hidingSpots) {
+    for (const h of this.allHidingSpots()) {
       if (h.disabled) continue;
       if (!h.interactable) {
         h.interactable = {
@@ -1044,9 +1267,17 @@ export class World {
     }
     for (const n of this._notes || []) list.push(n);
     this._interactables = list;
+    // per floor: the player's reach test is mostly horizontal, so never offer the other floor's doors
+    const fl = (it) => (it.kind === 'hide' ? it.spot.floor : it.door ? it.door.floor : 0) || 0;
+    this._byFloor = [list.filter((it) => fl(it) === 0), list.filter((it) => fl(it) === 1)];
   }
 
-  getInteractables() { return this._interactables; }
+  /** Interactables on `floor` (default: the local player's floor). */
+  getInteractables(floor) {
+    if (!this._byFloor || !this.floors[1]) return this._interactables;
+    const f = floor === 0 || floor === 1 ? floor : this.floorOf(this.game?.player?.position);
+    return this._byFloor[f];
+  }
 
   // ------------------------------------------------------------------------------- doors
   _doorEvent(door, type, by) {
@@ -1054,27 +1285,48 @@ export class World {
     if (by === 'player') this.events?.emit('noise', { position: door.position, radius: 8, source: 'door' });
   }
 
+  /** [pos, radius] pairs: the local player first, then the enemies (this._entEnemyEnd marks the end), then co-op players. */
   _entityPositions() {
     const g = this.game;
     const out = this._ents || (this._ents = []);
     out.length = 0;
     if (g.player && g.player.position) out.push(g.player.position, PLAYER.radius);
-    if (g.enemy && g.enemy.position) out.push(g.enemy.position, ENEMY.radius);
+    const foes = g.enemies || (g.enemy ? [g.enemy] : []);
+    for (const e of foes) {
+      // floor filtering (_sameFloor) keeps a parked enemy (e.g. The Assistant at y = -100) out of it
+      if (e && e.position) out.push(e.position, e.radius || (e.who === 'assistant' ? ASSISTANT.radius : ENEMY.radius));
+    }
+    this._entEnemyEnd = out.length;
     g.coop?.pushEntities?.(out); // co-op: the other players
     return out;
   }
 
+  /** Someone stands in the doorway, or in the arc the leaf sweeps on its way shut (no wedging). */
   _doorBlocked(door) {
     const ents = this._entityPositions();
+    const c = door.collider;
+    const seg = this._sweepSeg || (this._sweepSeg = { ax: 0, az: 0, bx: 0, bz: 0, nx: 0, nz: 0, minX: 0, maxX: 0, minZ: 0, maxZ: 0 });
+    const one = this._sweepOne || (this._sweepOne = [{ leafSeg: seg, leafSolid: true }]);
     for (let i = 0; i < ents.length; i += 2) {
       const p = ents[i];
       const r = ents[i + 1];
-      const c = door.collider;
+      if (!this._sameFloor(p, door.floor)) continue;
       const cx = Math.max(c.minX, Math.min(p.x, c.maxX));
       const cz = Math.max(c.minZ, Math.min(p.z, c.maxZ));
       if ((p.x - cx) ** 2 + (p.z - cz) ** 2 < (r + 0.05) ** 2) return true;
+      const hd = Math.hypot(p.x - door.hinge.x, p.z - door.hinge.z);
+      if (hd > door.leafLen + r + 0.1 || Math.abs(door.angle) < 0.06) continue;
+      for (let k = 1; k <= 6; k++) {
+        setLeafSegment(seg, door.hinge.x, door.hinge.z, door.baseRot + door.angle * (1 - k / 6), door.leafLen, 1);
+        if (leafBlocked(one, p.x, p.z, r)) return true;
+      }
     }
     return false;
+  }
+
+  /** Is a feet position on this floor (by height)? */
+  _sameFloor(p, floor = 0) {
+    return Math.abs((p.y || 0) - (FLOOR_Y[floor] || 0)) < 1.8;
   }
 
   // ------------------------------------------------------------------------------- per frame
@@ -1083,15 +1335,19 @@ export class World {
     dt = Math.min(dt, 0.1);
     // doors
     const ents = this._entityPositions();
+    const foeEnd = this._entEnemyEnd;
     for (let i = 0; i < this.doors.length; i++) {
       const d = this.doors[i];
-      // brushing past an ajar door pushes it fully open
+      // brushing past an ajar door pushes it fully open; an enemy shoves it from further away (1.5 m),
+      // so neither enemy ever squeezes past (or waits behind) a half-open leaf
       if (d.isOpen && Math.abs(d.target) < Math.abs(d.openAngle) * 0.9) {
         for (let k = 0; k < ents.length; k += 2) {
           const p = ents[k];
-          if ((p.x - d.position.x) ** 2 + (p.z - d.position.z) ** 2 < 0.9 * 0.9) {
+          const foe = k > 0 && k < foeEnd;
+          const reach = foe ? 1.5 : 0.9;
+          if ((p.x - d.position.x) ** 2 + (p.z - d.position.z) ** 2 < reach * reach && this._sameFloor(p, d.floor)) {
             d.target = d.openAngle;
-            this.events?.emit('door:open', { door: d, by: k === 0 ? 'player' : k === 2 ? 'enemy' : 'remote', push: true });
+            this.events?.emit('door:open', { door: d, by: k === 0 ? 'player' : foe ? 'enemy' : 'remote', push: true });
             break;
           }
         }
@@ -1102,10 +1358,15 @@ export class World {
         d.angle = Math.abs(diff) <= sp ? d.target : d.angle + Math.sign(diff) * sp;
         d.pivot.rotation.y = d.baseRot + d.angle;
       }
+      if (d._leafAngle !== d.angle) {
+        d._leafAngle = d.angle;
+        this._updateLeaf(d);
+      }
     }
     // hiding spot doors
-    for (let i = 0; i < this.hidingSpots.length; i++) {
-      const h = this.hidingSpots[i];
+    const hides = this.floors[1] && this.floor2.hidingSpots.length ? this.allHidingSpots() : this.hidingSpots;
+    for (let i = 0; i < hides.length; i++) {
+      const h = hides[i];
       if (h.anim < 0) continue;
       h.anim += dt / 0.9;
       const t = h.anim;
@@ -1126,11 +1387,20 @@ export class World {
       const a = this.entrance.anim * (this.entrance.state === 'open' ? 1.3 : 0.25);
       for (const pv of this.entrance.leaves) pv.rotation.y = pv.userData.base + (pv.userData.side < 0 ? -a : a);
     }
-    // lights follow the camera (falls back to the player)
+    this.stairs.update(dt);
+    // lights follow the camera (falls back to the player); only the camera's floor renders, both in a stairwell
     const cam = game?.camera || this.game.camera;
     const ref = cam ? cam.position : game?.player?.position;
-    const room = ref ? this.getRoomAt(ref.x, ref.z) : null;
-    this.lights.update(dt, ref, room);
+    let camFloor = 0, inStair = false;
+    if (ref) {
+      camFloor = ref.y >= LOS_SPLIT ? 1 : 0;
+      inStair = !!this.stairs.stairAt(ref.x, ref.z);
+    }
+    const v0 = this.showAllFloors || inStair || camFloor === 0, v1 = !!this.floors[1] && (this.showAllFloors || inStair || camFloor === 1);
+    this.visibleFloors[0] = this.floorRoots[0].visible = v0;
+    this.visibleFloors[1] = this.floorRoots[1].visible = v1;
+    const room = ref ? this.getRoomAt(ref.x, ref.z, camFloor) : null;
+    this.lights.update(dt, ref, room, camFloor, inStair);
     this.env.update(dt);
     this.graffiti?.update(dt, game || this.game);
   }
@@ -1151,6 +1421,8 @@ export class World {
     return {
       seed: this.seed, layoutSeed: this.layoutSeed, W: this.layout?.W, H: this.layout?.H,
       rooms: this.rooms.length, doors: this.doors.length, hidingSpots: this.hidingSpots.length,
+      floor2: this.floors[1] ? { rooms: this.floor2.rooms.length, doors: this.floor2.doors.length, hidingSpots: this.floor2.hidingSpots.length, patrolPoints: this.floor2.patrolPoints.length, anchors: this.floor2.anchors.length } : null,
+      stairs: { A: this.stairs.getState('A'), B: this.stairs.getState('B') },
       patrolPoints: this.patrolPoints.length, fixtures: this.lights.fixtures.length,
       ...this.stats, static: this.static?.computeStats(),
     };
@@ -1159,7 +1431,7 @@ export class World {
   _disposeLevel() {
     // hiding place ids count from 1 in every school: co-op names them in messages ('hd'), so the host's
     // and a guest's ids must match whatever each of them built before (a solo run, a restart)
-    this._hideCounter = 0;
+    this._f0._hideCounter = 0;
     this.signs?.clear();
     this.election?.clearBanner();
     this.graffiti?.clear();
@@ -1167,15 +1439,21 @@ export class World {
     this._roomData = new Map();
     if (this.static) this.static.dispose();
     this.static = null;
-    for (const d of this.doors) this.root.remove(d.pivot);
+    for (const d of this.doors) this._removeFromParent(d.pivot);
     this.doors = [];
-    for (const n of this._notes || []) this.root.remove(n.mesh);
+    this._floorDoors = [[], []];
+    for (const n of this._notes || []) this._removeFromParent(n.mesh);
     this._notes = [];
     if (this.entrance) {
-      for (const l of this.entrance.leaves) this.root.remove(l);
-      this.root.remove(this.entrance.chain);
+      for (const l of this.entrance.leaves) this._removeFromParent(l);
+      this._removeFromParent(this.entrance.chain);
       this.entrance = null;
     }
+    this.floor2?.dispose();
+    this.floors[1] = null;
+    this.stairs.dispose();
+    if (this.sharedStatic) this.sharedStatic.dispose();
+    this.sharedStatic = null;
     this.lights.dispose();
     this.hidingSpots = [];
     this.patrolPoints = [];

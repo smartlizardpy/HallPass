@@ -16,6 +16,7 @@
  * opt-in still decides whether an accepted friend sees a photo instead.
  */
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/app/lib/auth";
 import { parseAvatarChoice, resolveAvatar } from "@/app/lib/avatars";
@@ -40,7 +41,10 @@ async function saveAvatarAction(formData: FormData): Promise<void> {
   } catch {
     failed = true;
   }
-  // Redirecting re-renders the layout, so the header avatar updates at once.
+  // Expire the cached tree under /play/you so the identity header above the tabs
+  // shows the new avatar at once; the redirect alone can be served from the
+  // client router cache. (The site-header chip refetches on path change.)
+  if (!failed) revalidatePath("/play/you", "layout");
   redirect(failed ? "/play/you/settings?error=db" : "/play/you/settings");
 }
 

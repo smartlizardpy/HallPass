@@ -25,7 +25,7 @@ const shared: Options = {
   treeshake: true,
   outExtension: () => ({ js: ".js", dts: ".d.ts" }),
   banner: {
-    js: `/* HallPass P2P SDK v${P2P_VERSION} — peer-to-peer co-op for HallPass games — https://hallpass.gg/sdk/p2p/v${P2P_MAJOR}/ — MIT */`,
+    js: `/* HallPass P2P SDK v${P2P_VERSION} — peer-to-peer co-op for HallPass games — https://hallpass.games/sdk/p2p/v${P2P_MAJOR}/ — MIT */`,
   },
 };
 

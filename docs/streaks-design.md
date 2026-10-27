@@ -20,7 +20,7 @@ passing your score with no challenge in play told nobody.
 3. **No win-back for lapsed players.** Only a streak the player built and can
    still save is nudged. For a school audience, "we miss you" is where an arcade
    starts to feel manipulative.
-4. **17:00 local**, once per local day. **Hourly** cron, its own workflow.
+4. **17:00–20:59 local window**, once per local day. **Hourly** cron, its own workflow. A window rather than one hour because GitHub drops and delays cron runs.
 5. **`friend_passed` defaults to the bell**, for the reason `challenge_beaten`
    does: one popular board and one class is a dozen buzzes.
 6. **Gated on a new personal best**, so the extra statement on the leaderboard

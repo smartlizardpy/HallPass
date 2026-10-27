@@ -4,7 +4,7 @@
 -- database, run `scoreboard/migrations/036_player_streaks.sql` instead — the two
 -- must stay in lockstep. Read that migration's header for the design argument.
 -- In brief: one row per player, `last_day` is the player's own calendar day as a
--- DATE, `tz_offset_min` only locates their 17:00, and `last_nudged_day` makes the
+-- DATE, `tz_offset_min` only locates their 17:00-20:59 window, and `last_nudged_day` makes the
 -- reminder at most once per local day.
 
 CREATE TABLE IF NOT EXISTS player_streaks (

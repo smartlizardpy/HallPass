@@ -12,7 +12,7 @@
  * Load-bearing decisions:
  *  - The base URL is derived from the request so every example/curl resolves on
  *    localhost, previews, and production. The embed snippet itself is reproduced
- *    VERBATIM (it hard-codes hallpass.gg/sdk/v1/hallpass.js); a note explains how
+ *    VERBATIM (it hard-codes hallpass.games/sdk/v1/hallpass.js); a note explains how
  *    to repoint the src when self-hosting from another origin.
  *  - The registered-slug list is generated from `resolveGames()`, so it stays in
  *    sync as games are added AND reflects dashboard title overrides.
@@ -110,7 +110,7 @@ off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});retur
 setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
 q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:c.n==="invite"?{sent:0,link:null,cancelled:true}:{ok:false,reason:"inert"})})},2000)})(window);
 </script>
-<script src="https://hallpass.gg/sdk/v1/hallpass.js" data-game="YOUR-SLUG" defer></script>
+<script src="https://hallpass.games/sdk/v1/hallpass.js" data-game="YOUR-SLUG" defer></script>
 
 Replace YOUR-SLUG with the board slug you provisioned in section 2. The first
 <script> is a tiny SYNCHRONOUS stub: it installs window.HallPass immediately and
@@ -119,7 +119,7 @@ hit a "HallPass is undefined" error — even if the real SDK script is blocked o
 slow to load. When the real SDK arrives it replaces the stub and drains the
 queue. If the SDK never loads (e.g. a sandboxed preview), the stub flips mode to
 "inert" after 2 seconds and resolves every queued call with a safe no-op. If you
-serve the SDK from a host other than hallpass.gg, point the second <script> src
+serve the SDK from a host other than hallpass.games, point the second <script> src
 at ${base}/sdk/v1/hallpass.js.
 
 ## 4. Game-over usage
@@ -292,7 +292,7 @@ Error responses share a uniform body { error } with these status codes:
   a moment, not a state, so a listener added later is not re-toasted.
 
 ## 7. Environment matrix
-- Hosted on hallpass.gg (this site)   -> live  (same-origin fetch).
+- Hosted on hallpass.games (this site)   -> live  (same-origin fetch).
 - Standalone host (your own domain)   -> live  (cross-origin; the API sends
                                           CORS-open headers so the fetch works).
 - In-chat AI Canvas / sandbox preview -> inert (the SDK script and network are

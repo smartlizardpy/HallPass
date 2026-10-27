@@ -20,8 +20,9 @@ export const CATALOGUE = [
   { key: 'signed-out', name: 'Signed Out', description: 'Sign the Room 000 register and call off the hunt.', icon: '🖊️', points: 15 },
   { key: 'nobody-left-behind', name: 'Nobody Left Behind', description: 'Let a friend out of Room 000.', icon: '🤝', points: 20 },
   { key: 'all-out-together', name: 'All Out Together', description: 'Everyone in the team escapes.', icon: '👥', points: 25 },
-  { key: 'doner-kebab', name: 'Unfunded Policy', description: 'Vote Tövbe, find the döner shop and eat the döner.', icon: '🥙', points: 15 },
+  { key: 'doner-kebab', name: 'Unfunded Policy', description: 'Vote Ozzy, find the döner shop and eat the döner.', icon: '🥙', points: 15 },
   { key: 'egemen-was-here', name: 'Egemen Was Here', description: 'Spot the glowing tag in the dark.', icon: '🔦', points: 15, secret: true },
+  { key: 'down-bad', name: 'Down Bad', description: 'Get caught by the lunch monitor.', icon: '🍎', points: 10, secret: true },
   { key: 'enormous-burp', name: 'Enormous Burp', description: 'Get close enough to hear it.', icon: '💨', points: 10, secret: true },
 ];
 const BY_KEY = new Map(CATALOGUE.map((a) => [a.key, a]));
@@ -67,7 +68,7 @@ export class Achievements {
         this.unlock('detention');
         break;
       case 'easter-egg':
-        this.unlock('egemen-was-here');
+        if (!d.egg || d.egg === 'egemen') this.unlock('egemen-was-here');
         break;
       case 'pa-broadcast':
         this.unlock('on-the-tannoy');
@@ -83,6 +84,9 @@ export class Achievements {
         break;
       case 'winded':
         this.unlock('out-of-breath');
+        break;
+      case 'down-bad':
+        this.unlock('down-bad');
         break;
       case 'big-burp':
         this.unlock('enormous-burp');

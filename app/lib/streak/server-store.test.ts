@@ -79,7 +79,9 @@ describe("dueForReminder", () => {
     );
     expect(due).toEqual([{ playerId: "p1", current: 5, localDay: "2026-10-02" }]);
     expect(calls[0].text).toMatch(/push_subscriptions/);
-    expect(calls[0].values).toContain(17); // the reminder hour
+    expect(calls[0].text).toMatch(/BETWEEN/);
+    expect(calls[0].values).toContain(17); // first hour of the window
+    expect(calls[0].values).toContain(20); // last hour of the window
     expect(calls[0].values).toContain(50); // the cap
   });
 });

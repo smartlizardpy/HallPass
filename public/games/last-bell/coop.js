@@ -24,30 +24,65 @@
 //   - The run ends when nobody is left free inside (or the clock runs out). Whoever got out wins.
 //   - The game never pauses in co-op (the pause menu still opens). The host leaving ends the run.
 //
+// Second Floor update (protocol v2, COOP_VERSION '2'; the SDK refuses a mismatched build):
+//   - Two floors: every position carries y (feet). The floor is derived from y (world.floorOf).
+//   - Two enemies: the Caretaker (ground floor) and The Assistant (upstairs). Caught by the Caretaker →
+//     Room 000 (as before); caught by The Assistant → the Art room's "MY FRIENDS" circle (anchor
+//     'art-circle'). A teammate frees you either way (host-validated: same floor, within 3.5 m).
+//   - game.net (net.js) is bound to the room while a run is on (n:<type> messages, below).
+//   - Every guest→anyone message is validated (sender, shape, range, distance) and rate limited per
+//     sender with a token bucket (RATE). Over-limit messages are dropped and counted (netStats).
+//   - Text chat (chat.js), the player list (playerlist.js) and Director Mode (director.js) are built here.
+//   - Hidden Directors (HallPass admins, multiplayer.md §5) are room members but never players: not in
+//     the lobby, the ready check, the run roster, the team panel, the player list or any count; never
+//     enemy targets; they can't interact. Director Mode is OFF unless the host can verify them:
+//     room.verifyPeer (HallPass P2P SDK ≥ 1.3, feature-detected) or, for development only, the `local`
+//     transport on localhost with ?director=dev. No name, URL flag or client claim is ever trusted.
+//
 // Messages (room.send names; reliable unless noted):
-//   run  host→all  {seed, difficulty, roster, startAt}     lobby host→all  back to the lobby
-//   ps   all→all   [x, z, yaw, pitch, flags, noise]  unreliable, 15 Hz
-//   es   host→all  enemy snapshot (enemy.netSnapshot())  unreliable, 15 Hz
-//   ee   host→all  caretaker events (voice lines, spotted, state, winded…)
-//   nz   guest→host [x, z, radius, source]               dr  all→all [door, open]
+//   run  host→all  {seed, difficulty, roster, startAt, startFloor}   lobby host→all  back to the lobby
+//   ps   all→all   [x, y, z, yaw, pitch, flags, noise]  unreliable, 15 Hz (players only, never Directors)
+//   es   host→all  {c, a}: the Caretaker's and The Assistant's netSnapshot() (null when disabled), 15 Hz unreliable
+//   ee   host→all  enemy events {k, en?: 'assistant', tg?: target player id, line, state, prev…}
+//   nz   guest→host [x, y, z, radius, source]            dr  all→all [door, open]
 //   hd   all→all   {id, on}  hiding place                pk  host→all {id, by}  item picked
-//   r0   host→all  Room 000 opens                       xf/xw host→all transform / warning
-//   ck   host→all  {left, t}  1 Hz                       ct  host→all {id}  caught
-//   rs   host→all  {st: {id: status}}                    fr  host→all {id, by}  freed
-//   xo   host→all  main entrance open                    out guest→host  I walked out
-//   end  host→all  {reason, st, t, left}                 fx  guest→host caretaker lure (distract / call off)
-//   pa / psd / pst  PA broadcast, PlayStation dropped / taken    wv  wave emote
+//   r0   host→all  Room 000 opens                        xf/xw host→all transform / warning
+//   ck   host→all  {left, t}  1 Hz                        ct  host→all {id, who}  caught (who: which enemy)
+//   rs   host→all  {st: {id: status}, at: {id: 'r0'|'art'}}   fr  host→all {id, by}  freed
+//   xo   host→all  main entrance open                     out guest→host  I walked out
+//   end  host→all  {reason, st, t, left}                  fx  guest→host lure {k, x, y, z} (distract / call off)
+//   pa / psd / pst  PA broadcast, PlayStation dropped / taken     wv  wave emote
+//   dirs host→all  {ids}: the verified Directors (everyone hides them)
+//   me   host→peer {founder}: what HallPass attested about you (founder Easter egg)
+//   drun host→Director {seed, difficulty, roster, st, at, t, left, xf, r0, f1, exit, picked, doors, startFloor}: late join
+//   n:<type>  game.net: {b} host broadcast · {h} toHost · {q, d} request      nr host→peer {q, r} reply
+//   nsnap host→peer {all}: net.snapshotAll()      nsync guest→host: please resend nsnap
+//   dlog / dstate host→Directors: the action log, the debug overlay (director.js)
 // Requests (room.request → host): pick {id}, free {id}, exit {}.
 
 import * as THREE from './lib/three/three.module.js';
 import { HallPassP2P } from './lib/hallpass-p2p.js';
-import { ITEM_IDS, ITEM_NAMES, PLAYER, DIFFICULTY } from './config.js';
-import { RemoteAvatars, SnapBuffer, F } from './coop-avatars.js';
+import { ITEM_IDS, ITEM_NAMES, PLAYER, DIFFICULTY, FLOOR_Y, FLOOR_SPLIT_Y } from './config.js';
+import { RemoteAvatars, SnapBuffer, F, floorBand } from './coop-avatars.js';
 import { songSubtitle } from './computers.js';
+import { Chat } from './chat.js';
+import { PlayerList } from './playerlist.js';
+import { Director } from './director.js';
 
-export const COOP_VERSION = '1';
+export const COOP_VERSION = '2';
 const GAME_ID = 'last-bell';
 const MAX_PLAYERS = 4;
+const MAX_ROOM = 6; // 4 players + 2 Directors (only in rooms that can verify Directors)
+export const DIRECTOR_NAME = 'HallPass Director'; // the name a Director joins under (hidden until the host decides)
+const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])$/;
+const CLAIM_GRACE = 6000; // ms: a late joiner has this long to be verified as a Director, or is removed
+// Receive-side rate limits per sender: [tokens per second, burst]. Over the limit → dropped and counted.
+const RATE = {
+  ps: [24, 36], nz: [12, 24], dr: [5, 8], hd: [4, 6], pa: [0.4, 2], psd: [1, 3], pst: [1, 3], wv: [1, 3],
+  fx: [1, 4], out: [0.5, 2], pick: [4, 8], free: [2, 4], exit: [1, 3], nsync: [0.2, 2], n: [30, 60],
+  // Director Mode (director.js; Directors only, still bounded)
+  'dir:in': [20, 40], 'dir:act': [4, 6], 'dir:possess': [2, 4], 'dir:release': [2, 4], 'dir:event': [1, 3], 'dir:kick': [0.5, 2],
+};
 const STATE_HZ = 15;
 const ENEMY_HZ = 15;
 const INTERP_DELAY = 110; // ms behind the host clock: smooth motion between snapshots
@@ -84,15 +119,63 @@ const SKIN_PAINT = [0.86, 0.68, 0.56]; // the painted skin (sRGB) that the skin 
 const ANIMS = ['idle', 'stare', 'walk', 'run', 'search', 'investigate', 'turn_left', 'turn_right', 'capture'];
 const ESTATES = ['PATROL', 'SUSPICIOUS', 'INVESTIGATE', 'CHASE', 'SEARCH', 'CAPTURE', 'IDLE'];
 const STATUS_WORD = { alive: '', captured: 'caught!', trapped: 'in Room 000', escaping: 'getting out', escaped: 'got out', left: 'left' };
+const TRAP_WORD = { r0: 'in Room 000', art: 'in the Art room' };
+const ENEMY_KEYS = [['c', 'caretaker'], ['a', 'assistant']];
+
+/** Per-sender token buckets (receive-side rate limits). */
+class Buckets {
+  constructor() {
+    this.map = new Map();
+    this.dropped = {}; // type -> count
+  }
+  allow(type, from, [rate, burst] = RATE.n, now = performance.now()) {
+    const k = `${type}|${from}`;
+    let b = this.map.get(k);
+    if (!b) this.map.set(k, (b = { tokens: burst, t: now }));
+    b.tokens = Math.min(burst, b.tokens + ((now - b.t) / 1000) * rate);
+    b.t = now;
+    if (b.tokens >= 1) {
+      b.tokens -= 1;
+      return true;
+    }
+    this.dropped[type] = (this.dropped[type] || 0) + 1;
+    return false;
+  }
+  forget(from) {
+    for (const k of [...this.map.keys()]) if (k.endsWith(`|${from}`)) this.map.delete(k);
+  }
+  clear() {
+    this.map.clear();
+  }
+}
 
 const r2 = (n) => Math.round((+n || 0) * 100) / 100;
 const r3 = (n) => Math.round((+n || 0) * 1000) / 1000;
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
 const clampI = (v, n) => (Number.isInteger(v) && v >= 0 && v < n ? v : 0);
+const inRange = (v, lo, hi) => num(v) && v >= lo && v <= hi;
+/** A plausible world position (metres): the school lives in positive x/z, two floors. */
+const okPos = (x, y, z) => inRange(x, -50, 400) && inRange(y, -5, 12) && inRange(z, -50, 400);
+const floorOfY = (y) => (y > FLOOR_SPLIT_Y ? 1 : 0);
+const devLocalHost = () => {
+  try {
+    return LOCAL_HOST.test(location.hostname);
+  } catch {
+    return false;
+  }
+};
 
 export function cleanName(s) {
-  return String(s ?? '').replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 20) || 'Student';
+  const n = String(s ?? '')
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff<>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 20);
+  // nobody gets to look like staff: "HallPass", "Director", "Admin", "Moderator" are reserved
+  if (/hall\s*pass|\b(director|admin|administrator|moderator|mod|staff)\b/i.test(n)) return 'Student';
+  return n || 'Student';
 }
+const cleanText140 = (s) => String(s || '').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, '').slice(0, 140);
 function cleanLook(l) {
   l = l && typeof l === 'object' ? l : {};
   return {
@@ -198,7 +281,26 @@ export class Coop {
     this._specIdx = 0;
     this._interactables = [];
     this._runTimer = null;
+    // protocol v2: guards, the net bus, identity, Directors
+    this._rl = new Buckets();
+    this.netStats = { dropped: this._rl.dropped, bad: 0 };
+    this.directors = new Map(); // host: verified Directors: id -> { id, ident, how, at }
+    this._dirIds = new Set(); // everyone: the verified Directors (host's 'dirs')
+    this._claims = new Map(); // host: peers waiting to be verified (Director claims, late joiners): id -> since
+    this._verifying = new Set(); // host: claims being checked right now
+    this._ident = new Map(); // host: id -> HallPass-attested identity { role, founder, publicId } | null
+    this._selfIdent = null; // guest: what the host told us about ourselves ('me')
+    this._netT = null; // the transport bound to game.net
+    this._netSubs = new Map(); // 'n:<type>' -> off()
+    this._netReqs = new Map(); // request id -> { resolve, timer }
+    this._netSeq = 0;
+    this._netKnown = -1;
+    this._xfLog = []; // host: this run's transforms, for a Director who joins late
+    this._wantDirector = false; // this tab asked to join as a Director
     this.$ = (id) => document.getElementById(id);
+    this.chat = new Chat(game, this);
+    this.plist = new PlayerList(game, this);
+    this.director = new Director(game, this);
     this._bindUI();
     this._joinFromInvite(); // opened from a HallPass invite? straight into that room
     this._bindGame();
@@ -215,6 +317,58 @@ export class Coop {
   }
   get guest() {
     return this.active && !this.isHost;
+  }
+  /** This tab is a verified Director in the current room (the host said so). */
+  get amDirector() {
+    return !!this.room && this._dirIds.has(this.room.selfId);
+  }
+
+  /** Development only: the SDK's `local` transport (tabs of one browser) on localhost. */
+  _devLocal() {
+    return devLocalHost() && this.client?.transport === 'local';
+  }
+
+  /** Can this room verify Directors? HallPass attestation (SDK ≥ 1.3, feature-detected) or the dev stub. */
+  get dirCapable() {
+    return !!this.room && (typeof this.room.verifyPeer === 'function' || this._devLocal());
+  }
+
+  /** A room member who is (or claims to be, pending the host's verdict) a Director: never shown as a player. */
+  _hiddenPeer(p) {
+    if (!p) return false;
+    if (this._dirIds.has(p.id)) return true;
+    if (p.isSelf) return this._wantDirector;
+    return p.name === DIRECTOR_NAME || p.meta?.dir === 1;
+  }
+
+  /** The room's players, Directors (and Director claims) left out: the lobby, the ready check, the roster. */
+  _lobbyPlayers() {
+    return this.room ? this.room.players.filter((p) => !this._hiddenPeer(p)) : [];
+  }
+
+  /** A real player in this run (in the roster, not left, not a Director). */
+  _isPlayer(id) {
+    const r = this.roster.get(id);
+    return !!r && r.status !== 'left' && !this._dirIds.has(id);
+  }
+
+  /** Feet position of a player in this run (yourself, or the stand-in fed by their 'ps'). */
+  _posOf(id) {
+    if (id === this.selfId) return this.game.player?.position || null;
+    const pr = this.proxies.get(id);
+    return pr?._seen ? pr.position : null;
+  }
+
+  _floorOf(pos) {
+    if (!pos) return 0;
+    const f = this.game.world?.floorOf?.(pos);
+    return f === 0 || f === 1 ? f : floorOfY(pos.y || 0);
+  }
+
+  /** Rate limit for messages from `from` (never for our own). */
+  _allow(type, from) {
+    if (from === this.selfId) return true;
+    return this._rl.allow(type, from, RATE[type] || RATE.n);
   }
 
   // =================================================================================== lobby UI
@@ -338,7 +492,7 @@ export class Coop {
     const list = this.$('coop-players');
     if (list) {
       list.replaceChildren();
-      const players = room.players;
+      const players = this._lobbyPlayers();
       for (const p of players) {
         const li = document.createElement('li');
         const look = lookColors(p.isSelf ? this.look : p.meta?.look);
@@ -394,10 +548,11 @@ export class Coop {
     if (dBtn) dBtn.disabled = !this.isHost;
     const wait = this.$('coop-wait');
     if (wait) {
-      const n = room.players.filter((p) => !this._isReady(p)).length;
+      const n = this._lobbyPlayers().filter((p) => !this._isReady(p)).length;
       wait.textContent = !n ? 'Everyone is ready. Starting…' : `Waiting for ${n} player${n > 1 ? 's' : ''} to be ready…`;
     }
     this._checkAllReady();
+    this.director.renderLobby?.();
   }
 
   // ================================================================================== ready check
@@ -406,7 +561,7 @@ export class Coop {
   }
 
   setReady(on) {
-    if (!this.room || (this.active && !this._ended)) return;
+    if (!this.room || (this.active && !this._ended) || this._wantDirector) return;
     this._ready = !!on;
     this.room.setPlayerMeta({ ready: this._ready ? 1 : 0 });
     this.game.ui?._sound?.('ui_toggle');
@@ -418,7 +573,8 @@ export class Coop {
     const room = this.room;
     if (!room?.isHost) return;
     const open = !(this.active && !this._ended) && !room.started;
-    const all = open && room.players.length > 0 && room.players.every((p) => this._isReady(p));
+    const players = this._lobbyPlayers();
+    const all = open && players.length > 0 && players.every((p) => this._isReady(p));
     if (!all) {
       if (this._goTimer) {
         clearTimeout(this._goTimer);
@@ -431,13 +587,13 @@ export class Coop {
     this._status('Everyone is ready. Starting in 3…');
     this._goTimer = setTimeout(() => {
       this._goTimer = null;
-      if (this.room?.isHost && this.room.players.every((p) => this._isReady(p))) this.hostStart();
+      if (this.room?.isHost && this._lobbyPlayers().every((p) => this._isReady(p))) this.hostStart();
     }, 3000);
   }
 
   // ================================================================================ connection
-  async _connect() {
-    if (this.client && this.client.self?.name !== this.name && !this.room) {
+  async _connect(name = this.name) {
+    if (this.client && this.client.self?.name !== name && !this.room) {
       try {
         await this.client.close();
       } catch {
@@ -446,7 +602,11 @@ export class Coop {
       this.client = null;
     }
     if (!this.client) {
-      this.client = await HallPassP2P.connect({ gameId: GAME_ID, gameVersion: COOP_VERSION, name: this.name, debug: params.has('coopdebug') });
+      this.client = await HallPassP2P.connect({ gameId: GAME_ID, gameVersion: COOP_VERSION, name, debug: params.has('coopdebug') });
+    } else if (this.client.transport === 'local' && this.client.self) {
+      // the same tab joining again under another name (a Director seat, then a player): local only; on
+      // HallPass the name always comes from the account
+      this.client.self.name = name;
     }
     return this.client;
   }
@@ -456,8 +616,11 @@ export class Coop {
     this._busy = true;
     this._status('Opening a room…');
     try {
+      this._wantDirector = false;
       const client = await this._connect();
-      const room = await client.createRoom({ maxPlayers: MAX_PLAYERS, meta: { difficulty: this.game.settings.difficulty } });
+      // rooms that can verify Directors take 6 (4 players + 2 hidden Directors); players stay capped at 4
+      const canVerify = (client.transport === 'local' && devLocalHost()) || HallPassP2P?.features?.verifyPeer === true;
+      const room = await client.createRoom({ maxPlayers: canVerify ? MAX_ROOM : MAX_PLAYERS, meta: { difficulty: this.game.settings.difficulty } });
       this._attach(room);
       this._status('Share the code. Start when everyone is in.');
     } catch (err) {
@@ -467,8 +630,9 @@ export class Coop {
     }
   }
 
-  /** from: who invited you (a HallPass invite), for "Joining <from>'s room…". */
-  async join(code, from = '') {
+  /** from: who invited you (a HallPass invite), for "Joining <from>'s room…".
+   *  asDirector: Director Mode (director.js checks it is allowed first; the host verifies it again). */
+  async join(code, from = '', { asDirector = false } = {}) {
     code = String(code || '').trim().toUpperCase();
     if (this._busy || this.room) return;
     if (code.length !== 4) {
@@ -477,17 +641,24 @@ export class Coop {
     }
     this._busy = true;
     const token = (this._joinToken = (this._joinToken || 0) + 1);
-    this._status(from ? `Joining ${from}'s room…` : 'Joining…');
+    this._status(asDirector ? 'Joining as a Director…' : from ? `Joining ${from}'s room…` : 'Joining…');
     try {
-      const client = await this._connect();
+      this._wantDirector = !!asDirector;
+      const client = await this._connect(asDirector ? DIRECTOR_NAME : this.name);
       const room = await client.joinRoom(code, { timeoutMs: 20000 });
       if (token !== this._joinToken) {
         room.leave().catch(() => {}); // you pressed Back while it was connecting
         return;
       }
       this._attach(room);
+      if (asDirector) {
+        // the claim; the host verifies it (HallPass attestation, or the localhost dev stub) or removes us
+        room.setPlayerMeta({ dir: 1, ...(this._devLocal() && this.director.devRequested ? { dev: 'director' } : {}) });
+        this.director.onJoinedAsDirector();
+      }
       this._status('');
     } catch (err) {
+      if (!this.room) this._wantDirector = false;
       if (token === this._joinToken) this._status(err?.message || 'Could not join that room.', 'error');
     } finally {
       this._busy = false;
@@ -566,16 +737,30 @@ export class Coop {
 
   _attach(room) {
     this.room = room;
+    this._dirIds.clear();
+    this._claims.clear();
+    this._ident.clear();
+    this._selfIdent = null;
+    this._rl.clear();
     const on = (ev, fn) => this._offs.push(room.on(ev, fn));
     on('player-join', (p) => {
+      if (room.isHost) this._hostOnJoin(p);
       this._renderLobby();
+      this.plist.refresh();
+      if (this._hiddenPeer(p) || this.amDirector) return; // a Director (or a claim): no sound, no notice
       if (!this.active) this.game.audio?.play?.('ui_select');
       if (this.active) this.game.ui?.showNotice?.(`${cleanName(p.name)} is in the lobby.`, 3);
     });
     on('player-leave', ({ id }) => this._onLeave(id));
-    on('player-update', () => this._renderLobby());
+    on('player-update', (p) => {
+      if (room.isHost) this._hostOnUpdate(p);
+      else if (p?.id === room.hostId) this._guestHostConn(p);
+      this._renderLobby();
+      this.plist.refresh();
+    });
     on('room-update', () => this._renderLobby());
     on('closed', ({ reason }) => this._onClosed(reason));
+    on('kicked', ({ reason } = {}) => (this._kickWhy = cleanText140(reason)));
     on('error', (err) => console.warn('[coop]', err?.message || err));
     on('visibility', ({ id, hidden }) => {
       if (this.active && hidden && id === room.hostId) this.game.ui?.showNotice?.('The host tabbed out. The school is frozen until they come back.', 5);
@@ -601,18 +786,32 @@ export class Coop {
     on('end', (d, m) => this._onEnd(d, m));
     on('pa', (d, m) => this._onPA(d, m));
     on('psd', (d, m) => this._onPsDrop(d, m));
-    on('pst', () => this.active && this.game.computers?.remotePsTake?.());
-    on('wv', (d, m) => this.active && this.avatars.playOnce(m.from, 'wave'));
+    on('pst', (d, m) => this._fromPlayer('pst', m) && this.game.computers?.remotePsTake?.());
+    on('wv', (d, m) => this._fromPlayer('wv', m) && this.avatars.playOnce(m.from, 'wave'));
+    // protocol v2: Directors, identity, the net bus, late joins, resync
+    on('dirs', (d, m) => this._onDirs(d, m));
+    on('me', (d, m) => m.from === room.hostId && d && (this._selfIdent = { founder: d.founder === true }));
+    on('drun', (d, m) => this._onDirectorRun(d, m));
+    on('nr', (d, m) => this._onNetReply(d, m));
+    on('nsnap', (d, m) => m.from === room.hostId && d?.all && this.game.net.applySnapshot(d.all));
+    this.director.attach(room, on);
     if (room.isHost) {
-      this._offs.push(room.handle('pick', (d, m) => this._hostPick(d, m.from)));
-      this._offs.push(room.handle('free', (d, m) => this._hostFree(d, m.from)));
-      this._offs.push(room.handle('exit', (d, m) => this._hostExit(m.from)));
-      on('out', (d, m) => this._setStatus(m.from, 'escaped'));
-      on('fx', (d, m) => this._hostLure(d, m.from));
+      const guard = (type, fn) => (d, m) => (this._allow(type, m.from) ? fn(d, m) : { ok: false, error: 'rate' });
+      this._offs.push(room.handle('pick', guard('pick', (d, m) => this._hostPick(d, m.from))));
+      this._offs.push(room.handle('free', guard('free', (d, m) => this._hostFree(d, m.from))));
+      this._offs.push(room.handle('exit', guard('exit', (d, m) => this._hostExit(m.from))));
+      on('out', (d, m) => this._fromPlayer('out', m) && this._hostOut(m.from));
+      on('fx', (d, m) => this._fromPlayer('fx', m) && this._hostLure(d, m.from));
+      on('nsync', (d, m) => this._allow('nsync', m.from) && this._sendSnapshot(m.from));
+      for (const p of room.players) if (!p.isSelf) this._hostOnJoin(p);
     }
     this._offs.push(room.voice.on('stream', ({ peerId, stream }) => this._voiceStream(peerId, stream)));
     this._offs.push(room.voice.on('stream-end', ({ peerId }) => this._voiceEnd(peerId)));
-    room.setPlayerMeta({ look: this.look });
+    // development only (localhost + local transport): a ?founder=dev tab tells the host, which accepts
+    // it only under the same conditions. On HallPass the host asks HallPass (room.verifyPeer) instead.
+    const id = this.game.identity;
+    const dev = this._devLocal() && id?.publicId === 'dev' ? { devId: { founder: id.founder ? 1 : 0, role: id.role || null } } : {};
+    room.setPlayerMeta({ look: this.look, ...dev });
     this._view('room');
     this._renderLobby();
     this.avatars.load().catch((err) => console.warn('[coop] student model failed', err));
@@ -635,7 +834,15 @@ export class Coop {
     this._vc.clear();
     this.game.audio?.chatDuck?.(false);
     clearTimeout(this._runTimer);
+    this._unbindNet();
+    this.director.detach();
+    this.chat.reset();
+    this._dirIds.clear();
+    this._claims.clear();
+    this.directors.clear();
+    this._wantDirector = false;
     this.room = null;
+    this.plist.refresh();
   }
 
   _onClosed(reason) {
@@ -643,7 +850,8 @@ export class Coop {
     const g = this.game;
     this._endRunLocal();
     this._detach();
-    const why = { 'host-left': 'The host left, so the room closed.', kicked: 'You were removed from the room.', timeout: 'Lost the connection to the host.', error: 'The connection failed.' }[reason];
+    const why = { 'host-left': 'The host left, so the room closed.', kicked: this._kickWhy || 'You were removed from the room.', timeout: 'Lost the connection to the host.', error: 'The connection failed.' }[reason];
+    this._kickWhy = '';
     if (reason === 'left') return;
     if (wasActive) {
       g.enterMenu();
@@ -656,21 +864,239 @@ export class Coop {
   _onLeave(id) {
     const r = this.roster.get(id);
     this._vc.delete(id);
+    this._claims.delete(id);
+    this._rl.forget(id);
+    this._ident.delete(id);
+    if (this._dirIds.has(id)) {
+      // a Director left: the host releases anything they were possessing (and tells the others)
+      if (this.isHost) {
+        this.director.hostDirectorLeft(id);
+        this.directors.delete(id);
+        this._dirIds.delete(id);
+        this._sendDirs();
+      } else this._dirIds.delete(id);
+    }
     this._renderLobby();
+    this.plist.refresh();
     this._voiceEnd(id);
     if (!this.active || !r) return;
     r.status = 'left';
     this.avatars.remove(id);
     this.proxies.delete(id);
-    for (const h of this.game.world?.hidingSpots || []) if (h.remoteBy === id) h.remoteBy = null;
+    const w = this.game.world;
+    for (const h of w?.allHidingSpots?.() || w?.hidingSpots || []) if (h.remoteBy === id) h.remoteBy = null;
+    if (this.isHost) this.events.emit('player:left', { id }); // floor2.js: drop the staff card where they were
     this.game.ui?.showNotice?.(`${r.name} left the game.`, 4);
     this._renderTeam();
+  }
+
+  // ============================================================== Directors & identity (host)
+  /** Host: someone joined (or is in the room when we attach). Verify identity; Director claims; late joiners. */
+  _hostOnJoin(p) {
+    if (!p || p.isSelf) return;
+    this._hostVerifyIdentity(p);
+    if (this._hiddenPeer(p)) {
+      this._claims.set(p.id, performance.now());
+      this._hostCheckClaim(p);
+      return;
+    }
+    const running = this.active && !this._ended;
+    const players = this._lobbyPlayers().length;
+    if ((running || players > MAX_PLAYERS) && this.dirCapable) {
+      // only possible in rooms that stay open for Directors: give a Director's claim (meta) time to arrive
+      this._claims.set(p.id, performance.now());
+    } else if (players > MAX_PLAYERS) {
+      this._kick(p.id, 'The room is full.');
+    }
+  }
+
+  _hostOnUpdate(p) {
+    if (!p || p.isSelf) return;
+    if (this._claims.has(p.id)) this._hostCheckClaim(p);
+    if (this._devLocal() && p.meta?.devId && !this._ident.get(p.id)) this._hostVerifyIdentity(p);
+    // a peer came back after "reconnecting": catch them up on the shared state
+    const st = p.connection?.state;
+    const was = this._connState?.get(p.id);
+    (this._connState ||= new Map()).set(p.id, st);
+    if (this.active && was === 'reconnecting' && st === 'connected') this._sendSnapshot(p.id);
+  }
+
+  /** Guest: our link to the host came back after "reconnecting": ask for the shared state again. */
+  _guestHostConn(p) {
+    const st = p.connection?.state;
+    if (this.active && this._hostConn === 'reconnecting' && st === 'connected') {
+      try {
+        this.room.send('nsync', {}, { to: 'host' });
+      } catch {
+        /* closed */
+      }
+    }
+    this._hostConn = st;
+  }
+
+  /** Host: what HallPass says about this peer (room.verifyPeer, SDK ≥ 1.3). Dev: the localhost claim. */
+  async _hostVerifyIdentity(p) {
+    const room = this.room;
+    let ident = null;
+    if (typeof room?.verifyPeer === 'function') {
+      try {
+        const v = await room.verifyPeer(p.id);
+        ident = v ? { role: typeof v.role === 'string' ? v.role : null, founder: v.founder === true, publicId: typeof v.publicId === 'string' ? v.publicId : null } : null;
+      } catch {
+        ident = null;
+      }
+    } else if (this._devLocal() && p.meta?.devId && typeof p.meta.devId === 'object') {
+      // development only (localhost + local transport): a tab opened with ?founder=dev
+      ident = { role: p.meta.devId.role === 'super_admin' ? 'super_admin' : null, founder: p.meta.devId.founder === 1, publicId: 'dev' };
+    } else return;
+    if (this.room !== room) return;
+    this._ident.set(p.id, ident);
+    try {
+      room.send('me', { founder: !!ident?.founder }, { to: p.id });
+    } catch {
+      /* gone */
+    }
+  }
+
+  /** Host: decide about a Director claim. Verified → hidden Director; anything else → removed. */
+  async _hostCheckClaim(p) {
+    const room = this.room;
+    if (!room?.isHost || this.directors.has(p.id) || this._verifying.has(p.id)) return;
+    const claim = p.meta?.dir === 1;
+    this._verifying.add(p.id);
+    try {
+      await this._hostDecideClaim(room, p, claim);
+    } finally {
+      this._verifying.delete(p.id);
+    }
+  }
+
+  async _hostDecideClaim(room, p, claim) {
+    let ok = false;
+    let how = '';
+    let ident = null;
+    if (typeof room.verifyPeer === 'function') {
+      if (!this._hiddenPeer(p)) return; // not a claim (yet): the sweep removes late joiners
+      try {
+        const v = await room.verifyPeer(p.id);
+        ok = !!v && (v.role === 'admin' || v.role === 'super_admin');
+        ident = v ? { role: v.role ?? null, founder: v.founder === true, publicId: typeof v.publicId === 'string' ? v.publicId : null } : null;
+        how = 'hallpass';
+      } catch {
+        ok = false;
+      }
+    } else if (this._devLocal()) {
+      if (!claim) return; // wait for the claim's meta (the sweep removes it if it never comes)
+      ok = p.meta?.dev === 'director';
+      how = 'dev';
+      ident = { role: 'dev-director', founder: false, publicId: `dev:${p.id.slice(0, 6)}` };
+    }
+    if (this.room !== room || !room.players.some((x) => x.id === p.id)) return;
+    this._claims.delete(p.id);
+    if (!ok) {
+      this.director.hostLog('refused', p.id, { reason: how ? 'not an admin' : 'Director Mode is unavailable here' });
+      this._kick(p.id, how ? 'Director Mode needs a HallPass admin account.' : 'Director Mode is not available in this room.');
+      return;
+    }
+    this.directors.set(p.id, { id: p.id, ident, how, at: Date.now() });
+    this._dirIds.add(p.id);
+    this._sendDirs();
+    this.director.hostDirectorJoined(p.id, ident, how);
+    if (this.active && !this._ended) this._sendDirectorRun(p.id);
+  }
+
+  /** Host, every frame: claims that never got verified, and late joiners who aren't Directors, are removed. */
+  _hostSweepClaims() {
+    if (!this._claims.size) return;
+    const now = performance.now();
+    for (const [id, since] of this._claims) {
+      if (now - since < CLAIM_GRACE) continue;
+      this._claims.delete(id);
+      const p = this.room.players.find((x) => x.id === id);
+      if (!p || this.directors.has(id)) continue;
+      const late = this.active && !this._ended;
+      this.director.hostLog('refused', id, { reason: this._hiddenPeer(p) ? 'unverified Director claim' : late ? 'joined a running game' : 'room full' });
+      this._kick(id, this._hiddenPeer(p) ? 'Director Mode is not available in this room.' : late ? 'This game has already started.' : 'The room is full.');
+    }
+  }
+
+  _kick(id, reason) {
+    try {
+      this.room?.kick(id, reason);
+    } catch (err) {
+      console.warn('[coop] kick failed', err?.message || err);
+    }
+  }
+
+  _sendDirs() {
+    try {
+      this.room?.send('dirs', { ids: [...this._dirIds] }, { to: 'others' });
+    } catch {
+      /* closed */
+    }
+    this._renderLobby();
+    this.plist.refresh();
+    this.director.disclosure();
+  }
+
+  _onDirs(d, m) {
+    if (!this.room || m.from !== this.room.hostId || !Array.isArray(d?.ids)) return;
+    const was = this.amDirector;
+    this._dirIds = new Set(d.ids.filter((x) => typeof x === 'string').slice(0, 8));
+    this._renderLobby();
+    this.plist.refresh();
+    if (!was && this.amDirector) this.director.onVerified();
+    this.director.disclosure();
+  }
+
+  /** Is this peer a Director? (host-verified; everyone learns it from the host's 'dirs') */
+  isDirector(id = this.selfId) {
+    return !!id && this._dirIds.has(id);
+  }
+
+  /** HallPass identity of a peer, as the host verified it ({ role, founder, publicId } | null). Guests only
+   *  know their own (from the host's 'me'); the host knows everyone's once HallPass can attest them. */
+  peerIdentity(id) {
+    if (!this.room) return id === this.selfId || id === 'local' ? this.game.identity : null;
+    if (id === this.selfId) return this.isHost ? this.game.identity : this._selfIdent;
+    return this.isHost ? this._ident.get(id) || null : null;
+  }
+
+  /** game.playerInfo(id) in co-op: { id, position, floor, status, hidden, director, self } or null. */
+  playerInfo(id = this.selfId) {
+    if (!id) return null;
+    const self = id === this.selfId;
+    if (this._dirIds.has(id)) return { id, position: self ? this.game.camera.position : null, floor: -1, status: 'director', hidden: true, director: true, self };
+    const r = this.roster.get(id);
+    if (!r) return null;
+    const position = this._posOf(id);
+    const status = self ? this.status : r.status;
+    return {
+      id,
+      position: position || null,
+      floor: position ? this._floorOf(position) : -1,
+      status,
+      hidden: self ? !!this.game.player?.isHidden : !!this.proxies.get(id)?.isHidden,
+      director: false,
+      self,
+    };
+  }
+
+  /** Ids of everyone actually playing this run: no Directors, nobody who left. */
+  playerIds() {
+    const out = [];
+    for (const r of this.roster.values()) if (r.status !== 'left' && !this._dirIds.has(r.id)) out.push(r.id);
+    return out;
   }
 
   // ================================================================================ voice chat
   async toggleVoice() {
     const v = this.room?.voice;
     if (!v) return;
+    if (this._wantDirector || this.amDirector) {
+      this._status('Directors listen only: no microphone.', 'error');
+      return;
+    }
     try {
       if (!v.active) {
         await v.start({ echoCancellation: true, noiseSuppression: true, autoGainControl: true });
@@ -713,6 +1139,7 @@ export class Coop {
     const a = this.game.audio;
     const ctx = a?.ctx;
     this._voiceEnd(peerId);
+    if (this._dirIds.has(peerId)) return; // a hidden Director never talks into the game
     if (!ctx) {
       this._voiceWaiting.set(peerId, stream); // hooked up as soon as the audio is unlocked
       return;
@@ -874,12 +1301,15 @@ export class Coop {
       this.avatars.load().then(() => this.hostStart());
       return;
     }
-    const players = room.players;
+    const players = this._lobbyPlayers(); // never a Director
     const ordered = [players.find((p) => p.isHost), ...players.filter((p) => !p.isHost)].filter(Boolean).slice(0, MAX_PLAYERS);
     const roster = ordered.map((p, i) => ({ id: p.id, name: cleanName(p.name), slot: i, look: cleanLook(p.isSelf ? this.look : p.meta?.look) }));
     const seed = Number(params.get('seed')) || (Math.random() * 0x7fffffff) | 0;
-    room.lock();
-    room.send('run', { seed, difficulty: this.game.settings.difficulty, roster, startAt: room.now() + 900 }, { to: 'all' });
+    // Rooms lock at the start, as before. A room that can verify Directors stays open instead: the host
+    // removes anyone who joins a running game unless HallPass (or the dev stub) attests a Director.
+    if (!this.dirCapable) room.lock();
+    const startFloor = params.get('start') === 'floor1' ? 0 : 1; // game.startRun still falls back to 0 without an upstairs
+    room.send('run', { seed, difficulty: this.game.settings.difficulty, roster, startAt: room.now() + 900, startFloor }, { to: 'all' });
     this._status('Starting…');
   }
 
@@ -893,6 +1323,12 @@ export class Coop {
   _onRun(d, m) {
     const room = this.room;
     if (!room || m.from !== room.hostId || !d || !Array.isArray(d.roster)) return;
+    if (this.amDirector) {
+      // a Director in the lobby: spectate the run that starts
+      clearTimeout(this._runTimer);
+      this._runTimer = setTimeout(() => this._beginRun({ ...d, director: true }), Math.max(0, Math.min(3000, (+d.startAt || 0) - room.now())));
+      return;
+    }
     if (!d.roster.some((r) => r?.id === room.selfId)) {
       this._status('A run started without you. Wait for the next one.', 'error');
       return;
@@ -905,23 +1341,45 @@ export class Coop {
   _beginRun(d) {
     const g = this.game;
     if (!this.room) return;
+    const director = !!d.director && this.amDirector;
     this._ready = false;
-    this.room.setPlayerMeta({ ready: 0 });
+    if (!director) this.room.setPlayerMeta({ ready: 0 });
     this.roster.clear();
     for (const r of d.roster.slice(0, MAX_PLAYERS)) {
-      if (!r || typeof r.id !== 'string') continue;
-      this.roster.set(r.id, { id: r.id, name: cleanName(r.name), slot: clampI(r.slot, MAX_PLAYERS), look: cleanLook(r.look), status: 'alive' });
+      if (!r || typeof r.id !== 'string' || this._dirIds.has(r.id)) continue;
+      const st = d.st?.[r.id];
+      this.roster.set(r.id, {
+        id: r.id,
+        name: cleanName(r.name),
+        slot: clampI(r.slot, MAX_PLAYERS),
+        look: cleanLook(r.look),
+        status: STATUS_WORD[st] !== undefined ? st : 'alive',
+        at: d.at?.[r.id] === 'art' ? 'art' : 'r0',
+      });
     }
     this.mySlot = this.roster.get(this.selfId)?.slot ?? 0;
     this.active = true;
-    this.status = 'alive';
+    this.status = director ? 'director' : 'alive';
     this.exitOpen = false;
     this._ended = false;
     this._picked.clear();
     this._pending.clear();
+    this._capBusy?.clear();
+    this._xfLog.length = 0;
     this._enemyBuf = new SnapBuffer();
+    this._runStartFloor = d.startFloor === 0 ? 0 : 1;
+    this._bindNet(); // before startRun: floor2.reset() must already see who the host is
     const diff = DIFFICULTY[d.difficulty] ? d.difficulty : 'normal';
-    g.startRun(diff, { noLock: true, seed: (+d.seed | 0) || 1, coop: true });
+    g.startRun(diff, { noLock: true, seed: (+d.seed | 0) || 1, coop: true, startFloor: this._runStartFloor, director });
+    if (g.startFloor !== undefined && g.startFloor !== this._runStartFloor && g.world?.floor2?.playerSpawn) {
+      console.warn(`[coop] the host starts on floor ${this._runStartFloor + 1}, this tab on ${g.startFloor + 1} (check ?start=)`);
+    }
+    if (director) {
+      this.director.beginRun(d);
+      return;
+    }
+    // the host's state (Floor 2 objectives…) once everyone is in, in case a broadcast was missed
+    if (!this.isHost) setTimeout(() => this.active && this.room?.send('nsync', {}, { to: 'host' }), 2500);
     if (!g.touch?.active) this._clickToPlay(); // pointer lock needs a click of our own (not on touch screens)
     g.ui?.showNotice?.(`Co-op: ${this.roster.size} player${this.roster.size > 1 ? 's' : ''}. Stick together, or don't.`, 4);
   }
@@ -946,7 +1404,7 @@ export class Coop {
   /** Called by game.startRun (co-op) after the school is built, before the shaders are compiled. */
   onRunStart() {
     const g = this.game;
-    const sp = g.world.playerSpawn;
+    const sp = g.spawnPoint?.() || { position: g.world.playerSpawn.position, yaw: g.world.playerSpawn.yaw, floor: 0 };
     const pos = this._spawnPoint(sp, this.mySlot);
     g.player.spawn(pos, sp.yaw);
     g.player.seated = false;
@@ -958,29 +1416,34 @@ export class Coop {
       this.avatars.create({ id: r.id, name: r.name, look: lookColors(r.look) }, { torchLight: lights });
       const pr = makeProxy(r.id);
       pr.position.copy(this._spawnPoint(sp, r.slot));
+      pr.eyePosition.set(pr.position.x, pr.position.y + PLAYER.eyeHeight, pr.position.z);
       this.proxies.set(r.id, pr);
     }
-    g.enemy.remote = !this.isHost;
+    // guests (and Directors) see puppets of the host's enemies
+    for (const e of g.enemies || [g.enemy]) e.remote = !this.isHost;
     if (!this.isHost) g.enemy.enabled = true; // the puppet shows whatever the host's caretaker does
     this._t = { state: 0, enemy: 0, clock: 0 };
     this._renderTeam();
     const team = this.$('hud-team');
-    if (team) team.hidden = false;
+    if (team) team.hidden = this.status === 'director';
   }
 
+  /** Where player `slot` starts: spread around game.spawnPoint() (upstairs Classroom 2B, or the ground floor). */
   _spawnPoint(sp, slot) {
     const w = this.game.world;
     const yaw = sp.yaw || 0;
+    const y = sp.position.y || 0;
+    const floor = sp.floor ?? floorOfY(y);
     const fx = -Math.sin(yaw);
     const fz = -Math.cos(yaw);
     const rx = Math.cos(yaw);
     const rz = -Math.sin(yaw);
-    const OFF = [[0, 0], [0.9, 0], [-0.9, 0], [0, -1.0], [0.9, -1.0], [-0.9, -1.0], [0, 1.0]];
+    const OFF = [[0, 0], [0.9, 0], [-0.9, 0], [0, -1.0], [0.9, -1.0], [-0.9, -1.0], [0, 1.0], [0.9, 1.0], [-0.9, 1.0]];
     const order = [OFF[slot % 4], ...OFF];
     for (const [r, f] of order) {
       const x = sp.position.x + rx * r + fx * f;
       const z = sp.position.z + rz * r + fz * f;
-      if (w.isWalkable?.(x, z, PLAYER.radius)) return new THREE.Vector3(x, 0, z);
+      if (w.isWalkable?.(x, z, PLAYER.radius, floor)) return new THREE.Vector3(x, w.groundAt?.(x, z, floor) ?? y, z);
     }
     return sp.position.clone();
   }
@@ -990,16 +1453,21 @@ export class Coop {
     const g = this.game;
     clearTimeout(this._runTimer);
     if (!this.active) return;
+    if (this.isHost) this.director.hostReleaseAll('run ended'); // no code path leaves an enemy possessed
+    this.director.endRun();
+    this.chat.close?.('force');
     this.active = false;
     this.status = 'alive';
     this.avatars.clear();
     this.proxies.clear();
-    g.enemy.remote = false;
+    for (const e of g.enemies || [g.enemy]) e.remote = false;
     g.enemy.releaseCapture?.(0);
     if (g.player) g.player.seated = false;
     g.coopPaused = false;
+    this._unbindNet();
     const team = this.$('hud-team');
     if (team) team.hidden = true;
+    this.plist.refresh();
   }
 
   _backToLobby() {
@@ -1016,8 +1484,9 @@ export class Coop {
     if (!room || !this.active) return;
     const g = this.game;
     const now = room.now();
+    this._netRescan();
     this._t.state -= dt;
-    if (this._t.state <= 0) {
+    if (this._t.state <= 0 && this.status !== 'director') {
       this._t.state = 1 / STATE_HZ;
       try {
         room.send('ps', this._myState(), { reliable: false });
@@ -1029,28 +1498,60 @@ export class Coop {
       this._t.enemy -= dt;
       if (this._t.enemy <= 0) {
         this._t.enemy = 1 / ENEMY_HZ;
-        try {
-          room.send('es', g.enemy.netSnapshot?.((t) => this._slotOfTarget(t)), { reliable: false });
-        } catch {
-          /* ignore */
-        }
+        this._sendEnemies();
       }
       this._t.clock -= dt;
       if (this._t.clock <= 0) {
         this._t.clock = 1;
         room.send('ck', { left: r2(g.timeLeft), t: r2(g.time) });
       }
+      this._hostSweepClaims();
+      if (this._outWait?.size) for (const [id, since] of [...this._outWait]) (this._outWait.delete(id), this._hostOut(id, since));
+      this.director.hostUpdate(dt);
       this._hostCheckEnd();
     }
     this.avatars.update(dt, now - INTERP_DELAY);
     this._updateInteractables();
     this._updateLocal(dt);
     this._updateVoice(dt);
+    this.director.update(dt);
+    this.chat.update(dt);
   }
 
-  /** Lobby / end screens: keep voice positions sane. */
+  /** Lobby / end screens: keep voice positions sane; the host still screens people who join. */
   updateIdle(dt) {
-    if (this.room) this._updateVoice(dt);
+    if (!this.room) return;
+    this._updateVoice(dt);
+    if (this.isHost) this._hostSweepClaims();
+  }
+
+  /** Host, 15 Hz: both enemies' snapshots (only the enabled ones). Until the AI's v2 snapshots land, the
+   *  Caretaker's is his 14-number array (decoded below) and The Assistant's is null. */
+  _sendEnemies() {
+    const g = this.game;
+    const slotOf = (t) => this._slotOfTarget(t);
+    const snap = (e) => {
+      if (!e || !e.enabled) return null;
+      try {
+        return e.netSnapshot?.(slotOf) ?? null;
+      } catch (err) {
+        console.warn('[coop] enemy snapshot', err);
+        return null;
+      }
+    };
+    const c = snap(g.enemy);
+    const a = snap(g.assistant);
+    if (c == null && a == null) return;
+    try {
+      this.room.send('es', { c, a }, { reliable: false });
+    } catch {
+      /* buffer full / too big: next tick */
+    }
+  }
+
+  /** Puppets sample their buffers at this host time (guests). */
+  renderTime() {
+    return this.room ? this.room.now() - INTERP_DELAY : 0;
   }
 
   _myState() {
@@ -1064,25 +1565,36 @@ export class Coop {
     if (this.status === 'trapped') f |= F.seated;
     if (this.status === 'escaped' || this.status === 'escaping') f |= F.out;
     if (this.status === 'captured') f |= F.caught;
-    return [r2(p.position.x), r2(p.position.z), r3(p.yaw), r2(p.pitch), f, r2(p.noiseLevel || 0)];
+    return [r2(p.position.x), r2(p.position.y || 0), r2(p.position.z), r3(p.yaw), r2(p.pitch), f, r2(p.noiseLevel || 0)];
+  }
+
+  /** A message from a player in this run (not a Director), within its rate. */
+  _fromPlayer(type, m) {
+    if (!this.active || !m || m.from === this.selfId || !this._isPlayer(m.from)) return false;
+    return this._allow(type, m.from);
   }
 
   _onPS(d, m) {
-    if (!this.active || !Array.isArray(d) || d.length < 6 || !d.slice(0, 6).every(num)) return;
-    const [x, z, yaw, pitch, flags, noise] = d;
-    const s = { x, z, yaw, pitch, flags: flags | 0, spd: 0 };
+    if (!this._fromPlayer('ps', m) || !Array.isArray(d) || d.length < 7 || !d.slice(0, 7).every(num)) return;
+    const [x, y, z, yaw, pitch, flags, noise] = d;
+    if (!okPos(x, y, z) || !inRange(yaw, -100, 100) || !inRange(pitch, -3.2, 3.2) || !inRange(flags, 0, 255)) {
+      this.netStats.bad++;
+      return;
+    }
+    const s = { x, y, z, yaw, pitch, flags: flags | 0, spd: 0 };
     this.avatars.push(m.from, m.sentAt, s);
     const pr = this.proxies.get(m.from);
     if (!pr) return;
     const dts = (m.sentAt - pr._t) / 1000;
-    if (pr._seen && dts > 0.01 && dts < 1) pr.velocity.set((x - pr.position.x) / dts, 0, (z - pr.position.z) / dts);
-    pr.position.set(x, 0, z);
+    if (pr._seen && dts > 0.01 && dts < 1) pr.velocity.set((x - pr.position.x) / dts, (y - pr.position.y) / dts, (z - pr.position.z) / dts);
+    pr.position.set(x, y, z);
     pr.isCrouching = !!(flags & F.crouch);
     pr.isSprinting = !!(flags & F.sprint);
     pr.isMoving = !!(flags & F.moving);
     pr.flashlightOn = !!(flags & F.torch);
     pr.isHidden = !!(flags & F.hidden) || !!pr.hidingSpot;
-    pr.eyePosition.set(x, pr.isCrouching ? PLAYER.crouchEyeHeight : PLAYER.eyeHeight, z);
+    pr.eyePosition.set(x, y + (pr.isCrouching ? PLAYER.crouchEyeHeight : PLAYER.eyeHeight), z);
+    pr.floor = floorBand(y) < 0 ? floorOfY(y) : floorBand(y);
     pr.yaw = yaw;
     pr.pitch = pitch;
     pr.noiseLevel = Math.max(0, Math.min(1, noise));
@@ -1091,14 +1603,15 @@ export class Coop {
     pr._seen = true;
   }
 
-  /** The players the host's caretaker can go after (enemy.js). */
+  /** The players the host's enemies can go after (enemy.js / assistant.js filter by their own floor).
+   *  Never a Director, a spectator, someone caught or out, or someone who left. */
   targets() {
     const out = this._targets;
     out.length = 0;
     if (this.status === 'alive') out.push(this.game.player);
     for (const [id, pr] of this.proxies) {
       const r = this.roster.get(id);
-      pr.alive = r?.status === 'alive';
+      pr.alive = r?.status === 'alive' && !this._dirIds.has(id);
       if (pr.alive && pr._seen) out.push(pr);
     }
     return out;
@@ -1116,58 +1629,99 @@ export class Coop {
     for (const av of this.avatars.map.values()) if (av.root.visible) out.push(av.root.position, PLAYER.radius);
   }
 
-  // ======================================================================= the caretaker
+  // ======================================================================= the enemies
+  /** 'es' {c, a}: each enemy's snapshot goes to its own applySnapshot(snap, sentAt) when it has one
+   *  (the AI's v2 format; enemy.js / assistant.js decode it). The Caretaker's legacy 14-number array is
+   *  decoded here into the buffer that enemySample() serves, as before. */
   _onES(d, m) {
-    if (!this.active || this.isHost || m.from !== this.room.hostId || !Array.isArray(d) || d.length < 14) return;
-    if (!d.every(num)) return;
-    this._enemyBuf.push(m.sentAt, {
-      x: d[0], z: d[1], yaw: d[2], pitch: 0, flags: d[12] | 0,
-      state: ESTATES[d[3]] || 'PATROL', anim: ANIMS[d[4]] || 'idle', spd: d[5], run: d[6] === 1,
-      lx: d[7], ly: d[8], lz: d[9], hasLook: d[10] === 1, meter: d[11], tgt: d[13],
-    });
+    if (!this.active || this.isHost || m.from !== this.room.hostId || !d || typeof d !== 'object' || Array.isArray(d)) return;
+    const g = this.game;
+    for (const [key, who] of ENEMY_KEYS) {
+      const snap = d[key];
+      if (snap == null) continue;
+      const e = who === 'assistant' ? g.assistant : g.enemy;
+      if (!e) continue;
+      if (!e.enabled) e.enabled = true; // the host only sends snapshots of enemies it has switched on
+      if (typeof e.applySnapshot === 'function') {
+        try {
+          e.applySnapshot(snap, m.sentAt);
+        } catch (err) {
+          console.warn(`[coop] ${who} snapshot`, err);
+        }
+      } else if (who === 'caretaker' && Array.isArray(snap) && snap.length >= 14 && snap.every(num)) {
+        this._enemyBuf.push(m.sentAt, {
+          x: snap[0], y: 0, z: snap[1], yaw: snap[2], pitch: 0, flags: snap[12] | 0,
+          state: ESTATES[snap[3]] || 'PATROL', anim: ANIMS[snap[4]] || 'idle', spd: snap[5], run: snap[6] === 1,
+          lx: snap[7], ly: snap[8], lz: snap[9], hasLook: snap[10] === 1, meter: snap[11], tgt: snap[13],
+        });
+      }
+    }
   }
 
-  /** Interpolated caretaker snapshot for the puppet (enemy._updatePuppet). */
+  /** Interpolated legacy Caretaker snapshot for his puppet (enemy._updatePuppet). */
   enemySample() {
     if (!this.room) return null;
     return this._enemyBuf.sample(this.room.now() - INTERP_DELAY, this._enemyOut);
   }
 
-  /** Host: forward the caretaker's events so guests hear and see the same. */
+  _enemyOf(who) {
+    return who === 'assistant' ? this.game.assistant || this.game.enemy : this.game.enemy;
+  }
+
+  /** Host: forward the enemies' events so guests hear and see the same. en: which enemy (absent = the
+   *  Caretaker, so existing listeners keep working); tg: the player it was after. */
   _relayEnemy(k, e = {}) {
-    if (!this.active || !this.isHost) return;
+    if (!this.active || !this.isHost || e?.net) return;
     const d = { k };
-    if (e.line) d.line = String(e.line).slice(0, 24);
+    if (e.who && e.who !== 'caretaker') d.en = String(e.who).slice(0, 16);
+    if (e.line) d.line = String(e.line).slice(0, 32);
     if (e.big) d.big = 1;
-    if (e.state) d.state = e.state;
-    if (e.prev) d.prev = e.prev;
-    this.room.send('ee', d);
+    if (e.state) d.state = String(e.state).slice(0, 16);
+    if (e.prev) d.prev = String(e.prev).slice(0, 16);
+    if (e.target) d.tg = e.target === this.game.player ? this.selfId : String(e.target.id || '');
+    try {
+      this.room.send('ee', d);
+    } catch {
+      /* closed */
+    }
+  }
+
+  /** Was this caretaker event (enemy:winded, the close-up burp) about this player? The host's AI fires them for
+   *  whoever he was after, and guests hear them all, so the achievements only go to that player. */
+  aboutMe(e) {
+    if (!this.active) return true;
+    if (e && 'mine' in e) return !!e.mine; // a guest: retold by the host
+    return !e?.target || e.target === this.game.player;
   }
 
   _onEE(d, m) {
-    if (!this.active || this.isHost || m.from !== this.room.hostId || !d) return;
-    const e = this.game.enemy;
+    if (!this.active || this.isHost || m.from !== this.room.hostId || !d || typeof d.k !== 'string') return;
+    const assistant = d.en === 'assistant';
+    const e = this._enemyOf(assistant ? 'assistant' : 'caretaker');
     const ev = this.events;
+    const mine = d.tg === this.selfId;
+    const who = assistant ? { who: 'assistant' } : {}; // (no `who` = the Caretaker, for existing listeners)
+    const head = e.headPosition || e.position;
     this._relaying = true;
     try {
       switch (d.k) {
         case 'voice':
-          ev.emit('enemy:voice', { line: String(d.line || ''), position: e.headPosition, big: !!d.big });
+          ev.emit('enemy:voice', { ...who, line: String(d.line || ''), position: head, big: !!d.big, mine, net: true });
           break;
         case 'spotted':
-          ev.emit('enemy:spotted', { position: e.position.clone() });
+          ev.emit('enemy:spotted', { ...who, position: e.position.clone(), net: true });
           break;
         case 'state':
-          if (ESTATES.includes(d.state)) ev.emit('enemy:state', { state: d.state, prev: d.prev, net: true });
+          if (typeof d.state === 'string' && /^[A-Z_]{2,16}$/.test(d.state)) ev.emit('enemy:state', { ...who, state: d.state, prev: d.prev, net: true });
           break;
         case 'winded':
-          ev.emit('enemy:winded', { position: e.position });
+          ev.emit('enemy:winded', { ...who, position: e.position, mine, net: true });
           break;
         case 'sighting':
-          ev.emit('enemy:sighting', { position: e.position.clone() });
+          ev.emit('enemy:sighting', { ...who, position: e.position.clone(), net: true });
           break;
         case 'lost':
-          ev.emit('enemy:lost', {});
+          ev.emit('enemy:lost', { ...who, net: true });
           break;
         default:
           break;
@@ -1179,10 +1733,11 @@ export class Coop {
 
   /** Guests: a lure that has to reach the host's caretaker (PA broadcast, PlayStation, register). */
   forwardEnemy(kind, position) {
-    if (!this.guest) return false;
+    if (!this.guest || this.status === 'director') return false;
     const d = { k: kind === 'callOff' ? 'c' : 'd' };
     if (position) {
       d.x = r2(position.x);
+      d.y = r2(position.y || 0);
       d.z = r2(position.z);
     }
     this.room.send('fx', d, { to: 'host' });
@@ -1190,30 +1745,44 @@ export class Coop {
   }
 
   _hostLure(d, from) {
-    if (!this.active || !d || !this.roster.has(from)) return;
+    if (!this.active || !d || !this._isPlayer(from)) return;
     const e = this.game.enemy;
     if (d.k === 'c') e.callOff?.();
-    else if (num(d.x) && num(d.z)) e.distract?.(new THREE.Vector3(d.x, 0, d.z));
+    else if (num(d.x) && num(d.z)) {
+      const y = num(d.y) ? d.y : 0;
+      if (okPos(d.x, y, d.z)) e.distract?.(new THREE.Vector3(d.x, y, d.z));
+    }
   }
 
   // ============================================================================== noises
   _onNoise(d, m) {
-    if (!this.active || !this.isHost || !Array.isArray(d) || !num(d[0]) || !num(d[1]) || !num(d[2])) return;
-    if (this.roster.get(m.from)?.status !== 'alive') return;
+    if (!this.isHost || !this._fromPlayer('nz', m) || !Array.isArray(d) || !num(d[0]) || !num(d[1]) || !num(d[2]) || !num(d[3])) return;
+    if (this.roster.get(m.from)?.status !== 'alive' || !okPos(d[0], d[1], d[2])) return;
+    const position = new THREE.Vector3(d[0], d[1], d[2]);
     this.events.emit('noise', {
-      position: new THREE.Vector3(d[0], 0, d[1]),
-      radius: Math.max(0, Math.min(25, d[2])),
-      source: String(d[3] || 'remote').slice(0, 16),
+      position,
+      radius: Math.max(0, Math.min(25, d[3])),
+      source: String(d[4] || 'remote').slice(0, 16),
+      floor: this._floorOf(position),
       net: true,
     });
   }
 
   // ======================================================================== hiding places
   _onHide(d, m) {
-    if (!this.active || !d || typeof d.id !== 'string') return;
+    if (!this._fromPlayer('hd', m) || !d || typeof d.id !== 'string' || d.id.length > 40) return;
     const g = this.game;
-    const spot = (g.world?.hidingSpots || []).find((h) => h.id === d.id);
+    const spot = g.world?.getHide?.(d.id) || (g.world?.hidingSpots || []).find((h) => h.id === d.id); // (Floor 2: f2hide*)
     const pr = this.proxies.get(m.from);
+    if (!spot) return;
+    if (d.on && pr?._seen) {
+      // only a spot they are standing at (positions lag ~0.1 s; the camera sits inside the spot)
+      const at = spot.exitPosition || spot.position;
+      if (Math.hypot(at.x - pr.position.x, at.z - pr.position.z) > 3.5 || Math.abs((at.y || 0) - pr.position.y) > 2.5) {
+        this.netStats.bad++;
+        return;
+      }
+    }
     if (spot) {
       if (d.on) spot.remoteBy = m.from;
       else if (spot.remoteBy === m.from) spot.remoteBy = null;
@@ -1235,14 +1804,25 @@ export class Coop {
 
   // ================================================================================ doors
   _doorOut(door, open, by) {
-    if (!this.active || !door) return;
+    if (!this.active || !door || this.status === 'director') return;
     if (by === 'player' || (by === 'enemy' && this.isHost)) this.room.send('dr', [door.index, open ? 1 : 0]);
   }
 
+  /** Doors stay one array on both floors (CONTRACTS §13.1): synced by index. The host's doors are
+   *  trusted (its enemies open doors anywhere); a guest's only within reach of where that guest is. */
   _onDoor(d, m) {
     if (!this.active || !Array.isArray(d) || !Number.isInteger(d[0])) return;
     const door = this.game.world?.doors?.[d[0]];
     if (!door) return;
+    if (m.from !== this.room.hostId) {
+      if (!this._fromPlayer('dr', m)) return;
+      const pos = this._posOf(m.from);
+      const dp = door.position;
+      if (pos && dp && (Math.hypot(dp.x - pos.x, dp.z - pos.z) > 4.5 || (door.floor !== undefined && door.floor !== this._floorOf(pos)))) {
+        this.netStats.bad++;
+        return;
+      }
+    }
     if (d[1]) door.open('remote');
     else door.close('remote');
   }
@@ -1250,7 +1830,7 @@ export class Coop {
   // ================================================================================ items
   /** items.collect() in co-op: ask the host first (two players can't both take the keycard). */
   requestPick(id) {
-    if (!this.active || this.status !== 'alive' || this._pending.has(id)) return false;
+    if (!this.active || this.status !== 'alive' || this._pending.has(id)) return false; // (a Director's status is 'director')
     if (this.isHost) return !!this._hostPick({ id }, this.selfId).ok;
     this._pending.add(id);
     this.room
@@ -1265,10 +1845,10 @@ export class Coop {
     const id = String(d?.id || '');
     const e = g.items?.getEntry?.(id);
     if (!e || e.collected || this._picked.has(id)) return { ok: false };
-    if (this.roster.get(from)?.status !== 'alive') return { ok: false };
+    if (!this._isPlayer(from) || this.roster.get(from)?.status !== 'alive') return { ok: false };
     if (from !== this.selfId) {
       const pr = this.proxies.get(from);
-      if (!pr || Math.hypot(pr.position.x - e.position.x, pr.position.z - e.position.z) > 4) return { ok: false };
+      if (!pr || Math.hypot(pr.position.x - e.position.x, pr.position.z - e.position.z) > 4 || Math.abs((e.position.y || 0) - pr.position.y) > 2.5) return { ok: false };
     }
     this._picked.add(id);
     this.room.send('pk', { id, by: from }, { to: 'all' });
@@ -1316,6 +1896,43 @@ export class Coop {
     return new THREE.Vector3(c.x, 0, c.z);
   }
 
+  /** A named Floor 2 spot (world.floor2.anchors: an array or a map of { id, position, yaw, room, kind }). */
+  _anchor(id) {
+    const f2 = this.game.world?.floor2;
+    if (typeof f2?.anchor === 'function') {
+      try {
+        const x = f2.anchor(id);
+        if (x) return x;
+      } catch {
+        /* fall through */
+      }
+    }
+    const a = f2?.anchors;
+    if (!a) return null;
+    if (Array.isArray(a)) return a.find((x) => x?.id === id) || a.find((x) => x?.kind === id) || null;
+    if (a instanceof Map) return a.get(id) || null;
+    return a[id] || Object.values(a).find((x) => x?.kind === id) || null;
+  }
+
+  /** Where player `slot` sits in the Art room's "MY FRIENDS" circle after The Assistant catches them.
+   *  Falls back to the upstairs spawn, then to Room 000, if the world has no such anchor yet. */
+  _artSeat(slot) {
+    const w = this.game.world;
+    const a = this._anchor('art-circle');
+    const c = a?.position || w.floor2?.playerSpawn?.position;
+    if (!c) return { seat: this._seat(slot), centre: w.room000?.center || null, at: 'r0' };
+    const floor = 1;
+    const y = c.y || FLOOR_Y[1];
+    const R = 1.1;
+    for (let i = 0; i < 8; i++) {
+      const ang = ((slot + i) % 8) * (Math.PI / 4);
+      const x = c.x + Math.cos(ang) * R;
+      const z = c.z + Math.sin(ang) * R;
+      if (w.isWalkable?.(x, z, PLAYER.radius, floor) !== false) return { seat: new THREE.Vector3(x, w.groundAt?.(x, z, floor) ?? y, z), centre: c, at: 'art' };
+    }
+    return { seat: new THREE.Vector3(c.x, y, c.z), centre: c, at: 'art' };
+  }
+
   // ======================================================================== transforms
   /** Host: the inputs of a transform, rounded so host and guests compute exactly the same thing. */
   transformInputs() {
@@ -1326,10 +1943,12 @@ export class Coop {
       protect.push([r2(pos.x), r2(pos.z)]);
       if (view) viewers.push([r2(pos.x), r2(pos.z), r3(yaw)]);
     };
-    if (this.status !== 'escaped') add(g.player.position, g.player.yaw, true);
+    // the ground floor is the only one that changes: only people down there protect rooms or watch
+    const down = (pos) => this._floorOf(pos) === 0;
+    if (this.status !== 'escaped' && this.status !== 'director' && down(g.player.position)) add(g.player.position, g.player.yaw, true);
     for (const [id, pr] of this.proxies) {
       const st = this.roster.get(id)?.status;
-      if (pr._seen && st !== 'escaped' && st !== 'left') add(pr.position, pr.yaw, true);
+      if (pr._seen && st !== 'escaped' && st !== 'left' && down(pr.position)) add(pr.position, pr.yaw, true);
     }
     add(g.enemy.position, 0, false);
     return { viewers, protect, n: (g.world.transformer?.count || 0) + 1 };
@@ -1357,6 +1976,7 @@ export class Coop {
   sendTransform(inp) {
     if (!this.active || !this.isHost) return;
     this.room.send('xf', { n: inp.n, viewers: inp.viewers, protect: inp.protect, r0: !!this.game.world.room000Revealed });
+    this.sendTransformLog(inp);
   }
 
   _onTransform(d, m) {
@@ -1377,51 +1997,68 @@ export class Coop {
   }
 
   // ===================================================================== caught / freed
-  /** enemy:capture. Only the host's caretaker really catches anyone. */
+  /** enemy:capture { who, target }. Only the host's enemies really catch anyone. The Caretaker takes
+   *  you to Room 000; The Assistant to the Art room's circle upstairs. */
   onEnemyCapture(e = {}) {
     if (!this.active || !this.isHost) return;
     const g = this.game;
+    const who = e.who === 'assistant' ? 'assistant' : 'caretaker';
+    const en = this._enemyOf(who);
     const t = e.target;
     const id = !t || t === g.player ? this.selfId : t.id;
     const r = this.roster.get(id);
-    if (!r || r.status !== 'alive') {
-      g.enemy.releaseCapture?.(3);
+    if (!r || r.status !== 'alive' || this._dirIds.has(id)) {
+      en.releaseCapture?.(3);
       return;
     }
-    this._setStatus(id, 'captured');
-    if (!g.world.room000Revealed && !g.room000Revealed) {
+    // one capture at a time per enemy: while he is taking someone, a second capture event (e.g. his
+    // capture cinematic re-announcing his last target) is not a second catch
+    const now = performance.now();
+    if ((this._capBusy ||= new Map()).get(who) > now) return;
+    this._capBusy.set(who, now + 3000);
+    const at = who === 'assistant' ? 'art' : 'r0';
+    this._setStatus(id, 'captured', at);
+    if (at === 'r0' && !g.world.room000Revealed && !g.room000Revealed) {
       g.room000Revealed = true;
       g.revealRoom000Now?.();
     }
-    this.room.send('ct', { id }, { to: 'all' });
+    this.room.send('ct', { id, who }, { to: 'all' });
     if (id !== this.selfId) {
-      g.enemy.remoteCapture?.(t.position);
+      en.remoteCapture?.(t.position);
       g._at(g.time + 2.8, () => {
-        if (this.active) g.enemy.releaseCapture?.();
+        if (this.active) en.releaseCapture?.();
       });
     }
     g._at(g.time + 3.2, () => {
-      if (this.active && this.roster.get(id)?.status === 'captured') this._setStatus(id, 'trapped');
+      if (this.active && this.roster.get(id)?.status === 'captured') this._setStatus(id, 'trapped', at);
     });
   }
 
   _onCaught(d, m) {
     if (!this.active || m.from !== this.room.hostId || !d) return;
+    const who = d.who === 'assistant' ? 'assistant' : 'caretaker';
     if (d.id === this.selfId) {
-      this._captureLocal();
+      this._captureLocal(who);
       return;
     }
     const r = this.roster.get(d.id);
     if (r) {
-      this.game.subtitle?.(`${r.name} has been caught! They're being taken to Room 000.`, 4, '');
+      r.at = who === 'assistant' ? 'art' : 'r0';
+      this.game.subtitle?.(
+        who === 'assistant' ? `${r.name} has been caught! She's taking them to the Art room.` : `${r.name} has been caught! They're being taken to Room 000.`,
+        4,
+        '',
+      );
       this.game.audio?.play?.('capture_sting', { volume: 0.35 });
     }
   }
 
-  async _captureLocal() {
+  async _captureLocal(who = 'caretaker') {
     const g = this.game;
     if (this.status !== 'alive') return;
     this.status = 'captured';
+    this._captor = who;
+    this.events.emit('player:caught', { self: true, who }); // game.js closes every overlay (chat, puzzles…)
     const p = g.player;
     if (p.isHidden) {
       try {
@@ -1435,46 +2072,91 @@ export class Coop {
     g.schoolnet?.close?.('force');
     g.audio?.play?.('capture_sting');
     g.postfx?.pulseGlitch?.(1);
-    g.moment?.('captured', { coop: this.roster.size });
+    g.moment?.('captured', { coop: this.roster.size, who });
+    const en = this._enemyOf(who);
     try {
-      await Promise.race([g.enemy.runCaptureSequence(g.camera), new Promise((r) => setTimeout(r, 4500))]);
+      await Promise.race([Promise.resolve(en.runCaptureSequence?.(g.camera)), new Promise((r) => setTimeout(r, 4500))]);
     } catch (err) {
       console.warn('[coop] capture sequence', err);
     }
-    if (this.isHost) g.enemy.releaseCapture?.();
-    else g.enemy.endCapture?.();
+    if (this.isHost) en.releaseCapture?.();
+    else en.endCapture?.();
     if (!this.active || this.status !== 'captured') return;
-    this._trapLocal();
+    this._trapLocal(who);
   }
 
-  _trapLocal() {
+  _trapLocal(who = this._captor || 'caretaker') {
     const g = this.game;
     this.status = 'trapped';
-    if (!g.world.room000Revealed) {
-      g.room000Revealed = true;
-      g.revealRoom000Now?.();
+    let seat;
+    let c;
+    let at = 'r0';
+    if (who === 'assistant') {
+      ({ seat, centre: c, at } = this._artSeat(this.mySlot));
     }
-    const seat = this._seat(this.mySlot);
-    const c = g.world.room000?.center || seat;
+    if (at === 'r0') {
+      if (!g.world.room000Revealed) {
+        g.room000Revealed = true;
+        g.revealRoom000Now?.();
+      }
+      seat = this._seat(this.mySlot);
+      c = g.world.room000?.center;
+    }
+    this._trapAt = at;
+    c = c || seat;
     const yaw = Math.atan2(-(c.x - seat.x), -(c.z - seat.z)) || 0;
     g.player.spawn(seat, yaw);
     g.player.seated = true;
     g.player.setViewmodelVisible?.(false);
     this.syncPlayer();
+    // a beat in the black first, so the move to the Art room / Room 000 doesn't feel like a random teleport (beta)
     g.postfx.fade = 1;
-    g._tween(1.2, (k) => (g.postfx.fade = 1 - k));
-    g.ui?.showNotice?.('Locked in Room 000. A friend has to come here and let you out (E).', 7);
+    const card = this._carryCard(at === 'art' ? 'She carries you to the Art room…' : 'He drags you to Room 000…');
+    const HOLD = 1.8;
+    g._tween(HOLD, () => (g.postfx.fade = 1));
+    g._at(g.time + HOLD, () => {
+      card?.remove();
+      if (this.status !== 'trapped') return;
+      g._tween(1.2, (k) => (g.postfx.fade = 1 - k));
+      g.ui?.showNotice?.(
+        at === 'art'
+          ? 'Sitting in the Art room\'s circle, with her "friends". A friend has to come here and let you out (E).'
+          : 'Locked in Room 000. A friend has to come here and let you out (E).',
+        7,
+      );
+      // caught with a panel / computer / chat open (or Esc during the capture): the mouse is free and
+      // nothing else would ask for it back, so looking around did nothing (beta). Ask with one click.
+      if (!g.touch?.active && !g.player.isLocked && g.state === 'playing') g.ui?.showResumeOverlay?.();
+    });
     this._renderTeam();
   }
 
+  /** Centred line of text over the black while a captive is carried off (removed by the caller). */
+  _carryCard(text) {
+    try {
+      const el = document.createElement('div');
+      el.className = 'carry-card';
+      el.setAttribute('role', 'status');
+      el.textContent = text;
+      (document.getElementById('ui') || document.body).append(el);
+      return el;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Host: a free request. The rescuer must be a free player on the captive's floor, within 3.5 m. */
   _hostFree(d, from) {
     const g = this.game;
     const id = String(d?.id || '');
     const r = this.roster.get(id);
-    if (!this.active || !r || r.status !== 'trapped' || this.roster.get(from)?.status !== 'alive') return { ok: false };
+    if (!this.active || !r || r.status !== 'trapped' || !this._isPlayer(from) || this.roster.get(from)?.status !== 'alive') return { ok: false };
     const seatPos = id === this.selfId ? g.player.position : this.proxies.get(id)?.position;
     const byPos = from === this.selfId ? g.player.position : this.proxies.get(from)?.position;
-    if (!seatPos || !byPos || Math.hypot(seatPos.x - byPos.x, seatPos.z - byPos.z) > 3.5) return { ok: false };
+    if (!seatPos || !byPos) return { ok: false };
+    if (Math.hypot(seatPos.x - byPos.x, seatPos.z - byPos.z) > 3.5 || this._floorOf(seatPos) !== this._floorOf(byPos) || Math.abs(seatPos.y - byPos.y) > 1.5) {
+      return { ok: false, error: 'too-far' };
+    }
     this._setStatus(id, 'alive');
     this.room.send('fr', { id, by: from }, { to: 'all' });
     return { ok: true };
@@ -1500,10 +2182,12 @@ export class Coop {
       g.ui?.showNotice?.(`${by} let you out. Go!`, 4);
       g.audio?.play?.('door_open', { position: g.player.position });
     } else {
-      const who = this.roster.get(d.id)?.name || 'Someone';
+      const r = this.roster.get(d.id);
+      const who = r?.name || 'Someone';
       this.avatars.playOnce(d.id, 'stand_up');
       if (d.by === this.selfId) this.game.ach?.moment('rescue');
-      this.game.subtitle?.(d.by === this.selfId ? `You let ${who} out.` : `${by} let ${who} out of Room 000.`, 3.5, '');
+      const where = r?.at === 'art' ? 'out of the Art room' : 'out of Room 000';
+      this.game.subtitle?.(d.by === this.selfId ? `You let ${who} out.` : `${by} let ${who} ${where}.`, 3.5, '');
     }
     this._renderTeam();
   }
@@ -1524,11 +2208,11 @@ export class Coop {
           position: new THREE.Vector3(),
           range: 2.0,
           object: av.root,
-          getPrompt: () => `Let ${r.name} out`,
+          getPrompt: () => (this.roster.get(r.id)?.at === 'art' ? `Help ${r.name} up` : `Let ${r.name} out`),
           interact: () => this.requestFree(r.id),
         };
       }
-      av.free.position.set(av.root.position.x, 0.9, av.root.position.z);
+      av.free.position.set(av.root.position.x, av.root.position.y + 0.9, av.root.position.z);
       list.push(av.free);
     }
   }
@@ -1551,9 +2235,27 @@ export class Coop {
 
   _hostExit(from) {
     const g = this.game;
-    if (!this.active || this.exitOpen || this.roster.get(from)?.status !== 'alive' || !g.hasAllItems()) return { ok: false };
+    if (!this.active || this.exitOpen || !this._isPlayer(from) || this.roster.get(from)?.status !== 'alive' || !g.hasAllItems()) return { ok: false };
+    const pos = this._posOf(from);
+    const ex = g.world?.exit?.position;
+    if (from !== this.selfId && pos && ex && (Math.hypot(pos.x - ex.x, pos.z - ex.z) > 6 || this._floorOf(pos) !== 0)) return { ok: false, error: 'too-far' };
     this.room.send('xo', {}, { to: 'all' });
     return { ok: true };
+  }
+
+  /** Host: a guest says they walked out. Only through the open entrance, from the ground floor. */
+  _hostOut(from, since = performance.now()) {
+    const pos = this._posOf(from);
+    const ex = this.game.world?.exit?.position;
+    if (!this.exitOpen || this.roster.get(from)?.status !== 'alive') return;
+    if (pos && ex && (Math.hypot(pos.x - ex.x, pos.z - ex.z) > 6 || this._floorOf(pos) !== 0)) {
+      // their position (unreliable, 15 Hz) can be a step behind the reliable 'out': look again for 2 s
+      if (performance.now() - since < 2000) (this._outWait ||= new Map()).set(from, since);
+      else this.netStats.bad++;
+      return;
+    }
+    this._outWait?.delete(from);
+    this._setStatus(from, 'escaped');
   }
 
   _onExitOpen() {
@@ -1605,20 +2307,22 @@ export class Coop {
   }
 
   // ======================================================================== local status
-  /** player.enabled follows the co-op status (and the co-op pause). */
+  /** player.enabled follows the co-op status, the co-op pause and game.canControl() (overlays: chat,
+   *  puzzle panels… keep the player still). A Director's own player never moves. */
   syncPlayer() {
     const g = this.game;
     const p = g.player;
     if (!p) return;
-    p.enabled = !g.coopPaused && (this.status === 'alive' || this.status === 'trapped');
+    const can = typeof g.canControl === 'function' ? g.canControl() : !g.coopPaused;
+    p.enabled = can && !g.coopPaused && (this.status === 'alive' || this.status === 'trapped');
   }
 
   _updateLocal(dt) {
     const g = this.game;
-    // walk out through the open entrance
+    // walk out through the open entrance (ground floor)
     if (this.status === 'alive' && this.exitOpen && !g.player.isHidden) {
       const ex = g.world.exit.position;
-      if (Math.hypot(g.player.position.x - ex.x, g.player.position.z - ex.z) < 1.7) this._escapeLocal();
+      if (Math.hypot(g.player.position.x - ex.x, g.player.position.z - ex.z) < 1.7 && this._floorOf(g.player.position) === 0) this._escapeLocal();
     }
     if (this.status === 'escaped' && !this._outCam) this._spectate(dt);
   }
@@ -1637,7 +2341,7 @@ export class Coop {
     const s = av.cur;
     const fx = -Math.sin(s.yaw);
     const fz = -Math.cos(s.yaw);
-    const want = new THREE.Vector3(s.x - fx * 2.4, s.flags & F.seated ? 1.7 : 2.05, s.z - fz * 2.4);
+    const want = new THREE.Vector3(s.x - fx * 2.4, (s.y || 0) + (s.flags & F.seated ? 1.7 : 2.05), s.z - fz * 2.4);
     // don't put the camera inside a wall: pull it in towards them until it can see them
     const head = av.headPos;
     for (let i = 0; i < 4 && !g.world.lineOfSight(want, head); i++) want.lerp(head, 0.35);
@@ -1648,15 +2352,26 @@ export class Coop {
   }
 
   // ======================================================================== roster status
-  _setStatus(id, status) {
+  _setStatus(id, status, at) {
     if (!this.isHost || !this.roster.has(id)) return;
     const r = this.roster.get(id);
+    if (at) r.at = at;
     if (r.status === status || r.status === 'left') return;
     r.status = status;
-    const st = {};
-    for (const [k, v] of this.roster) st[k] = v.status;
-    this.room.send('rs', { st }, { to: 'others' });
+    const { st, at: where } = this._statusMaps();
+    this.room.send('rs', { st, at: where }, { to: 'others' });
     this._renderTeam();
+    this.plist.refresh();
+  }
+
+  _statusMaps() {
+    const st = {};
+    const at = {};
+    for (const [k, v] of this.roster) {
+      st[k] = v.status;
+      at[k] = v.at || 'r0';
+    }
+    return { st, at };
   }
 
   _onRoster(d, m) {
@@ -1664,8 +2379,16 @@ export class Coop {
     for (const [id, s] of Object.entries(d.st)) {
       const r = this.roster.get(id);
       if (r && STATUS_WORD[s] !== undefined) r.status = s;
+      if (r && (d.at?.[id] === 'art' || d.at?.[id] === 'r0')) r.at = d.at[id];
     }
     this._renderTeam();
+    this.plist.refresh();
+  }
+
+  /** The words for a player's status (the team panel, the player list). */
+  statusWord(r, status = r?.status) {
+    if (status === 'trapped') return TRAP_WORD[r?.at] || STATUS_WORD.trapped;
+    return STATUS_WORD[status] ?? '';
   }
 
   _renderTeam() {
@@ -1682,7 +2405,7 @@ export class Coop {
       const n = document.createElement('b');
       n.textContent = r.id === this.selfId ? `${r.name} (you)` : r.name;
       const s = document.createElement('small');
-      s.textContent = STATUS_WORD[li.dataset.status] || '';
+      s.textContent = this.statusWord(r.id === this.selfId ? { ...r, at: this._trapAt || r.at } : r, li.dataset.status);
       li.append(chip, n, this._vcBadge(r.id), s);
       ul.append(li);
     }
@@ -1746,13 +2469,13 @@ export class Coop {
 
   // ===================================================================== SCHOOLNET extras
   onPA(kind, pos, song) {
-    if (!this.active || !pos) return;
+    if (!this.active || !pos || this.status === 'director') return;
     this.room.send('pa', { k: kind === 'song' ? 'song' : 'announcement', s: kind === 'song' ? String(song || '').slice(0, 24) : undefined, x: r2(pos.x), y: r2(pos.y ?? 2.8), z: r2(pos.z) });
   }
 
-  _onPA(d) {
+  _onPA(d, m) {
     const g = this.game;
-    if (!this.active || !d || !num(d.x) || !num(d.z)) return;
+    if (!this._fromPlayer('pa', m) || !d || !num(d.x) || !num(d.z) || !okPos(d.x, num(d.y) ? d.y : 2.8, d.z)) return;
     const pos = new THREE.Vector3(d.x, num(d.y) ? d.y : 2.8, d.z);
     const song = typeof d.s === 'string' ? d.s : undefined; // (a song only they have falls back to Frère Jacques)
     const dur = g.audio?.broadcast?.(d.k === 'song' ? 'song' : 'announcement', pos, song, true) || 4;
@@ -1760,15 +2483,15 @@ export class Coop {
   }
 
   onPsDrop(x, z, yaw) {
-    if (this.active) this.room.send('psd', [r2(x), r2(z), r3(yaw)]);
+    if (this.active && this.status !== 'director') this.room.send('psd', [r2(x), r2(z), r3(yaw)]);
   }
 
   onPsTake() {
-    if (this.active) this.room.send('pst', {});
+    if (this.active && this.status !== 'director') this.room.send('pst', {});
   }
 
-  _onPsDrop(d) {
-    if (!this.active || !Array.isArray(d) || !d.slice(0, 3).every(num)) return;
+  _onPsDrop(d, m) {
+    if (!this._fromPlayer('psd', m) || !Array.isArray(d) || !d.slice(0, 3).every(num) || !okPos(d[0], 0, d[1])) return;
     this.game.computers?.remotePsDrop?.(d[0], d[1], d[2]);
   }
 
@@ -1777,25 +2500,29 @@ export class Coop {
     const ev = this.events;
     ev.on('noise', (n) => {
       if (!this.guest || n?.net || !n?.position || this.status !== 'alive') return;
-      this.room.send('nz', [r2(n.position.x), r2(n.position.z), r2(n.radius ?? 6), String(n.source || '').slice(0, 16)], { to: 'host' });
+      const p = n.position;
+      this.room.send('nz', [r2(p.x), r2(p.y || 0), r2(p.z), r2(n.radius ?? 6), String(n.source || '').slice(0, 16)], { to: 'host' });
     });
-    ev.on('hide:enter', ({ spot } = {}) => this.active && spot?.id && this.room.send('hd', { id: spot.id, on: 1 }));
-    ev.on('hide:exit', ({ spot } = {}) => this.active && spot?.id && this.room.send('hd', { id: spot.id, on: 0 }));
+    const hide = (spot, on) => this.active && this.status !== 'director' && spot?.id && this.room.send('hd', { id: spot.id, on });
+    ev.on('hide:enter', ({ spot } = {}) => hide(spot, 1));
+    ev.on('hide:exit', ({ spot } = {}) => hide(spot, 0));
     ev.on('door:open', ({ door, by, push } = {}) => !push && this._doorOut(door, true, by));
     ev.on('door:close', ({ door, by } = {}) => this._doorOut(door, false, by));
-    // the host's caretaker, retold to the guests
+    // the host's enemies, retold to the guests (with `who` for The Assistant)
     ev.on('enemy:voice', (e) => this._relayEnemy('voice', e));
-    ev.on('enemy:spotted', () => this._relayEnemy('spotted'));
+    ev.on('enemy:spotted', (e) => this._relayEnemy('spotted', e));
     ev.on('enemy:state', (e) => !e?.net && this._relayEnemy('state', e));
-    ev.on('enemy:winded', () => this._relayEnemy('winded'));
-    ev.on('enemy:sighting', () => this._relayEnemy('sighting'));
-    ev.on('enemy:lost', () => this._relayEnemy('lost'));
+    ev.on('enemy:winded', (e) => this._relayEnemy('winded', e));
+    ev.on('enemy:sighting', (e) => this._relayEnemy('sighting', e));
+    ev.on('enemy:lost', (e) => this._relayEnemy('lost', e));
     ev.on('world:transform-warning', (e) => {
       if (this.active && this.isHost && !e?.net) this.room.send('xw', {});
     });
-    // co-op keys: M mutes the mic, V waves; when out, clicking switches who you watch
+    // co-op keys: M mutes the mic, V waves; when out, clicking switches who you watch.
+    // (never while typing: chat, a puzzle panel, a login box… CONTRACTS §13.2)
     addEventListener('keydown', (e) => {
       if (!this.active || this.game.state !== 'playing' || this.game.schoolnet?.isOpen || e.repeat) return;
+      if (this.game.isTyping?.() || this.status === 'director') return;
       if (e.code === 'KeyM') this.toggleMute();
       if (e.code === 'KeyV' && this.status === 'alive') {
         this.room.send('wv', {});
@@ -1811,5 +2538,246 @@ export class Coop {
   /** HallPass moment data. */
   hpExtra() {
     return this.active ? { coop: this.roster.size, host: this.isHost ? 1 : 0 } : null;
+  }
+
+  /** Local mute (chat and voice) for a player: this session only (chat.js / playerlist.js). */
+  setMuted(id, on) {
+    try {
+      this.room?.voice?.setPeerMuted?.(id, !!on);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** Host: remove a player from the room (player list "Remove"; Director kick). */
+  hostKick(id, reason = 'The host removed you from the room.') {
+    if (!this.isHost || !id || id === this.selfId) return false;
+    this._kick(id, reason);
+    return true;
+  }
+
+  // ===================================================================== game.net transport
+  /** Bind game.net to this room for the run (net.js: CONTRACTS §13.3). Wire format: 'n:<type>' with
+   *  {b} (host broadcast), {h} (to the host, fire and forget) or {q, d} (a request; the host answers
+   *  once with 'nr' {q, r}; no answer in 5 s → { ok: false, error: 'timeout' }). The sender id always
+   *  comes from the SDK link (m.from), never from the payload. */
+  _bindNet() {
+    const net = this.game.net;
+    if (!net || !this.room) return;
+    if (!this._netT) {
+      this._netT = {
+        isHost: () => !!this.room?.isHost,
+        selfId: () => this.room?.selfId || 'local',
+        broadcast: (type, data, opts = {}) => this._netSend(type, { b: data ?? null }, 'others', opts.reliable !== false),
+        toHost: (type, data, opts = {}) => this._netSend(type, { h: data ?? null }, 'host', opts.reliable !== false),
+        request: (type, data) => this._netRequest(type, data),
+      };
+    }
+    net.bindTransport(this._netT);
+    this._netKnown = -1;
+    this._netRescan();
+  }
+
+  _unbindNet() {
+    const net = this.game.net;
+    if (this._netT) net?.unbindTransport?.(this._netT);
+    for (const off of this._netSubs.values()) {
+      try {
+        off();
+      } catch {
+        /* ignore */
+      }
+    }
+    this._netSubs.clear();
+    for (const [id, p] of this._netReqs) {
+      clearTimeout(p.timer);
+      p.resolve({ ok: false, error: 'closed' });
+      this._netReqs.delete(id);
+    }
+  }
+
+  /** Listen for 'n:<type>' for every type game.net knows (net.on / net.handle), plus our own. The SDK has
+   *  no wildcard listener, so new types are picked up when the counts change (checked every frame). */
+  _netRescan() {
+    const net = this.game.net;
+    const room = this.room;
+    if (!net || !room || net.transport !== this._netT) return;
+    const n = (net._on?.size || 0) + (net._handlers?.size || 0);
+    if (n === this._netKnown) return;
+    this._netKnown = n;
+    const types = new Set([...(net._on?.keys() || []), ...(net._handlers?.keys() || []), 'f2', 'f2s', 'floor1', 'chat', 'chatmsg']);
+    for (const type of types) {
+      const ev = `n:${type}`;
+      if (this._netSubs.has(ev) || ev.length > 64) continue;
+      this._netSubs.set(ev, room.on(ev, (body, m) => this._onNetMsg(type, body, m)));
+    }
+  }
+
+  _netSend(type, body, to, reliable) {
+    const room = this.room;
+    if (!room) return;
+    try {
+      room.send(`n:${type}`, body, { to, reliable });
+    } catch (err) {
+      console.warn(`[coop] net '${type}' not sent:`, err?.message || err);
+    }
+  }
+
+  _netRequest(type, data) {
+    const room = this.room;
+    if (!room) return Promise.resolve({ ok: false, error: 'offline' });
+    return new Promise((resolve) => {
+      const q = ++this._netSeq;
+      const timer = setTimeout(() => {
+        this._netReqs.delete(q);
+        resolve({ ok: false, error: 'timeout' });
+      }, 5000);
+      this._netReqs.set(q, { resolve, timer });
+      try {
+        room.send(`n:${type}`, { q, d: data ?? null }, { to: 'host' });
+      } catch (err) {
+        clearTimeout(timer);
+        this._netReqs.delete(q);
+        resolve({ ok: false, error: String(err?.code || 'send-failed') });
+      }
+    });
+  }
+
+  _onNetMsg(type, body, m) {
+    const room = this.room;
+    const net = this.game.net;
+    if (!room || !net || !body || typeof body !== 'object' || Array.isArray(body)) return;
+    if (m.from !== room.hostId && !this._allow(`n:${type}`, m.from)) {
+      if (room.isHost && Number.isInteger(body.q)) this._netReply(m.from, body.q, { ok: false, error: 'rate' });
+      return;
+    }
+    if ('b' in body) {
+      if (m.from !== room.hostId || room.isHost) return; // only the host broadcasts
+      net._deliver(type, body.b, m.from);
+    } else if ('h' in body) {
+      if (!room.isHost) return;
+      net._callHandler(type, body.h, m.from);
+    } else if (Number.isInteger(body.q)) {
+      if (!room.isHost) return;
+      Promise.resolve(net._callHandler(type, body.d, m.from)).then(
+        (r) => this._netReply(m.from, body.q, r ?? { ok: true }),
+        () => this._netReply(m.from, body.q, { ok: false, error: 'handler-failed' }),
+      );
+    }
+  }
+
+  _netReply(to, q, r) {
+    try {
+      this.room?.send('nr', { q, r }, { to });
+    } catch {
+      try {
+        this.room?.send('nr', { q, r: { ok: false, error: 'reply-failed' } }, { to });
+      } catch {
+        /* gone */
+      }
+    }
+  }
+
+  _onNetReply(d, m) {
+    if (!this.room || m.from !== this.room.hostId || !d || !Number.isInteger(d.q)) return;
+    const p = this._netReqs.get(d.q);
+    if (!p) return;
+    this._netReqs.delete(d.q);
+    clearTimeout(p.timer);
+    p.resolve(d.r ?? { ok: false, error: 'empty' });
+  }
+
+  /** Host: the full shared state (net.provideState) to one peer: a Director joining, a reconnect. */
+  _sendSnapshot(to) {
+    if (!this.room?.isHost || !this.active) return;
+    try {
+      this.room.send('nsnap', { all: this.game.net.snapshotAll() }, { to });
+    } catch (err) {
+      console.warn('[coop] snapshot not sent', err?.message || err);
+    }
+  }
+
+  // =================================================================== Director: late join
+  /** Host: the transforms of this run so far (a late Director replays them). */
+  sendTransformLog(inp) {
+    this._xfLog.push({ n: inp.n, viewers: inp.viewers, protect: inp.protect, r0: !!this.game.world.room000Revealed });
+    if (this._xfLog.length > 64) this._xfLog.shift();
+  }
+
+  /** Host: everything a Director needs to build this run's school as it is now. */
+  _sendDirectorRun(id) {
+    const g = this.game;
+    const room = this.room;
+    if (!room || !this.active) return;
+    const roster = [...this.roster.values()].map((r) => ({ id: r.id, name: r.name, slot: r.slot, look: r.look }));
+    const { st, at } = this._statusMaps();
+    const doors = (g.world?.doors || []).map((d) => (d.isOpen ? 1 : 0));
+    const d = {
+      seed: g.seed,
+      difficulty: g.settings.difficulty,
+      roster,
+      st,
+      at,
+      t: r2(g.time),
+      left: r2(g.timeLeft),
+      xf: this._xfLog.slice(),
+      r0: !!g.world?.room000Revealed,
+      f1: !!g.floor1Reached,
+      exit: !!this.exitOpen,
+      picked: [...this._picked],
+      doors,
+      startFloor: g.startFloor ?? this._runStartFloor ?? 0,
+    };
+    try {
+      room.send('drun', d, { to: id });
+    } catch (err) {
+      console.warn('[coop] drun not sent', err?.message || err);
+      return;
+    }
+    this._sendSnapshot(id);
+  }
+
+  _onDirectorRun(d, m) {
+    if (!this.room || m.from !== this.room.hostId || !d || !Array.isArray(d.roster) || !this.amDirector) return;
+    this._beginRun({ ...d, director: true, late: true });
+  }
+
+  /** Director (late join): bring the freshly built school up to the host's: transforms, Room 000,
+   *  doors, the team's items, the entrance, the clock. Quietly: no announcements, no fanfare. */
+  catchUp(d) {
+    const g = this.game;
+    const w = g.world;
+    const reveal = () => {
+      if (w.room000Revealed) return;
+      g.room000Revealed = true;
+      w.revealRoom000?.();
+    };
+    const list = Array.isArray(d.xf) ? d.xf : [];
+    const ok = (a, k) => Array.isArray(a) && a.length <= 8 && a.every((p) => Array.isArray(p) && p.length === k && p.every(num));
+    for (const x of list) {
+      if (!x || !Number.isInteger(x.n) || !ok(x.viewers, 3) || !ok(x.protect, 2)) continue;
+      if (x.r0) reveal();
+      try {
+        w.transformer.count = x.n - 1;
+        w.transform({ protect: x.protect.map(([px, pz]) => new THREE.Vector3(px, 0, pz)), isVisible: this.makeVisibility(x.viewers) });
+        g.transforms = (g.transforms || 0) + 1;
+      } catch (err) {
+        console.warn('[coop] transform replay', err);
+      }
+    }
+    if (d.r0) reveal();
+    for (const id of Array.isArray(d.picked) ? d.picked : []) if (typeof id === 'string') g.items?.collectRemote?.(id);
+    const doors = Array.isArray(d.doors) ? d.doors : [];
+    for (let i = 0; i < doors.length && i < (w.doors || []).length; i++) {
+      const door = w.doors[i];
+      if (!!doors[i] !== !!door.isOpen) doors[i] ? door.open('remote') : door.close('remote');
+    }
+    if (d.exit) {
+      this.exitOpen = true;
+      w.setExitState?.('open');
+    }
+    if (d.f1 && !g.floor1Reached) g._onFloor1Reached?.();
+    if (num(d.t)) g.time = d.t;
+    if (num(d.left)) g.timeLeft = d.left;
   }
 }

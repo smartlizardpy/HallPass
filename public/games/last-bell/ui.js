@@ -33,7 +33,7 @@
 // Settings extension key: voiceSynth (bool, default true) — speechSynthesis stand-in voice.
 
 import { DEFAULT_SETTINGS, SETTINGS_KEY, DIFFICULTY, ITEM_IDS, ITEM_NAMES } from './config.js';
-import { VOICE_LINES, ANNOUNCEMENTS } from './audio.js';
+import { VOICE_LINES, ANNOUNCEMENTS, ASSISTANT_LINES } from './audio.js';
 import { TIPS } from './schoolnet-content.js';
 import { Minimap } from './minimap.js';
 
@@ -128,7 +128,7 @@ export function saveSettings(settings) {
   }
 }
 
-const SCREENS = ['loading', 'warning', 'menu', 'intro', 'instructions', 'settings', 'credits', 'pause', 'victory', 'gameover', 'error', 'coop'];
+const SCREENS = ['loading', 'warning', 'hwwarning', 'menu', 'intro', 'instructions', 'settings', 'credits', 'pause', 'victory', 'gameover', 'error', 'coop'];
 const MENU_LIKE = new Set(['warning', 'menu', 'intro', 'instructions', 'settings', 'credits', 'pause', 'victory', 'gameover', 'error', 'loading', 'coop']);
 const WARNING_KEY = 'lastbell.photosensitivity.v1';
 
@@ -304,7 +304,15 @@ export class UI {
     this._introShownAt = performance.now();
     const screen = this.screens.intro;
     const text = this.el.introText;
-    const paras = [...text.querySelectorAll('p')];
+    // the second-floor start is the default; ?start=floor1 keeps the classic story
+    let classic = false;
+    try { classic = new URLSearchParams(location.search).get('start') === 'floor1'; } catch { /* default story */ }
+    const hw = this._introMode === 'halloween'; // The Halloween Shift has its own story (halloween/)
+    for (const p of text.querySelectorAll('p[data-intro]')) {
+      p.hidden = hw ? p.dataset.intro !== 'halloween' : p.dataset.intro === 'halloween' || (p.dataset.intro === 'classic') !== classic;
+    }
+    screen.classList.toggle('intro--hw', hw);
+    const paras = [...text.querySelectorAll('p')].filter((p) => !p.hidden);
     screen.classList.remove('is-ready');
     text.classList.remove('is-complete');
     for (const t of this._introTimers || []) clearTimeout(t);
@@ -323,6 +331,23 @@ export class UI {
     else this._introTimers.push(setTimeout(done, 250 + paras.length * 850));
     this.$('intro-begin').focus({ preventScroll: true });
     this.events?.emit('ui:intro', { difficulty: this.settings.difficulty });
+  }
+  /** The Halloween Shift's menu entry (halloween/config.js decides when). Seasonal styling: halloween/halloween.css. */
+  setHalloween(on) {
+    on = !!on;
+    const menu = this.screens.menu;
+    if (!menu) return;
+    if (on && !document.getElementById('hw-css')) {
+      const link = document.createElement('link');
+      link.id = 'hw-css';
+      link.rel = 'stylesheet';
+      link.href = 'halloween/halloween.css';
+      document.head.appendChild(link);
+    }
+    menu.classList.toggle('menu--hw', on);
+    for (const el of document.querySelectorAll('[data-hw]')) el.hidden = !on; // menu entry, board row, settings
+    const begin = menu.querySelector('[data-action="begin"]');
+    if (begin) begin.textContent = on ? 'Play normal' : 'Begin';
   }
   hideIntro() {
     for (const t of this._introTimers || []) clearTimeout(t);
@@ -503,7 +528,27 @@ export class UI {
     switch (action) {
       case 'begin':
         this._sound('ui_select');
+        this._introMode = 'normal';
         this.showIntro();
+        break;
+      case 'halloween':
+        // The Halloween Shift: its content warning first (13+, jump scares, censored gore, flicker)
+        this._sound('ui_select');
+        this._show('hwwarning');
+        break;
+      case 'hw-warning-ok':
+      case 'hw-warning-mild':
+        if (action === 'hw-warning-mild' && this.settings.scareIntensity !== 'mild') {
+          this.settings.scareIntensity = 'mild';
+          this.refreshSettings();
+          this._commitSettings();
+        }
+        this._sound('ui_select');
+        this._introMode = 'halloween';
+        this.showIntro();
+        break;
+      case 'hw-warning-back':
+        this.back();
         break;
       case 'warning-ok':
         this._closeWarning(false);
@@ -516,7 +561,7 @@ export class UI {
         if (this._introShownAt > 0 && performance.now() - this._introShownAt < 350) return;
         this._sound('ui_select');
         this.hideIntro();
-        this.events?.emit('ui:start', { difficulty: this.settings.difficulty });
+        this.events?.emit('ui:start', { difficulty: this.settings.difficulty, mode: this._introMode === 'halloween' ? 'halloween' : 'normal' });
         break;
       }
       case 'difficulty':
@@ -576,6 +621,11 @@ export class UI {
   back() {
     if (this.active === 'coop') {
       this.events?.emit('ui:coop', { action: 'coop-back' });
+      return true;
+    }
+    if (this.active === 'hwwarning') {
+      this._sound('ui_back');
+      this.showMenu();
       return true;
     }
     if (['instructions', 'settings', 'credits'].includes(this.active)) {
@@ -721,12 +771,16 @@ export class UI {
       }
       // at a SCHOOLNET computer every key belongs to the screen (typing a "p" must not pause)
       if (g.schoolnet?.isOpen) return;
+      // a puzzle panel, the chat box or any text field owns the keyboard (its own Esc closes it)
+      if (g.activeOverlay || g.isTyping?.()) return;
       if (!this.el.resume.hidden && (e.code === 'Enter' || e.code === 'Space')) {
         e.preventDefault();
         e.stopPropagation();
         this._action('resume-lock');
         return;
       }
+      // the upstairs opening cutscene takes every key (cutscene-f2.js): Esc / P skip it, they do not pause
+      if (g.cutscene?.active) return;
       // in game: P (and Esc when the pointer isn't locked) pauses
       if ((e.code === 'KeyP' || e.code === 'Escape') && g.state === 'playing') {
         e.preventDefault();
@@ -813,7 +867,14 @@ export class UI {
         at += d * 1000;
       }
     });
-    on('enemy:voice', ({ line, position, text, big } = {}) => {
+    on('enemy:voice', ({ line, position, text, big, who } = {}) => {
+      if (who === 'assistant') {
+        const t = text || ASSISTANT_LINES[line];
+        const p = this.game.player?.position;
+        if (!t || (position && p && typeof p.distanceTo === 'function' && p.distanceTo(position) > 28)) return;
+        this.showSubtitle(t, undefined, 'The Assistant');
+        return;
+      }
       let t = text || (big && line === 'burp' ? '[enormous burp]' : VOICE_LINES[line]);
       // the wheeze only has words once the recorded line is installed
       if (!text && line === 'wheeze' && !this.game.audio?.hasFile?.('caretaker_wheeze')) t = '[wheezing]';
@@ -957,13 +1018,21 @@ export class UI {
   }
 
   /** A paper card on screen (sticky note, the register): { title, lines[], footer, anchor }. */
-  showCard({ kind = '', title = '', lines = [], footer = '', anchor = null } = {}) {
+  showCard({ kind = '', title = '', lines = [], footer = '', anchor = null, image = '' } = {}) {
     const c = this.el.card;
     if (!c) return;
     c.className = `hud-card hud-card--${kind}`;
     c.querySelector('.hud-card__title').textContent = title;
     const box = c.querySelector('.hud-card__lines');
     box.textContent = '';
+    c.querySelector('.hud-card__img')?.remove();
+    if (image) {
+      const im = document.createElement('img');
+      im.className = 'hud-card__img';
+      im.src = image;
+      im.alt = '';
+      box.before(im);
+    }
     for (const l of lines) {
       const p = document.createElement('p');
       p.textContent = l;
@@ -1072,6 +1141,11 @@ export class UI {
       }
     }
     if (showGoals) {
+      // upstairs (Second Floor update): Floor 2's chain until someone reaches the ground floor
+      const f2 = !game.floor1Reached ? game.floor2?.objectives?.() : null;
+      this._renderFloor2Goals(f2?.length ? f2 : null);
+    }
+    if (showGoals && !this._f2GoalsOn) {
       const items = inv?.items ? [...inv.items] : [];
       const revealed = !!game.world?.room000Revealed;
       const escaped = game.state === 'escaping' || game.state === 'won';
@@ -1113,9 +1187,19 @@ export class UI {
   }
 
   _renderProximity(game) {
-    const enemy = game.enemy;
     const player = game.player;
     const el = this.el;
+    // the card follows the enemy on the player's own floor (Caretaker downstairs, the lunch monitor upstairs)
+    const pf = player?.floor ?? game.world?.floorOf?.(player?.position) ?? 0;
+    const upstairs = pf === 1 && !!game.assistant;
+    const enemy = upstairs ? game.assistant : game.enemy;
+    const title = upstairs ? 'The lunch monitor' : 'Caretaker';
+    if (this._proxTitle !== title) {
+      this._proxTitle = title;
+      const t = el.prox.querySelector('.hud-side__title');
+      if (t) t.textContent = title;
+      el.prox.setAttribute('aria-label', title);
+    }
     let level = 0;
     let word = 'Somewhere in the building';
     let metres = '';
@@ -1134,7 +1218,10 @@ export class UI {
     } else if (game.state === 'playing') {
       state = 'Not moving yet';
     }
-    const key = `${level}|${word}|${metres}|${state}|${hunting}`;
+    // the other floor's enemy, in a word: footsteps through the ceiling should have an owner (beta)
+    const other = upstairs ? game.enemy : pf === 0 ? game.assistant : null;
+    if (other?.enabled && game.state === 'playing') state = state ? `${state} · ${upstairs ? 'Caretaker: downstairs' : 'Lunch monitor: upstairs'}` : upstairs ? 'Caretaker: downstairs' : 'Lunch monitor: upstairs';
+    const key = `${level}|${word}|${metres}|${state}|${hunting}|${title}`;
     if (key === this._proxKey) return;
     this._proxKey = key;
     el.prox.dataset.level = String(level);
@@ -1142,6 +1229,65 @@ export class UI {
     el.proxWord.textContent = word;
     el.proxM.textContent = metres;
     el.proxState.textContent = state;
+  }
+
+  /** The HUD checklist while upstairs: game.floor2.objectives() replaces the ground-floor list. */
+  /** Draw the eye to the checklist for a moment (the opening beat on Floor 2). */
+  flashGoals() {
+    const box = this.el?.goals;
+    if (!box) return;
+    box.classList.remove('is-flash');
+    void box.offsetWidth;
+    box.classList.add('is-flash');
+    clearTimeout(this._flashT);
+    this._flashT = setTimeout(() => box.classList.remove('is-flash'), 4200);
+  }
+
+  _renderFloor2Goals(list) {
+    const box = this.el.goals;
+    if (!box) return;
+    const classic = box.querySelector('.hud-goals__list:not(.hud-goals__list--f2)');
+    let ul = box.querySelector('.hud-goals__list--f2');
+    const on = !!list;
+    if (on !== !!this._f2GoalsOn) {
+      this._f2GoalsOn = on;
+      if (classic) classic.hidden = on;
+      if (ul) ul.hidden = !on;
+      if (!on) this._goalsKey = undefined; // the classic list redraws (and animates) from scratch
+    }
+    if (!on) return;
+    const key = list.map((g) => `${g.id}:${g.done ? 1 : 0}${g.active ? 1 : 0}:${g.text}:${g.hint || ''}`).join('|');
+    if (key === this._f2Key) return;
+    const first = this._f2Key === undefined || !ul;
+    this._f2Key = key;
+    if (!ul) {
+      ul = document.createElement('ul');
+      ul.className = 'hud-goals__list hud-goals__list--f2';
+      box.appendChild(ul);
+    }
+    const old = new Map([...ul.children].map((li) => [li.dataset.goal, li]));
+    ul.textContent = '';
+    for (const g of list) {
+      const li = document.createElement('li');
+      li.dataset.goal = g.id;
+      const boxEl = document.createElement('span');
+      boxEl.className = 'hud-goals__box';
+      const text = document.createElement('span');
+      text.className = 'hud-goals__text';
+      const b = document.createElement('b');
+      b.textContent = g.text;
+      const small = document.createElement('small');
+      small.textContent = g.hint || '';
+      text.append(b, small);
+      li.append(boxEl, text);
+      li.classList.toggle('is-done', !!g.done);
+      li.classList.toggle('is-active', !g.done && !!g.active);
+      li.classList.toggle('is-locked', !g.done && !g.active);
+      const prev = old.get(g.id);
+      const changed = !prev || prev.classList.contains('is-done') !== !!g.done || prev.classList.contains('is-active') !== (!g.done && !!g.active);
+      if (!first && changed && (g.done || g.active)) li.classList.add('is-new');
+      ul.appendChild(li);
+    }
   }
 
   _renderGoals(items, revealed, escaped, animate, fuseHint = '') {

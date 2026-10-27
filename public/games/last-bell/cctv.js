@@ -3,8 +3,9 @@
 // One fixed camera per corridor, high up at one end, looking down its length. While the Security
 // Cameras app is open, schoolnet.js asks for one feed per frame (round-robin): it renders into a tiny
 // render target, is read back and is drawn into a 2D canvas as grainy green night vision with a
-// timestamp. The building's lights only follow the player, so a feed render turns the hemisphere
-// light up (infra-red) and thins the fog for that one render; both are put back straight away.
+// timestamp. The building's lights only follow the player, so a feed render moves the light pool to the
+// camera (world-lights poolAt), turns the hemisphere light up (infra-red) and thins the fog for that one
+// render; all three are put back straight away.
 
 import * as THREE from './lib/three/three.module.js';
 import { CELL } from './config.js';
@@ -78,7 +79,15 @@ export class CCTV {
     const fogD = fog && fog.density !== undefined ? fog.density : null;
     const prevRT = r.getRenderTarget();
     const prevClear = r.autoClear;
+    // the feed shows the rig's floor even when you watch it from upstairs (only your floor renders)
+    const roots = g.world?.floorRoots;
+    const vis = roots ? roots.map((o) => o.visible) : null;
+    let unpool = null;
     try {
+      if (roots) roots.forEach((o, i) => { o.visible = i === (rig.floor || 0); });
+      // the ceiling lights around the camera, not around the player (who is often a floor away)
+      const lights = g.world?.lights;
+      if (lights?.poolAt) unpool = lights.poolAt(cam.position, rig.floor || 0);
       if (hemi) hemi.intensity = IR_HEMI;
       if (fogD !== null) fog.density = fogD * IR_FOG;
       r.setRenderTarget(this.rt);
@@ -90,6 +99,8 @@ export class CCTV {
     } finally {
       r.setRenderTarget(prevRT);
       r.autoClear = prevClear;
+      if (unpool) unpool();
+      if (roots) roots.forEach((o, i) => { o.visible = vis[i]; });
       if (hemi) hemi.intensity = hemiI;
       if (fogD !== null) fog.density = fogD;
     }

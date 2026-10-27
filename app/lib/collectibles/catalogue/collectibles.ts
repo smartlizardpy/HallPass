@@ -1,6 +1,7 @@
 /**
- * The 68 launch collectibles. All art is DEMO art (see public/collectibles/ART.md);
- * replace a file at the same path and flip `art.status` to `final` here.
+ * The collectibles. The curated set (`curated.generated.ts`) carries final, full-card art; the
+ * demo rows below are the launch placeholders (pixel art, public/collectibles/ART.md), kept
+ * because people may own them. Replace a demo file at the same path and flip `art.status` to `final`.
  *
  * Names and captions are original, school-safe and refer to no real person or
  * brand. The Internet Culture, Brainrot and Turkish sets need a human content
@@ -9,6 +10,7 @@
  * NEVER delete or renumber a row: people own these. Retire with `retired: true`.
  */
 
+import { CURATED } from "./curated.generated";
 import type { ArtStatus, Collectible, CollectibleKind, CollectiblePool, Finish, Frame, Rarity } from "./types";
 
 const FINISH: Record<Rarity, Finish> = {
@@ -48,9 +50,8 @@ function build(collection: string, rows: Row[]): Collectible[] {
   });
 }
 
-const CHAMPION: Extra = { pool: "commemorative", frame: "champion" };
-
-const FF26 = build("ff26", [
+/** The 15 demo Fright Fest cards: retired (their owners keep them) now the curated set replaces them. */
+const FF26_DEMO = build("ff26", [
   ["cobweb-bell", "Cobweb Bell", "common", "Nobody has rung it in years. It still sounds nervous."],
   ["detention-slip", "Detention Slip", "common", "Signed by someone who is definitely not a teacher."],
   ["pumpkin-locker", "Pumpkin Locker", "common", "Inside: snacks and one very smug pumpkin."],
@@ -66,12 +67,7 @@ const FF26 = build("ff26", [
   ["blood-moon", "Blood Moon", "epic", "Rises once a year. Sets when the last bell rings."],
   ["the-caretaker", "The Caretaker", "epic", "Knows every corridor. Never speaks. Always has the spare key."],
   ["the-last-bell", "The Last Bell", "legendary", "When it rings, everybody had better be heading out."],
-  ["survivor", "Survivor 2026", "rare", "You entered every board. The lights are still on, mostly.", { kind: "sticker", pool: "commemorative" }],
-  ["champion-last-bell", "Last Bell Champion", "epic", "First on the Last Bell board. Rang it the loudest.", CHAMPION],
-  ["champion-shadow-core", "Shadow Core Champion", "epic", "Fastest through the dark. The shadows asked for a rematch.", CHAMPION],
-  ["champion-survive-till-dawn", "Survive Till Dawn Champion", "epic", "Still standing when the sun came up.", CHAMPION],
-  ["overall-champion", "Overall Champion 2026", "legendary", "Top of the whole Fright Fest. Even the caretaker saluted.", CHAMPION],
-]);
+]).map((c) => ({ ...c, retired: true as const }));
 
 const HPO = build("hpo", [
   ["doodle-dash", "Doodle Dash", "common", "Scribbles first, asks questions later."],
@@ -133,4 +129,9 @@ const TR = build("tr", [
   ["kisir-night", "Kısır Night", "legendary", "Everybody brings a dish. Nobody leaves hungry."],
 ]);
 
-export const COLLECTIBLES: Collectible[] = [...FF26, ...HPO, ...INET, ...BRR, ...TR];
+/**
+ * The curated set (hallpass-card, imported by scripts/catalogue-import.mjs): the five Fright Fest
+ * prize-only commemoratives keep their old ids, so packs and championship rewards are unchanged.
+ * The demo sets above (hpo, inet, brr, tr) stay for the people who own them; their collections are retired.
+ */
+export const COLLECTIBLES: Collectible[] = [...FF26_DEMO, ...CURATED, ...HPO, ...INET, ...BRR, ...TR];

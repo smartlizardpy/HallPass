@@ -1,0 +1,5 @@
+# Only needed to reprepare sources. The completed browser tool works offline.
+# Python 3.12; install in an isolated virtual environment.
+rembg[cpu]==2.0.85
+Pillow==12.3.0
+requests==2.34.2

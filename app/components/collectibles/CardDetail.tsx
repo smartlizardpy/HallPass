@@ -88,7 +88,7 @@ export function CardDetail({
         <h2 id="hc-detail-h" className="mt-3 text-xl font-black">
           {card.name}
         </h2>
-        <p className="mt-1 text-sm text-foreground-2">{card.caption}</p>
+        {card.caption && <p className="mt-1 text-sm text-foreground-2">{card.caption}</p>}
         <p className="mt-2 text-sm text-muted">
           {collection}. First collected {date}. You have {entry.owned} {entry.owned === 1 ? "copy" : "copies"}.
         </p>

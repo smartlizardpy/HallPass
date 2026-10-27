@@ -5,9 +5,9 @@ name: Streak reminders
 # says — lives on the deployment (`app/lib/streak/`) and is tested there; see
 # `scripts/send-streak-reminders.mjs`, which is deliberately thin.
 #
-# WHY HOURLY. A player's reminder hour is 17:00 WHERE THEY ARE, which is a
-# different UTC hour for every offset. Each run therefore reaches the players
-# whose local time is currently 17:xx, and the site's own once-per-local-day
+# WHY HOURLY. A player's reminder window is 17:00-20:59 WHERE THEY ARE, which is
+# a different UTC span for every offset. Each run therefore reaches the players
+# whose local time is currently inside it, and the site's own once-per-local-day
 # claim means an overlapping or repeated run sends nothing twice.
 #
 # WHY ITS OWN WORKFLOW AND NOT A STEP IN alerts.yml: a streak outage must not turn
@@ -15,8 +15,9 @@ name: Streak reminders
 # Different cadence, different failure meaning, different Actions log.
 #
 # TIMING IS BEST-EFFORT. GitHub queues cron runs and drops them under load, and a
-# run can be minutes late. At an hour-wide reminder window a late run is harmless;
-# a dropped run costs one hour's worth of players one reminder.
+# run can be minutes or, seen in practice, hours late. The reminder window is four
+# hours wide (17:00-20:59 local), so a late or dropped run is usually caught by a
+# later one; only a gap longer than the window costs a player their reminder.
 
 on:
   schedule:

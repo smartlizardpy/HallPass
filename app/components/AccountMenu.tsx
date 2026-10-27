@@ -109,6 +109,26 @@ export function AccountMenu() {
     };
   }, []);
 
+  // This menu lives in a layout that survives navigation, so the identity it
+  // fetched on mount would otherwise go stale: saving a new avatar on Settings
+  // redirects to the same path and the chip kept showing the old one. The
+  // avatar picker fires `hp:me-changed` once the saved choice has come back;
+  // re-read the identity then. Quiet on failure: keep whatever is shown.
+  useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      fetch("/api/v1/me", { credentials: "include", cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: MeResponse | null) => active && d && setMe(d))
+        .catch(() => {});
+    };
+    window.addEventListener("hp:me-changed", refresh);
+    return () => {
+      active = false;
+      window.removeEventListener("hp:me-changed", refresh);
+    };
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {

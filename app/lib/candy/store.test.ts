@@ -41,7 +41,7 @@ async function everyQuery() {
   await s.sync(PLAYER);
   await s.balance(PLAYER);
   await s.history(PLAYER);
-  await s.spend(PLAYER, "hpo-standard", REQ);
+  await s.spend(PLAYER, "legends-standard", REQ);
   await s.listBoards("last-bell");
   await s.listBoards();
   await s.payingBoards();
@@ -65,8 +65,8 @@ describe("candy config", () => {
 
   it("prices exactly the four everyday packs at 30 and the four Rare packs at 100, all published", () => {
     expect(C.prices).toEqual({
-      "hpo-standard": 30, "inet-standard": 30, "brr-standard": 30, "tr-standard": 30,
-      "hpo-rare": 100, "inet-rare": 100, "brr-rare": 100, "tr-rare": 100,
+      "legends-standard": 30, "brainrot-standard": 30, "turkish-standard": 30, "gaming-standard": 30,
+      "legends-rare": 100, "brainrot-rare": 100, "turkish-rare": 100, "gaming-rare": 100,
     });
     for (const id of Object.keys(C.prices)) expect(getPack(id), id).toBeDefined();
     // Nothing from the championship rewards is for sale.
@@ -227,16 +227,16 @@ describe("spend", () => {
     expect(await s.spend(PLAYER, "nope", REQ)).toEqual({ status: "bad-pack" });
     expect(await s.spend(PLAYER, "ff26-participation", REQ)).toEqual({ status: "bad-pack" });
     expect(await s.spend(PLAYER, "constructor", REQ)).toEqual({ status: "bad-pack" });
-    expect(await s.spend(PLAYER, "hpo-standard", "short")).toEqual({ status: "bad-request" });
-    expect(await s.spend(PLAYER, "hpo-standard", "has spaces in it!")).toEqual({ status: "bad-request" });
+    expect(await s.spend(PLAYER, "legends-standard", "short")).toEqual({ status: "bad-request" });
+    expect(await s.spend(PLAYER, "legends-standard", "has spaces in it!")).toEqual({ status: "bad-request" });
     expect(texts).toEqual([]);
     expect(REQUEST_ID_RE.test(REQ)).toBe(true);
   });
 
   it("is one transaction: lock, then one statement that checks, grants and debits together", async () => {
     const { sql, texts, values, batches } = fakeSql((t) => (t.includes("INSERT INTO player_packs") ? [{ public_id: "pack-1", balance: 70 }] : []));
-    const out = await createCandyStore(sql).spend(PLAYER, "hpo-standard", REQ);
-    expect(out).toEqual({ status: "ok", alreadySpent: false, packPublicId: "pack-1", packId: "hpo-standard", price: 30, balance: 70 });
+    const out = await createCandyStore(sql).spend(PLAYER, "legends-standard", REQ);
+    expect(out).toEqual({ status: "ok", alreadySpent: false, packPublicId: "pack-1", packId: "legends-standard", price: 30, balance: 70 });
     expect(batches).toEqual([2]);
     expect(texts[0]).toMatch(/pg_advisory_xact_lock/);
     expect(values[0]).toEqual([`candy:${PLAYER}`]);
@@ -252,37 +252,37 @@ describe("spend", () => {
     expect(values[1]).toContain(KEY);
     expect(values[1].filter((v) => v === KEY)).toHaveLength(2);
     expect(values[1]).toContain(-30);
-    expect(values[1]).toContain(currentVersion(getPack("hpo-standard")!).v);
+    expect(values[1]).toContain(currentVersion(getPack("legends-standard")!).v);
     expect(values[1]).toContain(C.spendUntil);
   });
 
   it("prices a Rare pack at 100", async () => {
     const { sql, values } = fakeSql((t) => (t.includes("INSERT INTO player_packs") ? [{ public_id: "p", balance: 0 }] : []));
-    const out = await createCandyStore(sql).spend(PLAYER, "tr-rare", REQ);
+    const out = await createCandyStore(sql).spend(PLAYER, "gaming-rare", REQ);
     expect(out).toMatchObject({ status: "ok", price: 100 });
     expect(values[1]).toContain(-100);
   });
 
   it("reports a replayed request as the same pack, not a second purchase", async () => {
     const { sql } = fakeSql((t) =>
-      t.includes("FROM candy_ledger l JOIN player_packs pp") ? [{ ref: "hpo-standard", public_id: "pack-1" }] : BALANCE_READ.test(t) ? [{ n: 70 }] : [],
+      t.includes("FROM candy_ledger l JOIN player_packs pp") ? [{ ref: "legends-standard", public_id: "pack-1" }] : BALANCE_READ.test(t) ? [{ n: 70 }] : [],
     );
-    expect(await createCandyStore(sql).spend(PLAYER, "hpo-standard", REQ)).toEqual({
-      status: "ok", alreadySpent: true, packPublicId: "pack-1", packId: "hpo-standard", price: 30, balance: 70,
+    expect(await createCandyStore(sql).spend(PLAYER, "legends-standard", REQ)).toEqual({
+      status: "ok", alreadySpent: true, packPublicId: "pack-1", packId: "legends-standard", price: 30, balance: 70,
     });
   });
 
   it("refuses a request id reused for a different pack", async () => {
-    const { sql } = fakeSql((t) => (t.includes("FROM candy_ledger l JOIN player_packs pp") ? [{ ref: "hpo-standard", public_id: "pack-1" }] : []));
-    expect(await createCandyStore(sql).spend(PLAYER, "tr-rare", REQ)).toEqual({ status: "bad-request" });
+    const { sql } = fakeSql((t) => (t.includes("FROM candy_ledger l JOIN player_packs pp") ? [{ ref: "legends-standard", public_id: "pack-1" }] : []));
+    expect(await createCandyStore(sql).spend(PLAYER, "gaming-rare", REQ)).toEqual({ status: "bad-request" });
   });
 
   it("says closed (not yet / expired) and insufficient, in that order of precedence", async () => {
     const state = (started: boolean, open: boolean) => (t: string) =>
       t.includes("AS started") ? [{ started, open }] : BALANCE_READ.test(t) ? [{ n: 12 }] : [];
-    expect(await createCandyStore(fakeSql(state(false, true)).sql).spend(PLAYER, "hpo-standard", REQ)).toEqual({ status: "closed", reason: "not-open-yet" });
-    expect(await createCandyStore(fakeSql(state(true, false)).sql).spend(PLAYER, "hpo-standard", REQ)).toEqual({ status: "closed", reason: "expired" });
-    expect(await createCandyStore(fakeSql(state(true, true)).sql).spend(PLAYER, "hpo-standard", REQ)).toEqual({ status: "insufficient", balance: 12, price: 30 });
+    expect(await createCandyStore(fakeSql(state(false, true)).sql).spend(PLAYER, "legends-standard", REQ)).toEqual({ status: "closed", reason: "not-open-yet" });
+    expect(await createCandyStore(fakeSql(state(true, false)).sql).spend(PLAYER, "legends-standard", REQ)).toEqual({ status: "closed", reason: "expired" });
+    expect(await createCandyStore(fakeSql(state(true, true)).sql).spend(PLAYER, "legends-standard", REQ)).toEqual({ status: "insufficient", balance: 12, price: 30 });
   });
 });
 
@@ -394,7 +394,7 @@ describe("presentation", () => {
     expect(describeEntry({ ...base, kind: "all_boards", ref: null }, titles).label).toBe("A result on every board");
     expect(describeEntry({ ...base, kind: "placing", ref: "last-bell#2" }, titles).label).toBe("Placed 2nd on Last Bell");
     expect(describeEntry({ ...base, kind: "placing", ref: "last-bell#11" }, titles).label).toBe("Placed 11th on Last Bell");
-    expect(describeEntry({ ...base, kind: "spend", amount: -30, ref: "hpo-standard" }, titles).label).toBe("Bought HallPass Originals Pack");
+    expect(describeEntry({ ...base, kind: "spend", amount: -30, ref: "legends-standard" }, titles).label).toBe("Bought Internet Legends Pack");
   });
   it("lists the shelf cheapest first and marks what the balance covers", () => {
     const shop = shopItems(30);

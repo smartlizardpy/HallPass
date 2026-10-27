@@ -660,7 +660,7 @@ export function Mini({ collectibleId, isNew }: { collectibleId: string; isNew: b
     <span className="pr-mini" data-new={isNew || undefined} role="img" aria-label={`${card.name}, ${RARITY_LABEL[card.rarity]}${isNew ? ", new" : ""}`}>
       <span style={{ background: col?.theme.colours[0] }}>
         {/* eslint-disable-next-line @next/next/no-img-element -- pixel art at a whole-number scale */}
-        <img src={card.art.src} alt="" width={32} height={32} loading="lazy" />
+        <img src={card.art.layout === "full" ? card.art.thumb : card.art.src} alt="" width={32} height={32} loading="lazy" data-full={card.art.layout === "full" || undefined} />
       </span>
       <b style={{ background: RARITY_VAR[card.rarity] }} />
     </span>

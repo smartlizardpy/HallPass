@@ -7,13 +7,15 @@
 //   avatars.update(dt, renderTime);           // interpolate, animate, torch, name tag, footsteps
 //   avatars.get(id) / remove(id) / clear()
 //
-// A snapshot is { x, z, yaw, pitch, flags, spd } (flags: see F in coop.js). The look (blazer / skin /
-// hair colour, hairstyle) tints the four materials of a per-player clone of the model.
+// A snapshot is { x, y, z, yaw, pitch, flags, spd } (flags: see F below; y = feet height, protocol v2).
+// The look (blazer / skin / hair colour, hairstyle) tints the four materials of a per-player clone of
+// the model. Second Floor update: avatars follow y up and down the stairs, and an avatar on the other
+// floor (neither of you on the stairs) is hidden with its torch, so nobody shows through a ceiling.
 
 import * as THREE from './lib/three/three.module.js';
 import { loadGLB, cloneGLB, ps1ify } from './assets.js';
 import { AnimationController } from './animations.js';
-import { PLAYER, QUALITY } from './config.js';
+import { PLAYER, QUALITY, FLOOR_Y } from './config.js';
 
 export const STUDENT_URL = 'assets/characters/student.glb';
 
@@ -39,6 +41,13 @@ const SURFACE_BY_ROOM = {
 };
 
 const TAU = Math.PI * 2;
+/** Floor index from a feet height: 0 / 1, or -1 on the stairs between them. */
+export function floorBand(y) {
+  if (!Number.isFinite(y)) return 0;
+  if (y < 0.35) return 0;
+  if (y > FLOOR_Y[1] - 0.35) return 1;
+  return -1;
+}
 const wrap = (a) => {
   a = (a + Math.PI) % TAU;
   if (a < 0) a += TAU;
@@ -63,7 +72,7 @@ export class SnapBuffer {
   get latest() {
     return this.list.length ? this.list[this.list.length - 1].s : null;
   }
-  /** Interpolated { x, z, yaw, pitch } at time t (holds the last one, extrapolates at most 150 ms). */
+  /** Interpolated { x, y, z, yaw, pitch } at time t (holds the last one, extrapolates at most 150 ms). */
   sample(t, out) {
     const L = this.list;
     if (!L.length) return null;
@@ -76,6 +85,7 @@ export class SnapBuffer {
           const k = (t - a.t) / Math.max(1, b.t - a.t);
           Object.assign(out, b.s);
           out.x = a.s.x + (b.s.x - a.s.x) * k;
+          out.y = (a.s.y || 0) + ((b.s.y || 0) - (a.s.y || 0)) * k;
           out.z = a.s.z + (b.s.z - a.s.z) * k;
           out.yaw = lerpAngle(a.s.yaw, b.s.yaw, k);
           out.pitch = a.s.pitch + (b.s.pitch - a.s.pitch) * k;
@@ -92,6 +102,7 @@ export class SnapBuffer {
       const k = Math.min(t - b.t, 150) / Math.max(1, b.t - a.t);
       if (k > 0 && b.s.flags === a.s.flags) {
         out.x = b.s.x + (b.s.x - a.s.x) * k;
+        out.y = (b.s.y || 0) + ((b.s.y || 0) - (a.s.y || 0)) * k;
         out.z = b.s.z + (b.s.z - a.s.z) * k;
       }
     }
@@ -268,8 +279,9 @@ export class RemoteAvatars {
       talking: false,
       light,
       buf: new SnapBuffer(),
-      cur: { x: 0, z: 0, yaw: 0, pitch: 0, flags: 0, spd: 0 },
+      cur: { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, flags: 0, spd: 0 },
       prevX: 0,
+      prevY: 0,
       prevZ: 0,
       speed: 0,
       want: 'idle',
@@ -324,6 +336,8 @@ export class RemoteAvatars {
 
   update(dt, renderTime) {
     const cam = this.game.camera;
+    // the floor the camera is on (feet height); -1 while on the stairs (then everyone shows)
+    const camFloor = cam ? floorBand(cam.position.y - PLAYER.eyeHeight) : -1;
     for (const av of this.map.values()) {
       const s = av.buf.sample(renderTime, this._snap);
       if (!s) {
@@ -332,22 +346,27 @@ export class RemoteAvatars {
         continue;
       }
       const c = av.cur;
+      const y = Number.isFinite(s.y) ? s.y : 0;
       c.x = s.x;
+      c.y = y;
       c.z = s.z;
       c.yaw = s.yaw;
       c.pitch = s.pitch;
       c.flags = s.flags;
       const hidden = !!(s.flags & F.hidden);
       const out = !!(s.flags & F.out);
-      av.root.visible = !hidden && !out;
-      av.root.position.set(s.x, 0, s.z);
+      const band = floorBand(y);
+      const otherFloor = camFloor >= 0 && band >= 0 && band !== camFloor; // a ceiling is between you
+      av.root.visible = !hidden && !out && !otherFloor;
+      av.root.position.set(s.x, y, s.z);
       av.root.rotation.y = s.yaw;
-      // ground speed from the interpolated motion (smoothed)
+      // speed along the ground (stairs included) from the interpolated motion (smoothed)
       if (av.placed && dt > 0) {
-        const sp = Math.hypot(s.x - av.prevX, s.z - av.prevZ) / dt;
+        const sp = Math.hypot(s.x - av.prevX, y - av.prevY, s.z - av.prevZ) / dt;
         av.speed += (Math.min(sp, 7) - av.speed) * Math.min(1, dt * 8);
       }
       av.prevX = s.x;
+      av.prevY = y;
       av.prevZ = s.z;
       av.placed = true;
 
@@ -378,11 +397,11 @@ export class RemoteAvatars {
         const p = THREE.MathUtils.clamp(s.pitch, -0.9, 0.9) * 0.6;
         if (!(s.flags & (F.seated | F.caught))) av.head.quaternion.multiply(_q.setFromAxisAngle(_X, -p));
       }
-      av.headPos.set(s.x, s.flags & F.seated ? 0.95 : s.flags & F.crouch ? 1.1 : 1.6, s.z);
+      av.headPos.set(s.x, y + (s.flags & F.seated ? 0.95 : s.flags & F.crouch ? 1.1 : 1.6), s.z);
 
       // name tag: only close by (and fades out), never while hidden
       if (cam) {
-        const d = Math.hypot(cam.position.x - s.x, cam.position.z - s.z);
+        const d = Math.hypot(cam.position.x - s.x, cam.position.z - s.z, (cam.position.y - PLAYER.eyeHeight - y) * 2);
         const a = THREE.MathUtils.clamp((12 - d) / 4, 0, 1);
         av.tag.material.opacity = a * 0.9;
         av.tag.visible = a > 0.02;
@@ -400,17 +419,17 @@ export class RemoteAvatars {
 
       // torch: a spot light from the right hand along where they look
       if (av.light && !av.light.userData.dead) {
-        const on = !!(s.flags & F.torch) && !hidden && !out && !(s.flags & (F.seated | F.caught));
+        const on = !!(s.flags & F.torch) && !hidden && !out && !otherFloor && !(s.flags & (F.seated | F.caught));
         const base = this.game.player?.flashlightBaseIntensity ?? 16;
         av.light.intensity += ((on ? base * 0.8 : 0) - av.light.intensity) * Math.min(1, dt * 12);
         const fx = -Math.sin(s.yaw);
         const fz = -Math.cos(s.yaw);
         const rx = Math.cos(s.yaw);
         const rz = -Math.sin(s.yaw);
-        const y = s.flags & F.crouch ? 0.95 : 1.35;
-        av.light.position.set(s.x + rx * 0.22 + fx * 0.25, y, s.z + rz * 0.22 + fz * 0.25);
+        const ly = y + (s.flags & F.crouch ? 0.95 : 1.35);
+        av.light.position.set(s.x + rx * 0.22 + fx * 0.25, ly, s.z + rz * 0.22 + fz * 0.25);
         const cp = Math.cos(s.pitch);
-        av.light.target.position.set(av.light.position.x + fx * cp * 6, y + Math.sin(s.pitch) * 6, av.light.position.z + fz * cp * 6);
+        av.light.target.position.set(av.light.position.x + fx * cp * 6, ly + Math.sin(s.pitch) * 6, av.light.position.z + fz * cp * 6);
         av.light.target.updateMatrixWorld();
       }
     }
@@ -419,10 +438,11 @@ export class RemoteAvatars {
   _footstep(av, clip) {
     if (!av.root.visible) return;
     const s = av.cur;
-    const room = this.game.world?.getRoomAt?.(s.x, s.z);
-    const surface = SURFACE_BY_ROOM[room?.type] || 'lino';
+    const band = floorBand(s.y);
+    const room = band >= 0 ? this.game.world?.getRoomAt?.(s.x, s.z, band) : null;
+    const surface = band < 0 ? 'concrete' : SURFACE_BY_ROOM[room?.type] || 'lino'; // (the stairs are concrete)
     const speed = clip === 'run' ? 'sprint' : clip === 'crouch_walk' ? 'crouch' : 'walk';
-    _v.set(s.x, 0.05, s.z);
+    _v.set(s.x, s.y + 0.05, s.z);
     this.game.audio?.play?.('footstep', { surface, speed, position: _v });
   }
 

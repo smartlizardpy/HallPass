@@ -8,8 +8,19 @@
 //                            playing → escaping → won
 //                            playing → lost (escape timer ran out)
 //
-// URL flags (testing): ?seed=123  ?debug=1  ?autostart=1 (start a run without the menu)
+// URL flags (testing): ?seed=123  ?debug=1  ?autostart=1 (start a run without the menu)  ?mode=halloween (with autostart)
 //                      ?difficulty=easy|normal|hard  ?coopdebug (log the P2P SDK)
+//                      ?start=floor1  the pre-update run: ground-floor spawn, ground-floor clock,
+//                                     transforms from the start, stairs open (regression tests)
+//                      ?founder=dev / ?director=dev  localhost only (CONTRACTS.md §13.4)
+//                      ?halloween=1|0  force The Halloween Shift's menu entry on/off (halloween/config.js)
+//
+// The Halloween Shift (halloween/, seasonal, isolated): startRun(d, { mode: 'halloween' }) plays the ground
+// floor only, both stairwells barricaded, with the HorrorDirector. The module is loaded on demand; normal
+// runs never load it. game.mode is 'normal' | 'halloween'. Turn the event off: HALLOWEEN.enabled = false.
+//
+// Second Floor update: runs start upstairs (Floor 2, The Assistant). The ground floor's transforms
+// start once somebody reaches it. One clock: timeLimit + floor2Time. CONTRACTS.md §13.
 //
 // Co-op (coop.js): the run is the same state machine, but it never leaves 'playing' until the host
 // ends it (finishCoop): being caught, walking out and pausing are co-op statuses, not game states.
@@ -30,6 +41,11 @@ import { SchoolNet } from './schoolnet.js';
 import { Coop } from './coop.js';
 import { MicHearing } from './mic-detect.js';
 import { Achievements } from './achievements.js';
+import { Net } from './net.js';
+import { Assistant } from './assistant.js';
+import { Floor2 } from './floor2.js';
+import { FloorTwoCutscene } from './cutscene-f2.js';
+import { HALLOWEEN, halloweenAvailable, loadHallPassEvent, onHalloweenChange } from './halloween/config.js';
 
 // boot-check.js watches for this: the module graph loaded and the game is starting
 if (window.__lastBell) window.__lastBell.started = true;
@@ -66,6 +82,22 @@ const ANNOUNCEMENTS = {
   announcement_room000: 'Room 000 is now open. Attendance is mandatory.',
   announcement_shift: 'Corridors are being reassigned. Please stay where you can be found.',
   announcement_late: 'Attention. The building will be secured in sixty seconds. Remain where you are.',
+  announcement_floor2:
+    'Students on the second floor. The stairwells have been secured for your safety. Please remain in your classroom. ' +
+    'A member of staff will collect you shortly.',
+  // two recorded takes: game.announce() picks one per run (by seed, so every co-op peer hears the same)
+  announcement_stairs_open: 'Stairwell A is now open. Please proceed downstairs in an orderly fashion. Walking, not running. [muttering] These people always fall asleep.',
+  announcement_stairs_open_2: '[clears throat] Stairwell A is now open. Please proceed downstairs in an orderly fashion. Walking, not running.',
+  // a staff page, now and then while upstairs: it draws The Assistant towards the Security Office speaker
+  announcement_assistant: 'Would the Assistant Caretaker please report to the second floor. Thank you.',
+  // the opening notice (cutscene and no-cutscene starts): it names the lock and who controls it
+  announcement_floor2_b: 'Students on the second floor. The stairwells are locked and will remain locked until the Security Office is powered. Please do not attempt to leave. Please do not attempt to leave.',
+  // the staff page alternates with announcement_assistant (first page: this one)
+  announcement_security_page: 'Would the Assistant Caretaker please report to the Security Office. Thank you.',
+  // floor2.js: when the Security Office power comes on
+  announcement_power_on: 'Attention. Power has been restored to the Security Office. This is not a scheduled event.',
+  // once per run: 20 s after power comes on, or 150 s into the floor, while Stairwell A is still shut
+  announcement_stairs_hint: 'Stairwell A may only be released from the Security Office. Staff are reminded not to write the password down.',
 };
 
 function loadSettings() {
@@ -138,21 +170,36 @@ class Game {
     this.postfx.setQuality(this.settings.quality);
     this.postfx.setReduced(this.settings.reducedEffects);
 
+    // --- shared services (Second Floor update; CONTRACTS.md §13) ------------------------
+    this.net = new Net(this); // gameplay messages: host-authoritative in co-op, local in solo
+    this.overlays = new Map(); // open overlays: name -> { keys, pointer, move }
+    this.activeOverlay = null;
+    this.identity = null; // this player's HallPass identity ({ role, founder, publicId }) or null
+    this.floor1Reached = false; // someone has walked down to the ground floor this run
+
     // --- modules (constructed against CONTRACTS.md) -------------------------------------
     this.world = new World(this);
     this.items = new Items(this);
     this.player = new Player(this);
-    this.enemy = new Enemy(this);
+    this.enemy = new Enemy(this); // the Caretaker (ground floor)
+    this.assistant = new Assistant(this); // The Assistant (upstairs)
+    this.enemies = [this.enemy, this.assistant];
+    this._captor = this.enemy; // who is running the capture cinematic
+    this.startFloor = 0;
     this.audio = new AudioSystem(this);
     this.ui = new UI(this);
     this.touch = new TouchControls(this); // tablets only (no-op elsewhere)
     this.computers = new Computers(this); // SCHOOLNET computers + the things you can use
+    this.floor2 = new Floor2(this); // the upstairs objectives and puzzles
+    this.cutscene = new FloorTwoCutscene(this); // the upstairs opening (cutscene-f2.js)
     this.schoolnet = new SchoolNet(this); // the computer screen
     this.ach = new Achievements(this);
     momentHook = (n, d) => this.ach.moment(n, d);
     this.coop = new Coop(this); // play with friends (HallPass P2P)
     this.mic = new MicHearing(this); // opt-in: the caretaker hears your microphone
     this.coopPaused = false;
+    this.mode = 'normal'; // 'halloween' during The Halloween Shift
+    this.halloween = null; // halloween/mode.js, loaded on demand
 
     this.exitInteractable = {
       id: 'exit',
@@ -170,6 +217,7 @@ class Game {
     };
 
     this._bindEvents();
+    this._loadIdentity();
     this._onResize();
     addEventListener('resize', () => this._onResize());
     document.addEventListener('visibilitychange', () => {
@@ -192,16 +240,19 @@ class Game {
   async boot() {
     this.setState('loading');
     this.ui.showLoading?.(0, 'Unlocking the building…');
-    const parts = { world: 0, enemy: 0, items: 0 };
+    const parts = { world: 0, enemy: 0, items: 0, assistant: 0 };
     const progress = (key) => (p) => {
       parts[key] = typeof p === 'number' ? p : 1;
-      const total = (parts.world + parts.enemy + parts.items) / 3;
+      const total = (parts.world + parts.enemy + parts.items + parts.assistant) / 4;
       this.ui.showLoading?.(Math.min(0.99, total), 'Unlocking the building…');
     };
+    // Ask HallPass whether the event is on, alongside the loading (it adds no wait unless the SDK is slow: 2.5 s cap).
+    const eventAnswer = loadHallPassEvent(2500);
     const results = await Promise.allSettled([
       this.world.load(progress('world')),
       this.enemy.load(progress('enemy')),
       this.items.load(progress('items')),
+      this.assistant.load(progress('assistant')),
     ]);
     const failed = results.filter((r) => r.status === 'rejected');
     if (failed.length) {
@@ -210,12 +261,28 @@ class Game {
     }
     this.world.setQuality?.(this.settings.quality);
     this._applyShadows();
+    await eventAnswer; // never rejects; the menu's halloweenAvailable() reads what HallPass said
+    // HallPass flipped the event: follow it at the menu. A run in progress (or its screens) is never interrupted;
+    // the next enterMenu() reads the new answer.
+    onHalloweenChange((on) => {
+      if (this.state !== 'menu') return;
+      this.ui.setHalloween?.(on);
+      if (on) this.loadHalloween().catch(() => {});
+    });
     this.ui.showLoading?.(1, 'Ready');
     this.ui.hideLoading?.();
     requestAnimationFrame(this._frame);
 
     if (params.has('autostart')) {
-      this.startRun(this.settings.difficulty, { noLock: true });
+      // ?mode=halloween (tests): The Halloween Shift, if the event (or ?halloween=1) allows it
+      const hw = params.get('mode') === 'halloween' && halloweenAvailable();
+      this.startRun(this.settings.difficulty, { noLock: true, ...(hw ? { mode: 'halloween' } : null) });
+      // the run started without a click, so the browser couldn't capture the mouse: the first click on the view does
+      window.addEventListener('mousedown', (e) => {
+        if (e.button !== 0 || e.target !== this.player.dom) return;
+        if (this.state !== 'playing' || !this.player.enabled || this.player.isLocked || this.touch?.active || this.schoolnet?.isOpen) return;
+        this.player.lockPointer?.();
+      });
     } else {
       this.enterMenu();
     }
@@ -228,6 +295,7 @@ class Game {
     if (state === this.state) return;
     const prev = this.state;
     this.state = state;
+    if (prev === 'playing' && this.overlays?.size) this.closeAllOverlays(state);
     this.events.emit('game:state', { state, prev });
   }
 
@@ -243,6 +311,198 @@ class Game {
     return CFG.ITEM_IDS.every((id) => this.inventory?.has(id));
   }
 
+  // ===================================================================================
+  // Overlays and input focus (CONTRACTS.md §13.2). Every puzzle panel, the security PC, chat, the
+  // player list and the Director panel open through here, so global keys (movement, P/Esc pause,
+  // co-op M/V, touch UI) know to stay out of the way. The world never pauses for an overlay.
+  // ===================================================================================
+  /**
+   * @param {string} name
+   * @param {{ capturesKeys?: boolean, releasesPointer?: boolean, blocksMovement?: boolean }} opts
+   */
+  openOverlay(name, opts = {}) {
+    const o = {
+      keys: opts.capturesKeys !== false,
+      pointer: opts.releasesPointer !== false,
+      move: opts.blocksMovement !== false,
+    };
+    this.overlays.delete(name);
+    this.overlays.set(name, o);
+    this.activeOverlay = name;
+    if (o.move) {
+      this.player.enabled = false;
+      this.player.focused = null;
+    }
+    if (o.pointer) this.player.unlockPointer?.();
+    this.events.emit('overlay:open', { name });
+  }
+
+  /** relock: take the mouse back (only from a user gesture: a key or a click). */
+  closeOverlay(name, { relock = true } = {}) {
+    if (!this.overlays.has(name)) return;
+    this.overlays.delete(name);
+    this.activeOverlay = [...this.overlays.keys()].at(-1) || null;
+    this.events.emit('overlay:close', { name });
+    if (![...this.overlays.values()].some((o) => o.move)) this._restoreControl(relock);
+  }
+
+  /** Being caught, the run ending or a Director takeover: everything shuts, nothing re-locks. */
+  closeAllOverlays(reason = 'force') {
+    for (const name of [...this.overlays.keys()]) {
+      this.overlays.delete(name);
+      this.events.emit('overlay:close', { name, reason });
+    }
+    this.activeOverlay = null;
+    this._restoreControl(false);
+  }
+
+  /** True while keystrokes belong to an overlay or a text box (chat, a login field…). */
+  isTyping() {
+    for (const o of this.overlays.values()) if (o.keys) return true;
+    const el = document.activeElement;
+    if (!el || el === document.body) return false;
+    const tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+  }
+
+  /** May the local player move right now? (co-op's syncPlayer and player.js respect this too) */
+  canControl() {
+    if (this.state !== 'playing' || this.coopPaused || this.schoolnet?.isOpen || this.cutscene?.active) return false;
+    for (const o of this.overlays.values()) if (o.move) return false;
+    return true;
+  }
+
+  _restoreControl(relock) {
+    if (this.state !== 'playing' || this.coopPaused) return;
+    if (this.coop?.active) this.coop.syncPlayer();
+    else this.player.enabled = !this.schoolnet?.isOpen && !this.cutscene?.active;
+    if (relock && this.player.enabled && !this.touch?.active) this.player.lockPointer?.();
+  }
+
+  // ===================================================================================
+  // Identity (HallPass) — founder Easter egg and Director Mode. Never trust a name or a URL flag
+  // outside local development. Peers are verified by the host through coop (multiplayer.md §5–7).
+  // ===================================================================================
+  async _loadIdentity() {
+    const local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+    if (local) {
+      // dev only: ?founder=dev pretends this tab is the founder (never on a real origin)
+      if (params.get('founder') === 'dev') this.identity = { role: 'super_admin', founder: true, publicId: 'dev' };
+      return;
+    }
+    try {
+      const res = await fetch('/api/v1/me', { credentials: 'same-origin', cache: 'no-store' });
+      if (!res.ok) return;
+      const me = await res.json();
+      this.identity = {
+        role: typeof me?.role === 'string' ? me.role : null,
+        founder: me?.founder === true,
+        publicId: typeof me?.publicId === 'string' ? me.publicId : null,
+      };
+    } catch {
+      /* not on HallPass, or signed out: no identity */
+    }
+  }
+
+  static _founderFrom(ident) {
+    if (!ident) return false;
+    if (ident.founder === true) return true;
+    return CFG.FOUNDER_RULE === 'founder-or-super-admin' && ident.role === 'super_admin';
+  }
+
+  /** Is this player id the HallPass founder? Solo: our own identity. Co-op: host-verified only. */
+  isFounder(id = this.net.selfId) {
+    if (id === this.net.selfId) {
+      // our own identity is only trusted for our own game: in co-op the host decides about guests
+      if (!this.coop?.active || this.net.isHost) return Game._founderFrom(this.identity);
+    }
+    return Game._founderFrom(this.coop?.peerIdentity?.(id));
+  }
+
+  /** Is this player id a Director (a hidden admin)? Directors are never targets or players. */
+  isDirector(id) {
+    return !!this.coop?.isDirector?.(id);
+  }
+
+  /**
+   * Live info about a player, for host-side validation: { id, position (feet, Vector3), floor,
+   * status ('alive'|'captured'|'trapped'|'escaping'|'escaped'|'left'), hidden, director, self }.
+   * Solo: the local player. Co-op: coop.playerInfo(id).
+   */
+  playerInfo(id = this.net.selfId) {
+    if (this.coop?.active) return this.coop.playerInfo?.(id) ?? null;
+    if (id !== this.net.selfId) return null;
+    const p = this.player;
+    return {
+      id,
+      position: p.position,
+      floor: this.world.floorOf?.(p.position) ?? 0,
+      status: this.state === 'playing' ? 'alive' : 'left',
+      hidden: !!p.isHidden,
+      director: false,
+      self: true,
+    };
+  }
+
+  /** Ids of everyone actually playing (not Directors, not left). */
+  playerIds() {
+    if (this.coop?.active) return this.coop.playerIds?.() ?? [this.net.selfId];
+    return [this.net.selfId];
+  }
+
+  // ===================================================================================
+  // Run phases (Second Floor update): upstairs → the ground floor
+  // ===================================================================================
+  /** Where this run starts: { position, yaw, floor }. Co-op spreads players around it. */
+  spawnPoint() {
+    const up = this.startFloor === 1 ? this.world.floor2?.playerSpawn : null;
+    const sp = up || this.world.playerSpawn;
+    return { position: sp.position, yaw: sp.yaw, floor: up ? 1 : 0 };
+  }
+
+  /** The HUD checklist: Floor 2's goals until someone reaches the ground floor, then the exit items. */
+  objectives() {
+    if (!this.floor1Reached) {
+      const f = this.floor2?.objectives?.();
+      if (f?.length) return f;
+    }
+    return CFG.ITEM_IDS.map((id) => ({ id, text: CFG.ITEM_NAMES[id], done: !!this.inventory?.has(id) }));
+  }
+
+  /** Host: somebody is standing on the ground floor. Idempotent; guests hear it from the host. */
+  reachFloor1() {
+    if (this.floor1Reached || !this.net.isHost) return;
+    this.net.broadcast('floor1', { t: Math.round(this.time) });
+  }
+
+  _onFloor1Reached() {
+    if (this.floor1Reached) return;
+    this.floor1Reached = true;
+    // the building starts changing a full interval after the first player gets downstairs
+    this.nextTransformAt = this.time + CFG.TRANSFORM_INTERVAL;
+    this.transformWarned = false;
+    this.events.emit('floor1:reached', {});
+    hpMoment('floor1-reached', this._hpData());
+  }
+
+  _checkFloor1(dt) {
+    if (this.floor1Reached || !this.net.isHost) return;
+    this._f1Check = (this._f1Check || 0) - dt;
+    if (this._f1Check > 0) return;
+    this._f1Check = 0.25;
+    for (const id of this.playerIds()) {
+      const info = this.playerInfo(id);
+      if (info && !info.director && info.status === 'alive' && info.floor === 0) {
+        this.reachFloor1();
+        return;
+      }
+    }
+  }
+
+  _enemyBy(who) {
+    return this.enemies.find((e) => e.who === who) || this.enemy;
+  }
+
   getInteractables() {
     const list = [];
     const w = this.world.getInteractables?.();
@@ -251,6 +511,8 @@ class Game {
     if (i) for (const it of i) list.push(it);
     const c = this.computers?.getInteractables?.();
     if (c) for (const it of c) list.push(it);
+    const f2 = this.floor2?.getInteractables?.();
+    if (f2) for (const it of f2) list.push(it);
     const co = this.coop?.getInteractables?.();
     if (co) for (const it of co) list.push(it);
     if (this.state === 'playing') list.push(this.exitInteractable);
@@ -273,6 +535,7 @@ class Game {
       room: String(this.world?.getRoomAt?.(pos?.x ?? 0, pos?.z ?? 0)?.name ?? '').slice(0, 40),
       seed: this.seed,
       diff: this.settings?.difficulty,
+      ...(this.mode === 'halloween' ? { mode: 'halloween' } : null),
       ...this.coop?.hpExtra?.(),
       ...extra,
     };
@@ -292,15 +555,23 @@ class Game {
   // Menu (attract mode: a slow drift down a corridor with the caretaker far away)
   // ===================================================================================
   enterMenu() {
+    this.halloween?.teardown();
+    this.mode = 'normal';
+    if (this._hwPrevDiff != null) {
+      this.settings.difficulty = this._hwPrevDiff;
+      this._hwPrevDiff = null;
+      this.ui.refreshDifficulty?.();
+    }
     this.coop?._endRunLocal?.();
     this.coop?.resetEndButtons?.();
     this.coopPaused = false;
+    this.cutscene?.abort();
     this.setState('menu');
     this.timeline.length = 0;
     this.tweens.length = 0;
     this.player.enabled = false;
     this.player.unlockPointer?.();
-    this.enemy.enabled = false;
+    for (const e of this.enemies) e.enabled = false;
     this.postfx.fade = 0;
     this.postfx.threat = 0;
     this.seed = Number(params.get('menuSeed')) || 0x1a57be11;
@@ -308,6 +579,7 @@ class Game {
     this.world.setLightsMode?.('normal');
     this.items.reset?.();
     this.computers?.reset();
+    this.floor2?.reset?.();
     this.inventory?.clear?.();
     this._setupMenuVista();
     this.player.setViewmodelVisible?.(false);
@@ -316,6 +588,9 @@ class Game {
     this.ui.hideHUD?.();
     this.ui.showMenu?.();
     this.audio.setMusicState?.('menu');
+    const hw = halloweenAvailable();
+    this.ui.setHalloween?.(hw);
+    if (hw) this.loadHalloween().catch(() => {}); // warm it up while they read the menu
   }
 
   _setupMenuVista() {
@@ -373,14 +648,43 @@ class Game {
   // ===================================================================================
   // Run lifecycle
   // ===================================================================================
+  /** The Halloween Shift's code (halloween/mode.js), loaded once on demand. */
+  loadHalloween() {
+    this._hwLoad ||= import('./halloween/mode.js').then((m) => (this.halloween = new m.HalloweenMode(this)));
+    return this._hwLoad;
+  }
+
   startRun(difficulty, opts = {}) {
     // Must run inside the user gesture (Start/Restart click) for pointer lock + audio.
     this.audio.unlock?.();
     if (!opts.noLock) this.player.lockPointer?.();
+    const mode = opts.mode === 'halloween' && !opts.coop && halloweenAvailable() ? 'halloween' : 'normal'; // a restart after HallPass switched the event off becomes a normal run
+    if (mode === 'halloween' && !this.halloween) {
+      // first Halloween run: fetch the module, then start (the pointer is already locked)
+      this.ui.showLoading?.(0.5, 'Unlocking the building…');
+      this.loadHalloween()
+        .then(() => (this.ui.hideLoading?.(), this.startRun(difficulty, { ...opts, noLock: true })))
+        .catch((err) => {
+          console.warn('[game] The Halloween Shift failed to load', err);
+          this.ui.hideLoading?.();
+          this.startRun(difficulty, { ...opts, mode: 'normal', noLock: true });
+        });
+      return;
+    }
+    this.halloween?.teardown(); // a previous Halloween run (no-op otherwise)
+    this.mode = mode;
+    if (mode === 'halloween') {
+      // ranked runs: one difficulty for everyone; the player's own choice comes back at the menu
+      this._hwPrevDiff ??= this.settings.difficulty;
+      difficulty = HALLOWEEN.difficulty;
+    } else if (this._hwPrevDiff != null) {
+      this.settings.difficulty = this._hwPrevDiff;
+      this._hwPrevDiff = null;
+    }
 
     if (difficulty && CFG.DIFFICULTY[difficulty]) this.settings.difficulty = difficulty;
     this.difficulty = CFG.DIFFICULTY[this.settings.difficulty] || CFG.DIFFICULTY.normal;
-    this.seed = opts.seed || Number(params.get('seed')) || (Math.random() * 0x7fffffff) | 0;
+    this.seed = opts.seed || Number(params.get('seed')) || (mode === 'halloween' ? HALLOWEEN.seed : (Math.random() * 0x7fffffff) | 0);
     this.coopPaused = false;
     if (!opts.coop) this.coop?.resetEndButtons?.();
 
@@ -389,11 +693,16 @@ class Game {
       this.ui.hideMenu?.();
       this.ui.hidePause?.();
     }
+    this.cutscene?.abort();
     this.audio.stopAll?.();
     this.timeline.length = 0;
     this.tweens.length = 0;
 
     this.world.generate(this.seed);
+    // upstairs unless ?start=floor1 (or the world has no upstairs yet); a co-op guest follows the host's choice
+    const wantFloor = mode === 'halloween' ? 0 : opts.startFloor === 0 || opts.startFloor === 1 ? opts.startFloor : params.get('start') === 'floor1' ? 0 : 1;
+    this.startFloor = wantFloor === 1 && this.world.floor2?.playerSpawn ? 1 : 0;
+    this.floor1Reached = this.startFloor === 0;
     this.world.setLightsMode?.('normal');
     this.enemy.setMenuPose?.(false);
     this.items.reset?.();
@@ -402,20 +711,29 @@ class Game {
     const torchSpot = this._torchUpgradeSpot();
     if (torchSpot) this.items.spawnExtra?.('batteries', torchSpot);
     this.inventory?.clear?.();
-    this.player.spawn(this.world.playerSpawn.position, this.world.playerSpawn.yaw);
+    const spawn = this.spawnPoint();
+    this.player.spawn(spawn.position, spawn.yaw);
     this.world.signs?.refresh(); // item stickers for the fresh (empty) inventory
     this.schoolnet?.close('force');
     this.computers?.build(); // computers, notes, the PlayStation, the register, the vending machine
     this.enemy.spawn(this.world.enemySpawn.position, this.world.enemySpawn.yaw);
     this.enemy.enabled = false;
     this.enemy.setAggression(0);
+    this.assistant.enabled = false;
+    this.assistant.reset?.();
+    this._captor = this.enemy;
+    this.floor2?.reset?.(); // the upstairs objectives (host builds the state from the seed)
     this.exitInteractable.position.copy(this.world.exit.position);
 
     this.time = 0;
-    this.timeLeft = this.difficulty.timeLimit;
+    this.timeLeft = this.difficulty.timeLimit + (this.startFloor === 1 ? this.difficulty.floor2Time || 0 : 0);
+    if (mode === 'halloween') {
+      this.timeLeft = HALLOWEEN.timeLimit;
+      this.halloween.setupRun(); // barricades, decorations, posters, The Watcher, the HorrorDirector
+    }
     this.transforms = 0;
     this.aggression = -1; // forces the first _updateAggression() to push 0 to the enemy
-    this.nextTransformAt = CFG.TRANSFORM_INTERVAL;
+    this.nextTransformAt = this.floor1Reached ? CFG.TRANSFORM_INTERVAL : Infinity;
     this.transformWarned = false;
     this.room000Revealed = false;
     this.exitHintShown = false;
@@ -435,6 +753,10 @@ class Game {
     hpMoment('run-start', this._hpData());
 
     this._tween(1.6, (p) => (this.postfx.fade = 1 - p));
+    // Upstairs start: the opening cutscene (skippable, local) replaces the PA intro and the story lines.
+    // ?autostart (tests) and ?cutscene=0 play the plain opening instead.
+    this._assistantWake = false;
+    const cutOn = this.startFloor === 1 && this.cutscene.start({ onEnd: (info) => this._f2OpeningDone(info) });
     // Intro: the final bell, the announcement, then the caretaker starts his rounds.
     this._at(0.4, () => {
       this.audio.play?.('bell');
@@ -442,15 +764,89 @@ class Game {
       this.events.emit('lights:flicker', { intensity: 0.6, duration: 2.5 });
     });
     this._at(3.2, () => this.world.setLightsMode?.('normal'));
-    this._at(4.2, () => this.announce('announcement_intro'));
+    if (!cutOn) this._at(4.2, () => this.announce('announcement_intro'));
     // he starts his rounds while she is still talking; the objective lines wait until she stops
     this._at(12.5, () => {
       this.enemy.enabled = true;
       hpMoment('caretaker-active', this._hpData());
     });
-    const introEnd = 4.2 + 1.5 + (Number(this.audio.speechDuration?.('announcement_intro')) || 15);
-    this._at(introEnd + 0.8, () => this.subtitle('Something is moving in the building.', 3.5, ''));
-    this._at(introEnd + 3.6, () => this.subtitle('Every exit is locked. Find a way out.', 4, ''));
+    // host timers hang off a fixed length, never off how soon this player skipped the cutscene
+    const introEnd = cutOn ? FloorTwoCutscene.LENGTH : 4.2 + 1.5 + (Number(this.audio.speechDuration?.('announcement_intro')) || 15);
+    if (!cutOn) this._at(introEnd + 0.8, () => this.subtitle('Something is moving in the building.', 3.5, ''));
+    if (this.startFloor === 1) {
+      const upstairs = () => (this.state === 'playing' || this.state === 'paused') && !this.floor1Reached;
+      if (!cutOn) {
+        // the goal beat: what is wrong, who can fix it, what is needed. Then the checklist flashes.
+        this._at(introEnd + 4.4, () => this.subtitle('The stairwell grille is down.', 3, ''));
+        this._at(introEnd + 7.4, () => this.subtitle('The Security Office controls it.', 3, ''));
+        this._at(introEnd + 10.4, () => {
+          this.subtitle('I need a staff card, power, and the login.', 3.8, '');
+          this.ui.flashGoals?.();
+        });
+        // she wakes at the first staff card pick-up (floor2:goal 'card', on every peer) or 60 s after the intro
+        this._at(introEnd + 60, () => this._wakeAssistant('timer'));
+        // the PA: the upstairs notice, then (two seconds after it ends) the player knows better
+        this._at(introEnd + 30, () => upstairs() && this.announce('announcement_floor2_b'));
+        const noticeEnd = introEnd + 30 + 1.5 + (Number(this.audio.speechDuration?.('announcement_floor2_b')) || 13);
+        this._at(noticeEnd + 2, () => upstairs() && this.subtitle("Nobody's coming. The Security Office controls the stairs.", 4, ''));
+      }
+      // a staff page now and then that calls her to the Security Office
+      let paged = false;
+      let pages = 0;
+      let s = (this.seed >>> 0) || 1;
+      const rnd = () => ((s = (Math.imul(s ^ (s >>> 15), 0x2c1b3c6d) + 0x6d2b79f5) >>> 0) / 4294967296);
+      const page = (t) => this._at(t, () => {
+        if (!upstairs()) return;
+        const pageId = pages++ % 2 === 0 ? 'announcement_security_page' : 'announcement_assistant';
+        this.announce(pageId);
+        if (!paged) {
+          paged = true; // the first page only: say where she is going
+          const dur = Number(this.audio.speechDuration?.(pageId)) || 5;
+          this._at(this.time + 1.5 + dur + 0.6, () => upstairs() && this.subtitle("She's heading for the Security Office.", 3, ''));
+        }
+        const sp = this.world.floor2?.anchor?.('security-pc')?.position;
+        // host / solo only: the AI is host-authoritative
+        if (sp && this.net.isHost) this._at(this.time + 2.5, () => upstairs() && this.events.emit('noise', { position: sp, radius: 90, source: 'pa' }));
+        page(t + 200 + rnd() * 70);
+      });
+      page(introEnd + 140 + rnd() * 40);
+      // the stairs hint, once: 20 s after the power comes on, or 150 s in, while Stairwell A is still shut
+      // (every peer schedules it from the same events/clock, so everyone hears it together)
+      let hinted = false;
+      const stairsHint = () => {
+        if (hinted || !upstairs() || this.floor2?.state?.stairA) return;
+        hinted = true;
+        this.announce('announcement_stairs_hint');
+      };
+      this._at(introEnd + 150, stairsHint);
+      // the old notice (re-recorded 10-18) once more, later: "a member of staff will collect you" - she is awake by now
+      this._at(introEnd + 95, () => upstairs() && !this.floor2?.state?.stairA && this.announce('announcement_floor2'));
+      this._offPowerHint?.();
+      const onPower = () => this._at(this.time + 20, stairsHint);
+      this.events.on('floor2:power', onPower);
+      this._offPowerHint = () => this.events.off?.('floor2:power', onPower);
+    } else {
+      this._at(introEnd + 3.6, () => this.subtitle('Every exit is locked. Find a way out.', 4, ''));
+      if (mode === 'halloween') this.halloween.onIntro(introEnd);
+    }
+  }
+
+  /** The upstairs opening cutscene ended (or was skipped): the thought, the checklist flash, and her wake timer.
+   *  Everything is scheduled from NOW, so it never depends on when somebody else's cutscene ended. */
+  _f2OpeningDone({ skipped, c } = {}) {
+    if (this.startFloor !== 1) return;
+    const upstairs = () => (this.state === 'playing' || this.state === 'paused') && !this.floor1Reached;
+    hpMoment('f2-opening-end', this._hpData({ skipped: !!skipped, secs: c }));
+    // her wake rule: the first staff card pick-up (floor2:goal), or 60 s after the opening
+    this._at(this.time + 60, () => this._wakeAssistant('timer'));
+    // the PA said "stay put, staff are coming"; two seconds after it ends, the player knows better
+    const t = Math.max(this.time + 0.9, this.cutscene.announceEndsAt() + 2);
+    this._at(t, () => upstairs() && this.subtitle("Nobody's coming. The Security Office controls the stairs.", 4, ''));
+    this._at(t + 3.6, () => {
+      if (!upstairs()) return;
+      this.subtitle('I need a staff card, power, and the login.', 3.8, '');
+      this.ui.flashGoals?.();
+    });
   }
 
   pause() {
@@ -485,7 +881,17 @@ class Game {
     this.setState('playing');
   }
 
+  /** The Assistant starts her rounds (once per run). The AI only runs on the host; a guest's puppet ignores the flag. */
+  _wakeAssistant(why) {
+    if (this._assistantWake || this.startFloor !== 1) return;
+    if (this.state !== 'playing' && this.state !== 'paused') return;
+    this._assistantWake = true;
+    this.assistant.enabled = true;
+    hpMoment('assistant-active', this._hpData({ why }));
+  }
+
   announce(id) {
+    if (id === 'announcement_stairs_open' && this.seed & 1) id = 'announcement_stairs_open_2';
     this.events.emit('announcement', { id, text: ANNOUNCEMENTS[id] || '' });
   }
 
@@ -695,7 +1101,9 @@ class Game {
       this.ui.hideHUD?.();
       this.ui.showVictory?.(this._stats());
       hpMoment('escaped', this._hpData());
-      hpScore(r1(this.timeLeft)); // score = seconds left on the clock at escape
+      // The Halloween Shift keeps its own board (halloween/score.js); never the normal one
+      if (this.mode === 'halloween') this.halloween?.onEscaped(this._stats());
+      else hpScore(r1(this.timeLeft)); // score = seconds left on the clock at escape
     });
   }
 
@@ -706,7 +1114,7 @@ class Game {
     this.player.unlockPointer?.();
     this.player.setViewmodelVisible?.(false);
     this.coopPaused = false;
-    this.enemy.enabled = false;
+    for (const e of this.enemies) e.enabled = false;
     this.schoolnet?.close?.('force');
     this.ui.hideHUD?.();
     if (won) {
@@ -733,10 +1141,14 @@ class Game {
     }
   }
 
-  async _onCapture() {
+  async _onCapture(e = {}) {
     if (this.state !== 'playing') return;
+    const captor = this._enemyBy(e.who || 'caretaker');
+    this._captor = captor;
+    for (const x of this.enemies) if (x !== captor) x.enabled = false;
     this.setState('captured');
-    hpMoment('captured', this._hpData());
+    if (this.mode === 'halloween') this.halloween?.onCaptured();
+    hpMoment('captured', this._hpData({ by: captor.who || 'caretaker' }));
     this.player.enabled = false;
     this.player.setViewmodelVisible?.(false);
     this.audio.play?.('capture_sting');
@@ -744,7 +1156,7 @@ class Game {
     this.postfx.pulseGlitch(1);
     try {
       await Promise.race([
-        this.enemy.runCaptureSequence(this.camera),
+        captor.runCaptureSequence(this.camera),
         new Promise((r) => setTimeout(r, 4500)),
       ]);
     } catch (err) {
@@ -757,6 +1169,7 @@ class Game {
     if (this.state === 'lost' || this.state === 'won') return;
     const finish = () => {
       this.setState('lost');
+      if (this.mode === 'halloween') this.halloween?.onRunEnd(reason);
       this.postfx.fade = 1;
       this.audio.setMusicState?.('defeat');
       this.audio.play?.('defeat');
@@ -768,7 +1181,7 @@ class Game {
       hpMoment('time-up', this._hpData());
       this.setState('captured');
       this.player.enabled = false;
-      this.enemy.enabled = false;
+      for (const e of this.enemies) e.enabled = false;
       this.audio.play?.('bell');
       this.world.setLightsMode?.('blackout');
       this.postfx.pulseGlitch(0.6);
@@ -785,10 +1198,10 @@ class Game {
   // ===================================================================================
   _bindEvents() {
     const ev = this.events;
-    ev.on('ui:start', ({ difficulty } = {}) => this.startRun(difficulty));
+    ev.on('ui:start', ({ difficulty, mode } = {}) => this.startRun(difficulty, { mode }));
     ev.on('ui:restart', () => {
       if (this.coop?.inRoom) this.coop.restart(); // host only: a new school, same friends
-      else this.startRun(this.settings.difficulty);
+      else this.startRun(this.settings.difficulty, { mode: this.mode });
     });
     ev.on('ui:resume', () => this.resume());
     ev.on('ui:pause', () => this.pause());
@@ -803,25 +1216,48 @@ class Game {
       this.ui.flash?.('item');
       this.postfx.doFlash(0.2, 0xfff4d6, 3);
     });
-    ev.on('enemy:capture', (e) => (this.coop?.active ? this.coop.onEnemyCapture(e) : this._onCapture()));
-    ev.on('enemy:state', ({ state }) => {
+    ev.on('enemy:capture', (e) => (this.coop?.active ? this.coop.onEnemyCapture(e) : this._onCapture(e)));
+    // co-op stays in 'playing' when you're caught: coop.js emits this for the local player
+    ev.on('player:caught', (e = {}) => e.self !== false && this.closeAllOverlays('caught'));
+    ev.on('enemy:state', ({ state, who = 'caretaker' }) => {
       if (this.state !== 'playing') return;
-      if (state === 'CHASE') hpMoment('caretaker-chase', this._hpData());
-      if (state === 'CHASE') this.world.setLightsMode?.('flicker');
-      else if (state === 'PATROL') this.world.setLightsMode?.('normal');
+      if (state === 'CHASE') hpMoment(who === 'caretaker' ? 'caretaker-chase' : `${who}-chase`, this._hpData());
+      // lights flicker while anything on your floor is chasing
+      const floor = this.world.floorOf?.(this.player.position) ?? 0;
+      const chasing = this.enemies.some((x) => x.enabled && x.state === 'CHASE' && (x.floor ?? 0) === floor);
+      if (state === 'CHASE' && chasing) this.world.setLightsMode?.('flicker');
+      else if (!chasing && (state === 'PATROL' || state === 'RETURN')) this.world.setLightsMode?.('normal');
     });
+    this.net.on('floor1', () => this._onFloor1Reached());
     // beta tracking: chases you got away from (outrun or hidden), and the easter egg being spotted
-    ev.on('enemy:lost', () => {
-      if (this.state === 'playing') hpMoment('caretaker-lost', this._hpData({ winded: !!this.enemy?.winded }));
+    ev.on('enemy:lost', ({ who = 'caretaker' } = {}) => {
+      if (this.state !== 'playing') return;
+      if (who === 'caretaker') hpMoment('caretaker-lost', this._hpData({ winded: !!this.enemy?.winded }));
+      else hpMoment(`${who}-lost`, this._hpData());
     });
-    ev.on('enemy:winded', () => this.state === 'playing' && this.ach.moment('winded'));
-    ev.on('enemy:voice', ({ line, big } = {}) => line === 'burp' && big && this.state === 'playing' && this.ach.moment('big-burp'));
+    // co-op: only the player he was after earns these (the host's caretaker fires them for everyone)
+    const mine = (e) => this.state === 'playing' && (this.coop?.aboutMe?.(e) ?? true);
+    ev.on('enemy:winded', (e) => mine(e) && this.ach.moment('winded'));
+    ev.on('enemy:voice', (e = {}) => (!e.who || e.who === 'caretaker') && e.line === 'burp' && e.big && mine(e) && this.ach.moment('big-burp'));
+    // Floor 2 onboarding + playtest moments (each peer reports its own run clock)
+    ev.on('floor2:goal', ({ id } = {}) => {
+      if (id !== 'card' || this.startFloor !== 1) return;
+      hpMoment('f2-card-found', this._hpData());
+      this._wakeAssistant('card'); // the first card pick-up, by anyone, wakes her
+    });
+    ev.on('stairs:unlocked', ({ stair } = {}) => stair === 'A' && this.startFloor === 1 && hpMoment('f2-stairs-open', this._hpData()));
     ev.on('egg:found', ({ id } = {}) => {
       if (this.state === 'playing') hpMoment('easter-egg', this._hpData({ egg: String(id || '').slice(0, 30) }));
     });
 
     addEventListener('keydown', (e) => {
-      if ((e.code === 'KeyP' || e.code === 'Escape') && this.state === 'playing' && !this.schoolnet?.isOpen) {
+      if (
+        (e.code === 'KeyP' || e.code === 'Escape') &&
+        this.state === 'playing' &&
+        !this.schoolnet?.isOpen &&
+        !this.activeOverlay &&
+        !this.isTyping()
+      ) {
         e.preventDefault();
         this.pause();
       }
@@ -847,6 +1283,7 @@ class Game {
       chat: s.chatVolume,
     });
     this.mic?.setEnabled(s.micHearing);
+    this.halloween?.applySettings?.(s);
   }
 
   _applyShadows() {
@@ -919,7 +1356,7 @@ class Game {
         this.time += dt;
         this._runScheduler(dt);
         this.world.update?.(dt, this);
-        if (this.state === 'captured') this.enemy.updateCapture?.(dt, this);
+        if (this.state === 'captured') this._captor.updateCapture?.(dt, this);
         break;
       default:
         // paused / won / lost / loading: keep the post noise alive only
@@ -930,10 +1367,16 @@ class Game {
     this.audio.update?.(dt, this);
     this.ui.update?.(dt, this);
     this.touch?.update?.();
-    this.postfx.threat = this.state === 'playing' ? (this.enemy.getThreat?.() ?? 0) : this.postfx.threat * 0.95;
+    this.postfx.threat = this.state === 'playing' ? this._threat() : this.postfx.threat * 0.95;
     this.postfx.render(this.scene, this.camera, dt);
     this.schoolnet?.afterRender(); // security-camera feeds (one per frame while that app is open)
     if (this.debugEl) this._updateDebugOverlay(dt);
+  }
+
+  _threat() {
+    let t = 0;
+    for (const e of this.enemies) if (e.enabled !== false) t = Math.max(t, e.getThreat?.() ?? 0);
+    return t;
   }
 
   _updatePlaying(dt) {
@@ -957,10 +1400,14 @@ class Game {
     }
 
     this.player.update(dt, this);
-    this.enemy.update(dt, this);
+    this.cutscene?.update(dt); // the upstairs opening owns the camera while it plays
+    for (const e of this.enemies) e.update(dt, this);
     this.world.update?.(dt, this);
+    if (this.mode === 'halloween') this.halloween?.update(dt);
     this.items.update?.(dt, this);
     this.computers?.update(dt);
+    this.floor2?.update?.(dt);
+    this._checkFloor1(dt);
     this.schoolnet?.update(dt);
     this.coop?.update(dt);
     this.mic?.update(dt);
@@ -1002,7 +1449,8 @@ class Game {
       `fps ${this._fps.toFixed(0)}  calls ${info.calls}  tris ${info.triangles}\n` +
       `state ${this.state}  seed ${this.seed}  t ${this.time.toFixed(1)}  left ${this.timeLeft.toFixed(0)}\n` +
       `player ${p ? `${p.x.toFixed(1)},${p.z.toFixed(1)}` : '-'}  enemy ${e ? `${e.x.toFixed(1)},${e.z.toFixed(1)}` : '-'} ${this.enemy.state}\n` +
-      `aggr ${this.aggression.toFixed(2)}  threat ${(this.enemy.getThreat?.() ?? 0).toFixed(2)}  transforms ${this.transforms}\n` +
+      `assistant ${this.assistant.enabled ? `${this.assistant.position.x.toFixed(1)},${this.assistant.position.z.toFixed(1)} ${this.assistant.state}` : 'off'}  floor ${this.world.floorOf?.(p) ?? 0}  f1 ${this.floor1Reached ? 'yes' : 'no'}\n` +
+      `aggr ${this.aggression.toFixed(2)}  threat ${this._threat().toFixed(2)}  transforms ${this.transforms}\n` +
       `inv ${this.inventory ? this.inventory.items.join(',') : ''}`;
   }
 }

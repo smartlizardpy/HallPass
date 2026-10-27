@@ -13,7 +13,7 @@
  */
 
 import type { NeonQueryFunction } from "@neondatabase/serverless";
-import { REMINDER_HOUR, REMINDER_MIN_STREAK } from "./server-core";
+import { REMINDER_FIRST_HOUR, REMINDER_LAST_HOUR, REMINDER_MIN_STREAK } from "./server-core";
 
 type Sql = NeonQueryFunction<false, false>;
 type Row = Record<string, unknown>;
@@ -110,7 +110,7 @@ export function createStreakStore(sql: Sql) {
       SELECT c.player_id, c.current_streak, (c.local_now::date)::text AS local_day
       FROM cand c
       WHERE c.last_day = c.local_now::date - 1
-        AND extract(hour FROM c.local_now) = ${REMINDER_HOUR}
+        AND extract(hour FROM c.local_now) BETWEEN ${REMINDER_FIRST_HOUR} AND ${REMINDER_LAST_HOUR}
         AND (c.last_nudged_day IS NULL OR c.last_nudged_day <> c.local_now::date)
         AND EXISTS (SELECT 1 FROM push_subscriptions p WHERE p.player_id = c.player_id)
       ORDER BY c.player_id

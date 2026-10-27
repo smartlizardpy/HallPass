@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  REMINDER_HOUR,
+  REMINDER_FIRST_HOUR,
+  REMINDER_LAST_HOUR,
   applyDay,
   clampDay,
   isNudgeDue,
@@ -117,13 +118,24 @@ describe("isNudgeDue", () => {
   const base = { current: 5, lastDay: "2026-10-01", lastNudgedDay: null, tzOffsetMin: 60 };
 
   it("is due at the reminder hour for a live, unextended streak", () => {
-    expect(localParts(now, 60).hour).toBe(REMINDER_HOUR);
+    expect(localParts(now, 60).hour).toBe(REMINDER_FIRST_HOUR);
     expect(isNudgeDue(base, now)).toBe(true);
   });
 
-  it("is not due outside the reminder hour", () => {
-    expect(isNudgeDue(base, at("2026-10-02T15:30:00Z"))).toBe(false);
-    expect(isNudgeDue(base, at("2026-10-02T17:30:00Z"))).toBe(false);
+  it("is still due late in the window, so a delayed run still reminds", () => {
+    // 19:59 UTC is 20:59 in London, the last minute of the window.
+    expect(isNudgeDue(base, at("2026-10-02T19:59:00Z"))).toBe(true);
+    expect(localParts(at("2026-10-02T19:59:00Z"), 60).hour).toBe(REMINDER_LAST_HOUR);
+  });
+
+  it("is not due outside the reminder window", () => {
+    expect(isNudgeDue(base, at("2026-10-02T15:59:00Z"))).toBe(false); // 16:59 local
+    expect(isNudgeDue(base, at("2026-10-02T20:00:00Z"))).toBe(false); // 21:00 local
+  });
+
+  it("is not due again inside the window once nudged today", () => {
+    const later = at("2026-10-02T18:30:00Z");
+    expect(isNudgeDue({ ...base, lastNudgedDay: "2026-10-02" }, later)).toBe(false);
   });
 
   it("is not due once the player has played today", () => {

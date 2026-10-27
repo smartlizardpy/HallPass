@@ -97,7 +97,7 @@ unspent candy expires. The date is shown everywhere candy appears.
 
 | Price | Packs |
 |---|---|
-| 30 candy | The four everyday packs as they are: HallPass Originals, Internet Culture, Brainrot, Turkish Internet Culture (3 cards, standard odds) |
+| 30 candy | The four everyday packs: Internet Legends, Brainrot & Reactions, Turkish Internet, Gaming Legends (3 cards, standard odds; a collection with no card in a rarity moves that weight one tier down, see collectibles-catalogue-import.md) |
 | 100 candy | **Four new Rare packs**, one per everyday collection. Slot 1 is one card from the collection at standard odds (60/25/10/4/1). Slots 2 and 3 are each one card from the collection at the already published rare-or-better odds (75% rare, 20% epic, 5% legendary). |
 
 - A bought pack is granted sealed into the player's Pack Room (`/packs`)
