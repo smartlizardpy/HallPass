@@ -5,7 +5,10 @@ import { cutoutStyle, type MemeAvatar } from "../lib/avatars";
  * drawn on top at the meme's fixed framing (see `app/lib/avatars.ts`).
  *
  * Presentational and hook-free, so it renders in server and client components
- * alike. The wrapper clips (`overflow-hidden rounded-full`) because some
+ * alike. It is `block`, not `inline-block`: an inline-block sits on the text
+ * baseline, so any inline parent (a button, a `<span>`) grew a descender gap
+ * below it and went taller than wide - an oval selection ring, a lopsided chip.
+ * The wrapper clips (`overflow-hidden rounded-full`) because some
  * framings deliberately push the cutout past the circle's edge.
  *
  * `block`, NOT `inline-block`: an inline-block sits on its parent's text
