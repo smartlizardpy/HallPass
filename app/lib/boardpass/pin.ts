@@ -23,11 +23,37 @@
  */
 
 import "server-only";
-import { argon2, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { promisify } from "node:util";
+import * as nodeCrypto from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { ARGON2, HASH_VERSION, PIN_LENGTH } from "./config";
 
-const argon2Async = promisify(argon2);
+/**
+ * `crypto.argon2` shipped in Node 24.7, but the repo's `@types/node` is v20 and
+ * does not declare it, so it is typed here. If the runtime is older and the
+ * function is absent, hashing throws `PinUnavailableError` (fail closed) rather
+ * than falling back to something weaker.
+ */
+type Argon2Params = {
+  message: Buffer;
+  nonce: Buffer;
+  parallelism: number;
+  tagLength: number;
+  memory: number;
+  passes: number;
+};
+type Argon2Fn = (
+  algorithm: "argon2id",
+  params: Argon2Params,
+  callback: (error: Error | null, key: Buffer) => void,
+) => void;
+
+function argon2Async(algorithm: "argon2id", params: Argon2Params): Promise<Buffer> {
+  const fn = (nodeCrypto as unknown as { argon2?: Argon2Fn }).argon2;
+  if (typeof fn !== "function") return Promise.reject(new PinUnavailableError());
+  return new Promise((resolve, reject) => {
+    fn(algorithm, params, (error, key) => (error ? reject(error) : resolve(key)));
+  });
+}
 
 export class PinUnavailableError extends Error {
   constructor() {
