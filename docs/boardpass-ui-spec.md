@@ -189,3 +189,39 @@ alternative to moving a window: arrow keys on the title bar and the Reset contro
 `LoginWindow` (restyled) · `UsernameKeyboard` · `WhoSheet` / `ConfirmSheet`
 (`Sheet`) · `SessionPrompt` · pure modules `board-filter.ts`, `keyboard-keys.ts`,
 `launch-decision.ts`, existing `drag-math.ts`, hook `useFloatingDrag`.
+
+## 7. Verification record
+
+Driven in real Chrome (Playwright, touch events, no hardware keyboard) against the
+local dev server and the Neon `dev` branch, with three throwaway accounts that were
+deleted afterwards. No migration was run; 051 was already applied there.
+
+| Flow | Result |
+| --- | --- |
+| Sign in via the separate on-screen keyboard (`zzuitest_ava`, 12 chars incl. `_`) and PIN pad | Pass |
+| Wrong PIN, then correct PIN, second player | Generic failure message; second player joins |
+| Featured Play with two players → "Who's playing?" → pick the **second** player | Pass; server binds that player and `system-error` |
+| Score POST from the page while bound | Stored under the chosen player's public handle with their `player_id` |
+| Score POST to a **different** game's board while bound | Stored anonymously (credit is bound to one slug) |
+| Close game → lobby | Binding cleared; a later score is anonymous |
+| Search, category chips, combined filter, empty state, search by on-screen keyboard | Pass |
+| Player menu: tap opens a menu only; Remove needs a second tap; Escape closes and returns focus | Pass |
+| Login window drag, clamp at both extremes, Reset position, arrow-key nudge | Pass |
+| End Session: Cancel keeps the session; confirm clears server state and the cookie | Pass |
+
+First row of game art is fully visible without scrolling at 1920×1080, 1366×768,
+1024×768 and 820×1180. The keyboard panel is fully on screen with Done reachable at
+all four. While it is open it covers the lower half of the sign-in window (the
+username field stays visible and the panel echoes what is typed); it can be dragged
+or docked.
+
+Not verified: real touch hardware, a Windows touch keyboard honouring
+`inputmode="none"` (the design does not rely on it), the 5-minute idle expiry and
+45-minute cap end to end (their logic is untouched; only the reaction to expiry is
+new and covered by the state-clearing code path, not a timed run), and Google
+sign-in (untouched).
+
+Full-suite note: `npm test` has 17 failures in `app/lib/console-capture.test.ts` and
+`app/lib/streak/streak-event.test.ts` (`localStorage.clear` is undefined under
+Node 26). Neither file is touched by this branch. Lint errors in the full run are in
+vendored or generated game bundles and unrelated modules; the board code is clean.
