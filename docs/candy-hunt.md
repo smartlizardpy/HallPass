@@ -13,8 +13,8 @@ Two pull requests:
 
 ### Earning
 Everything is recorded on the server. Candy is earned only while the event runs:
-from 28 Oct 00:00 to 2 Nov 00:00 UK, which is the championship's `opensAt` to
-`closesAt`.
+from 28 Oct 00:00 to 3 Nov 00:00 UK, which is the championship's `opensAt` to
+`closesAt`. (The owner added Mon 2 Nov on 27 Oct; it was 2 Nov 00:00 before.)
 
 1. **Your best score of the day, ranked on the leaderboard.** (Decided 26 Oct,
    replacing achievements, which are self-reported and easy to fake.)
@@ -29,7 +29,7 @@ from 28 Oct 00:00 to 2 Nov 00:00 UK, which is the championship's `opensAt` to
      earning window, the player's best row that day, in the leaderboard's own
      order (the board's sort, then the earlier `created_at`, then the lower id:
      `app/lib/scoreboard/rank.ts`). Days are UK days
-     (`Europe/London`); the window is five of them, 28 Oct to 1 Nov.
+     (`Europe/London`); the window is six of them, 28 Oct to 2 Nov.
    - **Its rank is the rank it held when it was set,** on the Halloween board:
      `1 + the rows strictly better than it with created_at >= opensAt and
      created_at <= its own`. This is `rankForScore`'s rule (strictly-better
