@@ -42,7 +42,7 @@ export class Graffiti {
 
   clear() {
     if (!this.mesh) return;
-    this.world.root.remove(this.mesh);
+    this.mesh?.parent?.remove(this.mesh);
     this.mesh.geometry.dispose();
     this.mesh = null;
     this.spot = null;
@@ -72,7 +72,7 @@ export class Graffiti {
       mesh.visible = false;
       this.material.opacity = 0;
       this.mesh = mesh;
-      w.root.add(mesh);
+      w.floorGroup(0).add(mesh); // ground floor only
     } catch (err) {
       console.warn('[graffiti] could not place the tag', err);
       this.clear();

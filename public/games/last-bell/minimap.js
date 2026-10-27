@@ -5,8 +5,10 @@
 //
 //   const mm = new Minimap(game, canvas);   mm.update(dt)   (called by the UI each frame; cheap)
 //
-// The plan is drawn once into an offscreen canvas and redrawn when the building changes (a transform)
-// or when you enter a new room; each frame only the arrow and the dots are painted on top.
+// The plan is drawn once into an offscreen canvas and redrawn when the building changes (a transform),
+// when you enter a new room or when you change floor; each frame only the arrow and the dots are painted
+// on top. It shows the floor you are on (Second Floor update): its rooms, the two stairwells (lit green when
+// open) and teammates - hollow when they are on the other floor.
 
 import { NavPathfinder } from './enemy-nav.js';
 
@@ -28,9 +30,16 @@ export class Minimap {
     this._route = new Float32Array(256);
     this._routeN = 0;
     this._routeAt = -9;
-    this._pf = new NavPathfinder(); // its own pathfinder: works the same for guests and with the caretaker off
-    this._pfRef = null;
-    this._pfVer = -1;
+    // its own pathfinders (one per floor): works the same for guests and with the caretaker off
+    this._pfs = [0, 1].map(() => ({ pf: new NavPathfinder(), ref: null, ver: -1, doors: null }));
+    this._floor = 0;
+  }
+
+  /** The rooms + room lookup of the floor you are on. */
+  _floorData(floor) {
+    const w = this.game.world;
+    if (floor === 1 && w.floor2?.rooms?.length) return { rooms: w.floor2.rooms, doors: w.floor2.doors };
+    return { rooms: w.rooms.filter((r) => r.type !== 'room000' || w.room000Revealed), doors: w.doors };
   }
 
   /** Easy: the map all run. Normal: it appears once everything is found, to show the route. Hard: never. */
@@ -44,14 +53,17 @@ export class Minimap {
     const w = g.world;
     const p = g.player;
     if (!this.enabled || !w?.rooms?.length || !p) return false;
+    const floor = (this._floor = w.floorOf?.(p.position) === 1 && w.floor2?.rooms?.length ? 1 : 0);
     if ((g.time ?? 0) < this._lastTime) this._visited.clear(); // a new run
     this._lastTime = g.time ?? 0;
-    const here = w.getRoomAt(p.position.x, p.position.z);
-    if (here && !this._visited.has(here.id)) {
-      this._visited.add(here.id);
+    const here = w.getRoomAt(p.position.x, p.position.z, floor);
+    const vk = floor + ':' + (here?.id ?? -1);
+    if (here && !this._visited.has(vk)) {
+      this._visited.add(vk);
       this._key = '';
     }
-    const key = `${g.transforms || 0}|${w.room000Revealed ? 1 : 0}|${w.layoutSeed}|${w.rooms.length}`;
+    const st = w.stairs ? `${w.getStairState?.('A')}${w.getStairState?.('B')}` : '';
+    const key = `${floor}|${g.transforms || 0}|${w.room000Revealed ? 1 : 0}|${w.layoutSeed}|${w.rooms.length}|${st}`;
     if (key !== this._key) {
       this._key = key;
       this._drawBase();
@@ -65,7 +77,8 @@ export class Minimap {
     const w = this.game.world;
     const c = this.base.getContext('2d');
     c.clearRect(0, 0, PX, PX);
-    const rooms = w.rooms.filter((r) => r.type !== 'room000' || w.room000Revealed);
+    const floor = this._floor;
+    const { rooms } = this._floorData(floor);
     if (!rooms.length) return;
     let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
     for (const r of rooms) {
@@ -83,7 +96,7 @@ export class Minimap {
     for (const r of rooms) for (const cell of r.cells) owner.set(`${cell.cx},${cell.cz}`, r);
     const cs = CELLM * s;
     for (const r of rooms) {
-      const seen = r.isCorridor || this._visited.has(r.id);
+      const seen = r.isCorridor || this._visited.has(floor + ':' + r.id);
       c.fillStyle = r.type === 'room000' ? 'rgba(150,30,40,.55)' : seen ? (r.isCorridor ? 'rgba(232,227,211,.26)' : 'rgba(232,227,211,.42)') : 'rgba(232,227,211,.16)';
       for (const cell of r.cells) c.fillRect(cell.cx * cs + ox, cell.cz * cs + oz, cs + 0.6, cs + 0.6);
     }
@@ -100,6 +113,59 @@ export class Minimap {
       }
     }
     c.stroke();
+    // the stairwells (same cells on both floors): hatched treads, a letter, green once they are open
+    for (const f of w.stairs?.list || []) {
+      const st = w.getStairState?.(f.id);
+      const open = st === 'open';
+      const x = f.minX * s + ox, z = f.minZ * s + oz, ww = (f.maxX - f.minX) * s, hh = (f.maxZ - f.minZ) * s;
+      c.fillStyle = open ? 'rgba(126,214,126,.32)' : 'rgba(20,20,20,.55)';
+      c.fillRect(x, z, ww, hh);
+      c.strokeStyle = open ? 'rgba(126,214,126,.7)' : 'rgba(232,227,211,.35)';
+      c.lineWidth = 1;
+      c.beginPath();
+      const along = Math.abs(f.V.z) > 0.5; // treads run across the flight
+      for (let k = 1; k < 6; k++) {
+        if (along) (c.moveTo(x + 2, z + (hh * k) / 6), c.lineTo(x + ww - 2, z + (hh * k) / 6));
+        else (c.moveTo(x + (ww * k) / 6, z + 2), c.lineTo(x + (ww * k) / 6, z + hh - 2));
+      }
+      c.stroke();
+      c.font = '700 11px sans-serif';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.lineWidth = 3;
+      c.strokeStyle = '#000';
+      c.strokeText(f.id, x + ww / 2, z + hh / 2);
+      c.fillStyle = open ? '#7ed67e' : '#e8e3d3';
+      c.fillText(f.id, x + ww / 2, z + hh / 2);
+      // Stair A is the goal upstairs: say whether it is shut
+      if (floor === 1 && f.id === 'A') this._tag(c, open ? 'DOWN' : 'LOCKED', x + ww / 2, z + hh + 2, open ? '#7ed67e' : '#ef7d8e');
+    }
+    // the Security Office (its computer releases Stair A): a gold marker on the room
+    if (floor === 1) {
+      const sc = rooms.find((r) => r.name === 'Security Office')?.center;
+      if (sc) {
+        const x = sc.x * s + ox, z = sc.z * s + oz;
+        c.fillStyle = '#e8c27a';
+        c.strokeStyle = '#000';
+        c.lineWidth = 1.2;
+        c.beginPath();
+        c.rect(x - 4, z - 4, 8, 8);
+        c.fill();
+        c.stroke();
+        this._tag(c, 'SECURITY', x, z + 6, '#e8c27a');
+      }
+    }
+    // which floor this is
+    c.font = '600 10px sans-serif';
+    c.textAlign = 'left';
+    c.textBaseline = 'top';
+    c.lineWidth = 3;
+    c.strokeStyle = '#000';
+    const label = floor === 1 ? 'SECOND FLOOR' : 'GROUND FLOOR';
+    c.strokeText(label, 5, 4);
+    c.fillStyle = '#e8e3d3';
+    c.fillText(label, 5, 4);
+    if (floor !== 0) return; // the way out is on the ground floor
     // the main entrance: the middle of reception's outer wall (a green door with an EXIT label)
     const ei = w.layout?.entranceEdge >= 0 ? w.layout.edgeInfo(w.layout.entranceEdge) : null;
     if (ei) {
@@ -120,12 +186,40 @@ export class Minimap {
     }
   }
 
-  /** Easy, once everything is found: the walkable way from you to the main entrance (the caretaker's nav grid). */
+  /** A small outlined caption (stair state, Security Office). */
+  _tag(c, text, x, y, color) {
+    c.font = '700 9px sans-serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'top';
+    c.lineWidth = 3;
+    c.strokeStyle = '#000';
+    c.strokeText(text, x, y);
+    c.fillStyle = color;
+    c.fillText(text, x, y);
+  }
+
+  /** Easy, once everything is found: the walkable way from you to the main entrance (the caretaker's nav
+   *  grid) - upstairs, to the nearest open stairwell instead. */
   _updateRoute(p) {
     const g = this.game;
     if (!g.exitHelp || !g.world?.exit?.position) {
       this._routeN = 0;
       return;
+    }
+    const floor = this._floor;
+    let e = g.world.exit.position;
+    if (floor === 1) {
+      let best = null;
+      for (const f of g.world.stairs?.list || []) {
+        if (g.world.getStairState?.(f.id) !== 'open') continue;
+        const d = Math.hypot(f.door.x - p.position.x, f.door.z - p.position.z);
+        if (!best || d < best.d) best = { d, x: f.door.x - f.V.x * 0.6, z: f.door.z - f.V.z * 0.6 };
+      }
+      if (!best) {
+        this._routeN = 0;
+        return;
+      }
+      e = best;
     }
     const now = g.time ?? 0;
     const moved = Math.hypot(p.position.x - (this._rx ?? 1e9), p.position.z - (this._rz ?? 1e9));
@@ -134,16 +228,18 @@ export class Minimap {
     this._rx = p.position.x;
     this._rz = p.position.z;
     this._rk = this._key;
-    const e = g.world.exit.position;
     try {
       const w = g.world;
-      const nav = w.getNav?.();
-      if (nav && (nav !== this._pfRef || nav.version !== this._pfVer || this._pf.doors !== w.doors)) {
-        this._pf.setNav(nav, w.doors);
-        this._pfRef = nav;
-        this._pfVer = nav.version;
+      const nav = w.getNav?.(floor);
+      const P = this._pfs[floor];
+      const doors = this._floorData(floor).doors;
+      if (nav && (nav !== P.ref || nav.version !== P.ver || P.doors !== doors)) {
+        P.pf.setNav(nav, doors);
+        P.ref = nav;
+        P.ver = nav.version;
+        P.doors = doors;
       }
-      this._routeN = this._pf.findPath(p.position.x, p.position.z, e.x, e.z, this._route, 128) || 0;
+      this._routeN = P.pf.findPath(p.position.x, p.position.z, e.x, e.z, this._route, 128) || 0;
     } catch {
       this._routeN = 0;
     }
@@ -178,13 +274,25 @@ export class Minimap {
       for (const [id, pr] of co.proxies) {
         const st = co.roster.get(id)?.status;
         if (!pr?.position || st === 'escaped' || st === 'left') continue;
-        c.fillStyle = st === 'alive' ? '#6fb7ff' : '#d6577a';
+        const col = st === 'alive' ? '#6fb7ff' : '#d6577a';
+        const there = (this.game.world.floorOf?.(pr.position) ?? 0) === this._floor;
         c.beginPath();
         c.arc(pr.position.x * v.s + v.ox, pr.position.z * v.s + v.oz, 3.4, 0, Math.PI * 2);
-        c.fill();
-        c.strokeStyle = '#000';
-        c.lineWidth = 1;
-        c.stroke();
+        if (there) {
+          c.fillStyle = col;
+          c.fill();
+          c.strokeStyle = '#000';
+          c.lineWidth = 1;
+          c.stroke();
+        } else {
+          // on the other floor: a hollow ring
+          c.strokeStyle = '#000';
+          c.lineWidth = 3;
+          c.stroke();
+          c.strokeStyle = col;
+          c.lineWidth = 1.4;
+          c.stroke();
+        }
       }
     }
     // you: an arrow along your view (forward = (-sin yaw, -cos yaw))

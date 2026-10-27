@@ -21,8 +21,9 @@
 //   enemy.dispose()           unsubscribes from the event bus
 //   event 'enemy:sighting' { position }  — emitted when a stalking stare starts while the player can see him
 //   enemy.fatigue 0..1 / enemy.winded   he tires after a long flat-out chase (see _updateFatigue)
-//   event 'enemy:winded' { position }   — emitted when he runs out of breath mid-chase (+ voice line 'wheeze')
-//   event 'enemy:voice' { line: 'burp', big: true } — the 25 % close-up burp (see NEAR_BURP_CHANCE)
+//   event 'enemy:winded' { position, target }   — emitted when he runs out of breath mid-chase (+ voice line 'wheeze')
+//   event 'enemy:voice' { line: 'burp', big: true, target } — the 25 % close-up burp (see NEAR_BURP_CHANCE)
+//     (target: the player he was after; co-op awards those achievements only to them)
 //   enemy.distract(position)  a PA broadcast / the PlayStation: he goes to check (not while chasing you in sight)
 //   enemy.callOff()           the Room 000 register: he forgets you and goes back to his rounds
 //   enemy.upcomingPatrol(n)   his next n patrol stops (truthful: he walks them unless something distracts him)
@@ -41,28 +42,43 @@
 // Movement only through world.moveCircle(pos, delta, ENEMY.radius); doors opened with door.open('enemy').
 // A 2.6 m man under 2.2 m door frames: he procedurally stoops through doorways (spine/knees, additive
 // on top of the clips) and his head tracks whatever he is interested in (you, a noise, a locker).
+//
+// Second Floor update (2026-10-17, AI workstream; enemy-ai.md §2–3). Fixes, not a redesign:
+//   * No "squeeze" (shrinking his collider) and no "vault" (moving without collision): he always moves with
+//     ENEMY.radius. A target his nav can't reach → he goes to the nearest cell he can (stand-off), reaches
+//     over only within 1.5 m with strict LOS centre to centre, otherwise searches after 3 s.
+//   * Perception eye `_eye` is inside his body: (x, 2.3 − stoop, z), 0.1 m forward. headPosition stays the
+//     face (head-look, audio, camera). Every sight / hearing / target / stalk / capture check uses strict LOS
+//     (world.lineOfSight(a, b, { strict: true })): doors block until door.fullyOpen.
+//   * Every capture needs strict LOS between the two bodies; a hidden player is taken only from the spot's
+//     exitPosition, once its door has finished swinging.
+//   * He waits for door.fullyOpen before walking through (ajar doors get pushed the rest of the way).
+//   * Chasing, a noise through a wall (> 0.3) sends him to the doorway of that room, not the exact spot.
+//   * Paths keep 0.6 m off furniture (soft cost) and his arms tuck in near props.
+//   * Decisions use a seeded RNG (enemy.rng, from game.seed): same seed → same patrol.
+//   * Shared code in enemy-perception.js (mover, puppet, possession, senses). who = 'caretaker', floor = 0;
+//     every enemy:* event carries who; enemy:capture also carries targetId (the caught player's net id).
+//   * Co-op: netSnapshot() gains y (index 14) and the possessed flag (8); applySnapshot(arr, sentAt) feeds the
+//     guest puppet, which moves with collision (snaps only when > 1 m off) and doesn't extrapolate when slow.
+//   * Director possession: setPossessed(id|null), applyInput(input, by), tryAttack(by) (CONTRACTS §13.5).
 
 import * as THREE from './lib/three/three.module.js';
-import { ENEMY, PLAYER, DIFFICULTY, DOOR_HEIGHT } from './config.js';
+import { ENEMY, PLAYER, DIFFICULTY, DOOR_HEIGHT, ASSISTANT } from './config.js';
 import { loadGLB, cloneGLB, ps1ify } from './assets.js';
 import { AnimationController } from './animations.js';
 import { NavPathfinder } from './enemy-nav.js';
+import {
+  DEG, clamp, lerp, smooth01, wrapAngle, yawTo, hdist, makeRng, los, pickTarget, candidateTargets, targetId,
+  noiseFloorGain, floorBaseY, floorList, floorOfPos, propQuery, Mover, Puppet, Possession,
+} from './enemy-perception.js';
 
-const DEG = Math.PI / 180;
-const TAU = Math.PI * 2;
 const STATES = ['PATROL', 'SUSPICIOUS', 'INVESTIGATE', 'CHASE', 'SEARCH', 'CAPTURE', 'IDLE'];
-
-const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const lerp = (a, b, t) => a + (b - a) * t;
-const smooth01 = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
-function wrapAngle(a) {
-  a = (a + Math.PI) % TAU;
-  if (a < 0) a += TAU;
-  return a - Math.PI;
-}
-/** three.js yaw that faces direction (dx, dz): forward = (-sin yaw, -cos yaw). */
-const yawTo = (dx, dz) => Math.atan2(-dx, -dz);
-const hdist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+const ANIMS = ['idle', 'stare', 'walk', 'run', 'search', 'investigate', 'turn_left', 'turn_right', 'capture'];
+const WHO = 'caretaker';
+const FLOOR = 0;
+const ATTACK_COOLDOWN = ASSISTANT?.attackCooldown ?? 1.2; // a possessing Director's grab, same as hers
+const REACH_OVER = 1.5; // m: across a desk he can't walk round, with a clear line between the two bodies
+const STANDOFF_GIVEUP = 3; // s at his nearest reachable spot before he gives up and searches
 
 // scratch objects (never escape)
 const _v1 = new THREE.Vector3();
@@ -90,10 +106,16 @@ const NEAR_BURP_DIST = 3;
 const NEAR_BURP_REARM = 6;
 const NEAR_BURP_CHANCE = 0.25;
 
+// arm bones blended toward his hanging-arms pose near furniture (procedural tuck)
+const ARM_BONES = ['upperarm_L', 'upperarm_R', 'forearm_L', 'forearm_R'];
+
 export class Enemy {
   constructor(game) {
     this.game = game;
     this.events = game.events;
+    this.who = WHO;
+    this.floor = FLOOR;
+    this.rng = makeRng(0xca7e);
     this.modelUrl = 'assets/characters/caretaker.glb';
     this.object = new THREE.Group();
     this.object.name = 'caretaker';
@@ -110,10 +132,32 @@ export class Enemy {
     this.pathIndex = 0;
     this.goal = new THREE.Vector3();
     this.pathTarget = new THREE.Vector3();
+    this.pathEnd = new THREE.Vector3();
+    this._vMove = new THREE.Vector3();
+    this.stickyStates = ['CHASE', 'CAPTURE'];
+    this.mover = new Mover(this, {
+      radius: ENEMY.radius,
+      floor: FLOOR,
+      speedFor: (m) => this._speedFor(m),
+      turnClips: true,
+      turn: { walk: 2.6, run: 5.5, face: 1.6, pivot: 2.4 },
+      accel: { walk: 2.6, run: 7, brake: 6 },
+      doorPause: (chasing) => (chasing ? 0.2 : 0.55 + this.rng() * 0.5),
+      doorOpenHold: 0,
+      onDoorPause: (door, chasing) => !chasing && this._say('hum', 0.15),
+      isChasing: () => this._state === 'CHASE',
+      isCapturing: () => this._state === 'CAPTURE',
+    });
+    this.puppet = new Puppet(this, { radius: ENEMY.radius, floor: FLOOR, decode: (d) => Enemy._decode(d) });
+    this.possession = new Possession();
+    this._lastAttackT = -99;
     this.stimulus = new THREE.Vector3();
     this.lkp = new THREE.Vector3();
     this.headPosition = new THREE.Vector3(0, 2.4, 0);
-    this._eye = new THREE.Vector3(0, 2.35, 0);
+    // perception eye: inside his body (not at the face, which pokes through closed doors when he stoops)
+    this._eye = new THREE.Vector3(0, 2.3, 0);
+    this._bodyA = new THREE.Vector3();
+    this._bodyB = new THREE.Vector3();
     this._lastSeenPos = new THREE.Vector3();
     this._stuckAnchor = new THREE.Vector3();
     this._faceTarget = new THREE.Vector3();
@@ -161,6 +205,20 @@ export class Enemy {
     return this._hasLkp ? this.lkp : null;
   }
 
+  /** Per-enemy enum tables for the co-op snapshot (netSnapshot / applySnapshot). */
+  static NET_STATES = STATES;
+  static NET_ANIMS = ANIMS;
+
+  /** The Director possessing him (multiplayer.md §5.4), or null. */
+  get possessedBy() {
+    return this.possession.by;
+  }
+
+  /** Stair-cell guard hits (tests assert 0). */
+  get stairGuardHits() {
+    return this.mover.stairGuardHits;
+  }
+
   async load(onProgress) {
     try {
       const gltf = await loadGLB(this.modelUrl);
@@ -190,7 +248,7 @@ export class Enemy {
     }
     this.anim.onFootstep = (clip) => {
       this._footPos.copy(this.object.position);
-      this.events?.emit('enemy:footstep', { position: this._footPos, running: clip === 'run' });
+      this.events?.emit('enemy:footstep', { who: WHO, position: this._footPos, running: clip === 'run' });
     };
     this._setupProcedural();
     this.anim.play('idle', { fade: 0 });
@@ -199,7 +257,9 @@ export class Enemy {
   }
 
   spawn(position, yaw = 0) {
-    this.object.position.set(position.x, 0, position.z);
+    // decisions are seeded per run (same seed → same rounds); the menu vista uses the menu seed
+    this.rng = makeRng((((this.game.seed ?? 1) >>> 0) ^ 0xca7e7a4e) >>> 0);
+    this.object.position.set(position.x, floorBaseY(FLOOR), position.z);
     this.yaw = yaw;
     this.object.rotation.set(0, yaw, 0);
     this.object.visible = true;
@@ -207,11 +267,18 @@ export class Enemy {
     this._reset();
     const prev = this._state;
     this._state = 'PATROL';
-    this.events?.emit('enemy:state', { state: 'PATROL', prev });
+    if (this.possession.active) {
+      this.possession.set(null, 0);
+      this.events?.emit('enemy:possessed', { who: WHO, by: null, reason: 'spawn' });
+    }
+    this.puppet.clear();
+    this.mover._lastValid.ok = false;
+    this.events?.emit('enemy:state', { who: WHO, state: 'PATROL', prev });
     if (this.anim) {
       this.anim.stopAll();
       this.anim.play('idle', { fade: 0 });
     }
+    this._updateEye();
   }
 
   setAggression(level) {
@@ -223,18 +290,24 @@ export class Enemy {
   }
 
   /** Called directly or through the 'noise' event. radius = metres heard at aggression 0. */
-  hearNoise({ position, radius = 6, source } = {}) {
+  hearNoise(n = {}) {
+    const { position, radius = 6, source } = n;
     if (!this.enabled || !this._ready || !position || this._state === 'CAPTURE' || this.remote) return;
-    if (source === 'enemy') return;
-    const diff = this._difficulty();
-    let R = radius * diff.hearing * (1 + 0.6 * this.aggression);
-    const d = hdist(this.object.position, position);
-    if (d > R) return;
-    // walls muffle: no line of sight -> 70 % radius
+    if (source === 'enemy' || this.possession.active) return;
     const world = this.game.world;
+    // other floors: only a noise inside a stairwell carries, at half the radius (enemy-ai.md §3)
+    const gain = noiseFloorGain(world, FLOOR, n);
+    if (gain <= 0) return;
+    const diff = this._difficulty();
+    let R = radius * gain * diff.hearing * (1 + 0.6 * this.aggression);
+    let d = hdist(this.object.position, position);
+    if (gain < 1) d = Math.hypot(d, (position.y || 0) - this.object.position.y);
+    if (d > R) return;
+    // walls (and shut doors) muffle: no strict line of sight -> 70 % radius
     if (world?.lineOfSight) {
-      _v1.set(position.x, Math.max(position.y || 0, 1.0), position.z);
-      if (!world.lineOfSight(this._eye, _v1)) R *= 0.7;
+      const ny = position.y || 0;
+      _v1.set(position.x, ny - floorBaseY(FLOOR) < 0.3 ? floorBaseY(FLOOR) + 1.0 : ny, position.z);
+      if (!los(world, this._eye, _v1)) R *= 0.7;
       if (d > R) return;
     }
     this._onHeard(position, 1 - d / R, source);
@@ -303,7 +376,7 @@ export class Enemy {
     const reach = endHead ? Math.max(0.2, -endHead.z) : 0.7;
     const want = reach + 0.45;
     seq.slideFrom = pos.clone();
-    seq.slideTo = new THREE.Vector3(_v1.x - dx * want, 0, _v1.z - dz * want);
+    seq.slideTo = new THREE.Vector3(_v1.x - dx * want, floorBaseY(FLOOR), _v1.z - dz * want);
     this.yaw = yawTo(dx, dz);
     this.object.rotation.y = this.yaw;
     seq.back.set(dx, 0, dz); // camera stumbles back along this
@@ -311,7 +384,7 @@ export class Enemy {
     if (this.anim) {
       this.anim.playOnce('capture', { fade: 0.12, fallbackDuration: seq.dur });
     }
-    this.events?.emit('enemy:voice', { line: fromHide ? 'found_hiding' : 'found_you', position: this.headPosition });
+    this.events?.emit('enemy:voice', { who: WHO, line: fromHide ? 'found_hiding' : 'found_you', position: this.headPosition });
 
     let last = performance.now();
     const tick = (now) => {
@@ -372,10 +445,10 @@ export class Enemy {
     this._visible = false;
     this._los = false;
     this._pathPartial = false;
-    this._squeeze = false;
-    this._vault = false;
-    this._sqT = 0;
-    (this._sqAnchor ||= new THREE.Vector3()).set(0, 0, 0);
+    this._pathGap = 0;
+    this._standoffT = 0;
+    this._spotOpen = null;
+    this._doorBlockT = 0;
     this._visDist = Infinity;
     this._losTimer = 0;
     this._hearTimer = 0;
@@ -419,7 +492,7 @@ export class Enemy {
     this._lastUpdateMs = 0;
     this._spottedEmitted = false;
     this.stalk = null;
-    this._nextStalk = 45 + Math.random() * 25;
+    this._nextStalk = 45 + this.rng() * 25;
     this._voiceT = { any: -999 };
     this._lostT = 0;
     this._runT = 0;
@@ -439,6 +512,10 @@ export class Enemy {
     this._tgtT = 0;
     this._graceT = 0;
     this._remoteCap = false;
+    this._soloTarget = null;
+    this._tuckW = 0;
+    this._propScanT = 0;
+    this._nearProp = 0;
     this.nav.clearBlocks?.();
   }
 
@@ -450,8 +527,8 @@ export class Enemy {
     this._stateTime = 0;
     this.subT = 0;
     if (s !== 'PATROL') this.stalk = null;
-    this._squeeze = false;
-    this._vault = false;
+    this._standoffT = 0;
+    this._spotOpen = null;
     switch (s) {
       case 'PATROL':
         this.sub = 'pick';
@@ -466,7 +543,7 @@ export class Enemy {
       case 'INVESTIGATE':
         this.sub = 'go';
         this._goTo(this.stimulus, 'fast', 0.9);
-        if (prev === 'PATROL' && Math.random() < 0.4) this._say('still_here', 1);
+        if (prev === 'PATROL' && this.rng() < 0.4) this._say('still_here', 1);
         break;
       case 'CHASE': {
         this.meter = 1;
@@ -479,7 +556,7 @@ export class Enemy {
         if (!this._spottedEmitted) {
           this._spottedEmitted = true;
           this._evtPos.copy(this._hasLkp ? this.lkp : this.object.position);
-          this.events?.emit('enemy:spotted', { position: this._evtPos });
+          this.events?.emit('enemy:spotted', { who: WHO, position: this._evtPos });
           this._say('found_you', 1, true);
         }
         this._goTo(this.lkp, 'run', 0.3);
@@ -494,7 +571,7 @@ export class Enemy {
       default:
         break;
     }
-    this.events?.emit('enemy:state', { state: s, prev });
+    this.events?.emit('enemy:state', { who: WHO, state: s, prev });
   }
 
   _enterCapture(spot = null) {
@@ -502,7 +579,8 @@ export class Enemy {
     this.capturedFromHide = spot;
     if (!this._captureEmitted) {
       this._captureEmitted = true;
-      this.events?.emit('enemy:capture', { target: this._target || this.game.player });
+      const target = this._target || this.game.player;
+      this.events?.emit('enemy:capture', { who: WHO, target, targetId: targetId(this.game, target) });
     }
   }
 
@@ -511,13 +589,13 @@ export class Enemy {
   }
 
   _say(line, chance = 1, force = false) {
-    if (Math.random() > chance) return;
+    if (this.rng() > chance) return;
     const t = this._time;
     if (!force && t - this._voiceT.any < 7) return;
     if (t - (this._voiceT[line] ?? -999) < (VOICE_COOLDOWN[line] || 20)) return;
     this._voiceT.any = t;
     this._voiceT[line] = t;
-    this.events?.emit('enemy:voice', { line, position: this.headPosition });
+    this.events?.emit('enemy:voice', { who: WHO, line, position: this.headPosition });
   }
 
   // =============================================================================== update
@@ -533,6 +611,10 @@ export class Enemy {
     this._time += dt;
     this._stateTime += dt;
     const world = game.world;
+    if (this.possession.active) {
+      if (this.possession.timedOut(this._time)) this.setPossessed(null, 'timeout');
+      else return this._updatePossessed(dt, game, world);
+    }
     let player = this._pickTarget(dt, game, world);
     if (this._graceT > 0) {
       // just took someone to Room 000: he isn't looking for anyone for a moment
@@ -557,41 +639,139 @@ export class Enemy {
     this._nearBurp(player);
     this._animate(dt, world);
     this._updateGlow(dt, game);
-    // threat (heartbeat, vignette, music) is about the player at THIS screen
+    // threat (heartbeat, vignette, music) is about the player at THIS screen (0 on another floor)
     const coop = game.coop?.active ? game.coop : null;
     this._updateThreat(dt, coop ? (coop.status === 'alive' ? game.player : null) : player, coop ? player === game.player : true);
   }
 
-  // =============================================================================== co-op
-  /** Whom he is after. Single player: you. Co-op host: one of coop.targets(), sticky while chasing. */
-  _pickTarget(dt, game, world) {
-    const coop = game.coop;
-    if (!coop?.active) return game.player;
-    const list = coop.targets();
-    const cur = this._target && list.includes(this._target) ? this._target : null;
-    if (cur && (this._state === 'CHASE' || this._state === 'CAPTURE')) return cur;
-    this._tgtT -= dt;
-    if (cur && this._tgtT > 0) return cur;
-    this._tgtT = 0.5;
+  // =============================================================================== possession
+  /** Director Mode (host): pause the AI and take input, or hand him back to the AI (state SEARCH). */
+  setPossessed(id, reason) {
+    if (this.remote) return false;
+    const by = id == null || id === '' ? null : String(id);
+    const was = this.possession.by;
+    if (by === was) return true;
+    this.possession.set(by, this._time);
+    if (by) {
+      this._stopMove();
+      this._turn = null;
+      this.stalk = null;
+      this._standoffT = 0;
+    } else {
+      // back to the AI from where he stands: a search of the area, then his rounds
+      this.lkp.set(this.object.position.x, floorBaseY(FLOOR), this.object.position.z);
+      this._hasLkp = true;
+      this.meter = Math.min(this.meter, 0.6);
+      if (this._state !== 'CAPTURE') this._setState('SEARCH');
+    }
+    this.events?.emit('enemy:possessed', { who: WHO, by, ...(reason ? { reason } : {}) });
+    return true;
+  }
+
+  /** Director input (host, per tick): { mx, mz, yaw, pitch, run, action }. */
+  applyInput(input, by) {
+    if (this.remote) return false;
+    return this.possession.apply(input, by, this._time, this.yaw);
+  }
+
+  /** A possessing Director's grab: the AI's own capture rules (range, strict LOS, same floor, cooldown). */
+  tryAttack(by) {
+    if (!this.possession.active || (by != null && by !== this.possession.by)) return { ok: false, reason: 'not-possessed' };
+    if (this._state === 'CAPTURE') return { ok: false, reason: 'cooldown' };
+    if (this._time - this._lastAttackT < ATTACK_COOLDOWN) return { ok: false, reason: 'cooldown' };
+    this._lastAttackT = this._time;
+    const world = this.game.world;
+    const list = candidateTargets(this.game, FLOOR, world, this._atkCands || (this._atkCands = []));
+    if (!list.length) return { ok: false, reason: this.game.player && floorOfPos(world, this.game.player.position) !== FLOOR ? 'floor' : 'no-target' };
     let best = null;
-    let bestScore = -Infinity;
-    const pos = this.object.position;
+    let bd = Infinity;
     for (const p of list) {
-      const d = hdist(pos, p.position);
-      let score = -d;
-      if (!p.isHidden && d < 30 && world?.lineOfSight?.(this._eye, p.eyePosition || p.position)) score += 25;
-      if (p === cur) score += 4; // don't flip-flop between two players at a similar distance
-      if (score > bestScore) {
-        bestScore = score;
+      const d = hdist(this.object.position, p.isHidden && p.hidingSpot ? p.hidingSpot.exitPosition || p.position : p.position);
+      if (d < bd) {
+        bd = d;
         best = p;
       }
     }
-    if (best !== this._target) {
+    if (best.isHidden) {
+      const spot = best.hidingSpot;
+      if (!spot || bd > 0.65) return { ok: false, reason: 'range' };
       this._target = best;
-      this._losTimer = 0; // perceive the new target right away
-      this._visible = false;
+      this._enterCapture(spot);
+      return { ok: true, targetId: targetId(this.game, best) };
     }
-    return best;
+    if (bd > ENEMY.captureRange + 0.1) return { ok: false, reason: 'range' };
+    if (!this._bodyLos(world, best)) return { ok: false, reason: 'los' };
+    this._target = best;
+    this._enterCapture();
+    return { ok: true, targetId: targetId(this.game, best) };
+  }
+
+  _updatePossessed(dt, game, world) {
+    const inp = this.possession.input;
+    if (world) this._syncNav(world);
+    if (this._state !== 'CAPTURE') {
+      const act = inp.action;
+      inp.action = null;
+      if (act === 'attack') this.tryAttack(this.possession.by);
+      else if (act === 'open-door') this._openDoorInFront(world);
+      else if (act === 'look') this._pulseLook = 1.2;
+      if (this._state !== 'CAPTURE') this.mover.drive(dt, world, inp, this._speedFor('walk'), this._speedFor('run'), 3.2);
+      // the head follows the Director's view
+      const cp = Math.cos(inp.pitch || 0);
+      this._lookTarget.set(this._eye.x - Math.sin(inp.yaw) * 6 * cp, this._eye.y + Math.sin(inp.pitch || 0) * 6, this._eye.z - Math.cos(inp.yaw) * 6 * cp);
+      this._hasLook = true;
+      this.goalMode = inp.run ? 'run' : 'walk';
+      this.moveStatus = this.speed > 0.15 ? 'moving' : 'idle';
+    }
+    this._pulseLook = Math.max(0, (this._pulseLook || 0) - dt);
+    this._wantAnim = this._pulseLook > 0 ? 'search' : 'idle';
+    this._updateFatigue(dt, inp.run && this.speed > ENEMY.walkSpeed * 1.5);
+    this._animate(dt, world);
+    this._updateGlow(dt, game);
+    const coop = game.coop?.active ? game.coop : null;
+    this._updateThreat(dt, coop ? (coop.status === 'alive' ? game.player : null) : game.player, true);
+    if (this.moveStatus === 'moving' && this.speed <= 0.15) this.moveStatus = 'idle';
+  }
+
+  /** Possession 'open-door': the nearest shut, unlocked door in front of him within 1.6 m. */
+  _openDoorInFront(world) {
+    const doors = world?.doors;
+    if (!doors) return false;
+    const pos = this.object.position;
+    const fx = -Math.sin(this.yaw);
+    const fz = -Math.cos(this.yaw);
+    let best = null;
+    let bd = 1.6;
+    for (const d of doors) {
+      if (!d.position || d.active === false || d.isLocked || (d.floor ?? 0) !== FLOOR) continue;
+      const dx = d.position.x - pos.x;
+      const dz = d.position.z - pos.z;
+      const dd = Math.hypot(dx, dz);
+      if (dd < bd && (fx * dx + fz * dz) / Math.max(dd, 1e-3) > 0.3) {
+        bd = dd;
+        best = d;
+      }
+    }
+    if (!best) return false;
+    return best.isOpen ? best.close?.('enemy') : best.open?.('enemy');
+  }
+
+  /** Strict LOS between the two bodies (centre to centre at 1.2 m): no grabbing through doors or walls. */
+  _bodyLos(world, p) {
+    const pos = this.object.position;
+    const by = floorBaseY(FLOOR) + 1.2;
+    this._bodyA.set(pos.x, by, pos.z);
+    this._bodyB.set(p.position.x, (p.position.y || 0) + 1.2, p.position.z);
+    return los(world, this._bodyA, this._bodyB);
+  }
+
+  // =============================================================================== co-op
+  /**
+   * Whom he is after. Single player: you, while you're on his floor. Co-op host: one of coop.targets() on his
+   * floor (never a Director), sticky while chasing. Shared scoring: enemy-perception.js pickTarget().
+   */
+  _pickTarget(dt, game, world) {
+    return pickTarget(this, dt, game, world);
   }
 
   /** Co-op host: he grabs someone who is not at this screen (their own screen plays the close-up). */
@@ -601,7 +781,7 @@ export class Enemy {
     if (this._state !== 'CAPTURE') this._setState('CAPTURE');
     this.anim?.play('capture', { fade: 0.15 });
     this._wantAnim = 'capture';
-    this.events?.emit('enemy:voice', { line: 'found_you', position: this.headPosition });
+    this.events?.emit('enemy:voice', { who: WHO, line: 'found_you', position: this.headPosition });
   }
 
   /** Co-op host: done with a capture; back to his rounds and ignore everyone for `grace` seconds. */
@@ -627,21 +807,44 @@ export class Enemy {
     this.capturedFromHide = null;
   }
 
-  /** The host's caretaker in 14 numbers (coop.js 'es'). slotOf(target) -> the target's player slot. */
+  /**
+   * The host's caretaker in 15 numbers (coop.js 'es'). slotOf(target) -> the target's player slot.
+   * The first 14 keep the pre-update order (old guests still parse it); [14] = y. Flags: 1 winded,
+   * 2 stalk stare, 4 LOS, 8 possessed. Enums: Enemy.NET_STATES / Enemy.NET_ANIMS.
+   */
   netSnapshot(slotOf) {
     const p = this.object.position;
     const r2 = (n) => Math.round(n * 100) / 100;
     const anim = this._remoteCap ? 'capture' : this.anim?.requested || this._wantAnim || 'idle';
-    const ai = ['idle', 'stare', 'walk', 'run', 'search', 'investigate', 'turn_left', 'turn_right', 'capture'].indexOf(anim);
+    const ai = ANIMS.indexOf(anim);
     const si = STATES.indexOf(this._state);
     const t = this._lookTarget;
-    const flags = (this.winded ? 1 : 0) | (this.stalk && this.stalk.phase === 'stare' ? 2 : 0) | (this._los ? 4 : 0);
+    const flags = (this.winded ? 1 : 0) | (this.stalk && this.stalk.phase === 'stare' ? 2 : 0) | (this._los ? 4 : 0) | (this.possession.active ? 8 : 0);
+    const slot = slotOf ? slotOf(this._target) : -1;
     return [
       r2(p.x), r2(p.z), Math.round(this.yaw * 1000) / 1000, si < 0 ? 0 : si, ai < 0 ? 0 : ai,
       r2(this._actualSpeed || 0), this.goalMode === 'run' ? 1 : 0,
       r2(t.x), r2(t.y), r2(t.z), this._hasLook ? 1 : 0, r2(this.meter || 0), flags,
-      slotOf ? slotOf(this._target) : -1,
+      Number.isFinite(slot) ? slot : -1, r2(p.y),
     ];
+  }
+
+  /** Decode one snapshot array (validated by Puppet.push). */
+  static _decode(d) {
+    return {
+      x: d[0], z: d[1], yaw: d[2], state: STATES[d[3]] || 'PATROL', anim: ANIMS[d[4]] || 'idle', spd: d[5], run: d[6] === 1,
+      lx: d[7], ly: d[8], lz: d[9], hasLook: d[10] === 1, meter: d[11], flags: d[12] | 0, tgt: d[13], y: d.length > 14 ? d[14] : floorBaseY(FLOOR),
+    };
+  }
+
+  /** Co-op guest: one 'es' snapshot from the host (sentAt = host clock ms). → true if accepted. */
+  applySnapshot(arr, sentAt) {
+    return this.puppet.push(arr, sentAt);
+  }
+
+  _netNow(game) {
+    const n = game.net?.now?.() ?? game.coop?.room?.now?.();
+    return Number.isFinite(n) ? n : performance.now();
   }
 
   /** Co-op guest: no AI, just the host's caretaker (interpolated), animated and glowing locally. */
@@ -653,10 +856,12 @@ export class Enemy {
       return;
     }
     this._time += dt;
-    const s = game.coop?.enemySample?.();
+    // own buffer (applySnapshot) when the host sends it; else the legacy coop.enemySample()
+    const s = this.puppet.size ? this.puppet.sample(this._netNow(game)) : game.coop?.enemySample?.();
     let mine = false;
     if (s) {
-      this.object.position.set(s.x, 0, s.z);
+      // toward the host's position with collision (never through a desk or a door); snaps only > 1 m off
+      this.puppet.follow(game.world, s, dt);
       this.yaw = s.yaw;
       this.object.rotation.y = s.yaw;
       if (s.state !== this._state) {
@@ -688,6 +893,11 @@ export class Enemy {
     this._updateThreat(dt, game.coop?.status === 'alive' ? game.player : null, mine);
   }
 
+  /** Guest-side puppet stats (tests): snaps = times it was more than 1 m off and jumped. */
+  get puppetSnaps() {
+    return this.puppet.snaps;
+  }
+
   /** The close-up burp: see NEAR_BURP_CHANCE. Skips the usual voice cooldowns (it is a one-off roll). */
   _nearBurp(player) {
     if (!player || this._state === 'CHASE' || this._state === 'CAPTURE') return;
@@ -698,24 +908,24 @@ export class Enemy {
     }
     if (!this._burpArmed || d > NEAR_BURP_DIST) return;
     this._burpArmed = false;
-    if (Math.random() >= NEAR_BURP_CHANCE) return;
+    if (this.rng() >= NEAR_BURP_CHANCE) return;
     this._voiceT.any = this._time;
     this._voiceT.burp = this._time;
-    this.events?.emit('enemy:voice', { line: 'burp', position: this.headPosition, big: true });
+    this.events?.emit('enemy:voice', { who: WHO, line: 'burp', position: this.headPosition, big: true, target: player });
   }
 
   /** Chase fatigue: see TIRE_RAMP. Drives _speedFor('run') and the 'enemy:winded' cue. */
-  _updateFatigue(dt) {
+  _updateFatigue(dt, possessedRun = false) {
     const diff = this._difficulty();
     const burst = diff.chaseBurst ?? DIFFICULTY.normal.chaseBurst;
-    const running = this._state === 'CHASE' && this.goalMode === 'run' && this.speed > ENEMY.walkSpeed * 1.5;
+    const running = possessedRun || (this._state === 'CHASE' && this.goalMode === 'run' && this.speed > ENEMY.walkSpeed * 1.5);
     if (running) this._runT = Math.min(burst + TIRE_RAMP + TIRE_CAP, this._runT + dt);
     else this._runT = Math.max(0, this._runT - dt * TIRE_RECOVER);
     const k = clamp((this._runT - burst) / TIRE_RAMP, 0, 1);
     this.fatigue = k * k * (3 - 2 * k);
     if (!this.winded && this.fatigue > 0.6) {
       this.winded = true;
-      this.events?.emit('enemy:winded', { position: this.object.position });
+      this.events?.emit('enemy:winded', { who: WHO, position: this.object.position, target: this._target || this.game.player });
       this._say('wheeze', 1, true); // "No… running… in the corridors.", out of breath
     } else if (this.winded && this.fatigue < 0.15) {
       this.winded = false;
@@ -773,7 +983,7 @@ export class Enemy {
         const inPeriph = !inCone && cos >= Math.cos(85 * DEG) && d < 7;
         const sense = d < 1.6 && !(p.isCrouching && !p.isMoving); // you can't stand right behind him
         if ((inCone || inPeriph || sense || (chasing && d < 14)) && d <= range) {
-          this._los = world?.lineOfSight ? world.lineOfSight(this._eye, pEye) : true;
+          this._los = los(world, this._eye, pEye); // strict: shut / ajar / swinging doors block
           if (this._los) {
             this._visible = true;
             this._peripheral = !inCone && !chasing && !sense;
@@ -825,9 +1035,9 @@ export class Enemy {
     const s = this._state;
     if (s === 'CAPTURE') return;
     if (s === 'CHASE') {
-      if (!this._visible && intensity > 0.15 && (source === 'player' || source === undefined || intensity > 0.4)) {
-        this.lkp.copy(position);
-        this.lkp.y = 0;
+      // hearing isn't sight: a noise through a wall only tells him which room (he heads for its doorway)
+      if (!this._visible && intensity > 0.3 && (source === 'player' || source === undefined || intensity > 0.4)) {
+        this._chaseHeard(position);
         this._lostT = Math.max(0, this._lostT - 0.8);
       }
       return;
@@ -856,20 +1066,67 @@ export class Enemy {
   }
 
   _setStimulus(position) {
-    this.stimulus.set(position.x, 0, position.z);
+    this.stimulus.set(position.x, floorBaseY(FLOOR), position.z);
     this._stimulusNoise = true;
+  }
+
+  /**
+   * Chasing, he hears you but can't see you. In plain view of the spot (strict LOS) → that spot. Behind a
+   * wall → the doorway of the room the noise came from (the one on his way), never the exact point.
+   */
+  _chaseHeard(position) {
+    const world = this.game.world;
+    const base = floorBaseY(FLOOR);
+    const pos = this.object.position;
+    _v1.set(position.x, base + 1.0, position.z);
+    if (los(world, this._eye, _v1)) {
+      this.lkp.set(position.x, base, position.z);
+      return;
+    }
+    const room = world?.getRoomAt?.(position.x, position.z, FLOOR);
+    const mine = world?.getRoomAt?.(pos.x, pos.z, FLOOR);
+    if (!room || room === mine) {
+      this.lkp.set(position.x, base, position.z);
+      return;
+    }
+    let best = null;
+    let bestScore = Infinity;
+    for (const d of world.doors || []) {
+      if (!d.position || d.active === false || d.isLocked || (d.floor ?? 0) !== FLOOR) continue;
+      if (d.roomA !== room && d.roomB !== room) continue;
+      const score = hdist(pos, d.position) + hdist(d.position, position);
+      if (score < bestScore) {
+        bestScore = score;
+        best = d;
+      }
+    }
+    if (!best) {
+      const c = room.center || position;
+      this.lkp.set(c.x, base, c.z);
+      return;
+    }
+    // just inside that room's side of the doorway
+    const n = best.n || { x: 0, z: 0 };
+    let sx = best.position.x + n.x * 0.9;
+    let sz = best.position.z + n.z * 0.9;
+    if (world.getRoomAt(sx, sz, FLOOR) !== room) {
+      sx = best.position.x - n.x * 0.9;
+      sz = best.position.z - n.z * 0.9;
+    }
+    this.lkp.set(sx, base, sz);
   }
 
   _onHideEnter({ spot, net } = {}) {
     if (!this.enabled || this._state === 'CAPTURE' || this.remote) return;
     // co-op: the local player hiding only matters if he is the one being hunted (coop.js reports the others)
     if (!net && this.game.coop?.active && this._target && this._target !== this.game.player) return;
+    if (this.possession.active) return;
     const recent = this._time - this._lastSeenTime <= 1.5;
     const noticed = this.meter >= 0.5 || this._lastSeenDist < 8 || this._state === 'CHASE' || this._state === 'SEARCH' || this._state === 'INVESTIGATE';
     if (recent && noticed && spot) {
       this._seenHide = { spot, time: this._time };
       this.lkp.copy(spot.exitPosition || spot.position);
-      this.lkp.y = 0;
+      this.lkp.y = floorBaseY(FLOOR);
       this._hasLkp = true;
       if (this._state !== 'CHASE') {
         this.meter = 1;
@@ -901,12 +1158,14 @@ export class Enemy {
       default:
         break;
     }
-    // bumping into him is always fatal (unless safely hidden)
+    // bumping into him is fatal (unless safely hidden), but every grab needs a clear line between the two
+    // bodies (strict LOS): never through a shut door, a wall or a cupboard
     if (player && this._state !== 'CAPTURE' && !player.isHidden && player.alive !== false) {
       const d = hdist(this.object.position, player.position);
-      const reachOver = this._state === 'CHASE' && this._pathPartial && this._los && d <= 1.9;
-      if (d < 0.95 || reachOver || (d <= ENEMY.captureRange && this._los && (this._state === 'CHASE' || this.meter >= 0.85))) {
-        this._enterCapture();
+      if (d <= REACH_OVER) {
+        const reachOver = this._state === 'CHASE' && this._standoffT > 0;
+        const grab = d < 0.95 || reachOver || (d <= ENEMY.captureRange && this._los && (this._state === 'CHASE' || this.meter >= 0.85));
+        if (grab && this._bodyLos(world, player)) this._enterCapture();
       }
     }
     // look at the player whenever he is visible and close: the head follows you
@@ -924,11 +1183,11 @@ export class Enemy {
     }
     if (this._time >= this._nextStalk && player && !player.isHidden) {
       if (this._tryStartStalk(world, player)) return;
-      this._nextStalk = this._time + 8 + Math.random() * 6;
+      this._nextStalk = this._time + 8 + this.rng() * 6;
     }
     switch (this.sub) {
       case 'pick': {
-        if (!world?.patrolPoints?.length) {
+        if (!this._patrolPts(world).length) {
           this.sub = 'pause';
           this.subT = 3;
           break;
@@ -948,13 +1207,13 @@ export class Enemy {
         this.subT += dt;
         if (this.moveStatus === 'arrived' || this.subT > 60) {
           this.sub = 'pause';
-          this.subT = (2 + Math.random() * 3.5) * (1 - 0.4 * this.aggression);
-          this._pauseAnim = Math.random() < 0.4 ? 'search' : Math.random() < 0.15 ? 'stare' : 'idle';
+          this.subT = (2 + this.rng() * 3.5) * (1 - 0.4 * this.aggression);
+          this._pauseAnim = this.rng() < 0.4 ? 'search' : this.rng() < 0.15 ? 'stare' : 'idle';
           if (this._pauseAnim !== 'search') {
-            if (Math.random() < 0.3) this._say('burp', 1); // now and then, on his rounds
+            if (this.rng() < 0.3) this._say('burp', 1); // now and then, on his rounds
             else this._say('hum', 0.25);
           }
-          const room = world?.getRoomAt?.(this.object.position.x, this.object.position.z);
+          const room = world?.getRoomAt?.(this.object.position.x, this.object.position.z, FLOOR);
           if (room?.isCorridor) this._say('corridor', 0.08);
           else this._say('school_closed', 0.05);
         } else if (this.moveStatus === 'failed') {
@@ -970,8 +1229,20 @@ export class Enemy {
     }
   }
 
+  /** His floor's patrol points (the whole list on a single-floor world; cached per source list). */
+  _patrolPts(world) {
+    const src = world?.floors?.[FLOOR]?.patrolPoints || world?.patrolPoints;
+    if (!src) return [];
+    if (!world.floors || src === world.floors[FLOOR]?.patrolPoints) return src;
+    const c = this._ppCache;
+    if (c && c.src === src && c.len === src.length) return c.out;
+    const out = floorList(world, FLOOR, 'patrolPoints');
+    this._ppCache = { src, len: src.length, out };
+    return out;
+  }
+
   _pickPatrolPoint(world, player) {
-    const pts = world.patrolPoints;
+    const pts = this._patrolPts(world);
     if (this._planPts !== pts) {
       this._plan.length = 0;
       this._planPts = pts;
@@ -987,7 +1258,7 @@ export class Enemy {
   /** His next n patrol stops: where he is walking now, then the ones he will pick (planned now). */
   upcomingPatrol(n = 3) {
     const world = this.game.world;
-    const pts = world?.patrolPoints;
+    const pts = world ? this._patrolPts(world) : null;
     if (!pts?.length) return [];
     if (this._planPts !== pts) {
       this._plan.length = 0;
@@ -1054,8 +1325,8 @@ export class Enemy {
       return w;
     };
     for (let i = 0; i < n; i++) total += weight(i);
-    if (total <= 0) return (Math.random() * n) | 0;
-    let r = Math.random() * total;
+    if (total <= 0) return (this.rng() * n) | 0;
+    let r = this.rng() * total;
     let pick = n - 1;
     for (let i = 0; i < n; i++) {
       r -= weight(i);
@@ -1099,13 +1370,13 @@ export class Enemy {
         if (this.moveStatus === 'arrived' || this.moveStatus === 'failed' || this.subT > 35) {
           this.sub = 'look';
           this.subT = 0;
-          this._lookDur = 4 + Math.random() * 1.8;
+          this._lookDur = 4 + this.rng() * 1.8;
           this._stopMove();
         }
         break;
       case 'look':
         if (this.subT > this._lookDur) {
-          const spot = this._nearestSpot(world, this.stimulus, 6, Math.random() < 0.55);
+          const spot = this._nearestSpot(world, this.stimulus, 6, this.rng() < 0.55);
           if (spot) {
             this._checkSpot = spot;
             this._goTo(spot.exitPosition || spot.position, 'walk', 0.45);
@@ -1118,7 +1389,7 @@ export class Enemy {
         if (this.moveStatus === 'arrived' || this.moveStatus === 'failed' || this.subT > 20) {
           this.sub = 'checkStand';
           this.subT = 0;
-          this._lookDur = 2.4 + Math.random() * 1.2;
+          this._lookDur = 2.4 + this.rng() * 1.2;
           this._stopMove();
           if (player?.isHidden && player.hidingSpot === this._checkSpot) this._say('still_here', 0.6);
         }
@@ -1148,25 +1419,38 @@ export class Enemy {
     const seen = this._seenHide;
     if (player.isHidden) {
       if (seen && seen.spot === player.hidingSpot) {
-        // he watched you get in. Walk up and open it.
-        const ex = seen.spot.exitPosition || seen.spot.position;
-        this.lkp.set(ex.x, 0, ex.z);
-        this._goTo(this.lkp, 'run', 0.35);
-        this._setLook(seen.spot.position);
-        const dSpot = hdist(pos, seen.spot.position);
-        if (hdist(pos, ex) < 0.75 || dSpot < ENEMY.captureRange + 0.35) {
-          this._enterCapture(seen.spot);
-        } else if (this._time - seen.time > 10) {
-          // never stands at a hiding place forever (a desk boxed in by chairs he can't path past):
-          // close enough, he reaches in; otherwise he gives up on it and searches the room
-          if (dSpot < 2.4) {
-            this._enterCapture(seen.spot);
+        // he watched you get in. Walk up to its front, wait for its door to stop swinging, open it.
+        const spot = seen.spot;
+        const ex = spot.exitPosition || spot.position;
+        const dEx = hdist(pos, ex);
+        this._setLook(spot.position);
+        const atSpot = dEx < 0.65 || (dEx < 0.95 && this._pathPartial && (this.moveStatus === 'arrived' || this.moveStatus === 'failed'));
+        if (!atSpot) {
+          this.lkp.set(ex.x, floorBaseY(FLOOR), ex.z);
+          this._goTo(this.lkp, 'run', 0.35);
+          this._spotOpen = null;
+        } else {
+          if (this.moveStatus === 'moving') this._stopMove();
+          this._setFace(spot.front || spot.position);
+          const so = this._spotOpen && this._spotOpen.spot === spot ? this._spotOpen : (this._spotOpen = { spot, t: 0, opened: false });
+          if (!so.opened) {
+            if (!(spot.anim >= 0)) {
+              spot.playDoor?.();
+              so.opened = true;
+              so.t = 0;
+            }
           } else {
-            this._seenHide = null;
-            this.meter = 0.6;
-            this.events?.emit('enemy:lost', {});
-            this._setState('SEARCH');
+            so.t += dt;
+            if (so.t >= 0.3) return this._enterCapture(spot);
           }
+        }
+        if (this._time - seen.time > 10 && !this._spotOpen?.opened) {
+          // never stands at a hiding place forever (a desk boxed in by chairs he can't get to the front
+          // of): he gives up on it and searches the room. He never reaches in from a distance.
+          this._seenHide = null;
+          this.meter = 0.6;
+          this.events?.emit('enemy:lost', { who: WHO });
+          this._setState('SEARCH');
         }
         return;
       }
@@ -1175,8 +1459,9 @@ export class Enemy {
       const v = player.velocity;
       const d = hdist(pos, player.position);
       const lead = clamp(d / 4, 0, 0.6);
-      _v1.set(player.position.x + (v ? v.x * lead : 0), 0, player.position.z + (v ? v.z * lead : 0));
-      if (d < 3 || !this.nav.nav || !this.nav.passableXZ(_v1.x, _v1.z)) _v1.set(player.position.x, 0, player.position.z);
+      const base = floorBaseY(FLOOR);
+      _v1.set(player.position.x + (v ? v.x * lead : 0), base, player.position.z + (v ? v.z * lead : 0));
+      if (d < 3 || !this.nav.nav || !this.nav.passableXZ(_v1.x, _v1.z)) _v1.set(player.position.x, base, player.position.z);
       this.lkp.copy(_v1);
       this._hasLkp = true;
       this._lostT = 0;
@@ -1185,27 +1470,24 @@ export class Enemy {
       this._lostT += dt;
     }
     this._goTo(this.lkp, 'run', 0.3);
-    // Target sits in a pocket his nav grid can't reach (between desks, behind a table): rather than
-    // circling the furniture, he shoves straight through it when he can see you up close.
-    const dP = hdist(pos, player.position);
-    this._squeeze = this._los && dP < 5 && (this._pathPartial || this.moveStatus === 'failed');
-    if (this._squeeze) {
-      this._lostT = 0;
-      // pinned against a table: climb over it (line of sight already rules out walls in between)
-      this._sqT += dt;
-      if (this._sqT > 0.8) {
-        this._vault = hdist(pos, this._sqAnchor) < 0.2;
-        this._sqT = 0;
-        this._sqAnchor.copy(pos);
+    // You're somewhere his body can't get to (a gap between desks, behind a table): he comes as close as
+    // he can (the nearest reachable cell; the mover already paths there). Within 1.5 m with a clear line
+    // between you he reaches over and grabs you (_think); otherwise, after 3 s there, he gives up and searches.
+    const unreachable = this._pathPartial && this._pathGap > 0.6 && hdist(this.goal, player.position) < 1.5;
+    const there = this.moveStatus === 'arrived' || this.moveStatus === 'failed' || (this.pathCount && hdist(pos, this.pathEnd) < 0.6);
+    if (unreachable && there) {
+      this._standoffT += dt;
+      this._setFace(player.position);
+      if (this._standoffT > STANDOFF_GIVEUP) {
+        this.events?.emit('enemy:lost', { who: WHO });
+        this.meter = 0.6;
+        this._setState('SEARCH');
+        return;
       }
-    } else {
-      this._vault = false;
-      this._sqT = 0;
-      this._sqAnchor.copy(pos);
-    }
+    } else this._standoffT = 0;
     const grace = 2.5 + 2.5 * this.aggression;
     if (!this._visible && (this._lostT > grace + 2 || (this._lostT > 0.6 && (this.moveStatus === 'arrived' || this.moveStatus === 'failed')))) {
-      this.events?.emit('enemy:lost', {});
+      this.events?.emit('enemy:lost', { who: WHO });
       this.meter = 0.6;
       this._setState('SEARCH');
     }
@@ -1214,17 +1496,17 @@ export class Enemy {
   _beginSearch() {
     const world = this.game.world;
     const c = this._hasLkp ? this.lkp : this.object.position;
-    this._searchEnd = this._time + 15 + Math.random() * 10 + 10 * this.aggression;
+    this._searchEnd = this._time + 15 + this.rng() * 10 + 10 * this.aggression;
     let n = 0;
-    // hiding spots near the last known position (closest first, at most 3)
-    const spots = world?.hidingSpots || [];
+    // hiding spots near the last known position (closest first, at most 3), on his floor
+    const spots = world ? this._floorSpots(world) : [];
     const used = [];
     for (let k = 0; k < 3; k++) {
       let best = null;
       let bestD = 11;
       for (const s of spots) {
         if (used.includes(s)) continue;
-        const d = hdist(s.position, c) + Math.random() * 1.5;
+        const d = hdist(s.position, c) + this.rng() * 1.5;
         if (d < bestD) {
           bestD = d;
           best = s;
@@ -1235,13 +1517,13 @@ export class Enemy {
       const e = this._searchPts[n++];
       e.spot = best;
       e.p.copy(best.exitPosition || best.position);
-      e.p.y = 0;
+      e.p.y = floorBaseY(FLOOR);
     }
     // random reachable points around it
     for (let k = 0; k < 3 && n < this._searchPts.length; k++) {
       const e = this._searchPts[n];
-      if (this.nav.nav && this.nav.randomPointNear(c.x, c.z, 4 + k * 3, e.p)) {
-        e.p.y = 0;
+      if (this.nav.nav && this.nav.randomPointNear(c.x, c.z, 4 + k * 3, e.p, this.rng)) {
+        e.p.y = floorBaseY(FLOOR);
         e.spot = null;
         n++;
       }
@@ -1285,12 +1567,12 @@ export class Enemy {
           this.subT = 0;
           if (e?.spot) {
             this.sub = 'spotStand';
-            this._lookDur = 2.6 + Math.random() * 1.6;
+            this._lookDur = 2.6 + this.rng() * 1.6;
             const inside = player?.isHidden && player.hidingSpot === e.spot;
             this._say('still_here', inside ? 0.75 : 0.2);
           } else {
             this.sub = 'look';
-            this._lookDur = 2.5 + Math.random() * 1.5;
+            this._lookDur = 2.5 + this.rng() * 1.5;
           }
         }
         break;
@@ -1335,9 +1617,21 @@ export class Enemy {
     this._searchEnd = end;
   }
 
+  /** Hiding spots on his floor (cached per source list). */
+  _floorSpots(world) {
+    const src = world?.floors?.[FLOOR]?.hidingSpots || world?.hidingSpots;
+    if (!src) return [];
+    if (!world.floors || src === world.floors[FLOOR]?.hidingSpots) return src;
+    const c = this._hsCache;
+    if (c && c.src === src && c.len === src.length) return c.out;
+    const out = floorList(world, FLOOR, 'hidingSpots');
+    this._hsCache = { src, len: src.length, out };
+    return out;
+  }
+
   _nearestSpot(world, c, maxD, chance = true) {
     if (!chance) return null;
-    const spots = world?.hidingSpots;
+    const spots = world ? this._floorSpots(world) : null;
     if (!spots) return null;
     let best = null;
     let bestD = maxD;
@@ -1353,7 +1647,7 @@ export class Enemy {
 
   // ---------------------------------------------------------------------------- stalking sightings
   _tryStartStalk(world, player) {
-    const pts = world?.patrolPoints;
+    const pts = world ? this._patrolPts(world) : null;
     if (!pts?.length || !world.lineOfSight || !this.nav.nav) return false;
     if (this._visible) return false;
     const pEye = player.eyePosition || player.position;
@@ -1366,10 +1660,10 @@ export class Enemy {
       const p = pts[i];
       const dp = hdist(p, player.position);
       if (dp < 15 || dp > 28) continue;
-      _v1.set(p.x, 2.3, p.z);
-      if (!world.lineOfSight(pEye, _v1)) continue;
-      let score = 1 + Math.random() * 0.5;
-      const room = world.getRoomAt?.(p.x, p.z);
+      _v1.set(p.x, floorBaseY(FLOOR) + 2.3, p.z);
+      if (!los(world, pEye, _v1)) continue;
+      let score = 1 + this.rng() * 0.5;
+      const room = world.getRoomAt?.(p.x, p.z, FLOOR);
       if (room?.isCorridor) score *= 3;
       score *= 0.4 + 1.6 * this._litScore(p.x, p.z, world); // near a light panel: backlit, readable
       const dot = ((p.x - player.position.x) * fx + (p.z - player.position.z) * fz) / dp;
@@ -1387,14 +1681,14 @@ export class Enemy {
     if (!n || this.nav.lastPartial || this.nav.lastLength > 75) return false;
     this.pathCount = n;
     this.pathIndex = 0;
-    this.pathTarget.set(best.x, 0, best.z);
-    this._stalkPoint.set(best.x, 0, best.z);
+    this.pathTarget.set(best.x, floorBaseY(FLOOR), best.z);
+    this._stalkPoint.set(best.x, floorBaseY(FLOOR), best.z);
     this.goal.copy(this._stalkPoint);
     this.goalMode = 'walk';
     this.goalArrive = 0.6;
     this.moveStatus = 'moving';
     this._needPath = false;
-    this.stalk = { phase: 'go', t: 0, stareT: 4 + Math.random() * 3, waitLook: 9, seen: false, announced: false, hidden: 0 };
+    this.stalk = { phase: 'go', t: 0, stareT: 4 + this.rng() * 3, waitLook: 9, seen: false, announced: false, hidden: 0 };
     return true;
   }
 
@@ -1429,9 +1723,9 @@ export class Enemy {
     if (st.phase === 'stare') {
       this._setFace(player.position);
       this._setLook(pEye);
-      const los = world.lineOfSight(pEye, this._eye);
+      const seesHim = los(world, pEye, this._eye);
       let looking = false;
-      if (los) {
+      if (seesHim) {
         const yaw = player.yaw || 0;
         const fx = -Math.sin(yaw);
         const fz = -Math.cos(yaw);
@@ -1444,8 +1738,8 @@ export class Enemy {
         if (!st.announced) {
           st.announced = true;
           this._evtPos.copy(this.object.position);
-          this.events?.emit('enemy:sighting', { position: this._evtPos });
-          const room = world.getRoomAt?.(this.object.position.x, this.object.position.z);
+          this.events?.emit('enemy:sighting', { who: WHO, position: this._evtPos });
+          const room = world.getRoomAt?.(this.object.position.x, this.object.position.z, FLOOR);
           this._say(room?.isCorridor ? 'corridor' : 'still_here', 0.7);
         }
       }
@@ -1461,8 +1755,8 @@ export class Enemy {
       return;
     }
     if (st.phase === 'leave') {
-      const los = player ? world.lineOfSight(pEye, this._eye) : false;
-      st.hidden = los ? 0 : st.hidden + dt;
+      const seesHim = player ? los(world, pEye, this._eye) : false;
+      st.hidden = seesHim ? 0 : st.hidden + dt;
       if (st.hidden > 1.5 || this.moveStatus === 'arrived' || this.moveStatus === 'failed' || st.t > 40) end();
     }
   }
@@ -1470,7 +1764,7 @@ export class Enemy {
   _endStalk = () => {
     this.stalk = null;
     this.sub = 'pick';
-    this._nextStalk = this._time + lerp(70, 40, this.aggression) + Math.random() * 20;
+    this._nextStalk = this._time + lerp(70, 40, this.aggression) + this.rng() * 20;
   };
 
   /** 0..1 how lit a spot is: world.getLightLevel() if provided, else distance to a working fixture. */
@@ -1489,7 +1783,7 @@ export class Enemy {
   }
 
   _pickLeavePoint(world, player) {
-    const pts = world.patrolPoints;
+    const pts = this._patrolPts(world);
     const pos = this.object.position;
     const pEye = player.eyePosition || player.position;
     const dNow = hdist(pos, player.position);
@@ -1500,8 +1794,8 @@ export class Enemy {
       if (dp < dNow - 1) continue;
       const d = hdist(p, pos);
       if (d < 3 || d > 30) continue;
-      _v1.set(p.x, 2.3, p.z);
-      if (world.lineOfSight(pEye, _v1)) continue;
+      _v1.set(p.x, floorBaseY(FLOOR) + 2.3, p.z);
+      if (los(world, pEye, _v1)) continue;
       if (d < bestD) {
         bestD = d;
         best = p;
@@ -1511,32 +1805,18 @@ export class Enemy {
   }
 
   // =============================================================================== movement
+  // movement: the shared Mover (enemy-perception.js) — full radius always, doors wait for fullyOpen,
+  // ≤ 4 path requests per second, stuck handling, stair-cell guard. Thin wrappers keep the old names.
   _goTo(target, mode = 'walk', arrive = 0.6) {
-    const moved = hdist(this.goal, target);
-    this.goal.set(target.x, 0, target.z);
-    this.goalMode = mode;
-    this.goalArrive = arrive;
-    if (this.moveStatus !== 'moving' || this.pathCount === 0) {
-      this._needPath = true;
-      this.moveStatus = 'moving';
-      this._stuckTimer = 0;
-      this._stuckAnchor.copy(this.object.position);
-    } else if (moved > 0.01 && hdist(this.goal, this.pathTarget) > (mode === 'run' ? 0.75 : 1.5)) {
-      this._needPath = true;
-    }
+    this.mover.goTo(target, mode, arrive);
   }
 
   _stopMove() {
-    this.moveStatus = 'idle';
-    this.pathCount = 0;
-    this.pathIndex = 0;
-    this._needPath = false;
-    this._doorWait = null;
-    this._sidestep = 0;
+    this.mover.stop();
   }
 
   _setFace(target) {
-    this._faceTarget.set(target.x, 0, target.z);
+    this._faceTarget.set(target.x, floorBaseY(FLOOR), target.z);
     this._facing = true;
   }
 
@@ -1546,16 +1826,10 @@ export class Enemy {
   }
 
   _syncNav(world) {
-    const nav = world.getNav ? world.getNav() : null;
-    if (!nav) return;
-    if (nav !== this._navRef || nav.version !== this._navVersion) {
-      this.nav.setNav(nav, world.doors);
-      this._navRef = nav;
-      this._navVersion = nav.version;
-      if (this.moveStatus === 'moving') this._needPath = true;
-    } else if (this.nav.doors !== world.doors) {
-      this.nav.doors = world.doors;
-    }
+    const ref = this._navRef;
+    const ver = this._navVersion;
+    this.mover.syncNav(world);
+    if (this._navRef !== ref || this._navVersion !== ver || !this._propQ) this._propQ = propQuery(world, FLOOR);
   }
 
   _speedFor(mode) {
@@ -1577,219 +1851,20 @@ export class Enemy {
   }
 
   _requestPath() {
-    const pos = this.object.position;
-    this._lastPathTime = this._time;
-    this._needPath = false;
-    this.pathTarget.copy(this.goal);
-    const n = this.nav.findPath(pos.x, pos.z, this.goal.x, this.goal.z, this.path, 256);
-    this.pathCount = n;
-    this.pathIndex = 0;
-    this.pathRequests = (this.pathRequests || 0) + 1;
-    // the player can squeeze into gaps between furniture that are narrower than his nav clearance
-    this._pathPartial = !n || !!this.nav.lastPartial;
-    if (!n) {
-      this.moveStatus = hdist(pos, this.goal) <= this.goalArrive + 0.3 ? 'arrived' : 'failed';
-    }
+    this.mover.requestPath();
   }
 
   _locomote(dt, world) {
-    const pos = this.object.position;
-    let targetSpeed = 0;
-    let turnRate = 2.4;
-    let desiredYaw = null;
-
-    if (this._turn) {
-      // in-place pivot driven by the turn clip
-      const t = this._turn;
-      const step = t.rate * dt;
-      if (Math.abs(step) >= Math.abs(t.left)) {
-        this.yaw = wrapAngle(this.yaw + t.left);
-        this._turn = null;
-      } else {
-        this.yaw = wrapAngle(this.yaw + step);
-        t.left -= step;
-        t.time -= dt;
-        if (t.time <= -0.3) this._turn = null;
-      }
-      this.speed = 0;
-      this._actualSpeed = 0;
-      this.object.rotation.y = this.yaw;
-      return;
-    }
-
-    if (this._doorWait) {
-      const w = this._doorWait;
-      w.t -= dt;
-      const door = w.door;
-      if (door.position) desiredYaw = yawTo(door.position.x - pos.x, door.position.z - pos.z);
-      if (w.phase === 'pause' && w.t <= 0) {
-        if (!door.isOpen && !door.isLocked) door.open?.('enemy');
-        w.phase = 'after';
-        w.t = 0.35;
-      } else if (w.phase === 'after' && w.t <= 0) {
-        this._doorWait = null;
-        if (door.isLocked && !door.isOpen) {
-          this.nav.blockDoor(w.index);
-          this._needPath = true;
-        }
-      }
-    } else if (this._squeeze && world && (this._target || this.game.player)) {
-      // ---- squeezing through furniture straight at the player (slow, deliberate)
-      const pp = (this._target || this.game.player).position;
-      desiredYaw = yawTo(pp.x - pos.x, pp.z - pos.z);
-      const diffYaw = wrapAngle(desiredYaw - this.yaw);
-      turnRate = 4;
-      targetSpeed = this._speedFor('walk') * 1.15 * clamp(Math.cos(diffYaw) * 1.25, 0.15, 1);
-    } else if (this.moveStatus === 'moving' && world) {
-      // ---- path management (≤ 4 requests per second)
-      const canPath = this._time - this._lastPathTime >= 0.25;
-      if (this.nav.nav && (this._needPath || this.pathCount === 0) && canPath) this._requestPath();
-      if (this.moveStatus === 'moving' && this.pathCount > 0) {
-        let wx = this.path[this.pathIndex * 2];
-        let wz = this.path[this.pathIndex * 2 + 1];
-        let d = Math.hypot(wx - pos.x, wz - pos.z);
-        while (this.pathIndex < this.pathCount - 1 && d < 0.45) {
-          this.pathIndex++;
-          wx = this.path[this.pathIndex * 2];
-          wz = this.path[this.pathIndex * 2 + 1];
-          d = Math.hypot(wx - pos.x, wz - pos.z);
-        }
-        const last = this.pathIndex === this.pathCount - 1;
-        const goalD = hdist(pos, this.goal);
-        if ((last && d < this.goalArrive) || goalD < this.goalArrive * 0.8) {
-          this.moveStatus = 'arrived';
-        } else {
-          const dirX = (wx - pos.x) / Math.max(d, 1e-4);
-          const dirZ = (wz - pos.z) / Math.max(d, 1e-4);
-          desiredYaw = yawTo(dirX, dirZ);
-          const diffYaw = wrapAngle(desiredYaw - this.yaw);
-          const run = this.goalMode === 'run';
-          // big in-place turn when starting to walk
-          if (!run && this.speed < 0.35 && Math.abs(diffYaw) > 100 * DEG && this._startTurn(diffYaw)) return;
-          turnRate = run ? 5.5 : 2.6;
-          targetSpeed = this._speedFor(this.goalMode) * clamp(Math.cos(diffYaw) * 1.25, 0.12, 1);
-          if (last && !run) targetSpeed *= clamp(d / 1.3, 0.4, 1);
-          // doors ahead?
-          if (this._checkDoorAhead(world, dirX, dirZ)) {
-            targetSpeed = 0;
-          }
-          if (this._sidestep > 0) {
-            this._sidestep -= dt;
-            desiredYaw = wrapAngle(desiredYaw + this._sidestepDir * 80 * DEG);
-            targetSpeed = this._speedFor('walk') * 0.8;
-          }
-        }
-      } else if (this.moveStatus === 'moving' && this.pathCount === 0 && this.nav.nav === null) {
-        // no nav grid at all: walk straight with collision
-        const d = hdist(pos, this.goal);
-        if (d < this.goalArrive) this.moveStatus = 'arrived';
-        else {
-          desiredYaw = yawTo(this.goal.x - pos.x, this.goal.z - pos.z);
-          targetSpeed = this._speedFor(this.goalMode);
-        }
-      }
-    }
-
-    if (desiredYaw === null && this._facing && this.moveStatus !== 'moving') {
-      const dx = this._faceTarget.x - pos.x;
-      const dz = this._faceTarget.z - pos.z;
-      if (dx * dx + dz * dz > 0.04) {
-        desiredYaw = yawTo(dx, dz);
-        const diffYaw = wrapAngle(desiredYaw - this.yaw);
-        if (Math.abs(diffYaw) > 55 * DEG && this.speed < 0.3 && this._state !== 'CAPTURE' && this._startTurn(diffYaw)) return;
-        turnRate = 1.6;
-      }
-    }
-    this._facing = false;
-
-    // ---- turning
-    if (desiredYaw !== null) {
-      const diffYaw = wrapAngle(desiredYaw - this.yaw);
-      const maxStep = turnRate * dt;
-      this.yaw = wrapAngle(this.yaw + clamp(diffYaw, -maxStep, maxStep));
-    }
-    this.object.rotation.y = this.yaw;
-
-    // ---- speed & collision-aware motion
-    const accel = targetSpeed > this.speed ? (this.goalMode === 'run' ? 7 : 2.6) : 6;
-    this.speed += clamp(targetSpeed - this.speed, -accel * dt, accel * dt);
-    if (this.speed > 0.01 && world?.moveCircle) {
-      const fx = -Math.sin(this.yaw);
-      const fz = -Math.cos(this.yaw);
-      _v1.set(fx * this.speed * dt, 0, fz * this.speed * dt);
-      const np = this._squeeze && this._vault
-        ? _vMove.set(pos.x + _v1.x, 0, pos.z + _v1.z)
-        : world.moveCircle(pos, _v1, this._squeeze ? 0.18 : ENEMY.radius, _vMove);
-      const moved = Math.hypot(np.x - pos.x, np.z - pos.z);
-      pos.x = np.x;
-      pos.z = np.z;
-      pos.y = 0;
-      this._actualSpeed = lerp(this._actualSpeed, moved / Math.max(dt, 1e-4), clamp(dt * 10, 0, 1));
-    } else {
-      this._actualSpeed = lerp(this._actualSpeed, 0, clamp(dt * 10, 0, 1));
-      if (this.speed <= 0.01) this.speed = 0;
-    }
-
-    // ---- stuck detection & recovery
-    if (this.moveStatus === 'moving' && targetSpeed > 0.3 && !this._doorWait) {
-      this._stuckTimer += dt;
-      if (this._stuckTimer > 1.2) {
-        const prog = hdist(pos, this._stuckAnchor);
-        if (prog < 0.25) {
-          this._stuckCount++;
-          this.stuckEvents++;
-          if (this._stuckCount === 1) this._needPath = true;
-          else if (this._stuckCount === 2) {
-            this._sidestep = 0.7;
-            this._sidestepDir = Math.random() < 0.5 ? -1 : 1;
-            this._needPath = true;
-          } else {
-            this.moveStatus = 'failed';
-            this._stuckCount = 0;
-          }
-        } else this._stuckCount = 0;
-        this._stuckTimer = 0;
-        this._stuckAnchor.copy(pos);
-      }
-    } else {
-      this._stuckTimer = 0;
-      this._stuckAnchor.copy(pos);
-    }
+    this.mover.locomote(dt, world);
   }
 
   _startTurn(diffYaw) {
-    if (!this.anim) return false;
-    const name = diffYaw > 0 ? 'turn_left' : 'turn_right';
-    if (!this.anim.has(name)) return false;
-    const dur = this.anim.duration(name) * 0.85;
-    this._turn = { left: diffYaw, rate: diffYaw / dur, time: dur, name };
-    this.anim.play(name, { fade: 0.15, restart: true, timeScale: Math.abs(diffYaw) > 150 * DEG ? 0.85 : 1 });
-    this._wantAnim = name;
-    return true;
+    return this.mover.startTurn(diffYaw);
   }
 
-  /** Look ahead along the path for a closed door; handles the pause/open sequence. */
+  /** Look ahead along the path for a door that isn't fully open; handles the pause/open/wait sequence. */
   _checkDoorAhead(world, dirX, dirZ) {
-    if (!this.nav.nav || !world.doors) return false;
-    const pos = this.object.position;
-    for (let k = 1; k <= 3; k++) {
-      const L = 0.3 * k + 0.25;
-      const di = this.nav.doorAt(pos.x + dirX * L, pos.z + dirZ * L);
-      if (di <= 0) continue;
-      const door = world.doors[di - 1];
-      if (!door || door.isOpen || door.active === false) return false;
-      if (door.isLocked) {
-        this.nav.blockDoor(di - 1);
-        this._needPath = true;
-        return true;
-      }
-      const chasing = this._state === 'CHASE';
-      this._doorWait = { door, index: di - 1, phase: 'pause', t: chasing ? 0.2 : 0.55 + Math.random() * 0.5 };
-      if (!chasing) this._say('hum', 0.15);
-      this.speed = Math.min(this.speed, 0.4);
-      return true;
-    }
-    return false;
+    return this.mover.checkDoorAhead(world, dirX, dirZ);
   }
 
   // =============================================================================== animation
@@ -1800,6 +1875,8 @@ export class Enemy {
     else if (this._state === 'CAPTURE') want = this._remoteCap ? 'capture' : 'idle';
     else if (this._actualSpeed > 0.2 || (this.moveStatus === 'moving' && this.speed > 0.15)) {
       want = this.goalMode === 'run' && this.speed > 2 ? 'run' : 'walk';
+    } else if (this.possession.active) {
+      want = this._pulseLook > 0 ? 'search' : 'idle';
     } else {
       switch (this._state) {
         case 'PATROL':
@@ -1834,7 +1911,7 @@ export class Enemy {
   }
 
   _setupProcedural() {
-    const names = ['hips', 'spine_01', 'spine_02', 'spine_03', 'neck_01', 'neck_02', 'head', 'thigh_L', 'thigh_R', 'shin_L', 'shin_R', 'keys'];
+    const names = ['hips', 'spine_01', 'spine_02', 'spine_03', 'neck_01', 'neck_02', 'head', 'thigh_L', 'thigh_R', 'shin_L', 'shin_R', 'keys', ...ARM_BONES];
     if (!this.model) return;
     this.object.updateMatrixWorld(true);
     const modelInv = this.model.getWorldQuaternion(new THREE.Quaternion()).invert();
@@ -1856,6 +1933,17 @@ export class Enemy {
       this._procAxes[n] = entry;
       this._procSnap = this._procSnap || [];
       this._procSnap.push({ bone: b, q: b.quaternion.clone(), p: n === 'hips' ? b.position.clone() : null });
+    }
+    // arms tucked in near furniture: the idle clip's first frame (arms hanging at his sides) is the target
+    this._tuckQ = null;
+    if (this.anim?.has('idle') && ARM_BONES.every((n) => this.bones[n])) {
+      const a = this.anim;
+      a.stopAll();
+      const act = a.play('idle', { fade: 0 });
+      act.time = 0;
+      a.mixer.update(0);
+      this._tuckQ = ARM_BONES.map((n) => this.bones[n].quaternion.clone());
+      a.stopAll();
     }
     const head = this.bones.head;
     this._faceOffset = new THREE.Vector3(0, 0.15, 0.06); // from head bone origin to the face (bone-local, approx.)
@@ -1922,20 +2010,36 @@ export class Enemy {
     this._stoop += clamp(needStoop - this._stoop, -dt * (capturing ? 6 : 2.2), dt * 3.2);
     const s = smooth01(this._stoop);
 
-    // ---- head tracking (follows what he is interested in)
+    // ---- arms tucked in when furniture is within 0.7 m (his arms swing ~0.7 m out walking, 1 m running,
+    // against a 0.4 m collider): the walk/run swing is blended toward his hanging-arms pose
+    this._propScanT -= dt;
+    if (this._propScanT <= 0) {
+      this._propScanT = 0.1;
+      const q = this._propQ;
+      this._nearProp = q ? (q(pos.x, pos.z, 0.55) ? 1 : q(pos.x, pos.z, 0.7) ? 0.6 : 0) : 0;
+    }
+    const tuckWant = capturing ? 0 : this._nearProp * (this._actualSpeed > 2 ? 1 : 0.85);
+    this._tuckW += clamp(tuckWant - this._tuckW, -dt * 3, dt * 5);
+    if (this._tuckQ && this._tuckW > 0.01) {
+      for (let i = 0; i < ARM_BONES.length; i++) {
+        const b = this.bones[ARM_BONES[i]];
+        b.quaternion.slerp(this._tuckQ[i], this._tuckW * (i < 2 ? 0.9 : 0.75));
+      }
+    }
+
+    // ---- head tracking (follows what he is interested in), from where his face is
     let wantYaw = 0;
     let wantPitch = 0;
     if (this._hasLook || this._state === 'CAPTURE') {
       const t = this._lookTarget;
       this.object.updateMatrixWorld(false);
-      const ex = this._eye.x;
-      const ez = this._eye.z;
-      const dx = t.x - ex;
-      const dz = t.z - ez;
+      const hp = this.headPosition;
+      const dx = t.x - hp.x;
+      const dz = t.z - hp.z;
       const target = yawTo(dx, dz);
       wantYaw = clamp(wrapAngle(target - this.yaw), -75 * DEG, 75 * DEG);
       const hd = Math.hypot(dx, dz);
-      wantPitch = clamp(Math.atan2(this._eye.y - t.y, Math.max(hd, 0.3)) * 0.85, -30 * DEG, 28 * DEG);
+      wantPitch = clamp(Math.atan2(hp.y - t.y, Math.max(hd, 0.3)) * 0.85, -30 * DEG, 28 * DEG);
     }
     const k = clamp(dt * (this._state === 'CHASE' ? 6 : 3.2), 0, 1);
     this._lookYaw += (wantYaw - this._lookYaw) * k;
@@ -1977,18 +2081,28 @@ export class Enemy {
     const head = this.bones.head;
     if (head) {
       this.headPosition.copy(this._faceOffset).applyMatrix4(head.matrixWorld);
-      this._eye.copy(this.headPosition);
     } else {
       const fx = -Math.sin(this.yaw);
       const fz = -Math.cos(this.yaw);
-      this.headPosition.set(pos.x + fx * 0.3, 2.4 - 0.4 * s, pos.z + fz * 0.3);
-      this._eye.copy(this.headPosition);
+      this.headPosition.set(pos.x + fx * 0.3, pos.y + 2.4 - 0.4 * s, pos.z + fz * 0.3);
     }
+    this._updateEye();
+  }
+
+  /**
+   * Perception eye: inside his body, (x, 2.3 − stoop, z) and 0.1 m forward (enemy-ai.md §2 row 4a). Touching a
+   * shut door his centre is 0.5 m from it, so the eye never pokes through to the other side.
+   */
+  _updateEye() {
+    const pos = this.object.position;
+    const s = smooth01(this._stoop || 0);
+    this._eye.set(pos.x - Math.sin(this.yaw) * 0.1, pos.y + 2.3 - 0.45 * s, pos.z - Math.cos(this.yaw) * 0.1);
   }
 
   // =============================================================================== threat
   _updateThreat(dt, player, focused = true) {
     let target = 0;
+    if (player && floorOfPos(this.game.world, player.position) !== FLOOR) player = null; // another floor: no threat
     if (player) {
       const d = hdist(this.object.position, player.position);
       const prox = clamp(1 - d / 30, 0, 1);
@@ -2032,8 +2146,9 @@ export class Enemy {
       const world = this.game.world;
       _v3.set(_v2.x - pos.x, 0, _v2.z - pos.z);
       if (world?.moveCircle) {
-        const np = world.moveCircle(pos, _v3, ENEMY.radius * 0.75, _vMove);
-        pos.set(np.x, 0, np.z);
+        // full radius even here: he stops short of a desk rather than sliding into it
+        const np = world.moveCircle(pos, _v3, ENEMY.radius, _vMove, this.mover._moveOpts);
+        pos.set(np.x, floorBaseY(FLOOR), np.z);
       } else pos.add(_v3);
       if (k >= 1) seq.slideTo = null;
     }
@@ -2060,6 +2175,7 @@ export class Enemy {
     seq.qTarget.multiply(_q2);
     if (seq.shake) {
       const amp = 0.9 * DEG * smooth01((seq.t - 0.35) / 0.4) * (1 - 0.5 * tt);
+      // (camera shake only: visual, so it stays off the seeded decision stream)
       _q2.setFromAxisAngle(_v3.set(Math.random() - 0.5, Math.random() - 0.5, 0).normalize(), amp * (Math.random() * 2 - 1));
       seq.qTarget.multiply(_q2);
     }

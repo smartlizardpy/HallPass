@@ -19,6 +19,8 @@
 //   musicState                   current music state (getter)
 //   setVolumes({ master, music, sfx, voice, chat })   0..1, perceptual (squared) taper, smoothed (chat: co-op)
 //   setPaused(bool)              extension used by game.js: lowpass + −8 dB duck of music/ambience, pauses TTS
+//   seasonDuck(level, tau)       seasonal extension (halloween/): deliberate silences, 1 = normal
+//   seasonLoop(id, gain)         seasonal extension: non-positional loop → { stop(fade) }
 //   announce(id, text)           extension: full PA sequence (chime → static bed → voice file or TTS → un-duck)
 //   speak(text, { pitch, rate, volume })   speechSynthesis placeholder voice (settings.voiceSynth !== false)
 //   announcing                   extension (co-op voice chat): true while an announcement or a PA broadcast plays
@@ -69,8 +71,45 @@ export const VOICE_LINES = {
   found_hiding: 'There you are… there you are.',
 };
 
+// The Assistant (upstairs enemy, Second Floor update: the school's too-friendly lunch monitor, ABG style;
+// she calls every student 'Senpai'): what each recorded line says. enemy:voice
+// { who: 'assistant', line } plays assets/audio/assistant_<line>.mp3; ui.js subtitles it from here.
+// The recordings have a tiled-corridor room baked in (dry takes sounded far too close and intimate),
+// so their in-game reverb send is lower than the Caretaker's.
+export const ASSISTANT_LINES = {
+  there_you_are: 'Senpai~! There you are!',
+  found_you: 'Found you~!',
+  hi: 'Hiii~',
+  why_running: 'Why are you running? …Why are you running?',
+  come_back: 'Come ba~ack!',
+  dont_leave: "Don't leave me!",
+  forever: "Let's stay together… forever.",
+  i_found_you: 'I found you.',
+  downstairs: "You're not going downstairs… are you?",
+  where_are_you: 'Senpai? Where did you go~?',
+  hide_seek: 'Hide and seek? I love hide and seek!',
+  breathing: 'I can hear you breathing, Senpai.',
+  what_was_that: 'Ooh? What was that?',
+  fixing: 'Are you fixing something? I can help~!',
+  no_running: "No running in the corridors~! That's the rule!",
+  pout: 'Hmph. Senpai is so mean…',
+  founder: "I've been waiting for you, Senpai.",
+  // goal-pointing lines (recorded 10-18): firm, still in character
+  stairs_closed: 'The stairs are closed, Senpai. They stay closed until I say so.',
+  staff_card: 'Nobody goes downstairs without a staff card. Where is yours?',
+  security_office: "Are you looking for the Security Office, Senpai? It's staff only.",
+  step_away: "Fixing the lights is not a student's job. Step away from the box.",
+  giggle: '[giggles]',
+  hum: '[humming]',
+  attack: '',
+};
+
 // Canonical PA texts. These match the texts game.js emits with its 'announcement' events, so the
 // subtitles and the ElevenLabs scripts agree. When an event carries its own text, that text is used.
+// Floors (Second Floor update): heights at or above this are upstairs (floor 2 is at 3.6 m).
+const FLOOR_SPLIT = 3.3;
+const THROUGH_FLOOR_GAIN = 0.35; // x the volume of a sound heard through the floor / ceiling
+
 export const ANNOUNCEMENTS = {
   announcement_intro:
     'Good evening, students. The final bell has now rung. All remaining students are required to report to Room 000. ' +
@@ -78,14 +117,38 @@ export const ANNOUNCEMENTS = {
   announcement_room000: 'Room 000 is now open. Attendance is mandatory.',
   announcement_shift: 'Corridors are being reassigned. Please stay where you can be found.',
   announcement_late: 'Attention. The building will be secured in sixty seconds. Remain where you are.',
+  // Second Floor update
+  announcement_floor2:
+    'Students on the second floor. The stairwells have been secured for your safety. Please remain in your classroom. ' +
+    'A member of staff will collect you shortly.',
+  announcement_stairs_open: 'Stairwell A is now open. Please proceed downstairs in an orderly fashion. Walking, not running. [muttering] These people always fall asleep.',
+  announcement_stairs_open_2: '[clears throat] Stairwell A is now open. Please proceed downstairs in an orderly fashion. Walking, not running.',
+  announcement_assistant: 'Would the Assistant Caretaker please report to the second floor. Thank you.',
+  // recorded 10-18: the opening notice (names the goal), the staff page, power on, the stairs hint
+  announcement_floor2_b: 'Students on the second floor. The stairwells are locked and will remain locked until the Security Office is powered. Please do not attempt to leave. Please do not attempt to leave.',
+  announcement_security_page: 'Would the Assistant Caretaker please report to the Security Office. Thank you.',
+  announcement_power_on: 'Attention. Power has been restored to the Security Office. This is not a scheduled event.',
+  announcement_stairs_hint: 'Stairwell A may only be released from the Security Office. Staff are reminded not to write the password down.',
 };
 
 // Every id that may be overridden by a file. Exactly the deliverables in ELEVENLABS_ASSET_REQUESTS.md.
 export const SOUND_FILES = {
   announcement_intro: 'assets/audio/announcement_intro.mp3',
+  // The Halloween Shift (optional): the player whispering Al-Fatiha. A real recording only, never synthesised
+  // (no `voice` in its SOUNDS entry, so there is no speech fallback); list it in manifest "available" once added.
+  player_fatiha: 'assets/audio/player_fatiha.mp3',
+  hw_headfall: 'assets/audio/hw_headfall.mp3', // Halloween: a head hitting the floor (a real body-fall recording); else halloween/sfx.js synthesises it
   announcement_room000: 'assets/audio/announcement_room000.mp3',
   announcement_late: 'assets/audio/announcement_late.mp3',
   announcement_shift: 'assets/audio/announcement_shift.mp3',
+  announcement_floor2: 'assets/audio/announcement_floor2.mp3',
+  announcement_stairs_open: 'assets/audio/announcement_stairs_open.mp3',
+  announcement_stairs_open_2: 'assets/audio/announcement_stairs_open_2.mp3',
+  announcement_assistant: 'assets/audio/announcement_assistant.mp3',
+  announcement_floor2_b: 'assets/audio/announcement_floor2_b.mp3',
+  announcement_security_page: 'assets/audio/announcement_security_page.mp3',
+  announcement_power_on: 'assets/audio/announcement_power_on.mp3',
+  announcement_stairs_hint: 'assets/audio/announcement_stairs_hint.mp3',
   caretaker_still_here: 'assets/audio/caretaker_still_here.mp3',
   caretaker_corridor: 'assets/audio/caretaker_corridor.mp3',
   caretaker_school_closed: 'assets/audio/caretaker_school_closed.mp3',
@@ -95,6 +158,33 @@ export const SOUND_FILES = {
   caretaker_wheeze: 'assets/audio/caretaker_wheeze.mp3',
   caretaker_found_hiding: 'assets/audio/caretaker_found_hiding.mp3',
   fuse_crackle: 'assets/audio/fuse_crackle.mp3',
+  // The Assistant (Second Floor update)
+  assistant_there_you_are: 'assets/audio/assistant_there_you_are.mp3',
+  assistant_found_you: 'assets/audio/assistant_found_you.mp3',
+  assistant_hi: 'assets/audio/assistant_hi.mp3',
+  assistant_why_running: 'assets/audio/assistant_why_running.mp3',
+  assistant_come_back: 'assets/audio/assistant_come_back.mp3',
+  assistant_dont_leave: 'assets/audio/assistant_dont_leave.mp3',
+  assistant_forever: 'assets/audio/assistant_forever.mp3',
+  assistant_i_found_you: 'assets/audio/assistant_i_found_you.mp3',
+  assistant_downstairs: 'assets/audio/assistant_downstairs.mp3',
+  assistant_where_are_you: 'assets/audio/assistant_where_are_you.mp3',
+  assistant_hide_seek: 'assets/audio/assistant_hide_seek.mp3',
+  assistant_breathing: 'assets/audio/assistant_breathing.mp3',
+  assistant_what_was_that: 'assets/audio/assistant_what_was_that.mp3',
+  assistant_fixing: 'assets/audio/assistant_fixing.mp3',
+  assistant_no_running: 'assets/audio/assistant_no_running.mp3',
+  assistant_pout: 'assets/audio/assistant_pout.mp3',
+  assistant_founder: 'assets/audio/assistant_founder.mp3',
+  assistant_giggle: 'assets/audio/assistant_giggle.mp3',
+  assistant_stairs_closed: 'assets/audio/assistant_stairs_closed.mp3',
+  assistant_staff_card: 'assets/audio/assistant_staff_card.mp3',
+  assistant_security_office: 'assets/audio/assistant_security_office.mp3',
+  assistant_step_away: 'assets/audio/assistant_step_away.mp3',
+  assistant_hum: 'assets/audio/assistant_hum.mp3',
+  assistant_attack: 'assets/audio/assistant_attack.mp3',
+  assistant_step: 'assets/audio/assistant_step.mp3',
+  assistant_step_run: 'assets/audio/assistant_step_run.mp3',
   // SCHOOLNET broadcasts (optional recordings; see the cast sheet)
   pa_song: 'assets/audio/pa_song.mp3',
   announcement_caretaker: 'assets/audio/announcement_caretaker.mp3',
@@ -362,6 +452,15 @@ function bellNote(out, t0, f, amp, partials, attack = 0.003) {
 // ---------------------------------------------------------------------------------------------
 const GEN = {};
 const def = (key, sr, fn) => (GEN[key] = { sr, fn });
+// Seasonal extension (halloween/sfx.js): the generator helpers, for sounds registered at runtime with
+// AudioSystem.registerSound(id, meta, fn). Unused in normal play.
+export const DSP = {
+  rand: (a, b) => rand(a, b), pick: (l) => pick(l), arr: (s) => arr(s), noise: (s, c) => noise(s, c),
+  bq: (...a) => bq(...a), envAD: (...a) => envAD(...a), envShape: (...a) => envShape(...a), tone: (...a) => tone(...a),
+  resonate: (...a) => resonate(...a), add: (...a) => add(...a), softclip: (...a) => softclip(...a), norm: (...a) => norm(...a),
+  loopify: (...a) => loopify(...a), click: (...a) => click(...a), thump: (...a) => thump(...a), burst: (...a) => burst(...a),
+  bellNote: (...a) => bellNote(...a), get SR() { return SR; },
+};
 
 const SURFACES = {
   lino: { bp: 1100, q: 0.9, tau: 0.026, body: 115, bodyAmp: 0.55, click: 0.25, squeak: true },
@@ -418,6 +517,21 @@ def('enemy_step', 32000, () =>
     return norm(out, 0.85);
   }),
 );
+
+// The Assistant's loafers: light, soft-soled, a faint squeak. Used until assistant_step(.run).mp3 are recorded.
+for (const [id, len, lo, hi, amp] of [['assistant_step', 0.3, 110, 135, 0.5], ['assistant_step_run', 0.26, 120, 150, 0.7]])
+  def(id, 32000, () =>
+    [0, 1, 2, 3].map(() => {
+      const out = arr(len);
+      thump(out, 0, amp, rand(lo, hi), 70, 0.05, 0.22);
+      burst(out, 0, amp * 0.5, 0.1, 0.001, 0.03, 'bp', rand(1400, 1900), 1.1);
+      const sq = noise(0.07);
+      envShape(sq, (u) => Math.sin(Math.PI * u) ** 2);
+      bq(sq, 'bp', rand(2600, 3400), 3);
+      add(out, sq, rand(0.03, 0.06), 0.05);
+      return norm(out, 0.5);
+    }),
+  );
 
 def('keys_jingle', 32000, () =>
   [0, 1, 2].map(() => {
@@ -478,6 +592,30 @@ def('door_creak', 32000, () =>
     return norm(out, 0.75);
   }),
 );
+
+// The Art room's music box (ENV, art-room.js): an original slow waltz in A minor on steel comb tines,
+// ~14 s, looped seamlessly; a little out of tune, a little uneven, like a box that's nearly wound down.
+def('music_box', 32000, () => {
+  const beat = 0.6;
+  const MEL = [[69, 1], [72, 1], [76, 1], [74, 2], [72, 1], [71, 1], [69, 1], [68, 1], [69, 3],
+    [76, 1], [77, 1], [76, 1], [74, 1], [72, 1], [71, 1], [72, 1], [71, 1], [68, 1], [69, 2], [0, 1]];
+  const BASS = [57, 62, 64, 57, 60, 53, 52, 57]; // one low tine on each bar's first beat
+  const tine = [[1, 1, 2.4], [2.0, 0.1, 0.9], [6.27, 0.16, 0.25], [12.1, 0.04, 0.08]];
+  const hz = (m, cents) => 440 * Math.pow(2, (m - 69) / 12 + cents / 1200);
+  const len = 24 * beat;
+  const out = arr(len + 2.0);
+  let t = 0.02;
+  for (const [m, b] of MEL) {
+    if (m) {
+      const at = t + rand(-0.015, 0.02);
+      bellNote(out, at, hz(m + 12, rand(-9, 9)), rand(0.75, 1), tine, 0.002);
+      click(out, at, 0.05, 5200, 0.002);
+    }
+    t += b * beat;
+  }
+  BASS.forEach((m, k) => bellNote(out, 0.02 + k * 3 * beat + rand(0, 0.02), hz(m + 12, rand(-6, 6)), 0.45, tine, 0.003));
+  return [norm(loopify(out, 2.0), 0.7)];
+});
 
 def('door_close', 32000, () =>
   [0, 1].map(() => {
@@ -1525,10 +1663,13 @@ def('m_farbell', 22050, () => [
 const SOUNDS = {
   footstep: { bus: 'sfx', gain: 0.55, wet: 0.1 },
   enemy_step: { bus: 'sfx', gain: 1.0, wet: 0.35, ref: 2, roll: 1.0 },
+  assistant_step: { bus: 'sfx', gain: 0.6, wet: 0.3, ref: 2, roll: 1.0 },
+  assistant_step_run: { bus: 'sfx', gain: 0.7, wet: 0.3, ref: 2, roll: 1.0 },
   keys_jingle: { bus: 'sfx', gain: 0.5, wet: 0.3, ref: 1.5 },
   door_open: { bus: 'sfx', gain: 1.0, wet: 0.3 },
   door_close: { bus: 'sfx', gain: 0.9, wet: 0.35 },
   door_creak: { bus: 'sfx', gain: 0.45, wet: 0.35 },
+  music_box: { bus: 'sfx', gain: 0.5, wet: 0.3, ref: 2 },
   door_locked: { bus: 'sfx', gain: 0.8, wet: 0.25 },
   locker_open: { bus: 'sfx', gain: 0.7, wet: 0.25 },
   locker_close: { bus: 'sfx', gain: 0.8, wet: 0.25 },
@@ -1575,14 +1716,50 @@ const SOUNDS = {
   announcement_room000: { bus: 'pa', gain: 1, voice: 'pa' },
   announcement_late: { bus: 'pa', gain: 1, voice: 'pa' },
   announcement_shift: { bus: 'pa', gain: 1, voice: 'pa' },
+  announcement_floor2: { bus: 'pa', gain: 1, voice: 'pa' },
+  announcement_stairs_open: { bus: 'pa', gain: 1, voice: 'pa' },
+  announcement_stairs_open_2: { bus: 'pa', gain: 1, voice: 'pa' },
+  announcement_assistant: { bus: 'pa', gain: 1, voice: 'pa' },
+  announcement_floor2_b: { bus: 'pa', gain: 1, voice: 'pa' },
+  announcement_security_page: { bus: 'pa', gain: 1, voice: 'pa' },
+  announcement_power_on: { bus: 'pa', gain: 1, voice: 'pa' },
+  announcement_stairs_hint: { bus: 'pa', gain: 1, voice: 'pa' },
   caretaker_still_here: { bus: 'voice', gain: 1, wet: 0.4, ref: 2, voice: 'enemy', line: 'still_here' },
   caretaker_corridor: { bus: 'voice', gain: 1, wet: 0.4, ref: 2, voice: 'enemy', line: 'corridor' },
   caretaker_school_closed: { bus: 'voice', gain: 1, wet: 0.4, ref: 2, voice: 'enemy', line: 'school_closed' },
   caretaker_found_you: { bus: 'voice', gain: 1, wet: 0.35, ref: 2, voice: 'enemy', line: 'found_you' },
   caretaker_hum: { bus: 'voice', gain: 0.7, wet: 0.45, ref: 2, line: 'hum' },
+  player_fatiha: { bus: 'voice', gain: 0.95, wet: 0.06 },
   caretaker_burp: { bus: 'voice', gain: 0.85, wet: 0.45, ref: 2, line: 'burp' },
   caretaker_wheeze: { bus: 'voice', gain: 0.8, wet: 0.4, ref: 2, line: 'wheeze' },
   caretaker_found_hiding: { bus: 'voice', gain: 1, wet: 0.3, ref: 2, voice: 'enemy', line: 'found_hiding' },
+  // The Assistant: room already baked into the files, so a smaller send (0.25 vs his 0.4)
+  assistant_there_you_are: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'there_you_are' },
+  assistant_found_you: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'found_you' },
+  assistant_hi: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'hi' },
+  assistant_why_running: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'why_running' },
+  assistant_come_back: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'come_back' },
+  assistant_dont_leave: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'dont_leave' },
+  assistant_forever: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'forever' },
+  assistant_i_found_you: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'i_found_you' },
+  assistant_downstairs: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'downstairs' },
+  assistant_where_are_you: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'where_are_you' },
+  assistant_hide_seek: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'hide_seek' },
+  assistant_breathing: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'breathing' },
+  assistant_what_was_that: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'what_was_that' },
+  assistant_fixing: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'fixing' },
+  assistant_no_running: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'no_running' },
+  assistant_pout: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'pout' },
+  assistant_founder: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'founder' },
+  assistant_giggle: { bus: 'voice', gain: 1.1, wet: 0.35, ref: 2.5, voice: 'assistant', line: 'giggle' },
+  assistant_stairs_closed: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'stairs_closed' },
+  assistant_staff_card: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'staff_card' },
+  assistant_security_office: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'security_office' },
+  assistant_step_away: { bus: 'voice', gain: 1, wet: 0.25, ref: 2, voice: 'assistant', line: 'step_away' },
+  assistant_hum: { bus: 'voice', gain: 0.7, wet: 0.35, ref: 2, voice: 'assistant', line: 'hum' },
+  assistant_attack: { bus: 'sfx', gain: 1, wet: 0.2, ref: 3, voice: 'assistant', line: 'attack' },
+  assistant_step: { bus: 'sfx', gain: 0.6, wet: 0.2, ref: 1.5 },
+  assistant_step_run: { bus: 'sfx', gain: 0.7, wet: 0.2, ref: 1.5 },
 };
 export const SOUND_IDS = Object.keys(SOUNDS).filter((id) => id !== 'roomtone');
 
@@ -1983,7 +2160,9 @@ export class AudioSystem {
     this._worldLP.type = 'lowpass';
     this._worldLP.frequency.value = 20000;
     this._worldDuck = G(1);
-    this._worldLP.connect(this._worldDuck);
+    this._seasonDuck = G(1); // seasonal modes: the director's deliberate silences (seasonDuck())
+    this._worldLP.connect(this._seasonDuck);
+    this._seasonDuck.connect(this._worldDuck);
     this._worldDuck.connect(this.master);
 
     const v = this._vol;
@@ -2246,9 +2425,27 @@ export class AudioSystem {
       p.positionZ.value = z;
     } else p.setPosition(x, y, z);
   }
+  /** Is a world position on the other floor from the listener (the camera)? The listener's floor comes from
+   *  the camera height minus eye height; a sound's from its own height (feet 0 / 3.6, heads under 2.7 / 6.3). */
+  _otherFloor(pos) {
+    const y = pos.y ?? 0;
+    const soundFloor = y >= FLOOR_SPLIT ? 1 : 0;
+    const earFloor = this._lp.y - 1.6 >= FLOOR_SPLIT - 1.5 ? 1 : 0;
+    return soundFloor !== earFloor;
+  }
   _dist(pos) {
     const dx = pos.x - this._lp.x, dy = (pos.y ?? 0) - this._lp.y, dz = pos.z - this._lp.z;
     return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+
+  /** Seasonal extension: add a procedural sound at runtime (rendered on first use). fn() → variants[]
+   *  (Float32Array or [L, R]) built with DSP; meta like SOUNDS ({ bus, gain, wet, ref, roll }). */
+  registerSound(id, meta, fn, sr = 32000) {
+    if (SOUNDS[id] && !SOUNDS[id].seasonal) return false;
+    SOUNDS[id] = { bus: 'sfx', gain: 0.8, wet: 0.3, ...meta, seasonal: true };
+    def(id, sr, fn);
+    this._proc?.delete?.(id);
+    return true;
   }
 
   play(id, opts = {}) {
@@ -2293,11 +2490,22 @@ export class AudioSystem {
     src.playbackRate.value = rate;
     const g = ctx.createGain();
     g.gain.value = (meta.gain ?? 1) * vol;
-    src.connect(g);
+    const pos = opts.position;
+    // a sound on the other floor comes through the ceiling / floor: muffled and quieter (beta: his steps
+    // downstairs sounded like they were in your hall while the HUD said nobody upstairs was moving)
+    let lp = null;
+    if (pos && meta.bus !== 'ui' && meta.bus !== 'pa' && this._otherFloor(pos)) {
+      lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 340;
+      lp.Q.value = 0.5;
+      src.connect(lp);
+      lp.connect(g);
+      g.gain.value *= THROUGH_FLOOR_GAIN;
+    } else src.connect(g);
     const bus = this._buses[meta.bus] || this._buses.sfx;
     let p = null;
-    const pos = opts.position;
-    let wet = meta.wet || 0;
+    let wet = (meta.wet || 0) * (lp ? 0.35 : 1);
     if (pos && meta.bus !== 'ui' && meta.bus !== 'pa') {
       p = this._panner(meta.ref ?? 1.5, meta.roll ?? 1.1);
       this._setPos(p, pos.x, pos.y ?? 1.2, pos.z);
@@ -2339,6 +2547,7 @@ export class AudioSystem {
         g.disconnect();
         p?.disconnect();
         w?.disconnect();
+        lp?.disconnect();
       } catch { /* ignore */ }
       const i = this._voices.indexOf(voice);
       if (i >= 0) this._voices.splice(i, 1);
@@ -2348,7 +2557,7 @@ export class AudioSystem {
       const old = this._voices.shift();
       old.stop(0.03);
     }
-    return { stop: () => voice.stop(0.08) };
+    return { stop: (f) => voice.stop(typeof f === 'number' ? f : 0.08) };
   }
 
   _playVoice(id, meta, opts) {
@@ -2358,10 +2567,12 @@ export class AudioSystem {
       const text = opts.text || ANNOUNCEMENTS[id] || '';
       return this._speakHandle(text, { pitch: 0.5, rate: 0.85 });
     }
-    const text = VOICE_LINES[meta.line] || '';
+    const assistant = meta.voice === 'assistant';
+    const text = assistant ? (ASSISTANT_LINES[meta.line] || '').replace(/\[.*?\]|~/g, '').trim() : VOICE_LINES[meta.line] || '';
+    if (!text) return null;
     let vol = 1;
     if (opts.position) vol = Math.max(0.15, Math.min(1, 3 / (this._dist(opts.position) + 1.5)));
-    return this._speakHandle(text, { pitch: 0.2, rate: 0.75, volume: vol });
+    return this._speakHandle(text, assistant ? { pitch: 1.5, rate: 1.0, volume: vol } : { pitch: 0.2, rate: 0.75, volume: vol });
   }
   _speakHandle(text, o) {
     const ok = this.speak(text, o);
@@ -2525,6 +2736,27 @@ export class AudioSystem {
       const model = hrtf ? 'HRTF' : 'equalpower';
       for (const b of this._amb?.buzz || []) if (b?.p) b.p.panningModel = model;
     }
+  }
+
+  /** Seasonal extension: a non-positional loop of `id` on its own bus → { stop(fade) } | null. */
+  seasonLoop(id, gain) {
+    try {
+      if (!this._ready || !this.ctx) return null;
+      const buf = this._variants(id)?.[0];
+      if (!buf) return null;
+      const meta = SOUNDS[id] || {};
+      return this._loop(buf, meta.bus || 'amb', gain ?? meta.gain ?? 0.5, null);
+    } catch {
+      return null;
+    }
+  }
+
+  /** Seasonal extension: duck music + ambience + reverb to `level` (0..1) over ~tau s (1 = normal). */
+  seasonDuck(level = 1, tau = 0.6) {
+    try {
+      if (!this._ready || !this._seasonDuck) return;
+      this._seasonDuck.gain.setTargetAtTime(Math.max(0.0001, Math.min(1, level)), this.ctx.currentTime, Math.max(0.01, tau));
+    } catch { /* ignore */ }
   }
 
   setPaused(paused) {
@@ -2859,11 +3091,21 @@ export class AudioSystem {
       this._stepSide = -this._stepSide;
       this.play('footstep', { surface, speed, pan: this._stepSide * 0.08 });
     });
-    on('enemy:footstep', ({ position, running }) => {
+    on('enemy:footstep', ({ position, running, who }) => {
+      if (who === 'assistant') {
+        this.play(running ? 'assistant_step_run' : 'assistant_step', { position, rate: 0.96 + Math.random() * 0.1 });
+        return;
+      }
       this.play('enemy_step', { position, volume: running ? 1 : 0.75, rate: running ? 1.05 : 1 });
       this._stepCount++;
       if (this._stepCount % 3 === 0 || Math.random() < 0.12) {
         this.play('keys_jingle', { position, volume: running ? 0.9 : 0.6, delay: 0.05 });
+      }
+    });
+    on('enemy:attack', ({ who, phase }) => {
+      if (who === 'assistant' && phase === 'miss') {
+        this._asstAtk?.stop?.(0.4);
+        this._asstAtk = null;
       }
     });
     on('door:open', ({ door }) => {
@@ -2901,7 +3143,9 @@ export class AudioSystem {
         this._brT = 2.2;
       }
     });
-    on('enemy:voice', ({ line, position, big }) => this._enemyVoice(line, position, big));
+    on('enemy:voice', ({ line, position, big, who }) =>
+      who === 'assistant' ? this._assistantVoice(line, position) : this._enemyVoice(line, position, big),
+    );
     on('enemy:spotted', () => {
       this.play('spotted');
       this._lastChaseT = this._gt;
@@ -3047,6 +3291,16 @@ export class AudioSystem {
     } catch {
       return null;
     }
+  }
+
+  /** The Assistant's lines: her recording if installed, else the speech placeholder (no hum/attack fallback). */
+  _assistantVoice(line, position) {
+    const id = 'assistant_' + line;
+    if (!SOUNDS[id] && !this._files.has(id)) return null;
+    if (!this._files.has(id) && (line === 'hum' || line === 'attack' || line === 'giggle')) return null;
+    const h = this.play(id, { position });
+    if (line === 'attack') this._asstAtk = h;
+    return h;
   }
 
   _enemyVoice(line, position, big = false) {

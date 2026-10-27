@@ -20,6 +20,9 @@ export class Environment {
     this.cur = 1;
     this.density = 0.055;
     this.built = false;
+    // seasonal extension (halloween/): ambient and fog multipliers, 1 = unchanged
+    this.horrorMul = 1;
+    this.fogMul = 1;
   }
 
   attach() {
@@ -44,7 +47,8 @@ export class Environment {
   update(dt) {
     this.cur += (this.target - this.cur) * Math.min(1, dt * 2);
     if (this.moon) this.moon.material.opacity = this.mode === 'blackout' ? 1.0 : 1.0;
-    this.hemi.intensity = this.baseHemi * this.cur;
+    this.hemi.intensity = this.baseHemi * this.cur * this.horrorMul;
+    this.fog.density = this.density * this.fogMul;
     if (this.mode === 'red') this.hemi.color.setHex(0x4e2a2e);
     else this.hemi.color.setHex(0x46587a);
   }
@@ -88,7 +92,7 @@ export class Environment {
     const one = new THREE.Vector3(1, 1, 1);
     patches.forEach((p, i) => {
       q.setFromAxisAngle(up, p.rot);
-      m.compose(new THREE.Vector3(p.x, 0.012, p.z), q, one);
+      m.compose(new THREE.Vector3(p.x, (p.y || 0) + 0.012, p.z), q, one);
       mesh.setMatrixAt(i, m);
     });
     mesh.instanceMatrix.needsUpdate = true;

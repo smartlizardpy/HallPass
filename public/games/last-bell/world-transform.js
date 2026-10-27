@@ -14,9 +14,12 @@
 // nav grid is flood-filled and everything that was reachable before must still be reachable, else
 // the operation is reverted.
 import * as THREE from './lib/three/three.module.js';
-import { CELL } from './config.js';
+import { CELL, STAIRS } from './config.js';
 import { ET, RNG, hashSeed } from './world-layout.js';
 import { CHALK_CREEPY } from './world-dress.js';
+
+// corridor cells in front of the stair doors: never sealed (CONTRACTS §13.1)
+const STAIR_HALLS = new Set(Object.values(STAIRS).map((s) => s.hall.join(',')));
 
 const PROTECT_R = 6;
 const _v = new THREE.Vector3();
@@ -206,6 +209,7 @@ export class WorldTransformer {
       if (!w.rooms[a].isCorridor || !w.rooms[b].isCorridor) continue;
       const ei = L.edgeInfo(e);
       if (ctx.cellProtected(ei.ax, ei.az) || ctx.cellProtected(ei.bx, ei.bz)) continue;
+      if (STAIR_HALLS.has(ei.ax + ',' + ei.az) || STAIR_HALLS.has(ei.bx + ',' + ei.bz)) continue; // keep the stair doors on the ring
       cands.push(e);
     }
     rng.shuffle(cands);
@@ -309,6 +313,7 @@ export class WorldTransformer {
       door.isOpen = before.open;
       door.angle = door.target = before.angle;
       door.pivot.rotation.y = door.baseRot + door.angle;
+      w._updateLeaf(door);
       w._dressRoomOwner(room, before.variant, before.seed);
       this._raster(Math.min(b.minX, tei.x0 - 1), Math.min(b.minZ, tei.z0 - 1), Math.max(b.maxX, tei.x1 + 1), Math.max(b.maxZ, tei.z1 + 1));
       w._collectHides();
@@ -386,8 +391,9 @@ export class WorldTransformer {
   lights(rng, ctx) {
     const w = this.world;
     const ch = w.lights.rotateBroken(rng, (f) => {
+      if ((f.floor || 0) !== 0 || f.stair) return false; // floor 0 only, never the stairwells
       const room = w.rooms[f.roomId];
-      if (!room || room.type === 'room000') return false;
+      if (!room || room.type === 'room000' || room.type === 'stairwell') return false;
       if (ctx.nearPoint(f.x, f.z, PROTECT_R + 2)) return false;
       return !ctx.visible([{ x: f.x, y: 3.0, z: f.z }]);
     });

@@ -10,6 +10,8 @@
   <link rel="preload" href="assets/ui/barlow-condensed-600.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/ui/barlow-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="puzzles.css">
+  <link rel="stylesheet" href="social.css">
   <!-- IMPORT MAP: owned by the main agent. Do not change. -->
 </head>
 <body>
@@ -118,10 +120,12 @@
           <span class="board__row board__row--big" aria-hidden="true"><b>L</b><b>A</b><b>S</b><b>T</b></span>
           <span class="board__row board__row--big" aria-hidden="true"><b>B</b><b>E</b><b>L</b><b>L</b></span>
           <span class="board__row board__row--small" aria-hidden="true"><b>P</b><b>L</b><b>E</b><b>A</b><b>S</b><b>E</b><i></i><b>S</b><b>I</b><b>G</b><b>N</b><i></i><b>O</b><b>U</b><b>T</b><i></i><b>A</b><b>T</b><i></i><b>R</b><b>E</b><b>C</b><b>E</b><b>P</b><b>T</b><b>I</b><i></i><b>N</b></span>
+          <span class="board__row board__row--small board__row--hw" data-hw hidden aria-hidden="true"><b>T</b><b>H</b><b>E</b><i></i><b>H</b><b>A</b><b>L</b><b>L</b><b>O</b><b>W</b><b>E</b><b>E</b><b>N</b><i></i><b>S</b><b>H</b><b>I</b><b>F</b><b>T</b></span>
         </h1>
 
         <nav class="menu" aria-label="Main menu">
           <button class="menu-item" data-action="begin">Begin</button>
+          <button class="menu-item menu-item--hw" data-action="halloween" data-hw hidden>The Halloween Shift</button>
           <button class="menu-item" data-action="coop">Play with friends</button>
           <button class="menu-item menu-item--value" data-action="difficulty" aria-describedby="difficulty-note">
             <span>Difficulty</span><span class="menu-item__value"><span class="chev" aria-hidden="true">‹</span><span id="difficulty-value">Normal</span><span class="chev" aria-hidden="true">›</span></span>
@@ -140,9 +144,15 @@
       <article class="intro">
         <div id="intro-text" class="intro__text typed">
           <p>The final bell rings.</p>
-          <p>You were meant to leave with everyone else. Now the corridors are dark, every exit is locked, and somewhere below you a ring of keys is jingling.</p>
-          <p>The main entrance needs three things: the security keycard, the maintenance fuse and the exit key.</p>
-          <p>The caretaker is still doing his rounds. Don't let him find you.</p>
+          <p data-intro="f2">You fell asleep in class. Now the school is empty, the doors are locked, and you are on the second floor.</p>
+          <p data-intro="classic" hidden>You were meant to leave with everyone else. Now the corridors are dark, every exit is locked, and somewhere below you a ring of keys is jingling.</p>
+          <p data-intro="classic" hidden>The main entrance needs three things: the security keycard, the maintenance fuse and the exit key.</p>
+          <p data-intro="classic" hidden>The caretaker is still doing his rounds. Don't let him find you.</p>
+          <p data-intro="halloween" hidden>Someone decorated the school for Halloween. Nobody ever took it down.</p>
+          <p data-intro="halloween" hidden>Tonight it is only the ground floor. The stairs are barricaded, the lights are not to be trusted, and the caretaker is still doing his rounds.</p>
+          <p data-intro="halloween" hidden>Find the security keycard, the maintenance fuse and the exit key, then leave by the main entrance. Use your torch when the lights go.</p>
+          <p data-intro="halloween" hidden>Something else is in the building. It watches. It does not chase. Try not to stare back.</p>
+          <p data-intro="halloween" class="intro__rules" id="hw-intro-rules" hidden>Fright Fest: one school for everyone, Normal difficulty, your best escape time counts. Headphones recommended.</p>
         </div>
         <ul class="keys-row" aria-label="Controls">
           <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>Move</span></li>
@@ -162,11 +172,14 @@
         <h2 id="instructions-title" class="panel__title">How to play</h2>
         <div class="panel__body panel__body--split">
           <div class="howto">
-            <p>Find the <strong>security keycard</strong>, the <strong>maintenance fuse</strong> and the <strong>exit key</strong>, then get to the main entrance before the clock runs out.</p>
+            <p>You start on the <strong>second floor</strong>, locked in. The way down is <strong>Stairwell A</strong>: find a <strong>staff access card</strong>, restore power to the <strong>Security Office</strong> (a junction box in the halls, the breakers in Maintenance), find the security login (someone wrote it down), then use the Security Office computer to unlock the stairs. The checklist top right keeps track.</p>
+            <p>The <strong>lunch monitor</strong> walks the second floor. She only moves while you aren't looking at her, and she freezes when you look straight at her. Keep her in sight, back away, and don't let her get close.</p>
+            <p>Downstairs, find the <strong>security keycard</strong>, the <strong>maintenance fuse</strong> and the <strong>exit key</strong>, then get to the main entrance before the clock runs out.</p>
             <p>Once you hold two of them, a room that shouldn't exist opens somewhere in the school. The key is inside.</p>
             <p>The caretaker listens. Sprinting, doors and heavy breathing carry a long way; crouching barely makes a sound. If he sees you, run. He is fast at first but tires after a long chase: keep sprinting, break his line of sight, then hide.</p>
             <p>Every minute the building rearranges itself. Nothing you can see will change.</p>
             <p><strong>With friends</strong> (main menu): share a room code, then work as a team. If he catches someone, he takes them to Room 000, and anyone who reaches them can let them out. Everyone has to get out. <span class="no-touch"><kbd>M</kbd> mutes your microphone, <kbd>V</kbd> waves.</span></p>
+            <p class="small">HallPass administrators may join any online room for moderation, testing or special events, sometimes without appearing in the player list. They can see and hear what players in the room can.</p>
             <p>Tools in the school: the teachers' <strong>SCHOOLNET</strong> computers (the login is on a sticky note somewhere in the same room) show the security cameras, can send him off to check an announcement, and say where things are. Vote in the election and your candidate's promise comes true. Whatever you can use shows up under <strong>Tools</strong>, top right.</p>
           </div>
           <table class="controls touch-only">
@@ -268,6 +281,14 @@
               <span class="setting__label" id="lbl-reducedEffects">Reduce flicker, noise and shake</span>
               <button class="toggle" role="switch" aria-labelledby="lbl-reducedEffects"></button>
             </div>
+            <div class="setting setting--hw" data-setting="scareIntensity" data-kind="choice" data-hw hidden title="The Halloween Shift: how hard it tries to scare you. Mild: no falling heads, more censoring. The rules, the Caretaker and the blackouts stay the same, so every run is ranked the same.">
+              <span class="setting__label" id="lbl-scareIntensity">Halloween scares</span>
+              <div class="choice" role="radiogroup" aria-labelledby="lbl-scareIntensity">
+                <button role="radio" data-value="mild">Mild</button>
+                <button role="radio" data-value="standard">Standard</button>
+                <button role="radio" data-value="intense">Intense</button>
+              </div>
+            </div>
             <div class="setting" data-setting="headBob" data-kind="toggle">
               <span class="setting__label" id="lbl-headBob">Head bob</span>
               <button class="toggle" role="switch" aria-labelledby="lbl-headBob"></button>
@@ -289,6 +310,28 @@
         <div class="panel__actions">
           <button class="menu-item" data-action="back">Back</button>
           <button class="menu-item menu-item--quiet" data-action="reset-settings">Reset to defaults</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============= THE HALLOWEEN SHIFT: CONTENT WARNING =============== -->
+    <section id="screen-hwwarning" class="screen screen--panel" aria-labelledby="hwwarning-title" hidden>
+      <div class="panel panel--narrow hw-warning">
+        <h2 id="hwwarning-title" class="panel__title">The Halloween Shift: content warning</h2>
+        <div class="panel__body">
+          <p class="hw-warning__age"><strong>13+</strong> This one is made to scare you.</p>
+          <ul class="hw-warning__list">
+            <li><strong>Jump scares</strong> and sudden loud sounds. Something appears when you least expect it.</li>
+            <li><strong>Blood and severed heads.</strong> The worst of it is pixelated out, but you will know what it is.</li>
+            <li><strong>Flickering lights</strong>, flashes, screen glitches and camera shake.</li>
+          </ul>
+          <p>Not for anyone who frightens very easily, or with a heart condition. If it gets too much, press <kbd>Esc</kbd> to pause and take a break. Headphones recommended. Spare trousers optional.</p>
+          <p>Milder scares tone down the hits and keep your time on the leaderboard the same. You can change it later in Settings. <em>Reduce flicker, noise and shake</em> slows every flash.</p>
+        </div>
+        <div class="panel__actions">
+          <button class="menu-item menu-item--cta" data-action="hw-warning-ok">I’m 13+. Let’s go</button>
+          <button class="menu-item" data-action="hw-warning-mild">Play with milder scares</button>
+          <button class="menu-item menu-item--quiet" data-action="hw-warning-back">Back</button>
         </div>
       </div>
     </section>
@@ -421,6 +464,10 @@
         <p id="error-text" class="panel__body"></p>
       </div>
     </section>
+
+    <!-- Second Floor update: puzzle panels / security PC (GAME) and chat, player list, Director (NET) mount here -->
+    <div id="overlay-root" class="overlay-root"></div>
+    <div id="social-root" class="social-root"></div>
 
     <div class="scanlines" aria-hidden="true"></div>
   </div>
