@@ -11,7 +11,8 @@
  * `fail=<n>` makes the first n open calls answer 503, `state=signedout`.
  */
 
-import { CATALOGUE } from "@/app/lib/collectibles/catalogue";
+import { CATALOGUE, currentVersion, getPack } from "@/app/lib/collectibles/catalogue";
+import { collectionProgress } from "@/app/lib/collectibles/progress";
 
 type Entry = { collectibleId: string; owned: number; firstPulledAt: string; favourite: boolean; featuredPosition: number | null; isNew: boolean };
 type Pull = { slot: number; collectibleId: string; wasNew: boolean };
@@ -21,12 +22,12 @@ const pick = (col: string, rarity: string, n = 0) => CATALOGUE.collectibles.filt
 
 /** One demo pack per print, with contents chosen to show every rarity at least once. */
 export const LAB_PACKS = [
-  { publicId: "11111111-2222-4333-8444-555555555501", packId: "ff26-participation", contents: ["ff26-survivor", "ff26-cobweb-bell", "ff26-the-last-bell"] },
-  { publicId: "11111111-2222-4333-8444-555555555502", packId: "ff26-overall-winner", contents: ["ff26-overall-champion", "ff26-the-last-bell", "ff26-blood-moon"] },
-  { publicId: "11111111-2222-4333-8444-555555555503", packId: "hpo-standard", contents: [pick("hpo", "common", 2), pick("hpo", "uncommon", 1), pick("hpo", "epic", 0)] },
-  { publicId: "11111111-2222-4333-8444-555555555504", packId: "inet-standard", contents: [pick("inet", "common", 0), pick("inet", "common", 1), pick("inet", "rare", 0)] },
-  { publicId: "11111111-2222-4333-8444-555555555505", packId: "brr-standard", contents: [pick("brr", "uncommon", 0), pick("brr", "common", 1), pick("brr", "rare", 0)] },
-  { publicId: "11111111-2222-4333-8444-555555555506", packId: "tr-standard", contents: [pick("tr", "common", 0), pick("tr", "uncommon", 0), pick("tr", "legendary", 0)] },
+  { publicId: "11111111-2222-4333-8444-555555555501", packId: "ff26-participation", contents: ["ff26-survivor", pick("ff26", "common", 0), pick("ff26", "rare", 0)] },
+  { publicId: "11111111-2222-4333-8444-555555555502", packId: "ff26-overall-winner", contents: ["ff26-overall-champion", pick("ff26", "epic", 0), pick("ff26", "epic", 1)] },
+  { publicId: "11111111-2222-4333-8444-555555555503", packId: "legends-standard", contents: [pick("legends", "common", 2), pick("legends", "uncommon", 1), pick("legends", "legendary", 0)] },
+  { publicId: "11111111-2222-4333-8444-555555555504", packId: "brainrot-standard", contents: [pick("brainrot", "common", 0), pick("brainrot", "common", 1), pick("brainrot", "epic", 0)] },
+  { publicId: "11111111-2222-4333-8444-555555555505", packId: "turkish-standard", contents: [pick("turkish", "uncommon", 0), pick("turkish", "common", 1), pick("turkish", "legendary", 0)] },
+  { publicId: "11111111-2222-4333-8444-555555555506", packId: "gaming-rare", contents: [pick("gaming", "common", 0), pick("gaming", "rare", 0), pick("gaming", "epic", 0)] },
 ];
 
 const KEY = "hp:packs-lab";
@@ -37,12 +38,12 @@ function seed(): LabState {
   const own = (id: string, owned = 1, extra: Partial<Entry> = {}) => {
     if (id) binder[id] = { collectibleId: id, owned, firstPulledAt: day(20), favourite: false, featuredPosition: null, isNew: false, ...extra };
   };
-  for (const [id, n] of [["ff26-cobweb-bell", 3], ["ff26-room-000", 1], ["ff26-shadow-dash", 2], ["ff26-pumpkin-locker", 1], ["ff26-arcade-bat", 2]] as const) own(id, n);
-  own("ff26-yellow-moon", 1, { favourite: true, featuredPosition: 1 });
-  own(pick("hpo", "common", 0), 2);
-  own(pick("hpo", "uncommon", 1), 1);
-  own(pick("inet", "common", 0), 1);
-  own(pick("brr", "uncommon", 0), 1);
+  for (const [id, n] of [["ff26-survivor", 1], [pick("ff26", "common", 0), 3], [pick("ff26", "uncommon", 1), 1], [pick("ff26", "rare", 0), 2]] as const) own(id, n);
+  own(pick("ff26", "common", 1), 1, { favourite: true, featuredPosition: 1 });
+  own(pick("legends", "common", 0), 2);
+  own(pick("legends", "rare", 0), 1);
+  own(pick("brainrot", "uncommon", 0), 1);
+  own("hpo-hall-pass", 1); // a retired demo card: its owner still sees it
   return { binder, opened: {}, fails: 0 };
 }
 
@@ -74,16 +75,11 @@ export function installLabApi(): void {
   };
   save();
 
-  const progress = () =>
-    CATALOGUE.collections.map((c) => {
-      const total = CATALOGUE.collectibles.filter((x) => x.collection === c.id).length;
-      const owned = Object.keys(state.binder).filter((id) => CATALOGUE.collectibles.find((x) => x.id === id)?.collection === c.id).length;
-      return { collection: c.id, owned, total, percent: total ? Math.floor((owned / total) * 100) : 0 };
-    });
+  const progress = () => collectionProgress(Object.keys(state.binder).map((collectibleId) => ({ collectibleId })));
   const packRow = (p: (typeof LAB_PACKS)[number]) => ({
     publicId: p.publicId,
     packId: p.packId,
-    packVersion: 1,
+    packVersion: currentVersion(getPack(p.packId)!).v,
     source: "championship",
     grantedAt: day(25),
     openedAt: state.opened[p.publicId]?.at ?? null,

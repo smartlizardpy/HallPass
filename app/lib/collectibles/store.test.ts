@@ -135,7 +135,7 @@ describe("collectibles store", () => {
     const s = createCollectiblesStore(sql);
     await s.openPack({ playerId: "p", publicId: PACK, randomInt: () => 0 }).catch(() => {});
     const ids = values.flat().find((v) => Array.isArray(v)) as string[];
-    expect(ids).toEqual(["ff26-survivor", "ff26-cobweb-bell", "ff26-cobweb-bell"]);
+    expect(ids).toEqual(["ff26-survivor", "ff26-h-pumpkin", "ff26-h-pumpkin"]);
   });
 });
 
@@ -144,6 +144,8 @@ describe("collectionProgress", () => {
     const p = collectionProgress([{ collectibleId: "hpo-hall-pass" }, { collectibleId: "hpo-reactor" }, { collectibleId: "ff26-survivor" }]);
     expect(p.find((x) => x.collection === "hpo")).toEqual({ collection: "hpo", owned: 2, total: 12, percent: 16 });
     expect(p.find((x) => x.collection === "ff26")).toMatchObject({ owned: 1, total: 20, percent: 5 });
-    expect(p.find((x) => x.collection === "tr")).toMatchObject({ owned: 0, percent: 0 });
+    expect(p.find((x) => x.collection === "turkish")).toMatchObject({ owned: 0, percent: 0 });
+    // Retired collections (the demo sets) show only to the people who own a card in one.
+    expect(p.find((x) => x.collection === "tr")).toBeUndefined();
   });
 });

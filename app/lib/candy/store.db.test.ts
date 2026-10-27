@@ -182,8 +182,8 @@ describe.skipIf(!enabled)("candy store against Postgres", () => {
     expect(await store.balance(p2)).toBe(30);
     const req = () => randomBytes(8).toString("hex");
     const results = await Promise.all([
-      store.spend(p2, "hpo-standard", req()),
-      store.spend(p2, "inet-standard", req()),
+      store.spend(p2, "legends-standard", req()),
+      store.spend(p2, "brainrot-standard", req()),
       store.spend(p2, "brr-standard", req()),
     ]);
     expect(results.filter((r) => r.status === "ok")).toHaveLength(1);
@@ -229,16 +229,16 @@ describe.skipIf(!enabled)("candy store against Postgres", () => {
     const id = Number((await sql`SELECT id FROM candy_ledger WHERE player_id = ${p3} AND kind = 'daily_best'`)[0].id);
     expect(await store.revokeCredit({ ledgerId: id, actorEmail: actor, reason: "Farmed" })).toBe(true);
     expect(await store.balance(p3)).toBe(-30);
-    expect(await store.spend(p3, "hpo-standard", randomBytes(8).toString("hex"))).toEqual({ status: "insufficient", balance: -30, price: 30 });
+    expect(await store.spend(p3, "legends-standard", randomBytes(8).toString("hex"))).toEqual({ status: "insufficient", balance: -30, price: 30 });
     const spendId = Number((await sql`SELECT id FROM candy_ledger WHERE player_id = ${p3} AND kind = 'spend'`)[0].id);
     expect(await store.revokeCredit({ ledgerId: spendId, actorEmail: actor, reason: "No" })).toBe(false);
   });
 
   it("refuses to spend after the window has closed, or before it opens", async () => {
     const expired = createCandyStore(sql, { ...config, spendUntil: "2021-01-01T00:00:00Z" });
-    expect(await expired.spend(p1, "hpo-standard", randomBytes(8).toString("hex"))).toEqual({ status: "closed", reason: "expired" });
+    expect(await expired.spend(p1, "legends-standard", randomBytes(8).toString("hex"))).toEqual({ status: "closed", reason: "expired" });
     const early = createCandyStore(sql, { ...config, opensAt: "2098-01-01T00:00:00Z" });
-    expect(await early.spend(p1, "hpo-standard", randomBytes(8).toString("hex"))).toEqual({ status: "closed", reason: "not-open-yet" });
+    expect(await early.spend(p1, "legends-standard", randomBytes(8).toString("hex"))).toEqual({ status: "closed", reason: "not-open-yet" });
     expect(await packCount(p1)).toBe(0);
   });
 

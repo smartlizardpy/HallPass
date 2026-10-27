@@ -64,7 +64,7 @@ describe("the rewards", () => {
   it("keeps guaranteed cards and random slots apart, and gives the random slots no odds or card", () => {
     const [participation, , overall] = buildRewards(C, FRIGHT_FEST_GAMES);
     expect(participation.slots.map((s) => s.kind)).toEqual(["fixed", "random", "random"]);
-    expect(overall.slots.map((s) => s.kind)).toEqual(["fixed", "fixed", "random"]);
+    expect(overall.slots.map((s) => s.kind)).toEqual(["fixed", "random", "random"]);
     for (const s of [...participation.slots, ...overall.slots]) {
       if (s.kind === "random") expect(s).toEqual({ kind: "random" });
       else expect(s.card && s.rarity).toBeTruthy();

@@ -133,7 +133,7 @@ function GrantPanel({ nonce }: { nonce: string }) {
         <label className="text-xs font-bold">
           Pack
           <select name="pack" required className={`${INPUT} mt-1 font-normal`}>
-            {CATALOGUE.packs.map((p) => (
+            {CATALOGUE.packs.filter((p) => !p.closed).map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} ({p.id} v{currentVersion(p).v})
               </option>
@@ -352,7 +352,7 @@ function CataloguePanel() {
                         <tr key={c.id}>
                           <td className="py-1 pr-2">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={c.art.src} alt={c.art.alt} width={32} height={32} loading="lazy" style={{ imageRendering: "pixelated" }} className="h-8 w-8" />
+                            <img src={c.art.thumb ?? c.art.src} alt={c.art.alt} width={32} height={c.art.layout === "full" ? 45 : 32} loading="lazy" style={c.art.layout === "full" ? undefined : { imageRendering: "pixelated" }} className={c.art.layout === "full" ? "h-11 w-8 object-cover" : "h-8 w-8"} />
                           </td>
                           <td className="pr-2">{c.number}</td>
                           <td className="pr-2">

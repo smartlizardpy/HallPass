@@ -25,7 +25,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const collection = getCollection(card.collection)?.name ?? card.collection;
   return {
     title: card.name,
-    description: `${card.name}, a ${RARITY_LABEL[card.rarity].toLowerCase()} ${card.kind} from ${collection} on HallPass. ${card.caption}`,
+    description: `${card.name}, a ${RARITY_LABEL[card.rarity].toLowerCase()} ${card.kind} from ${collection} on HallPass.${card.caption ? ` ${card.caption}` : ""}`,
     alternates: { canonical: cardPath(card.id) },
   };
 }
@@ -45,7 +45,7 @@ export default async function CollectiblePage({ params }: { params: Promise<{ id
         </div>
         <div className="min-w-0">
           <h1 className="text-3xl font-black">{card.name}</h1>
-          <p className="mt-2 text-foreground-2">{card.caption}</p>
+          {card.caption && <p className="mt-2 text-foreground-2">{card.caption}</p>}
           <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
             <dt className="font-bold">Collection</dt>
             <dd>{collection}</dd>
