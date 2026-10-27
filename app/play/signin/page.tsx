@@ -23,6 +23,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth, signIn } from "@/app/lib/auth";
 import { safeRelativePath } from "@/app/lib/safe-redirect";
+import { getBoardPassMode } from "@/app/lib/boardpass/mode";
 import { Wordmark } from "@/app/components/Wordmark";
 
 export const metadata: Metadata = {
@@ -54,6 +55,8 @@ export default async function PlaySignInPage({
     safeRelativePath(callbackUrl, "/play/you"),
   )}`;
 
+  const boardPassOn = (await getBoardPassMode()) !== "off";
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-6 py-10">
       <div className="w-full max-w-md rounded-xl border border-border bg-surface p-8 text-center">
@@ -80,6 +83,14 @@ export default async function PlaySignInPage({
             Continue with Google
           </button>
         </form>
+        {boardPassOn && (
+          <p className="mt-4 text-sm text-muted">
+            On a school board?{" "}
+            <a href="/board" className="font-semibold underline">
+              Sign in with BoardPass
+            </a>
+          </p>
+        )}
       </div>
     </main>
   );
