@@ -1,7 +1,7 @@
 "use client";
 
 import { copy } from "@/app/lib/boardpass/copy";
-import { isFiltering, NO_FILTER, type CategoryCount, type LibraryFilter } from "./board-filter";
+import { isFiltering, NO_FILTER, type CategoryCount, type LibraryFilter } from "@/app/components/board/board-filter";
 
 /**
  * Category chips, search and Clear. Search opens the same on-screen keyboard panel

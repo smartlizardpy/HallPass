@@ -20,16 +20,16 @@ import type { RosterEntry } from "@/app/lib/boardpass/sessions";
 import {
   bindGame, endSession, fetchState, keepPlaying, login, removeParticipant,
   unbindGame, unbindOnExit, type BoardState, type LoginResult,
-} from "./board-client";
-import { BoardHeader } from "./BoardHeader";
-import { categoryCounts, filterGames, isFiltering, NO_FILTER, pickFeatured, type LibraryFilter } from "./board-filter";
+} from "@/app/components/board/board-client";
+import { BoardHeader } from "@/app/components/board/BoardHeader";
+import { categoryCounts, filterGames, isFiltering, NO_FILTER, pickFeatured, type LibraryFilter } from "@/app/components/board/board-filter";
 import { FeaturedStrip } from "./FeaturedStrip";
 import { GameCard } from "./GameCard";
-import { planLaunch } from "./launch-decision";
+import { planLaunch } from "@/app/components/board/launch-decision";
 import { LibraryControls } from "./LibraryControls";
-import { LoginWindow } from "./LoginWindow";
-import { Sheet } from "./Sheet";
-import { UsernameKeyboard } from "./UsernameKeyboard";
+import { LoginWindow } from "@/app/components/board/LoginWindow";
+import { Sheet } from "@/app/components/board/Sheet";
+import { UsernameKeyboard } from "@/app/components/board/UsernameKeyboard";
 
 const WARN_MS = 60_000;
 const MAX_WINDOWS = 4;

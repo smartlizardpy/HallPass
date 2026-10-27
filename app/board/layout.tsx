@@ -1,4 +1,4 @@
-import "./_ui/board.css";
+import "@/app/components/board/board.css";
 
 /**
  * Loads the scoped Board Mode theme. The styles hang off `.bp-root`, which
