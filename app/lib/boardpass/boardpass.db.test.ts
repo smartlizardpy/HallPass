@@ -12,7 +12,7 @@
 import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { neon } from "@neondatabase/serverless";
-import { dbTestEnabled } from "@/app/lib/db-test-support";
+import { dbTestConnection, dbTestEnabled } from "@/app/lib/db-test-support";
 
 vi.mock("server-only", () => ({}));
 
@@ -27,7 +27,7 @@ vi.mock("./flag", () => ({ getBoardPassMode: async () => "on" }));
 
 describe.skipIf(!dbTestEnabled)("BoardPass against Postgres", () => {
   const tag = randomBytes(4).toString("hex");
-  const sql = neon(process.env.DATABASE_URL ?? "");
+  const sql = neon(dbTestConnection);
   const pid = (n: number) => `zz-bp-${tag}-p${n}`;
   const sessions: string[] = [];
   let credentials: typeof import("./credentials");
