@@ -20,13 +20,13 @@ export interface CandyDates {
 export interface CandyLabels {
   /** "28 Oct" */
   opens: string;
-  /** "1 Nov": the last day of earning. */
+  /** "2 Nov": the last day of earning. */
   earnEnds: string;
   /** "30 Nov": the last day of spending. */
   spendEnds: string;
   /** "30 Nov 2026, 23:59 UK" */
   spendUntil: string;
-  /** "Wed 4 Nov": results are final by this day. */
+  /** "Thu 5 Nov": results are final by this day. */
   resultsBy: string;
 }
 
@@ -72,7 +72,7 @@ export function rankRange(from: number, to: number): string {
   return from === to ? ordinal(from) : `${ordinal(from)}–${ordinal(to)}`;
 }
 
-/** `resultsByLabel` is the championship summary's own ("Wed 4 Nov, 23:59"); the time of day is dropped, as the hall does. */
+/** `resultsByLabel` is the championship summary's own ("Thu 5 Nov, 23:59"); the time of day is dropped, as the hall does. */
 export function buildCandy(config: CandyConfig, resultsByLabel: string): CandyProps {
   const items = shopItems(0, config);
   const prices = Array.from(new Set(items.map((i) => i.price))).sort((a, b) => a - b);

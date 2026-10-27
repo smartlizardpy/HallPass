@@ -7,7 +7,7 @@
  * amount paid).
  *
  * THE EARNING WINDOW is the championship's own (`opensAt` to `closesAt`, UTC):
- * 28 Oct 00:00 to 2 Nov 00:00 UK. It is read from `FRIGHT_FEST_2026` rather than
+ * 28 Oct 00:00 to 3 Nov 00:00 UK. It is read from `FRIGHT_FEST_2026` rather than
  * retyped, so a moved championship moves the candy with it.
  *
  * DAILY BEST. Once per UK day per board, a signed-in player's best score that day

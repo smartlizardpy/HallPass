@@ -42,7 +42,7 @@ export interface ChampionshipSummary {
     opensDay: string;
     lastMinute: string;
     closesDay: string;
-    /** "1 Nov": the last day, without the weekday. */
+    /** "2 Nov": the last day, without the weekday. */
     closesDate: string;
     resultsBy: string;
     range: string;

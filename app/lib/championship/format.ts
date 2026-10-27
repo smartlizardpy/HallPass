@@ -58,8 +58,8 @@ export function formatDay(iso: string, timeZone: string): string {
 }
 
 /**
- * The last moment of an exclusive close, for copy: closesAt 2 Nov 00:00 reads
- * "Sun 1 Nov, 23:59". Saying "ends 2 Nov, 00:00" is accurate and confusing.
+ * The last moment of an exclusive close, for copy: closesAt 3 Nov 00:00 reads
+ * "Mon 2 Nov, 23:59". Saying "ends 3 Nov, 00:00" is accurate and confusing.
  */
 export function formatLastMinute(iso: string, timeZone: string): string {
   const ms = Date.parse(iso);
