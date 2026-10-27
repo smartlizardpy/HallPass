@@ -20,7 +20,7 @@
  */
 
 import type { ChampionshipConfig } from "./types";
-import { validateLastBell, validateShadowCoreCursedDash, validateSurviveTillDawnBloodMoon } from "./validators";
+import { validateLastBell, validateScpLockdownHaunting, validateSurviveTillDawnBloodMoon } from "./validators";
 
 export const FRIGHT_FEST_2026: ChampionshipConfig = {
   id: "fright-fest-2026",
@@ -31,7 +31,7 @@ export const FRIGHT_FEST_2026: ChampionshipConfig = {
   timeZone: "Europe/London",
   resultsBy: "2026-11-06T00:00:00Z",
   href: "/fright-fest",
-  // Longer than the longest ranked run any board allows (Cursed Dash caps at
+  // Longer than the longest ranked run any board allows (The Haunting caps at
   // 60 minutes), so no legitimate run outlives its token.
   tokenTtlSec: 75 * 60,
   submitGraceSec: 10 * 60,
@@ -40,7 +40,7 @@ export const FRIGHT_FEST_2026: ChampionshipConfig = {
     participation: "ff26-participation",
     gameChampion: {
       "last-bell": "ff26-winner-last-bell",
-      "shadow-core-halloween-dash": "ff26-winner-shadow-core",
+      "scp-lockdown": "ff26-winner-scp-lockdown",
       "survive-till-dawn-pixel-edition": "ff26-winner-survive-till-dawn",
     },
     overallChampion: "ff26-overall-winner",
@@ -68,24 +68,24 @@ export const FRIGHT_FEST_2026: ChampionshipConfig = {
       validate: validateLastBell,
     },
     {
-      slug: "shadow-core-halloween-dash",
-      board: "shadow-core-cursed-dash",
-      title: "Shadow Core: Halloween Dash",
-      mode: "Cursed Dash",
-      modeShort: "Cursed Dash",
+      slug: "scp-lockdown",
+      board: "scp-lockdown-haunting",
+      title: "SCP: Lockdown",
+      mode: "The Haunting",
+      modeShort: "Haunting",
       rules: "proposed",
       metric: {
         sort: "asc",
-        label: "Total time",
+        label: "Escape time",
         format: "ms-clock",
-        tiebreakLabel: "Deaths",
-        tiebreakSort: "asc",
+        tiebreakLabel: "Ghosts banished",
+        tiebreakSort: "desc",
         tiebreakFormat: "integer",
       },
       howToEnter:
-        "Sign in, open Shadow Core: Halloween Dash and choose Cursed Dash: all fifteen sectors in one run, against one clock.",
-      rankingRule: "Fastest total time through all fifteen sectors. Equal times are split by fewer deaths.",
-      validate: validateShadowCoreCursedDash,
+        "Sign in, open SCP: Lockdown and choose The Haunting from its Fright Fest modes. Everyone gets the same site layout and Normal difficulty. Solo only. The other Fright Fest modes stay open to play, unranked.",
+      rankingRule: "Escape fastest: find a Level 4 keycard and get out. Equal times are split by more ghosts banished.",
+      validate: validateScpLockdownHaunting,
     },
     {
       slug: "survive-till-dawn-pixel-edition",

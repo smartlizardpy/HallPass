@@ -4,7 +4,6 @@ import {
   SCP_HAUNTING,
   validateLastBell,
   validateScpLockdownHaunting,
-  validateShadowCoreCursedDash,
   validateSurviveTillDawnBloodMoon,
 } from "./validators";
 
@@ -59,33 +58,6 @@ describe("validateLastBell", () => {
   it("records the server's evidence for reviewers", () => {
     const r = lb();
     expect(r.checks).toMatchObject({ elapsedSec: 180, clockUsedSec: 168, gameTimeSec: 168.2, seed: 2026118 });
-  });
-});
-
-describe("validateShadowCoreCursedDash (proposed)", () => {
-  const splits = Array.from({ length: 15 }, () => 8_000);
-  const sc = (over: Record<string, unknown> = {}, score: unknown = 120_000, elapsedSec = 400) =>
-    validateShadowCoreCursedDash({
-      score,
-      meta: { event: "fright-fest-2026", mode: "cursed-dash", splits, deaths: 4, ...over },
-      elapsedSec,
-      startSeed: null,
-    });
-
-  it("accepts a consistent run, deaths break ties", () => {
-    expect(sc()).toMatchObject({ ok: true, score: 120_000, tiebreak: 4, flags: [] });
-  });
-  it("rejects the impossible", () => {
-    expect(sc({}, 1_000)).toMatchObject({ ok: false, reason: "bad-score" });
-    expect(sc({ mode: "normal" })).toMatchObject({ ok: false, reason: "wrong-mode" });
-    expect(sc({}, 120_000, 100)).toMatchObject({ ok: false, reason: "clock-faster-than-real-time" });
-    expect(sc({ splits: splits.map((s, i) => (i ? s : s + 500)) })).toMatchObject({ ok: false, reason: "splits-do-not-add-up" });
-  });
-  it("flags what it cannot check", () => {
-    expect(sc({ splits: undefined })).toMatchObject({ ok: true, flags: ["no-splits"] });
-    expect(sc({ splits: splits.map(() => 4_000) }, 60_000).ok && sc({ splits: splits.map(() => 4_000) }, 60_000)).toMatchObject({
-      flags: ["unusually-fast"],
-    });
   });
 });
 

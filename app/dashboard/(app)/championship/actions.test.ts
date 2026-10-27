@@ -94,8 +94,8 @@ describe("lineup", () => {
   it("only acts on games in the championship, with the actor from the session", async () => {
     await expect(gameAction(form({ action: "open-game", game: "neon-snake" }))).rejects.toThrow(/not in this championship/);
     h.setGameStatus.mockResolvedValue(true);
-    await expect(gameAction(form({ action: "open-game", game: "shadow-core-halloween-dash", actorEmail: "forged@x" }))).rejects.toThrow(/board opened/);
-    expect(h.setGameStatus).toHaveBeenCalledWith(expect.objectContaining({ actorEmail: "staff@hallpass", gameSlug: "shadow-core-halloween-dash" }));
+    await expect(gameAction(form({ action: "open-game", game: "scp-lockdown", actorEmail: "forged@x" }))).rejects.toThrow(/board opened/);
+    expect(h.setGameStatus).toHaveBeenCalledWith(expect.objectContaining({ actorEmail: "staff@hallpass", gameSlug: "scp-lockdown" }));
     await expect(gameAction(form({ action: "withdraw-game", game: "last-bell" }))).rejects.toThrow(/Give a reason/);
   });
 });

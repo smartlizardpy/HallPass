@@ -110,52 +110,6 @@ export function validateLastBell({ score, meta, elapsedSec, startSeed }: Validat
   };
 }
 
-// ── Shadow Core: Halloween Dash — Cursed Dash (PROPOSED) ────────────────────
-//
-// The game has no such mode yet (docs/championship-design.md §2.2). Proposed:
-// all 15 sectors in one continuous run, total time in ms (lower is better),
-// per-sector splits and deaths in `meta`. The board stays `pending` until the
-// game sends exactly this and an admin opens it.
-
-export const SHADOW_CORE = {
-  sectors: 15,
-  /** Hard floor: 2 s per sector. Real data should raise it. */
-  minTotalMs: 30_000,
-  /** Below this a run is held for review until real times are known. */
-  reviewBelowMs: 90_000,
-  maxTotalMs: 3_600_000,
-  splitToleranceMs: 15,
-} as const;
-
-export function validateShadowCoreCursedDash({ score, meta, elapsedSec }: ValidationInput): ValidationResult {
-  const s = int(score);
-  const deaths = int(meta.deaths);
-  const splits = Array.isArray(meta.splits) ? meta.splits.map(int) : null;
-  const sum = splits && splits.every((x) => x !== null && x >= 0) ? (splits as number[]).reduce((a, b) => a + b, 0) : null;
-  const checks: Checks = {
-    elapsedSec: round2(elapsedSec),
-    totalMs: s,
-    splitCount: splits ? splits.length : null,
-    splitSumMs: sum,
-    deaths,
-  };
-
-  if (s === null || s < SHADOW_CORE.minTotalMs || s > SHADOW_CORE.maxTotalMs) return reject("bad-score", checks);
-  if (meta.event !== EVENT_ID) return reject("wrong-event", checks);
-  if (meta.mode !== "cursed-dash") return reject("wrong-mode", checks);
-  if (s / 1000 > elapsedSec + LATENCY_SLACK_SEC) return reject("clock-faster-than-real-time", checks);
-  if (splits && splits.length === SHADOW_CORE.sectors && sum !== null && Math.abs(sum - s) > SHADOW_CORE.splitToleranceMs) {
-    return reject("splits-do-not-add-up", checks);
-  }
-
-  const flags: string[] = clientFlags(meta).map((f) => `game:${f}`);
-  if (!splits || splits.length !== SHADOW_CORE.sectors || sum === null) flags.push("no-splits");
-  if (deaths === null || deaths < 0) flags.push("no-deaths");
-  if (s < SHADOW_CORE.reviewBelowMs) flags.push("unusually-fast");
-
-  return { ok: true, score: s, tiebreak: deaths !== null && deaths >= 0 ? deaths : null, flags, checks };
-}
-
 // ── SCP: Lockdown — The Haunting (PROPOSED) ─────────────────────────────────
 //
 // The game has no such mode yet (the developer builds it). Proposed: find a

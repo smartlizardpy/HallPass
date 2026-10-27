@@ -182,7 +182,17 @@ describe("toPublicStandings", () => {
     const p = toPublicStandings(s, { board: 25, overall: 50 });
     expect(p.boards.map((b) => b.slug)).toEqual(["last-bell"]);
     expect(p.pendingGames).toBe(2);
-    expect(JSON.stringify(p)).not.toMatch(/shadow|survive|Cursed|Blood Moon/i);
+    expect(JSON.stringify(p)).not.toMatch(/scp|lockdown|haunting|survive|Blood Moon/i);
+  });
+  it("ignores a stored game row the config no longer lists (the retired shadow-core row)", () => {
+    const stale = pending("shadow-core-halloween-dash");
+    const s = buildStandings(C, "live", [open("last-bell"), stale], [run("last-bell", "a", 300, 1)]);
+    expect(s.boards.map((b) => b.slug)).toEqual(C.games.map((g) => g.slug));
+    expect(s.lineupFinal).toBe(false);
+    expect(JSON.stringify(toPublicStandings(s, { board: 25, overall: 50 }))).not.toMatch(/shadow/i);
+    // Once every configured game has moved on, a stale pending row must not hold the lineup open.
+    const opened = buildStandings(C, "live", [...C.games.map((g) => open(g.slug)), stale], []);
+    expect(opened.lineupFinal).toBe(true);
   });
   it("applies the limits", () => {
     const s = buildStandings(C, "live", [open("last-bell")], [run("last-bell", "a", 3, 1), run("last-bell", "b", 2, 1), run("last-bell", "c", 1, 1)]);
