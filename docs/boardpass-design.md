@@ -70,10 +70,17 @@ Switch it at `/dashboard/boardpass` (super admin).
 ## Known limits
 
 - Games run **un-sandboxed on our origin**. PIN entry therefore exists only in
-  the lobby: login windows unmount before a game frame mounts, and `/board` is
-  `X-Frame-Options: DENY` + `frame-ancestors 'none'`. A hostile same-origin game
-  could still forge a referrer and rebind or end the session (the limit
-  `app/lib/social/origin.ts` already documents). It cannot read a PIN.
+  the board's own windows: they unmount before a game frame mounts. Board Mode
+  now lives on the homepage (the standalone `/board` page was removed), which is
+  static, cacheable and frameable, so the old page-level `X-Frame-Options: DENY`,
+  `frame-ancestors 'none'`, `noindex` and `no-store` no longer apply. In their
+  place `BoardProvider` renders nothing when `window.top !== window.self`. That
+  guard is client-side, so it stops a page that frames the homepage and is not a
+  substitute for the header; a hostile same-origin game could still script the
+  homepage in a frame it controls, and could forge a referrer to rebind or end the
+  session (the limit `app/lib/social/origin.ts` already documents). Nothing
+  server-side changed. Restoring the header would mean making `/` dynamic, which
+  drops it from the service-worker precache.
 - Cross-origin external games never receive the cookie: their scores are anonymous.
 - Local 2-player games credit the one chosen player; per-seat credit is deferred.
 - English only; every string is in `app/lib/boardpass/copy.ts` for translation.

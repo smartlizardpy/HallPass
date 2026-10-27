@@ -1,7 +1,14 @@
 # BoardPass UI — design specification ("Arcade Wall")
 
 Direction and rationale: `boardpass-ui-research.md`. Backend contract:
-`boardpass-design.md`. This file is the build contract for the `/board` UI. Nothing
+`boardpass-design.md`. This file is the build contract for the Board Mode UI. **Update:** the standalone
+`/board` page, its game grid, hero and filters have been removed. Board Mode is now a
+panel on the homepage: a header "Board Mode" button (and `/?board=1`) opens a bar
+under the site header with the player dock, Add Player and End Session; sign-in
+windows, the separate keyboard, "Who's playing?" and the board game overlay are
+client-only and loaded on demand. Sections below that describe the grid, featured
+strip, search and filters describe the removed page and are kept as design history.
+The window, keyboard, dock, sheet and overlay specifications still apply. Nothing
 here changes an API route, the session schema, cookies or auth rules.
 
 ## 1. Principles

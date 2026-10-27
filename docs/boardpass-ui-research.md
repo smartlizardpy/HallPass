@@ -1,6 +1,6 @@
 # BoardPass UI — research and direction
 
-Scope: a redesign of the `/board` lobby for shared classroom smartboards
+Note: the `/board` page this research describes has since been folded into the homepage (see `boardpass-ui-spec.md`). Scope: a redesign of the `/board` lobby for shared classroom smartboards
 (1920×1080 and 1366×768, touch first, no physical keyboard). This document records
 what was inspected, what was learned, what we chose and why. The build contract is
 in `boardpass-ui-spec.md`. Backend, API and session rules are **not** in scope and
