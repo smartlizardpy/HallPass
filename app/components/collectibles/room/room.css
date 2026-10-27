@@ -534,6 +534,11 @@ html[data-hp-skin="haunted"] .pr-loop[data-season="haunted"] {
   height: auto;
   image-rendering: pixelated;
 }
+.pr-mini img[data-full] {
+  height: 84%;
+  object-fit: cover;
+  image-rendering: auto;
+}
 .pr-mini b {
   display: block;
   height: 4px;

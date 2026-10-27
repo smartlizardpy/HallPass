@@ -77,16 +77,16 @@ export const CANDY_FRIGHT_FEST_2026: CandyConfig = {
   spendUntil: "2026-12-01T00:00:00Z",
   spendUntilLabel: "30 Nov 2026, 23:59 UK",
   prices: {
-    // The four everyday packs, as they are.
-    "hpo-standard": 30,
-    "inet-standard": 30,
-    "brr-standard": 30,
-    "tr-standard": 30,
+    // The four everyday packs of the curated collections, same price as before the catalogue import.
+    "legends-standard": 30,
+    "brainrot-standard": 30,
+    "turkish-standard": 30,
+    "gaming-standard": 30,
     // The four Rare packs.
-    "hpo-rare": 100,
-    "inet-rare": 100,
-    "brr-rare": 100,
-    "tr-rare": 100,
+    "legends-rare": 100,
+    "brainrot-rare": 100,
+    "turkish-rare": 100,
+    "gaming-rare": 100,
   },
   rankedRun: 10,
   allBoards: 20,

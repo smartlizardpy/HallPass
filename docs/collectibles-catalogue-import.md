@@ -74,6 +74,8 @@ The catalogue is **code** (`app/lib/collectibles/catalogue/`); player rows refer
 * Asset names carry a content hash (cache-safe). PNG→WebP q86; the animated `brainrot-whaaa` (6 MB, 158 frames) is re-encoded to 3.8 MB and its thumb is a still frame. Pack wrappers/emblems/symbols for the four new collections are **copies of the old wrappers** (inet→legends, brr→brainrot, tr→turkish, hpo→gaming): new wrapper art is still wanted.
 * Rights: the manifest still says `needs_clearance` for most cards; the owner confirmed on 27 Oct that all curated cards are cleared. The text is kept in `curated-map.json` unchanged. No card is gated on it.
 
+* **Candy shop**: `app/lib/candy/fright-fest-2026.ts` now prices the new `legends|brainrot|turkish|gaming` -standard (30) and -rare (100) packs and no longer the closed demo ones. Prices are unchanged.
+
 ## Balance (real roller, 400 simulated players per pack; odds not adjusted)
 
 Packs to complete the whole pool: ff26 participation median 35 (p90 67); legends standard 160 (p90 354) / rare 46; brainrot 20 / 27; turkish 27 / 22; gaming 12 / 20. Legends is hard to complete because its 1% Legendary is split across three cards.
