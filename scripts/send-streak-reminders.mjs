@@ -20,7 +20,7 @@
  * must not do is quietly report "nobody due" every hour for ever.
  *
  * ── THE QUIET RUNS ARE THE COMMON CASE ─────────────────────────────────────
- * A player's reminder hour is 17:00 where THEY are, so most hours only a slice
+ * A player's reminder window is 17:00-20:59 where THEY are, so most hours only a slice
  * of the world is due, and some hours nobody is. A quiet run still prints its
  * counts so "why did nobody get one?" is answerable from the log.
  *
@@ -118,7 +118,7 @@ if (dryRun) {
 }
 if (body.capped) {
   // More players were due than one run will send to; the rest miss today's
-  // reminder (their 17:00 hour has passed by the next run). See the route.
+  // reminder if their window closes before a later run reaches them. See the route.
   annotate(
     "warning",
     `More than ${body.cap} players were due this hour; only the first ${body.cap} were processed.`,

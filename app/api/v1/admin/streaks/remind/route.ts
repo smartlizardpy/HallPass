@@ -87,16 +87,18 @@ export async function POST(req: Request): Promise<Response> {
     return alertsError("Could not read who is due a reminder", 500);
   }
 
-  // THE PER-RUN CAP, AND WHAT IT COSTS. A player's reminder hour is 17:00 local,
-  // so one run reaches only the slice of players whose offset puts them in that
-  // hour, and the runner knocks once an hour. Players past the cap are NOT picked
-  // up later: next hour a different slice is in its 17:00, and theirs has passed,
-  // so they miss that day's reminder. `ORDER BY player_id` also means the same
-  // players are always first in line. That is the right trade at this scale — a
-  // runaway query or a leaked secret cannot fan out unbounded pushes — but it is a
-  // real ceiling, which is why `capped` is reported and the runner warns. If one
-  // offset's slice ever approaches the cap, raise it (and `maxDuration`) or fan
-  // out across several runs rather than ignoring the warning.
+  // THE PER-RUN CAP, AND WHAT IT COSTS. A player's reminder window is 17:00-20:59
+  // local, so one run reaches the players whose offsets put them inside it, and
+  // the runner knocks about once an hour. Players past the cap are claimed by
+  // nobody this run, so they stay due and are picked up by the next run while
+  // their window is still open (a claimed player drops out of the query). They
+  // only miss the day if the window closes first. `ORDER BY player_id` means the
+  // same players are always first in line, so a persistently over-cap slice
+  // starves the tail. That is the right trade at this scale — a runaway query or
+  // a leaked secret cannot fan out unbounded pushes — but it is a real ceiling,
+  // which is why `capped` is reported and the runner warns. If a slice ever
+  // approaches the cap, raise it (and `maxDuration`) rather than ignoring the
+  // warning.
   const capped = due.length > REMINDER_RUN_CAP;
   due = due.slice(0, REMINDER_RUN_CAP);
 
