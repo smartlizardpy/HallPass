@@ -65,15 +65,15 @@ describe("detectMobileOs", () => {
 });
 
 describe("escapeUrlFor", () => {
-  const url = "https://hallpass.gg/c/CDFGHJKMNP";
+  const url = "https://hallpass.games/c/CDFGHJKMNP";
 
   it("prefixes the undocumented Safari scheme on iOS", () => {
-    expect(escapeUrlFor("ios", url)).toBe("x-safari-https://hallpass.gg/c/CDFGHJKMNP");
+    expect(escapeUrlFor("ios", url)).toBe("x-safari-https://hallpass.games/c/CDFGHJKMNP");
   });
 
   it("builds an intent with a fallback so a Chrome-less device still lands", () => {
     const intent = escapeUrlFor("android", url);
-    expect(intent).toContain("intent://hallpass.gg/c/CDFGHJKMNP");
+    expect(intent).toContain("intent://hallpass.games/c/CDFGHJKMNP");
     expect(intent).toContain("scheme=https");
     expect(intent).toContain("package=com.android.chrome");
     // Without this an Android with no Chrome gets an error page instead of a game.
@@ -92,7 +92,7 @@ describe("escapeUrlFor", () => {
    */
   it("refuses anything that is not an absolute https URL", () => {
     expect(escapeUrlFor("ios", "/c/CDFGHJKMNP")).toBeNull();
-    expect(escapeUrlFor("ios", "http://hallpass.gg/c/X")).toBeNull();
+    expect(escapeUrlFor("ios", "http://hallpass.games/c/X")).toBeNull();
     expect(escapeUrlFor("android", "javascript:alert(1)")).toBeNull();
     expect(escapeUrlFor("ios", "")).toBeNull();
   });

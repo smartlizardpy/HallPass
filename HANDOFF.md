@@ -212,7 +212,7 @@ Names and signatures are as written in section 4 unless listed here.
    all — needs TURN), `P2P_DISABLED=1` (kill switch).
 5. **Deploy.** `prebuild` rebuilds `public/sdk/p2p/v1/` (also committed).
 6. **Manual test** from the brief: two people on different networks (home Wi-Fi
-   + phone hotspot) open `https://hallpass.gg/sdk/p2p/demo/index.html`, create
+   + phone hotspot) open `https://hallpass.games/sdk/p2p/demo/index.html`, create
    and join, move dots, chat, try voice. Then with "relay only" ticked: Stats
    should show `relay: true`. Try "Test connection" on a school network.
 7. **LAST BELL:** copy `hallpass-p2p.js` (+ `.d.ts`) into its `lib/`, use

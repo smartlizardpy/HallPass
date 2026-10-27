@@ -127,7 +127,7 @@ to the served URL path (`v1` → `/sdk/v1/hallpass.js`).
 ### Added
 
 - Initial public release of the browser SDK, served as a dependency-free IIFE
-  from `https://hallpass.gg/sdk/v1/hallpass.js`.
+  from `https://hallpass.games/sdk/v1/hallpass.js`.
 - Inline bootstrap stub that queues early calls and replays them once the real
   SDK loads, settling safely after 2s if it never does.
 - `window.HallPass` global (aliased `window.HP`) implementing the frozen

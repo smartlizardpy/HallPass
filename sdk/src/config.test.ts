@@ -53,13 +53,13 @@ describe("resolveConfig", () => {
   it("derives the api from the script origin when nothing overrides it", () => {
     const script = makeScript({
       "data-game": "snake",
-      src: "https://hallpass.gg/sdk/v1/hallpass.js",
+      src: "https://hallpass.games/sdk/v1/hallpass.js",
     });
 
     const result = resolveConfig(script);
 
     expect(result.game).toBe("snake");
-    expect(result.api).toBe("https://hallpass.gg");
+    expect(result.api).toBe("https://hallpass.games");
   });
 
   it("falls back to the page origin and a null game with no script", () => {

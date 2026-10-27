@@ -5,7 +5,7 @@
  * scores (the override stored in `players.handle`; clearing it reverts the
  * effective display to their Google name). This is a CREDENTIALED action keyed
  * by the Auth.js session cookie, so it is SAME-ORIGIN only: a player edits their
- * handle from hallpass.gg, where the cookie is attached. No verified session →
+ * handle from hallpass.games, where the cookie is attached. No verified session →
  * `401`.
  *
  * CORS, deliberately minimal: this is a same-origin, cookie-credentialed write,
