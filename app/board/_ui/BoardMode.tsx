@@ -56,7 +56,7 @@ export function BoardMode({ games }: { games: Game[] }) {
   }
 
   return (
-    <div className="bp-root">
+    <div className="bp-root bp-page">
       <BoardHeader
         roster={roster}
         loading={loading}
@@ -193,7 +193,7 @@ export function BoardMode({ games }: { games: Game[] }) {
 
 function Centered({ title, body }: { title: string; body: string }) {
   return (
-    <main className="bp-root bp-centered">
+    <main className="bp-root bp-page bp-centered">
       <div className="max-w-md space-y-2">
         <h1 className="text-3xl font-black">{title}</h1>
         <p className="text-lg" style={{ color: "var(--bp-muted)" }}>{body}</p>

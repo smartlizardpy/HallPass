@@ -28,6 +28,7 @@ export const copy = {
 
   // ── Board mode ─────────────────────────────────────────────────────────────
   boardMode: "Board Mode",
+  closeBoard: "Close Board Mode",
   addPlayer: "Add Player",
   removePlayer: "Remove player",
   endSession: "End Session",

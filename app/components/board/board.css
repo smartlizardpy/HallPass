@@ -23,15 +23,20 @@
   --bp-margin: clamp(24px, 3.4vw, 64px);
   --bp-gap: 20px;
 
+  color: var(--bp-text);
+  color-scheme: dark;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* The full-page lobby paint. Only the standalone page uses it; the board panel
+   on the homepage is `.bp-root` alone, so it never repaints the site behind it. */
+.bp-page {
   min-height: 100dvh;
   background:
     radial-gradient(1200px 520px at 15% -10%, rgb(124 46 239 / 0.22), transparent 70%),
     radial-gradient(900px 420px at 100% 0%, rgb(255 79 139 / 0.08), transparent 70%),
     var(--bp-bg);
-  color: var(--bp-text);
-  color-scheme: dark;
-  font-family: var(--font-sans, system-ui, sans-serif);
-  -webkit-tap-highlight-color: transparent;
 }
 
 @media (max-width: 1365px) {
@@ -89,6 +94,23 @@
   background: rgb(14 10 26 / 0.92);
   border-bottom: 1px solid var(--bp-line);
 }
+
+/* The panel on the homepage: a bar that sticks just under the site header
+   (64px, 80px from the `sm` breakpoint), so the players stay reachable. */
+.bp-bar {
+  position: sticky;
+  top: 64px;
+  z-index: 35;
+  padding: 10px clamp(12px, 2vw, 32px);
+  background: rgb(14 10 26 / 0.96);
+  border-bottom: 1px solid var(--bp-line);
+}
+@media (min-width: 640px) { .bp-bar { top: 80px; } }
+.bp-bar-row { display: flex; align-items: center; gap: 16px; }
+.bp-bar .bp-banner { margin: 10px 0 0; }
+/* Floating windows, keyboard and sheets: they are position:fixed, so their
+   wrapper only has to carry the tokens and must not take part in layout. */
+.bp-layer { display: contents; }
 
 .bp-modechip {
   padding: 6px 12px;
@@ -440,6 +462,8 @@
 @keyframes bp-shimmer { to { background-position: -200% 0; } }
 
 @media (max-width: 899px) {
+  .bp-bar-row { flex-wrap: wrap; gap: 12px; }
+  .bp-bar .bp-dock { order: 3; flex-basis: 100%; }
   .bp-header { flex-wrap: wrap; gap: 12px; }
   .bp-dock { order: 3; flex-basis: 100%; }
   .bp-featured { grid-template-columns: 1fr; height: auto; padding: 20px; }
