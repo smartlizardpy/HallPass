@@ -11,116 +11,29 @@
  * Keep Playing tap (or a real score from the chosen player) does.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import posthog from "posthog-js";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PlayerOverlay } from "@/app/components/PlayerOverlay";
 import { copy } from "@/app/lib/boardpass/copy";
 import type { Game } from "@/app/lib/games";
-import type { RosterEntry } from "@/app/lib/boardpass/sessions";
-import {
-  bindGame, endSession, fetchState, keepPlaying, login, removeParticipant,
-  unbindGame, unbindOnExit, type BoardState, type LoginResult,
-} from "@/app/components/board/board-client";
 import { BoardHeader } from "@/app/components/board/BoardHeader";
 import { categoryCounts, filterGames, isFiltering, NO_FILTER, pickFeatured, type LibraryFilter } from "@/app/components/board/board-filter";
 import { FeaturedStrip } from "./FeaturedStrip";
 import { GameCard } from "./GameCard";
-import { planLaunch } from "@/app/components/board/launch-decision";
 import { LibraryControls } from "./LibraryControls";
 import { LoginWindow } from "@/app/components/board/LoginWindow";
 import { Sheet } from "@/app/components/board/Sheet";
 import { UsernameKeyboard } from "@/app/components/board/UsernameKeyboard";
-
-const WARN_MS = 60_000;
-const MAX_WINDOWS = 4;
-const MAX_PLAYERS = 8;
-const CHANNEL = "hallpass-boardpass";
-
-type Playing = { game: Game; who: RosterEntry };
+import { useBoardSession } from "@/app/components/board/useBoardSession";
 
 export function BoardMode({ games }: { games: Game[] }) {
-  const [state, setState] = useState<BoardState>({ state: "loading" });
-  const [skew, setSkew] = useState(0);
-  const [offline, setOffline] = useState(false);
-  // Window order IS stacking order: the last one is on top (see `focusWindow`).
-  const [windows, setWindows] = useState<{ id: number; username: string }[]>([]);
-  // What the on-screen keyboard is editing: one sign-in window's username, or the search.
-  const [kbd, setKbd] = useState<{ kind: "window"; id: number } | { kind: "search" } | null>(null);
+  const b = useBoardSession();
+  const {
+    state, loading, offline, roster, newestId, endsBy, addDisabledReason, windows, kbd, setKbd, kbdWindow,
+    openWindow, closeWindow, focusWindow, setUsername, submitLogin, pick, setPick, playing, confirmEnd,
+    setConfirmEnd, warning, notice, setNotice, launch, choose, closeGame, remove, end, stillHere,
+  } = b;
   const [filter, setFilter] = useState<LibraryFilter>(NO_FILTER);
-  const [newestId, setNewestId] = useState<string | null>(null);
-  const [pick, setPick] = useState<Game | null>(null);
-  const [playing, setPlaying] = useState<Playing | null>(null);
-  const [confirmEnd, setConfirmEnd] = useState(false);
-  const [warning, setWarning] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const nextId = useRef(1);
-  const knownIds = useRef<Set<string>>(new Set());
-  const seeded = useRef(false);
-  const queue = useRef<Promise<unknown>>(Promise.resolve());
-  const channel = useRef<BroadcastChannel | null>(null);
-  const hadSession = useRef(false);
   const autoOpened = useRef(false);
-
-  const refresh = useCallback(async (): Promise<BoardState | null> => {
-    const next = await fetchState();
-    if (!next) {
-      setOffline(true);
-      return null;
-    }
-    setOffline(false);
-    if (next.state === "active") {
-      setSkew(Date.parse(next.session.now) - Date.now());
-      hadSession.current = true;
-    } else if (hadSession.current) {
-      // The session is gone (expiry, ended in another tab, or revoked): nothing
-      // from it may stay on screen for the next group.
-      hadSession.current = false;
-      setNotice(copy.sessionExpired);
-      setWindows([]);
-      setKbd(null);
-      setPick(null);
-      setConfirmEnd(false);
-    }
-    setState(next);
-    return next;
-  }, []);
-
-  const changed = useCallback(() => {
-    try { channel.current?.postMessage("changed"); } catch { /* tab sync is best effort */ }
-  }, []);
-
-  // Initial read, tab sync, and refetch when the tab is visible again.
-  useEffect(() => {
-    void refresh();
-    try {
-      const bc = new BroadcastChannel(CHANNEL);
-      bc.onmessage = () => void refresh();
-      channel.current = bc;
-    } catch { /* no BroadcastChannel: the visibility refetch still covers it */ }
-    const vis = () => document.visibilityState === "visible" && void refresh();
-    const online = () => void refresh();
-    document.addEventListener("visibilitychange", vis);
-    window.addEventListener("online", online);
-    window.addEventListener("pagehide", unbindOnExit);
-    return () => {
-      document.removeEventListener("visibilitychange", vis);
-      window.removeEventListener("online", online);
-      window.removeEventListener("pagehide", unbindOnExit);
-      channel.current?.close();
-    };
-  }, [refresh]);
-
-  const session = state.state === "active" ? state.session : null;
-  const roster = useMemo(() => session?.participants ?? [], [session]);
-
-  // Mark a player who just joined so the dock can welcome them with a brief pop.
-  useEffect(() => {
-    if (state.state === "loading") return;
-    const fresh = seeded.current ? roster.find((p) => !knownIds.current.has(p.id)) : undefined;
-    seeded.current = true; // players already signed in on page load don't "arrive"
-    knownIds.current = new Set(roster.map((p) => p.id));
-    if (fresh) setNewestId(fresh.id);
-  }, [roster, state.state]);
 
   // First visit with nobody signed in: open one window so the screen isn't blank.
   useEffect(() => {
@@ -128,142 +41,12 @@ export function BoardMode({ games }: { games: Game[] }) {
       autoOpened.current = true;
       openWindow();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.state]);
-
-  // The session ended under a running game: close the game.
-  useEffect(() => {
-    if (playing && state.state !== "active" && state.state !== "loading") setPlaying(null);
-  }, [playing, state.state]);
-
-  // Countdown: when the warning is due, RE-READ first — a score during a game
-  // extends the session server-side, so the client's copy may be stale — and only
-  // warn if it is still about to end. At expiry, re-read to show the notice.
-  useEffect(() => {
-    setWarning(false);
-    if (!session) return;
-    const end = Math.min(Date.parse(session.idleExpiresAt), Date.parse(session.absoluteExpiresAt));
-    const inMs = end - (Date.now() + skew);
-    const t = setTimeout(
-      async () => {
-        const next = await refresh();
-        if (next?.state === "active") {
-          const e = Math.min(Date.parse(next.session.idleExpiresAt), Date.parse(next.session.absoluteExpiresAt));
-          if (e - (Date.now() + skew) <= WARN_MS + 1500) setWarning(true);
-        }
-      },
-      Math.max(0, inMs - WARN_MS),
-    );
-    const t2 = setTimeout(() => void refresh(), Math.max(0, inMs) + 800);
-    return () => { clearTimeout(t); clearTimeout(t2); };
-  }, [session, skew, refresh]);
-
-  function openWindow() {
-    setWindows((w) => (w.length >= MAX_WINDOWS ? w : [...w, { id: nextId.current++, username: "" }]));
-  }
-  const closeWindow = (id: number) => {
-    setWindows((w) => w.filter((x) => x.id !== id));
-    setKbd((k) => (k?.kind === "window" && k.id === id ? null : k));
-  };
-  // Raise a window by moving it to the end; its z-index is derived from position.
-  const focusWindow = (id: number) =>
-    setWindows((w) => (w[w.length - 1]?.id === id ? w : [...w.filter((x) => x.id !== id), ...w.filter((x) => x.id === id)]));
-  const setUsername = (id: number, username: string) =>
-    setWindows((w) => w.map((x) => (x.id === id ? { ...x, username } : x)));
-
-  // Logins go through ONE queue, so two windows submitted together can't both
-  // create a session; the second joins the first.
-  function submitLogin(username: string, pin: string): Promise<LoginResult> {
-    const run = queue.current.then(() => login(username, pin));
-    queue.current = run.catch(() => {});
-    return run.then(async (r) => {
-      posthog.capture(r.ok ? "boardpass_login_succeeded" : "boardpass_login_failed", r.ok ? undefined : { reason: r.error });
-      if (r.ok) {
-        setNotice(null);
-        await refresh();
-        changed();
-      } else if (r.error === "google-session") {
-        await refresh();
-      }
-      return r;
-    });
-  }
-
-  async function launch(game: Game, who: RosterEntry) {
-    setPick(null);
-    let r = await bindGame(who.id, game.slug);
-    if (r === "busy") {
-      await unbindGame(); // a stale binding from a closed tab
-      r = await bindGame(who.id, game.slug);
-    }
-    if (r !== "ok") {
-      setNotice(
-        r === "network" ? copy.reconnecting : r === "gone" ? copy.sessionExpired : copy.launchFailed,
-      );
-      await refresh();
-      return;
-    }
-    setWindows([]); // PIN entry never shares a screen with a game
-    setKbd(null);
-    setPlaying({ game, who });
-    posthog.capture("boardpass_game_launched", { game_slug: game.slug, players: roster.length });
-    void refresh();
-  }
-
-  function choose(game: Game) {
-    const plan = planLaunch(roster);
-    if (plan.kind === "needs-player") {
-      setNotice(copy.nobodyYet);
-      if (windows.length === 0) openWindow();
-    } else if (plan.kind === "launch") {
-      void launch(game, plan.who);
-    } else {
-      setPick(game);
-    }
-  }
-
-  const closeGame = useCallback(async () => {
-    setPlaying(null);
-    await unbindGame();
-    await refresh();
-  }, [refresh]);
-
-  async function remove(id: string) {
-    await removeParticipant(id);
-    changed();
-    await refresh();
-  }
-  async function end() {
-    setConfirmEnd(false);
-    await endSession();
-    posthog.capture("boardpass_session_ended");
-    setWindows([]);
-    setKbd(null);
-    changed();
-    await refresh();
-  }
-  async function stillHere() {
-    await keepPlaying();
-    setWarning(false);
-    changed();
-    await refresh();
-  }
+  }, [state.state, playing, openWindow]);
 
   const featured = useMemo(() => pickFeatured(games), [games]);
   const categories = useMemo(() => categoryCounts(games), [games]);
   const shown = useMemo(() => filterGames(games, filter), [games, filter]);
   const filtering = isFiltering(filter);
-  const endsBy = session
-    ? new Date(session.absoluteExpiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-    : null;
-  const addDisabledReason =
-    roster.length >= MAX_PLAYERS
-      ? copy.addPlayerFull
-      : windows.length >= MAX_WINDOWS || roster.length + windows.length >= MAX_PLAYERS
-        ? copy.addPlayerWindows
-        : null;
-  const kbdWindow = kbd?.kind === "window" ? windows.find((w) => w.id === kbd.id) : undefined;
-  const loading = state.state === "loading";
 
   if (state.state === "unavailable") {
     return <Centered title={copy.brand} body={copy.unavailable} />;
