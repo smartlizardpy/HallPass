@@ -68,12 +68,7 @@ function isPrivatePath(pathname) {
     // STAGED game it is per-viewer too (a tester sees the card, everyone else
     // "run out"), so a cached copy could show one person's answer to the next
     // on a shared machine. Never stored, like the challenge picker above.
-    pathname.startsWith("/i/") ||
-    // The shared school board. It holds PIN entry and the roster of who is signed
-    // in on that screen, and the next student to use the machine must never be
-    // served the last session's page from the shared cache.
-    pathname === "/board" ||
-    pathname.startsWith("/board/")
+    pathname.startsWith("/i/")
   );
 }
 /* @pure-end */

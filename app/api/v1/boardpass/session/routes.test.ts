@@ -55,7 +55,7 @@ const UUID = "123e4567-e89b-42d3-a456-426614174000";
 
 function req(method: string, path: string, opts: { body?: unknown; referer?: string | null; type?: string | null } = {}) {
   const headers = new Headers();
-  const referer = opts.referer === undefined ? `${ORIGIN}/board` : opts.referer;
+  const referer = opts.referer === undefined ? `${ORIGIN}/` : opts.referer;
   if (referer) headers.set("referer", referer);
   const type = opts.type === undefined ? "application/json" : opts.type;
   if (type) headers.set("content-type", type);
@@ -109,7 +109,7 @@ describe("origin and content type", () => {
   });
   it("refuses no referrer and a foreign referrer", async () => {
     expect((await login(req("POST", "/x", { body, referer: null }))).status).toBe(403);
-    expect((await login(req("POST", "/x", { body, referer: "https://evil.example/board" }))).status).toBe(403);
+    expect((await login(req("POST", "/x", { body, referer: "https://evil.example/" }))).status).toBe(403);
   });
   it("refuses a non-JSON content type (what a cross-site form sends)", async () => {
     const res = await login(req("POST", "/x", { body, type: "application/x-www-form-urlencoded" }));
@@ -160,7 +160,7 @@ describe("POST participants (login)", () => {
   it("a malformed body is the generic 401", async () => {
     const r = new Request(`${ORIGIN}/x`, {
       method: "POST",
-      headers: { referer: `${ORIGIN}/board`, "content-type": "application/json" },
+      headers: { referer: `${ORIGIN}/`, "content-type": "application/json" },
       body: "{not json",
     });
     expect((await login(r)).status).toBe(401);

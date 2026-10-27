@@ -84,19 +84,6 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // THE SHARED BOARD (BoardPass). Never indexed, never cached, and above all
-        // NEVER FRAMED: the page holds PIN entry, and a game on our own origin
-        // must not be able to embed it and read it. `frame-ancestors 'none'` is
-        // the modern half, `X-Frame-Options: DENY` the legacy one.
-        source: "/board/:path*",
-        headers: [
-          { key: "X-Robots-Tag", value: "noindex, nofollow, noimageindex, noarchive" },
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
-          { key: "Cache-Control", value: "private, no-store" },
-        ],
-      },
-      {
         // CHALLENGE LINKS ARE NEVER INDEXED — and, exactly like `/u/:path*`,
         // they are deliberately NOT disallowed in `robots.txt`. A `Disallow`
         // would stop the crawler FETCHING the page and therefore ever seeing

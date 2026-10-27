@@ -26,8 +26,6 @@ describe("isPrivatePath", () => {
       "/embed/challenge",
       "/embed/invite",
       "/i/K7QXM3PDGHT9",
-      "/board",
-      "/board/",
     ]) {
       expect(isPrivatePath(path), path).toBe(true);
     }

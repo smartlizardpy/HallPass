@@ -57,28 +57,7 @@ export const copy = {
   pinProgress: (n: number) => `${n} of 6 digits entered`,
   moveWindowHint: "Use the arrow keys to move this window.",
 
-  // ── Lobby: library, featured, filters ─────────────────────────────────────
-  featured: "Featured",
-  play: "Play",
-  playGame: (title: string) => `Play ${title}`,
-  allCategories: "All",
-  searchLabel: "Search games",
-  searchPlaceholder: "Search games",
-  clearFilters: "Clear filters",
-  filterGroup: "Filter by category",
-  gamesCount: (shown: number, total: number) =>
-    shown === total ? `${total} games` : `${shown} of ${total} games`,
-  noMatchTitle: "No games match",
-  noMatchBody: (query: string, category: string | null) =>
-    query && category
-      ? `Nothing in ${category} matches “${query}”.`
-      : query
-        ? `Nothing matches “${query}”.`
-        : `There are no games in ${category ?? "this category"} yet.`,
-  badgeNew: "New",
-  badgeMultiplayer: "Multiplayer",
-  badgeMobile: "Best on phones",
-  loadingGames: "Loading games…",
+  // ── Sign-in hints ─────────────────────────────────────────────────────────
   usernameFirst: "Type your username first.",
   usernameHint: "Tap the box, then use the keyboard.",
 
@@ -93,7 +72,6 @@ export const copy = {
   confirmRemove: (name: string) => `Tap again to remove ${name}`,
   backToBoard: "Back to Board Mode",
   creditNote: "Scores and achievements go to the player you pick.",
-  sessionEndedTitle: "Board session ended",
   dismiss: "Dismiss",
   endSessionHint: "Signs everyone out of this board.",
 

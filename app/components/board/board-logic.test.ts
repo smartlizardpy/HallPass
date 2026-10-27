@@ -1,58 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Game } from "@/app/lib/games";
 import { validateUsernameFormat } from "@/app/lib/username";
-import { categoryCounts, filterGames, isFiltering, NO_FILTER, normaliseQuery, pickFeatured } from "./board-filter";
 import { applyKey, BACKSPACE, CLEAR, rowsFor, SEARCH_MAX_LENGTH } from "./keyboard-keys";
 import { planLaunch } from "./launch-decision";
-
-const g = (slug: string, title: string, category: string, extra: Partial<Game> = {}): Game =>
-  ({ slug, title, category, tagline: "", description: "", tags: [], gradient: ["#000", "#111"], accent: "#fff", art: "grid", ...extra }) as Game;
-
-const games = [
-  g("a", "Zombie Siege", "Survivor"),
-  g("b", "Neon Velocity", "Arcade", { isFeatured: true }),
-  g("c", "Café Rush", "Simulation"),
-  g("d", "Zombie Golf", "Sports"),
-  g("e", "Dash", "Arcade"),
-];
-
-describe("board-filter", () => {
-  it("returns everything with no filter", () => {
-    expect(filterGames(games, NO_FILTER)).toHaveLength(5);
-    expect(isFiltering(NO_FILTER)).toBe(false);
-  });
-  it("searches by name, case- and accent-insensitively, all words required", () => {
-    expect(filterGames(games, { query: "  ZOMBIE ", category: null }).map((x) => x.slug)).toEqual(["a", "d"]);
-    expect(filterGames(games, { query: "cafe", category: null }).map((x) => x.slug)).toEqual(["c"]);
-    expect(filterGames(games, { query: "zombie golf", category: null }).map((x) => x.slug)).toEqual(["d"]);
-    expect(filterGames(games, { query: "golf zombie", category: null }).map((x) => x.slug)).toEqual(["d"]);
-  });
-  it("does not search categories or taglines", () => {
-    expect(filterGames(games, { query: "arcade", category: null })).toEqual([]);
-  });
-  it("combines category and search", () => {
-    expect(filterGames(games, { query: "", category: "Arcade" }).map((x) => x.slug)).toEqual(["b", "e"]);
-    expect(filterGames(games, { query: "dash", category: "Arcade" }).map((x) => x.slug)).toEqual(["e"]);
-    expect(filterGames(games, { query: "zombie", category: "Arcade" })).toEqual([]);
-    expect(isFiltering({ query: "x", category: null })).toBe(true);
-    expect(isFiltering({ query: " ", category: "Arcade" })).toBe(true);
-  });
-  it("counts categories alphabetically", () => {
-    expect(categoryCounts(games)).toEqual([
-      { category: "Arcade", count: 2 },
-      { category: "Simulation", count: 1 },
-      { category: "Sports", count: 1 },
-      { category: "Survivor", count: 1 },
-    ]);
-  });
-  it("features only an explicitly flagged game", () => {
-    expect(pickFeatured(games)?.slug).toBe("b");
-    expect(pickFeatured(games.filter((x) => !x.isFeatured))).toBeNull();
-  });
-  it("normalises whitespace", () => {
-    expect(normaliseQuery("  a   b ")).toBe("a b");
-  });
-});
 
 describe("keyboard-keys", () => {
   it("offers every username character and nothing else", () => {

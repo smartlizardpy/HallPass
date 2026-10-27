@@ -2,8 +2,8 @@
  * BoardPass — shared request guards for `/api/v1/boardpass/*`.
  *
  * Every route here is same-origin, JSON, and `private, no-store`. State-changing
- * calls also pass the site's referrer allowlist (`isTrustedOrigin`, which now
- * includes `/board`) and must carry `Content-Type: application/json`, which a
+ * calls also pass the site's referrer allowlist (`isTrustedOrigin`; Board
+ * Mode lives on the homepage, which it already trusts) and must carry `Content-Type: application/json`, which a
  * cross-site form cannot send without a CORS preflight — and no CORS headers are
  * ever returned. Together with `SameSite=Lax` on the cookie, that closes
  * cross-site request forgery. It does NOT stop a hostile game running on our own

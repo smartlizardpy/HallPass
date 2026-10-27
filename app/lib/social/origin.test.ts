@@ -106,13 +106,12 @@ describe("isTrustedOrigin", () => {
   });
 });
 
-describe("BoardPass page", () => {
-  it("accepts the board page, with or without a trailing slash", () => {
-    expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}/board`))).toBe(true);
-    expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}/board/`))).toBe(true);
+describe("BoardPass on the homepage", () => {
+  it("accepts the homepage, where Board Mode now lives", () => {
+    expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}/`))).toBe(true);
   });
-  it("does not accept a lookalike path", () => {
-    expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}/boardgames`))).toBe(false);
+  it("no longer trusts the removed /board page", () => {
+    expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}/board`))).toBe(false);
   });
   it("still rejects the game frame", () => {
     expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}/game-html/duskfall/`))).toBe(false);
