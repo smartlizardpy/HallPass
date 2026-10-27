@@ -233,6 +233,14 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
    */
   let cachedPlayer: PlayerIdentity | null | undefined;
 
+  /**
+   * True once `/api/v1/me` has said this browser is a shared school BOARD
+   * (BoardPass). Learned from the same call that resolves the player, so it is
+   * `false` until a game has asked who is playing. Sticky for the page: a board
+   * does not turn into a personal device without a navigation.
+   */
+  let boardMode = false;
+
   /** Single-flight guard for {@link refreshAuth} so overlapping signals coalesce. */
   let refreshing = false;
 
@@ -462,6 +470,7 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
       if (!res.ok) return null;
 
       cachedPlayer = extractPlayer(res.data);
+      if (extractBoard(res.data)) boardMode = true;
       return cachedPlayer;
     } catch {
       return null;
@@ -594,6 +603,7 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
    * No-op when inert or outside a browser; never throws.
    */
   function signIn(opts?: AuthRedirectOptions): void {
+    if (boardMode) return; // A board signs players in on its own screen, never in a game.
     startAuthFlow("/play/signin", opts);
   }
 
@@ -604,6 +614,7 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
    * browser; never throws.
    */
   function signOut(opts?: AuthRedirectOptions): void {
+    if (boardMode) return; // The board owns the session; a game cannot end it.
     startAuthFlow("/play/signout", opts);
   }
 
@@ -687,6 +698,7 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
     getHandle: () => getHandle(),
     setHandle: (handle: string) => setHandle(handle),
     getPlayer,
+    isBoardMode: () => boardMode,
     signIn,
     signOut,
     setPlayerHandle,
@@ -727,6 +739,11 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
         try {
           if (mode === "inert") {
             resolve({ ok: false, sent: false, reason: "inert" });
+            return;
+          }
+          // Friends and challenges are account features; a board has no account.
+          if (boardMode) {
+            resolve({ ok: false, sent: false, reason: "signed-out" });
             return;
           }
           const game = opts?.game ?? cfg.game;
@@ -817,7 +834,7 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
     invite(opts: InviteOptions): Promise<InviteResult> {
       return new Promise<InviteResult>((resolve) => {
         try {
-          if (mode === "inert") return resolve(noInvite());
+          if (mode === "inert" || boardMode) return resolve(noInvite());
           if (typeof navigator !== "undefined" && navigator.onLine === false) {
             return resolve(noInvite());
           }
@@ -1025,6 +1042,11 @@ function extractPlayer(data: unknown): PlayerIdentity | null {
     image: typeof player.image === "string" ? player.image : null,
     handle: player.handle,
   };
+}
+
+/** `true` only when the server explicitly marked this a BoardPass browser. */
+function extractBoard(data: unknown): boolean {
+  return (data as Partial<MeResponse> | undefined)?.board === true;
 }
 
 function isPlayerIdentity(value: unknown): value is PlayerIdentity {

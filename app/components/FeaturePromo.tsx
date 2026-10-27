@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { useBoardActive } from "./board/board-active-store";
 import posthog from "posthog-js";
 import { acquireOverlayLock, isOverlayOpen } from "../lib/overlay-lock";
 import { openStealthSettings } from "../lib/stealth/store";
@@ -321,6 +322,9 @@ function bumpVisits(): number {
 
 export function FeaturePromo() {
   const pathname = usePathname();
+  // A stealth/install advert over a board that several students are mid-sign-in
+  // on is an obstacle, not a feature. It waits, and is still there afterwards.
+  const boardActive = useBoardActive();
   const router = useRouter();
   const [variant, setVariant] = useState<Variant | null>(null);
   /** Whose beta announcement this is — see {@link dismissKey}. */
@@ -554,7 +558,7 @@ export function FeaturePromo() {
     }
   };
 
-  if (!variant) return null;
+  if (!variant || boardActive) return null;
   const copy = COPY[variant];
 
   const isInstall = variant === "install";

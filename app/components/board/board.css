@@ -1,0 +1,328 @@
+/*
+ * Board Mode ("Arcade Wall") — scoped dark theme and component classes.
+ *
+ * Everything hangs off `.bp-root`, so the tokens below never leak into the rest of
+ * HallPass and the lobby stays dark whatever theme the browser is set to. Values
+ * and sizes are specified in docs/boardpass-ui-spec.md. Motion is transform and
+ * opacity only, and switched off under prefers-reduced-motion.
+ */
+
+.bp-root {
+  --bp-bg: #0e0a1a;
+  --bp-surface: #181229;
+  --bp-surface-2: #231a3b;
+  --bp-surface-3: #2e2350;
+  --bp-line: rgb(255 255 255 / 0.12);
+  --bp-text: #f6f3ff;
+  --bp-muted: #bdb4d8;
+  --bp-brand: #7c2eef;
+  --bp-brand-soft: #b58bff;
+  --bp-yellow: #ffc700;
+  --bp-pink: #ff5c93;
+  --bp-danger: #ff7a8a;
+  --bp-margin: clamp(24px, 3.4vw, 64px);
+  --bp-gap: 20px;
+
+  color: var(--bp-text);
+  color-scheme: dark;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 1365px) {
+  .bp-root { --bp-gap: 16px; }
+}
+
+.bp-root :focus-visible {
+  outline: 4px solid var(--bp-yellow);
+  outline-offset: 2px;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+.bp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 0 24px;
+  border: 1px solid var(--bp-line);
+  border-radius: 16px;
+  background: var(--bp-surface-2);
+  color: var(--bp-text);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  transition: transform 120ms ease, background-color 160ms ease, border-color 160ms ease, opacity 160ms ease;
+}
+.bp-btn:hover { background: var(--bp-surface-3); }
+.bp-btn:active { transform: scale(0.97); }
+.bp-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.bp-btn-primary { background: var(--bp-brand); border-color: transparent; color: #fff; }
+.bp-btn-primary:hover { background: #8b46f2; }
+.bp-btn-lg { min-height: 64px; padding: 0 32px; font-size: 20px; border-radius: 18px; }
+.bp-btn-danger { background: transparent; border-color: var(--bp-danger); color: var(--bp-danger); }
+.bp-btn-danger:hover { background: rgb(255 122 138 / 0.12); }
+.bp-btn-ghost { background: transparent; }
+
+/* The panel on the homepage: a bar that sticks just under the site header
+   (64px, 80px from the `sm` breakpoint), so the players stay reachable. */
+.bp-bar {
+  position: sticky;
+  top: 64px;
+  z-index: 35;
+  padding: 10px clamp(12px, 2vw, 32px);
+  background: rgb(14 10 26 / 0.96);
+  border-bottom: 1px solid var(--bp-line);
+}
+@media (min-width: 640px) { .bp-bar { top: 80px; } }
+.bp-bar-row { display: flex; align-items: center; gap: 16px; }
+.bp-bar .bp-banner { margin: 10px 0 0; }
+/* Floating windows, keyboard and sheets: they are position:fixed, so their
+   wrapper only has to carry the tokens and must not take part in layout. */
+.bp-layer { display: contents; }
+
+.bp-modechip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgb(124 46 239 / 0.22);
+  color: var(--bp-brand-soft);
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bp-dock {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 4px;
+  scrollbar-width: none;
+}
+.bp-dock::-webkit-scrollbar { display: none; }
+
+.bp-player {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 4px 20px 4px 4px;
+  border: 2px solid var(--bp-line);
+  border-radius: 999px;
+  background: var(--bp-surface);
+  color: var(--bp-text);
+  font-size: 18px;
+  font-weight: 800;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 120ms ease, border-color 160ms ease;
+}
+.bp-player:hover { border-color: var(--bp-brand-soft); }
+.bp-player:active { transform: scale(0.97); }
+.bp-player img { width: 54px; height: 54px; border-radius: 999px; background: var(--bp-surface-2); }
+.bp-player-new { animation: bp-pop 420ms ease-out; }
+
+.bp-menu {
+  position: fixed;
+  z-index: 85;
+  min-width: 280px;
+  padding: 8px;
+  border: 1px solid var(--bp-line);
+  border-radius: 18px;
+  background: var(--bp-surface-2);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.55);
+}
+.bp-menu [role="menuitem"] {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 56px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--bp-text);
+  font-size: 18px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.bp-menu [role="menuitem"]:hover { background: var(--bp-surface-3); }
+.bp-menu [data-danger="true"] { color: var(--bp-danger); }
+.bp-menu [data-armed="true"] { background: var(--bp-danger); color: #1a0a10; }
+
+/* ── Floating windows, keyboard ──────────────────────────────────────────── */
+
+.bp-window {
+  position: fixed;
+  border: 1px solid var(--bp-line);
+  border-radius: 24px;
+  background: var(--bp-surface);
+  box-shadow: 0 30px 80px rgb(0 0 0 / 0.6);
+  animation: bp-rise 180ms ease-out;
+}
+.bp-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 60px;
+  padding: 6px 8px 6px 18px;
+  border-radius: 24px 24px 0 0;
+  background: var(--bp-surface-2);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.bp-titlebar:active { cursor: grabbing; }
+.bp-titlebar .bp-icon { min-width: 48px; min-height: 48px; padding: 0 12px; font-size: 22px; }
+.bp-field {
+  width: 100%;
+  min-height: 56px;
+  padding: 0 16px;
+  border: 2px solid var(--bp-line);
+  border-radius: 14px;
+  background: var(--bp-bg);
+  color: var(--bp-text);
+  font-size: 20px;
+  font-weight: 700;
+}
+.bp-field:focus-visible { border-color: var(--bp-yellow); outline-offset: 0; }
+
+.bp-pin-dot { width: 18px; height: 18px; border-radius: 999px; border: 2px solid var(--bp-muted); transition: background-color 120ms ease, transform 120ms ease; }
+.bp-pin-dot[data-on="true"] { background: var(--bp-text); border-color: var(--bp-text); transform: scale(1.1); }
+.bp-key {
+  min-width: 0;
+  min-height: 72px;
+  border: 1px solid var(--bp-line);
+  border-radius: 18px;
+  background: var(--bp-surface-2);
+  color: var(--bp-text);
+  font-size: 28px;
+  font-weight: 800;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  transition: transform 90ms ease, background-color 120ms ease;
+}
+.bp-key:hover { background: var(--bp-surface-3); }
+.bp-key:active { transform: scale(0.94); background: var(--bp-brand); }
+.bp-key:disabled { opacity: 0.4; }
+.bp-key-sm { font-size: 18px; }
+
+.bp-kbd {
+  position: fixed;
+  z-index: 90;
+  padding-bottom: 14px;
+  border: 1px solid var(--bp-line);
+  border-radius: 24px;
+  background: var(--bp-surface);
+  box-shadow: 0 -12px 60px rgb(0 0 0 / 0.55);
+  animation: bp-rise 180ms ease-out;
+}
+.bp-kbd .bp-key { min-height: 64px; font-size: 26px; }
+
+/* ── Sheets, session card ────────────────────────────────────────────────── */
+
+.bp-scrim { position: fixed; inset: 0; z-index: 95; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgb(6 3 14 / 0.7); }
+.bp-sheet {
+  width: min(720px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: 28px;
+  border: 1px solid var(--bp-line);
+  border-radius: 28px;
+  background: var(--bp-surface);
+  box-shadow: 0 40px 100px rgb(0 0 0 / 0.65);
+  animation: bp-rise 200ms ease-out;
+}
+.bp-sheet h2 { margin: 0 0 6px; font-size: 30px; font-weight: 900; line-height: 1.15; }
+.bp-sheet p { color: var(--bp-muted); font-size: 18px; }
+.bp-who { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; margin: 20px 0 0; padding: 0; list-style: none; }
+.bp-who button {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; min-height: 150px; padding: 16px;
+  border: 2px solid var(--bp-line); border-radius: 22px; background: var(--bp-surface-2); color: var(--bp-text);
+  font-size: 22px; font-weight: 900; cursor: pointer; touch-action: manipulation;
+  transition: transform 120ms ease, border-color 160ms ease;
+}
+.bp-who button:hover { border-color: var(--bp-brand-soft); }
+.bp-who button:active { transform: scale(0.97); }
+.bp-who img { width: 80px; height: 80px; border-radius: 999px; background: var(--bp-surface-3); }
+
+.bp-banner {
+  display: flex; align-items: center; gap: 16px; margin: 16px var(--bp-margin) 0; padding: 14px 20px;
+  border: 1px solid var(--bp-line); border-radius: 18px; background: var(--bp-surface-2); font-size: 18px; font-weight: 700;
+}
+.bp-banner[data-tone="warn"] { border-color: var(--bp-yellow); }
+.bp-banner span { flex: 1; }
+
+.bp-session-card {
+  position: fixed; z-index: 80; left: 50%; bottom: 24px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 20px; width: min(760px, calc(100vw - 32px));
+  padding: 18px 20px 18px 28px; border: 2px solid var(--bp-yellow); border-radius: 24px;
+  background: var(--bp-surface); box-shadow: 0 30px 80px rgb(0 0 0 / 0.6); animation: bp-rise 200ms ease-out;
+}
+.bp-session-card strong { display: block; font-size: 24px; font-weight: 900; }
+.bp-session-card span.bp-sc-body { color: var(--bp-muted); font-size: 18px; }
+.bp-session-card > div:first-child { flex: 1; }
+
+
+/* ── Motion ──────────────────────────────────────────────────────────────── */
+
+@keyframes bp-rise { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
+@keyframes bp-pop { 0% { transform: scale(0.82); opacity: 0; } 60% { transform: scale(1.06); opacity: 1; } 100% { transform: none; } }
+
+@media (max-width: 899px) {
+  .bp-bar-row { flex-wrap: wrap; gap: 12px; }
+  .bp-bar .bp-dock { order: 3; flex-basis: 100%; }
+  .bp-session-card { flex-wrap: wrap; }
+}
+
+/* Mouse and trackpad screens (a teacher's laptop, a desk monitor) do not need
+   smartboard-sized targets. Touch devices, including touch smartboards, never match
+   this and keep the large sizes above. */
+@media (hover: hover) and (pointer: fine) {
+  .bp-btn { min-height: 40px; padding: 0 16px; font-size: 15px; border-radius: 12px; }
+  .bp-btn-lg { min-height: 46px; padding: 0 20px; font-size: 16px; border-radius: 14px; }
+  .bp-bar { padding-block: 6px; }
+  .bp-modechip { font-size: 12px; padding: 4px 10px; }
+  .bp-player { min-height: 44px; padding: 3px 14px 3px 3px; font-size: 15px; }
+  .bp-player img { width: 36px; height: 36px; }
+  .bp-titlebar { min-height: 44px; padding: 4px 6px 4px 14px; }
+  .bp-titlebar .bp-icon { min-width: 36px; min-height: 36px; font-size: 16px; }
+  .bp-field { min-height: 44px; font-size: 16px; }
+  .bp-key { min-height: 48px; font-size: 20px; }
+  .bp-key-sm { font-size: 15px; }
+  .bp-kbd .bp-key { min-height: 44px; font-size: 18px; }
+  .bp-pin-dot { width: 14px; height: 14px; }
+  .bp-sheet { padding: 22px; }
+  .bp-sheet h2 { font-size: 24px; }
+  .bp-sheet p { font-size: 15px; }
+  .bp-who { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .bp-who button { min-height: 120px; font-size: 18px; }
+  .bp-who img { width: 60px; height: 60px; }
+  .bp-session-card strong { font-size: 19px; }
+  .bp-session-card span.bp-sc-body { font-size: 15px; }
+  .bp-banner { font-size: 15px; }
+  /* Width is set inline (it is also the drag clamp), so the override must win. */
+  .bp-kbd { width: min(720px, calc(100vw - 32px)) !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bp-root *, .bp-root *::before, .bp-root *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

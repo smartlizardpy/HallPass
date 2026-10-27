@@ -9,6 +9,17 @@ to the served URL path (`v1` → `/sdk/v1/hallpass.js`).
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-27
+
+### Added
+
+- Board Mode (BoardPass, shared school boards). `isBoardMode()` is `true` once
+  `getPlayer()` has learned the page is open on a board. There `getPlayer()`
+  resolves the student the board chose for the game (public name and avatar only),
+  `signIn()` and `signOut()` do nothing, and `invite()` and `challenge()` resolve
+  unsuccessfully (`challenge` with `reason: "signed-out"`). Hide those buttons
+  when `isBoardMode()` is true. `MeResponse` gains an optional `board` flag.
+
 ## [1.5.0] - 2026-10-26
 
 ### Added

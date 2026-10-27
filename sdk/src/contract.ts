@@ -127,6 +127,15 @@ export interface PlayerIdentity {
 export interface MeResponse {
   player: PlayerIdentity | null;
   /**
+   * True when this browser is a shared school BOARD (BoardPass), not a normal
+   * signed-in session. `player` is then the student the board chose for the game
+   * that is open — public name and avatar only — or `null` if none is chosen yet.
+   * Games should treat the player as signed in for display and scoring, but
+   * friends, invites, challenges and sign-in/out are unavailable in Board Mode.
+   * Absent on every other response. Added in v1.
+   */
+  board?: boolean;
+  /**
    * Whether the signed-in user holds ANY dashboard role, so a header/menu can
    * show a Dashboard link. Never leaks email. Added in v1.
    *
@@ -747,6 +756,15 @@ export interface HallPass {
   getScores(opts?: GetScoresOptions): Promise<ScoreEntry[]>;
   getHandle(): string | null;
   setHandle(handle: string): string;
+  /**
+   * `true` when this page is open on a shared school board (BoardPass). Learned
+   * from the first `getPlayer()` answer, so call that first; `false` before it and
+   * everywhere else. In Board Mode `getPlayer()` is the student the board chose for
+   * this game (public name and avatar), `signIn()`/`signOut()` do nothing, and
+   * `invite()`/`challenge()` resolve unsuccessfully: hide those buttons when this
+   * is true. Added in v1.6 (append-only): guard with `HallPass.isBoardMode &&`.
+   */
+  isBoardMode?(): boolean;
   on(event: EventName, cb: (payload: unknown) => void): HallPass;
   off(event: EventName, cb: (payload: unknown) => void): HallPass;
   /**

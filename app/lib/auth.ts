@@ -173,6 +173,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const subjectId = account?.providerAccountId ?? profile?.sub;
       if (subjectId) {
         token.playerId = subjectId;
+        // WHEN THIS PERSON LAST PROVED IT WAS THEM to Google. Stamped only here, on
+        // the OAuth pass, because `iat` is re-minted by Auth.js's rolling session
+        // refresh and so says nothing about the last real sign-in. BoardPass reads
+        // it (see `boardpass/recent-auth.ts`) before letting a PIN be set, changed
+        // or revoked. The token is an encrypted JWE, so the client cannot forge it.
+        token.authAt = Date.now();
         // The signIn callback already resolved country for this pass (INSERT
         // or its own COALESCE) — skip the redundant backfill attempt below.
         token.countryChecked = true;
@@ -196,6 +202,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user) {
         session.user.role = (token.role as Role | null) ?? undefined;
         session.user.playerId = token.playerId;
+        session.user.authAt = token.authAt;
       }
       return session;
     },
@@ -251,7 +258,7 @@ export { isSuperAdminEmail };
 
 declare module "next-auth" {
   interface Session {
-    user: { role?: Role; playerId?: string } & DefaultSession["user"];
+    user: { role?: Role; playerId?: string; authAt?: number } & DefaultSession["user"];
   }
 }
 
@@ -260,6 +267,8 @@ declare module "next-auth/jwt" {
     role?: Role | null;
     email?: string;
     playerId?: string;
+    /** Epoch ms of the last Google sign-in (OAuth pass only). */
+    authAt?: number;
     /** Whether the one-time country-backfill attempt has run for this token. */
     countryChecked?: boolean;
   }

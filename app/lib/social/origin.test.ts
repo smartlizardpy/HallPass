@@ -106,6 +106,18 @@ describe("isTrustedOrigin", () => {
   });
 });
 
+describe("BoardPass on the homepage", () => {
+  it("accepts the homepage, where Board Mode now lives", () => {
+    expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}/`))).toBe(true);
+  });
+  it("no longer trusts the removed /board page", () => {
+    expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}/board`))).toBe(false);
+  });
+  it("still rejects the game frame", () => {
+    expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}/game-html/duskfall/`))).toBe(false);
+  });
+});
+
 describe("isTrustedPath", () => {
   it("is the same rule as the referrer check, for a bare path", () => {
     for (const path of ["/", "/play/you/friends", "/game/duskfall", "/embed/invite", "/u/ozan"]) {

@@ -18,6 +18,8 @@
 
 import { auth } from "@/app/lib/auth";
 import { isBetaTester } from "@/app/lib/beta";
+import { getBoardIdentity } from "@/app/lib/boardpass/identity";
+import { peekBoard } from "@/app/lib/boardpass/resolve";
 import { getPublicIdentity, getPublicPlayerId } from "@/app/lib/players";
 import type { Session } from "next-auth";
 import type { MeResponse, PlayerIdentity } from "@/sdk/src/contract";
@@ -46,9 +48,33 @@ export async function GET(): Promise<Response> {
   const isAdmin = Boolean(session?.user?.role);
   const role = session?.user?.role ?? null;
   if (!playerId) {
-    return Response.json({ player: null, isAdmin: false, role: null } satisfies MeResponse, {
-      headers: CORS_HEADERS,
-    });
+    // No Google session. If this browser is a BOARD, say so — and, while a game is
+    // open, who the board chose to play it. PUBLIC fields only (see
+    // `boardpass/identity.ts`): no email, no role, no Google id. A cross-origin
+    // embed carries no cookie and so still gets a plain `null`.
+    const board = await peekBoard();
+    if (!board.board) {
+      return Response.json({ player: null, isAdmin: false, role: null } satisfies MeResponse, {
+        headers: CORS_HEADERS,
+      });
+    }
+    let player: PlayerIdentity | null = null;
+    let publicId: string | null = null;
+    if (board.active) {
+      try {
+        const ident = await getBoardIdentity(board.active.playerId);
+        if (ident) {
+          publicId = ident.publicId;
+          player = { id: ident.id, name: ident.name, image: ident.image, handle: ident.handle };
+        }
+      } catch (error) {
+        console.error("me GET board identity failed:", error);
+      }
+    }
+    return Response.json(
+      { player, isAdmin: false, role: null, publicId, board: true } satisfies MeResponse,
+      { headers: CORS_HEADERS },
+    );
   }
 
   // A DB hiccup here must not 500 the endpoint — degrade to a null identity,

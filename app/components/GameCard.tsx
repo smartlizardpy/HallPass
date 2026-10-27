@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { Game } from "../lib/games";
 import { playsOn, useDevicePlatform } from "../lib/use-device-platform";
+import { useBoardPlays } from "./board/BoardProvider";
 import { CoverImage } from "./CoverImage";
 import { frightFestGame } from "./events/fright-fest/registry";
 
@@ -38,6 +39,9 @@ export function GameCard({
   // attribute styles nothing and the chip is an `ha-deco` slot hidden for everyone.
   const event = frightFestGame(game.slug);
 
+  // On a shared board a tap plays the game as the board (see `useBoardPlays`).
+  const boardPlays = useBoardPlays();
+
   return (
     // Root is a DIV so the card link, the hover ▶ and the favorite heart are all
     // SIBLINGS — an interactive element is never nested inside another.
@@ -53,6 +57,14 @@ export function GameCard({
         href={`/game/${game.slug}`}
         prefetch={false}
         className="flex flex-col text-left"
+        onClick={
+          boardPlays
+            ? (e) => {
+                e.preventDefault();
+                onPlay(game.slug);
+              }
+            : undefined
+        }
       >
         <div className={`ha-cv relative overflow-hidden rounded-3xl bg-zinc-900 ${aspect}`}>
           {/* Cover art + its fallback chain live in CoverImage — `card-art` is

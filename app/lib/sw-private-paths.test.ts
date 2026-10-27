@@ -32,7 +32,7 @@ describe("isPrivatePath", () => {
   });
 
   it("leaves public pages cacheable", () => {
-    for (const path of ["/", "/game/last-bell", "/category/arcade", "/c/K7QXM3PDGH", "/games/last-bell/index.html", "/info"]) {
+    for (const path of ["/", "/game/last-bell", "/category/arcade", "/c/K7QXM3PDGH", "/games/last-bell/index.html", "/info", "/boarding", "/boards"]) {
       expect(isPrivatePath(path), path).toBe(false);
     }
   });

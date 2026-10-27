@@ -35,6 +35,12 @@ import { isBetaTester } from "@/app/lib/beta";
 import { getUserRole } from "@/app/lib/dashboard-users";
 import { ROLE_HINT, ROLE_LABEL } from "@/app/lib/permissions";
 import { UsernameCard } from "@/app/components/friends/UsernameCard";
+import { auth } from "@/app/lib/auth";
+import { sql } from "@/app/lib/db";
+import { boardPassAllowedFor, getBoardPassMode } from "@/app/lib/boardpass/flag";
+import { countActiveBoards, getCredentialStatus } from "@/app/lib/boardpass/credentials";
+import { isRecentAuth } from "@/app/lib/boardpass/recent-auth";
+import { BoardPassCard } from "./BoardPassCard";
 import { AnalyticsSettingsCard } from "@/app/components/analytics/AnalyticsSwitch";
 import {
   setHandleAction,
@@ -122,6 +128,28 @@ export default async function YouSettingsPage({
   ]);
 
   const errorBanner = errorMessage(params.error);
+
+  // BoardPass: hidden entirely when the rollout mode is off (or not for this
+  // player yet), and fail-soft so a missing table never takes settings down.
+  let boardPass: { enabled: boolean; username: string | null; boards: number; recent: boolean } | null = null;
+  try {
+    if ((await getBoardPassMode()) !== "off" && (await boardPassAllowedFor(playerId))) {
+      const [status, boards, rows, session] = await Promise.all([
+        getCredentialStatus(playerId),
+        countActiveBoards(playerId),
+        sql`SELECT username FROM players WHERE id = ${playerId}`,
+        auth(),
+      ]);
+      boardPass = {
+        enabled: status.enabled,
+        boards,
+        username: (rows as { username: string | null }[])[0]?.username ?? null,
+        recent: isRecentAuth(session?.user?.authAt),
+      };
+    }
+  } catch (error) {
+    console.error(`settings boardpass read failed for ${playerId}:`, error);
+  }
 
   return (
     <div className="space-y-8">
@@ -285,6 +313,13 @@ export default async function YouSettingsPage({
           </form>
         </div>
       </section>
+
+      {boardPass && (
+        <section aria-labelledby="settings-security" className="space-y-4">
+          <GroupHeading id="settings-security">Security</GroupHeading>
+          <BoardPassCard {...boardPass} />
+        </section>
+      )}
 
       {/* PRIVACY ------------------------------------------------------------ */}
       <section aria-labelledby="settings-privacy" className="space-y-4">

@@ -519,3 +519,67 @@ describe("moment", () => {
     fetchSpy.mockRestore();
   });
 });
+
+describe("createClient Board Mode", () => {
+  const boardMe = (player: unknown) =>
+    jsonResponse({ player, isAdmin: false, role: null, board: true }, 200);
+
+  it("is false until /me has answered, and false on a normal browser", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ player: null }, 200)));
+    const api = createClient(sameOriginConfig(), () => {});
+    expect(api.isBoardMode!()).toBe(false);
+    await api.getPlayer!();
+    expect(api.isBoardMode!()).toBe(false);
+  });
+
+  it("turns true when /me says board, and getPlayer is the chosen student", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(boardMe({ id: "pub-1", name: "ozan", image: null, handle: "ozan" })),
+    );
+    const api = createClient(sameOriginConfig(), () => {});
+    expect(await api.getPlayer!()).toMatchObject({ id: "pub-1", name: "ozan" });
+    expect(api.isBoardMode!()).toBe(true);
+  });
+
+  it("is true with no game open (player null) too", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(boardMe(null)));
+    const api = createClient(sameOriginConfig(), () => {});
+    expect(await api.getPlayer!()).toBeNull();
+    expect(api.isBoardMode!()).toBe(true);
+  });
+
+  it("only an explicit true counts", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ player: null, board: "yes" }, 200)),
+    );
+    const api = createClient(sameOriginConfig(), () => {});
+    await api.getPlayer!();
+    expect(api.isBoardMode!()).toBe(false);
+  });
+
+  it("signIn and signOut do nothing: no popup, no navigation", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(boardMe(null)));
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const api = createClient(sameOriginConfig(), () => {});
+    await api.getPlayer!();
+    api.signIn!();
+    api.signOut!();
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("invite resolves empty and challenge resolves signed-out, with no picker", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(boardMe(null));
+    vi.stubGlobal("fetch", fetchSpy);
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const api = createClient(sameOriginConfig(), () => {});
+    await api.getPlayer!();
+    fetchSpy.mockClear();
+    expect(await api.invite!({ data: { room: "a" } })).toEqual({ sent: 0, link: null, cancelled: true });
+    expect(await api.challenge!()).toEqual({ ok: false, sent: false, reason: "signed-out" });
+    expect(open).not.toHaveBeenCalled();
+    expect(document.querySelector("iframe")).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});

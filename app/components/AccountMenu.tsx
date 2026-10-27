@@ -58,6 +58,7 @@ import type { MeResponse } from "@/sdk/src/contract";
 import { ROLE_LABEL } from "@/app/lib/permissions";
 import { parseAvatarRef } from "@/app/lib/avatars";
 import { MemeAvatarCircle } from "./MemeAvatar";
+import { BoardPill } from "./board/BoardEntry";
 
 /**
  * The slice of `/api/v1/me/friends/count` this menu reads. The route also
@@ -150,6 +151,16 @@ export function AccountMenu() {
   // Identity not resolved yet → hold space without flashing the wrong state.
   if (!loaded) {
     return <div className="h-11 w-11" aria-hidden />;
+  }
+
+  // A shared school board (BoardPass): never look like a personal account. A pill
+  // back to the board replaces both the menu and the Google sign-in button.
+  if (me?.board) {
+    return (
+      // On the homepage the board is already there: this brings up its panel.
+      // Anywhere else it is a link to it.
+      <BoardPill label={`Board Mode${player ? ` · ${player.handle}` : ""}`} />
+    );
   }
 
   // Logged out → a sign-in button.

@@ -88,6 +88,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
+import { useBoardActive } from "./board/board-active-store";
 import { useDevicePlatform } from "../lib/use-device-platform";
 import { useOnline } from "../lib/use-online";
 import { clearBottomChrome, publishBottomChrome } from "../lib/bottom-chrome";
@@ -190,8 +191,11 @@ export function MobileTabBar() {
   const pathname = normalizePath(usePathname() ?? "/");
   const barRef = useRef<HTMLElement | null>(null);
 
+  // A shared board (a touch smartboard reports as mobile) has its own controls
+  // and a game overlay; the player tab bar would sit over both.
+  const boardActive = useBoardActive();
   const hidden =
-    !isMobile || HIDDEN_PREFIXES.some((p) => pathname.startsWith(p));
+    !isMobile || boardActive || HIDDEN_PREFIXES.some((p) => pathname.startsWith(p));
 
   // ── THE WAIT BETWEEN THE TAP AND THE PAGE ─────────────────────────────────
   //

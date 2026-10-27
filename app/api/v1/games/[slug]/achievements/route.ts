@@ -94,6 +94,7 @@ import {
   type UnlockResult,
 } from "@/app/lib/achievements";
 import { findGame } from "@/app/lib/games";
+import { gameplayPlayerId } from "@/app/lib/boardpass/resolve";
 import { achievementCopy } from "@/app/lib/notifications/copy";
 import { notifyPlayer } from "@/app/lib/notifications/deliver";
 import {
@@ -398,7 +399,11 @@ export async function POST(
 ): Promise<Response> {
   const { slug } = await params;
 
-  const playerId = await currentPlayerId();
+  // A Google session first; failing that, the player a BOARD chose for this game
+  // (`app/lib/boardpass/resolve.ts`). Still "from `auth()` and only `auth()`" in
+  // spirit: the body never names a player, and the board choice is a server-side
+  // row bound to this game slug, not anything the game can supply.
+  const playerId = (await currentPlayerId()) ?? (await gameplayPlayerId(slug));
   // Checked FIRST, before parsing or touching the database: the guest path is
   // the hot one on a public game page and it must cost nothing.
   if (!playerId) {

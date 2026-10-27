@@ -1,6 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+import { BoardProvider, useBoard } from "./board/BoardProvider";
 import type { Game } from "../lib/games";
 import { useFavoritesServerSync } from "../lib/personalization";
 import { PlayerOverlay } from "./PlayerOverlay";
@@ -33,6 +35,13 @@ import { SiteHeader } from "./SiteHeader";
  * intercepts), the pattern `AccountMenu` already uses.
  */
 
+/**
+ * The board's sign-in windows, keyboard, sheets and stylesheet. Loaded only once
+ * a board can actually be used here, so a visitor with no board (nearly everyone)
+ * downloads none of it.
+ */
+const BoardLayer = dynamic(() => import("./board/BoardLayer").then((m) => m.BoardLayer), { ssr: false });
+
 /** `null` outside a shell so {@link useOpenGame} can give a useful error. */
 const OpenGameContext = createContext<((slug: string) => void) | null>(null);
 
@@ -49,15 +58,19 @@ export function useOpenGame(): (slug: string) => void {
   return open;
 }
 
-export function ArcadeShell({
-  games,
-  categories,
-  activeCategory = "All",
-  onSelectCategory,
-  query,
-  onQueryChange,
-  children,
-}: {
+export function ArcadeShell({ board = false, ...props }: ArcadeShellProps & { board?: boolean }) {
+  // Board Mode is opt-in per page. Without it no provider mounts, nothing is
+  // fetched, and `ShellBody` sees `useBoard() === null`.
+  return board ? (
+    <BoardProvider>
+      <ShellBody {...props} />
+    </BoardProvider>
+  ) : (
+    <ShellBody {...props} />
+  );
+}
+
+type ArcadeShellProps = {
   /**
    * The catalog. Two consumers: resolving a slug to the `Game` the overlay
    * renders, and `SiteHeader`, which hands it to "Surprise me" to pick from. Both
@@ -73,8 +86,19 @@ export function ArcadeShell({
   query?: string;
   onQueryChange?: (value: string) => void;
   children: React.ReactNode;
-}) {
+};
+
+function ShellBody({
+  games,
+  categories,
+  activeCategory = "All",
+  onSelectCategory,
+  query,
+  onQueryChange,
+  children,
+}: ArcadeShellProps) {
   const [navOpen, setNavOpen] = useState(false);
+  const board = useBoard();
   const [playingSlug, setPlayingSlug] = useState<string | null>(null);
 
   // Favourites sync lives HERE because the shell is the one component guaranteed
@@ -85,7 +109,17 @@ export function ArcadeShell({
   // mutually exclusive. Hoisting it removes that coupling entirely.
   useFavoritesServerSync();
 
-  const openGame = useCallback((slug: string) => setPlayingSlug(slug), []);
+  // On a shared board every play goes through "who's playing?" and the board's own
+  // overlay, so the score lands on the chosen player. With no board session (the
+  // case for everyone else) `interceptPlay` is false and this is unchanged.
+  const openGame = useCallback(
+    (slug: string) => {
+      const game = games.find((g) => g.slug === slug);
+      if (game && board?.interceptPlay(game)) return;
+      setPlayingSlug(slug);
+    },
+    [games, board],
+  );
   const closeGame = useCallback(() => setPlayingSlug(null), []);
 
   const playingGame = useMemo(
@@ -124,6 +158,7 @@ export function ArcadeShell({
             query={query}
             onQueryChange={onQueryChange}
           />
+          {board?.available && <BoardLayer />}
           {children}
           <SiteFooter />
         </main>
