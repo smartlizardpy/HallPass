@@ -446,6 +446,6 @@ off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});retur
 setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
 q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:c.n==="invite"?{sent:0,link:null,cancelled:true}:{ok:false,reason:"inert"})})},2000)})(window);
 </script>
-<script src="https://hallpass-rouge.vercel.app/sdk/v1/hallpass.js" data-game="last-bell" defer></script>
+<script src="/sdk/v1/hallpass.js" data-game="last-bell" defer></script>
 </body>
 </html>
