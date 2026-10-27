@@ -1,6 +1,10 @@
 // LAST BELL - fluorescent fixtures: instanced emissive panels + a small pool of real PointLights that
 // follow the player (smooth fades, no popping), flicker, broken lights and global light modes.
 // Owned by S1 (World).
+// Seasonal extension (halloween/, optional, unused in normal play): fixture.hmul (0..1, default 1) scales a
+// fixture's level and a fixture under 0.03 leaves the light pool (blackouts); addGlows([{x,y,z,color,power,
+// dist,roomId,flick}]) adds 'glow' fixtures (pumpkin candles) that join the pool and ignore hmul;
+// clearGlows() removes them. Glows are kept across build() so transforms don't drop them.
 import * as THREE from './lib/three/three.module.js';
 import { placeMatrix } from './world-kit.js';
 
@@ -40,6 +44,7 @@ export class LightSystem {
     this._best = new Int32Array(8);
     this._bestD = new Float32Array(8);
     this._dirty = false;
+    this.emergency = new Set(); // keys of fixtures shown as dim red emergency lighting
   }
 
   /** fixtures: [{x,y,z,rot,state:'ok'|'flicker'|'broken',roomId,kind:'panel'|'bulb', dangling}] */
@@ -47,8 +52,9 @@ export class LightSystem {
     this.dispose();
     this.fixtures = fixtures.map((f, i) => ({
       ...f, index: i, cur: f.state === 'broken' ? 0 : 1, flick: 1, timer: Math.random() * 2, target: 1,
-      panel: -1, enabled: true, spark: 0,
+      panel: -1, enabled: true, spark: 0, hmul: 1,
     }));
+    if (this._glows?.length) this._appendGlows(this._glows);
     const panels = this.fixtures.filter((f) => f.kind === 'panel' && !f.dangling);
     const part = kit.get('light_panel').parts[0];
     const mesh = new THREE.InstancedMesh(part.geometry, kit.panelMaterial, Math.max(1, panels.length));
@@ -95,8 +101,35 @@ export class LightSystem {
   }
 
   /** Enable / disable fixtures of a room (Room 000 before reveal). */
-  setRoomEnabled(roomId, on) {
-    for (const f of this.fixtures) if (f.roomId === roomId) f.enabled = on;
+  setRoomEnabled(roomId, on, floor = 0) {
+    for (const f of this.fixtures) if (f.roomId === roomId && (f.floor || 0) === floor) f.enabled = on;
+    this._dirty = true;
+  }
+
+  /** Emergency lighting for fixtures tagged with `key` (fixture.emergency): dim red until switched off. */
+  setEmergency(key, on) {
+    if (on) this.emergency.add(key); else this.emergency.delete(key);
+    this._dirty = true;
+  }
+
+  /** Seasonal: candle-lit glows (see header). Each { x, y, z, color, power, dist, roomId, flick }. */
+  addGlows(list) {
+    this._glows = (this._glows || []).concat(list);
+    this._appendGlows(list);
+  }
+
+  clearGlows() {
+    this._glows = [];
+    this.fixtures = this.fixtures.filter((f) => f.kind !== 'glow');
+    this.fixtures.forEach((f, i) => (f.index = i));
+    for (const s of this.pool) { s.fx = -1; s.w = 0; s.light.intensity = 0; }
+    this._dirty = true;
+  }
+
+  _appendGlows(list) {
+    for (const g of list) {
+      this.fixtures.push({ floor: 0, ...g, kind: 'glow', state: 'ok', index: this.fixtures.length, cur: 1, flick: g.flick ?? 0, timer: 0, target: 1, panel: -1, enabled: true, spark: 0, hmul: 1 });
+    }
     this._dirty = true;
   }
 
@@ -113,6 +146,12 @@ export class LightSystem {
 
   _fixtureLevel(f, dt) {
     if (!f.enabled) return 0;
+    if (f.kind === 'glow') return f.flick ? 0.82 + 0.18 * Math.sin(this.time * f.flick + f.index) * Math.sin(this.time * 2.7 + f.index * 1.7) : 1;
+    if (f.hmul !== undefined && f.hmul < 1) return this._fixtureLevelRaw(f, dt) * Math.max(0, f.hmul);
+    return this._fixtureLevelRaw(f, dt);
+  }
+
+  _fixtureLevelRaw(f, dt) {
     if (f.state === 'broken') {
       // rare dying spark (none with reduced effects)
       if (f.spark > 0) { f.spark -= dt; return f.spark > 0 ? 0.45 : 0; }
@@ -142,7 +181,9 @@ export class LightSystem {
     return 1;
   }
 
-  update(dt, ref, refRoom) {
+  /** camFloor / inStair: the pool only takes fittings on the camera's floor (both floors in a stairwell),
+   *  so a light never shines up or down through a slab. */
+  update(dt, ref, refRoom, camFloor = 0, inStair = false) {
     this.time += dt;
     const M = MODE[this.mode];
     const k = Math.min(1, dt * 3);
@@ -161,13 +202,14 @@ export class LightSystem {
       const f = this.fixtures[i];
       const lvl = this._fixtureLevel(f, dt);
       const flickering = f.state === 'flicker' || this.flickAmt > 0.01;
-      const ease = flickering ? (this.reduced ? 6 : 22) : 8; // ~50 ms edges while flickering
+      const ease = f.snap ? 45 : flickering ? (this.reduced ? 6 : 22) : 8; // ~50 ms edges while flickering; f.snap: ~25 ms (a seasonal flicker reveal)
       const cur = f.state === 'broken' && !this.reduced ? lvl : f.cur + (lvl - f.cur) * Math.min(1, dt * ease);
       const changed = Math.abs(cur - f.cur) > 0.002;
       f.cur = cur;
       if (f.panel >= 0 && (changed || this._dirty || transitioning || this.red > 0.01)) {
-        const b = f.cur * this.mul * (this.red > 0.01 ? redPulse : 1);
-        _c.copy(PANEL).lerp(RED, this.red).multiplyScalar(Math.max(0, b));
+        const em = f.emergency && this.emergency.has(f.emergency);
+        const b = f.cur * this.mul * (this.red > 0.01 ? redPulse : 1) * (em ? 0.45 : 1);
+        _c.copy(PANEL).lerp(RED, em ? 1 : this.red).multiplyScalar(Math.max(0, b));
         if (b < 0.12) _c.lerp(PANEL_DEAD, 1 - b / 0.12);
         panels.setColorAt(f.panel, _c);
         colorsChanged = true;
@@ -182,18 +224,23 @@ export class LightSystem {
     const bestD = this._bestD;
     let nb = 0;
     const R2 = this.range * this.range;
-    const rooms = this.world.rooms;
+    const R2snap = (this.range + 8) * (this.range + 8); // f.snap (a seasonal flicker): its lights reach further
     const refCorr = refRoom && refRoom.isCorridor;
+    const refFloor = refRoom ? refRoom.floor || 0 : camFloor;
     for (let i = 0; i < this.fixtures.length; i++) {
       const f = this.fixtures[i];
-      if (!f.enabled || f.state === 'broken') continue;
-      const dx = f.x - ref.x, dz = f.z - ref.z;
-      let d = dx * dx + dz * dz;
-      if (d > R2) continue;
-      if (refRoom && f.roomId !== refRoom.id) {
-        const fr = rooms[f.roomId];
+      if (!f.enabled || f.state === 'broken' || (f.hmul !== undefined && f.hmul < 0.03 && !f.snap)) continue;
+      const ff = f.floor || 0;
+      if (!inStair && ff !== camFloor) continue;
+      const dx = f.x - ref.x, dz = f.z - ref.z, dy = f.y - 1.6 - ref.y;
+      let d = dx * dx + dz * dz + (inStair ? dy * dy : 0);
+      if (d > (f.snap ? R2snap : R2)) continue;
+      if (refRoom && (f.roomId !== refRoom.id || ff !== refFloor)) {
+        const fr = this.world.floors?.[ff]?.rooms?.[f.roomId] || (ff === 0 ? this.world.rooms[f.roomId] : null);
         if (!(refCorr && fr && fr.isCorridor)) d += 30;
       }
+      if (f.kind === 'glow') d = d * 2 + 6; // candles only win a slot near you, or when the ceiling lights are out
+      if (f.snap) d -= f.snap === 2 ? 900 : 200; // a flicker holds its slots through the dark (2: the one it must light)
       for (let s = 0; s < N; s++) if (this.pool[s].fx === i) { d -= 5; break; }
       // insertion into the best-N list
       if (nb < N) {
@@ -212,7 +259,7 @@ export class LightSystem {
       const slot = this.pool[s];
       let wanted = false;
       for (let j = 0; j < nb; j++) if (best[j] === slot.fx) { wanted = true; break; }
-      slot.w += ((wanted ? 1 : 0) - slot.w) * fade;
+      slot.w += ((wanted ? 1 : 0) - slot.w) * (slot.fx >= 0 && this.fixtures[slot.fx].snap ? 1 : fade);
       if (!wanted && slot.w < 0.02) { slot.fx = -1; slot.w = 0; }
     }
     for (let j = 0; j < nb; j++) {
@@ -221,7 +268,7 @@ export class LightSystem {
       for (let s = 0; s < N; s++) if (this.pool[s].fx === fi) { has = true; break; }
       if (has) continue;
       for (let s = 0; s < N; s++) {
-        if (this.pool[s].fx === -1) { this.pool[s].fx = fi; this.pool[s].w = 0; break; }
+        if (this.pool[s].fx === -1) { this.pool[s].fx = fi; this.pool[s].w = this.fixtures[fi].snap ? 1 : 0; break; }
       }
     }
     for (let s = 0; s < N; s++) {
@@ -231,19 +278,63 @@ export class LightSystem {
       const f = this.fixtures[slot.fx];
       const dx = f.x - ref.x, dz = f.z - ref.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
-      const edge = Math.min(1, Math.max(0, (this.range - dist) / (this.range * 0.4)));
-      if (f.kind === 'bulb') {
+      const edge = f.snap ? 1 : Math.min(1, Math.max(0, (this.range - dist) / (this.range * 0.4)));
+      if (f.kind === 'glow') {
+        L.color.setHex(f.color);
+        L.position.set(f.x, f.y, f.z);
+        L.intensity = f.power * f.cur * slot.w * edge;
+        L.distance = f.dist;
+      } else if (f.kind === 'bulb') {
         L.color.copy(BULB_COLOR);
         L.position.set(f.x, f.y - 0.05, f.z);
         L.intensity = 14.0 * slot.w * edge * (0.85 + 0.15 * Math.sin(this.time * 2.1));
         L.distance = 8;
       } else {
-        L.color.copy(LIGHT_COLOR).lerp(LIGHT_RED, this.red);
+        const em = f.emergency && this.emergency.has(f.emergency);
+        L.color.copy(LIGHT_COLOR).lerp(LIGHT_RED, em ? 1 : this.red);
         L.position.set(f.x, f.y - 0.35, f.z);
-        L.intensity = this.baseIntensity * f.cur * this.mul * slot.w * edge * (this.red > 0.01 ? redPulse : 1);
+        L.intensity = this.baseIntensity * f.cur * this.mul * slot.w * edge * (this.red > 0.01 ? redPulse : 1) * (em ? 0.35 : 1);
         L.distance = this.range * 0.75;
       }
     }
+  }
+
+  /** CCTV: light the pool around a camera (any floor) for one off-screen render; returns the undo.
+   *  The pool normally follows the player, so a feed of a far corridor (or the other floor) would only get
+   *  the hemisphere light - this is why the upstairs feeds used to come out darker. */
+  poolAt(ref, floor = 0) {
+    const N = this.pool.length;
+    if (!N || !ref) return () => {};
+    const saved = this.pool.map((s) => ({ fx: s.fx, w: s.w, i: s.light.intensity, d: s.light.distance, p: s.light.position.clone(), c: s.light.color.clone() }));
+    const best = [];
+    const R2 = this.range * this.range;
+    for (let i = 0; i < this.fixtures.length; i++) {
+      const f = this.fixtures[i];
+      if (!f.enabled || f.state === 'broken' || f.kind === 'glow' || (f.hmul !== undefined && f.hmul < 0.03) || (f.floor || 0) !== floor) continue;
+      const d = (f.x - ref.x) ** 2 + (f.z - ref.z) ** 2;
+      if (d < R2) best.push([d, i]);
+    }
+    best.sort((a, b) => a[0] - b[0]);
+    for (let s = 0; s < N; s++) {
+      const L = this.pool[s].light;
+      const it = best[s];
+      if (!it) { L.intensity = 0; continue; }
+      const f = this.fixtures[it[1]];
+      const em = f.emergency && this.emergency.has(f.emergency);
+      L.color.copy(LIGHT_COLOR).lerp(LIGHT_RED, em ? 1 : this.red);
+      L.position.set(f.x, f.y - 0.35, f.z);
+      L.distance = this.range * 0.75;
+      const edge = Math.min(1, Math.max(0, (this.range - Math.sqrt(it[0])) / (this.range * 0.4)));
+      L.intensity = f.kind === 'bulb' ? 14.0 * edge : this.baseIntensity * Math.max(0.35, f.cur) * this.mul * edge * (em ? 0.35 : 1);
+    }
+    return () => {
+      for (let s = 0; s < N; s++) {
+        const sl = this.pool[s], v = saved[s];
+        sl.fx = v.fx; sl.w = v.w;
+        sl.light.intensity = v.i; sl.light.distance = v.d;
+        sl.light.position.copy(v.p); sl.light.color.copy(v.c);
+      }
+    };
   }
 
   dispose() {

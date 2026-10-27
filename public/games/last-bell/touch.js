@@ -1,4 +1,4 @@
-// LAST BELL - tablet / touch controls. Owned by the main agent.
+// LAST BELL - tablet / touch controls. Owned by the main agent (NET since the Second Floor update).
 //
 // Active when the device's primary pointer is touch (iPad, Android tablets), or with ?touch=1
 // (?touch=0 forces it off). Adds `touch` to <html> (CSS shows the touch UI and hides key hints).
@@ -6,6 +6,8 @@
 //   left half   a joystick appears under the thumb: move; push it to the rim to run
 //   right half  drag to look
 //   buttons     Use (E), Torch (F), Crouch (C), Breath (hold, only while hidden), Pause
+//               co-op only: Chat and Players, in the top-left strip after Pause (social.css). While
+//               chat is open (the soft keyboard is up) the controls hide; the chat sheet has its own ✕.
 //
 // No pointer lock on touch: Player.setTouchMode(true) makes lockPointer() a no-op and allows
 // look input without a lock, so the "Click to resume" overlay never appears. The first start /
@@ -33,6 +35,8 @@ const ICON = {
   crouch: '<svg viewBox="0 0 32 32"><circle cx="16" cy="7" r="3"/><path d="M16 10.5v7l-6 3.5 3 6M16 17.5l6 2-1 7M11 13.5l5-1 5 2"/></svg>',
   breath: '<svg viewBox="0 0 32 32"><path d="M6 12h13a3 3 0 1 0-3-3M6 17h18a3 3 0 1 1-3 3M6 22h8"/></svg>',
   pause: '<svg viewBox="0 0 32 32"><path d="M11 8v16M21 8v16"/></svg>',
+  chat: '<svg viewBox="0 0 32 32"><path d="M6 8h20v13H14l-6 5v-5H6z"/></svg>',
+  players: '<svg viewBox="0 0 32 32"><circle cx="12" cy="11" r="4"/><path d="M4 26c0-5 3.6-8 8-8s8 3 8 8"/><circle cx="22" cy="10" r="3.2"/><path d="M21 17.2c4 .2 7 2.8 7 7.8"/></svg>',
 };
 
 export class TouchControls {
@@ -57,6 +61,8 @@ export class TouchControls {
     root.innerHTML = `
       <div class="touch-stick" aria-hidden="true"><span class="touch-stick__knob"></span></div>
       <button class="touch-btn touch-btn--pause" data-touch="pause" aria-label="Pause">${ICON.pause}</button>
+      <button class="touch-btn touch-btn--chat" data-touch="chat" aria-label="Chat" hidden>${ICON.chat}<i class="touch-btn__dot" hidden></i></button>
+      <button class="touch-btn touch-btn--players" data-touch="players" aria-label="Players" hidden>${ICON.players}</button>
       <button class="touch-btn touch-btn--use" data-touch="use" aria-label="Use">${ICON.use}<span>Use</span></button>
       <button class="touch-btn touch-btn--torch" data-touch="torch" aria-label="Torch">${ICON.torch}<span>Torch</span></button>
       <button class="touch-btn touch-btn--crouch" data-touch="crouch" aria-label="Crouch">${ICON.crouch}<span>Crouch</span></button>
@@ -119,15 +125,28 @@ export class TouchControls {
       else if (name === 'crouch') pl._keyPressed?.('KeyC');
       else if (name === 'gadget') pl._keyPressed?.('KeyG');
       else if (name === 'pause') ev?.emit('ui:pause', {});
+      else if (name === 'players') g.coop?.plist?.toggle?.();
       else if (name === 'breath') {
         this._breath = e.pointerId;
         pl.setTouchBreath?.(true);
       }
     };
     for (const [name, b] of Object.entries(this.btn)) {
-      b.addEventListener('pointerdown', (e) => press(name, e));
       b.addEventListener('contextmenu', (e) => e.preventDefault());
+      if (name === 'chat') continue;
+      b.addEventListener('pointerdown', (e) => press(name, e));
     }
+    // chat opens on the click (not the touch-down): iOS only raises the soft keyboard for a focus() made
+    // inside a click / touchend
+    this.btn.chat.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    this.btn.chat.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (g.state === 'playing') g.coop?.chat?.open?.();
+    });
 
     const r = this.root;
     r.addEventListener('pointerdown', (e) => {
@@ -206,25 +225,32 @@ export class TouchControls {
    */
   _wanted(state = this.game.state) {
     const g = this.game;
-    return state === 'playing' && !g.coopPaused && !g.schoolnet?.isOpen;
+    return state === 'playing' && !g.coopPaused && !g.schoolnet?.isOpen && !g.coop?.chat?.isOpen && g.coop?.status !== 'director';
   }
 
   /** Per frame: co-op's pause menu comes and goes; button states follow the player. */
   update() {
     if (!this.active) return;
-    const coopPaused = !!this.game.coopPaused;
-    if (coopPaused !== !!this._coopPaused) {
-      this._coopPaused = coopPaused;
-      this.root.hidden = !this._wanted();
-      if (coopPaused) this._releaseAll();
+    const g = this.game;
+    // co-op's pause menu and the chat sheet come and go without a game:state change
+    const want = this._wanted();
+    if (want !== this._want) {
+      this._want = want;
+      if (g.state === 'playing' && !g.schoolnet?.isOpen) this.root.hidden = !want;
+      if (!want) this._releaseAll();
     }
     if (this.root.hidden) return;
-    const pl = this.game.player;
+    const pl = g.player;
     if (!pl) return;
     const hidden = !!pl.isHidden;
-    const key = `${!!pl.focused && !hidden}|${hidden}|${!!pl.flashlightOn}|${!!pl.isCrouching}|${!!pl.holdingBreath}`;
+    const coop = !!g.coop?.active;
+    const unread = coop && !!g.coop.chat?.unread;
+    const key = `${!!pl.focused && !hidden}|${hidden}|${!!pl.flashlightOn}|${!!pl.isCrouching}|${!!pl.holdingBreath}|${coop}|${unread}`;
     if (key === this._key) return;
     this._key = key;
+    this.btn.chat.hidden = !coop;
+    this.btn.players.hidden = !coop;
+    this.btn.chat.querySelector('.touch-btn__dot').hidden = !unread;
     this.btn.use.classList.toggle('is-ready', (!!pl.focused && !hidden) || hidden);
     this.btn.use.querySelector('span').textContent = hidden ? 'Leave' : 'Use';
     this.btn.breath.hidden = !hidden;

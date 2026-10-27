@@ -37,8 +37,8 @@ export const ELECTION = {
       graffiti: true,
     },
     {
-      name: 'Muhammed Tövbe Estağfurullah Donaeld Tramp Micheal Jordain',
-      lines: ['Muhammed', 'Tövbe Estağfurullah', 'Donaeld Tramp', 'Micheal Jordain'],
+      name: 'Ozzy Kaygulugulu',
+      lines: ['Ozzy', 'Kaygulugulu'],
       style: 'handmade',
       weight: 3, // share of all posters, split across the variants
       // one hand-made poster per variant (photos: lookalike edits of Ozan's photo, with his permission)

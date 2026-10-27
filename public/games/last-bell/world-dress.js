@@ -24,12 +24,23 @@ export const ROOM_TINT = {
   reception: [1.0, 0.95, 0.86],
   storage: [0.78, 0.78, 0.74],
   room000: [0.62, 0.4, 0.36],
+  // upstairs (Floor 2) rooms
+  art: [1.04, 1.0, 0.9],
+  staffroom: [1.0, 0.93, 0.84],
+  principal: [0.92, 0.84, 0.74],
+  office: [1.0, 0.95, 0.86],
+  security: [0.84, 0.9, 0.88],
+  computer_lab: [0.98, 0.96, 0.86],
+  maintenance: [0.74, 0.76, 0.74],
 };
 const FLOOR = {
   corridor: 'floor_chequer', classroom: 'floor_lino', science_lab: 'floor_lino', library: 'floor_carpet',
   toilets: 'floor_tiles', stairwell: 'floor_concrete', reception: 'floor_chequer', storage: 'floor_concrete',
   room000: 'floor_boards',
+  art: 'floor_lino', staffroom: 'floor_carpet', principal: 'floor_carpet', office: 'floor_carpet',
+  security: 'floor_lino', computer_lab: 'floor_carpet', maintenance: 'floor_concrete',
 };
+export { FLOOR as FLOOR_NODE };
 const PLAIN = new Set([ET.WALL, ET.EXT, ET.HIDDEN, ET.SEAL]);
 
 export const CHALK_NORMAL = [
@@ -54,14 +65,14 @@ export const NOTES = [
   'Exam paper. Every answer is "000".',
 ];
 
-function rotFor(dx, dz) { return Math.atan2(dx, dz); }
+export function rotFor(dx, dz) { return Math.atan2(dx, dz); }
 /** World XZ of a point given in a prop's local frame (local +X = (cos r, -sin r), +Z = (sin r, cos r)). */
-function lp(x, z, rot, lx, lz) {
+export function lp(x, z, rot, lx, lz) {
   const c = Math.cos(rot), s = Math.sin(rot);
   return { x: x + c * lx + s * lz, z: z - s * lx + c * lz };
 }
 
-class Occ {
+export class Occ {
   constructor(minX, minZ, maxX, maxZ) {
     this.res = 0.25;
     this.ox = minX;
@@ -215,7 +226,7 @@ export class Dresser {
   }
 
   /** Pick the "front" side: the side with the most plain wall, fewest doors. */
-  pickFront(inf, rng, avoidSide = null) {
+  pickFront(inf, rng, avoidSide = null, force = null) {
     const sides = {};
     for (const w of inf.walls) {
       const s = (sides[w.side] = sides[w.side] || { plain: [], doors: 0, all: [] });
@@ -225,7 +236,8 @@ export class Dresser {
     }
     let best = null;
     let bestScore = -Infinity;
-    for (const [k, s] of Object.entries(sides)) {
+    if (force && sides[force]?.plain.length) best = force; // Floor 2: the authored rooms say where the board goes
+    else for (const [k, s] of Object.entries(sides)) {
       if (!s.plain.length || k === avoidSide) continue;
       const score = s.plain.length * 2 - s.doors * 3 + rng.next() * 0.5;
       if (score > bestScore) { bestScore = score; best = k; }
@@ -270,12 +282,14 @@ export class Dresser {
     const sides = [];
     if (ra >= 0) sides.push({ room: L.rooms[ra], nx: ei.horiz ? 0 : -1, nz: ei.horiz ? -1 : 0 });
     if (rb >= 0) sides.push({ room: L.rooms[rb], nx: ei.horiz ? 0 : 1, nz: ei.horiz ? 1 : 0 });
+    const wide = !!(L.wideEdges && L.wideEdges.has(e)); // the library's double doors (2.4 m opening)
     for (const s of sides) {
       const tiled = s.room.type === 'toilets';
+      if (s.room.type === 'stairwell' && s.room.farEdge === e) continue; // drawn by the stair model
       let node;
       switch (t) {
         case ET.DOOR:
-        case ET.OPENING: node = tiled ? 'wall_face_door_tiled' : 'wall_face_door'; break;
+        case ET.OPENING: node = wide && this.kit.has('wall_face_door_double') ? 'wall_face_door_double' : tiled ? 'wall_face_door_tiled' : 'wall_face_door'; break;
         case ET.WINDOW: node = 'wall_face_window'; break;
         case ET.EXT_WINDOW: node = 'wall_face_ext_window'; break;
         case ET.ENTRANCE: node = 'wall_face_entrance'; break;
@@ -296,8 +310,9 @@ export class Dresser {
     const a1 = (ei.horiz ? ei.x1 : ei.z1) + T;
     const mid = ei.horiz ? ei.mx : ei.mz;
     if (t === ET.DOOR || t === ET.OPENING) {
-      box(a0, mid - 0.6, 'wall');
-      box(mid + 0.6, a1, 'wall');
+      const hw = wide ? 1.2 : 0.6;
+      box(a0, mid - hw, 'wall');
+      box(mid + hw, a1, 'wall');
     } else if (t === ET.ENTRANCE) {
       box(a0, mid - 1.0, 'wall');
       box(mid + 1.0, a1, 'wall');
@@ -348,6 +363,7 @@ export class Dresser {
   // ------------------------------------------------------------------------------- floors, ceilings, fixtures
   dressShell(room, rng) {
     const o = this.out();
+    if (room.type === 'stairwell') return o; // world-stairs.js: landings, ceilings and fittings
     const floor = FLOOR[room.type] || 'floor_lino';
     const C = CELL;
     for (const c of room.cells) {
@@ -707,15 +723,19 @@ export class Dresser {
   }
 
   // classroom --------------------------------------------------------------------------------
-  classroom(room, rng, o, inf, occ, variant) {
-    const front = this.pickFront(inf, rng);
+  /** opts (Floor 2): front side, board text, deskHide (true/false instead of the 35 % roll).
+   *  Returns { front, teacher: { x, z, rot } | null }. */
+  classroom(room, rng, o, inf, occ, variant, opts = {}) {
+    const front = this.pickFront(inf, rng, null, opts.front || null);
+    let teacher = null;
     const F = this.frame(inf, front.side);
     const f = F.f;
     const studentRot = rotFor(f.x, f.z);
     const chairColor = rng.chance(0.5) ? 'chair_orange' : 'chair_blue';
     const other = chairColor === 'chair_orange' ? 'chair_blue' : 'chair_orange';
     const creepy = rng.chance(0.55);
-    const text = creepy ? rng.pick(CHALK_CREEPY) : rng.pick(CHALK_NORMAL);
+    let text = creepy ? rng.pick(CHALK_CREEPY) : rng.pick(CHALK_NORMAL);
+    if (opts.text != null) text = opts.text;
     if (front.wall) this.board(o, front.wall, 2, text, 'chalk', occ);
     // teacher desk: 1.75 m from the board, to one side
     const tSide = rng.chance(0.5) ? 1 : -1;
@@ -724,6 +744,7 @@ export class Dresser {
     const teacherRot = rotFor(-f.x, -f.z);
     if (this.fits(occ, 'desk_teacher', tx, tz, teacherRot, 0.1)) {
       this.put(o, 'desk_teacher', tx, 0, tz, teacherRot, { collide: true, occ, gap: 0.1 });
+      teacher = { x: tx, z: tz, rot: teacherRot };
       const [cx, cz] = F.w(tu + tSide * 1.05, 1.1);
       this.put(o, 'chair_wood', cx, 0, cz, teacherRot + rng.range(-0.5, 0.5), { collide: true, occ, h: 0.9 });
       if (rng.chance(0.4)) {
@@ -734,7 +755,7 @@ export class Dresser {
       const [bx, bz] = F.w(tu - tSide * 1.0, 1.4);
       if (this.fits(occ, 'bin', bx, bz, 0, 0.05)) this.put(o, 'bin', bx, 0, bz, rng.range(0, 6), { collide: true, occ });
       // hide under the teacher desk (kneehole opens towards the board)
-      if (rng.chance(0.35)) {
+      if (opts.deskHide ?? rng.chance(0.35)) {
         const kx = Math.cos(teacherRot), kz = -Math.sin(teacherRot); // local +X
         const local = (lx, lz) => ({ x: tx + kx * lx + Math.sin(teacherRot) * lz, z: tz + kz * lx + Math.cos(teacherRot) * lz });
         const pos = local(0.18, -0.05);
@@ -842,6 +863,7 @@ export class Dresser {
     this.scatter(o, rng, inf, occ, rng.chance(0.5) ? 'papers_a' : 'papers_b', rng.int(0, 2));
     if (chaos) this.scatter(o, rng, inf, occ, 'papers_b', 2);
     o.spawns.push({ x: inf.cx, z: inf.cz, kind: 'patrol' });
+    return { front, teacher };
   }
 
   // science lab ------------------------------------------------------------------------------
@@ -1042,12 +1064,27 @@ export class Dresser {
   reception(room, rng, o, inf, occ) {
     // entrance is on the S (outer) wall. Counter runs parallel to a side wall (W or E) without openings.
     const ent = inf.walls.find((w) => w.type === ET.ENTRANCE);
-    const side = rng.chance(0.5) ? 'W' : 'E';
-    const F = this.frame(inf, side);
+    let side = rng.chance(0.5) ? 'W' : 'E';
+    // the counter must not cut the walkway from the corridor openings to the entrance: try the drawn
+    // side first, then nudges and the other side (pinned stairwells keep the band 2 cells deep, so a
+    // blind placement blocked the way in on ~4 % of seeds); fall back to the old spot
+    let F = this.frame(inf, side), cx, cz;
+    let placed = false;
+    for (const sd of [side, side === 'W' ? 'E' : 'W']) {
+      const Fs = this.frame(inf, sd);
+      const crs = rotFor(-Fs.f.x, -Fs.f.z);
+      for (const [du, v] of [[-0.4, 2.1], [0.6, 2.1], [-1.4, 2.1], [-0.4, 1.6], [0.6, 1.6], [-1.4, 1.6]]) {
+        const [x, z] = Fs.w(Fs.lat / 2 + du, v);
+        if (!this.fits(occ, 'reception_counter', x, z, crs, 0.05)) continue;
+        side = sd; F = Fs; cx = x; cz = z; placed = true;
+        break;
+      }
+      if (placed) break;
+    }
+    if (!placed) [cx, cz] = F.w(F.lat / 2 - 0.4, 2.1);
     const f = F.f;
     const len = F.lat;
     const crot = rotFor(-f.x, -f.z); // visitor side (+Z local) faces away from the side wall
-    const [cx, cz] = F.w(len / 2 - 0.4, 2.1);
     this.put(o, 'reception_counter', cx, 0, cz, crot, { collide: true, occ, gap: 0.05, h: 1.1 });
     o.surfaces.push({ x: cx - Math.cos(crot) * 0.6 - Math.sin(crot) * 0.15, y: 0.76, z: cz + Math.sin(crot) * 0.6 - Math.cos(crot) * 0.15, kind: 'counter', prio: 1 });
     // back office: pigeonholes + filing cabinets on the side wall

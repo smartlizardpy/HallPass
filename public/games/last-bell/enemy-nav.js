@@ -5,10 +5,17 @@
 //   iteration cap with a partial path to the closest node found
 // * string-pulling path smoothing with grid line-walkability checks
 // * locked doors are never passable (checked live through world.doors), plus temporary blocks
+// * stair-flight cells (nav.zone[i] === 1, Second Floor update) are never passable for enemies
+// * open / ajar door leaves (a 1.16 m board standing into the room) block the cells under them
+//   (updateLeaves; the shared nav grid itself doesn't know about leaves)
+// * soft cost for cells within 0.6 m of furniture (buildSoft): paths keep off desks and cupboards
+//   (walls stay at the grid's 0.42 m clearance), and smoothing never cuts closer to a prop than A* went
+// * reachableNear(): a goal his nav can't reach → the nearest cell he can (connected components)
 //
 // No allocations per search once the buffers are sized for the grid.
 
 const SQRT2 = Math.SQRT2;
+const SOFT_COST = 0.7; // extra cost of a step into a cell within 0.6 m of a prop (~ +70 % path length)
 const DX = [1, -1, 0, 0, 1, 1, -1, -1];
 const DZ = [0, 0, 1, -1, 1, -1, 1, -1];
 
@@ -23,6 +30,12 @@ export class NavPathfinder {
     this.lastPartial = false;
     this.lastLength = 0;
     this.heapCap = 0;
+    this.soft = null;
+    this.leaf = null;
+    this.leafList = null;
+    this.leafN = 0;
+    this._leafSig = NaN;
+    this._compDirty = true;
   }
 
   /** Bind to a nav grid (re-allocates only when the grid size changes). */
@@ -38,13 +51,101 @@ export class NavPathfinder {
       this.closedStamp = new Uint32Array(n);
       this.blocked = new Uint8Array(n);
       this.raw = new Int32Array(n);
+      this.onPath = new Uint32Array(n);
+      this.comp = new Int32Array(n);
+      this.compQ = new Int32Array(n);
+      this.leaf = new Uint8Array(n);
+      this.leafList = new Int32Array(Math.min(n, 8192));
+      this.soft = null;
       this.heapCap = Math.max(1024, n * 2);
       this.heap = new Int32Array(this.heapCap);
       this.heapF = new Float32Array(this.heapCap);
       this.stamp = 0;
     } else {
       this.blocked.fill(0);
+      this.leaf.fill(0);
     }
+    this.leafN = 0;
+    this._leafSig = NaN;
+    this.soft = null;
+    this._compDirty = true;
+  }
+
+  /**
+   * Mark the cells under solid door leaves (door.leafSeg, |angle| > 0.06) on `floor` as blocked for a body of
+   * radius r. Doorway cells themselves stay free (the doorway is handled by door state). Cheap no-op while no
+   * leaf has moved. → true if the layer changed.
+   */
+  updateLeaves(doors, floor = 0, r = 0.4) {
+    const nav = this.nav;
+    if (!nav || !doors || !this.leaf) return false;
+    let sig = 0;
+    for (let k = 0; k < doors.length; k++) {
+      const d = doors[k];
+      if (!d.leafSeg || (d.floor ?? 0) !== floor) continue;
+      sig = (sig * 31 + Math.round((d.active === false ? 0 : d.angle || 0) * 40) + 7) % 2147483647;
+    }
+    if (sig === this._leafSig) return false;
+    this._leafSig = sig;
+    const leaf = this.leaf;
+    for (let k = 0; k < this.leafN; k++) leaf[this.leafList[k]] = 0;
+    this.leafN = 0;
+    const res = nav.res;
+    const cols = nav.cols;
+    for (let k = 0; k < doors.length; k++) {
+      const d = doors[k];
+      const sg = d.leafSeg;
+      if (!sg || (d.floor ?? 0) !== floor || d.active === false || Math.abs(d.angle || 0) <= 0.06) continue;
+      const vx = sg.bx - sg.ax;
+      const vz = sg.bz - sg.az;
+      const vv = vx * vx + vz * vz;
+      if (vv < 1e-6) continue;
+      const c0 = Math.max(0, this.col(Math.min(sg.ax, sg.bx) - r));
+      const c1 = Math.min(cols - 1, this.col(Math.max(sg.ax, sg.bx) + r));
+      const r0 = Math.max(0, this.row(Math.min(sg.az, sg.bz) - r));
+      const r1 = Math.min(nav.rows - 1, this.row(Math.max(sg.az, sg.bz) + r));
+      for (let rr = r0; rr <= r1; rr++) {
+        for (let c = c0; c <= c1; c++) {
+          const i = rr * cols + c;
+          if (leaf[i] || (nav.door && nav.door[i] > 0)) continue;
+          const px = nav.originX + (c + 0.5) * res;
+          const pz = nav.originZ + (rr + 0.5) * res;
+          const u = Math.max(0, Math.min(1, ((px - sg.ax) * vx + (pz - sg.az) * vz) / vv));
+          const ex = sg.ax + vx * u - px;
+          const ez = sg.az + vz * u - pz;
+          if (ex * ex + ez * ez < r * r && this.leafN < this.leafList.length) {
+            leaf[i] = 1;
+            this.leafList[this.leafN++] = i;
+          }
+        }
+      }
+    }
+    this._compDirty = true;
+    return true;
+  }
+
+  /**
+   * Soft cost layer: propNear(x, z, r) → true if a furniture collider is within r. Cells within 0.6 m of a
+   * prop cost extra and smoothing keeps out of them. Built once per nav version (~1–3 ms on a full level).
+   */
+  buildSoft(propNear) {
+    const nav = this.nav;
+    if (!nav || !propNear) return;
+    const n = this.size;
+    if (!this.soft || this.soft.length !== n) this.soft = new Uint8Array(n);
+    const soft = this.soft;
+    let count = 0;
+    for (let i = 0; i < n; i++) {
+      if (!nav.walkable[i]) {
+        soft[i] = 0;
+        continue;
+      }
+      const x = this.cx(i);
+      const z = this.cz(i);
+      soft[i] = propNear(x, z, 0.6) ? 1 : 0;
+      count += soft[i];
+    }
+    this.softCells = count;
   }
 
   // ------------------------------------------------------------------ cell helpers
@@ -73,7 +174,8 @@ export class NavPathfinder {
 
   passable(idx) {
     const nav = this.nav;
-    if (idx < 0 || idx >= this.size || !nav.walkable[idx] || this.blocked[idx]) return false;
+    if (idx < 0 || idx >= this.size || !nav.walkable[idx] || this.blocked[idx] || this.leaf[idx]) return false;
+    if (nav.zone && nav.zone[idx] === 1) return false; // a stair flight: enemies never use the stairs
     const d = nav.door ? nav.door[idx] : 0;
     if (d > 0 && this.doors) {
       const door = this.doors[d - 1];
@@ -97,10 +199,88 @@ export class NavPathfinder {
     const d = this.nav.door;
     if (!d) return;
     for (let i = 0; i < this.size; i++) if (d[i] === doorIdx + 1) this.blocked[i] = on ? 1 : 0;
+    this._compDirty = true;
   }
 
   clearBlocks() {
     if (this.blocked) this.blocked.fill(0);
+    this._compDirty = true;
+  }
+
+  // ------------------------------------------------------------------ connected components
+  /** 4-connected components of passable cells (= what 8-connected A* without corner cutting can reach). */
+  _components() {
+    const nav = this.nav;
+    const n = this.size;
+    const comp = this.comp;
+    const q = this.compQ;
+    const W = nav.cols;
+    comp.fill(-1);
+    let label = 0;
+    for (let s = 0; s < n; s++) {
+      if (comp[s] !== -1 || !this.passable(s)) continue;
+      let h = 0;
+      let t = 0;
+      comp[s] = label;
+      q[t++] = s;
+      while (h < t) {
+        const i = q[h++];
+        const x = i % W;
+        if (x > 0 && comp[i - 1] === -1 && this.passable(i - 1)) { comp[i - 1] = label; q[t++] = i - 1; }
+        if (x < W - 1 && comp[i + 1] === -1 && this.passable(i + 1)) { comp[i + 1] = label; q[t++] = i + 1; }
+        if (i - W >= 0 && comp[i - W] === -1 && this.passable(i - W)) { comp[i - W] = label; q[t++] = i - W; }
+        if (i + W < n && comp[i + W] === -1 && this.passable(i + W)) { comp[i + W] = label; q[t++] = i + W; }
+      }
+      label++;
+    }
+    this._compDirty = false;
+    this._compVersion = nav.version;
+    this.components = label;
+  }
+
+  /**
+   * If the goal can't be reached from (sx, sz) (another component, or nothing passable near it), the
+   * nearest cell he CAN reach within 8 m of it → { x, z } (reused object); else null (A* will get there).
+   */
+  reachableNear(sx, sz, gx, gz, maxR = 16) {
+    const nav = this.nav;
+    if (!nav || !this.comp) return null;
+    if (this._compDirty || this._compVersion !== nav.version) this._components();
+    const start = this.nearestPassable(sx, sz, 6);
+    if (start < 0) return null;
+    const my = this.comp[start];
+    const goal = this.nearestPassable(gx, gz, 10);
+    if (goal >= 0 && this.comp[goal] === my) return null;
+    const c0 = this.col(gx);
+    const r0 = this.row(gz);
+    let best = -1;
+    let bestD = Infinity;
+    for (let r = 0; r <= maxR; r++) {
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.abs(dx) !== r && Math.abs(dz) !== r) continue;
+          const c = c0 + dx;
+          const rr = r0 + dz;
+          if (c < 0 || rr < 0 || c >= nav.cols || rr >= nav.rows) continue;
+          const i = rr * nav.cols + c;
+          if (this.comp[i] !== my) continue;
+          const ddx = this.cx(i) - gx;
+          const ddz = this.cz(i) - gz;
+          const d = ddx * ddx + ddz * ddz;
+          if (d < bestD) {
+            bestD = d;
+            best = i;
+          }
+        }
+      }
+      // a ring further out can't be closer than ~(r - 1) cells: stop once we have one and passed it
+      if (best >= 0 && (r - 1) * nav.res > Math.sqrt(bestD)) break;
+    }
+    if (best < 0) return null;
+    const out = this._alt || (this._alt = { x: 0, z: 0 });
+    out.x = this.cx(best);
+    out.z = this.cz(best);
+    return out;
   }
 
   /** Closest passable cell to idx within `maxR` cells (ring search), or -1. */
@@ -135,8 +315,11 @@ export class NavPathfinder {
     return -1;
   }
 
-  /** True if the straight segment stays on passable cells (sampled at ~res/3). */
-  lineWalkable(x0, z0, x1, z1) {
+  /**
+   * True if the straight segment stays on passable cells (sampled at ~res/3). With `pathStamp`, it also
+   * refuses soft (near-furniture) cells the A* path itself didn't use (smoothing clearance).
+   */
+  lineWalkable(x0, z0, x1, z1, pathStamp = 0) {
     const dx = x1 - x0;
     const dz = z1 - z0;
     const len = Math.sqrt(dx * dx + dz * dz);
@@ -149,6 +332,7 @@ export class NavPathfinder {
       if (idx === last) continue;
       last = idx;
       if (!this.passable(idx)) return false;
+      if (pathStamp && this.soft && this.soft[idx] && this.onPath[idx] !== pathStamp) return false;
     }
     return true;
   }
@@ -250,6 +434,7 @@ export class NavPathfinder {
     let found = false;
     let iter = 0;
     const doorArr = nav.door;
+    const soft = this.soft;
 
     while (this.heapSize > 0) {
       const cur = this._pop();
@@ -281,6 +466,7 @@ export class NavPathfinder {
           cost = SQRT2;
         }
         if (doorArr && doorArr[ni]) cost += 0.15; // slight preference for not loitering in doorways
+        if (soft && soft[ni]) cost += SOFT_COST; // keep off the furniture
         const ng = gcur + cost;
         if (openStamp[ni] !== stamp || ng < g[ni]) {
           g[ni] = ng;
@@ -299,6 +485,10 @@ export class NavPathfinder {
     let n = 0;
     for (let i = end; i !== -1 && n < this.size; i = parent[i]) this.raw[n++] = i;
     // raw[n-1] = start ... raw[0] = end
+    // smoothing may only touch near-furniture cells the A* path went through itself
+    const ps = (this._pathStamp = ((this._pathStamp || 0) + 1) >>> 0) || (this._pathStamp = 1);
+    if (this.soft) for (let k = 0; k < n; k++) this.onPath[this.raw[k]] = ps;
+    const psArg = this.soft ? ps : 0;
 
     // string pulling
     let count = 0;
@@ -311,14 +501,14 @@ export class NavPathfinder {
       out[count * 2 + 1] = az;
       count++;
     }
-    const endX = found && this.passableXZ(tx, tz) && this.lineWalkable(this.cx(goal), this.cz(goal), tx, tz) ? tx : this.cx(end);
+    const endX = found && this.passableXZ(tx, tz) && this.lineWalkable(this.cx(goal), this.cz(goal), tx, tz, psArg) ? tx : this.cx(end);
     const endZ = endX === tx ? tz : this.cz(end);
     let lastOkX = ax;
     let lastOkZ = az;
     for (let k = n - 2; k >= 0; k--) {
       const px = k === 0 ? endX : this.cx(this.raw[k]);
       const pz = k === 0 ? endZ : this.cz(this.raw[k]);
-      if (this.lineWalkable(ax, az, px, pz)) {
+      if (this.lineWalkable(ax, az, px, pz, psArg)) {
         lastOkX = px;
         lastOkZ = pz;
         continue;

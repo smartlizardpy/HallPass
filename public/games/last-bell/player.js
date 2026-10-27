@@ -6,7 +6,7 @@
 //   player.lockPointer();             // ONLY from a user gesture (ui:start / ui:resume handlers)
 //   player.update(dt, game);          // every frame (writes the camera only while enabled && alive)
 //
-// Readable state (contract): position (feet, y = 0), eyePosition, velocity, yaw, pitch,
+// Readable state (contract): position (feet; y = the walking surface: 0 downstairs, 3.6 upstairs, a ramp on the stairs), eyePosition, velocity, yaw, pitch,
 //   isCrouching, isSprinting, isMoving, isHidden, hidingSpot, stamina 0..1, noiseLevel 0..1,
 //   flashlightOn, alive, inventory, focused, enabled.
 // Extensions:
@@ -194,6 +194,7 @@ export class Player {
     // ---- readable state
     this.position = new THREE.Vector3();
     this.eyePosition = new THREE.Vector3(0, PLAYER.eyeHeight, 0);
+    this.floorAware = true; // feet follow world.groundAt: stairs and Floor 2 work (world.floor2Enabled)
     this.velocity = new THREE.Vector3();
     this.yaw = 0;
     this.pitch = 0;
@@ -744,10 +745,24 @@ export class Player {
     return false;
   }
 
+  // ================================================================ floors ==
+  /** Which floor a position is on (0 ground, 1 upstairs). */
+  _floorOf(pos) {
+    const w = this.game?.world;
+    try { return w?.floorOf ? w.floorOf(pos) : 0; } catch { return 0; }
+  }
+
+  /** Walking-surface height at (x, z) on floor f: 0 or 3.6, or the ramp height on the stairs. */
+  _groundY(x, z, f) {
+    const w = this.game?.world;
+    try { return w?.groundAt ? w.groundAt(x, z, f) : 0; } catch { return 0; }
+  }
+
   // ================================================================ spawn ==
   spawn(position, yaw = 0) {
     if (this.hidingSpot) this.hidingSpot.occupied = false;
-    this.position.set(position?.x || 0, 0, position?.z || 0);
+    const sx = position?.x || 0, sz = position?.z || 0;
+    this.position.set(sx, this._groundY(sx, sz, this._floorOf(position)), sz);
     this.yaw = yaw;
     this.pitch = 0;
     this._lastYaw = yaw;
@@ -805,7 +820,7 @@ export class Player {
     this._applyLook();
 
     if (this.seated) {
-      // co-op: sitting on the floor of Room 000, waiting for a friend
+      // co-op: sitting on the floor of Room 000 (or the Art room's circle upstairs), waiting for a friend
       this.isMoving = false;
       this.isSprinting = false;
       this.isCrouching = false;
@@ -814,7 +829,7 @@ export class Player {
       this.noiseLevel += (0 - this.noiseLevel) * damp(4, dt);
       this.focused = null;
       this._eyeH = 0.95;
-      this.eyePosition.set(this.position.x, 0.95, this.position.z);
+      this.eyePosition.set(this.position.x, this.position.y + 0.95, this.position.z);
       this.camera.position.copy(this.eyePosition);
       this.camera.rotation.set(this.pitch, this.yaw, 0);
       this._updateTorch(dt, game);
@@ -898,13 +913,14 @@ export class Player {
     const prevZ = this.position.z;
     if (this.velocity.x * this.velocity.x + this.velocity.z * this.velocity.z > 1e-6) {
       this._delta.set(this.velocity.x * dt, 0, this.velocity.z * dt);
+      const fl = this._floorOf(this.position);
       let next = null;
       try {
-        next = world?.moveCircle ? world.moveCircle(this.position, this._delta, PLAYER.radius) : null;
+        next = world?.moveCircle ? world.moveCircle(this.position, this._delta, PLAYER.radius, undefined, fl) : null;
       } catch (err) {
         next = null;
       }
-      if (next) this.position.set(next.x, 0, next.z);
+      if (next) this.position.set(next.x, this._groundY(next.x, next.z, fl), next.z);
       else this.position.add(this._delta);
     }
     const mx = this.position.x - prevX;
@@ -1013,7 +1029,7 @@ export class Player {
   }
 
   _placeCamera(dt) {
-    const target = this.isHidden ? this.hidingSpot?.position?.y || PLAYER.eyeHeight : this.isCrouching ? PLAYER.crouchEyeHeight : PLAYER.eyeHeight;
+    const target = this.isHidden ? (this.hidingSpot?.position ? this.hidingSpot.position.y - this.position.y : PLAYER.eyeHeight) : this.isCrouching ? PLAYER.crouchEyeHeight : PLAYER.eyeHeight;
     this._eyeH += (target - this._eyeH) * (dt > 0 ? damp(10, dt) : 1);
     const bobOn = this.settings.headBob !== false && !this.isHidden;
     const amp = bobOn ? this._bobAmp * (this.settings.reducedEffects ? 0.5 : 1) : 0;
@@ -1023,7 +1039,7 @@ export class Player {
     let heave = 0;
     if (this.exhausted && !this.settings.reducedEffects) heave = Math.sin(this._time * 2.3) * 0.008;
 
-    this.eyePosition.set(this.position.x, this._eyeH, this.position.z);
+    this.eyePosition.set(this.position.x, this.position.y + this._eyeH, this.position.z);
     if (this.isHidden && this.hidingSpot?.position) this.eyePosition.copy(this.hidingSpot.position);
     const cy = Math.cos(this.yaw);
     const sy = Math.sin(this.yaw);
@@ -1151,7 +1167,8 @@ export class Player {
       fromPitch: this.pitch,
       toPitch: 0,
     };
-    this.position.set(spot.position.x, 0, spot.position.z);
+    const hf = this._floorOf(this.position);
+    this.position.set(spot.position.x, this._groundY(spot.position.x, spot.position.z, hf), spot.position.z);
     this.events?.emit('hide:enter', { spot });
     return true;
   }
@@ -1160,6 +1177,7 @@ export class Player {
     if (!this.isHidden || this._hideAnim) return false;
     const spot = this.hidingSpot;
     const exit = spot?.exitPosition || spot?.position || this.position;
+    const exitY = this._groundY(exit.x, exit.z, this._floorOf(this.position));
     this.isHidden = false;
     this.hidingSpot = null;
     this.holdingBreath = false;
@@ -1168,14 +1186,14 @@ export class Player {
       t: 0,
       dur: HIDE_EXIT_TIME,
       from: this.camera.position.clone(),
-      to: new THREE.Vector3(exit.x, PLAYER.eyeHeight, exit.z),
+      to: new THREE.Vector3(exit.x, exitY + PLAYER.eyeHeight, exit.z),
       fromYaw: this.yaw,
       toYaw: this.yaw,
       fromPitch: this.pitch,
       toPitch: this.pitch * 0.5,
       exiting: true,
     };
-    this.position.set(exit.x, 0, exit.z);
+    this.position.set(exit.x, exitY, exit.z);
     this._eyeH = PLAYER.eyeHeight;
     if (this._flashWasOn) this.setFlashlight(true);
     this.events?.emit('hide:exit', { spot });
@@ -1198,7 +1216,7 @@ export class Player {
       this._lastYaw = this.yaw;
       this._lastPitch = this.pitch;
       if (a.exiting) {
-        this.eyePosition.set(this.position.x, PLAYER.eyeHeight, this.position.z);
+        this.eyePosition.set(this.position.x, this.position.y + PLAYER.eyeHeight, this.position.z);
       }
     }
   }

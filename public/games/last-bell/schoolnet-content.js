@@ -51,7 +51,7 @@ export const PROMISES = {
 export const COVERAGE = {
   intro: 'Live coverage with Mr Hasan P., Politics',
   lines: [
-    'Turnout: three students and whoever keeps ringing the bell. Tövbe takes it with 99.7%.',
+    'Turnout: three students and whoever keeps ringing the bell. Ozzy takes it with 99.7%.',
     "The döner policy is completely unfunded, and he's winning anyway.",
     "Mia's Wi-Fi plan was fully costed. Nobody read it.",
     "Chloe's vending-machine coalition fell apart at 3:31.",
@@ -60,7 +60,7 @@ export const COVERAGE = {
   byVote: {
     mia: 'One brave vote for Mia. The Wi-Fi gets switched on anyway, as a consolation.',
     chloe: "A vote for Chloe! Reception's vending machine is back on, out of pure spite.",
-    tovbe: 'Another vote for Tövbe. The döner shop is open. Of course it is.',
+    tovbe: 'Another vote for Ozzy. The döner shop is open. Of course it is.',
   },
 };
 
@@ -137,7 +137,7 @@ export const TIPS = {
   playstation: { title: "Kaan's PlayStation", text: 'Press G (or the PS button) to put it down and switch it on. He can\'t resist it.' },
   register: { title: 'The register', text: 'Sign it and he stops hunting you. It works once.' },
   mic: { title: 'He heard that', text: 'Your microphone is on. Keep your voice down, or hold your breath (hide).' },
-  doner: { title: 'TÖVBE DÖNER', text: 'The döner shop is open. Follow the glowing signs with his face on them.' },
+  doner: { title: 'OZZY DÖNER', text: 'The döner shop is open. Follow the glowing signs with his face on them.' },
   vending: { title: 'Vending machine', text: 'Reception: one free can. It lands with a loud clunk.' },
   wifi: { title: 'Free Wi-Fi', text: 'Every computer session from now on lasts 20 seconds longer.' },
 };

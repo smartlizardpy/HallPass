@@ -68,7 +68,7 @@ export class SignSystem {
     this.world = world;
     this.group = new THREE.Group();
     this.group.name = 'world-signs';
-    world.root.add(this.group);
+    world.floorGroup(0).add(this.group); // ground-floor signs (hidden upstairs)
     this.pf = new NavPathfinder();
     this.faces = [];
     this.sites = [];
@@ -445,7 +445,7 @@ export class SignSystem {
     this.texture.dispose();
     this.faceMat.dispose();
     this.frameMat.dispose();
-    this.world.root.remove(this.group);
+    this.group.parent?.remove(this.group);
   }
 }
 

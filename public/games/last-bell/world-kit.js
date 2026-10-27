@@ -6,7 +6,7 @@
 import * as THREE from './lib/three/three.module.js';
 import { loadGLB, ps1ify, addVertexSnap } from './assets.js';
 
-export const KIT_URLS = ['assets/environment/school_kit.glb', 'assets/environment/props_kit.glb'];
+export const KIT_URLS = ['assets/environment/school_kit.glb', 'assets/environment/props_kit.glb', 'assets/environment/floor2_kit.glb'];
 
 const _m = new THREE.Matrix4();
 const _mi = new THREE.Matrix4();
@@ -268,7 +268,7 @@ export class StaticBatcher {
         const e = pl.m.elements;
         const tr = pl.tint ? pl.tint[0] : 1, tg = pl.tint ? pl.tint[1] : 1, tb = pl.tint ? pl.tint[2] : 1;
         let remap = null;
-        if (pl.uvTo && (part.matName === 'm_signs' || part.matName === 'm_posters')) remap = [part.uvBox, pl.uvTo];
+        if (pl.uvTo && (part.matName === 'm_signs' || part.matName === 'm_posters' || part.matName === 'm_f2_atlas')) remap = [part.uvBox, pl.uvTo];
         const n = part.count;
         const p = part.P, nn = part.N, uu = part.U, cc = part.C;
         for (let i = 0; i < n; i++) {

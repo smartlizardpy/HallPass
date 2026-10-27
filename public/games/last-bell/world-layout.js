@@ -8,6 +8,8 @@
 // between cell (cx, cz-1) ("A" side, -z) and (cx, cz) ("B" side, +z).
 // Vertical edge v(cx,cz) lies on x = cx*CELL, between (cx-1, cz) (A, -x) and (cx, cz) (B, +x).
 
+import { STAIRS } from './config.js';
+
 export const ET = {
   NONE: 0, WALL: 1, DOOR: 2, OPENING: 3, WINDOW: 4, EXT: 5, EXT_WINDOW: 6, ENTRANCE: 7, SEAL: 8, HIDDEN: 9,
 };
@@ -182,10 +184,15 @@ function tryGenerate(rng) {
   const W = rng.int(13, 14);
   const H = rng.int(11, 12);
   const L = new Layout(W, H);
-  const zA = rng.int(2, 3);
-  const zB = H - 1 - rng.int(2, 3);
+  // Second Floor update (architecture.md §2.2): the ring's north row is pinned to z = 2 and its south row
+  // to z = 8 so the two stairwells (config STAIRS) line up with the fixed Floor 2; the east column stays
+  // at x >= 10. The old draws are still made so W/H/xA/xB come out as they did before for most seeds.
+  rng.int(2, 3);
+  rng.int(2, 3);
+  const zA = STAIRS.A.hall[1];
+  const zB = STAIRS.B.hall[1];
   const xA = rng.int(2, 3);
-  const xB = W - 1 - rng.int(2, 3);
+  const xB = Math.max(STAIRS.B.cells[0][0], W - 1 - rng.int(2, 3));
   const interiorW = xB - xA - 1;
   const interiorH = zB - zA - 1;
 
@@ -205,8 +212,10 @@ function tryGenerate(rng) {
   }
   // spur up into the top band (dead end with a window at the outer wall)
   let spurX = -1;
+  const stairAX = STAIRS.A.cells[0][0];
   if (rng.chance(0.55)) {
     spurX = rng.int(3, W - 4);
+    if (spurX === stairAX) spurX = stairAX + 1; // the spur never runs through Stair A
     addCorr('Old Wing Corridor', spurX, 0, spurX + 1, zA);
   }
 
@@ -223,18 +232,36 @@ function tryGenerate(rng) {
       p += s;
     }
   };
-  // top band (split around the spur)
-  if (spurX >= 0) {
-    pushBand(0, 0, spurX, zA, 'x', 'top');
-    pushBand(spurX + 1, 0, W, zA, 'x', 'top');
-  } else pushBand(0, 0, W, zA, 'x', 'top');
+  // the two pinned stairwells (fixed rects, never typed by take()); see config STAIRS
+  const stairRect = (id) => {
+    const c = STAIRS[id].cells;
+    const xs = c.map((q) => q[0]), zs = c.map((q) => q[1]);
+    return { x0: Math.min(...xs), z0: Math.min(...zs), x1: Math.max(...xs) + 1, z1: Math.max(...zs) + 1, band: 'stair', fixed: 'stairwell', stairId: id };
+  };
+  const stairA = stairRect('A'), stairB = stairRect('B');
+  // split a band along x around fixed columns (the spur, a stairwell)
+  const pushBandAround = (x0, z0, x1, z1, band, cuts) => {
+    let a = x0;
+    for (const c of cuts.filter((q) => q >= x0 && q < x1).sort((p, q) => p - q)) {
+      if (c > a) pushBand(a, z0, c, z1, 'x', band);
+      a = c + 1;
+    }
+    if (x1 > a) pushBand(a, z0, x1, z1, 'x', band);
+  };
+  // top band (split around the spur and Stair A)
+  pushBandAround(0, 0, W, zA, 'top', spurX >= 0 ? [spurX, stairA.x0] : [stairA.x0]);
+  rects.push(stairA);
   // bottom band: reception in the middle touching the outer wall
   const recW = rng.int(2, 3);
   const recX0 = Math.floor(W / 2) - 1 + rng.int(-1, 0);
   const reception = { x0: recX0, z0: zB + 1, x1: recX0 + recW, z1: H, band: 'bottom', fixed: 'reception' };
   pushBand(0, zB + 1, recX0, H, 'x', 'bottom');
   rects.push(reception);
-  pushBand(recX0 + recW, zB + 1, W, H, 'x', 'bottom');
+  // right of reception, split around Stair B; a deeper (H = 12) band leaves one cell under Stair B,
+  // which becomes a notch in the building outline
+  pushBandAround(recX0 + recW, zB + 1, W, H, 'bottom', [stairB.x0]);
+  rects.push(stairB);
+  if (stairB.z1 < H) rects.push({ x0: stairB.x0, z0: stairB.z1, x1: stairB.x1, z1: H, band: 'bottom', fixed: 'void', type: 'void' });
   // side bands
   pushBand(0, zA + 1, xA, zB, 'z', 'left');
   pushBand(xB + 1, zA + 1, W, zB, 'z', 'right');
@@ -267,17 +294,13 @@ function tryGenerate(rng) {
     return r;
   };
   reception.type = 'reception';
+  stairA.type = stairB.type = 'stairwell';
   const lib = take((r) => area(r) >= 6, (r) => area(r) + (r.band === 'interior' ? 3 : 0) + rng.next());
   if (!lib) return null;
   lib.type = 'library';
   const lab = take((r) => area(r) >= 4 && area(r) <= 9, (r) => -Math.abs(area(r) - 6) + rng.next() * 2);
   if (!lab) return null;
   lab.type = 'science_lab';
-  const thin = (r) => Math.min(r.x1 - r.x0, r.z1 - r.z0) === 1;
-  const stair = take((r) => thin(r) && area(r) >= 2 && area(r) <= 3 && r.band !== 'interior',
-    (r) => rng.next() + (r.band === 'top' ? 0.5 : 0) + (area(r) === 2 ? 1 : 0));
-  if (!stair) return null;
-  stair.type = 'stairwell';
   const toil = take((r) => area(r) >= 2 && area(r) <= 4, (r) => -area(r) + rng.next());
   if (!toil) return null;
   toil.type = 'toilets';
@@ -338,7 +361,7 @@ function tryGenerate(rng) {
       case 'library': name = 'Library'; sign = 9; break;
       case 'science_lab': name = 'Science Lab'; sign = 8; break;
       case 'toilets': name = 'Toilets'; sign = 10; break;
-      case 'stairwell': name = 'Stairwell'; sign = 14; break;
+      case 'stairwell': name = 'Stairwell ' + r.stairId; sign = 14; break;
       case 'reception': name = 'Reception'; sign = 13; break;
       case 'storage': name = storeNo === 0 ? "Caretaker's Store" : 'Store Room'; sign = storeNo === 0 ? 12 : 11; storeNo++; break;
       case 'room000': name = 'Room 000'; sign = 15; break;
@@ -346,6 +369,7 @@ function tryGenerate(rng) {
     }
     const room = mkRoom(r.type, name, r, false);
     room.sign = sign;
+    if (r.stairId) room.stairId = r.stairId;
   }
   L.rooms = roomList;
   L.voidCells = 0;
@@ -414,7 +438,18 @@ function tryGenerate(rng) {
       d1.start = 'open';
       continue;
     }
-    const first = room.type === 'stairwell' ? cand[0] : cand[Math.floor(rng.next() * Math.min(2, cand.length))];
+    if (room.stairId) {
+      // pinned door: the stairwell's door cell onto its hall cell (config STAIRS). Stair B's ground-floor
+      // doorway has no leaf: the chained gate (world-stairs.js) fills it.
+      const S = STAIRS[room.stairId];
+      const ce = cand.find((c) => c.cx === S.door[0] && c.cz === S.door[1] && c.nx === S.hall[0] && c.nz === S.hall[1]);
+      if (!ce) return null;
+      const sd = addDoor(room, ce, S.main ? 'door' : 'opening');
+      sd.start = 'open';
+      sd.stair = room.stairId;
+      continue;
+    }
+    const first = cand[Math.floor(rng.next() * Math.min(2, cand.length))];
     const d = addDoor(room, first);
     const two = (room.type === 'classroom' && rng.chance(0.45)) || (room.type === 'library' && rng.chance(0.85)) ||
       (room.type === 'science_lab' && rng.chance(0.35));
@@ -440,19 +475,9 @@ function tryGenerate(rng) {
     void d;
   }
 
-  // stairwell: stairs = end cell farthest from the door cell, landing = its neighbour towards the door
-  for (const room of roomList) {
-    if (room.type !== 'stairwell') continue;
-    const d = L.doors[room.doors[0]];
-    const cells = room.cells.slice().sort((a, b) => (a.cx - b.cx) || (a.cz - b.cz));
-    const ends = [cells[0], cells[cells.length - 1]];
-    const dd = (c) => Math.abs(c.cx - d.cx) + Math.abs(c.cz - d.cz);
-    const stairs = dd(ends[0]) >= dd(ends[1]) ? ends[0] : ends[1];
-    if (stairs.cx === d.cx && stairs.cz === d.cz) return null;
-    const landing = room.cells.find((c) => Math.abs(c.cx - stairs.cx) + Math.abs(c.cz - stairs.cz) === 1);
-    room.landing = landing;
-    room.stairs = stairs;
-  }
+  // stairwells: the open dog-leg stairs are built by world-stairs.js (both floors); keep the ids handy
+  L.stairs = {};
+  for (const room of roomList) if (room.stairId) L.stairs[room.stairId] = { roomId: room.id, edge: L.doors[room.doors[0]].edge };
 
   // --- windows
   for (let e = 0; e < L.nEdges; e++) {
@@ -482,7 +507,8 @@ function tryGenerate(rng) {
       const onBoundary = info2.horiz ? (info2.cz === 0 || info2.cz === L.H) : (info2.cx === 0 || info2.cx === L.W);
       if (!onBoundary) p = Math.max(p, room.isCorridor ? 0.75 : 0.6); // facing a courtyard
       if (room.type === 'room000') p = 0;
-      if (rng.chance(p)) L.edgeType[e] = ET.EXT_WINDOW;
+      const win = rng.chance(p);
+      if (win && room.type !== 'stairwell') L.edgeType[e] = ET.EXT_WINDOW; // (draw kept: same stream)
     }
   }
   // entrance: middle of reception's outer (bottom) wall

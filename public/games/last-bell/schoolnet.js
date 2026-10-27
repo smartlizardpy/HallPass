@@ -817,7 +817,7 @@ export class SchoolNet {
     } else {
       B.append(el('p', 'sn__big', 'Results (final)'));
       const res = [
-        ['Muhammed Tövbe… (write-in)', 99.7],
+        ['Ozzy Kaygulugulu (write-in)', 99.7],
         ['Mia Tran', 0.2],
         ['Chloe Lim', 0.1],
       ];

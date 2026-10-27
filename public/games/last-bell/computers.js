@@ -12,7 +12,7 @@
 //   Kaan's PlayStation  on Mr Ahmet Hoca's desk: take it, G puts it down and switches it on (a lure)
 //   Room 000 register   read it, then sign it once: he stops hunting you
 //   vending machine     reception; out of order until you vote Chloe: one free can = full stamina
-//   döner shop          opens when you vote Tövbe; glowing signs with his face lead the way
+//   döner shop          opens when you vote Ozzy; glowing signs with his face lead the way
 //
 // Events out: 'schoolnet:tools' {tools}, 'schoolnet:inventory' {keycard, fuse}, 'tip' {id},
 //             'schoolnet:gadget' {has}. HallPass moments via game.moment().
@@ -792,7 +792,7 @@ export class Computers {
     return true;
   }
 
-  // ================================================================== döner shop (Tövbe)
+  // ================================================================== döner shop (Ozzy)
   _openDonerShop() {
     const g = this.game;
     const w = g.world;
@@ -886,7 +886,7 @@ export class Computers {
     return true;
   }
 
-  /** Glowing A-frame signs (his face, "TÖVBE DÖNER", an arrow) at corridor junctions, pointing the real way. */
+  /** Glowing A-frame signs (his face, "OZZY DÖNER", an arrow) at corridor junctions, pointing the real way. */
   _placeArrows() {
     this._clearArrows();
     const d = this.doner;
@@ -1021,7 +1021,7 @@ export class Computers {
     const t = [];
     const touch = !!this.game.player?.touchMode;
     if (this.gadget === 'ps') t.push({ id: 'ps', name: "Kaan's PlayStation", how: touch ? 'PS button: put it down, switch it on' : 'G: put it down and switch it on' });
-    if (this.doner && !this.doner.eaten) t.push({ id: 'doner', name: 'TÖVBE DÖNER is open', how: `Follow the glowing signs: ${this.doner.room.name}` });
+    if (this.doner && !this.doner.eaten) t.push({ id: 'doner', name: 'OZZY DÖNER is open', how: `Follow the glowing signs: ${this.doner.room.name}` });
     if (this.vending?.on && !this.vending.used) t.push({ id: 'vending', name: 'Vending machine', how: 'Reception: one free can, full stamina' });
     if (this.register && !this.register.signed && this.game.world?.room000Revealed) t.push({ id: 'register', name: 'Room 000 register', how: 'Sign it once: he stops hunting you' });
     if (this.wifi) t.push({ id: 'wifi', name: 'Free Wi-Fi', how: `Computer sessions last ${this.sessionLength()} s` });
@@ -1194,7 +1194,7 @@ export class Computers {
       ctx.fillStyle = '#ffe680';
       ctx.textAlign = 'center';
       ctx.font = `bold 40px ${COND}`;
-      ctx.fillText('TÖVBE', w / 2, 56);
+      ctx.fillText('OZZY', w / 2, 56);
       ctx.fillText('DÖNER', w / 2, 96);
       this._drawFace(ctx, w / 2, 160, 50);
       // the arrow
@@ -1293,7 +1293,7 @@ export class Computers {
       ctx.fillStyle = '#ffe680';
       ctx.textAlign = 'center';
       ctx.font = `bold 34px ${COND}`;
-      ctx.fillText('TÖVBE DÖNER', w / 2, 80);
+      ctx.fillText('OZZY DÖNER', w / 2, 80);
       ctx.font = `20px ${HAND}`;
       ctx.fillStyle = '#fff';
       ctx.fillText('Baba come,', w / 2, 120);
@@ -1312,7 +1312,7 @@ export class Computers {
       ctx.fillStyle = '#ffe680';
       ctx.textAlign = 'center';
       ctx.font = `bold 52px ${COND}`;
-      ctx.fillText('TÖVBE', 262, 82);
+      ctx.fillText('OZZY', 262, 82);
       ctx.fillText('DÖNER', 262, 136);
       ctx.font = `18px ${HAND}`;
       ctx.fillStyle = '#fff3c4';

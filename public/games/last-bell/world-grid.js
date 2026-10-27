@@ -152,6 +152,73 @@ export function resolveCircle(cols, p, r) {
   return pushedAny;
 }
 
+// ------------------------------------------------------------------------------------------- door leaves
+// A door's leaf collides at its *current* angle (Second Floor update, enemy-ai.md §2 row 3b): a thin
+// segment from the hinge to the leaf tip, kept in door.leafSeg by world.js whenever the leaf moves.
+// The doorway AABB above is unchanged (solid while !isOpen); the leaf only matters once it has left
+// the doorway line (door.leafSolid). Leaves live outside the Colliders buckets on purpose: LOS, nav
+// and every AABB consumer keep treating doors exactly as before.
+export const LEAF_HALF = 0.05; // half thickness incl. the handle
+
+/** Circle vs one leaf segment. Writes the push into p and returns true if it overlapped. */
+function pushOffLeaf(s, p, r) {
+  const rr = r + LEAF_HALF;
+  if (p.x + rr < s.minX || p.x - rr > s.maxX || p.z + rr < s.minZ || p.z - rr > s.maxZ) return false;
+  const ex = s.bx - s.ax, ez = s.bz - s.az;
+  const l2 = ex * ex + ez * ez;
+  let t = l2 > 1e-9 ? ((p.x - s.ax) * ex + (p.z - s.az) * ez) / l2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  let dx = p.x - (s.ax + ex * t), dz = p.z - (s.az + ez * t);
+  const d2 = dx * dx + dz * dz;
+  if (d2 >= rr * rr) return false;
+  const d = Math.sqrt(d2);
+  if (d < 1e-6) {
+    // dead on the leaf: leave ahead of it as it opens (s.nx/nz = the opening direction)
+    p.x += s.nx * rr;
+    p.z += s.nz * rr;
+    return true;
+  }
+  const k = (rr - d) / d;
+  p.x += dx * k;
+  p.z += dz * k;
+  return true;
+}
+
+/** Resolve a circle against every solid leaf in `doors` (Door[] with leafSeg / leafSolid). */
+export function resolveLeaves(doors, p, r) {
+  let pushed = false;
+  for (let i = 0; i < doors.length; i++) {
+    const d = doors[i];
+    if (d.leafSeg && d.leafSolid && pushOffLeaf(d.leafSeg, p, r)) pushed = true;
+  }
+  return pushed;
+}
+
+/** Does a circle overlap a solid leaf? */
+export function leafBlocked(doors, x, z, r) {
+  for (let i = 0; i < doors.length; i++) {
+    const d = doors[i];
+    if (!d.leafSeg || !d.leafSolid) continue;
+    _lp.x = x;
+    _lp.z = z;
+    if (pushOffLeaf(d.leafSeg, _lp, r)) return true;
+  }
+  return false;
+}
+const _lp = { x: 0, z: 0 };
+
+/** Fill seg (hinge → tip at yaw `rot`, length len) incl. its bbox and the swing normal (sign = swing dir). */
+export function setLeafSegment(seg, hx, hz, rot, len, sign) {
+  const ux = Math.cos(rot), uz = -Math.sin(rot);
+  seg.ax = hx; seg.az = hz;
+  seg.bx = hx + ux * len; seg.bz = hz + uz * len;
+  // direction the leaf moves when its angle grows by `sign`: d/dθ of (cos, -sin) = (-sin, -cos)
+  seg.nx = -Math.sin(rot) * sign; seg.nz = -Math.cos(rot) * sign;
+  seg.minX = Math.min(seg.ax, seg.bx) - LEAF_HALF; seg.maxX = Math.max(seg.ax, seg.bx) + LEAF_HALF;
+  seg.minZ = Math.min(seg.az, seg.bz) - LEAF_HALF; seg.maxZ = Math.max(seg.az, seg.bz) + LEAF_HALF;
+  return seg;
+}
+
 export function circleBlocked(cols, x, z, r, ignoreDoors = false) {
   return cols.forEach(x - r, z - r, x + r, z + r, (c) => {
     if (c.noCollide) return false;
@@ -220,8 +287,13 @@ export class LosGrid {
     for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) fn(z * this.cols + x);
   }
 
-  /** DDA through the grid. doorsArr: Door[] (closed doors block). */
-  query(ax, ay, az, bx, by, bz, doorsArr) {
+  /**
+   * DDA through the grid. doorsArr: Door[] (closed doors block).
+   * strict (AI perception, Second Floor update): no soft zone for doors at either end, props only
+   * ignored in the last 0.3 m before the target, and a door only lets sight through once its leaf
+   * has actually swung open (door.blocksSight) — not the moment open() is called.
+   */
+  query(ax, ay, az, bx, by, bz, doorsArr, strict = false) {
     if (ay < 0.3 && by < 0.3) ay = by = 1.5;
     const dx = bx - ax;
     const dz = bz - az;
@@ -238,8 +310,8 @@ export class LosGrid {
     const tDZ = stepZ ? Math.abs(r / dz) : Infinity;
     let tMX = stepX ? ((stepX > 0 ? (cx + 1) * r + this.ox - ax : ax - (cx * r + this.ox)) / Math.abs(dx)) : Infinity;
     let tMZ = stepZ ? ((stepZ > 0 ? (cz + 1) * r + this.oz - az : az - (cz * r + this.oz)) / Math.abs(dz)) : Infinity;
-    const softA = 0.45 / len; // ignore props/doors this close to either endpoint (interaction targets)
-    const softB = 1 - 0.6 / len;
+    const softA = strict ? -1 : 0.45 / len; // ignore props/doors this close to either endpoint (interaction targets)
+    const softB = strict ? 1 - 0.3 / len : 1 - 0.6 / len;
     let t = 0;
     const maxSteps = this.cols + this.rows + 4;
     for (let s = 0; s < maxSteps; s++) {
@@ -249,10 +321,11 @@ export class LosGrid {
         const hh = this.h[i];
         if (hh >= 90) return false;
         const soft = t < softA || t > softB;
-        if (!soft) {
-          if (hh > 0 && y < hh) return false;
-          const d = this.door[i];
-          if (d && doorsArr[d - 1] && !doorsArr[d - 1].isOpen) return false;
+        if (!soft && hh > 0 && y < hh) return false;
+        const d = this.door[i];
+        if (d && doorsArr[d - 1]) {
+          const door = doorsArr[d - 1];
+          if (strict ? door.blocksSight !== false : !soft && !door.isOpen) return false;
         }
         if (this.win[i] && (y < 1.0 || y > 2.28)) return false;
       } else return false;
@@ -286,11 +359,13 @@ export class NavGridBuilder {
       rows: Math.ceil((maxZ + res) / res) + 1,
       walkable: null,
       door: null,
+      zone: null, // 1 = stair flight / half landing (enemies treat it as blocked; set by world-stairs.js)
       version: 0,
     };
     const n = this.nav.cols * this.nav.rows;
     this.nav.walkable = new Uint8Array(n);
     this.nav.door = new Int16Array(n);
+    this.nav.zone = new Uint8Array(n);
   }
 
   /** Rasterize walkability in a world rect. insideFn(x,z) -> bool (inside the building / allowed). */
