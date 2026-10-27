@@ -37,7 +37,7 @@ const TABLE = [entry(1, 100), entry(2, 80), entry(3, 65), entry(4, 40), entry(5,
 
 describe("tickerLine", () => {
   it("says the dates, the same for everyone, before the phase is known", () => {
-    expect(tickerLine(null, S, false)).toEqual({ text: "28 Oct to 1 Nov", tone: "idle", countdownLabel: null });
+    expect(tickerLine(null, S, false)).toEqual({ text: "28 Oct to 2 Nov", tone: "idle", countdownLabel: null });
   });
 
   it("has a line for every phase, with a countdown only before the opening and while live", () => {
@@ -45,7 +45,7 @@ describe("tickerLine", () => {
     expect(line("upcoming")).toEqual({ text: "Opens 28 Oct", tone: "soon", countdownLabel: "in" });
     expect(line("live")).toEqual({ text: "Live", tone: "live", countdownLabel: "ends in" });
     expect(line("closed").text).toMatch(/Closed/);
-    expect(line("verification").text).toBe("Closed · results final by Wed 4 Nov");
+    expect(line("verification").text).toBe("Closed · results final by Thu 5 Nov");
     expect(line("finalised")).toMatchObject({ text: "Final results are in", tone: "final" });
     expect(line("archived").text).toBe("Final results are in");
     expect(line("suspended").text).toMatch(/Paused/);

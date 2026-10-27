@@ -25,7 +25,7 @@ describe("seasonFloor", () => {
     expect(seasonFloor(s, new Date("2026-10-31T12:00:00Z"))).not.toBeNull();
   });
   it("has no floor from `until`, exclusive", () => {
-    expect(seasonFloor(s, new Date("2026-11-01T23:59:59Z"))).not.toBeNull();
+    expect(seasonFloor(s, new Date("2026-11-02T23:59:59Z"))).not.toBeNull();
     expect(seasonFloor(s, new Date(s.until))).toBeNull();
   });
 });

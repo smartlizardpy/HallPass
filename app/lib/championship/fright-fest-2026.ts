@@ -27,9 +27,9 @@ export const FRIGHT_FEST_2026: ChampionshipConfig = {
   title: "Fright Fest 2026",
   enabled: true,
   opensAt: "2026-10-28T00:00:00Z",
-  closesAt: "2026-11-02T00:00:00Z",
+  closesAt: "2026-11-03T00:00:00Z",
   timeZone: "Europe/London",
-  resultsBy: "2026-11-05T00:00:00Z",
+  resultsBy: "2026-11-06T00:00:00Z",
   href: "/fright-fest",
   // Longer than the longest ranked run any board allows (Cursed Dash caps at
   // 60 minutes), so no legitimate run outlives its token.
