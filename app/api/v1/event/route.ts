@@ -10,7 +10,7 @@
  * (see `app/lib/events/game-event.ts` for what "off" means to a game).
  */
 
-import { GAME_EVENT_THEME, resolveGameEvent } from "@/app/lib/events/game-event";
+import { gameEventNow } from "@/app/lib/events/game-event";
 import { getGameEventMode } from "@/app/lib/events/game-event-mode";
 
 const HEADERS = {
@@ -20,5 +20,5 @@ const HEADERS = {
 
 export async function GET(): Promise<Response> {
   const mode = await getGameEventMode();
-  return Response.json(resolveGameEvent(GAME_EVENT_THEME, mode, Date.now()), { headers: HEADERS });
+  return Response.json(gameEventNow(mode), { headers: HEADERS });
 }

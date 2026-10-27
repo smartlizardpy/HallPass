@@ -91,3 +91,8 @@ export function resolveGameEvent(
 
 /** The event games are told about today. A later event adds a sibling, not a flag. */
 export const GAME_EVENT_THEME = FRIGHT_FEST_THEME;
+
+/** The answer for the current moment. The one place a clock is read, for the route and the dashboard alike. */
+export function gameEventNow(mode: GameEventMode): GameEventState {
+  return resolveGameEvent(GAME_EVENT_THEME, mode, Date.now());
+}

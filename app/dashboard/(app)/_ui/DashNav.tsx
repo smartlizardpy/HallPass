@@ -98,6 +98,7 @@ const SUPER_ADMIN_ITEMS: NavItem[] = [
   { href: "/dashboard/users", label: "Users" },
   { href: "/dashboard/logs", label: "Logs" },
   { href: "/dashboard/boardpass", label: "BoardPass" },
+  { href: "/dashboard/events", label: "Halloween" },
   { href: "/dashboard/blob", label: "Blob ops" },
   { href: "/dashboard/candy", label: "Candy" },
 ];
