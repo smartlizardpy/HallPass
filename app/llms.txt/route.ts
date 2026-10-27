@@ -77,6 +77,34 @@ on a real origin, the same SDK lights up "live" and scores start flowing.
   Listen with on("auth", ({ player }) => ...) to react when sign-in/out completes
   (player is null when signed out). Guest scores from this page visit auto-attach
   to the account on sign-in.
+- Client (social, signed-in): HallPass.challenge({ board? }) opens a small picker
+  to dare a friend to beat the player's best score; check result.sent, not ok —
+  closing the picker resolves { ok:true, sent:false, reason:"closed" }.
+  HallPass.invite({ data, expiresInMinutes? }) invites friends into what the
+  player is doing now (data: plain JSON object, <= 1 KB) and resolves
+  { sent, link, cancelled }; the friend's copy then reads
+  HallPass.getLaunch() -> { kind:"invite", data, from, expiresAt } | null
+  (synchronous, call after ready(), hosted games only).
+- Client (beta testing): HallPass.moment(name, data?, { shot? }) marks a moment
+  for a beta tester's recording; a no-op for everyone else, so leave it in.
+  Guard moment/invite/getLaunch with HallPass.x && ... on older pasted snippets.
+
+## P2P co-op SDK (separate, optional)
+- Module:  ${base}/sdk/p2p/v1/hallpass-p2p.js (ES module, no build step; types in
+           hallpass-p2p.d.ts, minified hallpass-p2p.min.js) — 1-8 player online
+           play over WebRTC. HallPass only does signaling; game data never touches
+           the server. Unlike the scoreboard SDK it REJECTS with P2PError { code,
+           message } (message is player-safe).
+- Use:     const client = await HallPassP2P.connect({ gameId: "<slug>", gameVersion });
+           const room = await client.createRoom({ maxPlayers: 4 }); // host; room.code
+           const room = await client.joinRoom(code);                // everyone else
+           room.send(name, data, { reliable }), room.on(name, cb), room.start(payload),
+           room.request("host", name, data), room.voice.start().
+- Invites: pair it with HallPass.invite({ data: { room: room.code } }); the friend's
+           game reads HallPass.getLaunch().data.room and calls client.joinRoom(...).
+- Signaling API (used by the SDK, same-origin): GET ${base}/api/v1/p2p/config,
+  POST ${base}/api/v1/p2p/rooms, POST .../rooms/<code>/join, POST .../rooms/<code>/signal.
+- Full P2P guide: ${base}/llms-full.txt (section 4d).
 
 ## Trust model
 Submitting and reading scores are public and unauthenticated. The admin password

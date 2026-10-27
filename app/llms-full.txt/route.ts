@@ -5,7 +5,7 @@
  *
  * Purpose: a single self-contained, plain-text spec covering the golden rules,
  * one-time board provisioning, the verbatim embed snippet, game-over usage,
- * achievements, the public HTTP API, the client (window.HallPass) API, the
+ * achievements, challenges/invites/moments, the P2P co-op SDK, the public HTTP API, the client (window.HallPass) API, the
  * environment matrix, failure detection, and the live list of registered game
  * slugs.
  *
@@ -204,6 +204,144 @@ Games embedded before SDK 1.2.0 carry an older inline stub that does not know
 these methods; there, call them only AFTER ready() resolves (await
 HallPass.ready()), or re-paste the snippet in section 3.
 
+## 4c. Challenges, invites and moments (optional)
+Challenge a friend (signed-in player, needs a score on the board):
+
+  const r = await HallPass.challenge();   // opts: { game?, board? }
+  if (r.sent) toast("Challenged " + r.challenge.to);
+
+It opens a small HallPass-styled picker; the score to beat is the player's own
+best, resolved by the server. READ result.sent, NOT result.ok: closing the picker
+resolves { ok:true, sent:false, reason:"closed" }, which is not an error.
+r.challenge is { to, targetScore, board, game }; the same payload fires the
+"challenge" event. Reasons: "no-board" | "no-score" | "not-friends" | "self" |
+"signed-out" | "bad-request" | "rate-limited" | "unavailable" | "closed" |
+"popup-blocked" | "inert" | "network".
+
+Invite friends into the current session (a co-op room, level or seed):
+
+  const r = await HallPass.invite({ data: { room: "ABCD" }, expiresInMinutes: 30 });
+  // r = { sent, link, cancelled }
+
+data is the game's own plain JSON object, at most 1 KB, never interpreted by
+HallPass; do not put anything private in it (anyone with the link can open it).
+expiresInMinutes defaults to 30 (clamped 1-120). Offline, inert, bad data or a
+blocked popup resolve { sent:0, link:null, cancelled:true }. Signed-out players
+can still share a link. In the friend's copy of the game:
+
+  await HallPass.ready();
+  const launch = HallPass.getLaunch();   // SYNCHRONOUS
+  // { kind:"invite", data, from, expiresAt } or null
+
+getLaunch() returns the invite once per page load (a reload returns null) and
+only works for games hosted on this site; a game on its own domain gets null.
+
+Mark moments for beta testers:
+
+  HallPass.moment && HallPass.moment("boss-phase-2", { level: 4 });
+  HallPass.moment && HallPass.moment("died", { cause: "spikes" }, { shot: false });
+
+In a HallPass beta test session the tester's device screenshots the game at that
+instant ({ shot:false } logs the event with no picture); everywhere else it does
+nothing (no request, no storage), so the calls can ship permanently. name is
+lowercased [a-z0-9._-], up to 40 chars; data is a plain object of about 2 KB.
+Resolves { ok:true, name } or { ok:false, reason:"bad-name"|"bad-data"|"inert" }.
+
+Games pasted before SDK 1.3/1.4 have a stub without moment/invite/getLaunch;
+guard with HallPass.method && ..., or re-paste the snippet in section 3.
+
+## 4d. P2P co-op SDK (optional, separate from window.HallPass)
+For 1-8 player online play with no server of your own. Players connect directly
+over WebRTC; HallPass only helps them find each other (HTTP-polling signaling),
+and game data never touches HallPass. It is a dependency-free ES module:
+
+  ${base}/sdk/p2p/v1/hallpass-p2p.js        (also hallpass-p2p.min.js, hallpass-p2p.d.ts)
+
+Copy the file(s) into the game and import with a relative path (no build step):
+
+  import { HallPassP2P } from "./lib/hallpass-p2p.js";
+
+Unlike window.HallPass, this SDK REJECTS: failures are P2PError objects with a
+stable err.code, and err.message is written for players, so showError(err.message)
+is a complete error UI.
+
+  const client = await HallPassP2P.connect({
+    gameId: "${exampleSlug}",   // your HallPass game slug
+    gameVersion: "1.0.0",      // a joiner on another version gets "version-mismatch"
+    name: "Guest 4821"         // fallback; a signed-in player's HallPass name wins
+  });
+
+  // Host
+  const room = await client.createRoom({ maxPlayers: 4, meta: {}, lockOnStart: true });
+  showCode(room.code);         // e.g. "K7QX"; codes are case-insensitive
+
+  // Everyone else
+  try { const room = await client.joinRoom(codeInput.value); }
+  catch (err) { showError(err.message); }
+
+  room.on("player-join", addToLobby);
+  room.on("player-leave", function (e) { /* { id, reason } */ });
+  room.setReady(true);
+  room.on("start", function (e) {            // { payload, startAt }
+    setTimeout(begin, Math.max(0, e.startAt - room.now()));   // shared host clock
+  });
+  if (room.isHost) room.start({ seed: 123456 });              // host only
+
+  room.send("pos", [x, y], { reliable: false });     // unreliable, ~15-20 Hz
+  room.send("event", data);                          // reliable (default), in order
+  room.on("pos", function (data, meta) {});          // meta { from, sentAt, reliable }
+  room.handle("pickup", async function (data, meta) { return { ok: true }; }); // host
+  const res = await room.request("host", "pickup", { itemId: "fuse" }, { timeoutMs: 3000 });
+
+Details:
+- send(name, data, { to }) — to: "others" (default) | "all" | "host" | a peer id |
+  an array of ids. data: JSON, or ArrayBuffer / typed array (sent as binary).
+  Reliable <= 256 KB, unreliable <= 16 KB. Message names may not be room event
+  names (start, closed, ...).
+- Host-only (others get "not-host"): setRoomMeta, lock, unlock, kick(peerId), start.
+  Anyone: setReady(bool), setPlayerMeta(obj), leave(). One room per client.
+- Room state: code, selfId, hostId, isHost, meta, locked, started, players[]
+  ({ id, name, avatarUrl, isHost, isSelf, ready, meta, hidden, connection }).
+- Events: player-join, player-leave, player-update, room-update, start, host-left,
+  kicked, closed, visibility, error. The host leaving ends the room (no migration).
+- Voice (opt-in): await room.voice.start(); room.voice.on("stream", function (e)
+  { /* e.peerId, e.stream */ }); setMuted, setPeerMuted, stop.
+- Error codes: room-not-found, room-full, room-locked, version-mismatch, timeout,
+  connect-failed (err.reason: no-turn-restrictive-network | turn-failed |
+  relay-unavailable | peer-unreachable | signaling-unreachable |
+  signaling-unavailable | rate-limited | unknown-game | room-closed), cancelled
+  (the player declined the IP notice; return quietly), closed, not-host,
+  peer-left, handler-error, message-too-large, send-buffer-full,
+  invalid-argument, already-in-room, unsupported, mic-denied, mic-unavailable.
+- Privacy: players in a room can see each other's IP address. The SDK shows a
+  one-time notice before the first connection (ipNotice: "auto"); relayOnly: true
+  routes through TURN so nobody sees anybody's IP.
+- Locally (localhost) transport "auto" picks "local": tabs of one browser find
+  each other over BroadcastChannel, no HallPass server needed. The "hallpass"
+  transport (signaling) is same-origin only, i.e. for games served by HallPass.
+- Peers are untrusted: validate names, meta, messages and request data; let the
+  host's handle() decide whether an action is legal.
+
+Invite friends into a room (pairs the two SDKs): the host opens a room and calls
+HallPass.invite (section 4c) with the room code; the friend's game joins on load.
+
+  // Host
+  const room = await client.createRoom({ maxPlayers: 4 });
+  await HallPass.invite({ data: { room: room.code } });
+
+  // Friend, on load
+  await HallPass.ready();
+  const launch = HallPass.getLaunch();
+  if (launch && typeof launch.data.room === "string") {
+    await client.joinRoom(launch.data.room);   // straight into the lobby
+  }
+
+Signaling endpoints (used by the SDK itself; same-origin, you rarely call them):
+  GET  ${base}/api/v1/p2p/config                 public name, STUN, short-lived TURN credentials
+  POST ${base}/api/v1/p2p/rooms                  open a room
+  POST ${base}/api/v1/p2p/rooms/<code>/join      ask to join
+  POST ${base}/api/v1/p2p/rooms/<code>/signal    send and receive signals in one request
+
 ## 5. Public HTTP API
 GET ${base}/api/v1/leaderboard/<game>
   Query: limit (1-100, default 10), period (all | day | week, default all)
@@ -280,9 +418,20 @@ Error responses share a uniform body { error } with these status codes:
                        -> Promise<PlayerAchievement[]> ({ key, name, description,
                          icon, points, target, secret, progress, unlocked,
                          unlockedAt }). [] on any failure. opts: { game? }.
+- challenge(opts?)     -> Promise<ChallengeResult { ok, sent?, challenge?, reason? }>.
+                         Opens the friend picker; check sent, not ok. opts:
+                         { game?, board? }. See section 4c.
+- moment(name, data?, opts?)
+                       -> Promise<{ ok:true, name } | { ok:false, reason }>. Beta
+                         test sessions only; a no-op elsewhere. opts: { shot? }.
+- invite(opts)         -> Promise<{ sent, link, cancelled }>. opts: { data,
+                         expiresInMinutes? }. Never rejects.
+- getLaunch()          -> { kind:"invite", data, from, expiresAt } | null.
+                         SYNCHRONOUS; call after ready(). Hosted games only.
 - on(event, cb)        -> HallPass (chainable).
 - off(event, cb)       -> HallPass (chainable).
-  Events: "ready" | "scores" | "submitted" | "error" | "auth" | "achievement".
+  Events: "ready" | "scores" | "submitted" | "error" | "auth" | "achievement" |
+  "challenge".
   "auth" fires { player: PlayerIdentity | null } when sign-in/out completes (null
   on sign-out). It is sticky: a listener added afterward still gets the current
   identity.
@@ -290,6 +439,7 @@ Error responses share a uniform body { error } with these status codes:
   icon, points, progress, target, unlockedAt, game }) and ONLY when it is newly
   earned — never for one the player already holds. It is NOT sticky: an unlock is
   a moment, not a state, so a listener added later is not re-toasted.
+  "challenge" fires { to, targetScore, board, game } when the player sends one.
 
 ## 7. Environment matrix
 - Hosted on hallpass.games (this site)   -> live  (same-origin fetch).
