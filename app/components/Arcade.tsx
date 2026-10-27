@@ -133,10 +133,13 @@ export function Arcade({
   initialCategory = "All",
   playCounts = {},
   eventBoard,
+  board = false,
 }: {
   games: Game[];
   categories: string[];
   initialCategory?: string;
+  /** Offer Board Mode (the shared-screen sign-in) on this page. */
+  board?: boolean;
   playCounts?: Record<string, number>;
   /**
    * What fills the home page's board slot, desktop and phone. The page decides
@@ -177,6 +180,7 @@ export function Arcade({
 
   return (
     <ArcadeShell
+      board={board}
       games={games}
       categories={categories}
       activeCategory={category}

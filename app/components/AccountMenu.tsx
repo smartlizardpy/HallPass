@@ -58,6 +58,7 @@ import type { MeResponse } from "@/sdk/src/contract";
 import { ROLE_LABEL } from "@/app/lib/permissions";
 import { parseAvatarRef } from "@/app/lib/avatars";
 import { MemeAvatarCircle } from "./MemeAvatar";
+import { BoardPill } from "./board/BoardEntry";
 
 /**
  * The slice of `/api/v1/me/friends/count` this menu reads. The route also
@@ -156,12 +157,9 @@ export function AccountMenu() {
   // back to the board replaces both the menu and the Google sign-in button.
   if (me?.board) {
     return (
-      <a
-        href="/board"
-        className="flex h-11 items-center gap-2 rounded-full bg-brand px-4 text-sm font-extrabold text-white shadow-lg shadow-brand/30 transition hover:bg-brand-600"
-      >
-        Board Mode{player ? ` · ${player.handle}` : ""}
-      </a>
+      // On the homepage the board is already there: this brings up its panel.
+      // Anywhere else it is a link to it.
+      <BoardPill label={`Board Mode${player ? ` · ${player.handle}` : ""}`} />
     );
   }
 

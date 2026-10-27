@@ -7,6 +7,7 @@ import type { Game } from "../lib/games";
 import { captureSearchNow } from "../lib/use-search-capture";
 import { useDevicePlatform } from "../lib/use-device-platform";
 import { AccountMenu } from "./AccountMenu";
+import { BoardEntry } from "./board/BoardEntry";
 import { NotificationBell } from "./notifications/NotificationBell";
 import { PRIMARY_NAV, normalizePath } from "./primary-nav";
 import { StreakChip } from "./streak/StreakChip";
@@ -409,6 +410,9 @@ export function SiteHeader({
             <span aria-hidden="true" className="ha-spr ha-tab-gi" />
           </Link>
           <StreakChip />
+          {/* A touch-only smartboard reports a coarse pointer with no hover, i.e. it
+              lands in THIS branch, so the board's entry has to be here as well. */}
+          <BoardEntry />
           <NotificationBell />
         </div>
       ) : (
@@ -444,6 +448,7 @@ export function SiteHeader({
               and, like `AccountMenu`, its dropdown is anchored to the right edge
               so the two cannot fight for the same corner. */}
           <NotificationBell />
+          <BoardEntry />
           <AccountMenu />
         </div>
       )}

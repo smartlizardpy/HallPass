@@ -26,6 +26,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useBoardActive } from "./board/board-active-store";
 
 const STORAGE_KEY = "hp.survey.dismissed";
 
@@ -54,14 +55,14 @@ function writeDismissed(slugs: string[]): void {
 function isSuppressed(pathname: string): boolean {
   return (
     pathname.startsWith("/dashboard") ||
-    pathname.startsWith("/survey/") ||
-    // A shared classroom board has no one signed-in to answer for.
-    pathname.startsWith("/board")
+    pathname.startsWith("/survey/")
   );
 }
 
 export function SurveyBanner() {
   const pathname = usePathname();
+  // A shared classroom board has no one signed-in to answer for.
+  const boardActive = useBoardActive();
   const [banner, setBanner] = useState<Banner | null>(null);
 
   useEffect(() => {
@@ -80,7 +81,7 @@ export function SurveyBanner() {
     };
   }, []);
 
-  if (!banner || isSuppressed(pathname)) return null;
+  if (!banner || isSuppressed(pathname) || boardActive) return null;
 
   function dismiss() {
     if (!banner) return;

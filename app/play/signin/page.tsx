@@ -20,6 +20,7 @@
  */
 
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signIn } from "@/app/lib/auth";
 import { safeRelativePath } from "@/app/lib/safe-redirect";
@@ -86,9 +87,9 @@ export default async function PlaySignInPage({
         {boardPassOn && (
           <p className="mt-4 text-sm text-muted">
             On a school board?{" "}
-            <a href="/board" className="font-semibold underline">
+            <Link href="/?board=1" className="font-semibold underline">
               Sign in with BoardPass
-            </a>
+            </Link>
           </p>
         )}
       </div>
