@@ -69,6 +69,10 @@ const ALLOWED_REFERER_PREFIXES = [
   // Omitting it would 403 every challenge with the vague body above, which is
   // precisely how the `/beta/` outage presented.
   "/embed/",
+  // BoardPass's shared-board page. It makes credentialed writes (log a player in,
+  // pick who is playing) and is a first-party page we render. It is `/board/`
+  // here and an exact `/board` in `isTrustedPath`; `/game-html/` stays excluded.
+  "/board/",
 ];
 
 /**
@@ -80,7 +84,7 @@ const ALLOWED_REFERER_PREFIXES = [
 export function isTrustedPath(pathname: string): boolean {
   // `/` alone is allowed explicitly — the catalog root has no trailing segment to
   // match a prefix against.
-  if (pathname === "/") return true;
+  if (pathname === "/" || pathname === "/board") return true;
   return ALLOWED_REFERER_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 

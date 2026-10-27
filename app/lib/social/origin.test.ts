@@ -106,6 +106,19 @@ describe("isTrustedOrigin", () => {
   });
 });
 
+describe("BoardPass page", () => {
+  it("accepts the board page, with or without a trailing slash", () => {
+    expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}/board`))).toBe(true);
+    expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}/board/`))).toBe(true);
+  });
+  it("does not accept a lookalike path", () => {
+    expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}/boardgames`))).toBe(false);
+  });
+  it("still rejects the game frame", () => {
+    expect(isTrustedOrigin(reqWithReferer(`${ORIGIN}/game-html/duskfall/`))).toBe(false);
+  });
+});
+
 describe("isTrustedPath", () => {
   it("is the same rule as the referrer check, for a bare path", () => {
     for (const path of ["/", "/play/you/friends", "/game/duskfall", "/embed/invite", "/u/ozan"]) {
