@@ -15,7 +15,7 @@ import { frightFestGame } from "./events/fright-fest/registry";
 
 const EVENT_GAMES: Record<string, { mode: string }> = {
   "last-bell": { mode: "The Halloween Shift" },
-  "shadow-core-halloween-dash": { mode: "Cursed Dash" },
+  "scp-lockdown": { mode: "The Haunting" },
   "survive-till-dawn-pixel-edition": { mode: "Blood Moon" },
 };
 
