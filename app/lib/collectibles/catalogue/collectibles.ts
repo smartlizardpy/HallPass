@@ -130,8 +130,37 @@ const TR = build("tr", [
 ]);
 
 /**
+ * HAND-ADDED, NOT FROM THE STUDIO IMPORT: the SCP: Lockdown champion card. The studio manifest
+ * (hallpass-card/manifests/curated.json) has no entry for it yet, so this row lives here rather than in the
+ * generated file. Art: scripts/generate-champion-card-scp-lockdown.mjs. Number 36 follows the 35 existing ff26
+ * rows (15 retired demo + 20 curated); when the studio gains this card, move it into the importer's
+ * PRIZE_IDS / PRIZE_NUMBER (keeping id and number) and delete this row.
+ */
+const FF26_SCP_LOCKDOWN_CHAMPION: Collectible[] = [
+  {
+    id: "ff26-champion-scp-lockdown",
+    collection: "ff26",
+    number: 36,
+    name: "SCP: LOCKDOWN CHAMPION",
+    caption: "",
+    rarity: "epic",
+    kind: "card",
+    finish: "holo",
+    frame: "champion",
+    pool: "commemorative",
+    art: {
+      src: "/collectibles/ff26/ff26-champion-scp-lockdown.a6c504c5.webp",
+      thumb: "/collectibles/ff26/ff26-champion-scp-lockdown-thumb.7768511c.webp",
+      status: "final",
+      layout: "full",
+      alt: "SCP: LOCKDOWN CHAMPION. A glowing red lockdown beacon on a hazard-striped base, with light sweeping out either side. Epic card art.",
+    },
+  },
+];
+
+/**
  * The curated set (hallpass-card, imported by scripts/catalogue-import.mjs): the five Fright Fest
  * prize-only commemoratives keep their old ids, so packs and championship rewards are unchanged.
  * The demo sets above (hpo, inet, brr, tr) stay for the people who own them; their collections are retired.
  */
-export const COLLECTIBLES: Collectible[] = [...FF26_DEMO, ...CURATED, ...HPO, ...INET, ...BRR, ...TR];
+export const COLLECTIBLES: Collectible[] = [...FF26_DEMO, ...CURATED, ...FF26_SCP_LOCKDOWN_CHAMPION, ...HPO, ...INET, ...BRR, ...TR];

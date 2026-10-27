@@ -16,12 +16,12 @@ describe("catalogue", () => {
   });
 
   it("has the launch shape", () => {
-    // 5 live collections + 4 retired demo sets; 68 demo rows kept for their owners + 63 curated, 5 of them the ff26 prize ids re-used.
+    // 5 live collections + 4 retired demo sets; 68 demo rows kept for their owners + 63 curated, 5 of them the ff26 prize ids re-used, + the hand-added SCP: Lockdown champion.
     expect(CATALOGUE.collections.filter((c) => !c.retired).map((c) => c.id)).toEqual(["ff26", "legends", "brainrot", "turkish", "gaming"]);
     expect(CATALOGUE.collections.filter((c) => c.retired).map((c) => c.id).sort()).toEqual(["brr", "hpo", "inet", "tr"]);
-    expect(CATALOGUE.collectibles).toHaveLength(68 - 5 + 63);
+    expect(CATALOGUE.collectibles).toHaveLength(68 - 5 + 63 + 1);
     const live = (id: string) => CATALOGUE.collectibles.filter((c) => c.collection === id && !c.retired);
-    expect(["ff26", "legends", "brainrot", "turkish", "gaming"].map((id) => live(id).length)).toEqual([20, 12, 13, 9, 9]);
+    expect(["ff26", "legends", "brainrot", "turkish", "gaming"].map((id) => live(id).length)).toEqual([21, 12, 13, 9, 9]);
     expect(CATALOGUE.packs.map((p) => p.id)).toEqual([
       "ff26-participation", "ff26-winner-last-bell", "ff26-winner-shadow-core", "ff26-winner-survive-till-dawn",
       "ff26-overall-winner", "hpo-standard", "inet-standard", "brr-standard", "tr-standard",
@@ -69,7 +69,7 @@ describe("catalogue", () => {
   it("the Fright Fest prize cards are fixed-slot only: no pool can roll them, in any version", () => {
     const prize = CATALOGUE.collectibles.filter((c) => c.pool === "commemorative");
     expect(prize.map((c) => c.id).sort()).toEqual([
-      "ff26-champion-last-bell", "ff26-champion-shadow-core", "ff26-champion-survive-till-dawn", "ff26-overall-champion", "ff26-survivor",
+      "ff26-champion-last-bell", "ff26-champion-scp-lockdown", "ff26-champion-shadow-core", "ff26-champion-survive-till-dawn", "ff26-overall-champion", "ff26-survivor",
     ]);
     const pools = new Set(CATALOGUE.packs.flatMap((p) => p.versions.flatMap((v) => v.slots.flatMap((s) => (s.kind === "random" ? [s.pool] : [])))));
     for (const pool of pools) for (const c of prize) expect(eligibleCards(CATALOGUE, pool).map((x) => x.id)).not.toContain(c.id);
@@ -101,7 +101,7 @@ describe("catalogue", () => {
       }
     }
     expect(CATALOGUE.collectibles.filter((c) => c.pool === "commemorative").map((c) => c.id).sort()).toEqual([
-      "ff26-champion-last-bell", "ff26-champion-shadow-core", "ff26-champion-survive-till-dawn", "ff26-overall-champion", "ff26-survivor",
+      "ff26-champion-last-bell", "ff26-champion-scp-lockdown", "ff26-champion-shadow-core", "ff26-champion-survive-till-dawn", "ff26-overall-champion", "ff26-survivor",
     ]);
   });
 
