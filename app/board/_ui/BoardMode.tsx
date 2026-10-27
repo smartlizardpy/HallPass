@@ -21,10 +21,19 @@ import {
   bindGame, endSession, fetchState, keepPlaying, login, removeParticipant,
   unbindGame, unbindOnExit, type BoardState, type LoginResult,
 } from "./board-client";
+import { BoardHeader } from "./BoardHeader";
+import { categoryCounts, filterGames, isFiltering, NO_FILTER, pickFeatured, type LibraryFilter } from "./board-filter";
+import { FeaturedStrip } from "./FeaturedStrip";
+import { GameCard } from "./GameCard";
+import { planLaunch } from "./launch-decision";
+import { LibraryControls } from "./LibraryControls";
 import { LoginWindow } from "./LoginWindow";
+import { Sheet } from "./Sheet";
+import { UsernameKeyboard } from "./UsernameKeyboard";
 
 const WARN_MS = 60_000;
 const MAX_WINDOWS = 4;
+const MAX_PLAYERS = 8;
 const CHANNEL = "hallpass-boardpass";
 
 type Playing = { game: Game; who: RosterEntry };
@@ -33,15 +42,20 @@ export function BoardMode({ games }: { games: Game[] }) {
   const [state, setState] = useState<BoardState>({ state: "loading" });
   const [skew, setSkew] = useState(0);
   const [offline, setOffline] = useState(false);
-  const [windows, setWindows] = useState<{ id: number; z: number }[]>([]);
+  // Window order IS stacking order: the last one is on top (see `focusWindow`).
+  const [windows, setWindows] = useState<{ id: number; username: string }[]>([]);
+  // What the on-screen keyboard is editing: one sign-in window's username, or the search.
+  const [kbd, setKbd] = useState<{ kind: "window"; id: number } | { kind: "search" } | null>(null);
+  const [filter, setFilter] = useState<LibraryFilter>(NO_FILTER);
+  const [newestId, setNewestId] = useState<string | null>(null);
   const [pick, setPick] = useState<Game | null>(null);
   const [playing, setPlaying] = useState<Playing | null>(null);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [warning, setWarning] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
   const nextId = useRef(1);
-  const topZ = useRef(10);
+  const knownIds = useRef<Set<string>>(new Set());
+  const seeded = useRef(false);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const channel = useRef<BroadcastChannel | null>(null);
   const hadSession = useRef(false);
@@ -58,8 +72,14 @@ export function BoardMode({ games }: { games: Game[] }) {
       setSkew(Date.parse(next.session.now) - Date.now());
       hadSession.current = true;
     } else if (hadSession.current) {
+      // The session is gone (expiry, ended in another tab, or revoked): nothing
+      // from it may stay on screen for the next group.
       hadSession.current = false;
       setNotice(copy.sessionExpired);
+      setWindows([]);
+      setKbd(null);
+      setPick(null);
+      setConfirmEnd(false);
     }
     setState(next);
     return next;
@@ -92,6 +112,15 @@ export function BoardMode({ games }: { games: Game[] }) {
 
   const session = state.state === "active" ? state.session : null;
   const roster = useMemo(() => session?.participants ?? [], [session]);
+
+  // Mark a player who just joined so the dock can welcome them with a brief pop.
+  useEffect(() => {
+    if (state.state === "loading") return;
+    const fresh = seeded.current ? roster.find((p) => !knownIds.current.has(p.id)) : undefined;
+    seeded.current = true; // players already signed in on page load don't "arrive"
+    knownIds.current = new Set(roster.map((p) => p.id));
+    if (fresh) setNewestId(fresh.id);
+  }, [roster, state.state]);
 
   // First visit with nobody signed in: open one window so the screen isn't blank.
   useEffect(() => {
@@ -130,10 +159,17 @@ export function BoardMode({ games }: { games: Game[] }) {
   }, [session, skew, refresh]);
 
   function openWindow() {
-    setWindows((w) => (w.length >= MAX_WINDOWS ? w : [...w, { id: nextId.current++, z: ++topZ.current }]));
+    setWindows((w) => (w.length >= MAX_WINDOWS ? w : [...w, { id: nextId.current++, username: "" }]));
   }
-  const closeWindow = (id: number) => setWindows((w) => w.filter((x) => x.id !== id));
-  const focusWindow = (id: number) => setWindows((w) => w.map((x) => (x.id === id ? { ...x, z: ++topZ.current } : x)));
+  const closeWindow = (id: number) => {
+    setWindows((w) => w.filter((x) => x.id !== id));
+    setKbd((k) => (k?.kind === "window" && k.id === id ? null : k));
+  };
+  // Raise a window by moving it to the end; its z-index is derived from position.
+  const focusWindow = (id: number) =>
+    setWindows((w) => (w[w.length - 1]?.id === id ? w : [...w.filter((x) => x.id !== id), ...w.filter((x) => x.id === id)]));
+  const setUsername = (id: number, username: string) =>
+    setWindows((w) => w.map((x) => (x.id === id ? { ...x, username } : x)));
 
   // Logins go through ONE queue, so two windows submitted together can't both
   // create a session; the second joins the first.
@@ -168,19 +204,22 @@ export function BoardMode({ games }: { games: Game[] }) {
       return;
     }
     setWindows([]); // PIN entry never shares a screen with a game
+    setKbd(null);
     setPlaying({ game, who });
     posthog.capture("boardpass_game_launched", { game_slug: game.slug, players: roster.length });
     void refresh();
   }
 
   function choose(game: Game) {
-    if (roster.length === 0) {
+    const plan = planLaunch(roster);
+    if (plan.kind === "needs-player") {
       setNotice(copy.nobodyYet);
       if (windows.length === 0) openWindow();
-      return;
+    } else if (plan.kind === "launch") {
+      void launch(game, plan.who);
+    } else {
+      setPick(game);
     }
-    if (roster.length === 1) void launch(game, roster[0]);
-    else setPick(game);
   }
 
   const closeGame = useCallback(async () => {
@@ -199,6 +238,7 @@ export function BoardMode({ games }: { games: Game[] }) {
     await endSession();
     posthog.capture("boardpass_session_ended");
     setWindows([]);
+    setKbd(null);
     changed();
     await refresh();
   }
@@ -209,8 +249,21 @@ export function BoardMode({ games }: { games: Game[] }) {
     await refresh();
   }
 
-  const shown = games.filter((g) => !query || g.title.toLowerCase().includes(query.toLowerCase()));
-  const btn = "rounded-xl border border-black/10 dark:border-white/15 px-4 py-3 text-sm font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800 touch-manipulation";
+  const featured = useMemo(() => pickFeatured(games), [games]);
+  const categories = useMemo(() => categoryCounts(games), [games]);
+  const shown = useMemo(() => filterGames(games, filter), [games, filter]);
+  const filtering = isFiltering(filter);
+  const endsBy = session
+    ? new Date(session.absoluteExpiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : null;
+  const addDisabledReason =
+    roster.length >= MAX_PLAYERS
+      ? copy.addPlayerFull
+      : windows.length >= MAX_WINDOWS || roster.length + windows.length >= MAX_PLAYERS
+        ? copy.addPlayerWindows
+        : null;
+  const kbdWindow = kbd?.kind === "window" ? windows.find((w) => w.id === kbd.id) : undefined;
+  const loading = state.state === "loading";
 
   if (state.state === "unavailable") {
     return <Centered title={copy.brand} body={copy.unavailable} />;
@@ -220,69 +273,97 @@ export function BoardMode({ games }: { games: Game[] }) {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
-      <header className="flex flex-wrap items-center gap-3">
-        <h1 className="mr-2 text-2xl font-black">{copy.boardMode}</h1>
-        <ul className="flex flex-1 flex-wrap items-center gap-2" aria-label="Players on this board">
-          {roster.map((p) => (
-            <li key={p.id} className="flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 py-1 pl-1 pr-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.image} alt="" width={32} height={32} className="h-8 w-8 rounded-full" />
-              <span className="text-sm font-semibold">{p.name}</span>
-              <button type="button" onClick={() => void remove(p.id)} aria-label={`${copy.removePlayer}: ${p.name}`}
-                className="h-8 w-8 rounded-full hover:bg-black/10 dark:hover:bg-white/10">✕</button>
+    <div className="bp-root">
+      <BoardHeader
+        roster={roster}
+        loading={loading}
+        newestId={newestId}
+        addDisabledReason={addDisabledReason}
+        endsBy={endsBy}
+        onAdd={openWindow}
+        onEnd={() => setConfirmEnd(true)}
+        onRemove={(id) => void remove(id)}
+      />
+
+      <main>
+        {offline && <p role="status" className="bp-banner" data-tone="warn"><span>{copy.reconnecting}</span></p>}
+        {notice && (
+          <p role="status" className="bp-banner">
+            <span>{notice}</span>
+            <button type="button" className="bp-btn" onClick={() => setNotice(null)}>{copy.dismiss}</button>
+          </p>
+        )}
+
+        {featured && !filtering && <FeaturedStrip game={featured} onPlay={choose} />}
+
+        <LibraryControls
+          categories={categories}
+          filter={filter}
+          onChange={setFilter}
+          keyboardOpen={kbd?.kind === "search"}
+          onToggleKeyboard={() => setKbd((k) => (k?.kind === "search" ? null : { kind: "search" }))}
+        />
+
+        <p className="bp-meta" role="status">{copy.gamesCount(shown.length, games.length)}</p>
+        <ul className="bp-grid">
+          {shown.map((g, i) => (
+            <li key={g.slug}>
+              <GameCard game={g} onPlay={choose} eager={i < 10} />
             </li>
           ))}
+          {shown.length === 0 && (
+            <li className="bp-empty">
+              <h3>{copy.noMatchTitle}</h3>
+              <p>{copy.noMatchBody(filter.query.trim(), filter.category)}</p>
+              <button type="button" className="bp-btn bp-btn-primary bp-btn-lg" onClick={() => setFilter(NO_FILTER)}>{copy.clearFilters}</button>
+            </li>
+          )}
         </ul>
-        <button type="button" className={btn} onClick={openWindow} disabled={roster.length + windows.length >= 8 || windows.length >= MAX_WINDOWS}>
-          + {copy.addPlayer}
-        </button>
-        {roster.length > 0 && (
-          <button type="button" className={btn} onClick={() => setConfirmEnd(true)}>{copy.endSession}</button>
-        )}
-      </header>
+      </main>
 
-      {offline && <p role="status" className="rounded-lg bg-amber-100 dark:bg-amber-900/40 px-4 py-2 text-sm">{copy.reconnecting}</p>}
-      {notice && <p role="status" className="rounded-lg bg-indigo-100 dark:bg-indigo-900/40 px-4 py-2 text-sm">{notice}</p>}
-      {warning && !playing && (
-        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg bg-amber-100 dark:bg-amber-900/40 px-4 py-3">
-          <b>{copy.stillPlayingTitle}</b> <span className="text-sm">{copy.stillPlayingBody}</span>
-          <button type="button" className={btn} onClick={() => void stillHere()}>{copy.keepPlaying}</button>
+      {windows.map((w, i) => (
+        <LoginWindow
+          key={w.id}
+          index={i}
+          z={40 + i}
+          username={w.username}
+          onUsername={(u) => setUsername(w.id, u)}
+          keyboardOpen={kbd?.kind === "window" && kbd.id === w.id}
+          onKeyboard={(open) => setKbd(open ? { kind: "window", id: w.id } : (k) => (k?.kind === "window" && k.id === w.id ? null : k))}
+          onFocus={() => focusWindow(w.id)}
+          onSubmit={submitLogin}
+          onDone={() => closeWindow(w.id)}
+          onClose={() => closeWindow(w.id)}
+        />
+      ))}
+
+      {kbd?.kind === "window" && kbdWindow && (
+        <UsernameKeyboard mode="username" value={kbdWindow.username} onChange={(u) => setUsername(kbdWindow.id, u)} onClose={() => setKbd(null)} />
+      )}
+      {kbd?.kind === "search" && (
+        <UsernameKeyboard mode="search" value={filter.query} onChange={(q) => setFilter((f) => ({ ...f, query: q }))} onClose={() => setKbd(null)} />
+      )}
+
+      {warning && !playing && state.state === "active" && (
+        <div role="alert" className="bp-session-card">
+          <div>
+            <strong>{copy.stillPlayingTitle}</strong>
+            <span className="bp-sc-body">{copy.stillPlayingBody}</span>
+          </div>
+          <button type="button" className="bp-btn bp-btn-primary bp-btn-lg" onClick={() => void stillHere()}>{copy.keepPlaying}</button>
+          <button type="button" className="bp-btn bp-btn-danger" onClick={() => setConfirmEnd(true)}>{copy.endSession}</button>
         </div>
       )}
 
-      <input
-        type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search games"
-        aria-label="Search games"
-        className="w-full max-w-md rounded-xl border border-black/15 dark:border-white/20 bg-transparent px-4 py-3"
-      />
-      <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-        {shown.map((g) => (
-          <li key={g.slug}>
-            <button type="button" onClick={() => choose(g)}
-              className="h-full w-full rounded-2xl border border-black/10 dark:border-white/15 p-4 text-left hover:bg-neutral-100 dark:hover:bg-neutral-800 touch-manipulation">
-              <span className="block text-base font-bold">{g.title}</span>
-              <span className="block text-xs text-neutral-600 dark:text-neutral-400">{g.category}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-
-      {windows.map((w, i) => (
-        <LoginWindow key={w.id} index={i} z={w.z} onFocus={() => focusWindow(w.id)}
-          onSubmit={submitLogin} onDone={() => closeWindow(w.id)} onClose={() => closeWindow(w.id)} />
-      ))}
-
       {pick && (
         <Sheet title={copy.whoIsPlaying(pick.title)} onClose={() => setPick(null)}>
-          {pick.externalUrl && <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">{copy.externalNote}</p>}
-          <ul className="grid gap-3 sm:grid-cols-2">
+          {pick.externalUrl ? <p>{copy.externalNote}</p> : <p>{copy.creditNote}</p>}
+          <ul className="bp-who">
             {roster.map((p) => (
               <li key={p.id}>
-                <button type="button" onClick={() => void launch(pick, p)}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-black/10 dark:border-white/15 p-4 text-left text-lg font-bold hover:bg-neutral-100 dark:hover:bg-neutral-800 touch-manipulation">
+                <button type="button" onClick={() => void launch(pick, p)}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={p.image} alt="" width={48} height={48} className="h-12 w-12 rounded-full" />
+                  <img src={p.image} alt="" width={80} height={80} />
                   {p.name}
                 </button>
               </li>
@@ -292,25 +373,30 @@ export function BoardMode({ games }: { games: Game[] }) {
       )}
 
       {confirmEnd && (
-        <Sheet title={copy.endConfirmTitle} onClose={() => setConfirmEnd(false)}>
-          <p className="mb-4 text-sm">{copy.endConfirmBody}</p>
-          <div className="flex gap-2">
-            <button type="button" className={btn} onClick={() => void end()}>{copy.endSession}</button>
-            <button type="button" className={btn} onClick={() => setConfirmEnd(false)}>{copy.cancel}</button>
+        <Sheet title={copy.endConfirmTitle} onClose={() => setConfirmEnd(false)} closeLabel={null}>
+          <p>{copy.endConfirmBody}</p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button type="button" className="bp-btn bp-btn-lg" onClick={() => setConfirmEnd(false)}>{copy.cancel}</button>
+            <button type="button" className="bp-btn bp-btn-danger bp-btn-lg" onClick={() => void end()}>{copy.endSession}</button>
           </div>
         </Sheet>
       )}
 
       <PlayerOverlay
         board
+        closeLabel={copy.backToBoard}
         game={playing?.game ?? null}
         onClose={() => void closeGame()}
         chrome={
           playing && (
-            <div className="flex items-center gap-2 text-xs font-bold">
-              <span className="rounded-full bg-indigo-600 px-3 py-1 text-white">{copy.playingAs(playing.who.name)}</span>
+            <div className="flex items-center gap-3 text-lg font-bold">
+              <span className="inline-flex items-center gap-3 rounded-full bg-indigo-600 py-1.5 pl-1.5 pr-5 text-white">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={playing.who.image} alt="" width={40} height={40} className="h-10 w-10 rounded-full bg-white/20" />
+                {copy.playingAs(playing.who.name)}
+              </span>
               {warning && (
-                <button type="button" className="rounded-full bg-amber-400 px-3 py-1 text-black" onClick={() => void stillHere()}>
+                <button type="button" className="min-h-12 rounded-full bg-amber-400 px-5 py-2 text-black" onClick={() => void stillHere()}>
                   {copy.stillPlayingTitle} {copy.keepPlaying}
                 </button>
               )}
@@ -324,29 +410,11 @@ export function BoardMode({ games }: { games: Game[] }) {
 
 function Centered({ title, body }: { title: string; body: string }) {
   return (
-    <main className="flex min-h-screen items-center justify-center p-6 text-center">
+    <main className="bp-root bp-centered">
       <div className="max-w-md space-y-2">
-        <h1 className="text-2xl font-black">{title}</h1>
-        <p>{body}</p>
+        <h1 className="text-3xl font-black">{title}</h1>
+        <p className="text-lg" style={{ color: "var(--bp-muted)" }}>{body}</p>
       </div>
     </main>
-  );
-}
-
-function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", k);
-    return () => document.removeEventListener("keydown", k);
-  }, [onClose]);
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xl rounded-2xl bg-white dark:bg-neutral-900 p-6 shadow-2xl">
-        <h2 className="mb-4 text-xl font-black">{title}</h2>
-        {children}
-        <button type="button" className="mt-4 text-sm underline" onClick={onClose}>{copy.cancel}</button>
-      </div>
-    </div>
   );
 }
