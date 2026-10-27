@@ -19,6 +19,7 @@ export function PinPad({
   onComplete,
   disabled = false,
   label = copy.pinLabel,
+  variant = "default",
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -26,6 +27,8 @@ export function PinPad({
   onComplete?: (pin: string) => void;
   disabled?: boolean;
   label?: string;
+  /** `board` is the dark arcade styling (`board.css`); `default` is the account page's. */
+  variant?: "default" | "board";
 }) {
   const root = useRef<HTMLDivElement>(null);
 
@@ -49,18 +52,24 @@ export function PinPad({
     }
   }
 
-  const key =
-    "h-14 min-w-14 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-neutral-800 text-xl font-semibold " +
-    "hover:bg-neutral-100 dark:hover:bg-neutral-700 active:scale-95 disabled:opacity-50 touch-manipulation select-none";
+  const board = variant === "board";
+  const key = board
+    ? "bp-key"
+    : "h-14 min-w-14 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-neutral-800 text-xl font-semibold " +
+      "hover:bg-neutral-100 dark:hover:bg-neutral-700 active:scale-95 disabled:opacity-50 touch-manipulation select-none";
 
   return (
     <div ref={root} tabIndex={0} onKeyDown={onKeyDown} role="group" aria-label={label}
-      className="outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-xl p-1">
-      <div className="flex justify-center gap-2 py-3" role="img" aria-label={copy.pinProgress(value.length)}>
-        {Array.from({ length: PIN_LENGTH }, (_, i) => (
-          <span key={i} aria-hidden
-            className={`h-3.5 w-3.5 rounded-full border border-neutral-400 ${i < value.length ? "bg-neutral-900 dark:bg-white" : ""}`} />
-        ))}
+      className={board ? "rounded-2xl p-1 outline-none" : "outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-xl p-1"}>
+      <div className={board ? "flex justify-center gap-3 py-4" : "flex justify-center gap-2 py-3"} role="img" aria-label={copy.pinProgress(value.length)}>
+        {Array.from({ length: PIN_LENGTH }, (_, i) =>
+          board ? (
+            <span key={i} aria-hidden className="bp-pin-dot" data-on={i < value.length} />
+          ) : (
+            <span key={i} aria-hidden
+              className={`h-3.5 w-3.5 rounded-full border border-neutral-400 ${i < value.length ? "bg-neutral-900 dark:bg-white" : ""}`} />
+          ),
+        )}
       </div>
       <div className="grid grid-cols-3 gap-2">
         {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
@@ -68,7 +77,7 @@ export function PinPad({
             {d}
           </button>
         ))}
-        <button type="button" className={key + " text-sm"} disabled={disabled} onClick={() => onChange("")}>
+        <button type="button" className={key + (board ? " bp-key-sm" : " text-sm")} disabled={disabled} onClick={() => onChange("")}>
           {copy.clearPin}
         </button>
         <button type="button" className={key} disabled={disabled} onClick={() => push("0")}>0</button>

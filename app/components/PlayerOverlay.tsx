@@ -41,6 +41,7 @@ export function PlayerOverlay({
   onClose,
   chrome,
   board = false,
+  closeLabel,
 }: {
   game: Game | null;
   onClose: () => void;
@@ -52,6 +53,11 @@ export function PlayerOverlay({
    * the board records the play and streak day server-side for the chosen player.
    */
   board?: boolean;
+  /**
+   * Board Mode only: the words on the exit button ("Back to Board Mode"). Set, it
+   * also gets a smartboard-sized target; absent, the compact "Close ✕" is unchanged.
+   */
+  closeLabel?: string;
 }) {
   const frameWrapRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -236,7 +242,7 @@ export function PlayerOverlay({
       {/* Top bar */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex shrink-0 items-center justify-between gap-3 bg-surface px-3 sm:h-14 sm:px-5"
+        className={`flex shrink-0 items-center justify-between gap-3 bg-surface px-3 sm:px-5 ${closeLabel ? "sm:h-20" : "sm:h-14"}`}
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
         <h2
@@ -301,10 +307,20 @@ export function PlayerOverlay({
             type="button"
             onClick={requestClose}
             aria-label="Close game"
-            className="inline-flex h-11 min-w-11 items-center justify-center rounded-full bg-brand px-4 text-xs font-extrabold text-white transition hover:bg-brand-600 sm:h-auto sm:min-w-0 sm:py-2"
+            className={
+              closeLabel
+                ? "inline-flex h-14 min-w-14 items-center justify-center rounded-full bg-brand px-6 text-lg font-extrabold text-white transition hover:bg-brand-600"
+                : "inline-flex h-11 min-w-11 items-center justify-center rounded-full bg-brand px-4 text-xs font-extrabold text-white transition hover:bg-brand-600 sm:h-auto sm:min-w-0 sm:py-2"
+            }
           >
-            <span className="hidden sm:inline">Close ✕</span>
-            <span className="sm:hidden text-lg leading-none">✕</span>
+            {closeLabel ? (
+              <span>← {closeLabel}</span>
+            ) : (
+              <>
+                <span className="hidden sm:inline">Close ✕</span>
+                <span className="sm:hidden text-lg leading-none">✕</span>
+              </>
+            )}
           </button>
         </div>
       </div>
