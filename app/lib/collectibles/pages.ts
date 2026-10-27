@@ -33,7 +33,7 @@ export interface BinderGroup {
   collection: string;
   name: string;
   progress: CollectionProgress;
-  /** Card-number order, after the rarity filter. */
+  /** Card-number order (retired cards a player still owns last), after the rarity filter. */
   cells: BinderCell[];
 }
 
@@ -58,7 +58,7 @@ export function binderGroups(binder: readonly OwnedEntry[], progress: readonly C
       // A retired card (the old demo art) shows only to the people who own it.
       cells: CATALOGUE.collectibles
         .filter((c) => c.collection === p.collection && (!c.retired || byId.has(c.id)) && (filters.rarity === "all" || c.rarity === filters.rarity))
-        .sort((a, b) => a.number - b.number)
+        .sort((a, b) => Number(!!a.retired) - Number(!!b.retired) || a.number - b.number)
         .map((card) => ({ card, entry: byId.get(card.id) ?? null })),
     }));
 }

@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { getPack } from "@/app/lib/collectibles/catalogue";
+import { Binder } from "@/app/components/collectibles/Binder";
 import { OpeningFlow } from "@/app/components/collectibles/opening/OpeningFlow";
 import { PrizeCounter } from "@/app/components/collectibles/room/PrizeCounter";
 import { LabPack } from "./LabPack";
@@ -33,7 +34,8 @@ export function LabClient() {
 
   function body() {
     if (view === "open" && pack) return <OpeningFlow key={pack} id={pack} links={LINKS} />;
-    if (view === "pack") return <LabPack id={q.get("id") ?? "hpo-standard"} />;
+    if (view === "binder") return <Binder />;
+    if (view === "pack") return <LabPack id={q.get("id") ?? "legends-standard"} />;
     return <Index />;
   }
 }
@@ -48,8 +50,13 @@ function Index() {
       </p>
       <ul className="grid gap-2 sm:grid-cols-2">
         <li>
-          <Link className="underline" href="/packs/lab?view=pack&id=hpo-standard">
+          <Link className="underline" href="/packs/lab?view=pack&id=legends-standard">
             The pack on its own
+          </Link>
+        </li>
+        <li>
+          <Link className="underline" href="/packs/lab?view=binder">
+            Binder
           </Link>
         </li>
         <li>

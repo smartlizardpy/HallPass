@@ -23,7 +23,9 @@ describe("binder grouping", () => {
     // The retired demo sets (hpo, inet, brr, tr) show only to people who own one of their cards.
     expect(groups.map((g) => g.collection)).toEqual(CATALOGUE.collections.filter((c) => !c.retired).sort((a, b) => a.sort - b.sort).map((c) => c.id));
     const ff = groups[0];
-    expect(ff.cells.map((c) => c.card.number)).toEqual([...ff.cells.map((c) => c.card.number)].sort((a, b) => a - b));
+    const current = ff.cells.filter((c) => !c.card.retired).map((c) => c.card.number);
+    expect(current).toEqual([...current].sort((a, b) => a - b));
+    expect(ff.cells.at(-1)!.card.retired).toBe(true); // an owned retired card sits after the current set
     expect(ff.cells.filter((c) => c.entry).length).toBe(2);
     // 20 current cards plus the one retired demo card this player owns.
     expect(ff.cells.length).toBe(ff.progress.total + 1);
