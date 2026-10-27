@@ -19,6 +19,8 @@ export type Frame = "standard" | "event" | "champion";
 /** `commemorative` cards come only from fixed slots, never from chance. */
 export type CollectiblePool = "standard" | "commemorative";
 export type ArtStatus = "demo" | "final";
+/** `pixel`: 32 or 48 px art drawn inside the die-cut card. `full`: a finished 5:7 card face, drawn edge to edge. */
+export type ArtLayout = "pixel" | "full";
 
 export interface Collection {
   /** Short stable id; every collectible id in it is prefixed `<id>-`. */
@@ -31,6 +33,8 @@ export interface Collection {
   availableFrom?: string;
   availableUntil?: string;
   sort: number;
+  /** No longer offered: kept for the people who own its cards, hidden from everyone else's binder. */
+  retired?: true;
 }
 
 export interface Collectible {
@@ -45,7 +49,8 @@ export interface Collectible {
   finish: Finish;
   frame: Frame;
   pool: CollectiblePool;
-  art: { src: string; status: ArtStatus; alt: string };
+  /** `thumb` (full layout only) is the light binder image; `src` is the high-resolution reveal one. */
+  art: { src: string; status: ArtStatus; alt: string; layout?: ArtLayout; thumb?: string };
   /** Retired cards stay in the catalogue (people own them) but leave random pools. */
   retired?: true;
 }
@@ -69,6 +74,8 @@ export interface Pack {
   description: string;
   wrapper: string;
   versions: PackVersion[];
+  /** No longer granted (the shelf and the staff desk skip it). Sealed copies still open: every version stays. */
+  closed?: true;
 }
 
 export interface Catalogue {

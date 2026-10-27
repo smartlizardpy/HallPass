@@ -133,7 +133,7 @@ function GrantPanel({ nonce }: { nonce: string }) {
         <label className="text-xs font-bold">
           Pack
           <select name="pack" required className={`${INPUT} mt-1 font-normal`}>
-            {CATALOGUE.packs.map((p) => (
+            {CATALOGUE.packs.filter((p) => !p.closed).map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} ({p.id} v{currentVersion(p).v})
               </option>

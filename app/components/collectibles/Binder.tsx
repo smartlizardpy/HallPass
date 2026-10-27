@@ -14,7 +14,7 @@
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import Link from "next/link";
-import { CATALOGUE, RARITIES } from "@/app/lib/collectibles/catalogue";
+import { CATALOGUE, getCollection, RARITIES } from "@/app/lib/collectibles/catalogue";
 import type { Rarity } from "@/app/lib/collectibles/catalogue/types";
 import { RARITY_LABEL } from "@/app/lib/collectibles/present";
 import { batches, binderGroups, formatProgress, newIds, type OwnedEntry } from "@/app/lib/collectibles/pages";
@@ -136,14 +136,11 @@ function BinderView({ data, setState }: { data: MyCollection; setState: Dispatch
           <button type="button" className={chip} aria-pressed={collection === "all"} onClick={() => setCollection("all")}>
             All collections
           </button>
-          {CATALOGUE.collections
-            .slice()
-            .sort((a, b) => a.sort - b.sort)
-            .map((c) => (
-              <button key={c.id} type="button" className={chip} aria-pressed={collection === c.id} onClick={() => setCollection(c.id)}>
-                {c.name}
-              </button>
-            ))}
+          {data.progress.map((p) => (
+            <button key={p.collection} type="button" className={chip} aria-pressed={collection === p.collection} onClick={() => setCollection(p.collection)}>
+              {getCollection(p.collection)?.name ?? p.collection}
+            </button>
+          ))}
         </div>
         <div role="group" aria-label="Filter by rarity" className="flex flex-wrap gap-2">
           <button type="button" className={chip} aria-pressed={rarity === "all"} onClick={() => setRarity("all")}>

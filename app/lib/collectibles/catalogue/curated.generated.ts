@@ -284,8 +284,8 @@ export const CURATED: Collectible[] = [
     "frame": "standard",
     "pool": "standard",
     "art": {
-      "src": "/collectibles/brainrot/brainrot-whaaa.2d3eb023.webp",
-      "thumb": "/collectibles/brainrot/brainrot-whaaa-thumb.2d3eb023.webp",
+      "src": "/collectibles/brainrot/brainrot-whaaa.55e71c10.webp",
+      "thumb": "/collectibles/brainrot/brainrot-whaaa-thumb.1a69e71b.webp",
       "status": "final",
       "layout": "full",
       "alt": "WHAAA. rare card art."

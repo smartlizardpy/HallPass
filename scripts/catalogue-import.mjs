@@ -99,19 +99,22 @@ for (const c of cards) {
   const artBuf = read(c.m.art);
   const thumbBuf = read(c.m.thumb);
   const animated = c.m.animated;
-  const dir = `public/collectibles/${c.collection}`;
-  // An already-optimised (animated) WebP is copied as it is; PNGs are encoded below.
-  assets.set(c.id, { c, dir, artBuf, thumbBuf, animated, copyArt: animated || c.m.art.endsWith(".webp") });
+  assets.set(c.id, { c, artBuf, thumbBuf, animated });
 }
 
 async function build() {
   const rows = [];
   for (const [id, a] of assets) {
-    const { c, dir } = a;
-    const art = a.copyArt ? a.artBuf : await sharp(a.artBuf).webp({ quality: 86, effort: 5 }).toBuffer();
+    const { c } = a;
+    // PNGs are encoded to WebP. The one animated card is 158 frames at ~6 MB, so it is re-encoded smaller,
+    // and its binder thumbnail is a single still frame (the studio's own thumb is the animation again).
+    const art = a.animated
+      ? await sharp(a.artBuf, { animated: true }).webp({ quality: 50, effort: 4, loop: 0 }).toBuffer()
+      : await sharp(a.artBuf).webp({ quality: 86, effort: 5 }).toBuffer();
+    const thumb = a.animated ? await sharp(a.artBuf).resize(300, 420).webp({ quality: 82 }).toBuffer() : a.thumbBuf;
     const artSrc = `/collectibles/${c.collection}/${id}.${sha8(art)}.webp`;
-    const thumbSrc = `/collectibles/${c.collection}/${id}-thumb.${sha8(a.thumbBuf)}.webp`;
-    writes.push([join(ROOT, "public", artSrc), art], [join(ROOT, "public", thumbSrc), a.thumbBuf]);
+    const thumbSrc = `/collectibles/${c.collection}/${id}-thumb.${sha8(thumb)}.webp`;
+    writes.push([join(ROOT, "public", artSrc), art], [join(ROOT, "public", thumbSrc), thumb]);
     const meta = await sharp(art).metadata();
     if (meta.width * 7 !== (meta.pageHeight ?? meta.height) * 5) bad(`${c.m.id}: art ${meta.width}×${meta.height} is not 5:7`);
     const m = c.m;

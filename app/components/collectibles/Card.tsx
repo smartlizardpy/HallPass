@@ -82,7 +82,10 @@ export function CollectibleCard({
   useCardTilt(ref, isLive, tiltFrom);
   useOnScreenLoop(ref, loop && card.rarity === "legendary");
   const { base } = collectionColours(card.collection);
+  const full = card.art.layout === "full";
   const px = artPixels(card);
+  // A finished card face: the light thumbnail where the card is small, the high-resolution art where it is large.
+  const artSrc = full && card.art.thumb && (size === "sm" || size === "md") ? card.art.thumb : card.art.src;
   return (
     <div
       ref={ref}
@@ -91,7 +94,8 @@ export function CollectibleCard({
       data-kind={card.kind}
       data-size={size}
       data-holo={isLive ? "live" : "static"}
-      data-art={px}
+      data-art={full ? undefined : px}
+      data-layout={full ? "full" : undefined}
       data-name={
         card.name.length >= 19
           ? "long"
@@ -108,25 +112,28 @@ export function CollectibleCard({
         <div className="hc-cut">
           <div className="hc-shape" />
           <div className="hc-face">
-            <span className="hc-num">{cardNumber(card)}</span>
-            {/* eslint-disable-next-line @next/next/no-img-element -- pixel art at a whole-number scale, no optimiser */}
+            {!full && <span className="hc-num">{cardNumber(card)}</span>}
+            {/* eslint-disable-next-line @next/next/no-img-element -- pre-sized card art (pixel art at a whole-number scale, or a finished 5:7 face), no optimiser */}
             <img
               className="hc-art"
-              src={card.art.src}
+              src={artSrc}
               alt=""
-              width={px}
-              height={px}
+              width={full ? 750 : px}
+              height={full ? 1050 : px}
               loading="lazy"
               decoding="async"
               draggable={false}
             />
-            <span className="hc-cap">
-              <span className="hc-name">{card.name}</span>
-              <span className="hc-meta">
-                <span className="hc-pill">{RARITY_LABEL[card.rarity]}</span>
-                <Pips rarity={card.rarity} />
+            {/* A finished face carries its own name and caption; rarity and number are said by the page around it and the aria-label. */}
+            {!full && (
+              <span className="hc-cap">
+                <span className="hc-name">{card.name}</span>
+                <span className="hc-meta">
+                  <span className="hc-pill">{RARITY_LABEL[card.rarity]}</span>
+                  <Pips rarity={card.rarity} />
+                </span>
               </span>
-            </span>
+            )}
             <span className="hc-foil" />
             <span className="hc-glare" />
             {card.rarity === "legendary" && (

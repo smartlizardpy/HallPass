@@ -27,10 +27,22 @@ export function artPixels(card: Pick<Collectible, "rarity">): 32 | 48 {
 }
 
 /** "07/20": the card's number within its collection. */
-export function cardNumber(card: Pick<Collectible, "collection" | "number">): string {
-  const total = cardsIn(card.collection).length;
+export function cardNumber(card: Pick<Collectible, "collection" | "number" | "retired">): string {
+  const { position, total } = setPosition(card);
   const width = String(total).length;
-  return `${String(card.number).padStart(width, "0")}/${total}`;
+  return `${String(position).padStart(width, "0")}/${total}`;
+}
+
+/**
+ * Where a card sits in its set. Rows are never renumbered, so a collection that replaced its art
+ * has retired rows with gaps in `number`: a current card is counted among the cards still in the set,
+ * a retired one keeps its own number out of every row the collection has.
+ */
+function setPosition(card: Pick<Collectible, "collection" | "number" | "retired">): { position: number; total: number } {
+  const all = cardsIn(card.collection);
+  if (card.retired) return { position: card.number, total: all.length };
+  const current = all.filter((c) => !c.retired);
+  return { position: current.filter((c) => c.number <= card.number).length, total: current.length };
 }
 
 /** The collection's theme colours, with safe fallbacks. */
@@ -42,7 +54,8 @@ export function collectionColours(collectionId: string): { base: string; accent:
 /** Plain words for screen readers: "The Caretaker. Epic card, number 14 of 20 in Fright Fest 2026." */
 export function cardLabel(card: Collectible): string {
   const collection = getCollection(card.collection)?.name ?? card.collection;
-  return `${card.name}. ${RARITY_LABEL[card.rarity]} ${card.kind}, number ${card.number} of ${cardsIn(card.collection).length} in ${collection}.`;
+  const { position, total } = setPosition(card);
+  return `${card.name}. ${RARITY_LABEL[card.rarity]} ${card.kind}, number ${position} of ${total} in ${collection}.`;
 }
 
 /** The wrapper a pack is drawn in (its collection's), and its emblem. */

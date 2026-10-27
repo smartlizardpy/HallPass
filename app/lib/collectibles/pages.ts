@@ -55,8 +55,9 @@ export function binderGroups(binder: readonly OwnedEntry[], progress: readonly C
       collection: p.collection,
       name: getCollection(p.collection)?.name ?? p.collection,
       progress: p,
+      // A retired card (the old demo art) shows only to the people who own it.
       cells: CATALOGUE.collectibles
-        .filter((c) => c.collection === p.collection && (filters.rarity === "all" || c.rarity === filters.rarity))
+        .filter((c) => c.collection === p.collection && (!c.retired || byId.has(c.id)) && (filters.rarity === "all" || c.rarity === filters.rarity))
         .sort((a, b) => a.number - b.number)
         .map((card) => ({ card, entry: byId.get(card.id) ?? null })),
     }));
@@ -110,7 +111,7 @@ function slotView(slot: Slot, n: number): SlotView {
 
 /** Every pack with its CURRENT version's slots, for "What's in each pack". */
 export function packViews(): PackView[] {
-  return CATALOGUE.packs.map((pack) => {
+  return CATALOGUE.packs.filter((p) => !p.closed).map((pack) => {
     const v = currentVersion(pack);
     return { pack, version: v.v, slots: v.slots.map((s, i) => slotView(s, i + 1)) };
   });
@@ -194,7 +195,7 @@ export interface Source {
  */
 export function cardSources(card: Collectible): Source[] {
   const out: Source[] = [];
-  for (const pack of CATALOGUE.packs) {
+  for (const pack of CATALOGUE.packs.filter((p) => !p.closed)) {
     const slots = currentVersion(pack).slots;
     if (slots.some((s) => s.kind === "fixed" && s.collectible === card.id)) {
       out.push({ pack, how: "fixed" });

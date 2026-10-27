@@ -20,17 +20,27 @@ describe("binder grouping", () => {
 
   it("lists every collection with every card, in number order, owned ones paired", () => {
     const groups = binderGroups(binder, progress, { collection: "all", rarity: "all" });
-    expect(groups.map((g) => g.collection)).toEqual(CATALOGUE.collections.slice().sort((a, b) => a.sort - b.sort).map((c) => c.id));
+    // The retired demo sets (hpo, inet, brr, tr) show only to people who own one of their cards.
+    expect(groups.map((g) => g.collection)).toEqual(CATALOGUE.collections.filter((c) => !c.retired).sort((a, b) => a.sort - b.sort).map((c) => c.id));
     const ff = groups[0];
     expect(ff.cells.map((c) => c.card.number)).toEqual([...ff.cells.map((c) => c.card.number)].sort((a, b) => a - b));
     expect(ff.cells.filter((c) => c.entry).length).toBe(2);
-    expect(ff.cells.length).toBe(ff.progress.total);
+    // 20 current cards plus the one retired demo card this player owns.
+    expect(ff.cells.length).toBe(ff.progress.total + 1);
+    expect(ff.cells.filter((c) => c.card.retired && !c.entry)).toEqual([]);
+  });
+  it("shows a retired collection to the people who own a card in it, and nobody else", () => {
+    const owner = [entry("hpo-hall-pass")];
+    const groups = binderGroups(owner, collectionProgress(owner), { collection: "all", rarity: "all" });
+    expect(groups.map((g) => g.collection)).toContain("hpo");
+    expect(groups.find((g) => g.collection === "hpo")!.cells.map((c) => c.card.id)).toHaveLength(12);
   });
   it("filters by collection and rarity without changing progress", () => {
     const groups = binderGroups(binder, progress, { collection: "ff26", rarity: "legendary" });
     expect(groups).toHaveLength(1);
     expect(groups[0].cells.every((c) => c.card.rarity === "legendary")).toBe(true);
-    expect(groups[0].progress.owned).toBe(2);
+    // Only the survivor card is a current card; the retired demo Last Bell is owned but outside the set to complete.
+    expect(groups[0].progress.owned).toBe(1);
   });
   it("formats progress", () => {
     expect(formatProgress({ owned: 12, total: 20, percent: 60 })).toBe("12 of 20 · 60%");
@@ -54,7 +64,8 @@ describe("pack pages", () => {
   });
   it("describes every pack's current version, with odds summing to 100", () => {
     const views = packViews();
-    expect(views).toHaveLength(CATALOGUE.packs.length);
+    // Closed packs (the retired demo sets) are not described: nothing grants them any more.
+    expect(views).toHaveLength(CATALOGUE.packs.filter((p) => !p.closed).length);
     for (const v of views) {
       expect(v.slots).toHaveLength(v.pack.versions[v.pack.versions.length - 1].size);
       for (const s of v.slots) {
@@ -73,12 +84,14 @@ describe("how a card can be obtained", () => {
     expect(src.every((s) => s.how === "fixed")).toBe(true);
   });
   it("marks standard cards as chance in their collection's packs", () => {
-    const c = CATALOGUE.collectibles.find((x) => x.collection === "hpo" && x.pool === "standard" && x.rarity === "common")!;
+    const c = CATALOGUE.collectibles.find((x) => x.collection === "turkish" && x.pool === "standard" && x.rarity === "common")!;
     // The Rare pack's first slot is a standard roll too, so a common can come from it.
     expect(cardSources(c)).toEqual([
-      { pack: CATALOGUE.packs.find((p) => p.id === "hpo-standard")!, how: "chance" },
-      { pack: CATALOGUE.packs.find((p) => p.id === "hpo-rare")!, how: "chance" },
+      { pack: CATALOGUE.packs.find((p) => p.id === "turkish-standard")!, how: "chance" },
+      { pack: CATALOGUE.packs.find((p) => p.id === "turkish-rare")!, how: "chance" },
     ]);
+    // A retired demo card, or one whose only packs are closed, can no longer be pulled.
+    expect(cardSources(getCollectible("hpo-hall-pass")!)).toEqual([]);
   });
   it("builds a share path with only the card id", () => {
     expect(cardPath("ff26-survivor")).toBe("/collectibles/ff26-survivor");
@@ -108,7 +121,7 @@ describe("pack contents text", () => {
   });
   it("reads the sentence the page has always shown", () => {
     const ff = packViews().find((v) => v.pack.id === "ff26-participation")!;
-    expect(slotLine(ff.slots[1])).toBe("Slot 2. One card from Fright Fest 2026: 60% common, 25% uncommon, 10% rare, 4% epic, 1% legendary.");
+    expect(slotLine(ff.slots[1])).toBe("Slot 2. One card from Fright Fest 2026: 60% common, 25% uncommon, 10% rare, 5% epic.");
   });
   it("groups every pack once: events by name, the rest as everyday", () => {
     const groups = packGroups();
