@@ -143,7 +143,7 @@ describe("collectionProgress", () => {
   it("counts distinct owned cards per collection, from the ledger", () => {
     const p = collectionProgress([{ collectibleId: "hpo-hall-pass" }, { collectibleId: "hpo-reactor" }, { collectibleId: "ff26-survivor" }]);
     expect(p.find((x) => x.collection === "hpo")).toEqual({ collection: "hpo", owned: 2, total: 12, percent: 16 });
-    expect(p.find((x) => x.collection === "ff26")).toMatchObject({ owned: 1, total: 20, percent: 5 });
+    expect(p.find((x) => x.collection === "ff26")).toMatchObject({ owned: 1, total: 21, percent: 4 });
     expect(p.find((x) => x.collection === "turkish")).toMatchObject({ owned: 0, percent: 0 });
     // Retired collections (the demo sets) show only to the people who own a card in one.
     expect(p.find((x) => x.collection === "tr")).toBeUndefined();
