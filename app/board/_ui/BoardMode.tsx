@@ -161,7 +161,9 @@ export function BoardMode({ games }: { games: Game[] }) {
       r = await bindGame(who.id, game.slug);
     }
     if (r !== "ok") {
-      setNotice(r === "network" ? copy.reconnecting : copy.sessionExpired);
+      setNotice(
+        r === "network" ? copy.reconnecting : r === "gone" ? copy.sessionExpired : copy.launchFailed,
+      );
       await refresh();
       return;
     }

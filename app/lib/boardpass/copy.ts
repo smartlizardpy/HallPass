@@ -41,6 +41,7 @@ export const copy = {
   keepPlaying: "Keep Playing",
   sessionExpired: "This board session ended. Sign in again to keep playing.",
   externalNote: "This game is hosted elsewhere, so scores won't be saved to anyone.",
+  launchFailed: "Couldn't start that game. Try again.",
   nobodyYet: "Add a player to get started.",
   reconnecting: "Reconnecting…",
 

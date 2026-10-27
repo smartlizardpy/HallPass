@@ -21,7 +21,10 @@ async function call(method: string, path: string, body?: unknown): Promise<{ sta
       method,
       credentials: "same-origin",
       cache: "no-store",
-      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      // ALWAYS JSON, even for a DELETE with no body: the server refuses anything
+      // else (that refusal is the cross-site-form defence), so a bodiless DELETE
+      // without this header is a 415 and silently does nothing.
+      headers: { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     let data: Record<string, unknown> = {};
@@ -56,7 +59,7 @@ export const removeParticipant = (id: string) => call("DELETE", `/participants/$
 export const endSession = () => call("DELETE", "");
 export const keepPlaying = () => call("POST", "/touch", {});
 
-export async function bindGame(participantId: string, slug: string): Promise<"ok" | "busy" | "gone" | "network"> {
+export async function bindGame(participantId: string, slug: string): Promise<"ok" | "busy" | "gone" | "error" | "network"> {
   const today = new Date();
   const day = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const r = await call("POST", "/active", {
@@ -67,7 +70,8 @@ export async function bindGame(participantId: string, slug: string): Promise<"ok
   });
   if (r.status === 0) return "network";
   if (r.data.ok === true) return "ok";
-  return r.status === 409 ? "busy" : "gone";
+  if (r.status === 409) return "busy";
+  return r.status === 401 ? "gone" : "error";
 }
 
 export const unbindGame = () => call("DELETE", "/active");
@@ -75,6 +79,11 @@ export const unbindGame = () => call("DELETE", "/active");
 /** Fire-and-forget unbind for when the page is going away. */
 export function unbindOnExit(): void {
   try {
-    void fetch(BASE + "/active", { method: "DELETE", credentials: "same-origin", keepalive: true });
+    void fetch(BASE + "/active", {
+      method: "DELETE",
+      credentials: "same-origin",
+      keepalive: true,
+      headers: { "Content-Type": "application/json" },
+    });
   } catch { /* nothing to do */ }
 }
