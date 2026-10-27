@@ -156,6 +156,68 @@ export function validateShadowCoreCursedDash({ score, meta, elapsedSec }: Valida
   return { ok: true, score: s, tiebreak: deaths !== null && deaths >= 0 ? deaths : null, flags, checks };
 }
 
+// ── SCP: Lockdown — The Haunting (PROPOSED) ─────────────────────────────────
+//
+// The game has no such mode yet (the developer builds it). Proposed: find a
+// Level 4 keycard and escape. Score = escape time in whole milliseconds, lower
+// is better; ghosts banished (`meta.banished`) break ties, more is better. Fixed
+// conditions: Normal difficulty, solo, and one site layout for everyone (seed
+// 20261031 drives the door layout and keycard placement; ghost spawns may stay
+// random). The board stays `pending` until the game sends exactly this and an
+// admin opens it. The bounds below are placeholders: raise them with real data.
+
+export const SCP_HAUNTING = {
+  seed: 20261031,
+  /** Normal difficulty. */
+  difficulty: 1,
+  /** Hard floor, placeholder. Real data should raise it. */
+  minEscapeMs: 30_000,
+  /** Below this a run is held for review until real times are known (placeholder). */
+  reviewBelowMs: 60_000,
+  maxEscapeMs: 3_600_000,
+  /** `meta.time` (seconds) vs the score (milliseconds). */
+  timeToleranceMs: 1_000,
+  /** The game's own "game time ran faster than wall time" margin. */
+  wallToleranceSec: 2,
+} as const;
+
+export function validateScpLockdownHaunting({ score, meta, elapsedSec, startSeed }: ValidationInput): ValidationResult {
+  const s = int(score);
+  const time = num(meta.time);
+  const wall = num(meta.wall);
+  const seed = int(meta.seed);
+  const diff = int(meta.diff);
+  const banished = int(meta.banished);
+  const checks: Checks = {
+    elapsedSec: round2(elapsedSec),
+    escapeMs: s,
+    gameTimeSec: time === null ? null : round2(time),
+    wallTimeSec: wall === null ? null : round2(wall),
+    seed,
+    diff,
+    banished,
+  };
+
+  if (s === null || s < SCP_HAUNTING.minEscapeMs || s > SCP_HAUNTING.maxEscapeMs) return reject("bad-score", checks);
+  if (meta.event !== EVENT_ID) return reject("wrong-event", checks);
+  if (meta.mode !== "haunt") return reject("wrong-mode", checks);
+  if (meta.coop === true) return reject("co-op-not-ranked", checks);
+  if (diff !== SCP_HAUNTING.difficulty) return reject("wrong-difficulty", checks);
+  if (seed !== SCP_HAUNTING.seed || (startSeed !== null && startSeed !== SCP_HAUNTING.seed)) {
+    return reject("wrong-layout", checks);
+  }
+  if (s / 1000 > elapsedSec + LATENCY_SLACK_SEC) return reject("clock-faster-than-real-time", checks);
+
+  const flags: string[] = clientFlags(meta).map((f) => `game:${f}`);
+  if (time === null) flags.push("no-game-time");
+  else if (Math.abs(time * 1000 - s) > SCP_HAUNTING.timeToleranceMs) flags.push("game-time-mismatch");
+  if (time !== null && wall !== null && wall < time - SCP_HAUNTING.wallToleranceSec) flags.push("game-time-ahead-of-wall");
+  if (banished === null || banished < 0) flags.push("no-banished");
+  if (s < SCP_HAUNTING.reviewBelowMs) flags.push("unusually-fast");
+
+  return { ok: true, score: s, tiebreak: banished !== null && banished >= 0 ? banished : null, flags, checks };
+}
+
 // ── Survive Till Dawn: Pixel Edition — Blood Moon (PROPOSED) ────────────────
 //
 // The game has no such mode and submits no scores yet (§2.3). Proposed: Bleeding

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   LAST_BELL,
+  SCP_HAUNTING,
   validateLastBell,
+  validateScpLockdownHaunting,
   validateShadowCoreCursedDash,
   validateSurviveTillDawnBloodMoon,
 } from "./validators";
@@ -83,6 +85,97 @@ describe("validateShadowCoreCursedDash (proposed)", () => {
     expect(sc({ splits: undefined })).toMatchObject({ ok: true, flags: ["no-splits"] });
     expect(sc({ splits: splits.map(() => 4_000) }, 60_000).ok && sc({ splits: splits.map(() => 4_000) }, 60_000)).toMatchObject({
       flags: ["unusually-fast"],
+    });
+  });
+});
+
+describe("validateScpLockdownHaunting (proposed)", () => {
+  /** A clean Normal-difficulty escape in 2:00 (120,000 ms) after 130 s of real time. */
+  const scp = (over: { score?: unknown; meta?: Record<string, unknown>; elapsedSec?: number; startSeed?: number | null } = {}) =>
+    validateScpLockdownHaunting({
+      score: "score" in over ? over.score : 120_000,
+      meta: {
+        event: "fright-fest-2026",
+        v: 1,
+        mode: "haunt",
+        diff: 1,
+        seed: 20261031,
+        coop: false,
+        time: 120.05,
+        wall: 121,
+        banished: 3,
+        flags: [],
+        ...over.meta,
+      },
+      elapsedSec: over.elapsedSec ?? 130,
+      startSeed: over.startSeed === undefined ? 20261031 : over.startSeed,
+    });
+
+  it("accepts a clean escape, ghosts banished break ties", () => {
+    expect(scp()).toMatchObject({ ok: true, score: 120_000, tiebreak: 3, flags: [] });
+    expect(scp({ meta: { banished: 0 } })).toMatchObject({ ok: true, tiebreak: 0, flags: [] });
+  });
+
+  it("rejects a score off the scale", () => {
+    for (const score of [29_999, SCP_HAUNTING.maxEscapeMs + 1, 120_000.5, "120000", null, Infinity]) {
+      expect(scp({ score, elapsedSec: 4000 })).toMatchObject({ ok: false, reason: "bad-score" });
+    }
+    expect(scp({ score: SCP_HAUNTING.minEscapeMs, meta: { time: 30 }, elapsedSec: 40 }).ok).toBe(true);
+    expect(scp({ score: SCP_HAUNTING.maxEscapeMs, meta: { time: 3600 }, elapsedSec: 3600 }).ok).toBe(true);
+  });
+
+  it("rejects the wrong event, mode, co-op and difficulty", () => {
+    expect(scp({ meta: { event: "fright-fest-2025" } })).toMatchObject({ ok: false, reason: "wrong-event" });
+    expect(scp({ meta: { mode: "trick-or-treat" } })).toMatchObject({ ok: false, reason: "wrong-mode" });
+    expect(scp({ meta: { coop: true } })).toMatchObject({ ok: false, reason: "co-op-not-ranked" });
+    expect(scp({ meta: { diff: 2 } })).toMatchObject({ ok: false, reason: "wrong-difficulty" });
+    expect(scp({ meta: { diff: undefined } })).toMatchObject({ ok: false, reason: "wrong-difficulty" });
+  });
+
+  it("rejects the wrong site layout, whichever end declared it", () => {
+    expect(scp({ meta: { seed: 1 } })).toMatchObject({ ok: false, reason: "wrong-layout" });
+    expect(scp({ startSeed: 1 })).toMatchObject({ ok: false, reason: "wrong-layout" });
+    expect(scp({ startSeed: null }).ok).toBe(true);
+  });
+
+  it("rejects a clock that ran faster than the server's real time, allowing for latency", () => {
+    // 120 s of clock: fine with 112 s elapsed (8 s slack), impossible with 111.
+    expect(scp({ elapsedSec: 112 }).ok).toBe(true);
+    expect(scp({ elapsedSec: 111 })).toMatchObject({ ok: false, reason: "clock-faster-than-real-time" });
+  });
+
+  it("checks in the documented order", () => {
+    expect(scp({ score: 1, meta: { event: "x", mode: "x", coop: true, diff: 9, seed: 1 }, elapsedSec: 0 })).toMatchObject({ reason: "bad-score" });
+    expect(scp({ meta: { event: "x", mode: "x", coop: true, diff: 9, seed: 1 }, elapsedSec: 0 })).toMatchObject({ reason: "wrong-event" });
+    expect(scp({ meta: { mode: "x", coop: true, diff: 9, seed: 1 }, elapsedSec: 0 })).toMatchObject({ reason: "wrong-mode" });
+    expect(scp({ meta: { coop: true, diff: 9, seed: 1 }, elapsedSec: 0 })).toMatchObject({ reason: "co-op-not-ranked" });
+    expect(scp({ meta: { diff: 9, seed: 1 }, elapsedSec: 0 })).toMatchObject({ reason: "wrong-difficulty" });
+    expect(scp({ meta: { seed: 1 }, elapsedSec: 0 })).toMatchObject({ reason: "wrong-layout" });
+    expect(scp({ elapsedSec: 0 })).toMatchObject({ reason: "clock-faster-than-real-time" });
+  });
+
+  it("holds a run for review when the game's own numbers disagree", () => {
+    expect(scp({ meta: { flags: ["speed", 3] } })).toMatchObject({ ok: true, flags: ["game:speed"] });
+    expect(scp({ meta: { time: undefined } })).toMatchObject({ ok: true, flags: ["no-game-time"] });
+    expect(scp({ meta: { time: 118.9 } })).toMatchObject({ ok: true, flags: ["game-time-mismatch"] });
+    expect(scp({ meta: { time: 119.1, wall: 119.2 } }).flags).toEqual([]);
+    expect(scp({ meta: { wall: 117 } })).toMatchObject({ ok: true, flags: ["game-time-ahead-of-wall"] });
+    for (const banished of [undefined, -1, 2.5, "3"]) {
+      expect(scp({ meta: { banished } })).toMatchObject({ ok: true, tiebreak: null, flags: ["no-banished"] });
+    }
+    expect(scp({ score: 45_000, meta: { time: 45 }, elapsedSec: 60 })).toMatchObject({ ok: true, flags: ["unusually-fast"] });
+    expect(scp({ score: SCP_HAUNTING.reviewBelowMs, meta: { time: 60 }, elapsedSec: 70 }).flags).toEqual([]);
+  });
+
+  it("records the server's evidence for reviewers", () => {
+    expect(scp().checks).toEqual({
+      elapsedSec: 130,
+      escapeMs: 120_000,
+      gameTimeSec: 120.05,
+      wallTimeSec: 121,
+      seed: 20261031,
+      diff: 1,
+      banished: 3,
     });
   });
 });
