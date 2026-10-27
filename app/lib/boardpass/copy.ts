@@ -56,6 +56,60 @@ export const copy = {
   pinProgress: (n: number) => `${n} of 6 digits entered`,
   moveWindowHint: "Use the arrow keys to move this window.",
 
+  // ── Lobby: library, featured, filters ─────────────────────────────────────
+  featured: "Featured",
+  play: "Play",
+  playGame: (title: string) => `Play ${title}`,
+  allCategories: "All",
+  searchLabel: "Search games",
+  searchPlaceholder: "Search games",
+  clearFilters: "Clear filters",
+  filterGroup: "Filter by category",
+  gamesCount: (shown: number, total: number) =>
+    shown === total ? `${total} games` : `${shown} of ${total} games`,
+  noMatchTitle: "No games match",
+  noMatchBody: (query: string, category: string | null) =>
+    query && category
+      ? `Nothing in ${category} matches “${query}”.`
+      : query
+        ? `Nothing matches “${query}”.`
+        : `There are no games in ${category ?? "this category"} yet.`,
+  badgeNew: "New",
+  badgeMultiplayer: "Multiplayer",
+  badgeMobile: "Best on phones",
+  loadingGames: "Loading games…",
+  usernameFirst: "Type your username first.",
+  usernameHint: "Tap the box, then use the keyboard.",
+
+  // ── Lobby: header, players, session ───────────────────────────────────────
+  playersLabel: "Players on this board",
+  noPlayers: "No players yet. Tap Add Player to sign in.",
+  addPlayerFull: "This board already has 8 players.",
+  addPlayerWindows: "Finish or close an open sign-in window first.",
+  endsBy: (time: string) => `Ends by ${time}`,
+  playerOptions: (name: string) => `${name}: options`,
+  removeFromBoard: (name: string) => `Remove ${name} from this board`,
+  confirmRemove: (name: string) => `Tap again to remove ${name}`,
+  backToBoard: "Back to Board Mode",
+  creditNote: "Scores and achievements go to the player you pick.",
+  sessionEndedTitle: "Board session ended",
+  dismiss: "Dismiss",
+  endSessionHint: "Signs everyone out of this board.",
+
+  // ── On-screen keyboard ────────────────────────────────────────────────────
+  keyboardTitle: "On-screen keyboard",
+  keyboardForUsername: "Typing your username",
+  keyboardForSearch: "Searching games",
+  showKeyboard: "Keyboard",
+  hideKeyboard: "Hide keyboard",
+  keyboardDone: "Done",
+  keyboardDock: "Dock",
+  keyboardSpace: "Space",
+  keyboardDelete: "Delete last character",
+  keyboardClear: "Clear",
+  keyboardEmpty: "Nothing typed yet",
+  keyboardCapHint: "Usernames use letters, numbers and _",
+
   // ── Settings ───────────────────────────────────────────────────────────────
   settingsTitle: "BoardPass",
   settingsBlurb:
