@@ -23,15 +23,15 @@ export function eventDateLabels(theme: ThemeWindow) {
   return {
     /** "28 Oct" */
     startShort: fmt(dm, start),
-    /** "1 Nov": the last day the skin is on */
+    /** "2 Nov": the last day the skin is on */
     endShort: fmt(dm, last),
-    /** "2 Nov": the day the normal site is back */
+    /** "3 Nov": the day the normal site is back */
     restoreShort: fmt(dm, end),
-    /** "Wed 28 Oct to Sun 1 Nov"; the start's month is dropped when both ends share it ("Wed 28 to Sat 31 Oct") */
+    /** "Wed 28 Oct to Mon 2 Nov"; the start's month is dropped when both ends share it ("Wed 28 to Sat 31 Oct") */
     range: `${fmt(sameMonth(start, last) ? { weekday: "short", day: "numeric" } : wdm, start)} to ${fmt(wdm, last)}`,
-    /** "Sun 1 Nov, 23:59 UK" */
+    /** "Mon 2 Nov, 23:59 UK" */
     endsAt: `${fmt(wdm, last)}, ${fmt({ hour: "2-digit", minute: "2-digit", hour12: false }, last)} UK`,
-    /** "Sun 1 Nov" */
+    /** "Mon 2 Nov" */
     lastDay: fmt(wdm, last),
   };
 }

@@ -12,10 +12,10 @@ describe("championshipSummary", () => {
   });
   it("prints the UK dates the rules state", () => {
     expect(S.labels.opens).toBe("Wed 28 Oct, 00:00");
-    expect(S.labels.lastMinute).toBe("Sun 1 Nov, 23:59");
-    expect(S.labels.range).toBe("Wed 28 Oct to Sun 1 Nov");
-    expect(S.labels.closesDate).toBe("1 Nov");
-    expect(S.labels.resultsBy).toBe("Wed 4 Nov, 23:59");
+    expect(S.labels.lastMinute).toBe("Mon 2 Nov, 23:59");
+    expect(S.labels.range).toBe("Wed 28 Oct to Mon 2 Nov");
+    expect(S.labels.closesDate).toBe("2 Nov");
+    expect(S.labels.resultsBy).toBe("Thu 5 Nov, 23:59");
     expect(S.submitGraceMin).toBe(10);
   });
   it("gives a game's own page its entry, and nothing for a stranger", () => {
@@ -42,7 +42,7 @@ describe("phase", () => {
   it("follows the clock until the server says more", () => {
     expect(clockPhase(S, Date.parse("2026-10-27T23:59:59Z"))).toBe("upcoming");
     expect(clockPhase(S, Date.parse("2026-10-28T00:00:00Z"))).toBe("live");
-    expect(clockPhase(S, Date.parse("2026-11-02T00:00:00Z"))).toBe("closed");
+    expect(clockPhase(S, Date.parse("2026-11-03T00:00:00Z"))).toBe("closed");
   });
   it("has a line for every phase a player can see, with no invented numbers", () => {
     for (const p of ["upcoming", "live", "closed", "verification", "finalised", "archived", "suspended"] as const) {

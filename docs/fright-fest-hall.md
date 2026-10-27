@@ -34,8 +34,8 @@ Four pieces of work, shipped as four pull requests so each can merge on its own:
   other stylesheet may set base tokens under a seasonal selector
   (`skin-isolation.test.ts`). The hall's CSS may swap pictures under
   `html[data-hp-skin="haunted"]`, as `room.css` does.
-- The skin paints from 25 Oct and stops on 2 Nov by itself. Players can choose
-  the "Normal" look. Results are due by 4 Nov, and the page must keep working
+- The skin paints from 25 Oct and stops on 3 Nov by itself. Players can choose
+  the "Normal" look. Results are due by 5 Nov, and the page must keep working
   (and never 404) after the skin ends.
 - Hooks and anchors to keep: `data-testid="ff-phase"` / `"ff-countdown"`, and
   `#rules`, `#standings`, `#rewards`, `#board-<slug>` (used by `HomeCard`).
@@ -54,8 +54,8 @@ Four pieces of work, shipped as four pull requests so each can merge on its own:
    to 3×, pixelated, with the phone scene below 868 px (the Pack Room's
    breakpoint, so the two rooms switch together).
 2. **Seasons.** The haunted art shows under `html[data-hp-skin="haunted"]` and
-   the calm art otherwise. That covers "Normal" players, and the page after
-   2 Nov, with no 404 and no Halloween props once Halloween is over.
+   the calm art otherwise. That covers "Normal" players, and the page from
+   3 Nov, with no 404 and no Halloween props once Halloween is over.
 3. **What the room does:**
    - Cabinets are buttons (roving focus, arrow keys) that select a game. A
      details panel on the room's floor shows the mode, status, ranking rule and
@@ -344,7 +344,7 @@ ink ring on paper 16.0.
 
 ## 7. Halloween-only game leaderboards (backend only)
 
-During the event window (28 Oct 2026 00:00 to 2 Nov 2026 00:00 UK, the same as the
+During the event window (28 Oct 2026 00:00 to 3 Nov 2026 00:00 UK, the same as the
 championship's `opensAt`/`closesAt` and candy's earning window) a game's board
 counts only scores posted inside it. Older scores are hidden, not deleted. Outside
 the window everything is all-time, as before; the switch needs no deploy.

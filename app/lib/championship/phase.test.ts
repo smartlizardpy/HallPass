@@ -19,10 +19,10 @@ const state = (over: Partial<EventState> = {}): EventState => ({
 const lb: GameState = { slug: "last-bell", status: "open", openedAt: C.opensAt };
 
 describe("the Fright Fest 2026 window", () => {
-  it("is 28 Oct 00:00 UTC to 2 Nov 00:00 UTC, five days", () => {
+  it("is 28 Oct 00:00 UTC to 3 Nov 00:00 UTC, six days", () => {
     expect(OPENS).toBe(Date.UTC(2026, 9, 28));
-    expect(CLOSES).toBe(Date.UTC(2026, 10, 2));
-    expect((CLOSES - OPENS) / 86_400_000).toBe(5);
+    expect(CLOSES).toBe(Date.UTC(2026, 10, 3));
+    expect((CLOSES - OPENS) / 86_400_000).toBe(6);
   });
 });
 
@@ -145,6 +145,6 @@ describe("format", () => {
     expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 101].map(ordinal)).toEqual(["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "101st"]);
   });
   it("writes an exclusive close as its last minute, in UK time", () => {
-    expect(formatLastMinute(C.closesAt, C.timeZone)).toBe("Sun 1 Nov, 23:59");
+    expect(formatLastMinute(C.closesAt, C.timeZone)).toBe("Mon 2 Nov, 23:59");
   });
 });

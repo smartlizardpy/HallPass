@@ -6,11 +6,11 @@ describe("eventDateLabels", () => {
   it("derives every label from the configured window", () => {
     expect(eventDateLabels(FRIGHT_FEST_THEME)).toEqual({
       startShort: "28 Oct",
-      endShort: "1 Nov",
-      restoreShort: "2 Nov",
-      range: "Wed 28 Oct to Sun 1 Nov",
-      endsAt: "Sun 1 Nov, 23:59 UK",
-      lastDay: "Sun 1 Nov",
+      endShort: "2 Nov",
+      restoreShort: "3 Nov",
+      range: "Wed 28 Oct to Mon 2 Nov",
+      endsAt: "Mon 2 Nov, 23:59 UK",
+      lastDay: "Mon 2 Nov",
     });
   });
 

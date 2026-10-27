@@ -20,7 +20,7 @@ export const FRIGHT_FEST_THEME: ThemeWindow = {
   enabled: true,
   startAt: "2026-10-25T00:00:00Z",
   opensAt: "2026-10-28T00:00:00Z",
-  endAt: "2026-11-02T00:00:00Z",
+  endAt: "2026-11-03T00:00:00Z",
   event: "fright-fest",
   skin: "haunted",
   lookKey: "hp:event-look:fright-fest-2026",

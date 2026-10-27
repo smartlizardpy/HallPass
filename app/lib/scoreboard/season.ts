@@ -35,11 +35,11 @@ export interface Season {
   until: string;
 }
 
-/** Fright Fest 2026: 28 Oct 00:00 UK to 2 Nov 00:00 UK (UTC offset 0 then). */
+/** Fright Fest 2026: 28 Oct 00:00 UK to 3 Nov 00:00 UK (UTC offset 0 then). */
 export const FRIGHT_FEST_SEASON: Season = {
   id: "fright-fest-2026",
   from: "2026-10-28T00:00:00Z",
-  until: "2026-11-02T00:00:00Z",
+  until: "2026-11-03T00:00:00Z",
 };
 
 /**

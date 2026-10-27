@@ -29,9 +29,9 @@ export interface TickerLine {
 const short = (s: ChampionshipSummary) => ({
   /** "28 Oct" */
   opens: s.labels.opensDay.replace(/^\w+ /, ""),
-  /** "1 Nov" */
+  /** "2 Nov" */
   closes: s.labels.closesDate,
-  /** "Wed 4 Nov" */
+  /** "Thu 5 Nov" */
   resultsBy: s.labels.resultsBy.replace(/, .*$/, ""),
 });
 

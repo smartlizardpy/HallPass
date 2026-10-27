@@ -3,7 +3,7 @@
 The pixel art behind `/fright-fest` (docs/fright-fest-hall.md). Drawn as pixel
 art from scratch in October 2026, in two seasons from one script: `haunted`
 (shown under the Fright Fest skin) and `calm` (the "Normal" look, and the page
-after 2 Nov: the same room with every Halloween prop and all orange removed).
+from 3 Nov: the same room with every Halloween prop and all orange removed).
 
 ## Source
 

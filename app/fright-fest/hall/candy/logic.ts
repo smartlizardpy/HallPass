@@ -15,7 +15,7 @@ export interface PhaseFlags {
 }
 
 /**
- * Before the opening, earning (28 Oct to 1 Nov), spending only (to 30 Nov), over.
+ * Before the opening, earning (28 Oct to 2 Nov), spending only (to 30 Nov), over.
  * Display only: the database clock decides a spend.
  */
 export function candyPhase(nowMs: number | null, d: CandyDates, flags?: PhaseFlags | null): CandyPhase | null {

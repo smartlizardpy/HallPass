@@ -31,10 +31,10 @@ nothing; shipping it does not enter anyone.
 | --- | --- |
 | Championship id | `fright-fest-2026` |
 | Opens | 28 October 2026, 00:00 UTC |
-| Closes | 2 November 2026, 00:00 UTC |
+| Closes | 3 November 2026, 00:00 UTC |
 | Finishing grace | 10 minutes (`submitGraceSec: 600`) |
 | Run token lifetime | 75 minutes (`tokenTtlSec: 4500`) |
-| Results by | 5 November 2026, 00:00 UTC |
+| Results by | 6 November 2026, 00:00 UTC |
 
 The window is in UTC. Do not work it out from the player's local time.
 

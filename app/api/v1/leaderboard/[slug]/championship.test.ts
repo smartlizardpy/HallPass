@@ -161,7 +161,7 @@ describe("run start", () => {
   it("refuses signed-out players, closed boards and ordinary boards", async () => {
     expect((await RUNS(req({}), params(BOARD))).status).toBe(401);
     signedIn();
-    h.readEvent.mockResolvedValue({ ...snapshot(), nowMs: Date.parse("2026-11-02T00:00:00Z") });
+    h.readEvent.mockResolvedValue({ ...snapshot(), nowMs: Date.parse("2026-11-03T00:00:00Z") });
     const closed = await RUNS(req({}), params(BOARD));
     expect(closed.status).toBe(409);
     expect(await closed.json()).toMatchObject({ reason: "closed", detail: "closed" });

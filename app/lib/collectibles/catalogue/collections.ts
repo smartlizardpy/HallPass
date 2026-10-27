@@ -8,7 +8,7 @@ export const COLLECTIONS: Collection[] = [
     kind: "event",
     theme: { colours: ["#14091f", "#ffd84a", "#ff7a1a"], wrapper: "prize-bag" },
     availableFrom: "2026-10-28",
-    availableUntil: "2026-11-01",
+    availableUntil: "2026-11-02",
     sort: 1,
   },
   {

@@ -15,7 +15,7 @@
  *
  * SEASON. `html[data-hp-skin="haunted"]` (the Fright Fest skin, which follows the
  * player's look menu) swaps the pictures and the loops: the haunted room under the
- * skin, its calm twin otherwise (the "Normal" look, and the page after 2 Nov).
+ * skin, its calm twin otherwise (the "Normal" look, and the page from 3 Nov).
  * This file only ever swaps pictures. It sets no base token under a seasonal
  * selector (skin-isolation.test.ts), and defines its own `--hl-*` variables on
  * `.hl`, which are the same in both seasons.

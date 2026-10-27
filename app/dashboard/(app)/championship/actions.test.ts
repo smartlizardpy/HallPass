@@ -6,7 +6,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const CLOSES = Date.parse("2026-11-02T00:00:00Z");
+const CLOSES = Date.parse("2026-11-03T00:00:00Z");
 
 const h = vi.hoisted(() => ({
   requireRole: vi.fn(),

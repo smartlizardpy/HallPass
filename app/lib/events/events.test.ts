@@ -22,10 +22,10 @@ describe("phaseAt", () => {
     expect(phaseAt(T, END)).toBe("ended");
   });
 
-  it("is UTC: the skin paints 25 Oct 00:00Z to 2 Nov 00:00Z, the event opens 28 Oct", () => {
+  it("is UTC: the skin paints 25 Oct 00:00Z to 3 Nov 00:00Z, the event opens 28 Oct", () => {
     expect(START).toBe(Date.UTC(2026, 9, 25));
     expect(OPENS).toBe(Date.UTC(2026, 9, 28));
-    expect(END).toBe(Date.UTC(2026, 10, 2));
+    expect(END).toBe(Date.UTC(2026, 10, 3));
   });
 
   it("lets a manual disable beat the schedule", () => {

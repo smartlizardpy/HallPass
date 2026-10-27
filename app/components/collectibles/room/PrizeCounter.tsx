@@ -60,7 +60,7 @@ const only = (desk: boolean, phone: boolean) => (desk && phone ? undefined : des
 
 const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 
-/** "Fright Fest 2026 · earned 28 Oct – 1 Nov · 3 cards · 2 sealed", without repeating what the name says. */
+/** "Fright Fest 2026 · earned 28 Oct – 2 Nov · 3 cards · 2 sealed", without repeating what the name says. */
 function packLine(group: PackGroup): string {
   const pack = getPack(group.packId);
   const col = pack ? getCollection(pack.collection) : undefined;

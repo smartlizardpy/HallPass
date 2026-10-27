@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CANDY_FRIGHT_FEST_2026 as C } from "@/app/lib/candy/fright-fest-2026";
 import { buildCandy, rankRange } from "./props";
 
-const P = buildCandy(C, "Wed 4 Nov, 23:59");
+const P = buildCandy(C, "Thu 5 Nov, 23:59");
 
 describe("buildCandy", () => {
   it("shelves the eight priced packs: four at 30, four at 100", () => {
@@ -11,7 +11,7 @@ describe("buildCandy", () => {
     for (const i of P.shelves.flatMap((s) => s.items)) expect(i.print).toMatch(/^\/collectibles\/packs\/print\/.+\.png/);
   });
   it("reads the labels from the config", () => {
-    expect(P.labels).toEqual({ opens: "28 Oct", earnEnds: "1 Nov", spendEnds: "30 Nov", spendUntil: C.spendUntilLabel, resultsBy: "Wed 4 Nov" });
+    expect(P.labels).toEqual({ opens: "28 Oct", earnEnds: "2 Nov", spendEnds: "30 Nov", spendUntil: C.spendUntilLabel, resultsBy: "Thu 5 Nov" });
   });
   it("shows the daily-best bands as candy for the top-value game, and the placings", () => {
     expect(P.maxGameCandy).toBe(40);

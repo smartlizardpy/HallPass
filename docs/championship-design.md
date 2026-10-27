@@ -24,9 +24,10 @@ Taken with the owner on 26 Oct 2026:
    opened; Overall Champion needs a result on every board that opened. This is
    published as a rule from day one, so a board opening later is the rules
    working, not a rules change.
-2. **The window is 5 days: 28 Oct 00:00 UTC → 2 Nov 00:00 UTC** (last full day
-   1 Nov). The haunted skin's `endAt` moves to the same instant. They share a
-   date, not a flag.
+2. **The window is 6 days: 28 Oct 00:00 UTC → 3 Nov 00:00 UTC** (last full day
+   Mon 2 Nov). The haunted skin's `endAt` moves to the same instant. They share a
+   date, not a flag. (Decided as 5 days, ending 2 Nov 00:00; the owner added
+   Mon 2 Nov on 27 Oct, before the opening, and moved results to Thu 5 Nov.)
 3. **Last Bell's game side** is edited and staged by us (two edits, §2.1); the
    owner runs the production publish.
 4. **Collectible art is demo art for now**, clearly marked, swappable without
@@ -78,7 +79,8 @@ contract `docs/halloween/hallpass-request.md`:
      cross-origin, sent without the session cookie, and **anonymous**. It must
      load `/sdk/v1/hallpass.js` like every other HallPass game.
   2. `halloween/config.js` closes the window at 1 Nov 00:00 UTC. Runs on 1 Nov
-     would be flagged `phase` and never sent. It moves to 2 Nov.
+     would be flagged `phase` and never sent. It moves to 3 Nov (it was moved
+     to 2 Nov first; the event gained Mon 2 Nov on 27 Oct).
 - Weak points, all client-side: a modified client can post any score with
   `flags: []`. The server's real defences are the token's server timestamps,
   the seed, and consistency between score, game time and elapsed time.
@@ -108,7 +110,7 @@ proposed rules. Their homepage cabinets stay mystery cabinets until opened.
 ## 3. Rules (published on /fright-fest before any ranked run)
 
 **Window.** Ranked runs count if the server receives them between 28 Oct 00:00
-UTC and 2 Nov 00:00 UTC (UK time is UTC throughout: BST ended 25 Oct). The
+UTC and 3 Nov 00:00 UTC (UK time is UTC throughout: BST ended 25 Oct). The
 device clock is never consulted. A game that opens later counts from its
 opening moment.
 
@@ -169,7 +171,7 @@ recorded with a reason. Rewards are paid only from finalised standings (§7).
 ## 4. Lifecycle
 
 ```
-upcoming ──28 Oct──▶ live ──2 Nov──▶ closed ──admin──▶ verification ──admin──▶ finalised ──admin──▶ archived
+upcoming ──28 Oct──▶ live ──3 Nov──▶ closed ──admin──▶ verification ──admin──▶ finalised ──admin──▶ archived
                       │  ▲
               admin   ▼  │ admin
                    suspended            (also reachable from closed/verification)
