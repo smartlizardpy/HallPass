@@ -41,6 +41,7 @@ import type {
 } from "./contract";
 import type { ResolvedConfig } from "./config";
 import { createAchievements } from "./achievements";
+import { createEvent } from "./event";
 import {
   CAPABILITIES,
   boardId,
@@ -98,10 +99,18 @@ let lastReady: unknown;
  */
 let lastAuth: unknown;
 
+/**
+ * Last `"event"` payload, cached so `"event"` is STICKY like `"ready"` and
+ * `"auth"`: it describes a STATE (is the event on), which a late listener still
+ * needs. `undefined` = HallPass has not answered yet.
+ */
+let lastEvent: unknown;
+
 /** Dispatch `payload` to every listener of `event`. Never throws. */
 export function emit(event: EventName, payload: unknown): void {
   if (event === "ready") lastReady = payload;
   if (event === "auth") lastAuth = payload;
+  if (event === "event") lastEvent = payload;
   const listeners = registry[event];
   if (!listeners || !listeners.length) return;
   for (const cb of listeners.slice()) {
@@ -686,6 +695,12 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
     emit: emitEvent,
   });
 
+  /**
+   * The seasonal-event half of the surface. Its `"event"` signal rides the same
+   * registry, and is sticky (see `lastEvent`).
+   */
+  const eventApi = createEvent({ cfg, mode, emit: emitEvent });
+
   const api: HallPass = {
     version: SDK_MAJOR,
     mode,
@@ -694,6 +709,7 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
     runStart,
     supports,
     capabilities: CAPABILITIES,
+    getEvent: eventApi.getEvent,
     getScores,
     getHandle: () => getHandle(),
     setHandle: (handle: string) => setHandle(handle),
@@ -954,6 +970,18 @@ export function createClient(cfg: ResolvedConfig, emitEvent: Emit = emit): HallP
             } catch {
               // A misbehaving listener must never break the SDK.
             }
+          }
+          // "event" is sticky and, once someone listens, kept fresh: a late
+          // listener gets the last state, and the first one starts the watch.
+          if (event === "event") {
+            if (lastEvent !== undefined) {
+              try {
+                cb(lastEvent);
+              } catch {
+                // A misbehaving listener must never break the SDK.
+              }
+            }
+            eventApi.watch();
           }
           // "auth" is sticky too: a late listener gets the last known identity.
           if (event === "auth" && lastAuth !== undefined) {

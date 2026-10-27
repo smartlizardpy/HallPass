@@ -35,13 +35,13 @@ afterEach(() => {
 });
 
 describe("feature detection", () => {
-  it("answers for the three 1.5 features and nothing else", () => {
-    expect(["leaderboard.boards", "leaderboard.meta", "runs"].map(supports)).toEqual([true, true, true]);
+  it("answers for the 1.5 features, the 1.7 event feature and nothing else", () => {
+    expect(["leaderboard.boards", "leaderboard.meta", "runs", "event"].map(supports)).toEqual([true, true, true, true]);
     expect(supports("leaderboard.anything")).toBe(false);
     expect(supports(undefined)).toBe(false);
     const api = createClient(same(), () => {});
     expect(api.supports?.("leaderboard.boards")).toBe(true);
-    expect(api.capabilities).toEqual({ leaderboard: { boards: true, meta: true }, runs: true });
+    expect(api.capabilities).toEqual({ leaderboard: { boards: true, meta: true }, runs: true, event: true });
   });
 
   it("validates board ids and bounds meta", () => {

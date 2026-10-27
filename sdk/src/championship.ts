@@ -16,12 +16,13 @@ import { isSameOrigin } from "./challenge";
 import type { ChampionshipReason, ChampionshipSignal } from "./contract";
 
 /** Features `supports()` answers `true` for. Append-only. */
-export const FEATURES: readonly string[] = ["leaderboard.boards", "leaderboard.meta", "runs"];
+export const FEATURES: readonly string[] = ["leaderboard.boards", "leaderboard.meta", "runs", "event"];
 
 /** The same answer as an object, for games that feature-detect by property. */
 export const CAPABILITIES = Object.freeze({
   leaderboard: Object.freeze({ boards: true, meta: true }),
   runs: true,
+  event: true,
 });
 
 export function supports(feature: unknown): boolean {

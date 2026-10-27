@@ -9,6 +9,20 @@ to the served URL path (`v1` → `/sdk/v1/hallpass.js`).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-27
+
+### Added
+
+- `getEvent()` and the `"event"` event: is the seasonal event (Halloween / Fright
+  Fest) on right now? Resolves `{ active, event, phase, startAt, opensAt, endAt,
+  serverTime }`, or `null` when HallPass cannot be reached; treat `null` as "no
+  event". While `active` is `false` the event does not exist: `event` and every
+  date are `null`. HallPass flips it from the dashboard (or by the event's own
+  dates), so a game keeps no calendar of its own. `"event"` is sticky like
+  `"ready"` and, once something listens, re-checks every minute so an open game
+  follows the dashboard switch. Feature-detect with `supports("event")`; also
+  `capabilities.event`. Backed by `GET /api/v1/event`.
+
 ## [1.6.0] - 2026-10-27
 
 ### Added
