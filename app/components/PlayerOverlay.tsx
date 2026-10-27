@@ -39,9 +39,19 @@ import { ChampionshipRunToast } from "./championship/RunToast";
 export function PlayerOverlay({
   game,
   onClose,
+  chrome,
+  board = false,
 }: {
   game: Game | null;
   onClose: () => void;
+  /** Extra top-bar content, e.g. BoardPass's "Playing as X". Absent everywhere else. */
+  chrome?: React.ReactNode;
+  /**
+   * Opened on a shared school board. The device-local history (recent plays and
+   * the daily streak) belongs to nobody on a shared screen, so it is not written;
+   * the board records the play and streak day server-side for the chosen player.
+   */
+  board?: boolean;
 }) {
   const frameWrapRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -153,14 +163,16 @@ export function PlayerOverlay({
       return;
     }
 
-    recordRecentPlay(slug);
-    // Server-side play history, which is what makes "friends who play this"
-    // answerable — `hp:recent` above is device-local and never synced. Debounced
-    // per slug and a no-op for guests.
-    recordPlayServerSide(slug);
-    // Count this open toward the device-local daily streak. Idempotent per
-    // calendar day, so replays later today don't double-count or re-toast.
-    recordStreakPlay();
+    if (!board) {
+      recordRecentPlay(slug);
+      // Server-side play history, which is what makes "friends who play this"
+      // answerable — `hp:recent` above is device-local and never synced. Debounced
+      // per slug and a no-op for guests.
+      recordPlayServerSide(slug);
+      // Count this open toward the device-local daily streak. Idempotent per
+      // calendar day, so replays later today don't double-count or re-toast.
+      recordStreakPlay();
+    }
     posthog.capture("game_started", {
       game_slug: slug,
       game_title: title,
@@ -236,6 +248,7 @@ export function PlayerOverlay({
             · {game.category}
           </span>
         </h2>
+        {chrome}
         <div className="flex shrink-0 items-center gap-2">
           {/* Persistent escape hatch for external games: a third-party site may
               refuse embedding, so always offer a real new-tab link. The centred

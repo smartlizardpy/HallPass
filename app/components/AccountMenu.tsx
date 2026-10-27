@@ -152,6 +152,19 @@ export function AccountMenu() {
     return <div className="h-11 w-11" aria-hidden />;
   }
 
+  // A shared school board (BoardPass): never look like a personal account. A pill
+  // back to the board replaces both the menu and the Google sign-in button.
+  if (me?.board) {
+    return (
+      <a
+        href="/board"
+        className="flex h-11 items-center gap-2 rounded-full bg-brand px-4 text-sm font-extrabold text-white shadow-lg shadow-brand/30 transition hover:bg-brand-600"
+      >
+        Board Mode{player ? ` · ${player.handle}` : ""}
+      </a>
+    );
+  }
+
   // Logged out → a sign-in button.
   if (!player) {
     return (

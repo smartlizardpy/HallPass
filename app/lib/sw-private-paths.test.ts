@@ -26,13 +26,15 @@ describe("isPrivatePath", () => {
       "/embed/challenge",
       "/embed/invite",
       "/i/K7QXM3PDGHT9",
+      "/board",
+      "/board/",
     ]) {
       expect(isPrivatePath(path), path).toBe(true);
     }
   });
 
   it("leaves public pages cacheable", () => {
-    for (const path of ["/", "/game/last-bell", "/category/arcade", "/c/K7QXM3PDGH", "/games/last-bell/index.html", "/info"]) {
+    for (const path of ["/", "/game/last-bell", "/category/arcade", "/c/K7QXM3PDGH", "/games/last-bell/index.html", "/info", "/boarding", "/boards"]) {
       expect(isPrivatePath(path), path).toBe(false);
     }
   });

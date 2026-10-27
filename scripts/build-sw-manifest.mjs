@@ -175,6 +175,10 @@ if (existsSync(prerenderManifestPath)) {
       // invite under a URL that belongs to its code. Dynamic today, excluded
       // anyway.
       route.startsWith("/i/") ||
+      // NOR THE SHARED BOARD: it is the PIN-entry surface of BoardPass and is
+      // per-session. See `isPrivatePath` in `public/sw.js`.
+      route === "/board" ||
+      route.startsWith("/board/") ||
       // NO GENERATED SOCIAL CARD IS EVER PRECACHED. `/opengraph-image` and the
       // per-category/per-tag ones under it are statically optimised, so they DO
       // reach the prerender manifest — verified, not assumed: the home card
