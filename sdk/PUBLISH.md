@@ -3,7 +3,7 @@
 The SDK ships two ways from the same `sdk/src/*` source:
 
 1. **The hosted runtime** — a single IIFE built by `npm run build:sdk` (tsup) to
-   `public/sdk/v1/hallpass.js` and served from `https://hallpass.gg/sdk/v1/`.
+   `public/sdk/v1/hallpass.js` and served from `https://hallpass.games/sdk/v1/`.
    This is what games actually load. **It is the product.**
 2. **An npm package** (`@hallpass/scoreboard-sdk`) — the same modules published
    for tooling, bundler users, and type consumers. Not yet published.
@@ -40,7 +40,7 @@ When the package is first published, the manifest should look like this:
   "files": ["dist"],
   "license": "MIT",
   "repository": "github:hallpass/scoreboard-sdk",
-  "homepage": "https://hallpass.gg",
+  "homepage": "https://hallpass.games",
   "sideEffectsNote": "Only the IIFE entry has side effects; the ESM/CJS entries are tree-shakeable."
 }
 ```
@@ -72,7 +72,7 @@ Notes:
 
 The hosted path is a public API and is **append-only within a major**:
 
-- `https://hallpass.gg/sdk/v1/hallpass.js` must keep working for every page that
+- `https://hallpass.games/sdk/v1/hallpass.js` must keep working for every page that
   already embeds it. Caching is aggressive, so old pages may run old HTML for a
   long time.
 - Within `v1` you may add optional methods, optional options, and new event

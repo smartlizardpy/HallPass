@@ -11,7 +11,7 @@ preview with no network or storage the SDK goes _inert_ and quietly no-ops
 never break the game it is embedded in.
 
 The runtime is served from a version-stable URL:
-`https://hallpass.gg/sdk/v1/hallpass.js`.
+`https://hallpass.games/sdk/v1/hallpass.js`.
 
 ## Install
 
@@ -38,7 +38,7 @@ off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});retur
 setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
 q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:c.n==="invite"?{sent:0,link:null,cancelled:true}:{ok:false,reason:"inert"})})},2000)})(window);
 </script>
-<script src="https://hallpass.gg/sdk/v1/hallpass.js" data-game="YOUR-SLUG" defer></script>
+<script src="https://hallpass.games/sdk/v1/hallpass.js" data-game="YOUR-SLUG" defer></script>
 ```
 
 The stub means calls made before the real script finishes loading are queued and
@@ -365,7 +365,7 @@ other over WebRTC, and HallPass only helps them find each other.
 | | |
 | --- | --- |
 | Version | **1.2.0** (`HallPassP2P.version`) |
-| Hosted at | `https://hallpass.gg/sdk/p2p/v1/hallpass-p2p.js`, `hallpass-p2p.min.js` (54 KB, 19 KB gzipped), `hallpass-p2p.d.ts` |
+| Hosted at | `https://hallpass.games/sdk/p2p/v1/hallpass-p2p.js`, `hallpass-p2p.min.js` (54 KB, 19 KB gzipped), `hallpass-p2p.d.ts` |
 | Source | `sdk/p2p/src/` (build: `npm run build:sdk:p2p`) |
 | Demo / manual test page | `/sdk/p2p/demo/index.html` (coloured dots + chat) |
 | Design | `docs/p2p-design.md` |

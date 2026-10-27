@@ -158,11 +158,11 @@ async function withPage(fn) {
   const ctx = await browser.newContext({ viewport: { width: 960, height: 600 } });
   const errors = [];
   try {
-    await ctx.route("https://hallpass.gg/sdk/**", (r) => {
+    await ctx.route("https://hallpass.games/sdk/**", (r) => {
       const f = path.join(root, "public", new URL(r.request().url()).pathname);
       return fs.existsSync(f) ? r.fulfill({ status: 200, contentType: "text/javascript", body: fs.readFileSync(f) }) : r.abort();
     });
-    await ctx.route(/hallpass\.gg\/api\//, (r) => r.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true,"rank":1}' }));
+    await ctx.route(/hallpass\.games\/api\//, (r) => r.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true,"rank":1}' }));
     await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
     const page = await ctx.newPage();
     if (process.env.HP_DEBUG) page.on("console", (m) => console.log("  [page]", m.text().slice(0, 160)));

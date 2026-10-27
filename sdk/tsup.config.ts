@@ -24,7 +24,7 @@ export default defineConfig({
   dts: false,
   clean: false,
   banner: {
-    js: "/* HallPass Scoreboard SDK v1 — https://hallpass.gg/llms.txt — never throws, never blocks the game. */",
+    js: "/* HallPass Scoreboard SDK v1 — https://hallpass.games/llms.txt — never throws, never blocks the game. */",
   },
   // tsup names the IIFE bundle `hallpass.global.js`, but the stable URL contract
   // (and the integration snippet) reference `/sdk/v1/hallpass.js`. Rename to the

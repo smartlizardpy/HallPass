@@ -7,7 +7,7 @@
  *   2. `data-game` / `data-api` attributes on the SDK's own `<script>` tag.
  *   3. The origin the SDK script was served from (its own `src`), else the page
  *      origin. (Games are embedded on third-party pages, so the script origin is
- *      the API origin — e.g. `https://hallpass.gg`.)
+ *      the API origin — e.g. `https://hallpass.games`.)
  *
  * Load-bearing decision: `document.currentScript` is only the SDK's own tag
  * DURING synchronous top-level evaluation; inside the async callbacks that run
@@ -92,7 +92,7 @@ function attr(script: HTMLScriptElement | null, name: string): string | undefine
   }
 }
 
-/** The origin of the script's own `src`, e.g. `https://hallpass.gg`. */
+/** The origin of the script's own `src`, e.g. `https://hallpass.games`. */
 function scriptOrigin(script: HTMLScriptElement | null): string | undefined {
   try {
     const src = script?.src;

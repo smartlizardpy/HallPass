@@ -710,6 +710,23 @@ export const games: Game[] = [
     isNew: true,
     platform: "both",
   },
+  {
+    slug: "scp-lockdown",
+    title: "SCP: Lockdown",
+    tagline: "The site is sealed. Don't blink.",
+    description:
+      "Survive a containment breach at Site-19 in this first-person SCP horror game. Pick a role, dodge SCP-173, SCP-096 and the rest of the escaped anomalies, keep your light on and find a way out before the lockdown ends you.",
+    category: "Horror",
+    tags: ["Horror", "SCP", "3D", "Survival"],
+    gradient: ["#05080a", "#3a1014"],
+    accent: "#e5392d",
+    art: "eye",
+    isNew: true,
+    author: "Ateş Demir",
+    platform: "both",
+    staged: true,
+    coverUrl: "/game-media/scp-lockdown/hero-31948975f5.png",
+  },
 ];
 
 /**

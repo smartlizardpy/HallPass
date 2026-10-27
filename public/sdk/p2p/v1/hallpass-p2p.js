@@ -1,4 +1,4 @@
-/* HallPass P2P SDK v1.2.0 — peer-to-peer co-op for HallPass games — https://hallpass.gg/sdk/p2p/v1/ — MIT */
+/* HallPass P2P SDK v1.2.0 — peer-to-peer co-op for HallPass games — https://hallpass.games/sdk/p2p/v1/ — MIT */
 
 // sdk/p2p/src/codes.ts
 var CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";

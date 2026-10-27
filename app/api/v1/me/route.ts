@@ -4,7 +4,7 @@
  * The SDK calls this to learn who (if anyone) is signed in, so a game can show a
  * verified badge / avatar and skip the anonymous handle prompt. Identity rides
  * the Auth.js SESSION COOKIE, which the browser only attaches SAME-ORIGIN — so
- * on hallpass.gg the cookie arrives and `auth()` resolves a player, while a
+ * on hallpass.games the cookie arrives and `auth()` resolves a player, while a
  * cross-origin embed sends no cookie and we answer `{ player: null }` (the
  * cross-origin token flow is a later phase, out of scope here).
  *

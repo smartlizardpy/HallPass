@@ -9,7 +9,7 @@
  * Load-bearing decisions:
  *  - The base URL is derived from the request (`new URL(req.url).origin`) rather
  *    than hard-coded, so every example resolves correctly on localhost, on a
- *    preview deployment, and on production (hallpass.gg).
+ *    preview deployment, and on production (hallpass.games).
  *  - This module imports ONLY the static `publicGames` list — no Neon, no
  *    server-only code — so it stays a cheap, dependency-free text response. It is
  *    `publicGames`, not `games`, so the advertised count excludes staged games; a
