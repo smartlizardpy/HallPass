@@ -105,6 +105,8 @@ import { PRIMARY_NAV, normalizePath } from "./primary-nav";
 /** Routes that are their own full-screen world — no player tab bar over them. */
 const HIDDEN_PREFIXES = [
   "/dashboard",
+  // The shared classroom board is its own full-screen shell.
+  "/board",
   // Same reason the promo is suppressed there: `/embed/*` is a small panel
   // mounted inside a game, and site navigation has no business inside it.
   "/embed",

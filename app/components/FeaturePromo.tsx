@@ -99,6 +99,9 @@ const SESSION_KEY = "hp:visitCounted";
 const SUPPRESSED_PREFIXES = [
   "/dashboard",
   "/admin",
+  // The shared classroom board: a stealth/install advert over a lobby that
+  // several students are mid-sign-in on is an obstacle, not a feature.
+  "/board",
   // `/embed/*` is a 360x440 panel the SDK mounts INSIDE a game. A full-screen
   // modal there does not sit beside the picker, it replaces it — the player
   // pressed "Challenge a friend" and got a stealth advert in a box too small to

@@ -52,7 +52,12 @@ function writeDismissed(slugs: string[]): void {
 
 /** Routes the strip stays off. */
 function isSuppressed(pathname: string): boolean {
-  return pathname.startsWith("/dashboard") || pathname.startsWith("/survey/");
+  return (
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/survey/") ||
+    // A shared classroom board has no one signed-in to answer for.
+    pathname.startsWith("/board")
+  );
 }
 
 export function SurveyBanner() {
