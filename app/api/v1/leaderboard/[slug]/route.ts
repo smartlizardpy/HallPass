@@ -55,6 +55,8 @@ import {
   DEFAULT_LIMIT,
 } from "@/app/lib/scoreboard";
 import { auth } from "@/app/lib/auth";
+import { getBoardIdentity } from "@/app/lib/boardpass/identity";
+import { gameplayPlayerId } from "@/app/lib/boardpass/resolve";
 import { canViewStaged } from "@/app/lib/beta/staged-access";
 import { isStagedOrUnverifiable } from "@/app/lib/games-store";
 import { resolveChallengesForScore } from "@/app/lib/challenges";
@@ -231,7 +233,24 @@ export async function POST(
   let cleanHandle = sanitizeHandle(typeof handle === "string" ? handle : undefined);
 
   const sessionPlayerId = session?.user?.playerId;
-  if (sessionPlayerId) {
+  // A BOARD player: no Google session, but the board chose a player for THIS game
+  // (see `app/lib/boardpass/resolve.ts`). A Google session always wins. Keyed on
+  // `board.gameSlug`, not the leaderboard id in the URL, because the choice is
+  // bound to the game. The row is tagged exactly like a signed-in score, so
+  // challenges, friend alerts and the seasonal sync all treat it the same.
+  const boardPlayerId =
+    !sessionPlayerId && board.gameSlug ? await gameplayPlayerId(board.gameSlug) : null;
+  if (boardPlayerId) {
+    playerId = boardPlayerId;
+    try {
+      // No email on this path, so no `upsertPlayerOnLogin`. The name is the PUBLIC
+      // one — never the Google account name.
+      const ident = await getBoardIdentity(boardPlayerId);
+      if (ident) cleanHandle = ident.handle;
+    } catch (error) {
+      console.error(`leaderboard POST board player resolve failed for ${slug}:`, error);
+    }
+  } else if (sessionPlayerId) {
     playerId = sessionPlayerId;
     try {
       const email = session?.user?.email;

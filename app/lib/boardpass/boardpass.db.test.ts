@@ -23,7 +23,7 @@ vi.mock("next/headers", () => ({
       name === "hp_boardpass" && cookieJar.token ? { value: cookieJar.token } : undefined,
   }),
 }));
-vi.mock("./flag", () => ({ getBoardPassMode: async () => "on" }));
+vi.mock("./mode", () => ({ getBoardPassMode: async () => "on" }));
 
 describe.skipIf(!dbTestEnabled)("BoardPass against Postgres", () => {
   const tag = randomBytes(4).toString("hex");

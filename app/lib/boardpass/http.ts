@@ -12,7 +12,7 @@
  */
 
 import { isTrustedOrigin } from "@/app/lib/social/origin";
-import { getBoardPassMode } from "./flag";
+import { getBoardPassMode } from "./mode";
 import { isPinConfigured } from "./pin";
 
 export const NO_STORE: Record<string, string> = { "Cache-Control": "private, no-store" };

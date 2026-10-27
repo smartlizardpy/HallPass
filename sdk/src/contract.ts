@@ -127,6 +127,15 @@ export interface PlayerIdentity {
 export interface MeResponse {
   player: PlayerIdentity | null;
   /**
+   * True when this browser is a shared school BOARD (BoardPass), not a normal
+   * signed-in session. `player` is then the student the board chose for the game
+   * that is open — public name and avatar only — or `null` if none is chosen yet.
+   * Games should treat the player as signed in for display and scoring, but
+   * friends, invites, challenges and sign-in/out are unavailable in Board Mode.
+   * Absent on every other response. Added in v1.
+   */
+  board?: boolean;
+  /**
    * Whether the signed-in user holds ANY dashboard role, so a header/menu can
    * show a Dashboard link. Never leaks email. Added in v1.
    *

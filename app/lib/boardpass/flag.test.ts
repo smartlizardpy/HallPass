@@ -7,7 +7,8 @@ vi.mock("@/app/lib/beta", () => ({ isBetaTester: vi.fn() }));
 vi.mock("@/app/lib/db", () => ({ sql: vi.fn() }));
 
 import { readAppSetting } from "@/app/lib/app-settings";
-import { getBoardPassMode, modeAllows, parseMode } from "./flag";
+import { modeAllows } from "./flag";
+import { getBoardPassMode, parseMode } from "./mode";
 
 describe("parseMode", () => {
   it("defaults anything unknown to off", () => {

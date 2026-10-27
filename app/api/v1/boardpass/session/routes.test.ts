@@ -22,7 +22,7 @@ vi.mock("next/headers", () => ({
     set: h.setCookie,
   }),
 }));
-vi.mock("@/app/lib/boardpass/flag", () => ({ getBoardPassMode: async () => h.mode }));
+vi.mock("@/app/lib/boardpass/mode", () => ({ getBoardPassMode: async () => h.mode }));
 vi.mock("@/app/lib/boardpass/pin", () => ({ isPinConfigured: () => h.pinConfigured }));
 vi.mock("@/app/lib/social/request-guard", () => ({ currentPlayerId: async () => h.google }));
 vi.mock("@/app/lib/boardpass/attempts", () => ({ ipHashFor: () => "iphash" }));

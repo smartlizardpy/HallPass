@@ -13,7 +13,7 @@
 
 import { cookies } from "next/headers";
 import { currentPlayerId } from "@/app/lib/social/request-guard";
-import { getBoardPassMode } from "@/app/lib/boardpass/flag";
+import { getBoardPassMode } from "@/app/lib/boardpass/mode";
 import { isPinConfigured } from "@/app/lib/boardpass/pin";
 import { endSession, getLiveSession } from "@/app/lib/boardpass/sessions";
 import {

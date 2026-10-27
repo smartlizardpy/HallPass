@@ -26,7 +26,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { sql } from "@/app/lib/db";
 import { GAMEPLAY_GRACE_SECONDS, GAME_IDLE_SECONDS } from "./config";
-import { getBoardPassMode } from "./flag";
+import { getBoardPassMode } from "./mode";
 import { BOARDPASS_COOKIE, hashSessionToken, isWellFormedToken } from "./token";
 
 /** The hash of the request's board cookie, or null if absent or malformed. */
