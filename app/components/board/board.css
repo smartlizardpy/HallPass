@@ -289,6 +289,36 @@
   .bp-session-card { flex-wrap: wrap; }
 }
 
+/* Mouse and trackpad screens (a teacher's laptop, a desk monitor) do not need
+   smartboard-sized targets. Touch devices, including touch smartboards, never match
+   this and keep the large sizes above. */
+@media (hover: hover) and (pointer: fine) {
+  .bp-btn { min-height: 40px; padding: 0 16px; font-size: 15px; border-radius: 12px; }
+  .bp-btn-lg { min-height: 46px; padding: 0 20px; font-size: 16px; border-radius: 14px; }
+  .bp-bar { padding-block: 6px; }
+  .bp-modechip { font-size: 12px; padding: 4px 10px; }
+  .bp-player { min-height: 44px; padding: 3px 14px 3px 3px; font-size: 15px; }
+  .bp-player img { width: 36px; height: 36px; }
+  .bp-titlebar { min-height: 44px; padding: 4px 6px 4px 14px; }
+  .bp-titlebar .bp-icon { min-width: 36px; min-height: 36px; font-size: 16px; }
+  .bp-field { min-height: 44px; font-size: 16px; }
+  .bp-key { min-height: 48px; font-size: 20px; }
+  .bp-key-sm { font-size: 15px; }
+  .bp-kbd .bp-key { min-height: 44px; font-size: 18px; }
+  .bp-pin-dot { width: 14px; height: 14px; }
+  .bp-sheet { padding: 22px; }
+  .bp-sheet h2 { font-size: 24px; }
+  .bp-sheet p { font-size: 15px; }
+  .bp-who { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .bp-who button { min-height: 120px; font-size: 18px; }
+  .bp-who img { width: 60px; height: 60px; }
+  .bp-session-card strong { font-size: 19px; }
+  .bp-session-card span.bp-sc-body { font-size: 15px; }
+  .bp-banner { font-size: 15px; }
+  /* Width is set inline (it is also the drag clamp), so the override must win. */
+  .bp-kbd { width: min(720px, calc(100vw - 32px)) !important; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .bp-root *, .bp-root *::before, .bp-root *::after {
     animation: none !important;
