@@ -1,0 +1,259 @@
+<title>Fright Fest Event Hall</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Silkscreen:wght@400;700&family=Jersey+10&display=swap">
+<style>
+/* Review shell for the Fright Fest event hall concepts. Layout: a sticky control bar, then either the
+   device stage (the real event page in a frame at real device width) or a document view.
+   Deliberately single-theme: the night palette of HallPass's haunted skin. */
+:root {
+  --bg: #0d0a14; --panel: #17121f; --panel-2: #1f1829; --line: #2e2440; --line-2: #4d3a6b;
+  --fg: #efe9f6; --fg-2: #cdc3dc; --muted: #a698ba; --amber: #ffb347; --moon: #ffd84a; --pumpkin: #ff7a1a; --cyan: #00cfd6; --pink: #ff8ab5; --ink: #0b0612;
+  --f-ui: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif; --f-px: "Silkscreen", "Courier New", monospace; --f-sign: "Jersey 10", "Silkscreen", monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font: 600 15px/1.55 var(--f-ui); }
+a { color: var(--amber); }
+:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--bg); }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: rgba(13, 10, 20, .97); border-bottom: 1px solid var(--line);
+  padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.bar-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+.brand b { font: 400 26px/1 var(--f-sign); color: var(--moon); letter-spacing: .02em; }
+.brand span { font-size: 12px; color: var(--muted); }
+.views { display: flex; gap: 4px; flex-wrap: wrap; }
+.views button, .seg button { font: 800 13px var(--f-ui); background: none; border: 1px solid transparent; color: var(--fg-2); padding: 7px 11px; border-radius: 6px; cursor: pointer; min-height: 36px; }
+.views button[aria-pressed="true"] { background: var(--panel-2); border-color: var(--line-2); color: var(--fg); }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 10px; align-items: flex-end; }
+.ctl { display: grid; gap: 3px; }
+.ctl > span { font: 400 9px var(--f-px); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.seg { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
+.seg button { padding: 5px 9px; min-height: 32px; font-size: 12.5px; }
+.seg button[aria-pressed="true"] { background: var(--amber); color: var(--ink); }
+.seg.concepts button[aria-pressed="true"] { background: var(--moon); }
+.toggles { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; min-height: 36px; }
+.toggles label { display: flex; gap: 6px; align-items: center; font-size: 12.5px; color: var(--fg-2); cursor: pointer; }
+.toggles input { accent-color: var(--amber); width: 16px; height: 16px; }
+.view { padding-block: 18px 60px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.stage-wrap { display: grid; gap: 14px; justify-items: center; }
+.device-cap { font-size: 12px; color: var(--muted); text-align: center; }
+.device-cap b { color: var(--fg-2); }
+.device { position: relative; border: 1px solid var(--line-2); background: #000; overflow: hidden; border-radius: 10px; max-width: 100%; }
+.device.phone { border-radius: 28px; border-width: 8px; border-color: #241c30; }
+.device iframe { border: 0; display: block; transform-origin: 0 0; background: #0d0a14; }
+.fold { position: absolute; left: 0; right: 0; height: 0; border-top: 2px dashed var(--cyan); pointer-events: none; }
+.fold span { position: absolute; right: 8px; top: -22px; font: 400 10px var(--f-px); color: var(--ink); background: var(--cyan); padding: 2px 6px; }
+.jump { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.jump button { font: 800 12px var(--f-ui); background: var(--panel); border: 1px solid var(--line); color: var(--fg-2); padding: 6px 10px; border-radius: 6px; cursor: pointer; min-height: 34px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; min-width: 0; }
+.notes { width: min(1366px, 100%); display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+.notes h3 { margin: 0 0 6px; font: 400 11px var(--f-px); text-transform: uppercase; letter-spacing: .05em; color: var(--amber); }
+.notes p, .notes li { font-size: 14px; color: var(--fg-2); }
+.notes ul { margin: 0; padding-left: 18px; }
+.doc { width: min(1100px, 100%); margin: 0 auto; display: grid; gap: 18px; }
+.doc h2 { margin: 6px 0 0; font: 400 34px/1.05 var(--f-sign); color: var(--moon); text-wrap: balance; }
+.doc h3 { margin: 0 0 8px; font: 900 18px/1.25 var(--f-ui); text-wrap: balance; }
+.doc p, .doc li { color: var(--fg-2); max-width: 78ch; }
+.doc .lede { font-size: 17px; color: var(--fg); }
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th { text-align: left; font: 400 10px var(--f-px); text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 8px; border-bottom: 1px solid var(--line-2); }
+td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--fg-2); }
+td b { color: var(--fg); }
+.pill { display: inline-block; font: 400 9px var(--f-px); text-transform: uppercase; padding: 3px 6px; border-radius: 4px; background: var(--panel-2); color: var(--fg-2); border: 1px solid var(--line-2); }
+.pill.ok { color: #7dff9a; border-color: #2c6b3c; } .pill.no { color: #ff8a8a; border-color: #7a2a2a; } .pill.part { color: var(--amber); border-color: #7a5a2a; }
+.shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.shots figure { margin: 0; display: grid; gap: 6px; }
+.shots img { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); image-rendering: pixelated; }
+.shots figcaption { font-size: 13px; color: var(--muted); }
+.journey { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; counter-reset: j; }
+.journey figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; display: grid; gap: 8px; align-content: start; }
+.journey img { width: 100%; height: auto; border-radius: 6px; image-rendering: pixelated; }
+.journey figcaption b { display: block; font: 400 11px var(--f-px); text-transform: uppercase; color: var(--amber); }
+.journey figcaption { font-size: 13px; color: var(--fg-2); }
+.journey .here { border-color: var(--moon); }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.sw { width: 116px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); font-size: 11px; }
+.sw i { display: block; height: 44px; }
+.sw span { display: block; padding: 5px 7px; color: var(--fg-2); }
+.cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.cmp .device { width: 100%; }
+@media (max-width: 760px) { .cmp { grid-template-columns: 1fr; } .brand span { display: none; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<header class="bar">
+  <div class="bar-top">
+    <div class="brand"><b>Fright Fest · Event Hall</b><span>Design exploration · 26 Oct 2026 · nothing here is live</span></div>
+    <nav class="views" aria-label="Views">
+      <button type="button" data-view="explore" aria-pressed="true">Explore</button>
+      <button type="button" data-view="compare" aria-pressed="false">Compare</button>
+      <button type="button" data-view="journey" aria-pressed="false">Journey</button>
+      <button type="button" data-view="audit" aria-pressed="false">Audit</button>
+      <button type="button" data-view="research" aria-pressed="false">Research</button>
+      <button type="button" data-view="art" aria-pressed="false">Art system</button>
+      <button type="button" data-view="build" aria-pressed="false">Build notes</button>
+      <button type="button" data-view="reviews" aria-pressed="false">Reviews</button>
+    </nav>
+  </div>
+  <div class="controls" id="controls">
+    <div class="ctl"><span>Concept</span><div class="seg concepts" data-key="concept">
+      <button type="button" data-v="a" aria-pressed="true">A · Arcade Hall</button><button type="button" data-v="b" aria-pressed="false">B · School Hall</button><button type="button" data-v="c" aria-pressed="false">C · Possessed</button><button type="button" data-v="current" aria-pressed="false">Live today</button><button type="button" data-v="current-branch" aria-pressed="false">Championship branch</button></div></div>
+    <div class="ctl"><span>Device</span><div class="seg" data-key="device">
+      <button type="button" data-v="cb" aria-pressed="true">Chromebook</button><button type="button" data-v="lap" aria-pressed="false">1280 laptop</button><button type="button" data-v="wb" aria-pressed="false">Whiteboard</button><button type="button" data-v="ph" aria-pressed="false">Phone</button><button type="button" data-v="ph2" aria-pressed="false">Small phone</button></div></div>
+    <div class="ctl"><span>Event</span><div class="seg" data-key="phase">
+      <button type="button" data-v="upcoming" aria-pressed="true">Upcoming</button><button type="button" data-v="live" aria-pressed="false">Live</button><button type="button" data-v="closed" aria-pressed="false">Closed</button><button type="button" data-v="finalised" aria-pressed="false">Final</button></div></div>
+    <div class="ctl"><span>Data</span><div class="seg" data-key="data">
+      <button type="button" data-v="real" aria-pressed="true">Real today</button><button type="button" data-v="sample" aria-pressed="false">Sample</button></div></div>
+    <div class="ctl"><span>Lineup</span><div class="seg" data-key="lineup">
+      <button type="button" data-v="today" aria-pressed="true">As configured</button><button type="button" data-v="all" aria-pressed="false">All three open</button></div></div>
+    <div class="ctl"><span>Scores API</span><div class="seg" data-key="api">
+      <button type="button" data-v="ok" aria-pressed="true">OK</button><button type="button" data-v="loading" aria-pressed="false">Loading</button><button type="button" data-v="error" aria-pressed="false">Down</button></div></div>
+    <div class="ctl"><span>Switches</span><div class="toggles">
+      <label><input type="checkbox" id="t-season" checked> Haunted skin</label>
+      <label><input type="checkbox" id="t-champ" checked> Championship</label>
+      <label><input type="checkbox" id="t-auth"> Signed in</label>
+      <label><input type="checkbox" id="t-rm"> Reduced motion</label>
+      <label><input type="checkbox" id="t-hot"> Hotspots + data sources</label>
+    </div></div>
+  </div>
+</header>
+
+<main>
+  <section class="view" data-panel="explore">
+    <div class="stage-wrap">
+      <p class="device-cap" id="cap"></p>
+      <div class="jump" aria-label="Jump to a part of the page">
+        <button type="button" data-jump="top">The hall</button><button type="button" data-jump="standings">High scores</button><button type="button" data-jump="candy">Candy Hunt</button><button type="button" data-jump="prize-counter">Prize counter</button><button type="button" data-jump="rules">Rules</button>
+      </div>
+      <div class="device" id="device"><iframe id="hall" title="Event page prototype" src="hall.html"></iframe><div class="fold" id="fold" hidden><span>School Chromebook fold</span></div></div>
+      <div class="notes" id="concept-notes"></div>
+    </div>
+  </section>
+
+  <section class="view" data-panel="compare" hidden>
+    <div class="doc">
+      <h2>Current page against the proposals</h2>
+      <p>Left: the page as it is live today. Right: the concept picked in the bar, at the same device and state. Scroll each frame on its own.</p>
+      <div class="cmp">
+        <div><p class="device-cap"><b>Live today</b> (main, 26 Oct)</p><div class="device" id="cmp-l"><iframe title="Current page" data-fixed="current"></iframe></div></div>
+        <div><p class="device-cap"><b id="cmp-name">Concept A</b></p><div class="device" id="cmp-r"><iframe title="Proposed page"></iframe></div></div>
+      </div>
+      <div id="cmp-firsts"></div>
+    </div>
+  </section>
+
+  <section class="view" data-panel="journey" hidden><div class="doc" id="doc-journey"></div></section>
+  <section class="view" data-panel="audit" hidden><div class="doc" id="doc-audit"></div></section>
+  <section class="view" data-panel="research" hidden><div class="doc" id="doc-research"></div></section>
+  <section class="view" data-panel="art" hidden><div class="doc" id="doc-art"></div></section>
+  <section class="view" data-panel="build" hidden><div class="doc" id="doc-build"></div></section>
+  <section class="view" data-panel="reviews" hidden><div class="doc" id="doc-reviews"></div></section>
+</main>
+
+<script src="reviews.js"></script>
+<script src="docs.js"></script>
+<script>
+(function () {
+  "use strict";
+  const DEVICES = {
+    cb: { w: 1366, h: 860, label: "School Chromebook", note: "1366 × 768 screen; the dashed line marks the 640 px that show under the browser bars", fold: true },
+    lap: { w: 1280, h: 600, label: "1280 laptop", note: "1280 × 720; the room scales to fit between 2× and 3×" },
+    wb: { w: 1920, h: 1000, label: "Classroom whiteboard", note: "1920 × 1080 board driven by a PC; the room is exactly 4×" },
+    ph: { w: 390, h: 750, label: "Phone", note: "390 px wide (iPhone 13/14); its own composition at 2×", phone: true },
+    ph2: { w: 360, h: 660, label: "Small phone", note: "360 px wide Android; the phone composition scaled to fit", phone: true },
+  };
+  const S = { concept: "a", device: "cb", phase: "upcoming", data: "real", lineup: "today", api: "ok", season: "haunted", champ: "on", auth: "out", rm: "0", hot: "0" };
+  try { const saved = JSON.parse(localStorage.getItem("ffhall") || "{}"); Object.assign(S, saved); } catch (e) { /* storage blocked */ }
+  const frame = document.getElementById("hall");
+  const dev = document.getElementById("device");
+  const hallState = () => { const o = Object.assign({}, S); delete o.device; return o; };
+  const query = () => new URLSearchParams(hallState()).toString();
+
+  function fit(el, iframe, d, maxW) {
+    const avail = Math.min(maxW, el.parentElement.clientWidth);
+    const k = Math.min(1, avail / d.w);
+    iframe.style.width = d.w + "px"; iframe.style.height = d.h + "px";
+    iframe.style.transform = k < 1 ? `scale(${k})` : "";
+    el.style.width = Math.round(d.w * k) + (d.phone ? 16 : 2) + "px";
+    el.style.height = Math.round(d.h * k) + (d.phone ? 16 : 2) + "px";
+    el.classList.toggle("phone", !!d.phone);
+    return k;
+  }
+  let loadedDevice = null;
+  function apply(reloadFrame) {
+    const d = DEVICES[S.device];
+    const k = fit(dev, frame, d, 1400);
+    const fold = document.getElementById("fold");
+    fold.hidden = !d.fold;
+    fold.style.top = Math.round(640 * k) + "px";
+    document.getElementById("cap").innerHTML = `<b>${d.label}</b> · ${d.note}`;
+    if (reloadFrame || loadedDevice !== S.device) { loadedDevice = S.device; frame.src = "hall.html?" + query(); }
+    else frame.contentWindow && frame.contentWindow.postMessage({ type: "hall-state", state: hallState() }, "*");
+    document.querySelectorAll(".seg").forEach((seg) => seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(S[seg.dataset.key] === b.dataset.v))));
+    document.getElementById("t-season").checked = S.season === "haunted";
+    document.getElementById("t-champ").checked = S.champ === "on";
+    document.getElementById("t-auth").checked = S.auth === "in";
+    document.getElementById("t-rm").checked = S.rm === "1";
+    document.getElementById("t-hot").checked = S.hot === "1";
+    if (window.HALL_DOCS) document.getElementById("concept-notes").innerHTML = window.HALL_DOCS.notes(S.concept);
+    try { localStorage.setItem("ffhall", JSON.stringify(S)); } catch (e) { /* storage blocked */ }
+    if (!document.querySelector('[data-panel="compare"]').hidden) compare();
+  }
+  document.getElementById("controls").addEventListener("click", (e) => {
+    const b = e.target.closest(".seg button"); if (!b) return;
+    const key = b.closest(".seg").dataset.key;
+    const reload = key === "device" || (key === "concept" && (S.concept.startsWith("current") || b.dataset.v.startsWith("current")));
+    S[key] = b.dataset.v; apply(reload);
+  });
+  const tg = (id, key, on, off) => document.getElementById(id).addEventListener("change", (e) => { S[key] = e.target.checked ? on : off; apply(false); });
+  tg("t-season", "season", "haunted", "calm"); tg("t-champ", "champ", "on", "off"); tg("t-auth", "auth", "in", "out"); tg("t-rm", "rm", "1", "0"); tg("t-hot", "hot", "1", "0");
+  document.querySelector(".jump").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-jump]"); if (!b) return;
+    frame.contentWindow.postMessage({ type: "hall-state", state: hallState(), scrollTo: b.dataset.jump }, "*");
+  });
+  window.addEventListener("message", (e) => {
+    if (e.data && e.data.type === "hall-state" && e.data.state) { Object.assign(S, e.data.state); apply(false); }
+  });
+  frame.addEventListener("load", () => frame.contentWindow.postMessage({ type: "hall-state", state: hallState() }, "*"));
+
+  function compare() {
+    const d = DEVICES[S.device];
+    const l = document.querySelector("#cmp-l iframe"), r = document.querySelector("#cmp-r iframe");
+    const col = document.querySelector(".cmp > div");
+    [["cmp-l", l, "current"], ["cmp-r", r, S.concept.startsWith("current") ? "a" : S.concept]].forEach(([id, f, c]) => {
+      const box = document.getElementById(id);
+      const kk = Math.min(1, (col.clientWidth || 500) / d.w);
+      f.style.width = d.w + "px"; f.style.height = d.h + "px"; f.style.transform = kk < 1 ? `scale(${kk})` : "";
+      box.style.width = Math.round(d.w * kk) + 2 + "px"; box.style.height = Math.round(d.h * kk) + 2 + "px";
+      const q = new URLSearchParams(Object.assign(hallState(), { concept: c })).toString();
+      if (f.dataset.q !== q + S.device) { f.dataset.q = q + S.device; f.src = "hall.html?" + q; }
+    });
+    document.getElementById("cmp-name").textContent = window.HALL_DOCS ? window.HALL_DOCS.name(S.concept.startsWith("current") ? "a" : S.concept) : S.concept;
+    if (window.HALL_DOCS) document.getElementById("cmp-firsts").innerHTML = window.HALL_DOCS.firsts();
+  }
+
+  function show(view) {
+    document.querySelectorAll(".views button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.view === view)));
+    document.querySelectorAll("[data-panel]").forEach((p) => { p.hidden = p.dataset.panel !== view; });
+    document.getElementById("controls").hidden = !(view === "explore" || view === "compare");
+    const docs = window.HALL_DOCS;
+    if (docs && docs[view]) document.getElementById("doc-" + view).innerHTML = docs[view]();
+    if (view === "compare") compare();
+    if (view === "explore") apply(false);
+  }
+  document.querySelector(".views").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-view]"); if (!b) return;
+    show(b.dataset.view);
+    try { history.replaceState(null, "", "#" + b.dataset.view); } catch (err) { /* sandboxed */ }
+  });
+  let rz = 0; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => apply(false), 120); });
+  const start = (location.hash || "").slice(1);
+  apply(true);
+  if (start && document.querySelector(`[data-panel="${start}"]`)) show(start);
+})();
+</script>
