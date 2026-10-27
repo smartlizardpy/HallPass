@@ -46,6 +46,17 @@ export function useBoard(): BoardApi | null {
   return useContext(BoardContext);
 }
 
+/**
+ * True while a board session exists on this page. A tap on a game then means
+ * "play it as the board" (who's playing, then launch) rather than "open its store
+ * page": a smartboard is a touch screen, where a card tap otherwise navigates away
+ * and the score could never reach the player who was chosen.
+ */
+export function useBoardPlays(): boolean {
+  const board = useContext(BoardContext);
+  return !!board && board.available && board.session.state.state === "active";
+}
+
 /** Cross-origin parents make `window.top` throw: that counts as framed. */
 const isFramed = () => {
   try {

@@ -52,7 +52,7 @@ export default async function Home() {
     <>
       <SiteJsonLd />
       <h1 className="sr-only">Unblocked Games — Play Free Online at HALLPASS</h1>
-      <Arcade board games={games} categories={categories} playCounts={playCounts} eventBoard={EVENT_BOARD} />
+      <Arcade games={games} categories={categories} playCounts={playCounts} eventBoard={EVENT_BOARD} />
     </>
   );
 }

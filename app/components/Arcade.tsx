@@ -38,6 +38,7 @@ import {
 } from "../lib/catalog-prefs";
 import { CatalogToolbar } from "./CatalogToolbar";
 import { GameListRow } from "./GameListRow";
+import { useBoardPlays } from "./board/BoardProvider";
 import { HauntedHero } from "./events/fright-fest/HauntedHero";
 import { EventBoard } from "./events/fright-fest/EventBoard";
 import { frightFestGame } from "./events/fright-fest/registry";
@@ -133,12 +134,15 @@ export function Arcade({
   initialCategory = "All",
   playCounts = {},
   eventBoard,
-  board = false,
+  board = true,
 }: {
   games: Game[];
   categories: string[];
   initialCategory?: string;
-  /** Offer Board Mode (the shared-screen sign-in) on this page. */
+  /**
+   * Offer Board Mode (the shared-screen sign-in) on this page. On by default for
+   * every catalogue page, so a student who taps a genre in the rail keeps the bar.
+   */
   board?: boolean;
   playCounts?: Record<string, number>;
   /**
@@ -427,7 +431,7 @@ function ArcadeRows({
         {category === "All" && !query && (
           <>
             <HauntedHero games={games} />
-            <FeaturedBanner game={featured} playCounts={playCounts} />
+            <FeaturedBanner game={featured} playCounts={playCounts} onPlay={requestPlay} />
           </>
         )}
         {/* Pages without a hero get a little night sky instead (skin only). */}
@@ -777,10 +781,15 @@ function MobileSection({
 function FeaturedBanner({
   game,
   playCounts,
+  onPlay,
 }: {
   game: Game;
   playCounts: Record<string, number>;
+  onPlay: (slug: string) => void;
 }) {
+  // On a shared board the banner plays the game as the board instead of
+  // opening its store page; see `useBoardPlays`.
+  const boardPlays = useBoardPlays();
   // Resolved through the shared {@link playsFor}, so the headline number and the
   // "Popular this week" ranking are always reading the same figure.
   const plays = playsFor(game, playCounts);
@@ -801,7 +810,12 @@ function FeaturedBanner({
           match the cards. */}
       <Link
         href={`/game/${game.slug}`}
-        onClick={() => {
+        onClick={(e) => {
+          if (boardPlays) {
+            e.preventDefault();
+            onPlay(game.slug);
+            return;
+          }
           // Renamed from `featured_game_played`: this now means "clicked through
           // to the store page", not "started playing". `game_started` is fired
           // by PlayerOverlay and is the only event `app/lib/stats.ts` counts, so
