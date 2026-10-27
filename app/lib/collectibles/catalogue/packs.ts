@@ -84,6 +84,7 @@ export const PACKS: Pack[] = [
   },
   championPack("last-bell", "Last Bell"),
   championPack("shadow-core", "Shadow Core"),
+  championPack("scp-lockdown", "SCP: Lockdown"),
   championPack("survive-till-dawn", "Survive Till Dawn"),
   {
     id: "ff26-overall-winner",
