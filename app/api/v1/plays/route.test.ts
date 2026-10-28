@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const resolved = vi.hoisted(() => ({ ok: true }));
-const recordPlay = vi.hoisted(() => vi.fn(async (_slug: string) => {}));
+const recordPlay = vi.hoisted(() => vi.fn(async (slug: string) => void slug));
 vi.mock("@/app/lib/games-store", () => ({ isResolvedSlug: async () => resolved.ok }));
 vi.mock("@/app/lib/play-totals", () => ({ playTotals: { recordPlay } }));
 vi.mock("@/app/lib/db", () => ({ isMissingColumnError: () => false }));
