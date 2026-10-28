@@ -130,13 +130,13 @@ describe("validateScpLockdownHaunting (proposed)", () => {
     expect(scp({ meta: { flags: ["speed", 3] } })).toMatchObject({ ok: true, flags: ["game:speed"] });
     expect(scp({ meta: { time: undefined } })).toMatchObject({ ok: true, flags: ["no-game-time"] });
     expect(scp({ meta: { time: 118.9 } })).toMatchObject({ ok: true, flags: ["game-time-mismatch"] });
-    expect(scp({ meta: { time: 119.1, wall: 119.2 } }).flags).toEqual([]);
+    expect(scp({ meta: { time: 119.1, wall: 119.2 } })).toMatchObject({ ok: true, flags: [] });
     expect(scp({ meta: { wall: 117 } })).toMatchObject({ ok: true, flags: ["game-time-ahead-of-wall"] });
     for (const banished of [undefined, -1, 2.5, "3"]) {
       expect(scp({ meta: { banished } })).toMatchObject({ ok: true, tiebreak: null, flags: ["no-banished"] });
     }
     expect(scp({ score: 45_000, meta: { time: 45 }, elapsedSec: 60 })).toMatchObject({ ok: true, flags: ["unusually-fast"] });
-    expect(scp({ score: SCP_HAUNTING.reviewBelowMs, meta: { time: 60 }, elapsedSec: 70 }).flags).toEqual([]);
+    expect(scp({ score: SCP_HAUNTING.reviewBelowMs, meta: { time: 60 }, elapsedSec: 70 })).toMatchObject({ ok: true, flags: [] });
   });
 
   it("records the server's evidence for reviewers", () => {
