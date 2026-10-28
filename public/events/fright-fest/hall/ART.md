@@ -37,11 +37,17 @@ lettering); the page holds facts (dates, numbers, names, scores).
 
 ## Cabinets of games that are not announced yet
 
-Only the `lastbell` and `mystery` cabinets are in this folder. The other two
-games' cabinets and screen loops are in `art/out/a/` on the design branch and are
-deliberately NOT shipped. This folder is served as-is, a file in `public/` can be
-fetched by anyone who guesses its name, and an unannounced game must not be named
-or shown (docs/championship-design.md section 6). Copy a game's cabinet files here
+Shipped cabinets: `lastbell`, `std` (Survive Till Dawn) and `scp` (SCP: Lockdown),
+plus the `mystery` cabinet that stands in for any game that is not announced.
+`std` was drawn with the rest of the hall (`hall_a.py` on the design branch);
+`scp` was drawn on 2026-10-28 by a generator script kept outside this repo (it
+recolours the lastbell cabinet body to #7dd3a8 and repaints the marquee, beacon
+and screen; hazard stripes, a ghost in a containment corridor, no real logo).
+To change it, redraw with that script rather than painting over the PNGs.
+
+An unannounced game must not be named or shown (docs/championship-design.md
+section 6): this folder is served as-is, and a file in `public/` can be fetched
+by anyone who guesses its name. Copy a game's cabinet files here
 (`cab-<key>-{off,on}.png`, `scr-<key>.png`) in the same change that flips its
 `announced` flag in `app/components/events/fright-fest/registry.ts`, and add its
 art key in `app/fright-fest/hall/props.ts`.

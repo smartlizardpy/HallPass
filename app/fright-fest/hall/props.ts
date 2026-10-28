@@ -53,6 +53,8 @@ export type CabinetProps =
  */
 const ART_KEYS: Readonly<Record<string, string>> = {
   "last-bell": "lastbell",
+  "scp-lockdown": "scp",
+  "survive-till-dawn-pixel-edition": "std",
 };
 
 export const MYSTERY_ART = "mystery";

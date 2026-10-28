@@ -264,6 +264,18 @@ html[data-hp-still] .hl-loop {
 .hl-cab[data-art="lastbell"][data-on="1"] .hl-cab-btn {
   background-image: url(/events/fright-fest/hall/cab-lastbell-on.png);
 }
+.hl-cab[data-art="scp"][data-on="0"] .hl-cab-btn {
+  background-image: url(/events/fright-fest/hall/cab-scp-off.png);
+}
+.hl-cab[data-art="scp"][data-on="1"] .hl-cab-btn {
+  background-image: url(/events/fright-fest/hall/cab-scp-on.png);
+}
+.hl-cab[data-art="std"][data-on="0"] .hl-cab-btn {
+  background-image: url(/events/fright-fest/hall/cab-std-off.png);
+}
+.hl-cab[data-art="std"][data-on="1"] .hl-cab-btn {
+  background-image: url(/events/fright-fest/hall/cab-std-on.png);
+}
 .hl-cab[data-art="mystery"][data-on="0"] .hl-cab-btn {
   background-image: url(/events/fright-fest/hall/cab-mystery-off-calm.png);
 }
@@ -281,6 +293,12 @@ html[data-hp-skin="haunted"] .hl-cab[data-art="mystery"][data-on="1"] .hl-cab-bt
 }
 .hl-cab[data-art="lastbell"] .hl-scr {
   background-image: url(/events/fright-fest/hall/scr-lastbell.png);
+}
+.hl-cab[data-art="scp"] .hl-scr {
+  background-image: url(/events/fright-fest/hall/scr-scp.png);
+}
+.hl-cab[data-art="std"] .hl-scr {
+  background-image: url(/events/fright-fest/hall/scr-std.png);
 }
 .hl-cab[data-art="mystery"] .hl-scr {
   background-image: url(/events/fright-fest/hall/scr-mystery-calm.png);
