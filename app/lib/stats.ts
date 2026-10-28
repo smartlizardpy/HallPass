@@ -1,6 +1,8 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { PUBLIC_PLAY_COUNTS_TTL_SECONDS } from "@/app/lib/cache-lifetimes";
+import { playTotals } from "@/app/lib/play-totals";
 import { type HogqlResponse, namedRows } from "@/app/lib/hogql-rows";
 import {
   type Delta,
@@ -467,7 +469,50 @@ export async function getAllTimePlays(): Promise<number | null> {
   }
 }
 
+/**
+ * The permanent per-game totals (`game_play_totals`), memoised for the same day
+ * and under the same tag as the PostHog read beside it, so the pages that show
+ * them regenerate on ONE lifetime (see `cache-lifetimes.ts`).
+ *
+ * It THROWS on failure on purpose: `unstable_cache` only stores a fulfilled
+ * result, so a database blip must reject here rather than resolve to `{}` and
+ * have an empty map cached for a day.
+ */
+const readPermanentTotals = unstable_cache(
+  () => playTotals.totals(),
+  ["game-play-totals"],
+  { revalidate: PUBLIC_PLAY_COUNTS_TTL_SECONDS, tags: ["game-play-counts"] },
+);
+
+/**
+ * How many times each game has been played, as the PUBLIC pages print it.
+ *
+ * This used to be the last 30 days only, so a game nobody had opened lately lost
+ * its plays while its scores (kept in Neon with no expiry) stayed. The number is
+ * now the PERMANENT total: history seeded from PostHog plus every play counted
+ * since (`game_play_totals`).
+ *
+ * Per game it is the LARGER of that total and the last-30-days PostHog count.
+ * Until the backfill has seeded the table, the total is only the plays since the
+ * counter shipped — printing it alone would show LESS than the site did the day
+ * before. The max means a count can only go up, and once seeded the total always
+ * wins. It is also the fail-soft path: with the database down the 30-day figure
+ * still renders. Never throws.
+ */
 export async function getGamePlayCounts(): Promise<PlayCounts> {
+  const [recent, permanent] = await Promise.all([
+    getRecentPlayCounts(),
+    readPermanentTotals().catch((): PlayCounts => ({})),
+  ]);
+  const merged: PlayCounts = { ...permanent };
+  for (const [slug, plays] of Object.entries(recent)) {
+    merged[slug] = Math.max(merged[slug] ?? 0, plays);
+  }
+  return merged;
+}
+
+/** The rolling last-30-days count straight from PostHog. Empty when unreadable. */
+async function getRecentPlayCounts(): Promise<PlayCounts> {
   if (!API_KEY) return {};
 
   const query = {
