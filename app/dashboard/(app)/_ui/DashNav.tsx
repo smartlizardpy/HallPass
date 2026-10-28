@@ -101,6 +101,7 @@ const SUPER_ADMIN_ITEMS: NavItem[] = [
   { href: "/dashboard/events", label: "Halloween" },
   { href: "/dashboard/blob", label: "Blob ops" },
   { href: "/dashboard/candy", label: "Candy" },
+  { href: "/dashboard/referrals", label: "Referrals" },
 ];
 
 export function DashNav({ role }: { role: Role }) {
