@@ -74,5 +74,5 @@ It does **not** control the site's own haunted look: that is painted by a static
 
 ## Per game
 
-- **SCP: Lockdown** (`laboratory.js`, a minified bundle): the gate is `dY()`, built on `HC` (the hard-coded 28 Oct to 3 Nov window), `GY()` (the `laboratory-settings.fest` player setting, where `1` forces it on) and the `?fest=` flag. `GY() === 1` forcing it on, and `pY()` (the date check), both go.
+- **SCP: Lockdown** (`laboratory.js`, a minified bundle): already gates on `HallPass.getEvent()`. `?fest=1` forces the event on, on localhost only; `?fest=0` turns it off; the player's `fright` setting can only opt out, never force it on. It carries no hard-coded dates. Nothing to change for the gate. (Its ranked mode, The Haunting, is a separate contract: `docs/championship-integration.md` section 5.)
 - **Last Bell** (`halloween/config.js`): the gate is `halloweenAvailable()` over `HALLOWEEN.startAt/endAt/teaserFrom` and `?halloween=`. Its `eventPhase()` also drives practice-vs-ranked, which should now use `opensAt` from HallPass instead of its own constant. Its ranked board still needs `supports("leaderboard.boards")` as before; that is unrelated.

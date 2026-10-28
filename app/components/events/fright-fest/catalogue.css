@@ -2,7 +2,7 @@
    Registry frames and chips exist ONLY on the three competition slugs (data-event-game); every other card gets just the shared pumpkin hover (haunted.css). */
 /* Registry games only (data-event-game): a cabinet frame on the cover and a mode chip. */
 html[data-hp-skin="haunted"] [data-event-game="last-bell"]{--hov:#ffb347}
-html[data-hp-skin="haunted"] [data-event-game="shadow-core-halloween-dash"]{--hov:#f43f5e}
+html[data-hp-skin="haunted"] [data-event-game="scp-lockdown"]{--hov:#7dd3a8}
 html[data-hp-skin="haunted"] [data-event-game="survive-till-dawn-pixel-edition"]{--hov:#ff5470}
 html[data-hp-skin="haunted"] .card[data-event-game] .ha-cv{border-radius:0;clip-path:var(--ha-clip-3)}
 html[data-hp-skin="haunted"] .card[data-event-game] .ha-cv::before{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;box-shadow:inset 0 0 0 4px var(--ha-frame);background-image:linear-gradient(var(--ha-frame),var(--ha-frame)),linear-gradient(var(--ha-frame),var(--ha-frame)),linear-gradient(var(--ha-frame),var(--ha-frame)),linear-gradient(var(--ha-frame),var(--ha-frame));background-size:4px 4px;background-repeat:no-repeat;background-position:4px 4px,calc(100% - 4px) 4px,4px calc(100% - 4px),calc(100% - 4px) calc(100% - 4px)}

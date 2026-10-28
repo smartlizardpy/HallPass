@@ -9,7 +9,7 @@ import { buildCabinets, buildRewards } from "./props";
 const C = FRIGHT_FEST_2026;
 const ART = join(__dirname, "../../../public/events/fright-fest/hall");
 /** Every word that names a game that is not announced today (its title, mode, slug or cover). */
-const SECRETS = /shadow|cursed|survive|blood moon|dawn|halloween dash|\bstd\b|shadowcore/i;
+const SECRETS = /shadow|cursed|survive|blood moon|dawn|halloween dash|\bstd\b|shadowcore|\bscp\b|lockdown|haunting/i;
 const registry = (announced: (slug: string) => boolean): FrightFestGame[] => FRIGHT_FEST_GAMES.map((g) => ({ ...g, announced: announced(g.slug) }));
 
 describe("the cabinets", () => {
@@ -47,7 +47,7 @@ describe("the cabinets", () => {
 
   it("ships no cabinet art for a game that is not announced", () => {
     for (const g of FRIGHT_FEST_GAMES.filter((x) => !x.announced)) {
-      for (const art of ["shadowcore", "std"]) {
+      for (const art of ["shadowcore", "std", "scp"]) {
         expect(existsSync(join(ART, `cab-${art}-on.png`)), `${g.slug} ${art}`).toBe(false);
       }
     }

@@ -89,7 +89,7 @@ and are shown as such ("Already in your binder").
 | Pack | Granted for | Slot 1 | Slot 2 | Slot 3 |
 |---|---|---|---|---|
 | Fright Fest Participation | accepted result on every board in the final lineup | **Survivor 2026** sticker (fixed) | standard random | standard random |
-| Last Bell / Shadow Core / Survive Till Dawn Champion | 1st on that board, finalised | that game's **Champion** card (fixed) | rare-or-better | standard random |
+| Last Bell / SCP: Lockdown / Survive Till Dawn Champion | 1st on that board, finalised | that game's **Champion** card (fixed) | rare-or-better | standard random |
 | Fright Fest Overall Champion | top eligible player, finalised | **Overall Champion 2026** card (fixed, champion frame) | **The Last Bell** legendary (fixed) | epic-or-better |
 | HallPass Originals / Internet Culture / Brainrot / Turkish Internet standard packs | admin grants and future triggers | standard random | standard random | standard random |
 

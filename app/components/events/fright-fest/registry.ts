@@ -28,7 +28,7 @@ export type FrightFestGame = {
 
 export const FRIGHT_FEST_GAMES: readonly FrightFestGame[] = [
   { slug: "last-bell", short: "Halloween Shift", mq: ["Halloween", "Shift"], acc: "#e8e3d3", pos: "center 30%", announced: true },
-  { slug: "shadow-core-halloween-dash", short: "Cursed Dash", mq: ["Cursed", "Dash"], acc: "#f43f5e", pos: "center 38%", announced: false },
+  { slug: "scp-lockdown", short: "Haunting", mq: ["The", "Haunting"], acc: "#7dd3a8", pos: "center 30%", announced: false },
   { slug: "survive-till-dawn-pixel-edition", short: "Blood Moon", mq: ["Blood", "Moon"], acc: "#ff5470", pos: "center 22%", announced: false },
 ];
 

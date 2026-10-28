@@ -23,7 +23,7 @@ describe("catalogue", () => {
     const live = (id: string) => CATALOGUE.collectibles.filter((c) => c.collection === id && !c.retired);
     expect(["ff26", "legends", "brainrot", "turkish", "gaming"].map((id) => live(id).length)).toEqual([21, 12, 13, 9, 9]);
     expect(CATALOGUE.packs.map((p) => p.id)).toEqual([
-      "ff26-participation", "ff26-winner-last-bell", "ff26-winner-shadow-core", "ff26-winner-survive-till-dawn",
+      "ff26-participation", "ff26-winner-last-bell", "ff26-winner-shadow-core", "ff26-winner-scp-lockdown", "ff26-winner-survive-till-dawn",
       "ff26-overall-winner", "hpo-standard", "inet-standard", "brr-standard", "tr-standard",
       "hpo-rare", "inet-rare", "brr-rare", "tr-rare",
       "legends-standard", "brainrot-standard", "turkish-standard", "gaming-standard",
@@ -61,7 +61,7 @@ describe("catalogue", () => {
     expect(ODDS.standardNoLegendary).toEqual({ common: 60, uncommon: 25, rare: 10, epic: 5 }); // legendary 1 → epic
     expect(ODDS.rareOrBetterNoLegendary).toEqual({ rare: 75, epic: 25 }); // legendary 5 → epic
     expect(slots("turkish-rare")).toEqual([ODDS.standard, ODDS.rareOrBetter, ODDS.rareOrBetter]); // turkish has all five tiers
-    for (const id of ["ff26-participation", "ff26-winner-last-bell", "ff26-winner-shadow-core", "ff26-winner-survive-till-dawn", "ff26-overall-winner"]) {
+    for (const id of ["ff26-participation", "ff26-winner-last-bell", "ff26-winner-shadow-core", "ff26-winner-scp-lockdown", "ff26-winner-survive-till-dawn", "ff26-overall-winner"]) {
       expect(CATALOGUE.packs.find((p) => p.id === id)!.versions.map((v) => v.v), id).toEqual([1, 2]);
     }
   });

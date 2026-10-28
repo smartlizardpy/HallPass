@@ -37,6 +37,6 @@ describe("buildCandy", () => {
     expect(rankRange(4, 10)).toBe("4th–10th");
   });
   it("names no game that is not announced", () => {
-    expect(JSON.stringify(P)).not.toMatch(/shadow|cursed|survive|blood moon|dawn|halloween dash|shadowcore/i);
+    expect(JSON.stringify(P)).not.toMatch(/shadow|cursed|survive|blood moon|dawn|halloween dash|shadowcore|\bscp\b|lockdown|haunting/i);
   });
 });

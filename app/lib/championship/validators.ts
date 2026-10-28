@@ -110,50 +110,66 @@ export function validateLastBell({ score, meta, elapsedSec, startSeed }: Validat
   };
 }
 
-// ── Shadow Core: Halloween Dash — Cursed Dash (PROPOSED) ────────────────────
+// ── SCP: Lockdown — The Haunting (PROPOSED) ─────────────────────────────────
 //
-// The game has no such mode yet (docs/championship-design.md §2.2). Proposed:
-// all 15 sectors in one continuous run, total time in ms (lower is better),
-// per-sector splits and deaths in `meta`. The board stays `pending` until the
-// game sends exactly this and an admin opens it.
+// The game has no such mode yet (the developer builds it). Proposed: find a
+// Level 4 keycard and escape. Score = escape time in whole milliseconds, lower
+// is better; ghosts banished (`meta.banished`) break ties, more is better. Fixed
+// conditions: Normal difficulty, solo, and one site layout for everyone (seed
+// 20261031 drives the door layout and keycard placement; ghost spawns may stay
+// random). The board stays `pending` until the game sends exactly this and an
+// admin opens it. The bounds below are placeholders: raise them with real data.
 
-export const SHADOW_CORE = {
-  sectors: 15,
-  /** Hard floor: 2 s per sector. Real data should raise it. */
-  minTotalMs: 30_000,
-  /** Below this a run is held for review until real times are known. */
-  reviewBelowMs: 90_000,
-  maxTotalMs: 3_600_000,
-  splitToleranceMs: 15,
+export const SCP_HAUNTING = {
+  seed: 20261031,
+  /** Normal difficulty. */
+  difficulty: 1,
+  /** Hard floor, placeholder. Real data should raise it. */
+  minEscapeMs: 30_000,
+  /** Below this a run is held for review until real times are known (placeholder). */
+  reviewBelowMs: 60_000,
+  maxEscapeMs: 3_600_000,
+  /** `meta.time` (seconds) vs the score (milliseconds). */
+  timeToleranceMs: 1_000,
+  /** The game's own "game time ran faster than wall time" margin. */
+  wallToleranceSec: 2,
 } as const;
 
-export function validateShadowCoreCursedDash({ score, meta, elapsedSec }: ValidationInput): ValidationResult {
+export function validateScpLockdownHaunting({ score, meta, elapsedSec, startSeed }: ValidationInput): ValidationResult {
   const s = int(score);
-  const deaths = int(meta.deaths);
-  const splits = Array.isArray(meta.splits) ? meta.splits.map(int) : null;
-  const sum = splits && splits.every((x) => x !== null && x >= 0) ? (splits as number[]).reduce((a, b) => a + b, 0) : null;
+  const time = num(meta.time);
+  const wall = num(meta.wall);
+  const seed = int(meta.seed);
+  const diff = int(meta.diff);
+  const banished = int(meta.banished);
   const checks: Checks = {
     elapsedSec: round2(elapsedSec),
-    totalMs: s,
-    splitCount: splits ? splits.length : null,
-    splitSumMs: sum,
-    deaths,
+    escapeMs: s,
+    gameTimeSec: time === null ? null : round2(time),
+    wallTimeSec: wall === null ? null : round2(wall),
+    seed,
+    diff,
+    banished,
   };
 
-  if (s === null || s < SHADOW_CORE.minTotalMs || s > SHADOW_CORE.maxTotalMs) return reject("bad-score", checks);
+  if (s === null || s < SCP_HAUNTING.minEscapeMs || s > SCP_HAUNTING.maxEscapeMs) return reject("bad-score", checks);
   if (meta.event !== EVENT_ID) return reject("wrong-event", checks);
-  if (meta.mode !== "cursed-dash") return reject("wrong-mode", checks);
-  if (s / 1000 > elapsedSec + LATENCY_SLACK_SEC) return reject("clock-faster-than-real-time", checks);
-  if (splits && splits.length === SHADOW_CORE.sectors && sum !== null && Math.abs(sum - s) > SHADOW_CORE.splitToleranceMs) {
-    return reject("splits-do-not-add-up", checks);
+  if (meta.mode !== "haunt") return reject("wrong-mode", checks);
+  if (meta.coop === true) return reject("co-op-not-ranked", checks);
+  if (diff !== SCP_HAUNTING.difficulty) return reject("wrong-difficulty", checks);
+  if (seed !== SCP_HAUNTING.seed || (startSeed !== null && startSeed !== SCP_HAUNTING.seed)) {
+    return reject("wrong-layout", checks);
   }
+  if (s / 1000 > elapsedSec + LATENCY_SLACK_SEC) return reject("clock-faster-than-real-time", checks);
 
   const flags: string[] = clientFlags(meta).map((f) => `game:${f}`);
-  if (!splits || splits.length !== SHADOW_CORE.sectors || sum === null) flags.push("no-splits");
-  if (deaths === null || deaths < 0) flags.push("no-deaths");
-  if (s < SHADOW_CORE.reviewBelowMs) flags.push("unusually-fast");
+  if (time === null) flags.push("no-game-time");
+  else if (Math.abs(time * 1000 - s) > SCP_HAUNTING.timeToleranceMs) flags.push("game-time-mismatch");
+  if (time !== null && wall !== null && wall < time - SCP_HAUNTING.wallToleranceSec) flags.push("game-time-ahead-of-wall");
+  if (banished === null || banished < 0) flags.push("no-banished");
+  if (s < SCP_HAUNTING.reviewBelowMs) flags.push("unusually-fast");
 
-  return { ok: true, score: s, tiebreak: deaths !== null && deaths >= 0 ? deaths : null, flags, checks };
+  return { ok: true, score: s, tiebreak: banished !== null && banished >= 0 ? banished : null, flags, checks };
 }
 
 // ── Survive Till Dawn: Pixel Edition — Blood Moon (PROPOSED) ────────────────

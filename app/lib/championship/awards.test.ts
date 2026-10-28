@@ -14,7 +14,7 @@ const open = (slug: string): GameState => ({ slug, status: "open", openedAt: "20
 describe("awards", () => {
   it("pays the overall champion, each board's winner and every eligible player, with stable keys", () => {
     const s = buildStandings(C, "verification", [open("last-bell"), open(SC)], [
-      run("last-bell", "solo", 480 - 40), // wins Last Bell, never played Shadow Core
+      run("last-bell", "solo", 480 - 40), // wins Last Bell, never played SCP: Lockdown
       run("last-bell", "both", 300),
       run(SC, "both", 100_000, 0),
     ]);
@@ -22,7 +22,7 @@ describe("awards", () => {
     expect(awards.map((a) => [a.kind, a.publicId, a.packId, a.gameSlug ?? null])).toEqual([
       ["overall-champion", "pub-both", "ff26-overall-winner", null],
       ["game-champion", "pub-solo", "ff26-winner-last-bell", "last-bell"],
-      ["game-champion", "pub-both", "ff26-winner-shadow-core", SC],
+      ["game-champion", "pub-both", "ff26-winner-scp-lockdown", SC],
       ["participation", "pub-both", "ff26-participation", null],
     ]);
     expect(awards.map((a) => a.grantKey)).toEqual([
