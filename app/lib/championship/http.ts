@@ -34,6 +34,7 @@ import type {
 import type { ChampionshipBoardEntry } from "./config";
 import { championshipStore, getPublicChampionship } from "./index";
 import { issueRun, submitRun, type IssueOutcome, type SubmitOutcome } from "./intake";
+import { attributeFromRequest, qualifyAfterRun } from "@/app/lib/referrals";
 
 const NO_STORE = { "Cache-Control": "private, no-store" } as const;
 const PUBLIC_CACHE = {
@@ -106,6 +107,9 @@ export async function postRunStart(req: Request, entry: ChampionshipBoardEntry):
   } catch {
     /* An empty body is a valid run start. */
   }
+  // Friend referrals: a new player about to play their first ranked run is attributed to the link they came by.
+  // Fail-soft by construction (never throws); the run start does not wait on anything else.
+  await attributeFromRequest(req, player);
   let out: IssueOutcome;
   try {
     out = await issueRun(championshipStore, entry.championship, entry.game, player, { seed: body.seed });
@@ -141,6 +145,8 @@ export async function postChampionshipScore(req: Request, entry: ChampionshipBoa
     return fail(entry, 503, "unavailable", "Fright Fest is unavailable right now. Your run was not recorded.");
   }
   if (out.ok) {
+    // An accepted run is what qualifies a referred friend: pay whoever invited them (fail-soft, idempotent).
+    if (out.status === "accepted") await qualifyAfterRun(player);
     const body: ChampionshipSubmitResponse = {
       ok: true,
       championship: entry.championship.id,
