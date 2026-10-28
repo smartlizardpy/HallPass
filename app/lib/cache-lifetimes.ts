@@ -46,11 +46,13 @@
 export const CATALOGUE_TTL_SECONDS = 86_400;
 
 /**
- * The 30-day play counts shown to the PUBLIC: the "Most played" ordering, the
+ * The play counts shown to the PUBLIC: the "Most played" ordering, the
  * related-games ordering and the `interactionStatistic` in a game's JSON-LD.
+ * Permanent totals from `game_play_totals`, never less than the last 30 days of
+ * PostHog (see `getGamePlayCounts`); both reads use this one lifetime.
  *
- * A day, because a rolling 30-day count does not change meaningfully within one
- * and no number is printed until a game clears `MIN_PLAYS_SHOWN`. The
+ * A day, because a running total does not change meaningfully within one and no
+ * number is printed until a game clears `MIN_PLAYS_SHOWN`. The
  * dashboard's own figures do NOT use this: they go through `hogql` in
  * `stats.ts` with their own 60s lifetime, on dynamic routes that ISR never
  * stores.

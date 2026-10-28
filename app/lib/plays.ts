@@ -14,8 +14,8 @@ import type { Game } from "./games";
  */
 
 /**
- * The catalogue's ONE play-count resolution: the live count from
- * `app/lib/stats.ts` first, the static seed in `app/lib/games.ts` second, zero
+ * The catalogue's ONE play-count resolution: the permanent total from
+ * `app/lib/stats.ts` (`getGamePlayCounts`) first, the static seed in `app/lib/games.ts` second, zero
  * last.
  *
  * Shared rather than written out at each call site so the Trending ranking and
@@ -45,10 +45,10 @@ export function playsFor(
  * different act from advertising it, and a game with four plays still has to
  * sort somewhere.
  *
- * WORTH KNOWING: nothing on the site currently clears this. The busiest game in
- * the last 30 days had 30 plays when the catalogue toolbar was built, so the
- * banner's play line does not render for any game today. That is the threshold
- * working as intended rather than a bug — but it is also why the list layout
- * carries no play-count column: it would be empty on every row.
+ * WORTH KNOWING: when the catalogue toolbar was built the count was a rolling
+ * 30-day one and the busiest game had 30 plays, so nothing cleared this and the
+ * list layout got no play-count column (it would have been empty on every row).
+ * The count is now a permanent total, so games will start to clear it as the
+ * history is seeded; that is the threshold working, not a change to it.
  */
 export const MIN_PLAYS_SHOWN = 50;
