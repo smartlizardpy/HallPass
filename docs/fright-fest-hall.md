@@ -267,7 +267,7 @@ amber on the "you" row 7.2:1, ink on gold (Play, Full standings) 12.8:1.
   tag, so the phone "Laptop only" label was not seen on screen.
 - **Predates this PR, not on this page:** the theme's registry
   (`components/events/fright-fest/registry.ts`) carries the unannounced games'
-  mode names ("Cursed Dash", "Blood Moon"), and `GameCard`, `GameListRow`,
+  mode names ("The Haunting", "Blood Moon"), and `GameCard`, `GameListRow`,
   `GameEventPanel` and `Arcade` import it into client bundles. `/fright-fest`
   loads none of those chunks (checked in the built HTML and RSC payload), but
   other pages do. Fix: keep unannounced entries out of the client registry.

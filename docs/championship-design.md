@@ -49,6 +49,20 @@ Taken here, as engineering decisions:
    verification, finalised) is a database row, so it changes without a deploy
    and every change is logged.
 
+
+**Update, 27 Oct 2026 (owner decision): SCP: Lockdown replaces Shadow Core in
+the lineup.** The championship is now Last Bell, SCP: Lockdown and Survive Till
+Dawn: Pixel Edition. Shadow Core: Halloween Dash leaves the championship and
+stays an ordinary arcade game (its everyday board is untouched). SCP's ranked
+mode is "The Haunting": escape time in ms (lower wins), ghosts banished as the
+tiebreak, Normal difficulty, solo, one seeded site layout (20261031). Its rules
+are `proposed`, its board is `pending` until an admin opens it, and its
+contract is in `docs/championship-integration.md` section 5. The audit in §2
+and the tables below were written before the swap; read "Shadow Core" in them
+as superseded by this note. A leftover `shadow-core-halloween-dash` row in
+`championship_games` (seeded by migration 048) is ignored: standings are built
+from the config.
+
 ---
 
 ## 2. Audit: the three games

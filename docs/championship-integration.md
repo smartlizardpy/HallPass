@@ -3,8 +3,8 @@
 This is for the developers of two HallPass games that will join the Fright Fest
 2026 cross-game championship:
 
-- **Shadow Core: Halloween Dash** (slug `shadow-core-halloween-dash`), mode
-  "Cursed Dash".
+- **SCP: Lockdown** (slug `scp-lockdown`), mode "The Haunting". SCP replaced
+  Shadow Core in the lineup on 27 October 2026 (owner decision).
 - **Survive Till Dawn: Pixel Edition** (slug `survive-till-dawn-pixel-edition`),
   mode "Blood Moon".
 
@@ -18,7 +18,7 @@ disagree, the code wins and this page is wrong; tell us.
 
 ## 1. Status and window
 
-**Status: proposed rules.** The Shadow Core and Survive Till Dawn rules on this
+**Status: proposed rules.** The SCP: Lockdown and Survive Till Dawn rules on this
 page are proposals (`rules: "proposed"` in `fright-fest-2026.ts`). The Last Bell
 rules are verified.
 
@@ -57,7 +57,7 @@ opening. A run that started before the board opened is refused with
 2. **Load the SDK with a relative path**, not an absolute URL on another origin:
 
    ```html
-   <script src="/sdk/v1/hallpass.js" data-game="shadow-core-halloween-dash" defer></script>
+   <script src="/sdk/v1/hallpass.js" data-game="scp-lockdown" defer></script>
    ```
 
    For Survive Till Dawn use `data-game="survive-till-dawn-pixel-edition"`.
@@ -84,14 +84,14 @@ const canEnter = !!(hp && hp.submitScore && hp.supports && hp.supports("leaderbo
 // 2. Start: the moment the ranked clock starts.
 let run = null;
 if (canEnter && hp.runStart) {
-  run = await hp.runStart({ board: "shadow-core-cursed-dash" }); // { token, expiresAt } or null
+  run = await hp.runStart({ board: "scp-lockdown-haunting", seed: 20261031 }); // { token, expiresAt } or null
 }
 
 // 3. Submit: once, when the run ends.
-const r = await hp.submitScore(totalMs, {
-  board: "shadow-core-cursed-dash",
+const r = await hp.submitScore(escapeMs, {
+  board: "scp-lockdown-haunting",
   promptHandle: false,
-  meta: { token: run && run.token, event: "fright-fest-2026", mode: "cursed-dash", /* ... */ },
+  meta: { token: run && run.token, event: "fright-fest-2026", mode: "haunt", /* ... */ },
 });
 ```
 
@@ -136,7 +136,7 @@ Things Last Bell does that you should copy:
 | `null` | The board takes no run: signed out, board not open, event not live, rate limited, game on another domain, or the request failed. It never throws. |
 
 `runStart` accepts `{ board?, seed? }`. `seed` is stored with the run only if it
-is a safe integer. Only the Last Bell validator reads it (see section 8).
+is a safe integer. The Last Bell and SCP: Lockdown validators compare it with the fixed seed (see section 10).
 
 ### What `submitScore` returns
 
@@ -216,21 +216,24 @@ Any strings in `meta.flags` (an array; only strings count; the first 10 are
 read) become `game:<flag>` flags on the run. **One honest game-side flag is
 enough to hold a run for review.**
 
-## 5. Shadow Core: Halloween Dash, Cursed Dash
+## 5. SCP: Lockdown, The Haunting
 
-All fifteen sectors in one continuous run against one clock. Fastest total time
-wins.
+Find a Level 4 keycard and escape the site. The fastest escape wins. These
+rules are **proposed**: the game does not send them yet.
 
 | Item | Value |
 | --- | --- |
-| Board id | `shadow-core-cursed-dash` |
-| Slug | `shadow-core-halloween-dash` |
-| `meta.mode` | `"cursed-dash"` |
-| Score | Total time in whole **milliseconds** |
+| Board id | `scp-lockdown-haunting` |
+| Slug | `scp-lockdown` |
+| `meta.mode` | `"haunt"` |
+| Score | Escape time in whole **milliseconds**, from the round start to the escape |
 | Sort | Ascending: lower is better |
-| Score rules | Integer. At least 30,000 and at most 3,600,000 |
-| Tiebreak | Deaths, fewer is better (`meta.deaths`) |
-| Ranking rule | "Fastest total time through all fifteen sectors. Equal times are split by fewer deaths." |
+| Score rules | Integer. At least 30,000 and at most 3,600,000 (placeholder bounds, see section 10) |
+| Tiebreak | Ghosts banished, more is better (`meta.banished`) |
+| Ranking rule | "Escape fastest: find a Level 4 keycard and get out. Equal times are split by more ghosts banished." |
+
+SCP's other Fright Fest modes (Trick or Treat, Night of the Living Dead) stay
+playable and are **unranked**. Only The Haunting enters this board.
 
 ### `meta` fields the validator reads
 
@@ -238,44 +241,58 @@ wins.
 | --- | --- | --- | --- |
 | `token` | string | yes | From `runStart`. |
 | `event` | string | yes | Exactly `"fright-fest-2026"`. |
-| `mode` | string | yes | Exactly `"cursed-dash"`. |
-| `splits` | array of 15 integers | should | Milliseconds per sector, each at least 0, in sector order. |
-| `deaths` | integer | should | Whole run, at least 0. The tiebreak. |
+| `mode` | string | yes | Exactly `"haunt"`. |
+| `diff` | integer | yes | Exactly `1` (Normal). |
+| `seed` | integer | yes | Exactly `20261031`, the seed that lays out the doors and the keycard. Also pass it to `runStart`. |
+| `coop` | boolean | yes in practice | Send `false` for a solo run. `true` is rejected. |
+| `time` | number | should | Game seconds from the round start to the escape. Should match the score: `time * 1000` within 1,000 ms of it. |
+| `wall` | number | should | Wall-clock seconds over the same span, measured by the game. |
+| `banished` | integer | should | Ghosts banished in the run, at least 0. The tiebreak. |
+| `v` | integer | optional | Your mode's version. Stored, never checked. |
 | `flags` | array of strings | optional | Your own warnings. Any entry flags the run. |
 
 ### Rejected
+
+The checks run in this order; the first that fails is the reason.
 
 | Reason code | When |
 | --- | --- |
 | `bad-score` | Score is not an integer, is under 30,000 ms, or is over 3,600,000 ms. |
 | `wrong-event` | `meta.event` is not `"fright-fest-2026"`. |
-| `wrong-mode` | `meta.mode` is not `"cursed-dash"`. |
+| `wrong-mode` | `meta.mode` is not `"haunt"`. |
+| `co-op-not-ranked` | `meta.coop` is exactly `true`. |
+| `wrong-difficulty` | `meta.diff` is not the integer `1`. |
+| `wrong-layout` | `meta.seed` is not `20261031`, or the seed stored by `runStart` is set and is not `20261031`. |
 | `clock-faster-than-real-time` | Score in seconds is more than `elapsedSec + 8`. |
-| `splits-do-not-add-up` | `splits` has exactly 15 valid entries and their sum differs from the score by more than 15 ms. |
 
 ### Flagged for review
 
 | Flag | When |
 | --- | --- |
-| `no-splits` | `splits` is missing, is not 15 entries, or has an entry that is not an integer of at least 0. |
-| `no-deaths` | `deaths` is missing, not an integer, or negative. The tiebreak is then empty. |
-| `unusually-fast` | Score is under 90,000 ms. This threshold is a placeholder until real times are known. |
+| `no-game-time` | `meta.time` is missing or not a number. |
+| `game-time-mismatch` | `meta.time * 1000` differs from the score by more than 1,000 ms. |
+| `game-time-ahead-of-wall` | `meta.wall` is more than 2 seconds below `meta.time`. |
+| `no-banished` | `banished` is missing, not an integer, or negative. The tiebreak is then empty. |
+| `unusually-fast` | Score is under 60,000 ms. This threshold is a placeholder until real times are known. |
 | `game:<flag>` | One per entry in `meta.flags`. |
 
 ### What the mode must guarantee
 
-- **Fixed conditions for everyone.** The same fifteen sectors, in the same
-  order, with the same layout and rules, whoever plays. No difficulty choice, no
-  unlocks or upgrades that change speed.
-- **One continuous run.** All fifteen sectors against one clock. No resuming a
-  saved run, no skipping to a later sector.
-- **Total time is the ranked clock only.** Start it with `runStart` when the
-  first sector begins. Loading screens and menus are outside it.
-- **`splits` add up to the score.** If your split timer and total timer are
-  separate clocks, they will drift and the run will be rejected at 15 ms. Derive
-  the total from the splits, or the other way round.
-- **Deaths** counts every death in the run, including deaths that restart a
-  sector.
+- **The same site layout for everyone.** Seed `20261031` lays out the doors and
+  the keycard. Send it in `meta.seed` and pass it to `runStart`. Ghost spawns may
+  stay random.
+- **Normal difficulty, forced.** No difficulty choice in The Haunting; send
+  `diff: 1`.
+- **Solo only.** Co-op is not ranked. Do not offer to enter a co-op run. If one
+  slips through, send `coop: true` honestly and the server rejects it.
+- **`runStart` when the escape clock starts**, which is the round start. Menus
+  and loading screens are outside it.
+- **Submit once, on escape only.** Never on death, never on a quit. A run that
+  does not end in an escape is not entered.
+- **The other Fright Fest modes stay unranked.** Trick or Treat and Night of the
+  Living Dead never call `submitScore` for this board.
+- SCP's everyday multiplier scoring and leaderboard are unrelated and
+  untouched.
 
 ## 6. Survive Till Dawn: Pixel Edition, Blood Moon
 
@@ -388,7 +405,9 @@ Test against a local HallPass.
      page.
 7. Try the failure cases on purpose, so your game's messages are right: signed
    out, a missing token, an old token, a score of the wrong unit, `coop: true`
-   (Survive Till Dawn), a split list that does not add up (Shadow Core).
+   (Survive Till Dawn, SCP: Lockdown), the wrong seed or a difficulty other than
+   Normal (SCP: Lockdown), an escape time that disagrees with `meta.time`
+   (SCP: Lockdown).
 
 ### Verification checklist
 
@@ -401,8 +420,9 @@ HallPass runs this before opening a board. A "no" on any line keeps it
 - [ ] The event mode exists, is reachable from the menu, and matches the rules
       text on `/fright-fest` word for word: how to enter, solo, fixed
       conditions, ranking rule.
-- [ ] Conditions are identical for every player (fifteen sectors in order for
-      Cursed Dash; Bleeding Woods, Standard, 20-minute night for Blood Moon).
+- [ ] Conditions are identical for every player (seed 20261031 and Normal
+      difficulty for The Haunting; Bleeding Woods, Standard, 20-minute night for
+      Blood Moon).
 - [ ] `runStart` is called at the ranked clock start, with the right board id.
 - [ ] `submitScore` is called once per run, with the board id, `promptHandle:
       false` and `meta.token`.
@@ -411,8 +431,8 @@ HallPass runs this before opening a board. A "no" on any line keeps it
       stays under 4 KB.
 - [ ] A normal run is `accepted` and ranks. A deliberately broken run is
       `rejected` with the expected reason.
-- [ ] Cursed Dash only: the 15 splits add up to the score within 15 ms on
-      every test run.
+- [ ] The Haunting only: `meta.time * 1000` matches the score within 1,000 ms
+      on every test run, a death never submits, and co-op cannot enter.
 - [ ] Blood Moon only: a co-op run cannot enter, and reaching dawn scores 1200.
 - [ ] The game's clock does not run faster than real time (checked by playing
       with the tab in the background, and with a throttled frame rate).
@@ -453,37 +473,41 @@ These are the places where the proposals are provisional or where the code is
 narrower than the text. We will settle them with real data before opening the
 boards.
 
-- **Shadow Core thresholds.** The 30,000 ms hard floor (2 seconds a sector) and
-  the 90,000 ms review line are placeholders. Real times should raise them.
+- **The Haunting thresholds.** The 30,000 ms hard floor, the 60,000 ms review
+  line and the 3,600,000 ms ceiling are placeholders. Real escape times should
+  raise them.
 - **Survive Till Dawn kill rate.** 15 kills a second is a generous ceiling.
-- **Token lifetime and Cursed Dash.** A token lives 75 minutes, longer than
-  the 60-minute Cursed Dash ceiling (3,600,000 ms), so a legitimate run never
+- **Token lifetime and The Haunting.** A token lives 75 minutes, longer than
+  the 60-minute Haunting ceiling (3,600,000 ms), so a legitimate run never
   outlives its token. A run paused for longer than that would expire.
-- **Seeds.** `runStart({ seed })` stores a seed, but only the Last Bell validator
-  checks one (`2026118`). Neither new validator reads a seed, so "same layout
-  for everyone" is enforced by your game, not the server.
-- **Fields the proposals mention but the server does not read:** realm,
-  difficulty and `v`. They are stored with `meta` if you send them, but nothing
+- **Seeds.** `runStart({ seed })` stores a seed. The Last Bell validator checks
+  one (`2026118`) and so does The Haunting (`20261031`). The Survive Till Dawn
+  validator reads no seed, so "same layout for everyone" there is enforced by
+  your game, not the server. Ghost spawns in The Haunting may stay random.
+- **Fields the proposals mention but the server does not read:** realm and `v`
+  (and, for Blood Moon, difficulty). They are stored with `meta` if you send them, but nothing
   rejects on them. Send them anyway; reviewers will look.
 - **Fields the SDK passes through.** `late` and `duplicate` are in the HTTP body
   but not in the 1.5.0 `SubmitResult` notes.
 
 ## 11. Quick reference
 
-| | Last Bell | Shadow Core | Survive Till Dawn |
+| | Last Bell | SCP: Lockdown | Survive Till Dawn |
 | --- | --- | --- | --- |
 | Rules | verified | proposed | proposed |
-| Slug | `last-bell` | `shadow-core-halloween-dash` | `survive-till-dawn-pixel-edition` |
-| Board | `last-bell-halloween-shift` | `shadow-core-cursed-dash` | `survive-till-dawn-blood-moon` |
-| Mode | The Halloween Shift | Cursed Dash | Blood Moon |
-| Score | whole seconds left | whole ms total | whole seconds survived |
+| Slug | `last-bell` | `scp-lockdown` | `survive-till-dawn-pixel-edition` |
+| Board | `last-bell-halloween-shift` | `scp-lockdown-haunting` | `survive-till-dawn-blood-moon` |
+| Mode | The Halloween Shift | The Haunting | Blood Moon |
+| Score | whole seconds left | whole ms escape time | whole seconds survived |
 | Sort | descending | ascending | descending |
 | Bounds | 0 to 480 | 30,000 to 3,600,000 | 0 to 1200 |
-| Tiebreak | escape time, ascending | deaths, ascending | kills, descending |
+| Tiebreak | escape time, ascending | ghosts banished, descending | kills, descending |
 | `meta.event` | `fright-fest-2026` | `fright-fest-2026` | `fright-fest-2026` |
-| `meta.mode` | not checked | `cursed-dash` | `blood-moon` |
-| Co-op | not ranked | n/a | rejected |
-| Reward pack ids | `ff26-winner-last-bell` | `ff26-winner-shadow-core` | `ff26-winner-survive-till-dawn` |
+| `meta.mode` | not checked | `haunt` | `blood-moon` |
+| Seed | `2026118` | `20261031` | not checked |
+| Difficulty | not checked | `diff: 1` | not checked |
+| Co-op | not ranked | rejected | rejected |
+| Reward pack ids | `ff26-winner-last-bell` | `ff26-winner-scp-lockdown` | `ff26-winner-survive-till-dawn` |
 
 Points per board: 100, 80, 65, 40, 40, 20, 20, 20, 20, 20 for places 1 to 10,
 and 5 for everyone else who is ranked. Participation reward: `ff26-participation`.
