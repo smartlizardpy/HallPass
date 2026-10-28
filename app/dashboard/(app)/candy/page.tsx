@@ -73,7 +73,7 @@ function Banner({ tone, children }: { tone: "ok" | "error" | "warn"; children: R
   return <div role={tone === "error" ? "alert" : "status"} className={`mb-6 rounded-xl border px-4 py-3 text-sm ${cls}`}>{children}</div>;
 }
 
-const KIND_TONE = { daily_best: "brand", ranked_run: "green", all_boards: "green", placing: "amber", spend: "zinc" } as const;
+const KIND_TONE = { daily_best: "brand", ranked_run: "green", all_boards: "green", placing: "amber", spend: "zinc", referral: "green" } as const;
 
 export default async function CandyDeskPage({ searchParams }: { searchParams: SearchParams }) {
   await requireRole("super_admin");
