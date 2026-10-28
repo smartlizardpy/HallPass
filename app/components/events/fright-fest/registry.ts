@@ -28,8 +28,8 @@ export type FrightFestGame = {
 
 export const FRIGHT_FEST_GAMES: readonly FrightFestGame[] = [
   { slug: "last-bell", short: "Halloween Shift", mq: ["Halloween", "Shift"], acc: "#e8e3d3", pos: "center 30%", announced: true },
-  { slug: "scp-lockdown", short: "Haunting", mq: ["The", "Haunting"], acc: "#7dd3a8", pos: "center 30%", announced: false },
-  { slug: "survive-till-dawn-pixel-edition", short: "Blood Moon", mq: ["Blood", "Moon"], acc: "#ff5470", pos: "center 22%", announced: false },
+  { slug: "scp-lockdown", short: "Haunting", mq: ["The", "Haunting"], acc: "#7dd3a8", pos: "center 30%", announced: true },
+  { slug: "survive-till-dawn-pixel-edition", short: "Blood Moon", mq: ["Blood", "Moon"], acc: "#ff5470", pos: "center 22%", announced: true },
 ];
 
 const BY_SLUG = new Map(FRIGHT_FEST_GAMES.map((g) => [g.slug, g] as const));

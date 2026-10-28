@@ -348,7 +348,10 @@ stylesheet.
   to standings.
 - **Announcement**: the theme registry's single `ANNOUNCED` flag becomes
   per-game. Last Bell is announced; the other two stay mystery cabinets until
-  their boards open (a one-line data change each).
+  their boards open (a one-line data change each). *2026-10-28:* SCP: Lockdown
+  and Survive Till Dawn are announced too, with both boards open. Neither has
+  its own hall cabinet art yet, so the hall names them on the mystery body
+  (`ART_KEYS` in `app/fright-fest/hall/props.ts`).
 
 ## 7. Rewards hook
 
