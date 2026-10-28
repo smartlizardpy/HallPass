@@ -1,0 +1,199 @@
+/*
+ * "Spread the Fright". Extends the arcade board (sections.css): the `.ar-*` frame,
+ * heading and buttons are reused; this file only lays out the three cards, the
+ * invite glow, the copy pop and the dialog. Fixed palette from `--ar-*`.
+ */
+.ff-spread-banner {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 2px solid var(--ar-gold);
+  background: rgba(255, 199, 0, 0.12);
+  color: var(--ar-cream);
+  font-weight: 800;
+}
+.ff-spread-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 820px) {
+  .ff-spread-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+.ff-spread-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px;
+  border: 2px solid var(--ar-line-2);
+  background: var(--ar-plate);
+}
+.ff-spread-card h3 {
+  margin: 0;
+  font-family: var(--ar-pixel);
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  color: var(--ar-gold);
+}
+.ff-spread-card p {
+  margin: 0;
+  color: var(--ar-soft);
+  line-height: 1.45;
+}
+.ff-spread-card .ar-btn {
+  margin-top: auto;
+  align-self: stretch;
+  white-space: normal;
+}
+.ff-spread-card-invite {
+  border-color: var(--ar-gold);
+}
+.ff-spread-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+.ff-spread-mini {
+  font-size: 0.85rem;
+  color: var(--ar-lav);
+}
+
+/* A glowing but tasteful highlight around the invite button. */
+.ff-spread-glow {
+  animation: ff-spread-glow 2.6s ease-in-out infinite;
+}
+@keyframes ff-spread-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 199, 0, 0.35), 0 0 10px rgba(255, 199, 0, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(255, 199, 0, 0.15), 0 0 20px rgba(255, 199, 0, 0.5);
+  }
+}
+
+/* The subtle "copied" pop. */
+.ff-spread-done {
+  animation: ff-spread-pop 0.35s ease-out;
+  border-color: var(--ar-green);
+  color: var(--ar-green);
+}
+@keyframes ff-spread-pop {
+  0% {
+    transform: scale(0.94);
+  }
+  60% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.ff-spread-manual {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+.ff-spread-manual textarea,
+.ff-spread-link {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px;
+  border: 2px solid var(--ar-line-2);
+  background: var(--ar-ink);
+  color: var(--ar-cream);
+  font: inherit;
+  font-size: 0.9rem;
+}
+.ff-spread-foot {
+  margin: 12px 0 0;
+  font-size: 0.8rem;
+  color: var(--ar-lav);
+}
+
+/* The invite dialog. */
+.ff-spread-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 3px solid var(--ar-gold);
+  background: var(--ar-plate);
+  color: var(--ar-cream);
+  font-family: var(--ar-body);
+  overflow: auto;
+}
+.ff-spread-dialog::backdrop {
+  background: rgba(5, 2, 10, 0.78);
+}
+.ff-spread-dialog-body {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+.ff-spread-dialog h2 {
+  margin: 0;
+  font-family: var(--ar-pixel);
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: var(--ar-gold);
+}
+.ff-spread-dialog p {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--ar-soft);
+}
+.ff-spread-label {
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+.ff-spread-actions {
+  display: grid;
+  gap: 8px;
+}
+.ff-spread-big {
+  min-height: 52px;
+  font-size: 1.05rem;
+}
+.ff-spread-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin: 0;
+}
+.ff-spread-stats div {
+  padding: 8px 10px;
+  border: 2px solid var(--ar-line);
+  background: var(--ar-ink);
+}
+.ff-spread-stats dt {
+  font-size: 0.75rem;
+  color: var(--ar-lav);
+}
+.ff-spread-stats dd {
+  margin: 0;
+  font-family: var(--ar-pixel);
+  font-size: 1.1rem;
+  color: var(--ar-gold);
+}
+.ff-spread-bar {
+  height: 12px;
+  border: 2px solid var(--ar-line-2);
+  background: var(--ar-ink);
+}
+.ff-spread-bar span {
+  display: block;
+  height: 100%;
+  background: var(--ar-gold);
+}
+.ff-spread-close {
+  justify-self: end;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-spread-glow,
+  .ff-spread-done {
+    animation: none;
+  }
+}

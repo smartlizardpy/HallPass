@@ -25,6 +25,7 @@ import { resolveGames } from "../lib/games-store";
 import { FRIGHT_FEST_GAMES } from "../components/events/fright-fest/registry";
 import { Room } from "./hall/Room";
 import { CandyHunt } from "./hall/candy/CandyHunt";
+import { SpreadTheFright } from "./hall/spread/SpreadTheFright";
 import { buildCandy } from "./hall/candy/props";
 import { CANDY_HUNT_OPEN } from "./hall/config";
 import { CANDY_FRIGHT_FEST_2026 } from "../lib/candy/fright-fest-2026";
@@ -65,7 +66,12 @@ export default async function FrightFestPage() {
         <div className="ff-wall">
         <div className="ff-page">
           {SUMMARY ? (
-            <FrightFestSections summary={SUMMARY} rewards={rewards} afterProgress={candy ? <CandyHunt candy={candy} /> : null} />
+            <FrightFestSections summary={SUMMARY} rewards={rewards} afterProgress={
+                <>
+                  <SpreadTheFright />
+                  {candy ? <CandyHunt candy={candy} /> : null}
+                </>
+              } />
           ) : (
             <section id="rules" className="ar-sec ar-board ar-tba">
               <p>Games, scoring and rewards: to be announced.</p>
