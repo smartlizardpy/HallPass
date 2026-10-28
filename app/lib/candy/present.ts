@@ -80,6 +80,9 @@ export function describeEntry(e: LedgerEntry, gameTitles: ReadonlyMap<string, st
       label = Number(rank) > 0 ? `Placed ${ordinal(Number(rank))} on ${boardTitle(slug)}` : `Placed on ${boardTitle(slug)}`;
       break;
     }
+    case "referral":
+      label = "A friend joined the Fright";
+      break;
     default:
       label = `Bought ${getPack(e.ref ?? "")?.name ?? "a pack"}`;
   }

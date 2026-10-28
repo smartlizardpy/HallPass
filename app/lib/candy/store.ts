@@ -69,7 +69,7 @@ import { CANDY_FRIGHT_FEST_2026, isGameCandy, type CandyConfig } from "./fright-
 type Sql = NeonQueryFunction<false, false>;
 type Row = Record<string, unknown>;
 
-export const CANDY_KINDS = ["daily_best", "ranked_run", "all_boards", "placing", "spend"] as const;
+export const CANDY_KINDS = ["daily_best", "ranked_run", "all_boards", "placing", "spend", "referral"] as const;
 export type CandyKind = (typeof CANDY_KINDS)[number];
 
 /** A board id's format (`boards_id_format`). */

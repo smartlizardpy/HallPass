@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS candy_ledger (
   amount         INTEGER NOT NULL
                    CONSTRAINT candy_ledger_amount_chk CHECK (amount BETWEEN -1000 AND 1000 AND amount <> 0),
   kind           TEXT NOT NULL
-                   CONSTRAINT candy_ledger_kind_chk CHECK (kind IN ('daily_best','ranked_run','all_boards','placing','spend')),
+                   CONSTRAINT candy_ledger_kind_chk CHECK (kind IN ('daily_best','ranked_run','all_boards','placing','spend','referral')),
   award_key      TEXT NOT NULL UNIQUE
                    CONSTRAINT candy_ledger_award_key_chk CHECK (char_length(award_key) BETWEEN 1 AND 300),
   -- What it was for: '<boardId>#<YYYY-MM-DD>#<rank>' (daily_best), board slug (ranked_run), 'slug#rank' (placing), or pack id (spend).
