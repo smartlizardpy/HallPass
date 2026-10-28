@@ -19,6 +19,10 @@ import {
 } from "@/app/lib/cache-lifetimes";
 
 vi.mock("server-only", () => ({}));
+// `unstable_cache` needs Next's incremental cache; here it just calls through.
+vi.mock("next/cache", () => ({ unstable_cache: <T,>(fn: T) => fn }));
+const permanent = vi.hoisted(() => ({ totals: async (): Promise<Record<string, number>> => ({}) }));
+vi.mock("@/app/lib/play-totals", () => ({ playTotals: permanent }));
 
 type NextInit = RequestInit & { next?: { revalidate?: number; tags?: string[] } };
 
@@ -28,6 +32,7 @@ beforeEach(() => {
   seen.length = 0;
   vi.resetModules();
   // Read at module load, so it must be set before the dynamic import below.
+  permanent.totals = async () => ({});
   vi.stubEnv("POSTHOG_PERSONAL_API_KEY", "test-key");
   vi.stubEnv("POSTHOG_PROJECT_ID", "1");
   vi.stubGlobal(
@@ -66,6 +71,28 @@ describe("PostHog fetch lifetimes", () => {
     const { hogql } = await import("./stats");
     await hogql("SELECT 1");
     expect(seen[0].next?.revalidate).toBe(60);
+  });
+});
+
+describe("getGamePlayCounts — permanent totals", () => {
+  it("prints the permanent total once it exceeds the last 30 days", async () => {
+    permanent.totals = async () => ({ "neon-run": 5000, "last-bell": 12034 });
+    const { getGamePlayCounts } = await import("./stats");
+    expect(await getGamePlayCounts()).toEqual({ "neon-run": 5000, "last-bell": 12034 });
+  });
+
+  it("never shows less than the last 30 days while the table is still unseeded", async () => {
+    permanent.totals = async () => ({ "neon-run": 3 });
+    const { getGamePlayCounts } = await import("./stats");
+    expect(await getGamePlayCounts()).toEqual({ "neon-run": 57 });
+  });
+
+  it("falls back to the 30-day figure when the database is unreachable", async () => {
+    permanent.totals = async () => {
+      throw new Error("down");
+    };
+    const { getGamePlayCounts } = await import("./stats");
+    expect(await getGamePlayCounts()).toEqual({ "neon-run": 57 });
   });
 });
 

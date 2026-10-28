@@ -5,6 +5,7 @@ import posthog from "posthog-js";
 import type { Game } from "../lib/games";
 import { acquireOverlayLock } from "../lib/overlay-lock";
 import { recordPlayServerSide, recordRecentPlay } from "../lib/personalization";
+import { recordPlayTotal } from "../lib/play-beacon";
 import { recordPlay as recordStreakPlay } from "../lib/streak/store";
 import { ChampionshipRunToast } from "./championship/RunToast";
 
@@ -184,6 +185,8 @@ export function PlayerOverlay({
       game_title: title,
       game_category: categoryName,
     });
+    // The permanent per-game total, same definition of a play as `game_started`.
+    recordPlayTotal(slug);
 
     // A history entry so Back closes the game, uniformly from every page.
     //

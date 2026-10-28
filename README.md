@@ -641,6 +641,34 @@ dashboard and the arcade are separate sign-ins) — notifications are owned by a
 player row. See `app/lib/notifications/admins.ts`.
 
 
+## Permanent play totals
+
+The play count printed on the site is a **permanent per-game total**, not a rolling
+30-day window. Before this a game that nobody had opened lately lost its plays
+while its scores (Neon, no expiry) stayed, so scores and plays stopped matching.
+
+- `game_play_totals` (migration `052`) holds one row per game: `baseline` (history
+  seeded from PostHog) plus `plays` (counted since `POST /api/v1/plays` shipped).
+  The route is anonymous, referrer-gated and stores nothing about the visitor. The
+  player overlay calls it beside `game_started`, and not at all if the device
+  opted out of analytics.
+- `getGamePlayCounts()` prints the larger of that total and the last 30 days from
+  PostHog per game, so a count can only go up and the site degrades to the old
+  number if the database is down.
+- The dashboard's 30-day-versus-30-day charts are unchanged; they are meant to be
+  windowed.
+
+**Roll-out, in this order:**
+
+1. `npm run migrate` (check the host with `-- --status` first).
+2. Deploy. Note the deploy time.
+3. `node scripts/backfill-play-totals.mjs --until <deploy time, ISO> --dry-run`,
+   then again without `--dry-run`. Use the same `--until` on any re-run. It can
+   only recover as much history as PostHog still holds.
+
+Counts on prerendered pages refresh within a day; to see them sooner, invalidate
+the `game-play-counts` tag.
+
 ## Beta clip and screenshot retention
 
 Beta testers can attach a screen recording and/or a screenshot to a bug report.
