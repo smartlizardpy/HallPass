@@ -727,6 +727,22 @@ export const games: Game[] = [
     staged: true,
     coverUrl: "/game-media/scp-lockdown/hero-31948975f5.png",
   },
+  {
+    slug: "customizable-os",
+    author: "Sohan Kanti Dolai",
+    title: "Customizable OS",
+    tagline: "Build your own desktop.",
+    description:
+      "Boot a fully themeable desktop in your browser. Open windows, switch light and dark modes, and make the whole system yours.",
+    category: "Simulation",
+    tags: ["Simulation", "Sandbox", "Desktop"],
+    gradient: ["#0b1114", "#3b82f6"],
+    accent: "#f2a65a",
+    art: "glitch",
+    isNew: true,
+    staged: true,
+    coverUrl: "/game-media/customizable-os/hero-cfa9ee0672.png",
+  },
 ];
 
 /**
