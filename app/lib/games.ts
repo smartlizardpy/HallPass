@@ -743,6 +743,23 @@ export const games: Game[] = [
     staged: true,
     coverUrl: "/game-media/customizable-os/hero-cfa9ee0672.png",
   },
+  {
+    slug: "vanishing-point-3-14",
+    title: "Vanishing Point: 3:14",
+    tagline: "The bell never rang.",
+    description:
+      "Wander an empty school frozen at 3:14 PM. Explore the halls, collect lost papers and memories, and uncover why everyone vanished.",
+    category: "Horror",
+    tags: ["Horror", "Exploration", "Eerie"],
+    gradient: ["#1a1420", "#f2b84b"],
+    accent: "#f2b84b",
+    art: "eye",
+    isNew: true,
+    author: "Ateş Demir",
+    platform: "both",
+    staged: true,
+    coverUrl: "/game-media/vanishing-point-3-14/hero-c994152402.png",
+  },
 ];
 
 /**
