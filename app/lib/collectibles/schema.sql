@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS player_packs (
   grant_key      TEXT NOT NULL UNIQUE
                    CONSTRAINT player_packs_grant_key_chk CHECK (char_length(grant_key) BETWEEN 1 AND 200),
   source         TEXT NOT NULL
-                   CONSTRAINT player_packs_source_chk CHECK (source IN ('championship','admin','event')),
+                   CONSTRAINT player_packs_source_chk CHECK (source IN ('championship','admin','event','market')),
   source_ref     TEXT CONSTRAINT player_packs_source_ref_chk CHECK (source_ref IS NULL OR char_length(source_ref) <= 200),
   granted_by     TEXT,
   granted_at     TIMESTAMPTZ NOT NULL DEFAULT now(),

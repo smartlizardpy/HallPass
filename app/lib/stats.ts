@@ -569,3 +569,33 @@ async function getRecentPlayCounts(): Promise<PlayCounts> {
 
   return {};
 }
+
+/**
+ * One game's plays per day since its first recorded play, for the control
+ * center's lifetime chart. Unlike the 30-day panels this has no window.
+ *
+ * The slug is interpolated into HogQL, so it is checked against the catalogue's
+ * slug shape first rather than escaped. Returns `[]` — never throws — when
+ * PostHog is unconfigured, unreachable, or the slug is malformed.
+ */
+export async function getGameDailyPlays(
+  slug: string,
+): Promise<{ date: string; plays: number }[]> {
+  if (!API_KEY || !/^[a-z0-9][a-z0-9-]*$/i.test(slug)) return [];
+  try {
+    const rows = await hogql<[string, number]>(
+      `SELECT toString(toDate(timestamp)) AS day, count() AS plays
+       FROM events
+       WHERE event IN ${PLAY_EVENTS} AND properties.game_slug = '${slug}'
+       GROUP BY day ORDER BY day`,
+      "posthog-game-daily-plays",
+    );
+    return rows.map((r) => ({ date: String(r[0]), plays: Number(r[1]) || 0 }));
+  } catch (error) {
+    console.error(
+      "Failed to load game daily plays:",
+      error instanceof Error ? error.message : error,
+    );
+    return [];
+  }
+}

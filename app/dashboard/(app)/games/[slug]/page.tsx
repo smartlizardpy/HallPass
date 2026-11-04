@@ -43,6 +43,7 @@ import { CopyBox } from "./_ui/CopyBox";
 import { PublishPanel } from "./_ui/PublishPanel";
 import { CoverPanel } from "./_ui/CoverPanel";
 import { QualityPanel } from "./_ui/QualityPanel";
+import { LifetimePlaysPanel } from "./_ui/LifetimePlaysPanel";
 import { emptyScores } from "@/app/lib/quality";
 import {
   getOverride,
@@ -503,6 +504,7 @@ export default async function GameControlPage({
 
         {coverPanel}
       {qualityPanel}
+      <LifetimePlaysPanel slug={slug} />
 
         {/* DETAILS — one write covering every descriptive field + colours + an
             optional cover-URL override. */}
@@ -821,6 +823,7 @@ export default async function GameControlPage({
 
       {coverPanel}
       {qualityPanel}
+      <LifetimePlaysPanel slug={slug} />
 
       {/* DETAILS */}
       <Section title="Details" subtitle="Overrides the static catalogue">

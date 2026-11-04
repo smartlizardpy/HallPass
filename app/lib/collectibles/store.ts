@@ -38,7 +38,7 @@ type Row = Record<string, unknown>;
 
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const MAX_FEATURED = 6;
-export const PACK_SOURCES = ["championship", "admin", "event"] as const;
+export const PACK_SOURCES = ["championship", "admin", "event", "market"] as const;
 export type PackSource = (typeof PACK_SOURCES)[number];
 
 const toIso = (v: unknown): string | null => {

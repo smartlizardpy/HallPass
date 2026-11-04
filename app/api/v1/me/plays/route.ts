@@ -18,6 +18,7 @@
 
 import { isMissingColumnError } from "@/app/lib/db";
 import { isResolvedSlug } from "@/app/lib/games-store";
+import { earnForPlay } from "@/app/lib/hall-tokens";
 import { social } from "@/app/lib/social";
 import {
   NO_STORE,
@@ -50,6 +51,8 @@ export async function POST(req: Request): Promise<Response> {
       return Response.json({ ok: false, recorded: false }, { status: 404, headers: NO_STORE });
     }
     await social.recordPlay(playerId, slug);
+    // Hall Tokens: server-validated slug, capped per day. Fail-soft; never breaks the beacon.
+    await earnForPlay(playerId, slug);
     return Response.json({ ok: true, recorded: true }, { headers: NO_STORE });
   } catch (error) {
     if (!isMissingColumnError(error)) {
