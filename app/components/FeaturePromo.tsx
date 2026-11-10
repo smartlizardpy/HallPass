@@ -596,7 +596,7 @@ export function FeaturePromo() {
           aria-describedby="promo-body"
           onClick={(e) => e.stopPropagation()}
           onKeyDown={onKeyDownTrap}
-          className="promo-panel relative w-full max-w-md overflow-hidden rounded-3xl bg-zinc-950 shadow-2xl ring-1 ring-white/10"
+          className="promo-panel relative max-h-full w-full max-w-md overflow-y-auto overscroll-contain rounded-3xl bg-zinc-950 shadow-2xl ring-1 ring-white/10"
         >
           <RemembrancePanel closeRef={closeRef} onClose={() => dismiss("dismissed")} />
         </div>
