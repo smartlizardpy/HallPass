@@ -13,6 +13,8 @@ import {
   notificationPermission,
 } from "../lib/push/client";
 import { Wordmark } from "./Wordmark";
+import { RemembrancePanel } from "./RemembrancePanel";
+import { isRemembranceDay, remembranceKey } from "../lib/remembrance";
 import type { MeResponse } from "@/sdk/src/contract";
 
 /**
@@ -56,8 +58,13 @@ import type { MeResponse } from "@/sdk/src/contract";
  * the device gained (the app can go offline), or one the player was granted (the
  * beta programme). All three take priority over the nags and are decided BEFORE
  * them; `stealth` and `install` need no `/api` data at all.
+ *
+ * `remembrance` outranks everything, and only exists on 10 November (Istanbul
+ * time). It is not a feature at all but a notice marking the anniversary of
+ * Atatürk's death, so it has its own panel — see `RemembrancePanel.tsx`.
  */
 type Variant =
+  | "remembrance"
   | "stealth"
   | "install"
   | "notifications"
@@ -136,8 +143,11 @@ const SOCIAL_POINTS = [
   { icon: "🤝", text: "See what your friends are playing" },
 ];
 
+/** Every variant but `remembrance`, which renders its own panel. */
+type PromoVariant = Exclude<Variant, "remembrance">;
+
 const COPY: Record<
-  Variant,
+  PromoVariant,
   {
     badge: string;
     title: string;
@@ -254,6 +264,8 @@ const COPY: Record<
  * plain per-browser key.
  */
 function dismissKey(variant: Variant, playerId: string | null): string {
+  // Per YEAR, so dismissing it lasts until the next anniversary, not forever.
+  if (variant === "remembrance") return remembranceKey();
   return variant === "beta" && playerId ? `beta:${playerId}` : variant;
 }
 
@@ -376,6 +388,15 @@ export function FeaturePromo() {
       setVariant(next);
       posthog.capture("feature_promo_shown", { variant: next });
     };
+
+    // ── 10 Kasım remembrance (everyone, one day a year) ─────────────────────
+    // Scheduled BEFORE stealth on the same delay: equal-delay timers fire in the
+    // order they were set, so on the day it takes the single slot first and the
+    // others simply wait for a later visit.
+    if (isRemembranceDay() && !readDismissed().has(remembranceKey())) {
+      const t = window.setTimeout(() => commit("remembrance"), DELAY_MS);
+      cleanups.push(() => window.clearTimeout(t));
+    }
 
     // ── Stealth mode (NEWS, everyone) ────────────────────────────────────────
     // The site's headline hide-from-the-room feature. Announced once to every
@@ -559,6 +580,30 @@ export function FeaturePromo() {
   };
 
   if (!variant || boardActive) return null;
+
+  if (variant === "remembrance") {
+    return (
+      <div
+        className="promo-backdrop fixed inset-0 z-[95] flex items-end justify-center bg-zinc-950/75 p-4 backdrop-blur-sm sm:items-center"
+        onClick={() => dismiss("dismissed")}
+        role="presentation"
+      >
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="promo-title"
+          aria-describedby="promo-body"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={onKeyDownTrap}
+          className="promo-panel relative w-full max-w-md overflow-hidden rounded-3xl bg-zinc-950 shadow-2xl ring-1 ring-white/10"
+        >
+          <RemembrancePanel closeRef={closeRef} onClose={() => dismiss("dismissed")} />
+        </div>
+      </div>
+    );
+  }
+
   const copy = COPY[variant];
 
   const isInstall = variant === "install";
