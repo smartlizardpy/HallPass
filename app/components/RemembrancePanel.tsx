@@ -11,8 +11,9 @@ import type { Ref } from "react";
  * promo variants: no bullet points, no call to action, no "Maybe later".
  *
  * ── TONE ────────────────────────────────────────────────────────────────────
- * 10 November is a day of mourning in Türkiye, not a holiday. So: black and
- * white with one red accent, Turkish first with English beneath it, no "happy",
+ * 10 November is a day of mourning in Türkiye, not a holiday. So: a portrait
+ * of Atatürk in his kalpak fading into black, one red accent, Turkish first
+ * with English beneath it, no "happy",
  * and the only button closes the notice. The single quotation is Atatürk's own
  * ("Yurtta sulh, cihanda sulh"); the world-leader tributes that circulate on
  * social media every year are mostly misattributed and are deliberately left out.
@@ -34,7 +35,7 @@ export function RemembrancePanel({
         type="button"
         onClick={onClose}
         aria-label="Kapat · Close"
-        className="absolute right-3 top-3 z-10 grid h-9 w-9 place-items-center rounded-full text-zinc-400 transition hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-4 focus-visible:ring-white/30"
+        className="absolute right-3 top-3 z-10 grid h-9 w-9 place-items-center rounded-full bg-black/45 text-zinc-200 backdrop-blur-sm transition hover:bg-black/60 hover:text-white focus:outline-none focus-visible:ring-4 focus-visible:ring-white/30"
       >
         <svg
           width="16"
@@ -50,7 +51,29 @@ export function RemembrancePanel({
         </svg>
       </button>
 
-      <div className="px-6 pb-7 pt-10 text-center sm:px-8">
+      {/*
+        A plain <img>, not next/image: it is one small, pre-sized JPEG
+        (720px wide, cropped to the kalpak and face), shown one day a year.
+        The bottom of the photo fades into the panel's black so the text below
+        reads as part of the same picture.
+      */}
+      <div className="relative h-60 sm:h-72 [@media(max-height:720px)]:h-36">
+        {/* eslint-disable-next-line @next/next/no-img-element -- one pre-sized asset; see above */}
+        <img
+          src="/events/10-kasim/ataturk.jpg"
+          alt="Mustafa Kemal Atatürk"
+          width={720}
+          height={833}
+          decoding="async"
+          className="h-full w-full object-cover object-[50%_68%]"
+        />
+        <div
+          aria-hidden
+          className="absolute inset-0 bg-gradient-to-b from-transparent via-zinc-950/10 to-zinc-950"
+        />
+      </div>
+
+      <div className="relative -mt-6 px-6 pb-7 text-center sm:px-8">
         <CrescentAndStar />
 
         <h2
