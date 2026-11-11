@@ -126,7 +126,6 @@ function isText(v: unknown, max: number): v is string {
     v.length > 0 &&
     v.length <= max &&
     v === v.trim() &&
-    // eslint-disable-next-line no-control-regex
     !/[\u0000-\u001f\u007f]/.test(v)
   );
 }
