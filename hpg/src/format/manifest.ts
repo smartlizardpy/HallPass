@@ -84,6 +84,12 @@ export type HpgManifest = {
     scores?: boolean;
     /** The game persists progress (through the launcher's save API). */
     saves?: boolean;
+    /**
+     * Which scores rank first on the local leaderboard. Online, each board's
+     * sort lives in the database; offline it must travel with the package.
+     * Absent means "desc" (higher is better).
+     */
+    scoreOrder?: "desc" | "asc";
   };
   build?: {
     packager: string;
@@ -406,9 +412,12 @@ export function validateManifest(input: unknown): ValidationResult<HpgManifest> 
     const f = m.features;
     if (!isObj(f)) errors.push("features: must be an object");
     else {
-      checkKeys(f, ["scores", "saves"], "features.", errors);
+      checkKeys(f, ["scores", "saves", "scoreOrder"], "features.", errors);
       checkOptionalBool(f, "scores", "features.", errors);
       checkOptionalBool(f, "saves", "features.", errors);
+      if ("scoreOrder" in f && f.scoreOrder !== "desc" && f.scoreOrder !== "asc") {
+        errors.push('features.scoreOrder: must be "desc" or "asc"');
+      }
     }
   }
   if ("build" in m) {

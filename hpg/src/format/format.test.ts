@@ -106,7 +106,7 @@ describe("validateManifest", () => {
       inputs: ["mouse", "touch"],
       display: { width: 1280, height: 720, orientation: "landscape" },
       compatibility: { webgl: false, workers: true, audio: true, notes: ["Fonts fall back"] },
-      features: { scores: true, saves: true },
+      features: { scores: true, saves: true, scoreOrder: "asc" },
       build: { packager: "hpg-packager/1.0.0", source: "public/games/x", contentHash: HASH },
       permissions: ["pointer-lock"],
     });

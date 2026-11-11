@@ -66,7 +66,7 @@ a reader quietly ignores.
 | `inputs` | array | no | subset of `keyboard`, `mouse`, `touch`, `gamepad` |
 | `display` | object | no | `width`, `height` (integers), `orientation` (`landscape`, `portrait` or `any`) |
 | `compatibility` | object | no | `webgl`, `workers`, `audio` (booleans), `notes` (≤ 12 strings) |
-| `features` | object | no | `scores` (uses the HallPass SDK), `saves` (persists progress) |
+| `features` | object | no | `scores` (uses the HallPass SDK), `saves` (persists progress), `scoreOrder` (`desc` by default, or `asc`: which scores rank first on the local leaderboard) |
 | `build` | object | no | `packager` (required inside `build`), `source`, `contentHash` |
 
 Each `files` entry has:
