@@ -5,17 +5,21 @@
  *   inspect  <file.hpg>                 manifest, files, sizes, digest
  *   validate <file.hpg>…                full verification; exit 1 on any failure
  *   audit    [--json]                   package-ability of every game
+ *   launcher --out <index.html> [--trust-dir <dir>]
+ *                                       the standalone launcher, trusting the
+ *                                       .hpg packages found in --trust-dir
  *
  * Run through scripts/hpg.mjs, which bundles this file with esbuild first, so
  * it can import the TypeScript sources and `app/lib/games.ts` directly.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { publicGames } from "../../../app/lib/games";
 import { adapters } from "../../games.config";
 import { PackageError, readPackage } from "../archive/package";
 import { auditGames, auditMarkdown } from "../build/audit";
+import { buildLauncherHtml, type TrustList } from "../build/launcher";
 import type { BuildIssue } from "../build/inline";
 import { packageGame, type CatalogGame } from "../build/packager";
 
@@ -127,6 +131,31 @@ async function cmdAudit(args: string[], root: string): Promise<number> {
   return 0;
 }
 
+/** The trust list for every valid package in `dir` (developer use: dev arcades and e2e). */
+export async function trustFromDir(dir: string): Promise<TrustList> {
+  const packages: TrustList["packages"] = [];
+  for (const name of readdirSync(dir).filter((n) => n.endsWith(".hpg")).sort()) {
+    const p = await readPackage(new Uint8Array(readFileSync(path.join(dir, name))));
+    packages.push({ id: p.manifest.id, version: p.manifest.version, manifestDigest: p.manifestDigest });
+  }
+  return { packages };
+}
+
+async function cmdLauncher(args: string[], root: string): Promise<number> {
+  const out = flagValues(args, "--out")[0];
+  if (!out) {
+    console.error("usage: hpg launcher --out <index.html> [--trust-dir <dir>]");
+    return 2;
+  }
+  const trustDir = flagValues(args, "--trust-dir")[0];
+  const trust = trustDir ? await trustFromDir(path.resolve(root, trustDir)) : { packages: [] };
+  const html = await buildLauncherHtml(path.join(root, "hpg", "src"), trust);
+  mkdirSync(path.dirname(path.resolve(root, out)), { recursive: true });
+  writeFileSync(path.resolve(root, out), html);
+  console.log(`✓ launcher → ${out} (${kb(html.length)}, trusts ${trust.packages.length} packages)`);
+  return 0;
+}
+
 export async function main(argv: string[]): Promise<number> {
   const [cmd, ...args] = argv;
   const root = process.cwd();
@@ -139,8 +168,10 @@ export async function main(argv: string[]): Promise<number> {
       return cmdValidate(args);
     case "audit":
       return cmdAudit(args, root);
+    case "launcher":
+      return cmdLauncher(args, root);
     default:
-      console.log("usage: hpg <build|inspect|validate|audit> …  (see hpg/src/cli/main.ts)");
+      console.log("usage: hpg <build|inspect|validate|audit|launcher> …  (see hpg/src/cli/main.ts)");
       return cmd ? 2 : 0;
   }
 }
