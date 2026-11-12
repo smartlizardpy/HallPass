@@ -8,6 +8,11 @@ declare module "jsdom" {
     runScripts?: "dangerously" | "outside-only";
     url?: string;
     contentType?: string;
+    virtualConsole?: VirtualConsole;
+  }
+  /** A console sink; constructed without forwarding, it swallows jsdom's own warnings. */
+  export class VirtualConsole {
+    constructor();
   }
   export class JSDOM {
     constructor(html?: string, options?: JSDOMOptions);

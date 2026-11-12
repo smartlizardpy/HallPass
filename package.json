@@ -18,7 +18,12 @@
     "sync-games": "node scripts/sync-games.mjs",
     "migrate": "node scripts/migrate.mjs",
     "backfill-media-urls": "node scripts/backfill-media-urls.mjs",
-    "publish-game": "node scripts/publish-game.mjs"
+    "publish-game": "node scripts/publish-game.mjs",
+    "hpg": "node scripts/hpg.mjs",
+    "hpg:build": "node scripts/hpg.mjs build",
+    "hpg:inspect": "node scripts/hpg.mjs inspect",
+    "hpg:validate": "node scripts/hpg.mjs validate",
+    "hpg:audit": "node scripts/hpg.mjs audit"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
@@ -42,6 +47,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/web-push": "^3.6.4",
+    "acorn": "^8.16.0",
+    "esbuild": "^0.27.7",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "jsdom": "^29.1.1",
