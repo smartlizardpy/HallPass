@@ -8,6 +8,8 @@
  *   launcher --out <index.html> [--trust-dir <dir>]
  *                                       the standalone launcher, trusting the
  *                                       .hpg packages found in --trust-dir
+ *   arcade                              every package + launcher + catalog.json
+ *                                       into public/arcade/ (runs at prebuild)
  *
  * Run through scripts/hpg.mjs, which bundles this file with esbuild first, so
  * it can import the TypeScript sources and `app/lib/games.ts` directly.
@@ -18,6 +20,7 @@ import path from "node:path";
 import { publicGames } from "../../../app/lib/games";
 import { adapters } from "../../games.config";
 import { PackageError, readPackage } from "../archive/package";
+import { buildArcade } from "../build/arcade";
 import { auditGames, auditMarkdown } from "../build/audit";
 import { buildLauncherHtml, type TrustList } from "../build/launcher";
 import type { BuildIssue } from "../build/inline";
@@ -170,8 +173,14 @@ export async function main(argv: string[]): Promise<number> {
       return cmdAudit(args, root);
     case "launcher":
       return cmdLauncher(args, root);
+    case "arcade": {
+      // Never fails the deploy: problems are ::warning:: lines (see build/arcade.ts).
+      const c = await buildArcade(root, adapters, catalog);
+      console.log(`[arcade] catalog.json: ${c.games.length} games, available=${c.available}`);
+      return 0;
+    }
     default:
-      console.log("usage: hpg <build|inspect|validate|audit|launcher> …  (see hpg/src/cli/main.ts)");
+      console.log("usage: hpg <build|inspect|validate|audit|launcher|arcade> …  (see hpg/src/cli/main.ts)");
       return cmd ? 2 : 0;
   }
 }

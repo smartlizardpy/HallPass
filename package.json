@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "npm run build:sdk && node scripts/build-games-manifest.mjs",
+    "predev": "npm run build:sdk && node scripts/build-games-manifest.mjs && npm run hpg:arcade",
     "dev": "next dev",
-    "prebuild": "npm run build:sdk && node scripts/build-games-manifest.mjs",
+    "prebuild": "npm run build:sdk && node scripts/build-games-manifest.mjs && npm run hpg:arcade",
     "build": "next build",
     "postbuild": "node scripts/build-sw-manifest.mjs",
     "start": "next start",
@@ -23,7 +23,8 @@
     "hpg:build": "node scripts/hpg.mjs build",
     "hpg:inspect": "node scripts/hpg.mjs inspect",
     "hpg:validate": "node scripts/hpg.mjs validate",
-    "hpg:audit": "node scripts/hpg.mjs audit"
+    "hpg:audit": "node scripts/hpg.mjs audit",
+    "hpg:arcade": "node scripts/hpg.mjs arcade"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
