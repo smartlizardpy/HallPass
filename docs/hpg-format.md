@@ -127,7 +127,9 @@ it injects a bootstrap that provides:
 Games send messages to the launcher over `postMessage` (`hpg/src/protocol/`):
 
 - Game → launcher: `GAME_READY`, `GAME_EXIT`, `GAME_ERROR`, `SCORE_SUBMIT`,
-  `SCORES_REQUEST`, `SAVE_REQUEST`, `LOAD_REQUEST`.
+  `SCORES_REQUEST`, `SAVE_REQUEST`, `LOAD_REQUEST`, `FULLSCREEN_REQUEST` (sent
+  when the game calls `requestFullscreen()`, which a sandboxed frame cannot do
+  itself).
 - Launcher → game: `PAUSE`, `RESUME`, `MUTE`, `FLUSH`, plus the replies to
   requests.
 

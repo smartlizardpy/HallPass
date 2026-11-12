@@ -43,6 +43,13 @@ export type SessionCallbacks = {
   onLoadRequest(): Promise<SaveData | null>;
   /** The game sent no GAME_READY within the start timeout. */
   onSlowStart?(): void;
+  onFullscreenRequest?(): void;
+  /**
+   * The frame loaded a second time: the game called `location.reload()`. A
+   * reloaded srcdoc document boots from the save it was LAUNCHED with, not the
+   * latest one, so the launcher must restart the session with fresh state.
+   */
+  onReload?(): void;
 };
 
 export type SessionOptions = {
@@ -122,6 +129,10 @@ export class GameSession {
     frame.setAttribute("title", pkg.manifest.name);
     frame.className = "game-frame";
     this.win.addEventListener("message", this.onMessage);
+    let loads = 0;
+    frame.addEventListener("load", () => {
+      if (++loads > 1 && !this.closed) this.opts.callbacks.onReload?.();
+    });
     frame.srcdoc = buildGameDocument(entry, config, runtimeJs, new (this.win as unknown as typeof globalThis).DOMParser());
     this.opts.container.appendChild(frame);
     this.frame = frame;
@@ -221,6 +232,9 @@ export class GameSession {
         return;
       case "GAME_EXIT":
         cb.onExit?.();
+        return;
+      case "FULLSCREEN_REQUEST":
+        cb.onFullscreenRequest?.();
         return;
       case "GAME_ERROR":
         cb.onError?.(msg.payload.message);

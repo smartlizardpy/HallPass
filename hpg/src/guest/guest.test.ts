@@ -237,6 +237,12 @@ describe("installGuest", () => {
     expect(errs[0].payload).toEqual({ message: "boom 0" });
   });
 
+  it("turns a game's own requestFullscreen into a launcher request", async () => {
+    const { win, sent } = setup();
+    await win.document.body.requestFullscreen();
+    expect(sent.at(-1)?.type).toBe("FULLSCREEN_REQUEST");
+  });
+
   it("dispatches pause/resume events", () => {
     const { win, fromHost } = setup();
     const seen: string[] = [];

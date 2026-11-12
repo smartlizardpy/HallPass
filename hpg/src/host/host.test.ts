@@ -144,6 +144,18 @@ describe("GameSession", () => {
     expect(cb.onSave).not.toHaveBeenCalled();
   });
 
+  it("forwards fullscreen requests and detects an in-game reload", async () => {
+    cb.onFullscreenRequest = vi.fn();
+    cb.onReload = vi.fn();
+    const { fromGame, frame } = await start();
+    fromGame({ type: "FULLSCREEN_REQUEST" });
+    expect(cb.onFullscreenRequest).toHaveBeenCalled();
+    frame.dispatchEvent(new Event("load"));
+    expect(cb.onReload).not.toHaveBeenCalled();
+    frame.dispatchEvent(new Event("load"));
+    expect(cb.onReload).toHaveBeenCalledTimes(1);
+  });
+
   it("flags a slow start", async () => {
     await start();
     await vi.advanceTimersByTimeAsync(16000);

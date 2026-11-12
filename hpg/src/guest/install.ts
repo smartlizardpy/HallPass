@@ -355,6 +355,21 @@ export function installGuest(win: Win, config: GuestConfig, host: HostLink): Gue
     reportError(r && typeof r === "object" && "message" in r ? r.message : r);
   });
 
+  // ---------------------------------------------------------------- fullscreen
+  // A sandboxed frame without allowfullscreen cannot go fullscreen itself, so a
+  // game's own fullscreen button asks the launcher, which toggles the whole
+  // player. The click inside the frame also activates the parent (user
+  // activation propagates to ancestors), so the launcher may honour it.
+  const ElementProto = win.Element?.prototype as (Element & { webkitRequestFullscreen?: () => void }) | undefined;
+  if (ElementProto) {
+    const ask = () => {
+      send({ type: "FULLSCREEN_REQUEST" });
+      return Promise.resolve();
+    };
+    ElementProto.requestFullscreen = ask;
+    if ("webkitRequestFullscreen" in ElementProto) ElementProto.webkitRequestFullscreen = () => void ask();
+  }
+
   // ---------------------------------------------------------------- HPG API
   const hpg = Object.freeze({
     version: GUEST_RUNTIME_VERSION,

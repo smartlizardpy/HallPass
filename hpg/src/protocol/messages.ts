@@ -40,7 +40,9 @@ export type GuestMessage =
   | { type: "SCORE_SUBMIT"; id: number; payload: { score: number; handle?: string } }
   | { type: "SCORES_REQUEST"; id: number; payload: { limit: number } }
   | { type: "SAVE_REQUEST"; payload: SaveData }
-  | { type: "LOAD_REQUEST"; id: number };
+  | { type: "LOAD_REQUEST"; id: number }
+  /** The game's own fullscreen button was pressed; the launcher toggles its player. */
+  | { type: "FULLSCREEN_REQUEST" };
 
 export type HostMessage =
   | { type: "PAUSE" }
@@ -96,6 +98,7 @@ export function parseGuestMessage(data: unknown, session: string): GuestMessage 
   switch (data.type) {
     case "GAME_READY":
     case "GAME_EXIT":
+    case "FULLSCREEN_REQUEST":
       return { type: data.type };
     case "GAME_ERROR": {
       const p = data.payload;
