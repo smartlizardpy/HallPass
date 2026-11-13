@@ -137,9 +137,46 @@ export function installGuest(win: Win, config: GuestConfig, host: HostLink): Gue
   const blobUrls = new Map<string, string>();
   const classic = new Set(config.classicWorkers);
 
-  /** `undefined` = not an hpg: URL; `null` = an hpg: URL naming no valid file. */
+  // Plain relative paths ("assets/x.glb", as most loaders use) resolve against
+  // the frame's base, which a srcdoc frame inherits from the launcher: the
+  // folder index.html sits in. Such a URL names a package file when the
+  // package has that path. Anything else under the folder still falls through
+  // (and the launcher's CSP refuses it), exactly as before.
+  const baseDir = (() => {
+    try {
+      const u = new win.URL("./", win.document.baseURI);
+      return u.protocol === "file:" || u.protocol === "http:" || u.protocol === "https:" ? u.href : null;
+    } catch {
+      return null;
+    }
+  })();
+  function relativePath(url: string): string | undefined {
+    if (!baseDir) return undefined;
+    let abs: URL;
+    try {
+      abs = new win.URL(url, win.document.baseURI);
+    } catch {
+      return undefined;
+    }
+    const href = abs.href.split(/[?#]/)[0];
+    if (!href.startsWith(baseDir)) return undefined;
+    let path: string;
+    try {
+      path = href.slice(baseDir.length).split("/").map(decodeURIComponent).join("/");
+    } catch {
+      return undefined;
+    }
+    return isSafePackagePath(path) && Object.prototype.hasOwnProperty.call(config.files, path) ? path : undefined;
+  }
+
+  /**
+   * `undefined` = not a package URL (pass it through); `null` = an hpg: URL
+   * naming no valid file. Package URLs are `hpg:/<path>`, or a relative URL
+   * that resolves to a packaged path (see `relativePath`).
+   */
   function vfsPath(url: unknown): string | null | undefined {
-    if (typeof url !== "string" || !url.startsWith("hpg:")) return undefined;
+    if (typeof url !== "string") return undefined;
+    if (!url.startsWith("hpg:")) return relativePath(url);
     let rest = url.slice(4).replace(/^\/+/, "");
     rest = rest.split(/[?#]/)[0];
     let path: string;

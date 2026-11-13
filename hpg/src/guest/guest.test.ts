@@ -53,8 +53,8 @@ describe("protocol validators", () => {
 
 type Sent = { type: string; id?: number; payload?: unknown };
 
-function setup(over: Partial<GuestConfig> = {}) {
-  const dom = new JSDOM("<!doctype html><html><head></head><body></body></html>", { runScripts: "outside-only" });
+function setup(over: Partial<GuestConfig> = {}, url?: string) {
+  const dom = new JSDOM("<!doctype html><html><head></head><body></body></html>", { runScripts: "outside-only", ...(url ? { url } : {}) });
   const win = dom.window as unknown as Window & typeof globalThis & Record<string, unknown>;
   const sent: Sent[] = [];
   const hostToken = {};
@@ -168,6 +168,23 @@ describe("installGuest", () => {
     expect(((await win.fetch("hpg:/nope.js")) as Response).status).toBe(404);
     expect(((await win.fetch("hpg:/../x")) as Response).status).toBe(404);
     expect(await win.fetch("https://example.com")).toBe("network");
+  });
+
+  it("serves relative URLs that name a package file, from the launcher's folder", async () => {
+    const base = "file:///Users/me/HallPass%20Arcade/index.html";
+    const files = { "assets/m.glb": { type: "model/gltf-binary", b64: "AAAA" }, "assets/i.png": { type: "image/png", b64: "AAAA" } };
+    const { win, created } = setup({ files }, base);
+    // As a string, and as the absolute URL a Request has already resolved it to.
+    expect(((await win.fetch("assets/m.glb")) as Response).status).toBe(200);
+    expect(((await win.fetch("./assets/m.glb?v=2")) as Response).status).toBe(200);
+    expect(((await win.fetch(new win.URL("assets/m.glb", base))) as Response).status).toBe(200);
+    // Not in the package, or outside the folder: passed through untouched.
+    expect(await win.fetch("assets/other.glb")).toBe("network");
+    expect(await win.fetch("../assets/m.glb")).toBe("network");
+    expect(await win.fetch("https://example.com/assets/m.glb")).toBe("network");
+    const img = win.document.createElement("img");
+    img.src = "assets/i.png";
+    expect(img.src).toBe(created[0]);
   });
 
   it("starts packaged workers from frame blobs as classic workers", () => {
