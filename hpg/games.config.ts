@@ -43,4 +43,20 @@ export const adapters: GameAdapter[] = [
     inputs: ["keyboard", "mouse", "touch"],
     saves: true,
   },
+  {
+    // Three.js (vendored in lib/three) 3D horror, ES modules. Models, textures,
+    // audio and fonts load by relative path from assets/ (~12 MB). Solo only
+    // offline: co-op needs the P2P network. STAGED, so the deploy never packages
+    // it; try it with `npm run hpg:lab -- --source last-bell=../last-bell`.
+    id: "last-bell",
+    version: "0.1.0",
+    status: "experimental",
+    inputs: ["keyboard", "mouse"],
+    display: { orientation: "landscape" },
+    saves: true,
+    // First-person mouse look (the frame gets allow-pointer-lock, nothing else).
+    permissions: ["pointer-lock"],
+    assets: /^assets\/(?:[^/.][^/]*\/)*[^/.][^/]*$/,
+    notes: ["Solo only: co-op needs an internet connection."],
+  },
 ];
