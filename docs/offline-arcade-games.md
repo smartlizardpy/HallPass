@@ -106,6 +106,44 @@ From `npm run hpg:audit` on 14 November 2026 (34 games in `public/games/`).
 **not** mean the game has been played offline. Only the three offered games
 have been. The rest need steps 2–5 above.
 
+## Trying every game at once (the lab)
+
+Before writing adapters, see which games actually run offline:
+
+```
+npm run hpg:lab
+PLAYWRIGHT_CORE=<dir of a playwright-core install> npm run hpg:smoke
+```
+
+`hpg:lab` packages **every** game in `public/games/` into the gitignored
+`arcade-lab/`. Games with an adapter use it, and the rest use the audit's trial
+adapter. The output is a launcher that trusts all of them, a `games.zip`, and
+`lab.json` listing what built and why the rest didn't. To play them by hand,
+open `arcade-lab/index.html` and drop `games.zip` on it.
+
+Staged games are included in the lab, and `--source <id>=<dir>` packages a
+game from its own working folder instead of `public/games/` (for example
+`npm run hpg:lab -- --source last-bell=../last-bell`). Neither is ever possible
+in the deploy build.
+
+`hpg:smoke` opens that launcher from `file://` with the network off, imports
+everything and gives each game the same generic treatment:
+1. Press a start-like button if there is one, otherwise click the middle.
+2. Press Enter and Space.
+3. Hold arrows and WASD, then swipe and click.
+
+Each game gets one of three verdicts:
+- **PASS**: it started, drew and reacted.
+- **CHECK**: it ran but logged errors, or didn't visibly react. The usual reason is a start screen the generic input can't get past.
+- **FAIL**: it never became ready, or the screen stayed blank.
+
+The verdicts and three screenshots per game are in
+`arcade-lab/report/index.html`. Run a subset with `ONLY=id,id` and watch with
+`HEADED=1`. Any http(s) request fails the run.
+
+A smoke PASS is a shortlist, not a verification. The lab never touches
+`public/arcade/` or what the website offers.
+
 ## Browser testing
 
 Opt-in, like the P2P SDK's e2e, because Playwright is not a dependency:

@@ -12,6 +12,12 @@
  *                                       catalog.json into public/arcade/ (runs at
  *                                       prebuild); the flag adds experimental
  *                                       games, for local testing only
+ *   lab      [--out <dir>] [--source <id>=<dir>…]
+ *                                       EVERY game, staged ones too (adapter or
+ *                                       trial adapter) + a launcher trusting them
+ *                                       + games.zip into arcade-lab/, for local
+ *                                       testing only; --source packages a game
+ *                                       from its own working folder
  *
  * Run through scripts/hpg.mjs, which bundles this file with esbuild first, so
  * it can import the TypeScript sources and `app/lib/games.ts` directly.
@@ -19,11 +25,12 @@
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { publicGames } from "../../../app/lib/games";
+import { games as allGames, publicGames } from "../../../app/lib/games";
 import { adapters } from "../../games.config";
 import { PackageError, readPackage } from "../archive/package";
 import { buildArcade } from "../build/arcade";
 import { auditGames, auditMarkdown } from "../build/audit";
+import { buildLab } from "../build/lab";
 import { buildLauncherHtml, type TrustList } from "../build/launcher";
 import type { BuildIssue } from "../build/inline";
 import { packageGame, type CatalogGame } from "../build/packager";
@@ -181,8 +188,25 @@ export async function main(argv: string[]): Promise<number> {
       console.log(`[arcade] catalog.json: ${c.games.length} games, available=${c.available}`);
       return 0;
     }
+    case "lab": {
+      const out = path.resolve(root, flagValues(args, "--out")[0] ?? "arcade-lab");
+      const sources: Record<string, string> = {};
+      for (const s of flagValues(args, "--source")) {
+        const [id, dir] = s.split("=");
+        if (!id || !dir) {
+          console.error(`--source expects <id>=<dir>, got ${s}`);
+          return 2;
+        }
+        sources[id] = path.resolve(root, dir);
+      }
+      // The full catalogue, staged games included: the lab is local-only.
+      const r = await buildLab(root, adapters, allGames as CatalogGame[], out, console.log, { sources });
+      const built = r.games.filter((g) => g.built).length;
+      console.log(`\n${built}/${r.games.length} games built → ${path.relative(root, out)}/ (open index.html, drop games.zip; npm run hpg:smoke tests them all)`);
+      return 0;
+    }
     default:
-      console.log("usage: hpg <build|inspect|validate|audit|launcher|arcade> …  (see hpg/src/cli/main.ts)");
+      console.log("usage: hpg <build|inspect|validate|audit|launcher|arcade|lab> …  (see hpg/src/cli/main.ts)");
       return cmd ? 2 : 0;
   }
 }

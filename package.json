@@ -25,7 +25,9 @@
     "hpg:validate": "node scripts/hpg.mjs validate",
     "hpg:audit": "node scripts/hpg.mjs audit",
     "hpg:arcade": "node scripts/hpg.mjs arcade",
-    "hpg:e2e": "node hpg/e2e/run.mjs"
+    "hpg:e2e": "node hpg/e2e/run.mjs",
+    "hpg:lab": "node scripts/hpg.mjs lab",
+    "hpg:smoke": "node hpg/e2e/smoke.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

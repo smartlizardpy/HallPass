@@ -65,3 +65,5 @@ capture-sample.json
 # Offline Arcade output: .hpg packages, the standalone launcher and the catalog,
 # rebuilt from public/games/ by `npm run hpg:arcade` on every build.
 /public/arcade/
+# Local test arcade with every game (`npm run hpg:lab`); never deployed.
+/arcade-lab/

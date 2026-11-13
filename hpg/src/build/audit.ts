@@ -26,22 +26,38 @@ export type AuditRow = {
   adapter: "verified" | "experimental" | "none";
 };
 
-export async function auditGames(repoRoot: string, catalog: readonly CatalogGame[], adapters: readonly GameAdapter[]): Promise<AuditRow[]> {
+/**
+ * The permissive adapter used for a game that has none yet: web fonts may fall
+ * back, anything named like a worker is bundled as one. Shared by the audit and
+ * the local test lab (build/lab.ts), so both judge a game the same way.
+ */
+export function trialAdapter(id: string): GameAdapter {
+  return {
+    id,
+    version: "0.0.0",
+    status: "experimental",
+    inputs: [],
+    saves: true,
+    dropRemoteHosts: GOOGLE_FONT_HOSTS,
+    workers: /(^|\/)[^/]*worker[^/]*\.js$/i,
+  };
+}
+
+/** Game folders in public/games/, sorted. */
+export function gameIds(repoRoot: string): string[] {
   const gamesDir = path.join(repoRoot, "public", "games");
-  const ids = readdirSync(gamesDir)
+  return readdirSync(gamesDir)
     .filter((n) => !n.startsWith(".") && !n.startsWith("_") && statSync(path.join(gamesDir, n)).isDirectory())
     .sort();
+}
+
+export async function auditGames(repoRoot: string, catalog: readonly CatalogGame[], adapters: readonly GameAdapter[]): Promise<AuditRow[]> {
+  const gamesDir = path.join(repoRoot, "public", "games");
+  const ids = gameIds(repoRoot);
   const rows: AuditRow[] = [];
   for (const id of ids) {
     const known = adapters.find((a) => a.id === id);
-    const adapter: GameAdapter = known ?? {
-      id,
-      version: "0.0.0",
-      status: "experimental",
-      inputs: [],
-      dropRemoteHosts: GOOGLE_FONT_HOSTS,
-      workers: /(^|\/)[^/]*worker[^/]*\.js$/i,
-    };
+    const adapter: GameAdapter = known ?? trialAdapter(id);
     const html = existsSync(path.join(gamesDir, id, "index.html")) ? readFileSync(path.join(gamesDir, id, "index.html"), "utf8") : "";
     const base = {
       id,

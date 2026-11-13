@@ -85,7 +85,24 @@ function detectFeatures(code: string) {
   };
 }
 
-export async function packageGame(repoRoot: string, adapter: GameAdapter, catalog: readonly CatalogGame[]): Promise<PackageBuild> {
+/**
+ * Local-testing overrides, used only by the lab (build/lab.ts). The deploy
+ * (build/arcade.ts) never passes them, so a staged game or an outside folder
+ * can never reach public/arcade/.
+ */
+export type PackageOptions = {
+  /** Read the game from here instead of public/games/<id>/. */
+  gameDir?: string;
+  /** Package a staged (beta-only) game. */
+  allowStaged?: boolean;
+};
+
+export async function packageGame(
+  repoRoot: string,
+  adapter: GameAdapter,
+  catalog: readonly CatalogGame[],
+  options: PackageOptions = {},
+): Promise<PackageBuild> {
   const report = new InlineReport();
   const fail = (): PackageBuild => ({ ok: false, id: adapter.id, issues: report.issues });
 
@@ -94,7 +111,7 @@ export async function packageGame(repoRoot: string, adapter: GameAdapter, catalo
     report.error(`${adapter.id} is not a published game in app/lib/games.ts`);
     return fail();
   }
-  if (game.staged) {
+  if (game.staged && !options.allowStaged) {
     report.error(`${adapter.id} is staged (beta only) and must never be packaged`);
     return fail();
   }
@@ -102,9 +119,9 @@ export async function packageGame(repoRoot: string, adapter: GameAdapter, catalo
     report.error(`${adapter.id} is hosted off-site and cannot be packaged`);
     return fail();
   }
-  const gameDir = path.join(repoRoot, "public", "games", adapter.id);
+  const gameDir = options.gameDir ?? path.join(repoRoot, "public", "games", adapter.id);
   if (!existsSync(gameDir) || !statSync(gameDir).isDirectory()) {
-    report.error(`public/games/${adapter.id}/ does not exist (run npm run sync-games?)`);
+    report.error(`${gameDir} does not exist (run npm run sync-games?)`);
     return fail();
   }
 
