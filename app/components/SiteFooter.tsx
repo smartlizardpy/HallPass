@@ -59,7 +59,8 @@ export function SiteFooter() {
           <p className="mt-1 text-muted">
             © {new Date().getFullYear()} · all games unblocked, forever.
           </p>
-          {/* The legal pages: the first links this footer has carried. */}
+          {/* The legal pages (the first links this footer carried), then the
+              offline arcade download, a utility rather than a destination. */}
           <p className="mt-1 text-muted">
             <Link href="/about" className="underline underline-offset-2 hover:text-brand">
               About
@@ -75,6 +76,10 @@ export function SiteFooter() {
             {" · "}
             <Link href="/cookies" className="underline underline-offset-2 hover:text-brand">
               Cookies
+            </Link>
+            {" · "}
+            <Link href="/offline-arcade" className="underline underline-offset-2 hover:text-brand">
+              Offline arcade
             </Link>
           </p>
         </div>

@@ -286,6 +286,13 @@ self.addEventListener("fetch", (event) => {
   // no way to notice. `/oauth/authorize` is worse still: it is a consent screen
   // whose whole content depends on the query string and the session, and a
   // cached copy would show one app's name while approving another's request.
+  //
+  // `/arcade/*` IS THE OFFLINE ARCADE'S BUILD OUTPUT (hpg/src/build/arcade.ts).
+  // Its `index.html` embeds the trust list for exactly the packages built in the
+  // same deploy, and is not content-hashed, so `cacheFirst` would pin one
+  // deploy's launcher forever while the packages it is meant to accept change
+  // underneath it. /offline-arcade checks every file's sha256 against the page's
+  // own catalog anyway; this keeps the check from failing for no reason.
   if (
     url.pathname.startsWith("/admin") ||
     url.pathname.startsWith("/dashboard") ||
@@ -293,6 +300,7 @@ self.addEventListener("fetch", (event) => {
     url.pathname.startsWith("/ingest/") ||
     url.pathname.startsWith("/.well-known/") ||
     url.pathname.startsWith("/oauth/") ||
+    url.pathname.startsWith("/arcade/") ||
     url.pathname === "/games-version"
   ) {
     return;
