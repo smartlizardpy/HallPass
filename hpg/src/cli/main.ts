@@ -8,8 +8,10 @@
  *   launcher --out <index.html> [--trust-dir <dir>]
  *                                       the standalone launcher, trusting the
  *                                       .hpg packages found in --trust-dir
- *   arcade                              every package + launcher + catalog.json
- *                                       into public/arcade/ (runs at prebuild)
+ *   arcade   [--include-experimental]   every verified package + launcher +
+ *                                       catalog.json into public/arcade/ (runs at
+ *                                       prebuild); the flag adds experimental
+ *                                       games, for local testing only
  *
  * Run through scripts/hpg.mjs, which bundles this file with esbuild first, so
  * it can import the TypeScript sources and `app/lib/games.ts` directly.
@@ -175,7 +177,7 @@ export async function main(argv: string[]): Promise<number> {
       return cmdLauncher(args, root);
     case "arcade": {
       // Never fails the deploy: problems are ::warning:: lines (see build/arcade.ts).
-      const c = await buildArcade(root, adapters, catalog);
+      const c = await buildArcade(root, adapters, catalog, console.log, args.includes("--include-experimental"));
       console.log(`[arcade] catalog.json: ${c.games.length} games, available=${c.available}`);
       return 0;
     }

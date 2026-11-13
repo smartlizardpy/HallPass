@@ -91,8 +91,8 @@ Engineering decisions, each forced by behaviour tested in a real browser over
 | No remote dependencies | conquest, crimson-survivor, depths-of-aethelgard, doodle-dash, neon-tether, neon-well, paddle-crawler, pixel-slicer, ragdoll-hoops, sea-mercenary, system-restore, teraria | packageable |
 | Only Google Fonts is remote | battlebadlers, core-vs-swarm, jjk ×2, neon-fracture, neon-hockey, neon-velocity-hyperdrive, nuclear-reactor-manager, silence, snag, vanta-void | packageable; the font falls back (reported) |
 | Tailwind Play CDN script | chroma-orbit, neon-snake, pixel-bullet-quest, rhythm-hell-harmonic-flash, shadow-core-halloween-dash, symbiosis, system-error | blocked until Tailwind is vendored |
-| Three.js from a CDN | color-clash-3d, cube-clash-3d | blocked until Three is vendored |
-| Remote audio (15 files) | duskfall | blocked |
+| Import map to jsdelivr | color-clash-3d, duskfall (which also streams 15 remote audio files) | blocked until the modules are vendored |
+| Three.js from cdnjs | cube-clash-3d | blocked until Three is vendored |
 | Server multiplayer and remote API | last-bell | blocked |
 
 About 20 games load `/sdk/v1/hallpass.js`. Offline, the packager removes that tag
@@ -111,8 +111,9 @@ import, the SDK and saves), `neon-tether` (canvas, audio, the SDK and
 - Vendoring Tailwind Play and Three.js for the CDN-dependent games.
 - Network multiplayer (`last-bell`). This is not deferred: it is incompatible
   with offline play.
-- Edge. It is not installed on the development machine, so it is reported as
-  untested rather than assumed to work.
+- Edge and Firefox test runs. Edge is not installed on the development
+  machine, and its Playwright Firefox would not install (§7). Both are
+  reported as untested rather than assumed to work.
 
 ## 5. Implementation plan
 
@@ -179,5 +180,29 @@ because the game and the bootstrap share one frame.
 
 ## 7. Browser results
 
-Filled in from the e2e runs; see the compatibility report in
-`offline-arcade-games.md`.
+From `npm run hpg:e2e` on 14 November 2026 (macOS, Playwright 1.56.1), the
+launcher opened from `file://` with the browser's network off. The checks are
+listed in `offline-arcade-games.md` ("Browser testing").
+
+| Browser | Result | Notes |
+|---|---|---|
+| Google Chrome 157 | **45/45 passed** | All three games: start, draw, react to real input, are sandboxed and keep saves across Back, relaunch and a browser restart. Zero network requests. One known test limitation, below. |
+| Firefox | **Not tested** | The Playwright Firefox build on this machine is incomplete (`libmozglue.dylib` missing), and two reinstalls stalled during unpacking. Nothing here is Chrome-specific by design, but that is unproven. |
+| Edge | **Not tested** | Not installed. Edge is Chromium-based, so Chrome's result is the best indication, but it is not a result. |
+| Safari | Not a target | Not tested. |
+
+Also checked by hand in Chrome: the website download → unzip → open
+`index.html` from disk with the network off → import → play chain, end to
+end; `/offline-arcade` in light, dark and at phone width (no horizontal
+scroll); and the size estimate (195 KB estimated, 196 KB downloaded for all
+three games).
+
+**Known test limitation.** Headless Chrome stops routing real mouse input into
+an out-of-process sandboxed frame after a canvas there captured the pointer.
+Conquest's map does this, so the e2e presses Conquest's Start with a DOM click
+after a real tap has enabled it. Headed Chrome starts the match from a real
+click (checked with `HEADED=1`).
+
+**Before calling Firefox or Edge supported:** run
+`BROWSER=firefox npm run hpg:e2e` and `BROWSER=edge npm run hpg:e2e` on a
+machine that has them.

@@ -2,7 +2,7 @@
  * `npm run hpg:arcade`: everything the website needs to offer offline
  * arcades, written to `public/arcade/` (gitignored, rebuilt on every deploy).
  *
- *   public/arcade/packages/<id>-<version>-<hash>.hpg   one per adapter that built
+ *   public/arcade/packages/<id>-<version>-<hash>.hpg   one per VERIFIED adapter that built
  *   public/arcade/index.html                           the launcher, trusting exactly those
  *   public/arcade/catalog.json                         what /offline-arcade lists
  *
@@ -57,6 +57,8 @@ export async function buildArcade(
   adapters: readonly GameAdapter[],
   catalog: readonly CatalogGame[],
   log: ArcadeLog = console.log,
+  /** Local testing only (`hpg arcade --include-experimental`); never in prebuild. */
+  includeExperimental = false,
 ): Promise<ArcadeCatalog> {
   const outDir = path.join(repoRoot, "public", "arcade");
   const pkgDir = path.join(outDir, "packages");
@@ -67,6 +69,11 @@ export async function buildArcade(
   const games: ArcadeCatalogGame[] = [];
   const trust: TrustList = { packages: [] };
   for (const adapter of adapters) {
+    // Only games that passed the real-browser e2e are offered (hpg/games.config.ts).
+    if (adapter.status !== "verified" && !includeExperimental) {
+      log(`[arcade] ${adapter.id} skipped: status is ${adapter.status}, not verified`);
+      continue;
+    }
     let r;
     try {
       r = await packageGame(repoRoot, adapter, catalog);

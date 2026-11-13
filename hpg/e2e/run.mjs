@@ -7,7 +7,7 @@
  * Opt-in, like sdk/p2p/e2e/run.mjs: Playwright is not a dependency of this repo.
  *
  *   npm run hpg:arcade                       # build public/arcade/
- *   PLAYWRIGHT_CORE=<dir of playwright-core> node hpg/e2e/run.mjs
+ *   PLAYWRIGHT_CORE=<dir of playwright-core> npm run hpg:e2e
  *
  * Env:
  *   BROWSER=chrome|edge|firefox|chromium   default chrome (the installed Google Chrome)
