@@ -233,7 +233,12 @@ async function main() {
     check("a non-ZIP is refused", /not a ZIP|isn't a HallPass/.test(refused));
     check("refused files leave the library unchanged", (await page.locator(".card-wrap").count()) === ids.length);
 
-    for (const id of ids) {
+    // Per-game play checks need a spec (how to start it, what input proves it
+    // is alive). Games verified by smoke + playtest instead (games.config.ts)
+    // are still imported and listed above, and covered by npm run hpg:smoke.
+    const played = ids.filter((id) => GAMES[id]);
+    console.log(`  playing ${played.length} of ${ids.length} (the rest: npm run hpg:smoke)`);
+    for (const id of played) {
       const spec = GAMES[id];
       console.log(`  — ${id}`);
       await page.locator(`.card-wrap[data-game="${id}"] .card`).click();
@@ -330,7 +335,7 @@ async function main() {
     check("library survives a browser restart", (await page.locator(".card-wrap").count()) === ids.length);
     const persistentNotice = await page.locator(".notice").count();
     check("storage is persistent (no 'won't keep' notice)", persistentNotice === 0);
-    const id = ids[0];
+    const id = played[0];
     const expected = results.find((r) => r.name === `${id}: save survives Back and relaunch`)?.value;
     await page.locator(`.card-wrap[data-game="${id}"] .card`).click();
     await waitReady(page);

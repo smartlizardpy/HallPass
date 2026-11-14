@@ -52,8 +52,11 @@ build log, and the deploy continues.
    `public/arcade/index.html` from
    disk with Wi-Fi off, drop in a `games.zip` of the packages, and play it all
    the way through once, including saving and reloading.
-5. Add it to `GAMES` in `hpg/e2e/run.mjs`: how to start it and what input
-   proves it is alive. Run the e2e (below). Then set `status: "verified"`.
+5. Prove it, one of two ways, then set `status: "verified"`:
+   - add it to `GAMES` in `hpg/e2e/run.mjs` (how to start it, what input proves
+     it is alive) and pass the e2e (below); or
+   - get a PASS from `npm run hpg:smoke` and have a person play it in the lab
+     arcade.
 
 ## What blocks a game, and what to do
 
@@ -90,21 +93,22 @@ The game runs in `<iframe sandbox="allow-scripts">` (never with
 
 ## Compatibility report
 
-From `npm run hpg:audit` on 14 November 2026 (34 games in `public/games/`).
+From `npm run hpg:audit` and `npm run hpg:smoke` on 14 November 2026 (34 games in `public/games/`).
 
 | Verdict | Games |
 |---|---|
-| **Offered** (adapter, packaged, e2e) | conquest, depths-of-aethelgard, neon-tether |
-| Packageable, no adapter yet | crimson-survivor, doodle-dash, neon-well, paddle-crawler, pixel-slicer, ragdoll-hoops, sea-mercenary, system-restore, teraria |
-| Packageable, font falls back | battlebadlers, core-vs-swarm, jjk-domain-survival-top-down, jjk-domain-survival-v3, neon-fracture, neon-hockey, neon-velocity-hyperdrive, nuclear-reactor-manager, silence, snag, vanta-void |
+| **Offered**, full e2e | conquest, depths-of-aethelgard, neon-tether |
+| **Offered**, smoke PASS + playtest | battlebadlers, core-vs-swarm, crimson-survivor, doodle-dash, jjk-domain-survival-top-down, jjk-domain-survival-v3, neon-fracture, neon-hockey, neon-well, ragdoll-hoops, sea-mercenary, silence, snag, vanta-void |
+| Builds, smoke CHECK (needs a look) | neon-velocity-hyperdrive, nuclear-reactor-manager, paddle-crawler, pixel-slicer, system-restore, teraria |
 | Blocked: Tailwind Play CDN | chroma-orbit, neon-snake, pixel-bullet-quest, rhythm-hell-harmonic-flash, shadow-core-halloween-dash, symbiosis, system-error |
 | Blocked: import map to jsdelivr | color-clash-3d, duskfall |
 | Blocked: Three.js from cdnjs | cube-clash-3d |
-| Not published | last-bell (also needs a server for multiplayer) |
+| Staged, experimental adapter | last-bell (solo works in the lab from `../last-bell`; co-op needs the network) |
 
-"Packageable" means the build succeeds with no remote dependency. It does
-**not** mean the game has been played offline. Only the three offered games
-have been. The rest need steps 2–5 above.
+"Builds" means the packager found no remote dependency. A game is offered
+only once it is `verified`: by the full e2e, or by a smoke PASS plus a person
+playing it in the lab (hpg/games.config.ts). Smoke results from Chrome 157 on
+14 November 2026, after `npm run sync-games`.
 
 ## Trying every game at once (the lab)
 
