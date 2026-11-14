@@ -58,4 +58,13 @@ export type GameAdapter = {
 export const HALLPASS_SDK_PATHS = ["/sdk/v1/hallpass.js"];
 export const HALLPASS_HOSTS = ["hallpass.games", "www.hallpass.games"];
 
+/**
+ * The HallPass P2P (co-op) SDK, which games import as a module from the site.
+ * The packager bundles the repo's own copy (`public/sdk/p2p/v1/`, the exact
+ * file the site serves) instead, so the game loads offline; co-op itself still
+ * needs the network and fails the way the game already handles. Reported in
+ * the build log, never silent.
+ */
+export const HALLPASS_P2P_SDK_PATHS = ["/sdk/p2p/v1/hallpass-p2p.js", "/sdk/p2p/v1/hallpass-p2p.min.js"];
+
 export const GOOGLE_FONT_HOSTS = ["fonts.googleapis.com", "fonts.gstatic.com"];

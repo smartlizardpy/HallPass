@@ -22,7 +22,9 @@ import path from "node:path";
 
 export type TrustList = { packages: { id: string; version: string; manifestDigest: string }[] };
 
-const TARGET = ["chrome100", "edge100", "firefox100", "safari15"];
+/** The browsers the launcher supports; game bundles target the same (build/inline.ts). */
+export const BROWSER_TARGET = ["chrome100", "edge100", "firefox100", "safari15"];
+const TARGET = BROWSER_TARGET;
 
 async function bundleBrowser(entry: string, define?: Record<string, string>): Promise<string> {
   const r = await build({

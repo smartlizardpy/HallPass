@@ -103,7 +103,7 @@ export async function packageGame(
   catalog: readonly CatalogGame[],
   options: PackageOptions = {},
 ): Promise<PackageBuild> {
-  const report = new InlineReport();
+  const report = new InlineReport(path.join(repoRoot, "public"));
   const fail = (): PackageBuild => ({ ok: false, id: adapter.id, issues: report.issues });
 
   const game = catalog.find((g) => g.slug === adapter.id);

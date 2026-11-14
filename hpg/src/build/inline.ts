@@ -22,7 +22,11 @@
  * | `modulepreload`/`preload` of local file | removed (already bundled)                       |
  * | `preconnect`/`dns-prefetch`/`manifest`  | removed (network hints, no content)             |
  * | remote font (adapter-allowed host)      | removed, reported as a font fallback            |
+ * | HallPass P2P SDK import (site URL)      | the repo's copy bundled, reported               |
  * | any other remote resource               | BUILD ERROR                                     |
+ *
+ * `import(NAME)` where NAME is a file-wide-unique top-level string `const` is
+ * first rewritten to `import("…")` (const-imports.ts), so it can be resolved.
  *
  * `import.meta.url` in module code is defined as `hpg:/<path of that file>`,
  * so `new URL("worker.js", import.meta.url)` yields an `hpg:/` URL that the
@@ -34,13 +38,21 @@ import { JSDOM, VirtualConsole } from "jsdom";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { mimeTypeOf } from "../format/paths";
-import { GOOGLE_FONT_HOSTS, HALLPASS_HOSTS, HALLPASS_SDK_PATHS, type GameAdapter } from "./adapter";
+import { BROWSER_TARGET } from "./launcher";
+import { GOOGLE_FONT_HOSTS, HALLPASS_HOSTS, HALLPASS_P2P_SDK_PATHS, HALLPASS_SDK_PATHS, type GameAdapter } from "./adapter";
+import { inlineConstImports } from "./const-imports";
 import { checkBundledCode } from "./js-check";
 
 export type BuildIssue = { level: "error" | "warning" | "info"; message: string };
 
 export class InlineReport {
   issues: BuildIssue[] = [];
+  /**
+   * The repo's public/ folder, where the packager finds local copies of
+   * HallPass's own SDKs (HALLPASS_P2P_SDK_PATHS). Unset: such imports fail
+   * like any other remote dependency.
+   */
+  constructor(readonly publicDir?: string) {}
   error(message: string) {
     this.issues.push({ level: "error", message });
   }
@@ -58,7 +70,10 @@ export class InlineReport {
 }
 
 const JS_TYPES = new Set(["", "text/javascript", "application/javascript", "module", "text/ecmascript", "application/ecmascript"]);
-const TARGET = ["es2020"];
+// The launcher's own browsers (build/launcher.ts), not a language year: a game
+// can only ever run where the launcher runs, and these all support modern
+// syntax such as top-level await, which an es2020 target refused.
+const TARGET = BROWSER_TARGET;
 const DATA_URI_LOADERS = {
   ".png": "dataurl",
   ".jpg": "dataurl",
@@ -146,6 +161,14 @@ function policyPlugin(gameDir: string, adapter: GameAdapter, report: InlineRepor
   return {
     name: "hpg-policy",
     setup(b) {
+      // HallPass's own co-op SDK, by site URL or root-relative path: bundle the
+      // repo's copy (see HALLPASS_P2P_SDK_PATHS).
+      b.onResolve({ filter: /hallpass-p2p(\.min)?\.js/ }, (args) => {
+        const local = p2pSdkFile(args.path, report.publicDir);
+        if (!local) return undefined;
+        report.warn(`bundled the HallPass co-op SDK from public${HALLPASS_P2P_SDK_PATHS.find((p) => local.endsWith(p.split("/").join(path.sep)))} (co-op needs the internet; the game runs solo offline)`);
+        return { path: local };
+      });
       b.onResolve({ filter: /^(https?:)?\/\//i }, (args) => {
         const host = hostOf(args.path);
         if (droppable.has(host)) {
@@ -159,6 +182,12 @@ function policyPlugin(gameDir: string, adapter: GameAdapter, report: InlineRepor
         contents: "",
         loader: args.path.match(/\.(css)(\?|$)/) || args.path.includes("fonts.googleapis.com") ? "css" : "empty",
       }));
+      // Module files: resolve import(CONST) first (const-imports.ts).
+      b.onLoad({ filter: /\.m?js$/ }, (args) => {
+        const code = readFileSync(args.path, "utf8");
+        const out = inlineConstImports(code);
+        return out === code ? undefined : { contents: out, loader: "js", resolveDir: path.dirname(args.path) };
+      });
       b.onResolve({ filter: /.*/ }, async (args) => {
         if (args.pluginData?.hpgChecked || args.namespace === "hpg-dropped") return undefined;
         if (args.kind === "entry-point") return undefined;
@@ -194,7 +223,14 @@ export async function bundle(
     const result = await build({
       ...("file" in input
         ? { entryPoints: [input.file] }
-        : { stdin: { contents: input.contents, resolveDir: input.resolveDir, loader: input.loader, sourcefile: input.sourcefile } }),
+        : {
+            stdin: {
+              contents: input.loader === "js" ? inlineConstImports(input.contents) : input.contents,
+              resolveDir: input.resolveDir,
+              loader: input.loader,
+              sourcefile: input.sourcefile,
+            },
+          }),
       bundle: true,
       write: false,
       minify: true,
@@ -237,6 +273,26 @@ async function minifyClassic(code: string, label: string, report: InlineReport):
     report.error(`${label}: ${errors?.map(formatMessage).join("; ") ?? String(e)}`);
     return null;
   }
+}
+
+/** The local file for a HallPass P2P SDK URL or root path, if it exists. */
+function p2pSdkFile(spec: string, publicDir: string | undefined): string | null {
+  if (!publicDir) return null;
+  const clean = spec.split(/[?#]/)[0];
+  let p: string;
+  if (clean.startsWith("/") && !clean.startsWith("//")) p = clean;
+  else {
+    try {
+      const u = new URL(clean.startsWith("//") ? `https:${clean}` : clean);
+      if (!HALLPASS_HOSTS.includes(u.hostname)) return null;
+      p = u.pathname;
+    } catch {
+      return null;
+    }
+  }
+  if (!HALLPASS_P2P_SDK_PATHS.includes(p)) return null;
+  const file = path.join(publicDir, ...p.split("/").filter(Boolean));
+  return existsSync(file) ? file : null;
 }
 
 function isSdkScript(src: string): boolean {
