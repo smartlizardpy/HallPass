@@ -129,6 +129,12 @@ export async function packageGame(
   const inlined = await inlineEntry(gameDir, entry, adapter, report);
   if (!inlined || report.errors.length) return fail();
 
+  // Report-only: a game that asks for pointer lock without the permission gets
+  // "Blocked pointer lock … sandboxed" at the moment the player clicks in.
+  if (inlined.html.includes("requestPointerLock") && !(adapter.permissions ?? []).includes("pointer-lock")) {
+    report.warn(`the game calls requestPointerLock but the adapter does not grant "pointer-lock"; mouse capture will be blocked`);
+  }
+
   const files: PackageFile[] = [{ path: "game.html", data: new TextEncoder().encode(inlined.html), role: "entry" }];
   const all = listFiles(gameDir);
 

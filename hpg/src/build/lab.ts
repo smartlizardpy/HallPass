@@ -22,7 +22,7 @@
  * full e2e (docs/offline-arcade-games.md).
  */
 
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { writeZip } from "../archive/zip";
 import type { GameAdapter } from "./adapter";
@@ -52,6 +52,24 @@ export type LabGame = {
 
 export type LabReport = { builtAt: string; games: LabGame[] };
 
+/**
+ * The audit's trial adapter, plus pointer lock when the game's own code asks
+ * for it (a first-person game is unplayable without it). Lab only: a real
+ * adapter grants permissions explicitly, and the packager warns when one is
+ * missing.
+ */
+function labTrialAdapter(id: string, dir: string): GameAdapter {
+  const base = trialAdapter(id);
+  const wantsLock = (d: string): boolean =>
+    existsSync(d) &&
+    readdirSync(d, { withFileTypes: true }).some((e) =>
+      e.isDirectory()
+        ? !e.name.startsWith(".") && e.name !== "node_modules" && e.name !== "_dev" && wantsLock(path.join(d, e.name))
+        : /\.(html|m?js)$/.test(e.name) && readFileSync(path.join(d, e.name), "utf8").includes("requestPointerLock"),
+    );
+  return wantsLock(dir) ? { ...base, permissions: ["pointer-lock"] } : base;
+}
+
 export async function buildLab(
   repoRoot: string,
   adapters: readonly GameAdapter[],
@@ -72,7 +90,7 @@ export async function buildLab(
   const zipped: { path: string; data: Uint8Array; level: 0 }[] = [];
   for (const id of [...new Set([...gameIds(repoRoot), ...Object.keys(sources)])].sort()) {
     const known = adapters.find((a) => a.id === id);
-    const adapter = known ?? trialAdapter(id);
+    const adapter = known ?? labTrialAdapter(id, sources[id] ?? path.join(repoRoot, "public", "games", id));
     const entry = catalog.find((g) => g.slug === id);
     const name = entry?.title ?? id;
     let r;
