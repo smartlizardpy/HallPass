@@ -20,7 +20,7 @@ import path from "node:path";
 import type { Metadata } from "next";
 import { BackButton } from "../components/BackButton";
 import { Wordmark } from "../components/Wordmark";
-import { publicGames } from "../lib/games";
+import { games as allGames } from "../lib/games";
 import type { ArcadeCatalog } from "@/hpg/src/build/arcade";
 import { ArcadeBuilder, type BuilderGame } from "./ArcadeBuilder";
 
@@ -45,7 +45,10 @@ function loadCatalog(): ArcadeCatalog | null {
 
 export default function OfflineArcadePage() {
   const catalog = loadCatalog();
-  const bySlug = new Map(publicGames.map((g) => [g.slug, g]));
+  // Every catalogue entry, staged or not: the arcade build already decided
+  // which games are published (games.ts flags + dashboard overrides), and a
+  // game published from the dashboard is still `staged` in games.ts.
+  const bySlug = new Map(allGames.map((g) => [g.slug, g]));
   const games: BuilderGame[] = (catalog?.games ?? []).map((g) => {
     const site = bySlug.get(g.id);
     return {

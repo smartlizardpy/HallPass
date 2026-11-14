@@ -21,8 +21,13 @@ hallpass-offline-arcade.zip   composed in the browser, every file sha256-checked
   HallPass Arcade/index.html, games.zip, README.txt
 ```
 
-A game is offered only if its adapter is `verified` **and** it packages
-cleanly. A game that fails to package is left out with a `::warning::` in the
+A game is offered only if its adapter is `verified`, it is **published**, and
+it packages cleanly. "Published" uses the same rule as `sync-games`
+(`scripts/lib/staged.mjs`): the dashboard override in `game_overrides.staged`
+when the build can read the database, otherwise `staged` in `games.ts`. So a
+game published from the dashboard can be offered without a `games.ts` edit.
+Without a database the build falls back to `games.ts`, which can only offer
+fewer games. A game that fails to package is left out with a `::warning::` in the
 build log, and the deploy continues.
 
 ## Adding a game
@@ -67,7 +72,8 @@ build log, and the deploy continues.
 | `<script src>` from cdnjs | Same | Vendor the file |
 | Google Fonts | The font can't load | Nothing needed: the game uses its fallback font, and the build reports it |
 | `fetch()` to a server, WebSockets, multiplayer | Needs the internet by design | Not offline-capable |
-| `import(variable)` or a surviving runtime `require` | Can't be resolved at build time | Make the import static |
+| `import(variable)` or a surviving runtime `require` | Can't be resolved at build time | Make the import static. (`import(NAME)` where `NAME` is a top-level string `const` bound once in the file is resolved automatically.) |
+| HallPass co-op SDK (`https://www.hallpass.games/sdk/p2p/v1/hallpass-p2p.js`) | — | Nothing: the packager bundles the repo's copy from `public/sdk/p2p/v1/` and reports it. Co-op needs the internet; solo works offline |
 
 Every one of these is caught at build time (`build/inline.ts`,
 `build/js-check.ts`). The launcher's Content-Security-Policy also blocks any

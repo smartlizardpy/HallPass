@@ -31,6 +31,7 @@ import { PackageError, readPackage } from "../archive/package";
 import { buildArcade } from "../build/arcade";
 import { auditGames, auditMarkdown } from "../build/audit";
 import { buildLab } from "../build/lab";
+import { fetchStagedRows, resolveStaged } from "../../../scripts/lib/staged.mjs";
 import { buildLauncherHtml, type TrustList } from "../build/launcher";
 import type { BuildIssue } from "../build/inline";
 import { packageGame, type CatalogGame } from "../build/packager";
@@ -168,6 +169,39 @@ async function cmdLauncher(args: string[], root: string): Promise<number> {
   return 0;
 }
 
+/**
+ * The catalogue with each game's EFFECTIVE staged flag: the production
+ * override (game_overrides.staged) when the database can be read, else the
+ * static flag in games.ts. The same rule, and the same code, as
+ * scripts/sync-games.mjs (scripts/lib/staged.mjs), so a game published from
+ * the dashboard can be offered offline with no games.ts edit, and one staged
+ * from the dashboard is withdrawn. If the database is unset or unreadable, the
+ * static flags stand: that can only offer FEWER games, never a staged one.
+ */
+async function liveCatalog(): Promise<CatalogGame[]> {
+  const all = allGames as CatalogGame[];
+  const staticGames = all.map((g) => ({ slug: g.slug, staged: g.staged === true }));
+  let rows: Awaited<ReturnType<typeof fetchStagedRows>> = {
+    overrides: null,
+    externals: null,
+    error: "DATABASE_URL is not set",
+  };
+  if (process.env.DATABASE_URL) {
+    const { neon } = await import("@neondatabase/serverless");
+    const timeout = new Promise<typeof rows>((resolve) =>
+      setTimeout(() => resolve({ overrides: null, externals: null, error: "timed out after 10s" }), 10_000).unref(),
+    );
+    rows = await Promise.race([fetchStagedRows(neon(process.env.DATABASE_URL)), timeout]);
+  }
+  const { staged, registered } = resolveStaged({ staticGames, overrides: rows.overrides, externals: rows.externals });
+  console.log(
+    registered === null
+      ? `[arcade] staged flags from games.ts only (${rows.error})`
+      : `[arcade] staged flags from games.ts + database overrides`,
+  );
+  return all.map((g) => ({ ...g, staged: staged.has(g.slug) }));
+}
+
 export async function main(argv: string[]): Promise<number> {
   const [cmd, ...args] = argv;
   const root = process.cwd();
@@ -184,7 +218,8 @@ export async function main(argv: string[]): Promise<number> {
       return cmdLauncher(args, root);
     case "arcade": {
       // Never fails the deploy: problems are ::warning:: lines (see build/arcade.ts).
-      const c = await buildArcade(root, adapters, catalog, console.log, args.includes("--include-experimental"));
+      const live = await liveCatalog();
+      const c = await buildArcade(root, adapters, live, console.log, args.includes("--include-experimental"));
       console.log(`[arcade] catalog.json: ${c.games.length} games, available=${c.available}`);
       return 0;
     }
