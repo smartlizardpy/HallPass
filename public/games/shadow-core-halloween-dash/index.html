@@ -8,7 +8,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Creepster&family=Inter:wght@400;600;800&family=Pirata+One&display=swap');
-
         body, html {
             margin: 0;
             padding: 0;
@@ -20,12 +19,10 @@
             touch-action: none;
             user-select: none;
         }
-
         .font-spooky {
             font-family: 'Pirata One', 'Creepster', cursive;
             letter-spacing: 2px;
         }
-
         #gameCanvas {
             display: block;
             width: 100%;
@@ -35,7 +32,6 @@
             left: 0;
             z-index: 1;
         }
-
         .ui-layer {
             position: absolute;
             top: 0;
@@ -45,11 +41,9 @@
             z-index: 10;
             pointer-events: none;
         }
-
         .ui-content {
             pointer-events: auto;
         }
-
         /* Eerie Halloween Glassmorphism */
         .glass-panel {
             background: rgba(12, 14, 20, 0.92);
@@ -58,25 +52,21 @@
             border: 2px solid rgba(220, 225, 235, 0.15);
             box-shadow: 0 0 40px rgba(0, 0, 0, 0.95), inset 0 0 20px rgba(255, 255, 255, 0.03);
         }
-
         .glass-button {
             background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(40, 45, 60, 0.4) 100%);
             border: 1px solid rgba(255, 255, 255, 0.25);
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
             transition: all 0.2s ease-out;
         }
-
         .glass-button:hover {
             background: linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(60, 65, 85, 0.6) 100%);
             border-color: rgba(255, 255, 255, 0.6);
             box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
             transform: translateY(-2px);
         }
-
         .glass-button:active {
             transform: translateY(1px);
         }
-
         .audio-btn {
             background: rgba(15, 18, 25, 0.85);
             border: 1px solid rgba(255, 255, 255, 0.2);
@@ -86,7 +76,6 @@
             border-color: rgba(251, 191, 36, 0.6);
             transform: scale(1.05);
         }
-
         /* Mobile touch controls overlay */
         #mobileControls {
             display: none;
@@ -98,7 +87,6 @@
             z-index: 20;
             pointer-events: none;
         }
-
         .mobile-btn {
             width: 76px;
             height: 76px;
@@ -116,12 +104,48 @@
             backdrop-filter: blur(8px);
             transition: background 0.1s, transform 0.1s;
         }
-        
         .mobile-btn:active {
             background: rgba(255, 255, 255, 0.25);
             transform: scale(0.92);
         }
-
+        /* UI polish */
+        @keyframes popIn {
+            0% { opacity: 0; transform: translateY(14px) scale(0.96); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-6px); }
+            40% { transform: translateX(6px); }
+            60% { transform: translateX(-4px); }
+            80% { transform: translateX(4px); }
+        }
+        #ui-main > .ui-content:not(.hidden) { animation: popIn 0.28s ease-out; }
+        #screen-death:not(.hidden) { animation: popIn 0.28s ease-out, shake 0.4s 0.1s; }
+        #ui-main { background: radial-gradient(ellipse at center, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.6) 100%); }
+        .glass-panel { border-top: 2px solid rgba(251, 146, 60, 0.35); }
+        .btn-primary {
+            background: linear-gradient(135deg, #F97316 0%, #BE123C 100%);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            box-shadow: 0 6px 20px rgba(190, 18, 60, 0.35);
+            transition: all 0.2s ease-out;
+        }
+        .btn-primary:hover { transform: translateY(-2px); filter: brightness(1.12); box-shadow: 0 8px 26px rgba(249, 115, 22, 0.45); }
+        .btn-primary:active { transform: translateY(1px); }
+        .btn-ghost {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            transition: all 0.2s ease-out;
+        }
+        .btn-ghost:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.5); color: #fff; }
+        .stat-box {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 14px;
+            padding: 8px 6px;
+        }
+        .stat-label { font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: #94A3B8; font-weight: 600; }
+        .kbd { font-family: ui-monospace, monospace; font-size: 10px; padding: 1px 6px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.08); }
         ::-webkit-scrollbar {
             width: 6px;
         }
@@ -135,33 +159,27 @@
     </style>
 </head>
 <body class="text-white select-none">
-
     <!-- Main Game Canvas -->
     <canvas id="gameCanvas"></canvas>
-
     <!-- UI Overlay Screens -->
     <div id="ui-main" class="ui-layer flex items-center justify-center p-4">
-        
         <!-- Main Menu Screen -->
         <div id="screen-menu" class="ui-content glass-panel p-6 md:p-8 rounded-3xl flex flex-col items-center max-w-lg w-full text-center transition-all">
             <h1 class="font-spooky text-5xl md:text-6xl font-black mb-0 tracking-widest text-slate-100 drop-shadow-[0_4px_12px_rgba(0,0,0,0.9)]">
                 HALLOWEEN
             </h1>
             <p class="text-xs uppercase tracking-[0.35em] text-slate-400 mb-4 font-semibold">SHADOW DASH PLATFORMER</p>
-
             <!-- Custom Game Thumbnail Canvas Card (Matching Uploaded Image) -->
             <div class="relative w-full h-52 md:h-56 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl mb-6 bg-stone-950">
                 <canvas id="thumbnailCanvas" class="w-full h-full block"></canvas>
                 <div class="absolute bottom-3 left-4 right-4 flex justify-between items-center text-xs font-spooky text-slate-300">
                     <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span> SPOOKY REALM</span>
-                    <span class="text-amber-400 font-bold tracking-widest">15 SECTORS</span>
+                    <span class="text-amber-400 font-bold tracking-widest">50 SECTORS</span>
                 </div>
             </div>
-
-            <button onclick="changeState('LEVEL_SELECT')" class="glass-button w-full py-4 text-xl font-spooky tracking-widest rounded-xl text-slate-100 hover:text-white transition">
+            <button onclick="changeState('LEVEL_SELECT')" class="btn-primary w-full py-4 text-2xl font-spooky tracking-widest rounded-xl text-white">
                 PLAY NOW
             </button>
-            
             <!-- Music & Sound Style Control Bar -->
             <div class="flex items-center gap-3 w-full mt-3">
                 <button onclick="cycleMusicStyle()" class="glass-button flex-1 py-2.5 px-4 rounded-xl text-amber-300 font-spooky text-sm flex items-center justify-center gap-2 hover:border-amber-400 transition">
@@ -171,15 +189,32 @@
                     <span id="menu-audio-icon">🔊</span>
                 </button>
             </div>
-
-            <!-- Filled by updateAuthUI(): a sign-in button, or who you are. -->
-            <div id="hp-auth-container" class="w-full mt-3"></div>
+            <button onclick="SoundFX.playClick(); document.getElementById('screen-menu').classList.add('hidden'); document.getElementById('screen-highlights').classList.remove('hidden');" class="glass-button w-full py-2.5 mt-3 rounded-xl text-emerald-300 font-spooky text-sm hover:border-emerald-400 transition">
+                ✨ VERSION HIGHLIGHTS
+            </button>
+            <p class="mt-4 text-[10px] tracking-widest text-slate-500 uppercase">A game by Sohan Kanti Dolai</p>
         </div>
-
+        <!-- Version Highlights Screen -->
+        <div id="screen-highlights" class="ui-content glass-panel p-6 md:p-8 rounded-3xl flex flex-col items-center max-w-lg w-full text-center hidden">
+            <h2 class="font-spooky text-3xl md:text-4xl font-bold mb-1 text-slate-100">VERSION HIGHLIGHTS</h2>
+            <p class="text-xs text-slate-400 mb-5 tracking-wider">What's new in this update</p>
+            <ul class="w-full text-left text-sm text-slate-200 space-y-2.5 overflow-y-auto max-h-[50vh] pr-1">
+                <li class="glass-panel rounded-xl px-4 py-2.5">🧱 <b>Better textures</b> - stone brick platforms with mossy, glowing tops</li>
+                <li class="glass-panel rounded-xl px-4 py-2.5">🐞 <b>Fixed bugs</b> - pause menu now resumes properly, plus clearer outlined spikes</li>
+                <li class="glass-panel rounded-xl px-4 py-2.5">🗺️ <b>35 more levels</b> - now 50 levels in total</li>
+                <li class="glass-panel rounded-xl px-4 py-2.5">🌙 <b>New spooky skies</b> - the sky changes colour every 10 levels</li>
+                <li class="glass-panel rounded-xl px-4 py-2.5">🪚 <b>Tougher late game</b> - more sawblades as you go deeper</li>
+                <li class="glass-panel rounded-xl px-4 py-2.5">🎃 <b>Better UI</b> - updated level counts and a redesigned death screen with progress and stats</li>
+                <li class="glass-panel rounded-xl px-4 py-2.5">📊 <b>Live progress bar</b> - see how far you are while playing, with pumpkin markers</li>
+                <li class="glass-panel rounded-xl px-4 py-2.5">⚡ <b>New features</b> - death counter, level intro banner, new best time badge, press R to restart instantly, overall stats on level select</li>
+            </ul>
+            <button onclick="SoundFX.playClick(); document.getElementById('screen-highlights').classList.add('hidden'); document.getElementById('screen-menu').classList.remove('hidden');" class="mt-5 px-8 py-3 border border-slate-600 rounded-xl text-slate-300 font-semibold hover:bg-slate-800 hover:text-white transition">BACK</button>
+        </div>
         <!-- Level Select Menu -->
         <div id="screen-levels" class="ui-content glass-panel p-6 md:p-8 rounded-3xl flex flex-col items-center max-w-3xl w-11/12 max-h-[85vh] hidden">
             <h2 class="font-spooky text-3xl md:text-4xl font-bold mb-1 text-slate-100">SELECT LEVEL</h2>
-            <p class="text-xs text-slate-400 mb-6 tracking-wider">15 Action-Packed Spooky Challenges</p>
+            <p class="text-xs text-slate-400 mb-1 tracking-wider">50 Action-Packed Spooky Challenges</p>
+            <p id="level-totals" class="text-xs text-amber-300 mb-5 tracking-widest font-semibold"></p>
             <div id="level-grid" class="grid grid-cols-3 sm:grid-cols-5 gap-3 md:gap-4 overflow-y-auto p-2 w-full max-h-[50vh]">
                 <!-- Dynamically generated -->
             </div>
@@ -188,14 +223,14 @@
                 <button onclick="resetProgress()" class="px-4 py-3 border border-rose-900/40 rounded-xl text-rose-400/70 font-semibold text-xs hover:bg-rose-950/50 hover:text-rose-300 transition">RESET PROGRESS</button>
             </div>
         </div>
-
         <!-- Pause Menu -->
         <div id="screen-pause" class="ui-content glass-panel p-8 rounded-3xl flex flex-col items-center max-w-sm w-full hidden">
-            <h2 class="font-spooky text-4xl font-bold mb-6 text-slate-100 tracking-widest">GAME PAUSED</h2>
-            <button onclick="resumeGame()" class="glass-button w-full py-3.5 mb-4 text-lg font-spooky rounded-xl text-white">RESUME</button>
-            <button onclick="changeState('LEVEL_SELECT')" class="w-full py-3 bg-slate-800/80 border border-slate-600 font-semibold rounded-xl text-slate-300 hover:bg-slate-700 transition">LEVEL SELECT</button>
+            <h2 class="font-spooky text-4xl font-bold text-slate-100 tracking-widest">GAME PAUSED</h2>
+            <p class="text-[11px] uppercase tracking-[0.3em] text-slate-400 mt-1 mb-6">Take a breath</p>
+            <button onclick="resumeGame()" class="btn-primary w-full py-3.5 mb-3 text-lg font-spooky rounded-xl text-white">RESUME <span class="kbd ml-2 align-middle">Esc</span></button>
+            <button onclick="SoundFX.playClick(); restartLevel();" class="btn-ghost w-full py-3 mb-3 font-semibold rounded-xl text-slate-300">RESTART LEVEL</button>
+            <button onclick="changeState('LEVEL_SELECT')" class="btn-ghost w-full py-3 font-semibold rounded-xl text-slate-300">LEVEL SELECT</button>
         </div>
-
         <!-- Level Complete Screen -->
         <div id="screen-complete" class="ui-content glass-panel p-8 rounded-3xl flex flex-col items-center max-w-md w-full hidden">
             <div class="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center mb-4 shadow-[0_0_25px_rgba(52,211,153,0.4)]">
@@ -203,52 +238,75 @@
             </div>
             <h2 class="font-spooky text-4xl font-black mb-1 text-emerald-400">STAGE CLEARED</h2>
             <p class="text-slate-300 mb-2 text-sm">Level <span id="completed-level-text" class="text-amber-300 font-bold"></span> completed successfully!</p>
-            
             <div class="flex items-center gap-2 mb-3 text-2xl" id="souls-rating">
                 <!-- Stars / Souls collected display -->
             </div>
-
-            <div class="glass-panel px-5 py-2 rounded-xl text-center mb-3 border-slate-700 w-full">
+            <div id="new-best-badge" class="hidden mb-2 px-4 py-1 rounded-full bg-amber-400/20 border border-amber-300 text-amber-300 text-xs font-bold tracking-[0.25em]">🏆 NEW BEST TIME!</div>
+            <div class="glass-panel px-5 py-2 rounded-xl text-center mb-6 border-slate-700">
                 <p class="text-xs text-slate-400 uppercase tracking-widest font-semibold">TIME RECORD</p>
                 <p id="completed-time-text" class="text-2xl font-mono text-cyan-300 font-bold">00:00.0</p>
             </div>
-
-            <div id="hp-complete-leaderboard" class="w-full mb-4 glass-panel p-3 rounded-xl max-h-40 overflow-y-auto"></div>
-
-            <button onclick="SoundFX.playClick(); nextLevel();" class="glass-button w-full py-4 mb-3 font-spooky text-lg rounded-xl text-slate-100 shadow-[0_0_20px_rgba(255,255,255,0.15)]">
+            <button onclick="SoundFX.playClick(); nextLevel();" class="btn-primary w-full py-4 mb-3 font-spooky text-xl rounded-xl text-white">
                 NEXT LEVEL
             </button>
-            <button onclick="SoundFX.playClick(); changeState('LEVEL_SELECT');" class="w-full py-3 bg-transparent border border-slate-600 font-semibold rounded-xl text-slate-400 hover:text-white transition">LEVEL SELECT</button>
+            <button onclick="SoundFX.playClick(); changeState('LEVEL_SELECT');" class="btn-ghost w-full py-3 font-semibold rounded-xl text-slate-300">LEVEL SELECT</button>
         </div>
-
         <!-- Game Over Screen -->
-        <div id="screen-death" class="ui-content glass-panel p-8 rounded-3xl flex flex-col items-center max-w-md w-full hidden text-center">
-            <div class="w-16 h-16 rounded-full bg-rose-500/20 border-2 border-rose-500 flex items-center justify-center mb-4 shadow-[0_0_25px_rgba(244,63,94,0.4)] animate-bounce">
-                <span class="text-rose-500 text-3xl">☠</span>
+        <div id="screen-death" class="ui-content glass-panel p-6 md:p-8 rounded-3xl flex flex-col items-center max-w-md w-full hidden text-center">
+            <div class="w-16 h-16 rounded-full bg-rose-500/15 border-2 border-rose-500/80 flex items-center justify-center mb-3 shadow-[0_0_30px_rgba(244,63,94,0.35)]">
+                <span class="text-rose-400 text-3xl">☠</span>
             </div>
-            <h2 class="font-spooky text-4xl font-black mb-1 text-rose-500 tracking-wider">SPOOKED!</h2>
-            <!-- Dynamic funny death reason message injected here -->
-            <p id="death-reason-text" class="text-amber-300 font-medium mb-4 text-sm md:text-base px-2 italic leading-relaxed">
+            <h2 class="font-spooky text-5xl font-black text-rose-500 tracking-wider leading-none">SPOOKED!</h2>
+            <p class="text-[11px] uppercase tracking-[0.3em] text-slate-400 mt-2 mb-4">Level <span id="death-level-text" class="text-amber-300 font-bold">1</span> &bull; Attempt <span id="death-attempt-text" class="text-amber-300 font-bold">1</span></p>
+            <p id="death-reason-text" class="text-amber-200 font-medium mb-5 text-sm md:text-base px-2 italic leading-relaxed">
                 "You fell into the abyss."
             </p>
-
-            <div id="hp-death-leaderboard" class="w-full mb-4 glass-panel p-3 rounded-xl max-h-36 overflow-y-auto text-left"></div>
-
-            <button onclick="SoundFX.playClick(); restartLevel();" class="w-full py-3.5 mb-3 bg-gradient-to-r from-rose-700 to-amber-700 hover:from-rose-600 hover:to-amber-600 text-white font-spooky text-lg rounded-xl shadow-lg transition transform hover:scale-102">
-                TRY AGAIN
+            <div class="w-full mb-5">
+                <div class="flex justify-between text-[10px] uppercase tracking-widest text-slate-400 mb-1.5 font-semibold">
+                    <span>Level progress</span><span id="death-progress-text" class="text-white">0%</span>
+                </div>
+                <div class="w-full h-2.5 rounded-full bg-black/60 border border-white/10 overflow-hidden">
+                    <div id="death-progress-bar" class="h-full rounded-full bg-gradient-to-r from-amber-500 to-rose-500" style="width:0%"></div>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3 w-full mb-6">
+                <div class="stat-box"><div class="stat-label">Time</div><div id="death-time-text" class="font-mono text-lg text-cyan-300 font-bold">00:00.0</div></div>
+                <div class="stat-box"><div class="stat-label">Pumpkins</div><div id="death-souls-text" class="text-lg text-amber-300 font-bold">0 / 3</div></div>
+            </div>
+            <button onclick="SoundFX.playClick(); restartLevel();" class="btn-primary w-full py-3.5 mb-3 text-white font-spooky text-xl rounded-xl">
+                TRY AGAIN <span class="kbd ml-2 align-middle">R</span>
             </button>
-            <button onclick="SoundFX.playClick(); changeState('LEVEL_SELECT');" class="w-full py-3 bg-transparent border border-slate-600 font-semibold rounded-xl text-slate-400 hover:text-white transition">LEVEL SELECT</button>
+            <button onclick="SoundFX.playClick(); changeState('LEVEL_SELECT');" class="btn-ghost w-full py-3 font-semibold rounded-xl text-slate-300">LEVEL SELECT</button>
         </div>
     </div>
-
+    <!-- Level Start Banner -->
+    <div id="level-banner" class="fixed inset-0 z-30 flex flex-col items-center justify-center pointer-events-none opacity-0 transition-opacity duration-500">
+        <p class="text-xs uppercase tracking-[0.5em] text-slate-300">Sector</p>
+        <h2 id="level-banner-num" class="font-spooky text-7xl md:text-8xl font-black text-amber-300 drop-shadow-[0_0_25px_rgba(251,146,60,0.6)]">1</h2>
+    </div>
     <!-- HUD Overlay -->
     <div id="ui-hud" class="ui-layer hidden flex justify-between p-6 items-start">
+        <div id="hud-progress-wrap" class="absolute left-1/2 -translate-x-1/2 top-[92px] md:top-auto md:bottom-6 w-[min(90%,420px)] pointer-events-none">
+            <div class="flex justify-between text-[10px] uppercase tracking-[0.25em] text-slate-300 mb-1 font-semibold drop-shadow">
+                <span>Progress</span><span id="hud-progress-pct" class="text-amber-300">0%</span>
+            </div>
+            <div class="relative w-full h-3 rounded-full bg-black/60 border border-white/20 overflow-hidden">
+                <div id="hud-progress-big" class="h-full rounded-full bg-gradient-to-r from-amber-400 to-rose-500 shadow-[0_0_10px_rgba(251,146,60,0.7)]" style="width:0%"></div>
+                <div class="absolute top-0 h-full w-px bg-white/40" style="left:25%"></div>
+                <div class="absolute top-0 h-full w-px bg-white/40" style="left:55%"></div>
+                <div class="absolute top-0 h-full w-px bg-white/40" style="left:82%"></div>
+            </div>
+        </div>
+        <div class="absolute top-0 left-0 w-full h-1.5 bg-black/50"><div id="hud-progress" class="h-full bg-gradient-to-r from-amber-400 to-rose-500 shadow-[0_0_10px_rgba(251,146,60,0.7)]" style="width:0%"></div></div>
         <div class="flex items-center gap-2 md:gap-4">
             <div class="ui-content font-spooky text-xl text-slate-200 flex items-center gap-2 glass-panel px-4 md:px-5 py-2 rounded-2xl">
-                <span>LEVEL</span> <span id="hud-level" class="text-amber-400 font-bold text-2xl">1</span> / 15
+                <span>LEVEL</span> <span id="hud-level" class="text-amber-400 font-bold text-2xl">1</span> / 50
             </div>
             <div class="ui-content font-spooky text-lg text-amber-300 flex items-center gap-2 glass-panel px-3 md:px-4 py-2 rounded-2xl">
                 <span>🎃</span> <span id="hud-souls" class="font-bold text-xl text-white">0 / 3</span>
+            </div>
+            <div class="ui-content font-spooky text-lg text-rose-400 flex items-center gap-2 glass-panel px-3 md:px-4 py-2 rounded-2xl">
+                <span>💀</span> <span id="hud-deaths" class="font-bold text-xl text-white">0</span>
             </div>
             <div class="ui-content font-mono text-xs md:text-sm text-cyan-300 flex items-center gap-1.5 glass-panel px-3 md:px-4 py-2 rounded-2xl font-bold border-cyan-500/30">
                 <span>⏱️</span> <span id="hud-timer" class="tracking-wider">00:00.0</span>
@@ -267,7 +325,6 @@
             </button>
         </div>
     </div>
-
     <!-- Mobile Controls -->
     <div id="mobileControls" class="flex justify-between px-8 md:px-14">
         <div class="flex gap-4">
@@ -278,11 +335,9 @@
             <div id="btn-jump" class="mobile-btn" style="width: 86px; height: 86px;">▲</div>
         </div>
     </div>
-
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-
         const DEATH_MESSAGES = {
             void: [
                 "Bro forgot gravity existed! 🕳️",
@@ -312,7 +367,6 @@
                 "Chopped into shadow bite-size pieces! 🍕"
             ]
         };
-
         // Rebuilt Web Audio API Engine for Soothing Lofi Beats, Ambient Piano & Soft SFX
         const SoundFX = {
             ctx: null,
@@ -322,26 +376,20 @@
             musicTimer: null,
             musicStep: 0,
             currentTrack: null, // 'menu' or 'game'
-            currentLevel: 0,
-            currentKey: null,
             musicStyle: 'lofi', // 'lofi', 'ambient', 'jazz'
             styleList: ['lofi', 'ambient', 'jazz'],
-
             init() {
                 if (!this.ctx) {
                     const AudioCtx = window.AudioContext || window.webkitAudioContext;
                     if (AudioCtx) {
                         this.ctx = new AudioCtx();
-
                         // Master lowpass filter eliminates ALL ear-hurting high frequency blips
                         this.masterFilter = this.ctx.createBiquadFilter();
                         this.masterFilter.type = 'lowpass';
                         this.masterFilter.frequency.setValueAtTime(800, this.ctx.currentTime);
                         this.masterFilter.Q.setValueAtTime(1.0, this.ctx.currentTime);
-
                         this.musicGain = this.ctx.createGain();
                         this.musicGain.gain.setValueAtTime(0.25, this.ctx.currentTime);
-
                         this.masterFilter.connect(this.musicGain);
                         this.musicGain.connect(this.ctx.destination);
                     }
@@ -350,26 +398,23 @@
                     this.ctx.resume();
                 }
             },
-
             toggleMute() {
                 this.isMuted = !this.isMuted;
                 if (this.isMuted) {
                     this.stopMusic();
                 } else {
-                    this.playTrack(this.currentTrack || 'menu', this.currentLevel || 0, true);
+                    this.playTrack(this.currentTrack || 'menu');
                 }
                 return this.isMuted;
             },
-
             cycleStyle() {
                 const nextIdx = (this.styleList.indexOf(this.musicStyle) + 1) % this.styleList.length;
                 this.musicStyle = this.styleList[nextIdx];
                 if (!this.isMuted && this.currentTrack) {
-                    this.playTrack(this.currentTrack, this.currentLevel || 0, true);
+                    this.playTrack(this.currentTrack);
                 }
                 return this.musicStyle;
             },
-
             playSoftPianoNote(freq, duration = 1.4, vol = 0.07) {
                 if (this.isMuted || !this.ctx || !freq) return;
                 try {
@@ -378,35 +423,28 @@
                     const osc2 = this.ctx.createOscillator();
                     const noteGain = this.ctx.createGain();
                     const noteFilter = this.ctx.createBiquadFilter();
-
                     osc1.type = 'sine';
                     osc2.type = 'triangle';
-                    
                     osc1.frequency.setValueAtTime(freq, now);
                     osc2.frequency.setValueAtTime(freq * 1.002, now); // Warm chorus detune
-
                     // Dynamic warm filter drop
                     noteFilter.type = 'lowpass';
                     noteFilter.frequency.setValueAtTime(1100, now);
                     noteFilter.frequency.exponentialRampToValueAtTime(250, now + duration);
-
                     // Zero-click soft attack & smooth exponential decay
                     noteGain.gain.setValueAtTime(0, now);
                     noteGain.gain.linearRampToValueAtTime(vol, now + 0.025);
                     noteGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-
                     osc1.connect(noteFilter);
                     osc2.connect(noteFilter);
                     noteFilter.connect(noteGain);
                     noteGain.connect(this.masterFilter);
-
                     osc1.start(now);
                     osc2.start(now);
                     osc1.stop(now + duration);
                     osc2.stop(now + duration);
                 } catch(e) {}
             },
-
             playPadChord(freqArray, duration = 3.6, vol = 0.035) {
                 if (this.isMuted || !this.ctx || !freqArray) return;
                 try {
@@ -415,51 +453,40 @@
                         const osc = this.ctx.createOscillator();
                         const gain = this.ctx.createGain();
                         const filter = this.ctx.createBiquadFilter();
-
                         osc.type = 'triangle';
                         osc.frequency.setValueAtTime(freq, now);
-
                         filter.type = 'lowpass';
                         filter.frequency.setValueAtTime(180, now);
                         filter.frequency.linearRampToValueAtTime(500, now + duration * 0.4);
                         filter.frequency.linearRampToValueAtTime(150, now + duration);
-
                         gain.gain.setValueAtTime(0, now);
                         gain.gain.linearRampToValueAtTime(vol, now + 0.9); // Gentle slow pad swell
                         gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-
                         osc.connect(filter);
                         filter.connect(gain);
                         gain.connect(this.masterFilter);
-
                         osc.start(now + i * 0.04);
                         osc.stop(now + duration);
                     });
                 } catch(e) {}
             },
-
             playLofiKick() {
                 if (this.isMuted || !this.ctx) return;
                 try {
                     const now = this.ctx.currentTime;
                     const osc = this.ctx.createOscillator();
                     const gain = this.ctx.createGain();
-
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(90, now);
                     osc.frequency.exponentialRampToValueAtTime(32, now + 0.15);
-
                     gain.gain.setValueAtTime(0.18, now);
                     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-
                     osc.connect(gain);
                     gain.connect(this.masterFilter);
-
                     osc.start(now);
                     osc.stop(now + 0.15);
                 } catch(e) {}
             },
-
             playLofiHat() {
                 if (this.isMuted || !this.ctx) return;
                 try {
@@ -470,27 +497,21 @@
                     for (let i = 0; i < bufferSize; i++) {
                         data[i] = Math.random() * 2 - 1;
                     }
-
                     const noise = this.ctx.createBufferSource();
                     noise.buffer = buffer;
-
                     const filter = this.ctx.createBiquadFilter();
                     filter.type = 'bandpass';
                     filter.frequency.setValueAtTime(3500, now);
                     filter.Q.setValueAtTime(3, now);
-
                     const gain = this.ctx.createGain();
                     gain.gain.setValueAtTime(0.02, now);
                     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
-
                     noise.connect(filter);
                     filter.connect(gain);
                     gain.connect(this.masterFilter);
-
                     noise.start(now);
                 } catch(e) {}
             },
-
             playJump() {
                 if (this.isMuted || !this.ctx) return;
                 try {
@@ -498,27 +519,21 @@
                     const gain = this.ctx.createGain();
                     const filter = this.ctx.createBiquadFilter();
                     const now = this.ctx.currentTime;
-
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(140, now);
                     osc.frequency.exponentialRampToValueAtTime(260, now + 0.12);
-
                     filter.type = 'lowpass';
                     filter.frequency.setValueAtTime(500, now);
-
                     gain.gain.setValueAtTime(0, now);
                     gain.gain.linearRampToValueAtTime(0.12, now + 0.02);
                     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-
                     osc.connect(filter);
                     filter.connect(gain);
                     gain.connect(this.ctx.destination);
-
                     osc.start(now);
                     osc.stop(now + 0.12);
                 } catch(e) {}
             },
-
             playSpring() {
                 if (this.isMuted || !this.ctx) return;
                 try {
@@ -527,7 +542,6 @@
                     });
                 } catch(e) {}
             },
-
             playSoul() {
                 if (this.isMuted || !this.ctx) return;
                 try {
@@ -538,7 +552,6 @@
                     });
                 } catch(e) {}
             },
-
             playDeath() {
                 if (this.isMuted || !this.ctx) return;
                 try {
@@ -548,18 +561,14 @@
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(120, now);
                     osc.frequency.exponentialRampToValueAtTime(30, now + 0.35);
-
                     gain.gain.setValueAtTime(0.2, now);
                     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-
                     osc.connect(gain);
                     gain.connect(this.ctx.destination);
-
                     osc.start(now);
                     osc.stop(now + 0.35);
                 } catch(e) {}
             },
-
             playWin() {
                 if (this.isMuted || !this.ctx) return;
                 try {
@@ -571,7 +580,6 @@
                     });
                 } catch(e) {}
             },
-
             playClick() {
                 if (this.isMuted || !this.ctx) return;
                 try {
@@ -581,44 +589,23 @@
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(300, now);
                     osc.frequency.exponentialRampToValueAtTime(120, now + 0.03);
-
                     gain.gain.setValueAtTime(0.08, now);
                     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
-
                     osc.connect(gain);
                     gain.connect(this.ctx.destination);
-
                     osc.start(now);
                     osc.stop(now + 0.03);
                 } catch(e) {}
             },
-
-            // Each level gets its own key, tempo nudge and chord order so the
-            // song audibly changes level to level; the menu keeps the base key.
-            // Re-requesting the same track (e.g. resuming from pause) is a no-op
-            // unless `force` is set (style change / unmute).
-            playTrack(trackName, level = 0, force = false) {
-                const trackKey = trackName + ':' + (trackName === 'game' ? level : 0);
-                if (!force && trackKey === this.currentKey && this.musicTimer) return;
+            playTrack(trackName) {
                 this.currentTrack = trackName;
-                this.currentLevel = level;
-                this.currentKey = trackKey;
                 if (this.isMuted) return;
                 this.init();
                 this.stopMusic();
-
                 this.musicStep = 0;
-
-                const lv = trackName === 'game' ? Math.max(1, level) : 0;
-                const keyShifts = [1, 1.1225, 0.8909, 1.2599, 0.9439, 1.0595];  // semitones: 0,+2,-2,+4,-1,+1
-                const shift = lv ? keyShifts[(lv - 1) % keyShifts.length] : 1;
-                const barOffset = lv ? (lv - 1) % 4 : 0;
-                const tempoNudge = lv ? [0, 4, -3, 6, 2][(lv - 1) % 5] : 0;
-
                 // Relaxed, cozy tempos
-                const bpm = (this.musicStyle === 'ambient' ? 64 : (this.musicStyle === 'jazz' ? 76 : 80)) + tempoNudge;
+                const bpm = this.musicStyle === 'ambient' ? 64 : (this.musicStyle === 'jazz' ? 76 : 80);
                 const intervalMs = (60 / bpm / 4) * 1000;
-
                 // Rich Lofi / Jazz Chords
                 const lofiChords = [
                     [130.81, 155.56, 196.00, 233.08, 293.66], // Cm9
@@ -626,32 +613,26 @@
                     [87.31, 130.81, 155.56, 174.61, 261.63],  // Fm9
                     [98.00, 146.83, 174.61, 246.94, 311.13]   // G7b13
                 ];
-
                 const ambientChords = [
                     [130.81, 196.00, 261.63, 311.13],
                     [155.56, 233.08, 311.13, 392.00],
                     [103.83, 155.56, 207.65, 261.63],
                     [87.31, 130.81, 174.61, 261.63]
                 ];
-
                 const lofiMelodyNotes = [
                     261.63, 311.13, 349.23, 392.00, 466.16, 523.25, 587.33, 622.25, 0, 0, 0
                 ];
-
                 this.musicTimer = setInterval(() => {
                     if (this.isMuted || !this.ctx) return;
                     const s = this.musicStep;
                     const bar = Math.floor(s / 16);
                     const beatInBar = s % 16;
-
                     const chords = this.musicStyle === 'ambient' ? ambientChords : lofiChords;
-                    const currentChord = chords[(bar + barOffset) % chords.length].map(f => f * shift);
-
+                    const currentChord = chords[bar % chords.length];
                     // Pad Chord Swell at the start of each bar
                     if (beatInBar === 0) {
                         this.playPadChord(currentChord, (60 / bpm) * 4 * 0.95, 0.035);
                     }
-
                     if (this.musicStyle === 'lofi') {
                         if (beatInBar === 0 || beatInBar === 10) {
                             this.playLofiKick();
@@ -661,7 +642,7 @@
                         }
                         if ([2, 6, 9, 13].includes(beatInBar) && Math.random() > 0.35) {
                             const noteIdx = Math.floor(Math.random() * lofiMelodyNotes.length);
-                            const noteFreq = lofiMelodyNotes[noteIdx] * shift;
+                            const noteFreq = lofiMelodyNotes[noteIdx];
                             if (noteFreq) {
                                 this.playSoftPianoNote(noteFreq, 1.2, 0.05);
                             }
@@ -684,11 +665,9 @@
                             this.playSoftPianoNote(note, 1.0, 0.045);
                         }
                     }
-
                     this.musicStep++;
                 }, intervalMs);
             },
-
             stopMusic() {
                 if (this.musicTimer) {
                     clearInterval(this.musicTimer);
@@ -696,13 +675,11 @@
                 }
             }
         };
-
         function cycleMusicStyle() {
             SoundFX.init();
             const style = SoundFX.cycleStyle();
             updateMusicUI(style);
         }
-
         function updateMusicUI(style) {
             const labels = {
                 lofi: { icon: '☕', name: 'Lofi Chill' },
@@ -710,7 +687,6 @@
                 jazz: { icon: '🎷', name: 'Midnight Jazz' }
             };
             const info = labels[style] || labels.lofi;
-
             ['music-style-icon', 'menu-music-icon'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.innerText = info.icon;
@@ -720,7 +696,6 @@
                 if (el) el.innerText = info.name;
             });
         }
-
         function toggleAudio() {
             SoundFX.init();
             const muted = SoundFX.toggleMute();
@@ -729,12 +704,11 @@
                 if (el) el.innerText = muted ? '🔇' : '🔊';
             });
         }
-
         // Auto unlock audio on user gesture
         const unlockAudio = () => {
             SoundFX.init();
             if (gameState === 'PLAYING') {
-                SoundFX.playTrack('game', currentLevel);
+                SoundFX.playTrack('game');
             } else {
                 SoundFX.playTrack('menu');
             }
@@ -745,13 +719,11 @@
         window.addEventListener('click', unlockAudio);
         window.addEventListener('keydown', unlockAudio);
         window.addEventListener('touchstart', unlockAudio);
-
         const thumbCanvas = document.getElementById('thumbnailCanvas');
         const thumbCtx = thumbCanvas.getContext('2d');
-
         let gameState = 'MENU'; 
         let currentLevel = 1;
-        const TOTAL_LEVELS = 15;
+        const TOTAL_LEVELS = 50;
         let maxUnlockedLevel = 1;
         let levelStats = {};
         try {
@@ -759,14 +731,11 @@
             levelStats = JSON.parse(localStorage.getItem('shadow_dash_level_stats') || '{}');
         } catch(e) {}
         let isMobileControlsActive = false;
-
         let lastTime = 0;
         let gameTime = 0;
         let levelTimer = 0;
-
         // Camera setup
         let camera = { x: 0, y: 0 };
-
         // Level Entities
         let platforms = [];
         let hazards = [];
@@ -777,10 +746,8 @@
         let goal = null;
         let levelLength = 0;
         let collectedCount = 0;
-
         // Input state
         const keys = { left: false, right: false, jump: false };
-
         // Player entity (Spooky Dark Cube matching photo)
         const player = {
             x: 0, y: 0,
@@ -799,30 +766,25 @@
             isDead: false,
             trail: []
         };
-
         function resize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-
             if (thumbCanvas) {
                 thumbCanvas.width = thumbCanvas.parentElement.clientWidth;
                 thumbCanvas.height = thumbCanvas.parentElement.clientHeight;
             }
         }
         window.addEventListener('resize', resize);
-
         function hideAllScreens() {
-            ['screen-menu', 'screen-levels', 'screen-pause', 'screen-complete', 'screen-death'].forEach(id => {
+            ['screen-menu', 'screen-highlights', 'screen-levels', 'screen-pause', 'screen-complete', 'screen-death'].forEach(id => {
                 document.getElementById(id).classList.add('hidden');
             });
             document.getElementById('ui-main').classList.add('hidden');
             document.getElementById('ui-hud').classList.add('hidden');
         }
-
         function changeState(newState) {
             gameState = newState;
             hideAllScreens();
-            
             if (newState === 'MENU') {
                 document.getElementById('ui-main').classList.remove('hidden');
                 document.getElementById('screen-menu').classList.remove('hidden');
@@ -835,9 +797,11 @@
             } else if (newState === 'PLAYING') {
                 document.getElementById('ui-hud').classList.remove('hidden');
                 document.getElementById('hud-level').innerText = currentLevel;
+                { const d = document.getElementById('hud-deaths'); if (d) d.innerText = (attemptCounts[currentLevel] || 0); }
+                showLevelBanner();
                 updateSoulsHUD();
                 lastTime = performance.now();
-                SoundFX.playTrack('game', currentLevel);
+                SoundFX.playTrack('game');
             } else if (newState === 'PAUSED') {
                 document.getElementById('ui-main').classList.remove('hidden');
                 document.getElementById('screen-pause').classList.remove('hidden');
@@ -846,19 +810,15 @@
                 document.getElementById('screen-complete').classList.remove('hidden');
                 document.getElementById('completed-level-text').innerText = currentLevel;
                 renderSoulsRating();
-                loadLeaderboard('hp-complete-leaderboard');
             } else if (newState === 'DEATH') {
                 document.getElementById('ui-main').classList.remove('hidden');
                 document.getElementById('screen-death').classList.remove('hidden');
-                loadLeaderboard('hp-death-leaderboard');
             }
             updateControlsVisibility();
         }
-
         function updateSoulsHUD() {
             document.getElementById('hud-souls').innerText = `${collectedCount} / 3`;
         }
-
         function renderSoulsRating() {
             const container = document.getElementById('souls-rating');
             let html = '';
@@ -871,7 +831,6 @@
             }
             container.innerHTML = html;
         }
-
         function createSeededRandom(seed) {
             return function() {
                 let t = seed += 0x6D2B79F5;
@@ -880,7 +839,6 @@
                 return ((t ^ t >>> 14) >>> 0) / 4294967296;
             }
         }
-
         function formatTime(seconds, includeMs = true) {
             if (!seconds && seconds !== 0) return '--:--';
             const mins = Math.floor(seconds / 60);
@@ -893,146 +851,6 @@
             }
             return `${mStr}:${sStr}`;
         }
-
-        /* --- HallPass ---------------------------------------------------------
-           The board holds ONE number per player: the time to clear all fifteen
-           sectors, summed from each sector's personal best. It is an ASCENDING
-           board - lowest time ranks first - and the only one on the site that
-           sorts that way.
-
-           Times cross the wire as INTEGER MILLISECONDS. The score column is
-           BIGINT and the API truncates with Math.trunc, so a fractional value is
-           silently floored: posting 12.3 seconds would store 12 and every close
-           run would tie on a whole second.
-        ---------------------------------------------------------------------- */
-
-        const HP_BOARD_LABEL = 'FASTEST FULL CLEAR';
-
-        /* Escape text bound for innerHTML. Handles arrive server-sanitised to
-           [A-Za-z0-9 _-], but a signed-in player's Google name does not, and it
-           is rendered straight into the auth row. */
-        function hpEscape(value) {
-            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-            return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => map[c]);
-        }
-
-        /* Format a board time from WHOLE MILLISECONDS, using integer maths only.
-           formatTime() takes float seconds and floors the tenth, so binary
-           floating point drags a boundary value down a tenth: 252700 ms is
-           252.7 s, which is stored as 252.69999999999999, and (s % 1) * 10
-           floors to 6 - the board would read 04:12.6 for a 04:12.7 run. The
-           scores arrive as integers, so nothing here needs to leave them. */
-        function hpFormatMs(ms) {
-            const total = Math.max(0, Math.round(Number(ms) || 0));
-            const mins = Math.floor(total / 60000);
-            const secs = Math.floor((total % 60000) / 1000);
-            const tenths = Math.floor((total % 1000) / 100);
-            return String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0') + '.' + tenths;
-        }
-
-        /* Sectors with a recorded best, out of TOTAL_LEVELS. */
-        function hpSectorsCleared() {
-            let cleared = 0;
-            for (let i = 1; i <= TOTAL_LEVELS; i++) {
-                const stat = levelStats[i];
-                if (stat && stat.time) cleared++;
-            }
-            return cleared;
-        }
-
-        /* Total clear time in whole milliseconds, or null until every sector has
-           a best. levelStats stores seconds as floats; the sum is rounded once,
-           at the end, rather than per sector. */
-        function hpTotalClearMs() {
-            let totalSeconds = 0;
-            for (let i = 1; i <= TOTAL_LEVELS; i++) {
-                const stat = levelStats[i];
-                if (!stat || !stat.time) return null;
-                totalSeconds += stat.time;
-            }
-            return Math.round(totalSeconds * 1000);
-        }
-
-        function loadLeaderboard(containerId) {
-            const el = document.getElementById(containerId);
-            if (!el || !window.HallPass) return;
-
-            el.innerHTML = '<div class="text-xs text-slate-400 py-1 text-center">Loading fastest times...</div>';
-
-            /* getScores never rejects - it resolves [] when offline or inert. */
-            window.HallPass.getScores({ limit: 10 }).then((rows) => {
-                let html = '<div class="text-xs font-spooky text-amber-400 mb-1.5 font-bold tracking-wider text-center">\u{1F3C6} '
-                    + HP_BOARD_LABEL + '</div>';
-
-                if (!rows || rows.length === 0) {
-                    html += '<div class="text-xs text-amber-300 py-1 text-center font-semibold">No full clears yet - be the first!</div>';
-                } else {
-                    html += '<div class="space-y-1 text-xs font-mono">';
-                    rows.forEach((r) => {
-                        const badge = r.verified ? ' <span class="text-cyan-400" title="Verified">\u2713</span>' : '';
-                        html += '<div class="flex justify-between items-center bg-slate-900/80 px-2.5 py-1 rounded border border-slate-800 text-slate-200">'
-                            + '<span>#' + r.rank + ' ' + hpEscape(r.handle || 'Guest') + badge + '</span>'
-                            + '<span class="text-cyan-300 font-bold">' + hpFormatMs(r.score) + '</span>'
-                            + '</div>';
-                    });
-                    html += '</div>';
-                }
-
-                /* Say why nothing of yours is up there yet. */
-                const cleared = hpSectorsCleared();
-                if (cleared < TOTAL_LEVELS) {
-                    html += '<div class="text-[11px] text-slate-400 mt-2 text-center leading-snug">Clear all '
-                        + TOTAL_LEVELS + ' sectors to post a time - ' + cleared + '/' + TOTAL_LEVELS + ' done.</div>';
-                }
-
-                el.innerHTML = html;
-            });
-        }
-
-        /* Post the full clear, but only when it beats what this browser last got
-           on the board. Every sector keeps its minimum, so the total only ever
-           falls; without the guard each later sector clear would re-post an
-           identical number as a duplicate row.
-
-           The marker is written only once the API confirms the row, so a run
-           posted while offline is retried on the next clear instead of being
-           recorded as sent. */
-        function hpSubmitClearIfImproved() {
-            const totalMs = hpTotalClearMs();
-            if (totalMs === null || !window.HallPass) return;
-
-            let posted = null;
-            try {
-                const raw = localStorage.getItem('shadow_dash_hp_posted_ms');
-                if (raw !== null) posted = parseInt(raw, 10);
-            } catch(e) {}
-            if (posted !== null && Number.isFinite(posted) && totalMs >= posted) return;
-
-            window.HallPass.submitScore(totalMs).then((res) => {
-                if (!res || !res.ok) return;
-                try {
-                    localStorage.setItem('shadow_dash_hp_posted_ms', String(totalMs));
-                } catch(e) {}
-                /* Repaint so the player sees the rank they just took. */
-                loadLeaderboard('hp-complete-leaderboard');
-            });
-        }
-
-        function updateAuthUI(playerData) {
-            const container = document.getElementById('hp-auth-container');
-            if (!container) return;
-
-            if (playerData) {
-                /* Show the handle the board will credit, not the Google name. */
-                container.innerHTML = '<div class="text-xs text-emerald-400 font-semibold bg-emerald-950/50 border border-emerald-800/60 py-2.5 px-4 rounded-xl flex items-center justify-center gap-2">'
-                    + '<span>\u{1F464}</span> Signed in as <strong class="text-white">'
-                    + hpEscape(playerData.handle || playerData.name) + '</strong></div>';
-            } else {
-                container.innerHTML = '<button onclick="window.HallPass && window.HallPass.signIn()" class="glass-button w-full py-2.5 px-4 rounded-xl text-amber-300 font-spooky text-sm flex items-center justify-center gap-2 hover:border-amber-400 transition">'
-                    + '<span>\u{1F511}</span> Sign In with Google</button>';
-            }
-        }
-
         function generateLevel(levelIdx) {
             platforms = [];
             hazards = [];
@@ -1044,13 +862,8 @@
             collectedCount = 0;
             levelTimer = 0;
             player.isDead = false;
-
             const rand = createSeededRandom(levelIdx * 9999 + 4321);
-            // Separate stream for the newer obstacles so adding them never
-            // reshuffles the platform layout the main stream produces.
-            const orand = createSeededRandom(levelIdx * 7919 + 1234);
-            levelLength = 8500 + (levelIdx * 600);
-
+            levelLength = 8500 + (Math.min(levelIdx, 15) * 600) + (Math.max(0, levelIdx - 15) * 90);
             // Background fog nodes
             for (let i = 0; i < 60; i++) {
                 stars.push({
@@ -1060,41 +873,26 @@
                     alpha: rand() * 0.12 + 0.03
                 });
             }
-
             let curX = 0;
             let curY = canvas.height / 2;
-
             // Safe starting ground platform
             platforms.push({ x: curX, y: curY, w: 700, h: 50, type: 'normal' });
             curX += 700;
-
             player.x = 120;
             player.y = curY - player.h - 10;
             player.vx = 0;
             player.vy = 0;
-            player.coyoteTime = 0;
-            player.jumpBuffer = 0;
-            // Start the camera on the player; a stale camera from the previous
-            // run could otherwise trip the fall-death check on the first frame.
-            camera.x = 0;
-            camera.y = player.y - canvas.height / 1.6;
-
             let soulPlaced = 0;
             const soulMilestones = [levelLength * 0.25, levelLength * 0.55, levelLength * 0.82];
-
             while (curX < levelLength - 1200) {
-                let gapX = 120 + rand() * (120 + levelIdx * 6);
+                let gapX = 120 + rand() * (120 + Math.min(levelIdx, 22) * 6);
                 let gapY = (rand() > 0.5 ? 1 : -1) * (rand() * 160);
-
                 if (curY + gapY > canvas.height * 1.3) gapY = -Math.abs(gapY);
                 if (curY + gapY < -canvas.height * 0.3) gapY = Math.abs(gapY);
-
                 curX += gapX;
                 curY += gapY;
-
                 let platW = Math.max(120, 280 - (levelIdx * 8) + rand() * 100);
                 let platType = 'normal';
-
                 // Crumbling / Moving platform mechanics
                 let roll = rand();
                 if (levelIdx >= 4 && roll < 0.25) {
@@ -1102,7 +900,6 @@
                 } else if (levelIdx >= 5 && roll < 0.45) {
                     platType = 'moving';
                 }
-
                 let moveRange = 70 + rand() * 70;
                 let isVertical = rand() > 0.5;
                 if (platType === 'moving') {
@@ -1112,7 +909,6 @@
                         moveRange = Math.min(moveRange, 80); // Safe vertical travel range
                     }
                 }
-
                 let pObj = { 
                     x: curX, y: curY, w: platW, h: 48, 
                     type: platType,
@@ -1125,8 +921,6 @@
                     respawnTimer: -1
                 };
                 platforms.push(pObj);
-
-                const hazardsBefore = hazards.length;
                 let hasSpring = false;
                 let springX = 0;
                 if (levelIdx >= 3 && rand() < 0.3 && platType === 'normal' && platW >= 150) {
@@ -1142,15 +936,12 @@
                         active: 0
                     });
                 }
-
                 // Triangular ground Spikes placement - safe separation from spring pads!
                 if (platType === 'normal' && rand() < 0.65 && platW > 150) {
                     let spikeCount = Math.floor(rand() * 2) + 1;
                     if (levelIdx > 8) spikeCount += 1;
-
                     let spikeW = 32;
                     let totalSpikeW = spikeCount * spikeW;
-
                     // Position spikes away from the spring pad if one exists
                     let spikeStart = curX + (platW / 2) - (totalSpikeW / 2);
                     if (hasSpring) {
@@ -1162,7 +953,6 @@
                             spikeStart = curX + 15;
                         }
                     }
-
                     if (spikeStart >= curX + 10 && spikeStart + totalSpikeW <= curX + platW - 10) {
                         for (let i = 0; i < spikeCount; i++) {
                             hazards.push({
@@ -1175,9 +965,8 @@
                         }
                     }
                 }
-
                 // Spinning Sawblade hazard
-                if (levelIdx >= 8 && rand() < 0.28) {
+                if (levelIdx >= 8 && rand() < 0.28 + Math.min(Math.max(0, levelIdx - 15), 35) * 0.004) {
                     hazards.push({
                         type: 'saw',
                         x: curX + platW / 2,
@@ -1187,33 +976,6 @@
                         angle: 0
                     });
                 }
-
-                // Newer obstacles: only on bare normal platforms, so they never
-                // overlap a spring, spikes or the static sawblade.
-                const oRoll = orand();
-                const oPhase = orand() * 6.28;
-                if (platType === 'normal' && !hasSpring && hazards.length === hazardsBefore) {
-                    if (levelIdx >= 3 && platW >= 170 && oRoll < 0.22) {
-                        // Retracting spikes: sink, flash red as a warning, then pop up
-                        const cx = curX + platW / 2;
-                        for (let i = 0; i < 2; i++) {
-                            hazards.push({
-                                type: 'popspike',
-                                x: cx - 32 + i * 32, y: curY - 32, w: 32, h: 32,
-                                ext: 0, offset: oPhase
-                            });
-                        }
-                    } else if (levelIdx >= 10 && platW >= 220 && oRoll > 0.75) {
-                        // Low patrolling sawblade: jump over it, mind the timing
-                        hazards.push({
-                            type: 'saw', patrol: true,
-                            x: curX + platW / 2, y: curY - 22, r: 22, w: 44, h: 44,
-                            cx: curX + platW / 2, range: platW / 2 - 40,
-                            speed: 1.5 + orand() * 0.8, phase: oPhase, angle: 0
-                        });
-                    }
-                }
-
                 // Collectible Pumpkin Souls placement
                 if (soulPlaced < 3 && curX >= soulMilestones[soulPlaced]) {
                     collectibles.push({
@@ -1224,25 +986,20 @@
                     });
                     soulPlaced++;
                 }
-
                 curX += platW;
             }
-
             // End Goal Platform (With Green Flag matching photo)
             curX += 200;
             curY = curY + (rand() > 0.5 ? 60 : -60);
             platforms.push({ x: curX, y: curY, w: 900, h: 50, type: 'normal' });
-
             goal = {
                 x: curX + 450,
                 y: curY - 180,
                 w: 24,
                 h: 180
             };
-
             levelLength = curX + 900;
         }
-
         window.addEventListener('keydown', (e) => {
             if (isMobileControlsActive) {
                 isMobileControlsActive = false;
@@ -1254,30 +1011,28 @@
                 if (!keys.jump) player.jumpBuffer = player.maxJumpBuffer;
                 keys.jump = true;
             }
+            if ((gameState === 'DEATH' && (e.code === 'KeyR' || e.code === 'Enter')) || (gameState === 'PLAYING' && e.code === 'KeyR')) restartLevel();
+            else if (gameState === 'COMPLETE' && e.code === 'Enter') nextLevel();
             if (e.code === 'Escape' || e.code === 'KeyP') {
                 if (gameState === 'PLAYING') pauseGame();
                 else if (gameState === 'PAUSED') resumeGame();
             }
         });
-
         window.addEventListener('keyup', (e) => {
             if (e.code === 'KeyA' || e.code === 'ArrowLeft') keys.left = false;
             if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.right = false;
             if (e.code === 'KeyW' || e.code === 'ArrowUp' || e.code === 'Space') keys.jump = false;
         });
-
         function updateControlsVisibility() {
             document.getElementById('mobileControls').style.display = 
                 (isMobileControlsActive && gameState === 'PLAYING') ? 'flex' : 'none';
         }
-
         document.addEventListener('touchstart', (e) => {
             if (!isMobileControlsActive) {
                 isMobileControlsActive = true;
                 updateControlsVisibility();
             }
         }, { passive: true });
-
         const bindTouch = (id, keyName) => {
             const btn = document.getElementById(id);
             btn.addEventListener('touchstart', (e) => {
@@ -1294,19 +1049,22 @@
                 keys[keyName] = false;
             });
         };
-
         bindTouch('btn-left', 'left');
         bindTouch('btn-right', 'right');
         bindTouch('btn-jump', 'jump');
-
         function buildLevelGrid() {
             const grid = document.getElementById('level-grid');
             grid.innerHTML = '';
+            {
+                let totalP = 0, cleared = 0;
+                for (const k in levelStats) { totalP += levelStats[k].pumpkins || 0; if (levelStats[k].time) cleared++; }
+                const lt = document.getElementById('level-totals');
+                if (lt) lt.innerText = `🎃 ${totalP} / ${TOTAL_LEVELS * 3}   •   🚩 ${cleared} / ${TOTAL_LEVELS} cleared`;
+            }
             for (let i = 1; i <= TOTAL_LEVELS; i++) {
                 const btn = document.createElement('button');
                 const isUnlocked = i <= maxUnlockedLevel;
                 const stats = levelStats[i] || { pumpkins: 0, time: null };
-
                 if (isUnlocked) {
                     let pumpkinsDisplay = '';
                     if (stats.pumpkins > 0) {
@@ -1316,9 +1074,7 @@
                     } else {
                         pumpkinsDisplay = '<span class="opacity-30 text-[10px]">No 🎃</span>';
                     }
-
                     const timeDisplay = stats.time ? formatTime(stats.time, false) : '--:--';
-
                     btn.className = 'glass-panel p-3 text-center font-spooky rounded-2xl text-slate-100 border border-slate-600/50 hover:border-amber-400 hover:text-amber-300 transition hover:scale-105 active:scale-95 flex flex-col items-center justify-between min-h-[115px]';
                     btn.innerHTML = `
                         <span class="text-2xl font-bold">${i}</span>
@@ -1338,28 +1094,23 @@
                 grid.appendChild(btn);
             }
         }
-
         function resetProgress() {
             maxUnlockedLevel = 1;
             levelStats = {};
             try {
                 localStorage.removeItem('shadow_dash_max_level');
                 localStorage.removeItem('shadow_dash_level_stats');
-                localStorage.removeItem('shadow_dash_hp_posted_ms');
             } catch(e) {}
             buildLevelGrid();
         }
-
         function startLevel() {
             generateLevel(currentLevel);
             changeState('PLAYING');
             keys.left = keys.right = keys.jump = false;
         }
-
         function restartLevel() {
             startLevel();
         }
-
         function nextLevel() {
             if (currentLevel < TOTAL_LEVELS) {
                 currentLevel++;
@@ -1368,27 +1119,45 @@
                 changeState('MENU');
             }
         }
-
+        function resumeGame() {
+            if (gameState !== 'PAUSED') return;
+            keys.left = keys.right = keys.jump = false;
+            SoundFX.playClick();
+            changeState('PLAYING');
+        }
         function pauseGame() {
             if (gameState === 'PLAYING') changeState('PAUSED');
         }
-        function resumeGame() {
-            if (gameState !== 'PAUSED') return;
-            changeState('PLAYING'); // keeps the level as-is and resets lastTime so no time jump
-            keys.left = keys.right = keys.jump = false;
+        const attemptCounts = {};
+        let bannerTimer = null;
+        function showLevelBanner() {
+            const b = document.getElementById('level-banner');
+            if (!b) return;
+            document.getElementById('level-banner-num').innerText = currentLevel;
+            b.style.opacity = '1';
+            clearTimeout(bannerTimer);
+            bannerTimer = setTimeout(() => { b.style.opacity = '0'; }, 1100);
         }
         function triggerDeath(reason = 'void') {
             if (player.isDead) return;
             player.isDead = true;
+            attemptCounts[currentLevel] = (attemptCounts[currentLevel] || 0) + 1;
+            const pct = Math.max(0, Math.min(100, Math.round((player.x / levelLength) * 100)));
+            const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
+            setTxt('death-level-text', currentLevel);
+            setTxt('death-attempt-text', attemptCounts[currentLevel]);
+            setTxt('death-progress-text', pct + '%');
+            setTxt('death-time-text', formatTime(levelTimer, true));
+            setTxt('death-souls-text', collectedCount + ' / 3');
+            const bar = document.getElementById('death-progress-bar');
+            if (bar) bar.style.width = pct + '%';
             SoundFX.playDeath();
-
             const msgs = DEATH_MESSAGES[reason] || DEATH_MESSAGES.void;
             const randomMsg = msgs[Math.floor(Math.random() * msgs.length)];
             const deathElem = document.getElementById('death-reason-text');
             if (deathElem) {
                 deathElem.innerText = `"${randomMsg}"`;
             }
-
             for (let i = 0; i < 30; i++) {
                 particles.push({
                     x: player.x + player.w / 2,
@@ -1404,42 +1173,30 @@
                 changeState('DEATH');
             }, 300);
         }
-
         function checkAABB(r1, r2) {
             return r1.x < r2.x + r2.w &&
                    r1.x + r1.w > r2.x &&
                    r1.y < r2.y + r2.h &&
                    r1.y + r1.h > r2.y;
         }
-
-        // Hazards are drawn as a triangle (spike) or a round blade centred on
-        // (x, y) (saw), so test against those shapes, not their bounding squares.
-        function hazardHit(box, h) {
-            if (h.type === 'saw') {
-                const cx = h.x, cy = h.y, r = h.r * 0.8; // forgiving: blade teeth are thin
-                const nx = Math.max(box.x, Math.min(cx, box.x + box.w));
-                const ny = Math.max(box.y, Math.min(cy, box.y + box.h));
-                const dx = cx - nx, dy = cy - ny;
-                return dx * dx + dy * dy < r * r;
-            }
-            if (h.type === 'popspike') {
-                if (h.ext <= 0.5) return false; // retracted or still warning
-            }
-            // Spike: narrower, shorter box hugging the triangle's body
-            return checkAABB(box, { x: h.x + h.w * 0.25, y: h.y + h.h * 0.35, w: h.w * 0.5, h: h.h * 0.65 });
-        }
-
         function update(dt) {
             gameTime += dt;
             player.coyoteTime -= dt;
             player.jumpBuffer -= dt;
-
             if (gameState === 'PLAYING') {
                 levelTimer += dt;
                 const timerElem = document.getElementById('hud-timer');
                 if (timerElem) timerElem.innerText = formatTime(levelTimer, true);
+                const progElem = document.getElementById('hud-progress');
+                if (levelLength > 0) {
+                    const pctNow = Math.max(0, Math.min(100, (player.x / levelLength) * 100));
+                    if (progElem) progElem.style.width = pctNow + '%';
+                    const big = document.getElementById('hud-progress-big');
+                    if (big) big.style.width = pctNow + '%';
+                    const bt = document.getElementById('hud-progress-pct');
+                    if (bt) bt.innerText = Math.floor(pctNow) + '%';
+                }
             }
-
             // Platform moving & crumbling logic
             for (let p of platforms) {
                 if (p.type === 'moving') {
@@ -1459,26 +1216,17 @@
                     }
                 }
             }
-
             // Sawblade animation
             for (let h of hazards) {
                 if (h.type === 'saw') {
                     h.angle += dt * 8;
-                    if (h.patrol) h.x = h.cx + Math.sin(gameTime * h.speed + h.phase) * h.range;
-                } else if (h.type === 'popspike') {
-                    // 2.4s cycle: down 0-1.2s, warning 1.2-1.6s, up 1.6-2.4s
-                    const t = (gameTime + h.offset) % 2.4;
-                    h.ext = t < 1.2 ? 0 : (t < 1.6 ? 0.4 * (t - 1.2) / 0.4 : 1);
                 }
             }
-
             // Player movement physics
             if (keys.left && !keys.right) player.vx = -player.speed;
             else if (keys.right && !keys.left) player.vx = player.speed;
             else player.vx = 0;
-
             player.x += player.vx * dt;
-
             // Horizontal platform collision
             for (let p of platforms) {
                 if (p.type === 'crumble' && (p.crumbleTimer <= 0 && p.respawnTimer > 0)) continue;
@@ -1488,7 +1236,6 @@
                     player.vx = 0;
                 }
             }
-
             // Variable gravity physics
             let currentGravity = player.gravityNormal;
             if (keys.jump && player.vy < 0) {
@@ -1497,7 +1244,6 @@
             player.vy += currentGravity * dt;
             player.y += player.vy * dt;
             player.grounded = false;
-
             // Vertical platform collision
             for (let p of platforms) {
                 if (p.type === 'crumble' && (p.crumbleTimer <= 0 && p.respawnTimer > 0)) continue;
@@ -1507,7 +1253,6 @@
                         player.vy = 0;
                         player.grounded = true;
                         player.coyoteTime = player.maxCoyoteTime;
-
                         if (p.type === 'crumble' && p.crumbleTimer < 0) {
                             p.crumbleTimer = 0.5; // Stepped on crumble platform
                         }
@@ -1520,7 +1265,6 @@
                     }
                 }
             }
-
             // Spring Boost Pads
             for (let s of springs) {
                 if (s.active > 0) s.active -= dt;
@@ -1531,7 +1275,6 @@
                     SoundFX.playSpring();
                 }
             }
-
             // Collectible Pumpkin Souls
             for (let c of collectibles) {
                 if (!c.collected && checkAABB(player, c)) {
@@ -1552,14 +1295,12 @@
                     }
                 }
             }
-
             // Airborne Cube Tilt
             if (!player.grounded) {
                 player.rotation += (player.vx !== 0 ? Math.sign(player.vx) : 1) * 6 * dt;
             } else {
                 player.rotation = 0;
             }
-
             // Jump execution
             if (player.jumpBuffer > 0 && player.coyoteTime > 0) {
                 player.vy = player.jumpPower;
@@ -1568,22 +1309,19 @@
                 player.grounded = false;
                 SoundFX.playJump();
             }
-
             // Death fall check
             if (player.y > canvas.height * 2 || player.y > camera.y + canvas.height + 300) {
                 triggerDeath('void');
                 return;
             }
-
-            // Hazard collisions (hitboxes match what is drawn, see hazardHit)
+            // Hazard collisions
             const pBox = { x: player.x + 6, y: player.y + 6, w: player.w - 12, h: player.h - 12 };
             for (let h of hazards) {
-                if (hazardHit(pBox, h)) {
+                if (checkAABB(pBox, h)) {
                     triggerDeath(h.type === 'saw' ? 'saw' : 'spike');
                     return;
                 }
             }
-
             // Goal flag collision & unlocking next level
             if (goal && checkAABB(player, goal)) {
                 if (currentLevel >= maxUnlockedLevel && currentLevel < TOTAL_LEVELS) {
@@ -1592,37 +1330,31 @@
                         localStorage.setItem('shadow_dash_max_level', maxUnlockedLevel);
                     } catch(e) {}
                 }
-
                 const existing = levelStats[currentLevel] || { pumpkins: 0, time: null };
                 const updatedPumpkins = Math.max(existing.pumpkins || 0, collectedCount);
                 const updatedTime = existing.time ? Math.min(existing.time, levelTimer) : levelTimer;
-                
+                const isNewBest = !existing.time || levelTimer < existing.time;
+                const badge = document.getElementById('new-best-badge');
+                if (badge) badge.classList.toggle('hidden', !isNewBest);
                 levelStats[currentLevel] = { pumpkins: updatedPumpkins, time: updatedTime };
                 try {
                     localStorage.setItem('shadow_dash_level_stats', JSON.stringify(levelStats));
                 } catch(e) {}
-
-                hpSubmitClearIfImproved();
-
                 document.getElementById('completed-time-text').innerText = formatTime(levelTimer, true);
                 SoundFX.playWin();
                 changeState('COMPLETE');
                 return;
             }
-
             // Camera follow smoothing
             let targetCamX = player.x - canvas.width / 3.2;
             let targetCamY = player.y - canvas.height / 1.6;
             if (targetCamX < 0) targetCamX = 0;
-
             camera.x += (targetCamX - camera.x) * 6 * dt;
             camera.y += (targetCamY - camera.y) * 6 * dt;
-
             // Player shadow trail
             player.trail.push({ x: player.x, y: player.y, rotation: player.rotation, alpha: 0.8 });
             if (player.trail.length > 8) player.trail.shift();
             for (let t of player.trail) t.alpha -= dt * 4.0;
-
             // Particles update
             for (let i = particles.length - 1; i >= 0; i--) {
                 let p = particles[i];
@@ -1632,59 +1364,55 @@
                 if (p.life <= 0) particles.splice(i, 1);
             }
         }
-
         function drawPlayerCube(targetCtx, x, y, w, h, rot, isAir, vy) {
             targetCtx.save();
             targetCtx.translate(x + w / 2, y + h / 2);
             targetCtx.rotate(rot);
-
             // Dark rounded cube body matching attached photo
             targetCtx.fillStyle = '#111116';
             targetCtx.shadowBlur = 15;
             targetCtx.shadowColor = 'rgba(0,0,0,0.8)';
-            
             let r = 10;
             targetCtx.beginPath();
             targetCtx.roundRect(-w / 2, -h / 2, w, h, r);
             targetCtx.fill();
-
+            // Light outline so the player stands out
+            targetCtx.shadowBlur = 0;
+            targetCtx.strokeStyle = '#E2E8F0';
+            targetCtx.lineWidth = 2;
+            targetCtx.stroke();
             // Distinct white vertical slit eyes (||) matching attached photo
             targetCtx.shadowBlur = 8;
             targetCtx.shadowColor = '#FFFFFF';
             targetCtx.fillStyle = '#FFFFFF';
-
             let eyeW = 5;
             let eyeH = 15;
             let eyeY = -6;
-
             if (isAir && vy < 0) {
                 eyeH = 18; // Jump elongated eyes
             } else if (isAir && vy > 0) {
                 eyeH = 12; // Falling eyes
             }
-
             // Left Eye vertical bar
             targetCtx.beginPath();
             targetCtx.roundRect(-10, eyeY, eyeW, eyeH, 3);
             targetCtx.fill();
-
             // Right Eye vertical bar
             targetCtx.beginPath();
             targetCtx.roundRect(4, eyeY, eyeW, eyeH, 3);
             targetCtx.fill();
-
             targetCtx.restore();
         }
-
         function drawBackground(targetCtx, camX, camY, viewW, viewH) {
             // Eerie dark gradient sky
+            const SKY = [['#0C0D12','#1A1C24'],['#120C14','#2A1A28'],['#0A1412','#14282A'],['#14100A','#2E2216'],['#0A0C18','#1A2040']];
+            const sky = SKY[Math.floor((Math.max(currentLevel, 1) - 1) / 10) % 5];
             let bgGrad = targetCtx.createLinearGradient(0, 0, 0, viewH);
-            bgGrad.addColorStop(0, '#0C0D12');
-            bgGrad.addColorStop(0.5, '#1A1C24');
+            bgGrad.addColorStop(0, sky[0]);
+            bgGrad.addColorStop(0.5, sky[1]);
             bgGrad.addColorStop(1, '#08090C');
             targetCtx.fillStyle = bgGrad;
             targetCtx.fillRect(0, 0, viewW, viewH);
-
             // Giant glowing full moon on top right
             targetCtx.save();
             targetCtx.fillStyle = '#D9E2EC';
@@ -1694,7 +1422,6 @@
             targetCtx.arc(viewW - 140, 120, 75, 0, Math.PI * 2);
             targetCtx.fill();
             targetCtx.restore();
-
             // Layered misty oval cloud silhouettes matching the attached photo
             targetCtx.fillStyle = 'rgba(255, 255, 255, 0.04)';
             for (let s of stars) {
@@ -1705,12 +1432,10 @@
                 targetCtx.fill();
             }
         }
-
         function drawWorld(targetCtx) {
             // Draw Platforms (Solid pitch black silhouettes)
             for (let p of platforms) {
                 if (p.type === 'crumble' && p.crumbleTimer <= 0 && p.respawnTimer > 0) continue;
-
                 targetCtx.save();
                 if (p.type === 'crumble' && p.crumbleTimer > 0) {
                     targetCtx.fillStyle = '#2A1820'; // Shaking crumble color
@@ -1718,34 +1443,42 @@
                 } else {
                     targetCtx.fillStyle = '#07070A'; // Deep black silhouette
                 }
-
                 targetCtx.fillRect(p.x, p.y, p.w, p.h);
-
+                // Stone brick texture
+                targetCtx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
+                targetCtx.lineWidth = 1;
+                for (let by = 12, row = 0; by < p.h; by += 12, row++) {
+                    targetCtx.beginPath();
+                    targetCtx.moveTo(p.x, p.y + by);
+                    targetCtx.lineTo(p.x + p.w, p.y + by);
+                    targetCtx.stroke();
+                    for (let bx = (row % 2) * 20; bx < p.w; bx += 40) {
+                        targetCtx.beginPath();
+                        targetCtx.moveTo(p.x + bx, p.y + by - 12);
+                        targetCtx.lineTo(p.x + bx, p.y + by);
+                        targetCtx.stroke();
+                    }
+                }
+                // Mossy top with warm pumpkin glow
+                targetCtx.fillStyle = 'rgba(52, 211, 153, 0.22)';
+                targetCtx.fillRect(p.x, p.y, p.w, 5);
+                targetCtx.fillStyle = 'rgba(251, 146, 60, 0.35)';
+                targetCtx.fillRect(p.x, p.y + 5, p.w, 1.5);
                 // Subtle edge highlight
                 targetCtx.fillStyle = 'rgba(255, 255, 255, 0.08)';
                 targetCtx.fillRect(p.x, p.y, p.w, 3);
+                // Light outline so platforms stand out from the sky
+                targetCtx.strokeStyle = '#E2E8F0';
+                targetCtx.lineWidth = 2;
+                targetCtx.lineJoin = 'round';
+                targetCtx.strokeRect(p.x + 1, p.y + 1, p.w - 2, p.h - 2);
                 targetCtx.restore();
             }
-
             // Draw Triangular Ground Spikes (Original dark silhouettes without glow)
             for (let h of hazards) {
-                if (h.type === 'popspike') {
+                if (h.type === 'spike') {
                     targetCtx.save();
-                    const warn = h.ext > 0 && h.ext < 1;
-                    // base stub always visible, triangle grows with ext
-                    targetCtx.fillStyle = '#07070A';
-                    targetCtx.fillRect(h.x, h.y + h.h - 5, h.w, 5);
-                    const th = Math.max(0.15, h.ext) * (h.h - 5);
-                    targetCtx.fillStyle = warn ? '#F43F5E' : '#07070A';
-                    targetCtx.beginPath();
-                    targetCtx.moveTo(h.x + h.w / 2, h.y + h.h - 5 - th);
-                    targetCtx.lineTo(h.x + h.w, h.y + h.h - 5);
-                    targetCtx.lineTo(h.x, h.y + h.h - 5);
-                    targetCtx.closePath();
-                    targetCtx.fill();
-                    targetCtx.restore();
-                } else if (h.type === 'spike') {
-                    targetCtx.save();
+                    // Dark spikes with a clean light outline so they stand out
                     targetCtx.fillStyle = '#07070A';
                     targetCtx.beginPath();
                     targetCtx.moveTo(h.x + h.w / 2, h.y);
@@ -1753,13 +1486,19 @@
                     targetCtx.lineTo(h.x, h.y + h.h);
                     targetCtx.closePath();
                     targetCtx.fill();
+                    targetCtx.strokeStyle = '#E2E8F0';
+                    targetCtx.lineWidth = 2;
+                    targetCtx.lineJoin = 'round';
+                    targetCtx.stroke();
                     targetCtx.restore();
                 } else if (h.type === 'saw') {
                     targetCtx.save();
                     targetCtx.translate(h.x, h.y);
                     targetCtx.rotate(h.angle);
-                    targetCtx.fillStyle = '#07070A';
-                    targetCtx.strokeStyle = '#F43F5E';
+                    targetCtx.fillStyle = '#3B0A14';
+                    targetCtx.strokeStyle = '#FB7185';
+                    targetCtx.shadowColor = 'rgba(244, 63, 94, 0.8)';
+                    targetCtx.shadowBlur = 12;
                     targetCtx.lineWidth = 3;
                     targetCtx.beginPath();
                     for (let i = 0; i < 8; i++) {
@@ -1776,13 +1515,11 @@
                     targetCtx.restore();
                 }
             }
-
             // Spring Boost Pads
             for (let s of springs) {
                 targetCtx.fillStyle = s.active > 0 ? '#10B981' : '#059669';
                 targetCtx.fillRect(s.x, s.y + (s.active > 0 ? 6 : 0), s.w, s.h - (s.active > 0 ? 6 : 0));
             }
-
             // Collectible Pumpkin Souls
             for (let c of collectibles) {
                 if (!c.collected) {
@@ -1796,19 +1533,15 @@
                     targetCtx.restore();
                 }
             }
-
             // Draw Goal (Green Flag matching uploaded photo!)
             if (goal) {
                 targetCtx.save();
-                
                 // Black Flagpole
                 targetCtx.fillStyle = '#07070A';
                 targetCtx.fillRect(goal.x, goal.y, 8, goal.h);
-
                 // Green Flag icon with circular white background outline (Exact replica of photo)
                 let flagX = goal.x - 22;
                 let flagY = goal.y + 10;
-
                 // Glowing green circular badge
                 targetCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
                 targetCtx.shadowBlur = 20;
@@ -1816,7 +1549,6 @@
                 targetCtx.beginPath();
                 targetCtx.arc(flagX + 25, flagY + 25, 32, 0, Math.PI * 2);
                 targetCtx.fill();
-
                 // Green flag icon polygon inside
                 targetCtx.fillStyle = '#10B981';
                 targetCtx.beginPath();
@@ -1825,20 +1557,15 @@
                 targetCtx.lineTo(flagX + 16, flagY + 36);
                 targetCtx.closePath();
                 targetCtx.fill();
-
                 targetCtx.restore();
             }
         }
-
         function draw() {
             drawBackground(ctx, camera.x, camera.y, canvas.width, canvas.height);
-
             ctx.save();
             ctx.translate(-Math.floor(camera.x), -Math.floor(camera.y));
-
             // World Objects
             drawWorld(ctx);
-
             // Particles
             for (let p of particles) {
                 if (p.life > 0) {
@@ -1848,7 +1575,6 @@
                 }
             }
             ctx.globalAlpha = 1.0;
-
             // Player Ghost Trail
             if (gameState === 'PLAYING') {
                 for (let t of player.trail) {
@@ -1858,33 +1584,25 @@
                     }
                 }
                 ctx.globalAlpha = 1.0;
-
                 // Main Player
                 if (!player.isDead) {
                     drawPlayerCube(ctx, player.x, player.y, player.w, player.h, player.rotation, !player.grounded, player.vy);
                 }
             }
-
             ctx.restore();
         }
-
         // Render live menu thumbnail matching user photo (Halloween title, rounded cube in air, green flag on pillar)
         function renderThumbnailPreview() {
             if (!thumbCanvas || gameState !== 'MENU') return;
-
             let w = thumbCanvas.width;
             let h = thumbCanvas.height;
-
             // Background clouds/moon
             drawBackground(thumbCtx, 0, 0, w, h);
-
             let time = performance.now() / 1000;
-
             // Black Ground & Spikes
             let groundY = h - 35;
             thumbCtx.fillStyle = '#07070A';
             thumbCtx.fillRect(0, groundY, w, 35);
-
             // Spikes with bright outlines for menu preview
             let spikeCount = 4;
             let spikeW = 28;
@@ -1906,11 +1624,9 @@
                 thumbCtx.stroke();
                 thumbCtx.restore();
             }
-
             // High Pillar Platform (Matching photo)
             let pillarX = w - 110;
             thumbCtx.fillRect(pillarX, groundY - 110, 45, 110);
-
             // Green Flag badge on pillar
             thumbCtx.save();
             thumbCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
@@ -1919,7 +1635,6 @@
             thumbCtx.beginPath();
             thumbCtx.arc(pillarX + 22, groundY - 110, 22, 0, Math.PI * 2);
             thumbCtx.fill();
-
             thumbCtx.fillStyle = '#10B981';
             thumbCtx.beginPath();
             thumbCtx.moveTo(pillarX + 16, groundY - 120);
@@ -1928,67 +1643,27 @@
             thumbCtx.closePath();
             thumbCtx.fill();
             thumbCtx.restore();
-
             // Air Cube in mid-jump above spikes (Matching photo)
             let cubeX = 85;
             let cubeY = groundY - 80 + Math.sin(time * 3) * 10;
             drawPlayerCube(thumbCtx, cubeX, cubeY, 36, 36, -0.25, true, -1);
         }
-
         function gameLoop(timestamp) {
             let dt = (timestamp - lastTime) / 1000;
             if (dt > 0.1) dt = 0.1;
             lastTime = timestamp;
-
             if (gameState === 'PLAYING') {
                 update(dt);
             }
-
             draw();
             renderThumbnailPreview();
-
             requestAnimationFrame(gameLoop);
         }
-
         // Initialize engine
         resize();
         changeState('MENU');
         lastTime = performance.now();
         requestAnimationFrame(gameLoop);
     </script>
-
-    <!-- HallPass: online leaderboard for the 15-sector clear time. The stub below
-         installs window.HallPass synchronously so calls made before the bundle
-         lands are queued, and settles them inert after 2s if it never arrives.
-
-         data-game is the BOARD id, not the game slug. This board is the one
-         exception in the catalogue: it is `haloween-fastest-level-time`, while
-         the game is `shadow-core-halloween-dash`. Sending the slug would hit an
-         unprovisioned board and every submission would 409. -->
-    <script>
-    (function(w){if(w.HallPass&&w.HallPass.version!=="0")return;var q=[];
-    function e(n){return function(){var a=[].slice.call(arguments);
-    return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
-    w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
-    submitScore:e("submitScore"),getScores:e("getScores"),
-    getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
-    unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
-    getAchievements:e("getAchievements"),challenge:e("challenge"),
-    signIn:function(){},signOut:function(){},
-    getHandle:function(){return null},setHandle:function(v){return v},
-    on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
-    off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
-    setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
-    q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:{ok:false,reason:"inert"})})},2000)})(window);
-    </script>
-    <script src="/sdk/v1/hallpass.js" data-game="haloween-fastest-level-time" defer></script>
-    <script>
-        /* The stub above guarantees window.HallPass exists, so these queue and
-           replay once the bundle lands. "auth" is sticky: a listener added after
-           sign-in already completed still fires once with the current identity. */
-        updateAuthUI(null);
-        window.HallPass.getPlayer().then(updateAuthUI);
-        window.HallPass.on('auth', (e) => updateAuthUI(e.player));
-    </script>
 </body>
-</html>
+</html><!DOCTYPE html>
