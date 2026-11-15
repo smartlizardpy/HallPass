@@ -56,7 +56,9 @@ export type GameAdapter = {
 
 /** Hosts serving the networked HallPass SDK; its tag is replaced by the offline SDK. */
 export const HALLPASS_SDK_PATHS = ["/sdk/v1/hallpass.js"];
-export const HALLPASS_HOSTS = ["hallpass.games", "www.hallpass.games"];
+// hallpass-rouge.vercel.app is the site's original Vercel domain, which older
+// games still load the SDK from (docs/championship-design.md).
+export const HALLPASS_HOSTS = ["hallpass.games", "www.hallpass.games", "hallpass-rouge.vercel.app"];
 
 /**
  * The HallPass P2P (co-op) SDK, which games import as a module from the site.
