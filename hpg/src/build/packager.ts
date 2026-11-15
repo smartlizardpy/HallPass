@@ -22,6 +22,7 @@ import { isSafePackagePath } from "../format/paths";
 import type { HpgManifest } from "../format/manifest";
 import type { GameAdapter } from "./adapter";
 import { bundle, inlineEntry, InlineReport, type BuildIssue } from "./inline";
+import { Vendor } from "./vendor";
 
 /** The fields of a `games.ts` entry the packager reads. */
 export type CatalogGame = {
@@ -103,7 +104,7 @@ export async function packageGame(
   catalog: readonly CatalogGame[],
   options: PackageOptions = {},
 ): Promise<PackageBuild> {
-  const report = new InlineReport(path.join(repoRoot, "public"));
+  const report = new InlineReport(path.join(repoRoot, "public"), Vendor.at(path.join(repoRoot, "hpg", "vendor")));
   const fail = (): PackageBuild => ({ ok: false, id: adapter.id, issues: report.issues });
 
   const game = catalog.find((g) => g.slug === adapter.id);

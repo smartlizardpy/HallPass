@@ -15,6 +15,8 @@ const eslintConfig = defineConfig([
     // Generated Scoreboard SDK build output + test coverage.
     "public/sdk/**",
     "coverage/**",
+    // Third-party CDN libraries pinned for offline packages (hpg/vendor/README.md).
+    "hpg/vendor/*/**",
     // Agent-harness git worktrees checked out inside the repo (see .gitignore):
     // each is a full second copy of the source tree and lints on its own.
     ".claude/worktrees/**",
