@@ -60,7 +60,7 @@ function changed(a, b) {
   return n / (a.length / 3);
 }
 /** Labels of buttons that start a game, tried before a blind click. */
-const START_WORDS = /^\W*(play|start|begin|engage|deploy|initiali[sz]e|descend|enter|launch|go|new game|vs cpu|single ?player|tutorial|execute|continue|solo)\b/i;
+const START_WORDS = /^\W*(play|start|begin|engage|deploy|initiali[sz]e|descend|enter|launch|go|new game|vs cpu|single ?player|tutorial|execute|continue|solo|initiate|boot|awaken|1 player)\b/i;
 const pct = (x) => `${(x * 100).toFixed(1)}%`;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
