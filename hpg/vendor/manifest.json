@@ -1,0 +1,44 @@
+{
+  "libraries": [
+    "Tailwind CSS Play CDN 3.4.17 (MIT)",
+    "three.js r128 (MIT)",
+    "three.js 0.160.0 (MIT)",
+    "three.js 0.169.0 (MIT)",
+    "Font Awesome Free 6.0.0 (CSS MIT, fonts SIL OFL 1.1)"
+  ],
+  "prefixes": {
+    "https://cdn.tailwindcss.com/3.4.17": "tailwindcss/3.4.17.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/": "cdnjs/three.js/r128/",
+    "https://cdn.jsdelivr.net/npm/three@0.160.0/": "jsdelivr/three@0.160.0/",
+    "https://cdn.jsdelivr.net/npm/three@0.169.0/": "jsdelivr/three@0.169.0/",
+    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/": "cdnjs/font-awesome/6.0.0/"
+  },
+  "aliases": {
+    "https://cdn.tailwindcss.com": "https://cdn.tailwindcss.com/3.4.17"
+  },
+  "files": {
+    "tailwindcss/3.4.17.js": "176e894661aa9cdc9a5cba6c720044cbbf7b8bd80d1c9a142a7c24b1b6c50d15",
+    "cdnjs/three.js/r128/three.min.js": "9274bbcec8d96168626c732b5d31c775aa8cfb7eaa0599bec0c175908a2c1ce2",
+    "jsdelivr/three@0.160.0/build/three.module.js": "76dea8151bc9352aef3528b4262e249b2604f62543828328db978d060d61a495",
+    "jsdelivr/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js": "d234e578618fa816955ebdc059c049c577e203e650e33cf22bde3f232c29e669",
+    "jsdelivr/three@0.160.0/examples/jsm/postprocessing/RenderPass.js": "1c90c085312871c4bcdccfcf519499c6276dd503363fcf7cb7f703add45cf4a2",
+    "jsdelivr/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js": "8f09315c0cec117a0ca2494d3e3586035b3c4323d6dcb037537cc51b04c3cdba",
+    "jsdelivr/three@0.160.0/examples/jsm/postprocessing/OutputPass.js": "13817fc7a87f662d29d2c5e00f44d3a4588c9afac4a372de0cacb0e44e368ffd",
+    "jsdelivr/three@0.160.0/examples/jsm/postprocessing/ShaderPass.js": "3b28a1ee27e0eb96c0eab137a1f442ccf127a926904eced2d51e125ec44af781",
+    "jsdelivr/three@0.160.0/examples/jsm/shaders/CopyShader.js": "4e3346db194db56a596cd074e9bdb39fb5eb52040c333e0d29dc4eb1324d3b1d",
+    "jsdelivr/three@0.160.0/examples/jsm/postprocessing/MaskPass.js": "328cf7db0da5d9be83ffe39d54b01d5ac1fddf108cc98182ddbb056f5c8b537f",
+    "jsdelivr/three@0.160.0/examples/jsm/postprocessing/Pass.js": "b3c6128340eaa37e40a6a2f1b738e894c855239417d50959759b34a2b5e89f92",
+    "jsdelivr/three@0.160.0/examples/jsm/shaders/LuminosityHighPassShader.js": "3d841cc594a0c1767d1b0185720b32761a0133c5f1b70b56658e28f2fb9b7900",
+    "jsdelivr/three@0.160.0/examples/jsm/shaders/OutputShader.js": "53a52e430c27bc36ceaab8ae90a2b4af7b02672d7ee4b29d6ba3c28e09c92c2a",
+    "jsdelivr/three@0.169.0/build/three.module.js": "0a3368c165eea773490aec7b77c22de70e3eac288503409256fdbf4d12578416",
+    "cdnjs/font-awesome/6.0.0/css/all.min.css": "8d321d88cb97fdedc3189506c25de9292c6e73a60ebaab496243346c6404480e",
+    "cdnjs/font-awesome/6.0.0/webfonts/fa-brands-400.woff2": "29bc44694c394921d1f00271128a2e4cd8293516216e24eac07a73fa821fc1f5",
+    "cdnjs/font-awesome/6.0.0/webfonts/fa-brands-400.ttf": "9e122861bc5f7d6190d580b22acc5b1c3f8cdba9f495593cccd3b47d2cbfa2fd",
+    "cdnjs/font-awesome/6.0.0/webfonts/fa-regular-400.woff2": "fa79fc4f2559112ff3dd27cf5be216d9b5f88066ceef728264f5a3a1a195fc1e",
+    "cdnjs/font-awesome/6.0.0/webfonts/fa-regular-400.ttf": "709034805d10429d24862ad685d561808328329debdbca4f70487b508320a3ff",
+    "cdnjs/font-awesome/6.0.0/webfonts/fa-solid-900.woff2": "1b099f88c06ed0869872561c157f0ec9cbe133a0939d9ece4ee1e1f54bd4683d",
+    "cdnjs/font-awesome/6.0.0/webfonts/fa-solid-900.ttf": "1782156bfa2054db429277b42f143298a1ce03437c05e2779ca7875112b19d3c",
+    "cdnjs/font-awesome/6.0.0/webfonts/fa-v4compatibility.woff2": "b3abfccce275536beaaeba990e900a0c08ed2fefbabf4a8bcbb2e2ffe3f2431f",
+    "cdnjs/font-awesome/6.0.0/webfonts/fa-v4compatibility.ttf": "fde941c0964fab984f6af0697b3fec92e7df384eec9941babfd3e4cbbd6211c2"
+  }
+}

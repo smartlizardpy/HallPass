@@ -23,6 +23,8 @@
  * | `preconnect`/`dns-prefetch`/`manifest`  | removed (network hints, no content)             |
  * | remote font (adapter-allowed host)      | removed, reported as a font fallback            |
  * | HallPass P2P SDK import (site URL)      | the repo's copy bundled, reported               |
+ * | vendored CDN library (script, CSS,     | the pinned copy in hpg/vendor/ inlined,         |
+ * |   import, import-map entry)            |   reported (build/vendor.ts)                    |
  * | any other remote resource               | BUILD ERROR                                     |
  *
  * `import(NAME)` where NAME is a file-wide-unique top-level string `const` is
@@ -42,6 +44,7 @@ import { BROWSER_TARGET } from "./launcher";
 import { GOOGLE_FONT_HOSTS, HALLPASS_HOSTS, HALLPASS_P2P_SDK_PATHS, HALLPASS_SDK_PATHS, type GameAdapter } from "./adapter";
 import { inlineConstImports } from "./const-imports";
 import { checkBundledCode } from "./js-check";
+import type { Vendor, VendorHit } from "./vendor";
 
 export type BuildIssue = { level: "error" | "warning" | "info"; message: string };
 
@@ -51,8 +54,31 @@ export class InlineReport {
    * The repo's public/ folder, where the packager finds local copies of
    * HallPass's own SDKs (HALLPASS_P2P_SDK_PATHS). Unset: such imports fail
    * like any other remote dependency.
+   *
+   * `vendor` is hpg/vendor/: pinned copies of CDN libraries (build/vendor.ts).
+   * Unset: every CDN URL is a build error.
    */
-  constructor(readonly publicDir?: string) {}
+  constructor(
+    readonly publicDir?: string,
+    readonly vendor?: Vendor,
+  ) {}
+  /** The entry's import map, remote entries only: specifier (or "x/" prefix) → URL. */
+  importMap = new Map<string, string>();
+  /** The pinned local copy of a CDN URL, reported; null if not vendored. */
+  vendored(url: string): VendorHit | null {
+    let hit: VendorHit | null = null;
+    try {
+      hit = this.vendor?.lookup(url) ?? null;
+    } catch (e) {
+      this.error(e instanceof Error ? e.message : String(e));
+      return null;
+    }
+    if (hit) {
+      if (hit.pinned) this.warn(`${url} is unversioned; packaged the pinned copy of ${hit.url} from hpg/vendor`);
+      else this.info(`packaged the pinned copy of ${hit.url} from hpg/vendor`);
+    }
+    return hit;
+  }
   error(message: string) {
     this.issues.push({ level: "error", message });
   }
@@ -92,6 +118,14 @@ const DATA_URI_LOADERS = {
 
 export function isRemote(url: string): boolean {
   return /^(https?:)?\/\//i.test(url);
+}
+
+/** Resolve a bare specifier through an import map (exact key, then longest "x/" prefix). */
+function importMapUrl(spec: string, map: Map<string, string>): string | undefined {
+  if (map.has(spec)) return map.get(spec);
+  let best = "";
+  for (const k of map.keys()) if (k.endsWith("/") && spec.startsWith(k) && k.length > best.length) best = k;
+  return best ? map.get(best) + spec.slice(best.length) : undefined;
 }
 
 function hostOf(url: string): string {
@@ -161,6 +195,15 @@ function policyPlugin(gameDir: string, adapter: GameAdapter, report: InlineRepor
   return {
     name: "hpg-policy",
     setup(b) {
+      // Bare specifiers the entry's import map sends to a CDN ("three",
+      // "three/addons/…"): the vendored copy, or a clear error.
+      b.onResolve({ filter: /.*/ }, (args) => {
+        if (!report.importMap.size || /^(\.{0,2}\/|[a-z][a-z0-9+.-]*:)/i.test(args.path)) return undefined;
+        const url = importMapUrl(args.path, report.importMap);
+        if (!url) return undefined;
+        const hit = report.vendored(url);
+        return hit ? { path: hit.file } : { errors: [{ text: `import map sends ${args.path} to ${url}, which is not vendored (hpg/vendor)` }] };
+      });
       // HallPass's own co-op SDK, by site URL or root-relative path: bundle the
       // repo's copy (see HALLPASS_P2P_SDK_PATHS).
       b.onResolve({ filter: /hallpass-p2p(\.min)?\.js/ }, (args) => {
@@ -170,6 +213,8 @@ function policyPlugin(gameDir: string, adapter: GameAdapter, report: InlineRepor
         return { path: local };
       });
       b.onResolve({ filter: /^(https?:)?\/\//i }, (args) => {
+        const hit = report.vendored(args.path);
+        if (hit) return { path: hit.file };
         const host = hostOf(args.path);
         if (droppable.has(host)) {
           report.dropped.add(host);
@@ -195,7 +240,7 @@ function policyPlugin(gameDir: string, adapter: GameAdapter, report: InlineRepor
         if (r.errors.length) return { errors: r.errors };
         if (r.external || !r.path) return r;
         const real = existsSync(r.path) ? realpathSync(r.path) : r.path;
-        if (real !== root && !real.startsWith(root + path.sep)) {
+        if (real !== root && !real.startsWith(root + path.sep) && !report.vendor?.contains(real)) {
           return { errors: [{ text: `import ${args.path} resolves outside the game folder` }] };
         }
         return r;
@@ -321,9 +366,22 @@ export async function inlineEntry(gameDir: string, entry: string, adapter: GameA
   const doc = dom.window.document;
   // Import maps: a bare import ("three") mapped to a CDN shows up later as an
   // unresolvable import; name the real cause up front.
+  // Remote entries are kept for the bundler when hpg/vendor has a pinned copy
+  // of everything they point at.
   for (const el of [...doc.querySelectorAll('script[type="importmap"]')]) {
-    const remote = (el.textContent ?? "").match(/https?:\/\/[a-z0-9.-]+/gi) ?? [];
-    for (const url of new Set(remote)) report.error(`import map maps a module to ${url}, which cannot be packaged for offline play`);
+    let imports: Record<string, unknown> = {};
+    try {
+      imports = (JSON.parse(el.textContent ?? "{}") as { imports?: Record<string, unknown> }).imports ?? {};
+    } catch {
+      report.error("the import map is not valid JSON");
+    }
+    for (const [spec, url] of Object.entries(imports)) {
+      if (typeof url !== "string" || !isRemote(url)) continue;
+      // A hash mismatch counts as covered here; resolving the import reports it.
+      const covered = spec.endsWith("/") ? report.vendor?.coversPrefix(url) : report.vendor?.has(url);
+      if (covered) report.importMap.set(spec, url);
+      else report.error(`import map maps a module to ${hostOf(url)} (${url}), which cannot be packaged for offline play`);
+    }
     el.remove();
   }
   const droppable = new Set((adapter.dropRemoteHosts ?? []).map((h) => h.toLowerCase()));
@@ -354,13 +412,14 @@ export async function inlineEntry(gameDir: string, entry: string, adapter: GameA
         el.remove();
         continue;
       }
-      if (isRemote(src)) {
+      const hit = isRemote(src) ? report.vendored(src) : null;
+      if (isRemote(src) && !hit) {
         remoteRef(el, src, "script");
         continue;
       }
-      const file = resolveLocal(gameDir, entry, src, report, "script");
+      const file = hit?.file ?? resolveLocal(gameDir, entry, src, report, "script");
       if (!file) continue;
-      const rel = relativeTo(gameDir, file);
+      const rel = hit ? `vendor:${hit.url}` : relativeTo(gameDir, file);
       const code = isModule
         ? await bundle({ file }, "esm", gameDir, rel, adapter, report)
         : await minifyClassic(readFileSync(file, "utf8"), rel, report);
@@ -384,13 +443,14 @@ export async function inlineEntry(gameDir: string, entry: string, adapter: GameA
     const rel = (el.getAttribute("rel") ?? "").toLowerCase().split(/\s+/);
     const href = el.getAttribute("href") ?? "";
     if (rel.includes("stylesheet")) {
-      if (isRemote(href)) {
+      const hit = isRemote(href) ? report.vendored(href) : null;
+      if (isRemote(href) && !hit) {
         remoteRef(el, href, "stylesheet");
         continue;
       }
-      const file = resolveLocal(gameDir, entry, href, report, "stylesheet");
+      const file = hit?.file ?? resolveLocal(gameDir, entry, href, report, "stylesheet");
       if (!file) continue;
-      const css = await bundle({ file }, "css", gameDir, relativeTo(gameDir, file), adapter, report);
+      const css = await bundle({ file }, "css", gameDir, hit ? `vendor:${hit.url}` : relativeTo(gameDir, file), adapter, report);
       if (css === null) continue;
       const style = doc.createElement("style");
       style.textContent = css;
@@ -454,7 +514,11 @@ export async function inlineEntry(gameDir: string, entry: string, adapter: GameA
 }
 
 /** Hosts that appear in code as identifiers, not as fetched resources. */
-const NAMESPACE_HOSTS = new Set(["www.w3.org", "w3.org", "jcgt.org", "github.com", "threejs.org", "mrdoob.com"]);
+const NAMESPACE_HOSTS = new Set([
+  ...["www.w3.org", "w3.org", "jcgt.org", "github.com", "threejs.org", "mrdoob.com"],
+  // Credits and doc links inside the vendored libraries (hpg/vendor).
+  ...["tailwindcss.com", "evilmartians.com", "www.w3ctech.com", "twitter.com", "mths.be", "fontawesome.com", "discourse.threejs.org"],
+]);
 
 /**
  * REPORTING ONLY: list remote hosts still mentioned anywhere in the finished

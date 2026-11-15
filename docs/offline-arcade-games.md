@@ -67,9 +67,8 @@ build log, and the deploy continues.
 
 | Problem | Why it can't run offline | Fix |
 |---|---|---|
-| `<script src="https://cdn.tailwindcss.com">` | Tailwind Play builds CSS at run time from a remote script | Build the CSS once (Tailwind CLI) and commit it next to the game |
-| Import map to a CDN (`three` from jsdelivr) | The module only exists online | Vendor the module into the game folder and import it relatively |
-| `<script src>` from cdnjs | Same | Vendor the file |
+| A CDN library listed in `hpg/vendor/manifest.json` (Tailwind Play CDN, three.js r128 / 0.160.0 / 0.169.0, Font Awesome 6.0.0) | — | Nothing: the packager inlines the pinned, hash-checked copy and reports it (`build/vendor.ts`) |
+| Any other CDN script, stylesheet or import-map entry | The file only exists online | Add the exact version to `LIBRARIES` in `hpg/vendor/fetch.mjs`, run it, commit (`hpg/vendor/README.md`) |
 | Google Fonts | The font can't load | Nothing needed: the game uses its fallback font, and the build reports it |
 | `fetch()` to a server, WebSockets, multiplayer | Needs the internet by design | Not offline-capable |
 | `import(variable)` or a surviving runtime `require` | Can't be resolved at build time | Make the import static. (`import(NAME)` where `NAME` is a top-level string `const` bound once in the file is resolved automatically.) |
@@ -99,22 +98,20 @@ The game runs in `<iframe sandbox="allow-scripts">` (never with
 
 ## Compatibility report
 
-From `npm run hpg:audit` and `npm run hpg:smoke` on 14 November 2026 (34 games in `public/games/`).
+Every game the site hosts packages: 40 of 40 on 15 November 2026 (34 in
+`public/games/` plus the 6 published from the dashboard, which a deploy
+mirrors from Blob). Smoke results from Chrome 157 with the network off.
 
 | Verdict | Games |
 |---|---|
 | **Offered**, full e2e | conquest, depths-of-aethelgard, neon-tether |
-| **Offered**, smoke PASS + playtest | battlebadlers, core-vs-swarm, crimson-survivor, doodle-dash, jjk-domain-survival-top-down, jjk-domain-survival-v3, neon-fracture, neon-hockey, neon-well, ragdoll-hoops, sea-mercenary, silence, snag, vanta-void |
-| Builds, smoke CHECK (needs a look) | neon-velocity-hyperdrive, nuclear-reactor-manager, paddle-crawler, pixel-slicer, system-restore, teraria |
-| Blocked: Tailwind Play CDN | chroma-orbit, neon-snake, pixel-bullet-quest, rhythm-hell-harmonic-flash, shadow-core-halloween-dash, symbiosis, system-error |
-| Blocked: import map to jsdelivr | color-clash-3d, duskfall |
-| Blocked: Three.js from cdnjs | cube-clash-3d |
-| Staged, experimental adapter | last-bell (solo works in the lab from `../last-bell`; co-op needs the network) |
+| **Offered**, smoke PASS + playtest (14 Nov) | battlebadlers, core-vs-swarm, crimson-survivor, doodle-dash, jjk-domain-survival-top-down, jjk-domain-survival-v3, neon-fracture, neon-hockey, neon-well, ragdoll-hoops, sea-mercenary, silence, snag, vanta-void, last-bell (solo; playtested, headless Chrome cannot pointer-lock) |
+| **Offered**, smoke PASS (15 Nov) | color-clash-3d, cube-clash-3d, cyber-pulse-3d-neon-dash, duskfall (synthesised sound offline), living-flesh, neon-snake, neon-velocity-hyperdrive, paddle-crawler, rhythm-hell-harmonic-flash, scp-lockdown, shadow-core-halloween-dash, survive-till-dawn-pixel-edition, symbiosis, system-error, vanishing-point-3-14 |
+| **Offered**, smoke CHECK (15 Nov): start screen drawn, no errors, generic input can't get past it | chroma-orbit, customizable-os, nuclear-reactor-manager, pixel-bullet-quest, pixel-slicer, system-restore, teraria |
+| Not packageable | games hosted off-site (`externalUrl`) |
 
-"Builds" means the packager found no remote dependency. A game is offered
-only once it is `verified`: by the full e2e, or by a smoke PASS plus a person
-playing it in the lab (hpg/games.config.ts). Smoke results from Chrome 157 on
-14 November 2026, after `npm run sync-games`.
+The 15 November rows were added at the site owner's request to offer every
+game that packages; see the docblock in hpg/games.config.ts.
 
 ## Trying every game at once (the lab)
 
@@ -138,7 +135,7 @@ in the deploy build.
 
 `hpg:smoke` opens that launcher from `file://` with the network off, imports
 everything and gives each game the same generic treatment:
-1. Press a start-like button if there is one, otherwise click the middle.
+1. Press a start-like button (`START_WORDS` in smoke.mjs) if there is one, otherwise click the middle.
 2. Press Enter and Space.
 3. Hold arrows and WASD, then swipe and click.
 
