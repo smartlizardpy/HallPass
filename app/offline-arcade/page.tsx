@@ -77,6 +77,10 @@ export default function OfflineArcadePage() {
             Pick games, download one file, and play them with the internet off: on a train, on a plane, or anywhere the
             Wi-Fi gives up. Nothing to install and no account. It opens in Chrome, Edge or Firefox on a computer.
           </p>
+          <p className="rounded-2xl bg-brand-50 px-4 py-3 text-sm font-bold text-brand sm:hidden">
+            On a phone? You can download it here, but you&rsquo;ll need a computer to play: move the file over and
+            open it there.
+          </p>
         </header>
 
         {available ? (
