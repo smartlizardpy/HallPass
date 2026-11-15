@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "npm run build:sdk && node scripts/build-games-manifest.mjs",
+    "predev": "npm run build:sdk && node scripts/build-games-manifest.mjs && npm run hpg:arcade",
     "dev": "next dev",
-    "prebuild": "npm run build:sdk && node scripts/build-games-manifest.mjs",
+    "prebuild": "npm run build:sdk && node scripts/build-games-manifest.mjs && npm run hpg:arcade",
     "build": "next build",
     "postbuild": "node scripts/build-sw-manifest.mjs",
     "start": "next start",
@@ -18,7 +18,16 @@
     "sync-games": "node scripts/sync-games.mjs",
     "migrate": "node scripts/migrate.mjs",
     "backfill-media-urls": "node scripts/backfill-media-urls.mjs",
-    "publish-game": "node scripts/publish-game.mjs"
+    "publish-game": "node scripts/publish-game.mjs",
+    "hpg": "node scripts/hpg.mjs",
+    "hpg:build": "node scripts/hpg.mjs build",
+    "hpg:inspect": "node scripts/hpg.mjs inspect",
+    "hpg:validate": "node scripts/hpg.mjs validate",
+    "hpg:audit": "node scripts/hpg.mjs audit",
+    "hpg:arcade": "node scripts/hpg.mjs arcade",
+    "hpg:e2e": "node hpg/e2e/run.mjs",
+    "hpg:lab": "node scripts/hpg.mjs lab",
+    "hpg:smoke": "node hpg/e2e/smoke.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
@@ -42,6 +51,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/web-push": "^3.6.4",
+    "acorn": "^8.16.0",
+    "esbuild": "^0.27.7",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "jsdom": "^29.1.1",

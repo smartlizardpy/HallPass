@@ -22,20 +22,13 @@
             text-align: center; pointer-events: auto; border: 2px solid #00f3ff;
             box-shadow: 0 0 40px rgba(0, 243, 255, 0.4); backdrop-filter: blur(15px);
         }
-        /* Qualified with `body` purely to win on specificity. The Tailwind
-           play CDN injects its preflight into <head> at runtime, which lands
-           AFTER this sheet, and preflight resets `button` background-image to
-           none and padding to 0 at the same (0,0,1) specificity -- so on source
-           order it took every primary button in the game back to bare text.
-           `body button` is (0,0,2) and wins; .hp-ghost is a class and still
-           outranks this, so the secondary buttons are unaffected. */
-        body button {
+        button {
             background: linear-gradient(135deg, #00f3ff, #ff007f); color: black; font-weight: 900; padding: 14px 35px;
             border-radius: 9999px; border: none; cursor: pointer; margin-top: 1.5rem; text-transform: uppercase; letter-spacing: 2px; transition: all 0.2s ease-in-out;
             box-shadow: 0 0 15px rgba(0, 243, 255, 0.5);
         }
-        body button:hover { transform: scale(1.05); box-shadow: 0 0 25px rgba(255, 0, 127, 0.8); color: white;}
-        body button:active { transform: scale(0.95); }
+        button:hover { transform: scale(1.05); box-shadow: 0 0 25px rgba(255, 0, 127, 0.8); color: white;}
+        button:active { transform: scale(0.95); }
         #hud {
             position: absolute; top: 20px; left: 20px; color: white; font-family: monospace; font-size: 1.1rem;
             pointer-events: none; text-shadow: 0 0 8px rgba(0,243,255,0.8); display: none;
@@ -80,91 +73,6 @@
             background: rgba(4, 5, 12, 0.85); padding: 10px 20px; border-radius: 9999px;
             border: 1px solid #ff007f; box-shadow: 0 0 20px rgba(255, 0, 127, 0.2);
         }
-        /* --- HallPass -------------------------------------------------------
-           Online leaderboard and friend challenges: the board plus a Challenge
-           button on the two end screens, and an identity row on the start
-           screen.
-
-           Every rule below stands on its own rather than leaning on .panel or
-           the `button` rule above. That started as a workaround: this file used
-           to be indented with U+00A0, which CSS does not treat as whitespace --
-           it is a valid ident code point, so `<U+00A0>.panel {` parsed as a type
-           selector for an element literally named "<U+00A0>" and matched
-           nothing, leaving the whole stylesheet inert. The indentation is
-           ordinary spaces now and those rules do apply, but keeping this block
-           self-contained costs nothing and means the board looks the same in
-           whichever panel it is attached to. Palette and shapes follow the
-           author's intent above -- cyan #00f3ff, pink #ff007f, monospace for
-           figures. */
-        .hp-auth {
-            display: flex; gap: 10px; align-items: center;
-            justify-content: center; flex-wrap: wrap; margin-top: 1.2rem;
-        }
-        #hpAuthStatus {
-            font-family: monospace; font-size: 0.8rem; letter-spacing: 0.12em;
-            text-transform: uppercase; color: #7d8b99;
-        }
-        #hpAuthStatus b { color: #00f3ff; font-weight: 700; }
-        #hpBlock {
-            max-width: 340px; margin: 1.4rem auto 0; text-align: center;
-        }
-        .hp-title {
-            font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase;
-            color: #7d8b99; margin-bottom: 0.5rem;
-        }
-        .hp-board { min-height: 22px; }
-        /* table-layout:fixed is load-bearing. Without it the browser sizes the
-           columns to their content, and the ellipsis on .hp-who then truncates
-           a long handle to a single character instead of clipping it. Fixed
-           layout lets .hp-who take whatever the other two columns leave. */
-        .hp-board table {
-            width: 100%; border-collapse: collapse; table-layout: fixed;
-            font-variant-numeric: tabular-nums;
-        }
-        .hp-board td { padding: 3px 0; font-size: 0.95rem; }
-        .hp-board .hp-rank {
-            width: 26px; color: #7d8b99; font-family: monospace; text-align: left;
-        }
-        .hp-board .hp-who {
-            text-align: left; color: #d6e4f0;
-            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-        }
-        .hp-board .hp-pts {
-            width: 36%; text-align: right; font-family: monospace; color: #00f3ff;
-        }
-        .hp-board .hp-tick { color: #ff007f; margin-left: 4px; font-size: 0.75rem; }
-        .hp-empty {
-            font-size: 0.8rem; letter-spacing: 0.12em; text-transform: uppercase;
-            color: #7d8b99; padding: 4px 0;
-        }
-        .hp-actions { margin-top: 0.9rem; }
-        .hp-msg {
-            margin-top: 0.7rem; font-size: 0.8rem; letter-spacing: 0.12em;
-            text-transform: uppercase; color: #7d8b99;
-        }
-        .hp-msg b { color: #00f3ff; font-weight: 700; }
-        /* Secondary next to the primary action, so "RETRY SEQUENCE" and "BEGIN
-           EXORCISM" stay the obvious thing to press. A class outranks the bare
-           `button` type selector above, so every property that rule sets is
-           restated here -- including box-shadow on :hover, which would
-           otherwise hang the pink glow of a primary button on a ghost one. */
-        .hp-ghost {
-            background: none; color: #00f3ff; border: 1px solid #00f3ff;
-            box-shadow: none; margin: 0; padding: 9px 22px;
-            font-size: 0.8rem; font-weight: 700; font-family: inherit;
-            border-radius: 9999px; cursor: pointer; text-transform: uppercase;
-            letter-spacing: 2px; transition: all 0.2s ease-in-out;
-        }
-        .hp-ghost:hover {
-            background: rgba(0, 243, 255, 0.14); color: #ffffff; box-shadow: none;
-        }
-        .hp-ghost:disabled { opacity: 0.5; cursor: default; }
-        /* The panels in this file hide themselves with Tailwind's .hidden, and
-           the HallPass elements follow that convention -- but stated locally as
-           well, so the board still hides correctly if the Tailwind CDN is
-           blocked or offline. */
-        #hpBlock.hidden, #hpChallenge.hidden,
-        #hpChallengeMsg.hidden, #hpSignIn.hidden { display: none; }
     </style>
 </head>
 <body>
@@ -184,7 +92,7 @@
         <div id="meter-fill"></div>
         <div id="meter-label">DOMAIN READY</div>
     </div>
-
+    
     <button id="solo-btn">DOMAIN EXPANSION (F)</button>
 
     <div id="freeplay-instructions">
@@ -196,7 +104,7 @@
     <div class="pointer-events-none fixed inset-0 z-[2]" style="box-shadow: inset 0 0 150px rgba(0,0,0,0.98);"></div>
 
     <div id="ui-layer">
-
+        
         <!-- Pause Button overlaying top right -->
         <button id="pauseBtn" class="absolute top-5 right-5 text-white border-2 border-cyan-400 px-6 py-2 rounded-full font-bold hidden z-50 hover:bg-cyan-900 transition-colors uppercase tracking-widest text-sm shadow-[0_0_15px_rgba(0,243,255,0.4)] bg-black/50 backdrop-blur-md pointer-events-auto">PAUSE</button>
 
@@ -219,16 +127,8 @@
                 ⚡ <b>HARMONIC FLASH:</b> Parry perfectly on impact to unleash a Black Flash!<br>
             </p>
             <button id="startBtn">BEGIN EXORCISM</button>
-            <!-- Identity row: Sign in only, never a Challenge button. A
-                 challenge dares somebody to beat a score you have just posted,
-                 and on the start screen there is no such score -- challenge()
-                 would answer "no-score" every time it was pressed here. -->
-            <div class="hp-auth">
-                <button id="hpSignIn" class="hp-ghost">Sign in</button>
-                <span id="hpAuthStatus">Playing as Guest</span>
-            </div>
         </div>
-
+        
         <div id="gameOverPanel" class="panel hidden">
             <h1 class="text-4xl font-bold text-red-500 mb-2">SOUL SHATTERED</h1>
             <p class="text-xl mb-4 text-gray-400">Final Score: <span id="finalScore" class="text-white">0</span></p>
@@ -246,51 +146,13 @@
                 </button>
             </div>
         </div>
-        <!-- The HallPass board, Challenge button and result message.
-
-             ONE copy, moved into whichever panel the run ended on, rather than
-             a copy inside each. Both endings post, so both need it -- but ids
-             must be unique in a document, and duplicating them fails quietly
-             instead of loudly: getElementById returns the FIRST match, so every
-             listener and every render would keep targeting the loss panel even
-             while the win panel is the one on screen. A single block cannot
-             drift out of step with itself. -->
-        <div id="hpBlock" class="hidden">
-            <div class="hp-title">Rhythm Hell &middot; High Scores</div>
-            <div class="hp-board" id="hpBoard"></div>
-            <div class="hp-actions">
-                <button id="hpChallenge" class="hp-ghost">Challenge a friend</button>
-            </div>
-            <div class="hp-msg hidden" id="hpChallengeMsg"></div>
-        </div>
     </div>
-
-<!-- HallPass: online leaderboard + friend challenges. The stub below installs
-     window.HallPass synchronously so calls made before the bundle lands are
-     queued, never lost, and degrade to a safe no-op if it never arrives. -->
-<script>
-(function(w){if(w.HallPass&&w.HallPass.version!=="0")return;var q=[];
-function e(n){return function(){var a=[].slice.call(arguments);
-return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
-w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
-submitScore:e("submitScore"),getScores:e("getScores"),
-getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
-unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
-getAchievements:e("getAchievements"),challenge:e("challenge"),
-signIn:function(){},signOut:function(){},
-getHandle:function(){return null},setHandle:function(v){return v},
-on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
-off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
-setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
-q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:{ok:false,reason:"inert"})})},2000)})(window);
-</script>
-<script src="/sdk/v1/hallpass.js" data-game="rhythm-hell-harmonic-flash" defer></script>
 
     <script>
         const TWO_PI = Math.PI * 2;
         const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d', { alpha: false });
-
+        const ctx = canvas.getContext('2d', { alpha: false }); 
+        
         // Element Caching - Crucial for initialization and runtime performance
         const startPanel = document.getElementById('startPanel');
         const gameOverPanel = document.getElementById('gameOverPanel');
@@ -308,7 +170,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
         const pausePanel = document.getElementById('pausePanel');
         const resumeBtn = document.getElementById('resumeBtn');
         const quitBtn = document.getElementById('quitBtn');
-
+        
         // HUD Caching (Optimization)
         const phaseDisplay = document.getElementById('phaseDisplay');
         const scoreDisplay = document.getElementById('scoreDisplay');
@@ -318,12 +180,12 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
         const shieldHUDDisplay = document.getElementById('shieldHUDDisplay');
         const finalScoreDisplay = document.getElementById('finalScore');
         const winScoreDisplay = document.getElementById('winScore');
-
+        
         // HUD State memory to prevent needless DOM writes
         let lastHudState = { phase: '', score: -1, multi: '', health: -1, chrono: '', shield: '' };
-
+        
         let width, height, isPlaying = false, isPaused = false, gameLoopId;
-
+        
         function resize() {
             canvas.width = window.innerWidth; canvas.height = window.innerHeight;
             width = canvas.width; height = canvas.height;
@@ -335,16 +197,16 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
         // Safely pre-initialized collections
         let bullets = [], particles = [], gameEvents = [], bulletWarnings = [];
         let dashTrails = [], engineParticles = [], stardustParticles = [];
-
+        
         let score = 0, bgHue = 190, bgLightness = 5, shakeAmount = 0, bossScale = 1;
-        let sidechainVisual = 1.0;
-
+        let sidechainVisual = 1.0; 
+        
         let currentPhase = 1, loopCount = 0;
-        const loopsPerPhase = 1;
-        let tempo = 138;
+        const loopsPerPhase = 1; 
+        let tempo = 138; 
         let globalSpeedMult = 1.0;
         let isFrozen = false;
-        let winTriggered = false;
+        let winTriggered = false; 
 
         let isFreeplayMode = false;
 
@@ -352,21 +214,21 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
         let subCores = [{x:0, y:0, angle:0}, {x:0, y:0, angle:0}];
 
         let isTubeMode = false; let tubeRadius = 300;
-        let bossDomainActive = false;
+        let bossDomainActive = false; 
         let finaleActive = false;
         let desperationActive = false;
         let heavenOrHellActive = false;
-        let globalRotation = 0;
+        let globalRotation = 0; 
 
-        let multiplier = 1.0; let grazeTexts = []; let melodyMeter = 0;
+        let multiplier = 1.0; let grazeTexts = []; let melodyMeter = 0; 
         let domainState = 0; let domainTimer = 0; let domainPath = []; let targetedBullets = []; let executionIndex = 0; let isMouseDown = false;
-        let harmonicFlash = 0;
+        let harmonicFlash = 0; 
         let isChronoActive = false; let chronoCooldown = 0; let chronoCharge = 100; const chronoRate = 0.25; let autoChronoTriggered = false;
-        let consecutiveOnBeatHits = 0; let beatShieldDuration = 0;
+        let consecutiveOnBeatHits = 0; let beatShieldDuration = 0; 
 
         let parryCooldown = 0, parryActive = 0, parryVisualRadius = 0, lastKickTime = 0;
-        let dashCooldown = 0, dashActive = 0;
-
+        let dashCooldown = 0, dashActive = 0; 
+        
         let current16thNote = 0;
         let nextNoteTime = 0.0;
         let simulatedTime = 0; let lastFrameTime = performance.now();
@@ -403,11 +265,11 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             player = { x: width/2, y: height * 0.8, radius: 8, health: 500, parryColor: '#ffff00', tubeAngle: 0 };
             boss = { x: width/2, y: height * 0.3, radius: 40, angle: 0, orbitAngle: 0 };
             bullets = []; particles = []; gameEvents = []; bulletWarnings = [];
-            score = 0; bgHue = 190; bgLightness = 5;
-            currentPhase = isFreeplayMode ? 33 : 1;
+            score = 0; bgHue = 190; bgLightness = 5; 
+            currentPhase = isFreeplayMode ? 33 : 1; 
             loopCount = 0;
             shakeAmount = 0; bossScale = 1; current16thNote = 0; tempo = 138;
-            bossSides = 3; targetSides = 3; isSplit = false; isTubeMode = isFreeplayMode;
+            bossSides = 3; targetSides = 3; isSplit = false; isTubeMode = isFreeplayMode; 
             bossDomainActive = false; finaleActive = isFreeplayMode; desperationActive = false; heavenOrHellActive = false; globalRotation = 0;
             parryCooldown = 0; parryActive = 0; parryVisualRadius = 0; lastKickTime = 0;
             dashCooldown = 0; dashActive = 0; dashTrails = []; engineParticles = [];
@@ -417,12 +279,12 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             consecutiveOnBeatHits = 0; beatShieldDuration = 0; stardustParticles = [];
             domainState = 0; domainTimer = 0; domainPath = []; targetedBullets = []; harmonicFlash = 0;
             lastLeadPitch = null;
-
+            
             meterFill.style.width = isFreeplayMode ? '100%' : '0%';
             soloBtn.style.display = isFreeplayMode ? 'block' : 'none';
             simulatedTime = 0; lastFrameTime = performance.now();
             freeplayInstructions.style.display = isFreeplayMode ? "block" : "none";
-
+            
             lastHudState = { phase: '', score: -1, multi: '', health: -1, chrono: '', shield: '' };
             if (masterDelay && audioCtx && audioCtx.state === 'running') masterDelay.delayTime.value = (60/tempo) * 0.75;
             updateHUD();
@@ -440,7 +302,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                 if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
                 pausePanel.classList.add('hidden');
                 pauseBtn.innerText = "PAUSE";
-                lastFrameTime = performance.now();
+                lastFrameTime = performance.now(); 
                 requestAnimationFrame(gameLoop);
             }
         }
@@ -451,14 +313,14 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             isPlaying = false;
             cleanupAudio();
             if (gameLoopId) cancelAnimationFrame(gameLoopId);
-
+            
             hud.style.display = 'none';
             meterContainer.style.display = 'none';
             soloBtn.style.display = 'none';
             freeplayInstructions.style.display = 'none';
             pauseBtn.style.display = 'none';
             pausePanel.classList.add('hidden');
-
+            
             startPanel.classList.remove('hidden');
             ctx.fillStyle = '#020205';
             ctx.fillRect(0, 0, width, height);
@@ -472,9 +334,9 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
         let targetX = width/2, targetY = height * 0.8;
         function updateTarget(e) {
             if (!isPlaying || isPaused) return;
-            if (e.touches && e.touches.length > 0) { targetX = e.touches[0].clientX; targetY = e.touches[0].clientY; }
+            if (e.touches && e.touches.length > 0) { targetX = e.touches[0].clientX; targetY = e.touches[0].clientY; } 
             else if (e.clientX !== undefined) { targetX = e.clientX; targetY = e.clientY; }
-
+            
             if (domainState === 1 && isMouseDown) {
                 domainPath.push({x: targetX, y: targetY});
                 for(let i=0; i<bullets.length; i++) {
@@ -501,7 +363,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             if (!isFreeplayMode) { melodyMeter = 0; meterFill.style.width = '0%'; soloBtn.style.display = 'none'; }
             domainState = 1; domainTimer = 180; domainPath = [{x: player.x, y: player.y}]; targetedBullets = [];
             if (delayFilter && audioCtx) { delayFilter.frequency.setTargetAtTime(300, audioCtx.currentTime, 0.1); }
-            playDomainOpenSound(); shakeAmount = 20; bgLightness = -10;
+            playDomainOpenSound(); shakeAmount = 20; bgLightness = -10; 
             grazeTexts.push({x: width/2, y: height/2, life: 2.0, text: "DOMAIN EXPANSION"});
         }
 
@@ -524,7 +386,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             if (type === 6) { playImpact(ct); fireNote('impact', targetPitch, 0, ct); }
         }
 
-        window.addEventListener('mousedown', (e) => {
+        window.addEventListener('mousedown', (e) => { 
             if (isPaused) return;
             isMouseDown = true;
             if (e.button === 0 && e.target.tagName !== 'BUTTON') {
@@ -535,7 +397,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
         window.addEventListener('contextmenu', (e) => { e.preventDefault(); triggerDash(); });
         window.addEventListener('keydown', (e) => {
             if (e.code === 'KeyP' || e.code === 'Escape') { togglePause(); e.preventDefault(); return; }
-            if (isPaused) return;
+            if (isPaused) return; 
             if (e.code === 'Space') { attemptParry(); e.preventDefault(); }
             if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { triggerDash(); e.preventDefault(); }
             if (e.code === 'KeyF') { triggerDomain(); e.preventDefault(); }
@@ -547,9 +409,9 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
 
         let lastTapTime = 0; let lastShipTap = 0;
         window.addEventListener('touchstart', (e) => {
-            if (e.target.tagName === 'BUTTON' || isPaused) return;
+            if (e.target.tagName === 'BUTTON' || isPaused) return; 
             isMouseDown = true; const now = Date.now();
-
+            
             if (isFreeplayMode) {
                 triggerConductorSynth([1, 2, 3, 5][Math.floor(Math.random() * 4)]);
                 e.preventDefault();
@@ -573,11 +435,11 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             const ct = (audioCtx && audioCtx.state === 'running') ? audioCtx.currentTime : simulatedTime;
             const timeDiff = Math.abs(ct - lastKickTime);
             let isPerfect = timeDiff < 0.15;
-            parryActive = isPerfect ? 25 : 15; parryCooldown = isPerfect ? 20 : 45;
-            parryVisualRadius = player.radius; player.parryColor = isPerfect ? '#00f3ff' : '#ff007f';
+            parryActive = isPerfect ? 25 : 15; parryCooldown = isPerfect ? 20 : 45; 
+            parryVisualRadius = player.radius; player.parryColor = isPerfect ? '#00f3ff' : '#ff007f'; 
             if (isPerfect) {
                 consecutiveOnBeatHits++; grazeTexts.push({x: player.x, y: player.y - 20, life: 1.0, text: `PERFECT! (${consecutiveOnBeatHits}/4)`});
-                playShieldTuningSound(consecutiveOnBeatHits); chargeMeter(15);
+                playShieldTuningSound(consecutiveOnBeatHits); chargeMeter(15); 
                 if (consecutiveOnBeatHits >= 4) activateBeatShield();
             } else {
                 if (consecutiveOnBeatHits > 0) grazeTexts.push({x: player.x, y: player.y - 20, life: 1.0, text: "STREAK LOST"});
@@ -596,7 +458,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             if (isTubeMode) {
                 const targetAngle = Math.atan2(targetY - height/2, targetX - width/2) - globalRotation;
                 let angleDiff = targetAngle - player.tubeAngle; angleDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
-                player.tubeAngle += angleDiff * 0.5;
+                player.tubeAngle += angleDiff * 0.5; 
             } else {
                 const dx = targetX - player.x, dy = targetY - player.y, dist = Math.hypot(dx, dy);
                 if (dist > 15) {
@@ -606,7 +468,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                     player.y = Math.max(player.radius, Math.min(height - player.radius, player.y));
                 }
             }
-            for(let i = 0; i < 4; i++) dashTrails.push({ x: player.x, y: player.y, life: 1.0 });
+            for(let i = 0; i < 4; i++) dashTrails.push({ x: player.x, y: player.y, life: 1.0 }); 
             dashActive = 12; dashCooldown = 45; playDashSound();
         }
 
@@ -616,10 +478,10 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
         }
         function activateChrono() { isChronoActive = true; playChronoSound(true); adjustAudioTempo(tempo * chronoRate); }
         function deactivateChrono() { isChronoActive = false; chronoCooldown = 180; playChronoSound(false); adjustAudioTempo(tempo); }
-
+        
         // --- HIGH FIDELITY SYNTH ENGINE ---
         let audioCtx = null, masterCompressor, masterDelay, sidechainNode, delayFilter, masterGain, timerID;
-        let analyser = null, dataArray = new Uint8Array(64);
+        let analyser = null, dataArray = new Uint8Array(64); 
         let noiseBuffer, distortionCurve, globalSwingOsc;
 
         const notes = {
@@ -649,7 +511,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
 
         function getChordForStep(step) {
             if (finaleActive) return finaleChord;
-            let safeStep = step % 64;
+            let safeStep = step % 64; 
             if (safeStep < 16) return { root: notes.F2, scale: [notes.F4, notes.Ab4, notes.C5, notes.Eb5], arp: [notes.F3, notes.C4, notes.F4, notes.C4], arp2: [notes.C4, notes.F4, notes.Ab4, notes.C5] };
             if (safeStep < 32) return { root: notes.Eb2, scale: [notes.Eb4, notes.G4, notes.Bb4, notes.Eb5], arp: [notes.Eb3, notes.Bb3, notes.Eb4, notes.Bb3], arp2: [notes.Bb3, notes.Eb4, notes.G4, notes.Bb4] };
             if (safeStep < 48) return { root: notes.Db3, scale: [notes.Db4, notes.F4, notes.Ab4, notes.C5], arp: [notes.Db3, notes.Ab3, notes.Db4, notes.Ab3], arp2: [notes.Ab3, notes.Db4, notes.F4, notes.Ab4] };
@@ -683,9 +545,9 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
         function triggerSidechain(time) {
             if (!sidechainNode) return;
             sidechainNode.gain.cancelScheduledValues(time);
-            sidechainNode.gain.setValueAtTime(0.1, time);
+            sidechainNode.gain.setValueAtTime(0.1, time); 
             sidechainNode.gain.exponentialRampToValueAtTime(1.0, time + 0.15);
-            sidechainVisual = 0.2;
+            sidechainVisual = 0.2; 
         }
 
         function playKick(time) {
@@ -722,7 +584,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
         }
 
         function playHat(time, isRoll = false) {
-            gameEvents.push({ type: 'hat', time: time, freq: isRoll ? 1 : 0 });
+            gameEvents.push({ type: 'hat', time: time, freq: isRoll ? 1 : 0 }); 
             if (!audioCtx || audioCtx.state !== 'running' || !noiseBuffer) return;
             const noise = audioCtx.createBufferSource(), filter = audioCtx.createBiquadFilter(), gain = audioCtx.createGain();
             noise.buffer = noiseBuffer; filter.type = 'highpass'; filter.frequency.setValueAtTime(8000, time);
@@ -758,7 +620,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             [-0.01, 0, 0.01].forEach(detune => { const osc = audioCtx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.setValueAtTime(freq + (freq * detune), time); osc.connect(filter); osc.start(time); osc.stop(time + 0.5); });
             filter.connect(gain); gain.connect(masterDelay || sidechainNode || masterCompressor);
         }
-
+        
         function playChiptuneLead(time, freq) {
             gameEvents.push({ type: 'supersaw', time: time, freq: freq });
             if (!audioCtx || audioCtx.state !== 'running') return;
@@ -767,16 +629,16 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             const osc = audioCtx.createOscillator(); osc.type = 'square'; osc.frequency.setValueAtTime(freq, time);
             osc.connect(gain); gain.connect(masterDelay || sidechainNode || masterCompressor); osc.start(time); osc.stop(time + 0.2);
         }
-
+        
         function playArtcoreArp(time, freq) {
             gameEvents.push({ type: 'pluck', time: time, freq: freq, origin: 1 });
             if (!audioCtx || audioCtx.state !== 'running') return;
             const osc = audioCtx.createOscillator(), filter = audioCtx.createBiquadFilter(), gain = audioCtx.createGain();
-            osc.type = 'triangle'; osc.frequency.setValueAtTime(freq, time); filter.type = 'highpass'; filter.frequency.setValueAtTime(1000, time);
+            osc.type = 'triangle'; osc.frequency.setValueAtTime(freq, time); filter.type = 'highpass'; filter.frequency.setValueAtTime(1000, time); 
             gain.gain.setValueAtTime(0, time); gain.gain.linearRampToValueAtTime(0.1, time + 0.01); gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
             osc.connect(filter); filter.connect(gain); gain.connect(masterDelay || sidechainNode || masterCompressor); osc.start(time); osc.stop(time + 0.15);
         }
-
+        
         function playGlitchFragment(time) {
             if (!audioCtx || audioCtx.state !== 'running' || !masterCompressor) return;
             const osc = audioCtx.createOscillator(), gain = audioCtx.createGain(), dist = audioCtx.createWaveShaper();
@@ -791,7 +653,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             if (!audioCtx || audioCtx.state !== 'running' || !masterCompressor) return;
             const osc = audioCtx.createOscillator(), filter = audioCtx.createBiquadFilter(), gain = audioCtx.createGain();
             osc.type = 'sawtooth'; osc.frequency.setValueAtTime(freq, time);
-            filter.type = 'bandpass'; filter.Q.value = 15;
+            filter.type = 'bandpass'; filter.Q.value = 15; 
             filter.frequency.setValueAtTime(freq * 8, time); filter.frequency.exponentialRampToValueAtTime(freq, time + 0.2);
             gain.gain.setValueAtTime(0.5, time); gain.gain.exponentialRampToValueAtTime(0.01, time + 0.2);
             osc.connect(filter); filter.connect(gain); gain.connect(masterCompressor);
@@ -803,7 +665,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             if (!audioCtx || audioCtx.state !== 'running' || !noiseBuffer || !masterCompressor) return;
             const noise = audioCtx.createBufferSource(), filter = audioCtx.createBiquadFilter(), gain = audioCtx.createGain();
             noise.buffer = noiseBuffer; filter.type = 'lowpass'; filter.frequency.setValueAtTime(6000, time); filter.frequency.exponentialRampToValueAtTime(100, time + 1.5);
-            gain.gain.setValueAtTime(0.5, time); gain.gain.exponentialRampToValueAtTime(0.001, time + 2.0);
+            gain.gain.setValueAtTime(0.5, time); gain.gain.exponentialRampToValueAtTime(0.001, time + 2.0); 
             noise.connect(filter); filter.connect(gain); gain.connect(masterCompressor); noise.start(time); noise.stop(time + 2.0);
             const osc = audioCtx.createOscillator(), subGain = audioCtx.createGain();
             osc.type = 'sine'; osc.frequency.setValueAtTime(100, time); osc.frequency.exponentialRampToValueAtTime(20, time + 1.0);
@@ -837,7 +699,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             const osc = audioCtx.createOscillator(), gain = audioCtx.createGain(), dist = audioCtx.createWaveShaper();
             osc.type = 'sawtooth'; osc.frequency.setValueAtTime(80, time); osc.frequency.exponentialRampToValueAtTime(10, time + 0.6);
             if (distortionCurve) { dist.curve = distortionCurve; dist.oversample = '4x'; }
-            gain.gain.setValueAtTime(0.8, time); gain.gain.exponentialRampToValueAtTime(0.01, time + 0.7);
+            gain.gain.setValueAtTime(0.8, time); gain.gain.exponentialRampToValueAtTime(0.01, time + 0.7); 
             osc.connect(dist); dist.connect(gain); gain.connect(masterCompressor);
             osc.start(time); osc.stop(time + 0.7);
         }
@@ -914,32 +776,33 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             if (!isPlaying) return;
             const scaleFactor = isChronoActive ? chronoRate : 1.0;
             nextNoteTime += (0.25 * (60.0 / tempo)) * scaleFactor;
-
-            // Only progress the actual song pattern if not frozen and not in Freeplay Mode
-            if (!isFrozen && domainState === 0) {
+            
+            // Progress the actual song pattern if not in Freeplay Mode.
+            // We removed the !isFrozen block so the beat can reach Phase 9!
+            if (domainState === 0) {
                 current16thNote++;
-                if (current16thNote >= 64) {
+                if (current16thNote >= 64) { 
                     current16thNote = 0; loopCount++;
                     if (loopCount >= loopsPerPhase) {
-                        loopCount = 0;
-
+                        loopCount = 0; 
+                        
                         if (!isFreeplayMode) {
                             currentPhase++;
-
-                            if (currentPhase >= 31 && !winTriggered) {
-                                gameEvents.push({ type: 'win', time: nextNoteTime });
+                            
+                            if (currentPhase >= 31 && !winTriggered) { 
+                                gameEvents.push({ type: 'win', time: nextNoteTime }); 
                                 winTriggered = true;
                                 currentPhase = 31;
                             } else if (currentPhase > 31) {
                                 currentPhase = 31;
                             }
-
+                            
                             if (currentPhase === 15) { gameEvents.push({ type: 'hyperShift', time: nextNoteTime }); }
                             if (currentPhase === 21) { gameEvents.push({ type: 'desperationBuild', time: nextNoteTime }); }
                             if (currentPhase === 31) { gameEvents.push({ type: 'heavenOrHell', time: nextNoteTime }); }
-
-                            if (currentPhase < 31 && !bossDomainActive && !finaleActive) {
-                                bgHue = (bgHue + 55) % 360; bgLightness = 40; updateHUD();
+                            
+                            if (currentPhase < 31 && !bossDomainActive && !finaleActive) { 
+                                bgHue = (bgHue + 55) % 360; bgLightness = 40; updateHUD(); 
                             }
                         }
                     }
@@ -954,19 +817,19 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             // Handle standard phases (Phase 1 to 20)
             if (currentPhase < 21) {
                 if (currentPhase === 8) {
-                    if (step === 0) playRiser(time, (60 / tempo) * 4 * 3.5);
+                    if (step === 0) playRiser(time, (60 / tempo) * 4 * 3.5); 
                     if (step < 56) {
                         if (step % 4 === 0) playKick(time);
                         if (step % 2 === 0) playReeseBass(time, getChordForStep(step).root);
                         if (step < 32 && step % 4 === 0) playSnare(time); else if (step >= 32 && step < 48 && step % 2 === 0) playSnare(time); else if (step >= 48 && step < 56) playSnare(time);
                     } else if (step === 56) gameEvents.push({ type: 'freeze', time: time });
-                    return;
+                    return; 
                 }
 
                 if (currentPhase === 9 && step === 0) {
-                    tempo = 150; adjustAudioTempo(tempo); gameEvents.push({ type: 'unfreeze', time: time }); playImpact(time);
+                    tempo = 150; adjustAudioTempo(tempo); gameEvents.push({ type: 'unfreeze', time: time }); playImpact(time); 
                 }
-
+                
                 if (currentPhase === 20 && step === 0) {
                     tempo = 160; adjustAudioTempo(tempo); gameEvents.push({ type: 'bossDomain', time: time });
                     playImpact(time);
@@ -978,7 +841,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                 if (step % 4 === 0) playKick(time);
                 if (step % 8 === 4) playSnare(time);
                 if (currentPhase > 10 && (step % 4 === 1 || step % 4 === 3)) playHat(time, true); else if (step % 4 === 2) playHat(time, false);
-
+                
                 if (step % 2 === 0 && step % 16 !== 14) playReeseBass(time, chord.root * speedScale);
 
                 if (currentPhase >= 12 && step % 16 === 8) {
@@ -986,7 +849,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                 }
 
                 if (currentPhase >= 3) {
-                    let arpIndex = step % 4; if (Math.floor(step / 4) % 2 === 1) arpIndex = 3 - arpIndex;
+                    let arpIndex = step % 4; if (Math.floor(step / 4) % 2 === 1) arpIndex = 3 - arpIndex; 
                     const notePitch = isChronoActive ? chord.arp[arpIndex] * chronoRate : chord.arp[arpIndex];
                     const notePitchCounter = isChronoActive ? chord.arp2[3 - arpIndex] * chronoRate : chord.arp2[3 - arpIndex];
                     if (currentPhase >= 15) { playTrancePluck(time, notePitch, 1); playTrancePluck(time, notePitchCounter, 2); } else { playTrancePluck(time, notePitch, 0); }
@@ -1006,19 +869,19 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             // --- THE FINALE STATE MACHINE (Phases 21 to 30) ---
             const speedScale = isChronoActive ? chronoRate : 1.0;
             const barInCycle = currentPhase % 32;
-            let state = 'A';
+            let state = 'A'; 
 
             if (barInCycle >= 4 && barInCycle < 12) state = 'B';
             else if (barInCycle >= 12 && barInCycle < 15) state = 'C';
-            else if (barInCycle === 15) state = 'D';
+            else if (barInCycle === 15) state = 'D'; 
             else if (barInCycle >= 16 && barInCycle < 24) state = 'C';
             else if (barInCycle >= 24 && barInCycle < 31) state = 'B';
-            else if (barInCycle === 31) state = 'D';
+            else if (barInCycle === 31) state = 'D'; 
 
             if (state === 'D') {
                 if (step === 0) playImpact(time);
                 if (step % 4 === 0) { playKick(time); shakeAmount = 15; }
-                return;
+                return; 
             }
 
             const chordRoots = [notes.F2, notes.Gb2, notes.Eb2, notes.C2];
@@ -1048,7 +911,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                 const motif = (barInCycle < 16) ? bossMotif : playerMotif;
                 const index = Math.floor(step / 2) % motif.length;
                 const nextPitch = chooseNextNoteNearest(lastLeadPitch, [motif[index]]);
-
+                
                 playSupersawLead(time, nextPitch * speedScale);
                 lastLeadPitch = nextPitch;
             }
@@ -1072,7 +935,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
 
             const clock = (audioCtx && audioCtx.state === 'running') ? audioCtx.currentTime : simulatedTime;
             while (nextNoteTime < clock + 0.1) {
-                scheduleNote(current16thNote, nextNoteTime);
+                scheduleNote(current16thNote, nextNoteTime); 
                 nextNote();
             }
             timerID = window.setTimeout(scheduler, 25);
@@ -1090,7 +953,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
         }
 
         function initAudio() {
-            cleanupAudio();
+            cleanupAudio(); 
             try {
                 if (!audioCtx) {
                     const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -1100,46 +963,46 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
 
                 masterCompressor = audioCtx.createDynamicsCompressor();
                 masterCompressor.threshold.value = -12; masterCompressor.ratio.value = 10;
-
-                sidechainNode = audioCtx.createGain();
-
+                
+                sidechainNode = audioCtx.createGain(); 
+                
                 masterDelay = audioCtx.createDelay(5.0);
-                masterDelay.delayTime.value = (60/tempo) * 0.75;
-
-                const delayFeedback = audioCtx.createGain();
-                delayFeedback.gain.value = 0.35;
-                masterDelay.connect(delayFeedback);
+                masterDelay.delayTime.value = (60/tempo) * 0.75; 
+                
+                const delayFeedback = audioCtx.createGain(); 
+                delayFeedback.gain.value = 0.35; 
+                masterDelay.connect(delayFeedback); 
                 delayFeedback.connect(masterDelay);
-
-                delayFilter = audioCtx.createBiquadFilter();
+                
+                delayFilter = audioCtx.createBiquadFilter(); 
                 delayFilter.type = 'lowpass'; delayFilter.frequency.value = 2500;
-
+                
                 masterDelay.connect(delayFilter);
                 delayFilter.connect(masterCompressor);
-                sidechainNode.connect(masterCompressor);
-
+                sidechainNode.connect(masterCompressor); 
+                
                 globalSwingOsc = audioCtx.createOscillator();
-                globalSwingOsc.frequency.value = 0.25;
+                globalSwingOsc.frequency.value = 0.25; 
                 const swingGain = audioCtx.createGain();
-                swingGain.gain.value = 0.7;
-
+                swingGain.gain.value = 0.7; 
+                
                 if (audioCtx.createStereoPanner) {
-                    const panner = audioCtx.createStereoPanner();
-                    panner.pan.setValueAtTime(0.0, audioCtx.currentTime);
-                    globalSwingOsc.connect(swingGain);
-                    swingGain.connect(panner.pan);
+                    const panner = audioCtx.createStereoPanner(); 
+                    panner.pan.setValueAtTime(0.0, audioCtx.currentTime); 
+                    globalSwingOsc.connect(swingGain); 
+                    swingGain.connect(panner.pan); 
                     globalSwingOsc.start();
-                    delayFilter.connect(panner);
-                    panner.connect(masterCompressor);
+                    delayFilter.connect(panner); 
+                    panner.connect(masterCompressor); 
                 } else {
-                    globalSwingOsc.start();
+                    globalSwingOsc.start(); 
                 }
-
+                
                 analyser = audioCtx.createAnalyser(); analyser.fftSize = 128; dataArray = new Uint8Array(analyser.frequencyBinCount);
                 masterGain = audioCtx.createGain(); masterGain.gain.value = 0.8;
-                masterCompressor.connect(masterGain); masterGain.connect(analyser); analyser.connect(audioCtx.destination);
-
-                noiseBuffer = createNoiseBuffer();
+                masterCompressor.connect(masterGain); masterGain.connect(analyser); analyser.connect(audioCtx.destination); 
+                
+                noiseBuffer = createNoiseBuffer(); 
                 distortionCurve = createDistortionCurve(400);
             } catch (err) { console.warn("AudioContext fallback.", err); }
 
@@ -1149,7 +1012,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
 
         // --- BULLET FIRE ENGINE ---
         function fireNote(type, freq, origin, spawnTime) {
-            if (bullets.length > 300) bullets.splice(0, bullets.length - 300);
+            if (bullets.length > 300) bullets.splice(0, bullets.length - 300); 
 
             let spawnX = boss.x, spawnY = boss.y;
             if (isSplit && origin === 1) { spawnX = subCores[0].x; spawnY = subCores[0].y; }
@@ -1160,8 +1023,8 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
 
             if (isTubeMode) { baseAngle = player.tubeAngle; }
 
-            const safeFreq = freq || 0;
-
+            const safeFreq = freq || 0; 
+            
             if (type === 'gabba') {
                 b.vx = Math.cos(baseAngle) * 12; b.vy = Math.sin(baseAngle) * 12; b.radius = 24; b.color = '#ff0000'; b.shape = 'sawblade'; shakeAmount = 25; bossScale = 3.0; bgLightness = 100;
             } else if (type === 'kick') {
@@ -1184,13 +1047,13 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                     if (isTubeMode) { subB.z = 1000; subB.tubeAngle = Math.atan2(subB.vy, subB.vx); subB.zSpeed = Math.hypot(subB.vx, subB.vy) * 2.5; }
                     bullets.push(subB);
                 }
-                return;
+                return; 
             } else if (type === 'impact') {
                 if (bulletWarnings.length > 20) bulletWarnings.shift();
                 bulletWarnings.push({
                     x: spawnX, y: spawnY, radius: 20, maxRadius: 280, duration: 30, timer: 0,
                     trigger: () => {
-                        const rings = 16;
+                        const rings = 16; 
                         for(let i=0; i<rings; i++){
                             let a = (TWO_PI/rings)*i;
                             let ib = { x: spawnX, y: spawnY, vx: Math.cos(a)*14, vy: Math.sin(a)*14, radius: 5, color: '#ffffff', shape: 'ring', life: 0, spawnTime: spawnTime, targeted: false };
@@ -1223,14 +1086,14 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             let count = isHuge ? 30 : 8; let speed = isHuge ? 14 : 7;
             for(let i=0; i<count; i++) particles.push({x: x, y: y, vx: (Math.random()-0.5)*speed, vy: (Math.random()-0.5)*speed, life: 1.0});
         }
-
+        
         function updateHUD() {
             const safeScore = isNaN(score) ? 0 : Math.floor(score);
             const safeMulti = isNaN(multiplier) ? "1.0" : multiplier.toFixed(1);
-
+            
             let phaseStr = isFreeplayMode ? "ZEN CONDUCTOR" : (finaleActive ? "THE FINALE (PHASE " + currentPhase + ")" : (bossDomainActive ? "INFINITE RESONANCE" : (isTubeMode ? "HYPER-SHIFT" : "PHASE " + Math.min(currentPhase, 20))));
             let phaseColor = isFreeplayMode ? "#00f3ff" : (finaleActive ? "#ffffff" : (bossDomainActive ? "#ff0000" : (isTubeMode ? "#00f3ff" : "#ff007f")));
-
+            
             let healthStr = isFreeplayMode ? "INFINITE" : player.health;
             let chronoStr = isChronoActive ? "ACTIVE" : (chronoCooldown > 0 ? "COOLDOWN" : Math.floor(chronoCharge) + "%");
             let shieldStr = beatShieldDuration > 0 ? "ACTIVE!" : `${consecutiveOnBeatHits}/4 BEATS`;
@@ -1238,10 +1101,10 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             if (lastHudState.phase !== phaseStr || lastHudState.phaseColor !== phaseColor) { phaseDisplay.innerText = phaseStr; phaseDisplay.style.color = phaseColor; lastHudState.phase = phaseStr; lastHudState.phaseColor = phaseColor; }
             if (lastHudState.score !== safeScore) { scoreDisplay.innerText = safeScore; lastHudState.score = safeScore; }
             if (lastHudState.multi !== safeMulti) { multiDisplay.innerText = safeMulti; lastHudState.multi = safeMulti; }
-            if (lastHudState.health !== healthStr) {
-                healthDisplay.innerText = healthStr;
+            if (lastHudState.health !== healthStr) { 
+                healthDisplay.innerText = healthStr; 
                 healthDisplay.className = isFreeplayMode ? "text-purple-400 font-black animate-pulse" : "text-green-400";
-                lastHudState.health = healthStr;
+                lastHudState.health = healthStr; 
             }
             if (lastHudState.chrono !== chronoStr) {
                 chronoDisplay.innerText = chronoStr;
@@ -1256,29 +1119,18 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                 lastHudState.shield = shieldStr;
             }
         }
-
-        /* Whether this run's score has already gone to HallPass. Two functions
-           end a run here -- gameOver() and gameWin() -- and they are mutually
-           exclusive in practice, since each returns early unless isPlaying is
-           still true. The latch is not defending against those two racing; it
-           is defending against a duplicate row on a shared leaderboard, which
-           is not worth leaving to an argument about control flow.
-           startGame() clears it. */
-        let hpPosted = false;
-
+        
         function gameOver() {
             if (!isPlaying || (currentPhase >= 32 && !isFreeplayMode)) return;
             isPlaying = false; cleanupAudio(); if (gameLoopId) cancelAnimationFrame(gameLoopId);
             hud.style.display = 'none'; meterContainer.style.display = 'none'; soloBtn.style.display = 'none'; freeplayInstructions.style.display = 'none'; pauseBtn.style.display = 'none';
             gameOverPanel.classList.remove('hidden'); finalScoreDisplay.innerText = Math.floor(score);
-            hpFinish(gameOverPanel, restartBtn);
         }
         function gameWin() {
             if (!isPlaying) return;
             isPlaying = false; cleanupAudio(); if (gameLoopId) cancelAnimationFrame(gameLoopId);
             hud.style.display = 'none'; meterContainer.style.display = 'none'; soloBtn.style.display = 'none'; freeplayInstructions.style.display = 'none'; pauseBtn.style.display = 'none';
             winPanel.classList.remove('hidden'); winScoreDisplay.innerText = Math.floor(score);
-            hpFinish(winPanel, winRestartBtn.parentElement);
         }
 
         // --- MAIN INTEGRATED ENGINE LOOP ---
@@ -1298,15 +1150,15 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             const currentTime = (audioCtx && audioCtx.state === 'running') ? audioCtx.currentTime : simulatedTime;
 
             if (shakeAmount > 0) shakeAmount *= 0.85;
-
+            
             if (isTubeMode) bossScale += ((finaleActive ? (2.0 + Math.random()) : (bossDomainActive ? 2.0 : 0.4)) - bossScale) * 0.15;
             else bossScale += (1 - bossScale) * 0.15;
-
-            sidechainVisual += (1 - sidechainVisual) * 0.1;
-            if (globalSpeedMult > 1.0) globalSpeedMult -= 0.04;
+            
+            sidechainVisual += (1 - sidechainVisual) * 0.1; 
+            if (globalSpeedMult > 1.0) globalSpeedMult -= 0.04; 
             if (globalSpeedMult < 1.0) globalSpeedMult = 1.0;
-
-            if (harmonicFlash > 0) harmonicFlash--;
+            
+            if (harmonicFlash > 0) harmonicFlash--; 
 
             if (domainState === 1) {
                 domainTimer--; if (domainTimer <= 0) endDomainDrawing();
@@ -1335,7 +1187,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                 if (isChronoActive) {
                     chronoCharge -= dt * 18; if (chronoCharge <= 0) { chronoCharge = 0; deactivateChrono(); }
                 } else {
-                    if (chronoCooldown > 0) chronoCooldown--; if (chronoCooldown === 0 && chronoCharge < 100) chronoCharge = Math.min(100, chronoCharge + dt * 8);
+                    if (chronoCooldown > 0) chronoCooldown--; if (chronoCooldown === 0 && chronoCharge < 100) chronoCharge = Math.min(100, chronoCharge + dt * 8); 
                 }
 
                 if (player.health <= 150 && !autoChronoTriggered && chronoCooldown === 0) { autoChronoTriggered = true; activateChrono(); }
@@ -1346,12 +1198,12 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                     if (ev.type === 'freeze') { isFrozen = true; }
                     if (ev.type === 'unfreeze') { isFrozen = false; globalSpeedMult = 1.8; shakeAmount = 40; bgLightness = 100; bossScale = 2.5; }
                     if (ev.type === 'hyperShift') {
-                        isTubeMode = true; isSplit = false; tubeRadius = Math.min(width, height) * 0.4; shakeAmount = 60; bgLightness = 100; bullets = [];
+                        isTubeMode = true; isSplit = false; tubeRadius = Math.min(width, height) * 0.4; shakeAmount = 60; bgLightness = 100; bullets = []; 
                         for(let i=0; i<60; i++) particles.push({x: width/2, y: height/2, vx: (Math.random()-0.5)*30, vy: (Math.random()-0.5)*30, life: 1.5});
                     }
                     if (ev.type === 'splitBoss') { isSplit = true; shakeAmount = 35; bgLightness = 85; createExplosion(boss.x, boss.y, true); }
                     if (ev.type === 'bossDomain') {
-                        bossDomainActive = true; bgHue = 0; isSplit = false; shakeAmount = 60; bullets = [];
+                        bossDomainActive = true; bgHue = 0; isSplit = false; shakeAmount = 60; bullets = []; 
                         grazeTexts.push({x: width/2, y: height/2, life: 3.0, text: "DOMAIN EXPANSION: INFINITE RESONANCE"});
                         for(let i=0; i<60; i++) particles.push({x: width/2, y: height/2, vx: (Math.random()-0.5)*40, vy: (Math.random()-0.5)*40, life: 2.0});
                     }
@@ -1369,9 +1221,9 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                         grazeTexts.push({x: width/2, y: height/2, life: 4.0, text: "THE FINALE"});
                         for(let i=0; i<80; i++) particles.push({x: width/2, y: height/2, vx: (Math.random()-0.5)*50, vy: (Math.random()-0.5)*50, life: 2.5});
                     }
-                    if (ev.type === 'kick') lastKickTime = currentTime;
+                    if (ev.type === 'kick') lastKickTime = currentTime; 
                     if (ev.type !== 'freeze' && ev.type !== 'unfreeze' && ev.type !== 'splitBoss' && ev.type !== 'hyperShift' && ev.type !== 'bossDomain' && ev.type !== 'desperationBuild' && ev.type !== 'heavenOrHell' && ev.type !== 'win') {
-                        fireNote(ev.type, ev.freq, ev.origin || 0, currentTime);
+                        fireNote(ev.type, ev.freq, ev.origin || 0, currentTime); 
                     }
                 }
 
@@ -1379,14 +1231,14 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
 
                 if (isTubeMode) {
                     tubeRadius = Math.min(width, height) * 0.4;
-                    const cx = width/2, cy = height/2;
-
+                    const cx = width/2, cy = height/2; 
+                    
                     // We must update player.tubeAngle relative to the rotation so mouse controls feel 1:1 visually!
-                    let angleDiff = targetAnglePhysics - player.tubeAngle;
+                    let angleDiff = targetAnglePhysics - player.tubeAngle; 
                     angleDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
-                    player.tubeAngle += angleDiff * 0.2;
-
-                    player.x = cx + Math.cos(player.tubeAngle) * tubeRadius;
+                    player.tubeAngle += angleDiff * 0.2; 
+                    
+                    player.x = cx + Math.cos(player.tubeAngle) * tubeRadius; 
                     player.y = cy + Math.sin(player.tubeAngle) * tubeRadius;
                 } else {
                     player.x += (targetX - player.x) * 0.2; player.y += (targetY - player.y) * 0.2;
@@ -1395,14 +1247,14 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
 
                 if (isFrozen || currentPhase === 8) targetSides = 10;
                 else {
-                    let currentStep = current16thNote % 64;
-                    if (finaleActive || desperationActive || heavenOrHellActive) targetSides = Math.floor(Math.random() * 8) + 3;
+                    let currentStep = current16thNote % 64; 
+                    if (finaleActive || desperationActive || heavenOrHellActive) targetSides = Math.floor(Math.random() * 8) + 3; 
                     else if (currentStep < 16) targetSides = bossDomainActive ? 8 : 3;
                     else if (currentStep < 32) targetSides = bossDomainActive ? 12 : 4;
                     else if (currentStep < 48) targetSides = bossDomainActive ? 16 : 5;
                     else targetSides = bossDomainActive ? 20 : 6;
                 }
-                bossSides += (targetSides - bossSides) * ((finaleActive || desperationActive || heavenOrHellActive) ? 0.8 : 0.08);
+                bossSides += (targetSides - bossSides) * ((finaleActive || desperationActive || heavenOrHellActive) ? 0.8 : 0.08); 
 
                 // Dynamic Canvas Rotation updates
                 if (heavenOrHellActive) globalRotation += dt * Math.PI * 0.5 * executionSpeedScale;
@@ -1410,13 +1262,13 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                 if (!isFrozen) {
                     boss.orbitAngle += 0.012 * globalSpeedMult * executionSpeedScale;
                     boss.angle += 0.02 * globalSpeedMult * executionSpeedScale * ((finaleActive || heavenOrHellActive) ? 3 : 1);
-
+                    
                     if (isSplit) {
                         boss.radius += (20 - boss.radius) * 0.1;
                         subCores[0].x = boss.x + Math.cos(boss.orbitAngle * 3.2) * 160; subCores[0].y = boss.y + Math.sin(boss.orbitAngle * 3.2) * 160; subCores[0].angle -= 0.06 * globalSpeedMult * executionSpeedScale;
                         subCores[1].x = boss.x + Math.cos(boss.orbitAngle * 3.2 + Math.PI) * 160; subCores[1].y = boss.y + Math.sin(boss.orbitAngle * 3.2 + Math.PI) * 160; subCores[1].angle -= 0.06 * globalSpeedMult * executionSpeedScale;
                     } else {
-                        boss.x = (width/2) + Math.cos(boss.orbitAngle) * (width * 0.25) * ((finaleActive || heavenOrHellActive || desperationActive) ? Math.random() : 1);
+                        boss.x = (width/2) + Math.cos(boss.orbitAngle) * (width * 0.25) * ((finaleActive || heavenOrHellActive || desperationActive) ? Math.random() : 1); 
                     }
                 }
                 if (bossDomainActive) bgLightness += (10 - bgLightness) * 0.05;
@@ -1432,7 +1284,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                     let b = bullets[i];
                     let currentRadius = b.radius;
                     let hitDist = 9999;
-
+                    
                     if (isTubeMode) {
                         if (!isFrozen) {
                             if (b.reflected) {
@@ -1442,8 +1294,8 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                                     shakeAmount = 6; bossScale = 0.8; continue;
                                 }
                             } else {
-                               if (b.type === 'scythe') b.tubeAngle += (0.015 * b.curveDir * globalSpeedMult * executionSpeedScale);
-                                else if (b.type === 'wall') b.zSpeed *= (1 + 0.005 * executionSpeedScale);
+                               if (b.type === 'scythe') b.tubeAngle += (0.015 * b.curveDir * globalSpeedMult * executionSpeedScale); 
+                                else if (b.type === 'wall') b.zSpeed *= (1 + 0.005 * executionSpeedScale); 
                                 else if (b.type === 'homing') {
                                     const bulletAge = currentTime - b.spawnTime;
                                     if (bulletAge < 2.0) {
@@ -1465,7 +1317,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                         b.renderRadius = currentRadius;
 
                         const zDist = Math.abs(b.z - 100);
-                        if (zDist < Math.max(30, b.zSpeed * 1.5)) {
+                        if (zDist < Math.max(30, b.zSpeed * 1.5)) { 
                             let aDiff = Math.abs(player.tubeAngle - b.tubeAngle) % TWO_PI;
                             if (aDiff > Math.PI) aDiff = TWO_PI - aDiff;
                             hitDist = aDiff * tubeRadius;
@@ -1483,15 +1335,15 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                                 continue;
                             }
                             if (b.type === 'scythe') {
-                                const curAngle = Math.atan2(b.vy, b.vx); const nextAngle = curAngle + (0.015 * b.curveDir * globalSpeedMult * executionSpeedScale);
+                                const curAngle = Math.atan2(b.vy, b.vx); const nextAngle = curAngle + (0.015 * b.curveDir * globalSpeedMult * executionSpeedScale); 
                                 const speed = Math.hypot(b.vx, b.vy); b.vx = Math.cos(nextAngle) * speed; b.vy = Math.sin(nextAngle) * speed;
                             } else if (b.type === 'wall') {
-                                b.vx *= (1 + 0.005 * executionSpeedScale); b.vy *= (1 + 0.005 * executionSpeedScale);
+                                b.vx *= (1 + 0.005 * executionSpeedScale); b.vy *= (1 + 0.005 * executionSpeedScale); 
                             } else if (b.type === 'homing') {
                                 const bulletAge = currentTime - b.spawnTime;
                                 if (b.reflected || bulletAge < 2.0) {
                                     let angleToPlayer = Math.atan2(player.y - b.y, player.x - b.x); let currentAngle = Math.atan2(b.vy, b.vx);
-                                    let newAngle = currentAngle + (angleToPlayer - currentAngle) * 0.025 * executionSpeedScale;
+                                    let newAngle = currentAngle + (angleToPlayer - currentAngle) * 0.025 * executionSpeedScale; 
                                     let speed = Math.hypot(b.vx, b.vy); b.vx = Math.cos(newAngle) * speed; b.vy = Math.sin(newAngle) * speed;
                                 }
                             } else if (b.type === 'sinwave') {
@@ -1504,7 +1356,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                         }
                         hitDist = Math.hypot(player.x - b.x, player.y - b.y);
                     }
-
+                    
                     if (beatShieldDuration > 0 && hitDist < shieldHitRadius + currentRadius) {
                         playShieldAbsorbSound(); score += 30 * multiplier; multiplier += 0.02; updateHUD();
                         for (let pIdx = 0; pIdx < 6; pIdx++) {
@@ -1517,22 +1369,22 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                         b.reflected = true; harmonicFlash = 12; multiplier += 1.0; score += 1000 * multiplier;
                         playBlackFlashSound(); shakeAmount = 50; createExplosion(b.x, b.y, true);
                         grazeTexts.push({x: player.x, y: player.y - 40, life: 2.0, text: "HARMONIC FLASH!!"});
-
+                        
                         bullets.forEach(otherB => {
                             if (Math.hypot(otherB.x - player.x, otherB.y - player.y) < 350) {
                                 otherB.reflected = true;
                                 const a = Math.atan2(otherB.y - player.y, otherB.x - player.x);
                                 otherB.vx = Math.cos(a) * 20; otherB.vy = Math.sin(a) * 20;
                                 if (isTubeMode) { otherB.zSpeed = 40; }
-                                otherB.color = '#000000'; otherB.shadowColor = '#ff0000';
+                                otherB.color = '#000000'; otherB.shadowColor = '#ff0000'; 
                             }
                         });
                         continue;
                     } else if (parryActive > 0 && hitDist < parryVisualRadius + currentRadius && !isFrozen) {
-                        b.reflected = true; b.color = player.parryColor;
-                        if (isTubeMode) { b.zSpeed = Math.max(20, Math.abs(b.zSpeed) * 2.0); }
+                        b.reflected = true; b.color = player.parryColor; 
+                        if (isTubeMode) { b.zSpeed = Math.max(20, Math.abs(b.zSpeed) * 2.0); } 
                         else {
-                            const angleToBoss = Math.atan2(boss.y - b.y, boss.x - b.x); const speed = Math.max(16, Math.hypot(b.vx, b.vy) * 2.0);
+                            const angleToBoss = Math.atan2(boss.y - b.y, boss.x - b.x); const speed = Math.max(16, Math.hypot(b.vx, b.vy) * 2.0); 
                             b.vx = Math.cos(angleToBoss) * speed; b.vy = Math.sin(angleToBoss) * speed;
                         }
                         chargeMeter(20); continue;
@@ -1543,7 +1395,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                             b.grazed = true; multiplier += 0.05; score += 5 * multiplier; chargeMeter(2);
                             grazeTexts.push({x: player.x + (Math.random()*30-15), y: player.y - 20, life: 0.8, text: "DASH GRAZE!"}); updateHUD();
                         }
-                        continue;
+                        continue; 
                     }
 
                     if (hitDist < player.radius + currentRadius) {
@@ -1551,14 +1403,14 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                             playShieldAbsorbSound(); bullets.splice(i, 1); continue;
                         }
                         player.health -= 10; multiplier = 1.0; updateHUD(); createExplosion(player.x, player.y); bullets.splice(i, 1);
-                        shakeAmount = 15;
+                        shakeAmount = 15; 
                         if (player.health <= 0) { gameOver(); return; }
                         continue;
                     } else if (hitDist < player.radius * 3.5 && !b.grazed && parryActive <= 0 && !isFrozen) {
-                        b.grazed = true; multiplier += 0.1; score += 15 * multiplier; chargeMeter(6);
+                        b.grazed = true; multiplier += 0.1; score += 15 * multiplier; chargeMeter(6); 
                         grazeTexts.push({x: player.x + (Math.random()*30-15), y: player.y - 20, life: 1.0, text: "GRAZE!"}); updateHUD();
                     }
-
+                    
                     if (!isTubeMode && !isFrozen) {
                         if (b.noteStyle === 'sixteenth') {
                             if (b.x < 0 || b.x > width) b.vx *= -1; if (b.y < 0) b.vy *= -1; if (b.y > height + 50) bullets.splice(i, 1);
@@ -1567,14 +1419,14 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                         }
                     }
                 }
-            }
-
+            } 
+            
             if (particles.length > 100) particles.splice(0, particles.length - 100);
             for(let i = particles.length - 1; i >= 0; i--) {
                 particles[i].x += particles[i].vx * (domainState > 0 ? 0 : executionSpeedScale); particles[i].y += particles[i].vy * (domainState > 0 ? 0 : executionSpeedScale); particles[i].life -= 0.05;
                 if(particles[i].life <= 0) particles.splice(i, 1);
             }
-
+            
             if (dashTrails.length > 20) dashTrails.splice(0, dashTrails.length - 20);
             for (let i = dashTrails.length - 1; i >= 0; i--) {
                 dashTrails[i].life -= 0.04;
@@ -1586,7 +1438,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                 let sp = stardustParticles[i];
                 const dxTarget = sp.target.x - sp.x; const dyTarget = sp.target.y - sp.y; const distTarget = Math.hypot(dxTarget, dyTarget);
                 if (distTarget < sp.target.radius + 10) { stardustParticles.splice(i, 1); continue; }
-
+                
                 if (beatShieldDuration > 0) {
                     const angle = Math.atan2(dyTarget, dxTarget) + 0.15;
                     sp.vx += Math.cos(angle) * 1.8; sp.vy += Math.sin(angle) * 1.8;
@@ -1598,23 +1450,23 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                 if (sp.life <= 0) stardustParticles.splice(i, 1);
             }
 
-            if (!isFrozen && domainState === 0) score += 1 * multiplier * executionSpeedScale;
+            if (!isFrozen && domainState === 0) score += 1 * multiplier * executionSpeedScale; 
             if (Math.round(currentTime * 60) % 15 === 0) updateHUD();
 
             // Render background
             if (finaleActive || heavenOrHellActive || desperationActive) {
                 ctx.fillStyle = (current16thNote % 4 === 0) ? `rgba(20, 0, 0, 0.7)` : `rgba(2, 2, 5, 0.9)`;
             } else if (bossDomainActive) {
-                ctx.fillStyle = `rgba(15, 0, 0, 0.45)`;
+                ctx.fillStyle = `rgba(15, 0, 0, 0.45)`; 
             } else if (domainState > 0) {
-                ctx.fillStyle = `rgba(0, 0, 0, 0.85)`;
+                ctx.fillStyle = `rgba(0, 0, 0, 0.85)`; 
             } else if (isChronoActive) {
-                ctx.fillStyle = `rgba(10, 5, 20, 0.45)`;
+                ctx.fillStyle = `rgba(10, 5, 20, 0.45)`; 
             } else {
-                ctx.fillStyle = isFrozen ? `rgba(0, 0, 0, 0.2)` : `rgba(3, 3, 7, ${0.45 * sidechainVisual})`;
+                ctx.fillStyle = isFrozen ? `rgba(0, 0, 0, 0.2)` : `rgba(3, 3, 7, ${0.45 * sidechainVisual})`; 
             }
             ctx.fillRect(0, 0, width, height);
-
+            
             ctx.save();
             if (shakeAmount > 0.5) ctx.translate((Math.random()-0.5)*shakeAmount, (Math.random()-0.5)*shakeAmount);
 
@@ -1631,8 +1483,8 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                     analyser.getByteFrequencyData(dataArray);
                     const barWidth = width / dataArray.length;
                     for (let i = 0; i < dataArray.length; i++) {
-                        const barHeight = (dataArray[i] / 255) * (height * 0.42) * sidechainVisual;
-                        const eqHue = (finaleActive || heavenOrHellActive || desperationActive) ? (Math.random()>0.5?0:360) : (bossDomainActive ? 0 : (isChronoActive ? 270 + (i * 2) : (bgHue + (i * 5)) % 360));
+                        const barHeight = (dataArray[i] / 255) * (height * 0.42) * sidechainVisual; 
+                        const eqHue = (finaleActive || heavenOrHellActive || desperationActive) ? (Math.random()>0.5?0:360) : (bossDomainActive ? 0 : (isChronoActive ? 270 + (i * 2) : (bgHue + (i * 5)) % 360)); 
                         ctx.fillStyle = `hsla(${eqHue}, 80%, 60%, 0.12)`; ctx.fillRect(i * barWidth, height - barHeight, barWidth - 1, barHeight);
                         ctx.fillStyle = `hsla(${eqHue}, 100%, 75%, 0.45)`; ctx.fillRect(i * barWidth, height - barHeight - 4, barWidth - 1, 4);
                     }
@@ -1643,7 +1495,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             const gridHue = (finaleActive || heavenOrHellActive || desperationActive) ? 0 : (bossDomainActive ? 0 : (isChronoActive ? 280 : bgHue));
             ctx.strokeStyle = `hsla(${gridHue}, 60%, ${domainState > 0 ? 10 : bgLightness * sidechainVisual}%, 0.3)`;
             ctx.lineWidth = (finaleActive || heavenOrHellActive || desperationActive) ? 4 : 2; ctx.beginPath();
-
+            
             if (isTubeMode) {
                 const cx = width/2, cy = height/2;
                 for(let i = 0; i < 16; i++) {
@@ -1652,10 +1504,10 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                 const tunnelSpeed = (simulatedTime * 2000 * globalSpeedMult) % 200;
                 for(let z = 10; z < 2000; z += 150) {
                     let actualZ = z - tunnelSpeed; if(actualZ < 1) continue;
-                    const scale = 100 / actualZ;
+                    const scale = 100 / actualZ; 
                     const pulseRadius = tubeRadius * (1 + Math.sin(simulatedTime * 5) * 0.08) * scale;
                     if (pulseRadius > width) continue;
-
+                    
                     ctx.moveTo(cx + pulseRadius, cy);
                     if (finaleActive || heavenOrHellActive || desperationActive) {
                         drawMorphingPolygon(ctx, cx, cy, pulseRadius, Math.floor(Math.random() * 8) + 3, 0);
@@ -1694,7 +1546,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             // Boss Render
             ctx.save();
             ctx.translate(boss.x, boss.y); ctx.rotate(boss.angle); ctx.scale(bossScale * sidechainVisual, bossScale * sidechainVisual);
-
+            
             const bossRenderHue = domainState > 0 ? 0 : ((finaleActive || heavenOrHellActive || desperationActive) ? 0 : (bossDomainActive ? 0 : (isChronoActive ? 280 : bgHue)));
             const renderSaturation = domainState > 0 ? 0 : 100;
             ctx.beginPath(); ctx.arc(0, 0, boss.radius * 1.5, 0, TWO_PI);
@@ -1704,13 +1556,13 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             drawMorphingPolygon(ctx, 0, 0, boss.radius * 1.3, bossSides, 0); ctx.fill();
             ctx.strokeStyle = `hsla(${bossRenderHue}, ${renderSaturation}%, 75%, ${isSplit ? 0.4 : 0.8})`; ctx.lineWidth = 4;
             drawMorphingPolygon(ctx, 0, 0, boss.radius * 1.3, bossSides, 0); ctx.stroke();
-
-            ctx.rotate(-boss.angle * 2.5);
+            
+            ctx.rotate(-boss.angle * 2.5); 
             ctx.strokeStyle = isSplit ? '#777' : ((finaleActive || heavenOrHellActive || desperationActive) ? '#fff' : (bossDomainActive ? '#ff0000' : '#fff')); ctx.lineWidth = 3;
             drawMorphingPolygon(ctx, 0, 0, boss.radius * 0.8, targetSides === 10 ? 5 : targetSides, Math.PI/4); ctx.stroke();
 
             if (!isSplit) {
-                ctx.rotate(boss.angle * 2.5); ctx.rotate(-boss.angle);
+                ctx.rotate(boss.angle * 2.5); ctx.rotate(-boss.angle); 
                 const angleToPlayer = Math.atan2(player.y - boss.y, player.x - boss.x);
                 const eyeDist = boss.radius * 0.4;
                 ctx.fillStyle = domainState > 0 ? '#555' : ((finaleActive || heavenOrHellActive || desperationActive) ? '#fff' : (bossDomainActive ? '#fff' : (isChronoActive ? '#aa00ff' : '#ff0055'))); ctx.shadowBlur = 20; ctx.shadowColor = domainState > 0 ? '#000' : ((finaleActive || heavenOrHellActive || desperationActive) ? '#ff0000' : (bossDomainActive ? '#ff0000' : (isChronoActive ? '#aa00ff' : '#ff0055')));
@@ -1746,7 +1598,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             ctx.shadowBlur = 12;
             bullets.forEach(b => {
                 ctx.save(); ctx.translate(b.x, b.y);
-
+                
                 // Cloaked/Hidden bullets during Phase 31 Heaven or Hell
                 if (heavenOrHellActive && isTubeMode) {
                     ctx.globalAlpha = Math.max(0, Math.min(1, (1000 - b.z) / 400));
@@ -1761,15 +1613,15 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                 } else {
                     ctx.fillStyle = b.color; ctx.strokeStyle = b.color; ctx.shadowColor = b.color;
                 }
-
+                
                 const rotAngle = isTubeMode ? b.tubeAngle + Math.PI / 2 : Math.atan2(b.vy, b.vx) + Math.PI / 2;
                 ctx.rotate(rotAngle);
-
+                
                 const r = isTubeMode ? (b.renderRadius || b.radius) : b.radius;
-
+                
                 ctx.lineWidth = Math.max(2, r * 0.3);
                 ctx.beginPath();
-
+                
                 switch(b.shape) {
                     case 'hexagon':
                         for(let i=0; i<6; i++) ctx.lineTo(r * Math.cos(i * Math.PI/3), r * Math.sin(i * Math.PI/3));
@@ -1818,7 +1670,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                         ctx.arc(0, 0, r, 0, TWO_PI);
                         ctx.fill(); ctx.stroke();
                 }
-
+                
                 if (b.targeted) {
                     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
                     ctx.beginPath(); ctx.moveTo(-r*2, -r*2); ctx.lineTo(r*2, r*2); ctx.moveTo(r*2, -r*2); ctx.lineTo(-r*2, r*2); ctx.stroke();
@@ -1827,21 +1679,21 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             });
             ctx.globalAlpha = 1.0;
 
-            ctx.shadowBlur = 0;
+            ctx.shadowBlur = 0; 
             dashTrails.forEach(trail => {
                 ctx.save(); ctx.translate(trail.x, trail.y);
                 ctx.fillStyle = domainState === 2 ? `rgba(255, 0, 127, ${trail.life * 0.8})` : `rgba(0, 255, 255, ${trail.life * 0.45})`;
-
+                
                 if (isTubeMode) ctx.rotate(player.tubeAngle + Math.PI);
                 else {
                     const tilt = Math.min(0.3, speedDist * 0.01) * Math.cos(moveAngle);
                     ctx.rotate(tilt);
                 }
 
-                ctx.beginPath();
-                ctx.moveTo(0, -player.radius*2.2); ctx.lineTo(player.radius*1.5, player.radius*1.2);
-                ctx.lineTo(player.radius*0.5, player.radius*0.8); ctx.lineTo(0, player.radius*1.5);
-                ctx.lineTo(-player.radius*0.5, player.radius*0.8); ctx.lineTo(-player.radius*1.5, player.radius*1.2);
+                ctx.beginPath(); 
+                ctx.moveTo(0, -player.radius*2.2); ctx.lineTo(player.radius*1.5, player.radius*1.2); 
+                ctx.lineTo(player.radius*0.5, player.radius*0.8); ctx.lineTo(0, player.radius*1.5); 
+                ctx.lineTo(-player.radius*0.5, player.radius*0.8); ctx.lineTo(-player.radius*1.5, player.radius*1.2); 
                 ctx.closePath(); ctx.fill();
                 ctx.restore();
             });
@@ -1876,9 +1728,9 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
 
             if (domainState !== 2) {
                 ctx.save();
-                ctx.translate(player.x, player.y);
-
-                if (isTubeMode) { ctx.rotate(player.tubeAngle + Math.PI); }
+                ctx.translate(player.x, player.y); 
+                
+                if (isTubeMode) { ctx.rotate(player.tubeAngle + Math.PI); } 
                 else { const tilt = Math.min(0.3, speedDist * 0.01) * Math.cos(moveAngle); ctx.rotate(tilt); }
 
                 if (beatShieldDuration > 0) {
@@ -1890,9 +1742,9 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                     ctx.restore();
                 }
 
-                ctx.fillStyle = dashActive > 0 ? '#ffffff' : (isChronoActive ? '#9400d3' : '#00f3ff');
+                ctx.fillStyle = dashActive > 0 ? '#ffffff' : (isChronoActive ? '#9400d3' : '#00f3ff'); 
                 ctx.shadowBlur = 20; ctx.shadowColor = dashActive > 0 ? '#ffffff' : (isChronoActive ? '#9400d3' : '#00f3ff');
-
+                
                 if (parryActive > 0) {
                     ctx.beginPath(); ctx.arc(0, 0, parryVisualRadius, 0, TWO_PI);
                     ctx.strokeStyle = player.parryColor; ctx.lineWidth = 4; ctx.stroke();
@@ -1918,11 +1770,11 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
                     ctx.strokeStyle = 'rgba(0, 243, 255, 0.8)'; ctx.lineWidth = 1.5; ctx.stroke();
                 }
 
-                ctx.beginPath(); ctx.moveTo(0, -player.radius*2.2); ctx.lineTo(player.radius*1.5, player.radius*1.2);
-                ctx.lineTo(player.radius*0.5, player.radius*0.8); ctx.lineTo(0, player.radius*1.5);
-                ctx.lineTo(-player.radius*0.5, player.radius*0.8); ctx.lineTo(-player.radius*1.5, player.radius*1.2);
+                ctx.beginPath(); ctx.moveTo(0, -player.radius*2.2); ctx.lineTo(player.radius*1.5, player.radius*1.2); 
+                ctx.lineTo(player.radius*0.5, player.radius*0.8); ctx.lineTo(0, player.radius*1.5); 
+                ctx.lineTo(-player.radius*0.5, player.radius*0.8); ctx.lineTo(-player.radius*1.5, player.radius*1.2); 
                 ctx.closePath(); ctx.fill();
-
+                
                 ctx.fillStyle = '#030307'; ctx.shadowBlur = 0;
                 ctx.beginPath(); ctx.ellipse(0, -player.radius*0.3, player.radius*0.4, player.radius*0.8, 0, 0, TWO_PI); ctx.fill();
                 ctx.restore();
@@ -1930,7 +1782,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
 
             // Restore canvas transformation matrix so HUD isn't drawn crooked
             if (heavenOrHellActive) {
-                ctx.restore();
+                ctx.restore(); 
                 ctx.save();
             }
 
@@ -1940,20 +1792,20 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
 
             ctx.font = "bold 14px 'Segoe UI', sans-serif"; ctx.textAlign = "center";
             for (let i = grazeTexts.length - 1; i >= 0; i--) {
-                let gt = grazeTexts[i]; gt.y -= 1.5; gt.life -= 0.03;
+                let gt = grazeTexts[i]; gt.y -= 1.5; gt.life -= 0.03; 
                 ctx.fillStyle = `rgba(255, 0, 127, ${gt.life})`; ctx.fillText(gt.text, gt.x, gt.y);
                 if (gt.life <= 0) grazeTexts.splice(i, 1);
             }
 
             if (isFrozen || domainState === 1) {
-                ctx.fillStyle = `rgba(255, 255, 255, ${(Math.sin(Date.now() / 100) + 1) / 2})`;
+                ctx.fillStyle = `rgba(255, 255, 255, ${(Math.sin(Date.now() / 100) + 1) / 2})`; 
                 ctx.font = "bold 80px 'Segoe UI', sans-serif"; ctx.textAlign = "center";
                 ctx.fillText(domainState === 1 ? "DRAW PATH" : "SILENCE", width/2, height/2 - 20);
                 ctx.font = "20px 'Segoe UI', sans-serif"; ctx.fillStyle = "#00f3ff";
                 ctx.fillText(domainState === 1 ? "SLICE THROUGH BULLETS" : "REPOSITION NOW.", width/2, height/2 + 20);
             }
 
-            ctx.restore();
+            ctx.restore(); 
             gameLoopId = requestAnimationFrame(gameLoop);
         }
 
@@ -1962,13 +1814,9 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
             isPaused = false;
             pauseBtn.innerText = "PAUSE";
             pausePanel.classList.add('hidden');
-
+            
             startPanel.classList.add('hidden'); gameOverPanel.classList.add('hidden'); winPanel.classList.add('hidden');
             hud.style.display = 'block'; meterContainer.style.display = 'block'; pauseBtn.style.display = 'block';
-            // A new run may post again. All four ways back into the game --
-            // start, retry, play again and Zen -- funnel through startGame(),
-            // so clearing the latch here covers every one of them.
-            hpPosted = false;
             resetGameState(); initAudio(); isPlaying = true; gameLoopId = requestAnimationFrame(gameLoop);
         }
 
@@ -1976,217 +1824,7 @@ q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||
         restartBtn.addEventListener('click', () => startGame(false));
         winRestartBtn.addEventListener('click', () => startGame(false));
         winFreeplayBtn.addEventListener('click', () => startGame(true));
-
-        /* --- HallPass --------------------------------------------------------
-           The inline stub immediately above this script installs window.HallPass
-           synchronously, so every call below is safe the moment it runs even
-           while the real bundle is still in flight.
-
-           Each SDK method RESOLVES -- none reject and none throw -- including
-           when the board has not been provisioned server-side yet, which simply
-           answers { ok:false }. Nothing here is therefore wrapped in try/catch:
-           a rejection is not one of the outcomes, and a game with no board must
-           play exactly like a game with one. */
-
-        const hpBlock = document.getElementById('hpBlock');
-        const hpBoard = document.getElementById('hpBoard');
-        const hpChallengeBtn = document.getElementById('hpChallenge');
-        const hpChallengeMsg = document.getElementById('hpChallengeMsg');
-        const hpSignInBtn = document.getElementById('hpSignIn');
-        const hpAuthStatus = document.getElementById('hpAuthStatus');
-
-        /* A one-line status where the table would go. Everything in this
-           section is built with createElement and textContent rather than
-           innerHTML: handles and display names come from other players and must
-           never be parsed as markup. */
-        function hpNote(text) {
-            hpBoard.textContent = '';
-            const note = document.createElement('div');
-            note.className = 'hp-empty';
-            note.textContent = text;
-            hpBoard.appendChild(note);
-        }
-
-        /* Move the single block into the panel this run ended on.
-
-           insertBefore rather than appendChild, so the board reads ABOVE the
-           big "RETRY SEQUENCE" / "PLAY AGAIN" button instead of being stranded
-           underneath it. The anchor is passed in by the caller as an element it
-           already holds -- not a child index -- so adding markup to either panel
-           later cannot silently relocate the board. */
-        function hpAttach(panel, anchor) {
-            panel.insertBefore(hpBlock, anchor);
-            hpBlock.classList.remove('hidden');
-        }
-
-        /* Post the run that just ended, then draw the board underneath it.
-
-           BOTH ENDINGS POST. To a scoreboard a win and a loss are the same
-           thing -- a finished run carrying a final score -- and skipping the win
-           would drop precisely the runs most worth ranking.
-
-           NOT CALLED FROM quitGame(). Backing out to the menu mid-run has not
-           finished anything, and a partial score posted for it would sit on the
-           board indistinguishable from a real result.
-
-           ZEN GOD MODE IS NEVER POSTED. In Freeplay the bullet-collision check
-           takes its isFreeplayMode branch and skips the damage entirely, so the
-           player cannot die, and scheduleNote() returns early so no win event is
-           ever queued. The run therefore has no end and the score has no
-           ceiling. A single unbounded, invulnerable entry would sit above every
-           honest score permanently and make the whole board worthless. The
-           player is told so where the board would be, because silently doing
-           nothing reads as a bug rather than as a rule.
-
-           submitScore resolves either way and never throws, so this cannot stop
-           the end screen from appearing or delay it. The board is drawn AFTER
-           the post resolves, so the run that just ended is already in the list
-           rather than first appearing on the next one. */
-        function hpFinish(panel, anchor) {
-            if (hpPosted) return;
-            hpPosted = true;
-
-            hpAttach(panel, anchor);
-            // Clear the previous run's result, or "Dared Ali to beat 4,200"
-            // would sit under a score that is no longer the one in question.
-            hpChallengeMsg.classList.add('hidden');
-
-            if (isFreeplayMode) {
-                hpChallengeBtn.classList.add('hidden');
-                hpNote('Zen God Mode runs are not posted');
-                return;
-            }
-
-            hpChallengeBtn.classList.remove('hidden');
-            hpNote('Posting your score...');
-            // Math.floor because `score` accumulates as a float; the panels
-            // above already display it floored, and the board must agree with
-            // the number the player was just shown.
-            HallPass.submitScore(Math.floor(score)).then(hpRenderBoard);
-        }
-
-        /* Draw the online top five.
-
-           FIVE, not ten: the panel already carries a final score and two
-           buttons, and a list long enough to need scrolling inside it would
-           fight the touch input that drives the game.
-
-           TEN ARE REQUESTED because one player can hold several of the top
-           rows; after collapsing each handle to their best, five is what is
-           left to show. */
-        function hpRenderBoard() {
-            hpNote('Loading scores...');
-            HallPass.getScores({ limit: 10 }).then((rows) => {
-                if (!rows || !rows.length) {
-                    hpNote('Be the first to score');
-                    return;
-                }
-                const seen = new Set();
-                const best = rows.filter((r) => seen.has(r.handle) ? false : (seen.add(r.handle), true))
-                                 .slice(0, 5);
-                const table = document.createElement('table');
-                let rank = 0;
-                for (const row of best) {
-                    const tr = document.createElement('tr');
-                    const n = document.createElement('td');
-                    n.className = 'hp-rank';
-                    n.textContent = ++rank;
-                    const who = document.createElement('td');
-                    who.className = 'hp-who';
-                    who.textContent = row.handle;              // untrusted
-                    if (row.verified) {
-                        const tick = document.createElement('span');
-                        tick.className = 'hp-tick';
-                        tick.textContent = '✓';
-                        who.appendChild(tick);
-                    }
-                    const pts = document.createElement('td');
-                    pts.className = 'hp-pts';
-                    pts.textContent = Number(row.score).toLocaleString();
-                    tr.append(n, who, pts);
-                    table.appendChild(tr);
-                }
-                hpBoard.textContent = '';
-                hpBoard.appendChild(table);
-            });
-        }
-
-        /* Paint the start screen's identity row. `player` is null when signed
-           out. */
-        function hpRefreshAuth(player) {
-            if (player) {
-                hpSignInBtn.classList.add('hidden');
-                hpAuthStatus.textContent = 'Signed in as ';
-                const name = document.createElement('b');
-                name.textContent = player.name;                // untrusted
-                hpAuthStatus.appendChild(name);
-            } else {
-                hpSignInBtn.classList.remove('hidden');
-                hpAuthStatus.textContent = 'Playing as Guest';
-            }
-        }
-
-        /* Only the outcomes the PICKER CANNOT REPORT ITSELF are listed here.
-           Server refusals -- signed out, not friends, no score -- are already
-           rendered inside the panel the player is looking at, and repeating
-           them underneath would be noise. These three stop that panel before it
-           can say anything at all. */
-        const HP_CHALLENGE_MSG = {
-            'popup-blocked': 'Your browser blocked the challenge window',
-            'inert': 'Challenges need the online leaderboard, offline here',
-            'network': 'Could not reach HallPass - try again shortly',
-        };
-
-        hpChallengeBtn.addEventListener('click', async () => {
-            hpChallengeBtn.disabled = true;
-            hpChallengeMsg.classList.add('hidden');
-            // No try/catch: every SDK method resolves, so there is nothing to
-            // catch.
-            const res = await HallPass.challenge();
-            hpChallengeBtn.disabled = false;
-
-            /* READ `sent`, NOT `ok`. Closing the picker resolves
-               { ok:true, sent:false, reason:"closed" } -- the call worked and the
-               player simply changed their mind, which must never be reported
-               back to them as a failure. */
-            if (res && res.sent && res.challenge) {
-                hpChallengeMsg.textContent = 'Dared ';
-                const who = document.createElement('b');
-                who.textContent = res.challenge.to;            // untrusted
-                const target = document.createElement('b');
-                target.textContent = Number(res.challenge.targetScore).toLocaleString();
-                hpChallengeMsg.append(who, ' to beat ', target);
-                hpChallengeMsg.classList.remove('hidden');
-                return;
-            }
-            const text = res && res.reason ? HP_CHALLENGE_MSG[res.reason] : null;
-            if (text) {
-                hpChallengeMsg.textContent = text;
-                hpChallengeMsg.classList.remove('hidden');
-            }
-        });
-
-        /* The board is the one part of an end screen a player is meant to sit
-           and read, and this game binds parry and dash to window. The existing
-           mousedown and touchstart handlers already exempt <button>, so
-           hpSignIn and hpChallenge need no guard and adding one would be
-           redundant -- but a <table> of handles is not a button, and touchstart
-           additionally calls preventDefault(). Swallowing the event on this
-           subtree keeps a tap on the leaderboard from registering as a game
-           input. */
-        for (const el of [hpBoard, hpChallengeMsg]) {
-            el.addEventListener('mousedown', (e) => e.stopPropagation());
-            el.addEventListener('touchstart', (e) => e.stopPropagation());
-        }
-
-        HallPass.getPlayer().then(hpRefreshAuth);
-        // The sign-in popup does not reload the game, so the label has to be
-        // told when it finishes -- otherwise it still reads "Guest" to somebody
-        // who has just signed in.
-        HallPass.on('auth', (e) => hpRefreshAuth(e.player));
-        // Must be a real click: browsers block a popup opened without a user
-        // gesture.
-        hpSignInBtn.addEventListener('click', () => HallPass.signIn());
     </script>
 </body>
 </html>
+

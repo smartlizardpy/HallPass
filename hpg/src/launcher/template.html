@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<!--
+  The arcade never needs the network, so it is not allowed to use it.
+  Game frames load through srcdoc, which INHERITS this policy, so the same
+  rule stops every game from making network requests. Games still get what
+  offline play needs: inline and blob:/data: scripts (eval too, as some games
+  use it; the frame is sandboxed regardless), WebAssembly, blob: workers, and
+  data:/blob: media and fonts.
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data:; style-src 'unsafe-inline' blob: data:; img-src data: blob:; media-src data: blob:; font-src data: blob:; worker-src blob: data:; connect-src blob: data:; frame-src blob: data: about:; base-uri 'none'; form-action 'none'">
+<title>HallPass Offline Arcade</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%237c2eef'/%3E%3Ccircle cx='46' cy='44' r='7' fill='%23ffc700'/%3E%3Cpath d='M18 46V18h8v11h6V18h8v28h-8V36h-6v10z' fill='%23fff'/%3E%3C/svg%3E">
+<style>/*HPG:STYLE*/</style>
+</head>
+<body>
+<div id="app" aria-live="polite"></div>
+<noscript><p style="font:16px system-ui;padding:24px">The HallPass Offline Arcade needs JavaScript. Open this file in Chrome, Edge or Firefox.</p></noscript>
+<script>/*HPG:SCRIPT*/</script>
+</body>
+</html>

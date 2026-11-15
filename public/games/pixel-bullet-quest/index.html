@@ -151,32 +151,6 @@
             80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
             100% { opacity: 0; transform: translate(-50%, -70%) scale(1.2); }
         }
-
-        /* --- HallPass (online leaderboard + friend challenges) --------------
-           Press Start 2P is enormous at ordinary sizes, so everything HallPass
-           adds runs at 10px and leans on column alignment rather than weight to
-           stay readable. The colours are the ones the HUD already speaks in:
-           cyan for who somebody is, amber for what they scored. Layout stays in
-           Tailwind utilities to match the markup around it - only what a
-           utility cannot express cheaply lives here. */
-        .hp-board { min-height: 20px; }
-        /* table-layout:fixed is load-bearing. Without it the browser sizes the
-           columns to their content, and the ellipsis on .hp-who then collapses a
-           long handle to a single character instead of truncating it. */
-        .hp-board table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-        .hp-board td { padding: 5px 0; font-size: 10px; }
-        .hp-board .hp-rank { width: 26px; text-align: left; color: #64748b; }
-        .hp-board .hp-who {
-            text-align: left; color: #38bdf8;
-            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-        }
-        .hp-board .hp-pts { width: 40%; text-align: right; color: #facc15; }
-        .hp-board .hp-verified { color: #4ade80; margin-left: 6px; }
-        .hp-empty { font-size: 10px; color: #64748b; line-height: 1.8; }
-        /* The browser's own [hidden] rule loses to any display utility that
-           lands on the same element, and both of these sit in markup made of
-           display utilities - so they say it outright rather than hoping. */
-        #hpChallengeMsg[hidden], #hpSignIn[hidden] { display: none; }
     </style>
 </head>
 <body>
@@ -345,15 +319,6 @@
             </div>
             
             <button id="openCheatBtn" class="px-6 py-3 text-xs bg-gray-900 border-2 border-gray-700 rounded text-gray-400 hover:text-white hover:border-gray-400 transition shadow-md pixel-text mt-4">ENTER SECRET CODE</button>
-
-            <!-- HallPass identity. Signing in belongs here and the friend dare
-                 belongs on the game-over screen: challenge() needs a score of
-                 yours for somebody to be dared to beat, and on this screen there
-                 is not one yet. -->
-            <div class="flex flex-wrap gap-4 items-center justify-center mt-8">
-                <button id="hpSignIn" class="arcade-btn blue px-6 py-3 text-[10px] text-white pixel-text">SIGN IN</button>
-                <span id="hpAuthStatus" class="text-[10px] text-gray-400 pixel-text tracking-widest">PLAYING AS GUEST</span>
-            </div>
         </div>
 
         <div id="cheatScreen" class="text-center hidden w-full px-4 max-w-md flex flex-col items-center">
@@ -372,16 +337,6 @@
                 <p class="text-gray-400 text-sm pixel-text mb-4 text-left flex justify-between"><span>STATUS:</span> <span id="finalFloorDisplay" class="text-yellow-400">Chamber 1</span></p>
                 <p class="text-gray-400 text-sm pixel-text text-left flex justify-between"><span>SCORE:</span> <span id="finalScoreDisplay" class="text-white text-xl">0</span></p>
             </div>
-
-            <!-- HallPass: the online top five, then the friend dare. Both live
-                 on this screen because this is the only moment where a final
-                 score exists - to post, and to dare somebody to beat. -->
-            <div class="hud-panel w-full max-w-md mb-8">
-                <div class="text-[10px] text-cyan-300 pixel-text tracking-widest mb-4">TOP RUNS</div>
-                <div id="hpBoard" class="hp-board"></div>
-            </div>
-            <button id="hpChallenge" class="arcade-btn blue py-3 px-8 text-[10px] text-white pixel-text mb-6">CHALLENGE A FRIEND</button>
-            <div id="hpChallengeMsg" class="text-[10px] text-gray-400 pixel-text tracking-widest mb-8" hidden></div>
             <button id="restartBtn" class="arcade-btn py-4 px-12 text-xl pixel-text w-64">REBOOT</button>
         </div>
     </div>
@@ -714,40 +669,6 @@ class FloorPatch {
 }
 
 let bullets = [], enemies = [], bosses = [], particles = [], bgParticles = [], items = [], walls = [], hazards = [], barrels = [], pets = [], shopNPC = null;
-
-// Enemies move through moveEntity rather than raw x/y writes. It is the same swept circle-as-box
-// wall test Player.update uses, with four additions:
-// - unstickEntity first pushes an entity that already overlaps a wall out by its shallowest side.
-//   The swept test only clamps one that was fully outside the wall last frame, so an enemy that
-//   spawned, was knocked or grew into a wall walked straight through it.
-// - 0.001px of slack: after a clamp to w.x - radius, x + radius can miss w.x by one ulp, and the
-//   next step would pass through that face.
-// - 20px sub-steps can never hop a wall: the thinnest wall plus the smallest enemy diameter (a
-//   shrunk minion) is 56px. A chase step is a single sub-step; a knockback takes several.
-// - It ends with the arena clamp Player.update has always had.
-function moveEntity(e, dx, dy) {
-    unstickEntity(e);
-    const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 20));
-    for (let s = 0; s < steps; s++) {
-        let newX = e.x + dx / steps; let newY = e.y + dy / steps;
-        walls.forEach(w => {
-            if (newX + e.radius > w.x && newX - e.radius < w.x + w.w && newY + e.radius > w.y && newY - e.radius < w.y + w.h) {
-                if (e.x + e.radius <= w.x + 0.001) newX = w.x - e.radius; else if (e.x - e.radius >= w.x + w.w - 0.001) newX = w.x + w.w + e.radius;
-                if (e.y + e.radius <= w.y + 0.001) newY = w.y - e.radius; else if (e.y - e.radius >= w.y + w.h - 0.001) newY = w.y + w.h + e.radius;
-            }
-        });
-        e.x = newX; e.y = newY;
-    }
-    unstickEntity(e);
-}
-function unstickEntity(e) {
-    for (let pass = 0; pass < 2; pass++) walls.forEach(w => {
-        const l = e.x + e.radius - w.x, r = w.x + w.w - (e.x - e.radius), t = e.y + e.radius - w.y, b = w.y + w.h - (e.y - e.radius);
-        if (l > 0 && r > 0 && t > 0 && b > 0) { const m = Math.min(l, r, t, b); if (m === l) e.x -= l; else if (m === r) e.x += r; else if (m === t) e.y -= t; else e.y += b; }
-    });
-    const roomSize = 2400;
-    e.x = Math.max(-roomSize/2 + e.radius, Math.min(roomSize/2 - e.radius, e.x)); e.y = Math.max(-roomSize/2 + e.radius, Math.min(roomSize/2 - e.radius, e.y));
-}
 
 class Entity {
     constructor(x, y, size, speed, hp) {
@@ -1140,15 +1061,15 @@ class Enemy extends Entity {
         super.update(dt, timestamp);
         if (this.freezeTimer > 0) { return; }
         
-        if (this.bubbleTimer > 0) { moveEntity(this, 0, -50 * dt); return; }
-        if (this.glitchTimer > 0 && Math.random() < 0.1) moveEntity(this, (Math.random() - 0.5) * 100, (Math.random() - 0.5) * 100);
-        if (this.danceTimer > 0) { this.targetAngle += dt * 10; moveEntity(this, Math.cos(this.targetAngle) * this.speed * 0.5 * dt, Math.sin(this.targetAngle) * this.speed * 0.5 * dt); return; }
+        if (this.bubbleTimer > 0) { this.y -= 50 * dt; return; }
+        if (this.glitchTimer > 0 && Math.random() < 0.1) { this.x += (Math.random() - 0.5) * 100; this.y += (Math.random() - 0.5) * 100; }
+        if (this.danceTimer > 0) { this.targetAngle += dt * 10; this.x += Math.cos(this.targetAngle) * this.speed * 0.5 * dt; this.y += Math.sin(this.targetAngle) * this.speed * 0.5 * dt; return; }
 
         // Hazard damage
         hazards.forEach(h => {
             if (this.x > h.x && this.x < h.x+h.w && this.y > h.y && this.y < h.y+h.h) {
                 if (h.type === 'lava') { this.takeDamage(1); if(Math.random()<0.1) particles.push(new SmokeParticle(this.x, this.y, 0, -20, 0.5, '#ef4444', 6)); }
-                if (h.type === 'void') { const cx = h.x + h.w/2; const cy = h.y + h.h/2; const ang = Math.atan2(cy - this.y, cx - this.x); moveEntity(this, Math.cos(ang) * 100 * dt, Math.sin(ang) * 100 * dt); }
+                if (h.type === 'void') { const cx = h.x + h.w/2; const cy = h.y + h.h/2; const ang = Math.atan2(cy - this.y, cx - this.x); this.x += Math.cos(ang) * 100 * dt; this.y += Math.sin(ang) * 100 * dt; }
             }
         });
 
@@ -1164,11 +1085,11 @@ class Enemy extends Entity {
             enemies.forEach(other => { if (!other.charmed && other !== this) { let d = distance(this.x, this.y, other.x, other.y); if (d < minDist) { minDist = d; nearest = other; } } });
             if (nearest) {
                 let ang = Math.atan2(nearest.y - this.y, nearest.x - this.x);
-                if (minDist > 200) { moveEntity(this, Math.cos(ang) * this.speed * dt, Math.sin(ang) * this.speed * dt); } 
+                if (minDist > 200) { this.x += Math.cos(ang) * this.speed * dt; this.y += Math.sin(ang) * this.speed * dt; } 
                 else if (timestamp - this.lastShot > this.fireRate) { this.targetAngle = ang; this.shoot(true); this.lastShot = timestamp; }
             } else {
                 let ang = Math.atan2(player.y - this.y, player.x - this.x);
-                if (distance(this.x, this.y, player.x, player.y) > 150) { moveEntity(this, Math.cos(ang) * this.speed * dt, Math.sin(ang) * this.speed * dt); }
+                if (distance(this.x, this.y, player.x, player.y) > 150) { this.x += Math.cos(ang) * this.speed * dt; this.y += Math.sin(ang) * this.speed * dt; }
             }
             return;
         }
@@ -1215,7 +1136,14 @@ class Enemy extends Entity {
             
             let dx = 0, dy = 0; if (len > 0) { dx = (targetVx / len) * activeSpeed; dy = (targetVy / len) * activeSpeed; }
             
-            moveEntity(this, dx * dt, dy * dt);
+            let newX = this.x + dx * dt; let newY = this.y + dy * dt;
+            walls.forEach(w => {
+                if (newX + this.radius > w.x && newX - this.radius < w.x + w.w && newY + this.radius > w.y && newY - this.radius < w.y + w.h) {
+                    if (this.x + this.radius <= w.x) newX = w.x - this.radius; else if (this.x - this.radius >= w.x + w.w) newX = w.x + w.w + this.radius;
+                    if (this.y + this.radius <= w.y) newY = w.y - this.radius; else if (this.y - this.radius >= w.y + w.h) newY = w.y + w.h + this.radius;
+                }
+            });
+            this.x = newX; this.y = newY;
         }
     }
 
@@ -1452,7 +1380,8 @@ class Bullet {
                 const d = distance(this.x, this.y, e.x, e.y);
                 if (d < 400 && !(e instanceof Boss)) { 
                     const angle = Math.atan2(this.y - e.y, this.x - e.x);
-                    moveEntity(e, Math.cos(angle) * (400-d) * dt * 0.5, Math.sin(angle) * (400-d) * dt * 0.5);
+                    e.x += Math.cos(angle) * (400-d) * dt * 0.5; e.y += Math.sin(angle) * (400-d) * dt * 0.5;
+                    const roomSize = 2400; if (e.x > roomSize/2 - e.radius) e.x = roomSize/2 - e.radius; if (e.x < -roomSize/2 + e.radius) e.x = -roomSize/2 + e.radius; if (e.y > roomSize/2 - e.radius) e.y = roomSize/2 - e.radius; if (e.y < -roomSize/2 + e.radius) e.y = -roomSize/2 + e.radius;
                 }
             });
         }
@@ -1725,8 +1654,7 @@ function generateHazards() {
     const maxWalls = Math.min(8, Math.floor(2 + floor/4));
     for(let i=0; i<maxWalls; i++) {
         const w = Math.random() > 0.5 ? 200 : 50; const h = w === 200 ? 50 : 200; let wx, wy; let safe = false;
-        // 50px clear of earlier walls (wider than the 40px tank): overlapping or near-touching walls leave a wedged enemy no open side to be pushed out to.
-        while(!safe) { wx = (Math.random()-0.5) * 1600; wy = (Math.random()-0.5) * 1600; if(distance(wx, wy, 0, 0) > 300 && !walls.some(o => wx < o.x + o.w + 50 && o.x < wx + w + 50 && wy < o.y + o.h + 50 && o.y < wy + h + 50)) safe = true; }
+        while(!safe) { wx = (Math.random()-0.5) * 1600; wy = (Math.random()-0.5) * 1600; if(distance(wx, wy, 0, 0) > 300) safe = true; }
         walls.push(new Wall(wx, wy, w, h));
     }
     
@@ -1820,12 +1748,6 @@ document.querySelectorAll('.char-btn').forEach(btn => {
 });
 
 function initGame() {
-    // The one place a run actually begins in this game: REBOOT only walks back
-    // to the class select, and it is the class buttons that land here. So this
-    // is where the "already posted" latch is released. Defined in the HallPass
-    // block at the end of the body, along with why it also re-reads the cheat
-    // state instead of clearing it.
-    hpRunStarted();
     player = new Player(0, 0, selectedClass);
     bullets = []; enemies = []; bosses = []; particles = []; items = []; bgParticles = []; walls = []; hazards = []; barrels = []; pets = []; shopNPC = null;
     weaponLockToggle.checked = false;
@@ -1850,13 +1772,6 @@ function togglePause() {
 function endGame() {
     gameState = 'GAMEOVER'; uiLayer.classList.add('hidden'); expBarContainer.classList.add('hidden'); screens.classList.remove('hidden'); gameOverScreen.classList.remove('hidden'); bossUi.classList.add('hidden');
     playSound('game_over'); document.getElementById('finalScoreDisplay').innerText = player.score; document.getElementById('finalFloorDisplay').innerText = `Chamber ${floor}`;
-
-    // Posted after the screen is already up. submitScore resolves either way
-    // and never throws, but the results screen must not wait on a network round
-    // trip to appear - and death here is already a single, guarded event
-    // (takeDamage returns early once invincible is set, one line above its own
-    // call to endGame).
-    hpPostRun(player.score);
 }
 
 function nextFloor() {
@@ -1884,12 +1799,12 @@ function checkCollisions() {
                 if (b.bubbleTrap && !(e instanceof Boss)) e.bubbleTimer = 5.0;
                 if (b.glitchStatus && !(e instanceof Boss)) e.glitchTimer = 4.0;
                 if (b.webbed && !(e instanceof Boss)) e.webTimer = 3.0;
-                if (b.tether && !(e instanceof Boss)) { const ang = Math.atan2(player.y - e.y, player.x - e.x); moveEntity(e, Math.cos(ang) * 150, Math.sin(ang) * 150); }
+                if (b.tether && !(e instanceof Boss)) { const ang = Math.atan2(player.y - e.y, player.x - e.x); e.x += Math.cos(ang) * 150; e.y += Math.sin(ang) * 150; }
                 if (b.shatter && e.freezeTimer > 0 && !(e instanceof Boss)) { e.takeDamage(9999, true); particles.push(new DamageText(e.x, e.y-40, "SHATTERED!", '#7dd3fc', 2.0)); }
 
                 if (b.freeze) e.freezeTimer = 2.0; if (b.burn) e.burnTimer = 3.0; if (b.poison) e.poisonTimer = 4.0; if (b.stun) e.stunTimer = 3.0; 
                 if (b.shrink && !(e instanceof Boss)) e.shrinkTimer = 5.0; if (b.slowEnemy && !(e instanceof Boss)) e.slowTimer = 3.0;
-                if (b.knockback && !(e instanceof Boss)) { const angle = Math.atan2(e.y - b.y, e.x - b.x); moveEntity(e, Math.cos(angle) * 50, Math.sin(angle) * 50); }
+                if (b.knockback && !(e instanceof Boss)) { const angle = Math.atan2(e.y - b.y, e.x - b.x); e.x += Math.cos(angle) * 50; e.y += Math.sin(angle) * 50; }
                 if (b.lifesteal && Math.random() < 0.05) { if(player.hp < player.maxHp) { player.hp++; updateUI(); particles.push(new DamageText(player.x, player.y-20, "+1 HP", '#ef4444')); } }
                 if (b.magnet) { items.forEach(item => { if (distance(player.x, player.y, item.x, item.y) < 600) { const angle = Math.atan2(player.y - item.y, player.x - item.x); item.x += Math.cos(angle) * 40; item.y += Math.sin(angle) * 40; } }); }
                 if (b.clearBullets) { bullets.forEach(enemyB => { if (!enemyB.isPlayerMade && distance(b.x, b.y, enemyB.x, enemyB.y) < 150) enemyB.destroy(); }); }
@@ -1928,9 +1843,6 @@ function update(dt, timestamp) {
     if (shopNPC) shopNPC.update(dt);
 
     checkCollisions();
-    // Spawns, summoned minions, Reality Bender landings and a shrink wearing off put an enemy inside a
-    // wall without moving it (and sheep have no border of their own): resolve that before drawing.
-    enemies.forEach(unstickEntity);
 
     bullets = bullets.filter(b => !b.markedForDeletion); enemies = enemies.filter(e => !e.markedForDeletion); bosses = bosses.filter(b => !b.markedForDeletion); barrels = barrels.filter(b => !b.markedForDeletion);
     particles = particles.filter(p => !p.markedForDeletion); items = items.filter(i => !i.markedForDeletion); pets = pets.filter(p => !p.markedForDeletion);
@@ -2044,229 +1956,12 @@ cheatCancelBtn.addEventListener('click', () => { cheatScreen.classList.add('hidd
 
 cheatSubmitBtn.addEventListener('click', () => {
     if (cheatInput.value.toUpperCase() === 'FISH') {
-        cheatLuckActive = true;
-        // The cheat itself is left exactly as it was - it is part of the game.
-        // What changes is that runs played under it no longer go to the global
-        // board; see hpRunStarted() at the end of the body.
-        hpRunCheated = true;
-        cheatMessage.innerText = "LUCK SET TO INFINITY!"; cheatMessage.style.color = '#4ade80';
+        cheatLuckActive = true; cheatMessage.innerText = "LUCK SET TO INFINITY!"; cheatMessage.style.color = '#4ade80';
         setTimeout(() => { cheatScreen.classList.add('hidden'); startScreen.classList.remove('hidden'); }, 1500);
     } else { cheatMessage.innerText = "INVALID CODE"; cheatMessage.style.color = '#ef4444'; }
 });
 
 drawBackground();
 </script>
-<!-- HallPass: online leaderboard + friend challenges. The stub below installs
-     window.HallPass synchronously so calls made before the bundle lands are
-     queued, never lost, and degrade to a safe no-op if it never arrives. -->
-<script>
-(function(w){if(w.HallPass&&w.HallPass.version!=="0")return;var q=[];
-function e(n){return function(){var a=[].slice.call(arguments);
-return new Promise(function(r){q.push({n:n,a:a,r:r})})}}
-w.HallPass=w.HP={version:"0",mode:"loading",_q:q,ready:e("ready"),
-submitScore:e("submitScore"),getScores:e("getScores"),
-getPlayer:e("getPlayer"),setPlayerHandle:e("setPlayerHandle"),
-unlock:e("unlock"),unlockMany:e("unlockMany"),progress:e("progress"),
-getAchievements:e("getAchievements"),challenge:e("challenge"),
-signIn:function(){},signOut:function(){},
-getHandle:function(){return null},setHandle:function(v){return v},
-on:function(){q.push({n:"on",a:[].slice.call(arguments),r:function(){}});return this},
-off:function(){q.push({n:"off",a:[].slice.call(arguments),r:function(){}});return this}};
-setTimeout(function(){if(w.HallPass.version!=="0")return;w.HallPass.mode="inert";
-q.splice(0).forEach(function(c){c.r(c.n==="getScores"||c.n==="getAchievements"||c.n==="unlockMany"?[]:c.n==="getPlayer"||c.n==="setPlayerHandle"?null:c.n==="challenge"?{ok:false,sent:false,reason:"inert"}:{ok:false,reason:"inert"})})},2000)})(window);
-</script>
-<script src="/sdk/v1/hallpass.js" data-game="pixel-bullet-quest" defer></script>
-
-<script>
-"use strict";
-/* --- HallPass wiring ---------------------------------------------------
-   This block sits AFTER the stub above rather than inside the game script,
-   because the stub is what guarantees window.HallPass exists and the code
-   below calls getPlayer() the moment it runs. The game script reaches back
-   into here through hpRunStarted() and hpPostRun(), which are ordinary globals
-   and are only ever called from a click - long after both scripts have
-   finished executing.
-
-   Every SDK method resolves rather than throwing, including against a board
-   that has not been provisioned yet, so nothing here can break the game. That
-   is also why there is no try/catch below: there is nothing to catch.
-
-   Note what is deliberately NOT here: neon-well had to stopPropagation on its
-   board, because that game restarts on any tap on the over screen and would
-   otherwise have eaten a leaderboard somebody was reading. This game restarts
-   only from REBOOT's own click handler, and its keydown listener does nothing
-   on the over screen except Escape, so there is no stray input to swallow. */
-
-/* One run, one row. Player.takeDamage already sets invincible before it calls
-   endGame and returns early while invincible is set, so a second call in the
-   same frame is not expected - but a duplicate row on a shared board is not a
-   thing to leave resting on that ordering staying as it is. */
-let hpPosted = false;
-
-/* Whether the run that is being played was played with the FISH cheat on. */
-let hpRunCheated = false;
-
-function hpRunStarted(){
-  hpPosted = false;
-  /* Deliberately NOT `hpRunCheated = false`. cheatLuckActive is set once, in
-     the cheat handler, and nothing in this game ever clears it - so every run
-     begun after the code is entered plays at luck 999999999999999, this one
-     included. A flag that simply reset per run would therefore clear itself the
-     instant the next run started and wave every cheated run straight onto the
-     board. Re-reading the sticky global is what actually holds: it stays true
-     for the rest of the tab, and a page reload - the only route back to honest
-     luck - is also the only route back to a postable run. */
-  hpRunCheated = cheatLuckActive;
-}
-
-/* The board area doubles as its own status line, so its one-line states are
-   built through the DOM exactly like the rows are, rather than by assigning a
-   string of HTML. Nothing untrusted can reach innerHTML that way, and there is
-   no second code path to remember when that starts mattering. */
-function hpNote(el, text){
-  el.textContent = "";
-  const note = document.createElement("div");
-  note.className = "hp-empty";
-  note.textContent = text;
-  el.appendChild(note);
-}
-
-function hpPostRun(score){
-  if (hpPosted) return;
-  hpPosted = true;
-  const el = document.getElementById("hpBoard");
-  /* Clear the previous run's dare. Otherwise "Dared Ali to beat 21,300" sits
-     under a score that is no longer the one being talked about. */
-  const msg = document.getElementById("hpChallengeMsg");
-  if (msg) msg.hidden = true;
-
-  /* A global board is only worth having if the numbers on it mean something,
-     and a run played at luck 999999999999999 does not - one entry would sit on
-     top of it permanently and every honest run below would be pointless. So a
-     cheated run is not posted. It is not silently dropped either: the player is
-     told so in the place the board would have been, because letting somebody
-     believe they are on a list they are not on is its own kind of lie. */
-  if (hpRunCheated){
-    if (el) hpNote(el, "Cheat active - this run is not posted");
-    return;
-  }
-
-  if (el) hpNote(el, "Posting your score...");
-  /* Drawn only after the post resolves, so the run that just ended is already
-     in the list instead of turning up one game over late. */
-  HallPass.submitScore(score).then(hpRenderBoard);
-}
-
-/* Draw the online top five.
-
-   TEN are requested because a single player can hold several of the top rows;
-   after collapsing each handle to its best run, five is what is left to show.
-   FIVE and not ten because this screen already carries a stats card, two
-   buttons and a message row on a phone-height viewport, and a list that needs
-   scrolling inside an overlay is a list nobody reads. The full board lives on
-   the game's HallPass page. */
-function hpRenderBoard(){
-  const el = document.getElementById("hpBoard");
-  if (!el) return;
-  hpNote(el, "Loading scores...");
-  HallPass.getScores({ limit: 10 }).then((rows) => {
-    if (!rows || !rows.length){
-      hpNote(el, "Be the first to score");
-      return;
-    }
-    const seen = new Set();
-    const best = rows.filter((r) => seen.has(r.handle) ? false : (seen.add(r.handle), true))
-                     .slice(0, 5);
-    const table = document.createElement("table");
-    let rank = 0;
-    for (const row of best){
-      const tr = document.createElement("tr");
-      const n = document.createElement("td");
-      n.className = "hp-rank"; n.textContent = ++rank;
-      const who = document.createElement("td");
-      who.className = "hp-who";
-      // textContent throughout: a handle is untrusted input and must never be parsed.
-      who.textContent = row.handle;
-      if (row.verified){
-        const tick = document.createElement("span");
-        tick.className = "hp-verified"; tick.textContent = "✓";
-        who.appendChild(tick);
-      }
-      const pts = document.createElement("td");
-      pts.className = "hp-pts"; pts.textContent = Number(row.score).toLocaleString();
-      tr.append(n, who, pts);
-      table.appendChild(tr);
-    }
-    el.textContent = "";
-    el.appendChild(table);
-  });
-}
-
-/* Paint the start screen's identity row. `player` is null when signed out.
-   Upper case to sit level with the rest of that screen's lettering. */
-function hpRefreshAuth(hpPlayer){
-  const status = document.getElementById("hpAuthStatus");
-  const btn = document.getElementById("hpSignIn");
-  if (!status || !btn) return;
-  status.textContent = "";
-  if (hpPlayer){
-    btn.hidden = true;
-    const name = document.createElement("b");
-    // textContent: a display name is untrusted input and must never be parsed.
-    name.textContent = hpPlayer.name;
-    status.append("SIGNED IN AS ", name);
-  } else {
-    btn.hidden = false;
-    status.textContent = "PLAYING AS GUEST";
-  }
-}
-
-/* Only the outcomes the PICKER CANNOT REPORT ITSELF are written here. Server
-   refusals - signed-out, not-friends, no-score - are already rendered inside
-   the panel the player is looking at, and saying them twice would be noise.
-   These three stop the panel before it can say anything at all. */
-const HP_CHALLENGE_MSG = {
-  "popup-blocked": "Your browser blocked the challenge window",
-  "inert":         "Challenges need the online leaderboard, offline here",
-  "network":       "Could not reach HallPass - try again shortly",
-};
-
-/* click, like every other button in this game (REBOOT, PAUSE, the class
-   cards). It is a real user gesture, which is what the popup blocker cares
-   about - signIn() called any other way would simply be blocked. */
-document.getElementById("hpSignIn").addEventListener("click", () => HallPass.signIn());
-
-document.getElementById("hpChallenge").addEventListener("click", async () => {
-  const btn = document.getElementById("hpChallenge");
-  const msg = document.getElementById("hpChallengeMsg");
-  btn.disabled = true;
-  msg.hidden = true;
-  const res = await HallPass.challenge();
-  btn.disabled = false;
-
-  /* READ `sent`, NOT `ok`. Closing the picker resolves
-     { ok:true, sent:false, reason:"closed" } - the call worked and the player
-     changed their mind, which must never be shown to them as a failure. */
-  if (res && res.sent && res.challenge){
-    msg.textContent = "";
-    const to = document.createElement("b");
-    to.textContent = res.challenge.to;                                  // untrusted display name
-    const target = document.createElement("b");
-    target.textContent = Number(res.challenge.targetScore).toLocaleString();
-    msg.append("DARED ", to, " TO BEAT ", target);
-    msg.hidden = false;
-    return;
-  }
-  const text = res && res.reason ? HP_CHALLENGE_MSG[res.reason] : null;
-  if (text){ msg.textContent = text; msg.hidden = false; }
-});
-
-HallPass.getPlayer().then(hpRefreshAuth);
-/* The sign-in popup does not reload the game, so the label has to be told when
-   it finishes - otherwise it still reads "GUEST" to somebody who has just
-   signed in. */
-HallPass.on("auth", (e) => hpRefreshAuth(e.player));
-</script>
-
 </body>
 </html>

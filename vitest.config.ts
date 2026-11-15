@@ -21,7 +21,7 @@ export default defineConfig({
     ],
   },
   test: {
-    include: ["app/**/*.test.ts", "sdk/**/*.test.ts"],
+    include: ["app/**/*.test.ts", "sdk/**/*.test.ts", "hpg/**/*.test.ts"],
     environment: "node",
   },
 });

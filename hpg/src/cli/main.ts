@@ -1,0 +1,247 @@
+/**
+ * `npm run hpg -- <command>` — the HPG developer CLI.
+ *
+ *   build    --game <id> [--game <id>…] | --all   [--out <dir>]
+ *   inspect  <file.hpg>                 manifest, files, sizes, digest
+ *   validate <file.hpg>…                full verification; exit 1 on any failure
+ *   audit    [--json]                   package-ability of every game
+ *   launcher --out <index.html> [--trust-dir <dir>]
+ *                                       the standalone launcher, trusting the
+ *                                       .hpg packages found in --trust-dir
+ *   arcade   [--include-experimental]   every verified package + launcher +
+ *                                       catalog.json into public/arcade/ (runs at
+ *                                       prebuild); the flag adds experimental
+ *                                       games, for local testing only
+ *   lab      [--out <dir>] [--source <id>=<dir>…]
+ *                                       EVERY game, staged ones too (adapter or
+ *                                       trial adapter) + a launcher trusting them
+ *                                       + games.zip into arcade-lab/, for local
+ *                                       testing only; --source packages a game
+ *                                       from its own working folder
+ *
+ * Run through scripts/hpg.mjs, which bundles this file with esbuild first, so
+ * it can import the TypeScript sources and `app/lib/games.ts` directly.
+ */
+
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { games as allGames, publicGames } from "../../../app/lib/games";
+import { adapters } from "../../games.config";
+import { PackageError, readPackage } from "../archive/package";
+import { buildArcade } from "../build/arcade";
+import { auditGames, auditMarkdown } from "../build/audit";
+import { buildLab } from "../build/lab";
+import { fetchStagedRows, resolveStaged } from "../../../scripts/lib/staged.mjs";
+import { buildLauncherHtml, type TrustList } from "../build/launcher";
+import type { BuildIssue } from "../build/inline";
+import { packageGame, type CatalogGame } from "../build/packager";
+
+const catalog: CatalogGame[] = publicGames as CatalogGame[];
+
+function flagValues(args: string[], name: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) if (args[i] === name && args[i + 1]) out.push(args[++i]);
+  return out;
+}
+
+function kb(n: number): string {
+  return `${(n / 1024).toFixed(1)} KB`;
+}
+
+function printIssues(issues: BuildIssue[], verbose: boolean) {
+  for (const i of issues) {
+    if (i.level === "info" && !verbose) continue;
+    const tag = i.level === "error" ? "  ✗" : i.level === "warning" ? "  !" : "  ·";
+    console.log(`${tag} ${i.message}`);
+  }
+}
+
+async function cmdBuild(args: string[], root: string): Promise<number> {
+  const all = args.includes("--all");
+  const ids = flagValues(args, "--game");
+  const outDir = path.resolve(root, flagValues(args, "--out")[0] ?? "public/arcade/packages");
+  const verbose = args.includes("--verbose");
+  const chosen = all ? adapters : ids.map((id) => adapters.find((a) => a.id === id) ?? id);
+  if (chosen.length === 0) {
+    console.error("usage: hpg build --game <id> | --all");
+    return 2;
+  }
+  mkdirSync(outDir, { recursive: true });
+  let failures = 0;
+  for (const a of chosen) {
+    if (typeof a === "string") {
+      console.log(`✗ ${a}: no adapter in hpg/games.config.ts`);
+      failures++;
+      continue;
+    }
+    const r = await packageGame(root, a, catalog);
+    if (!r.ok) {
+      console.log(`✗ ${a.id}: could not be packaged`);
+      printIssues(r.issues, true);
+      failures++;
+      continue;
+    }
+    writeFileSync(path.join(outDir, r.fileName), r.bytes);
+    console.log(`✓ ${a.id} → ${path.relative(root, path.join(outDir, r.fileName))} (${kb(r.bytes.length)}, ${Object.keys(r.manifest.files).length} files)`);
+    printIssues(r.issues, verbose);
+  }
+  return failures ? 1 : 0;
+}
+
+async function cmdInspect(args: string[]): Promise<number> {
+  const file = args[0];
+  if (!file) {
+    console.error("usage: hpg inspect <file.hpg>");
+    return 2;
+  }
+  const bytes = new Uint8Array(readFileSync(file));
+  try {
+    const p = await readPackage(bytes);
+    const m = p.manifest;
+    console.log(`${m.name} (${m.id}) ${m.version}`);
+    console.log(`  runtime ${m.runtime}, entry ${m.entry}, launcher ≥ ${m.minimumLauncherVersion}`);
+    console.log(`  ${m.category ?? "—"} · inputs: ${(m.inputs ?? []).join(", ") || "—"} · permissions: ${m.permissions.join(", ") || "none"}`);
+    console.log(`  features: ${JSON.stringify(m.features ?? {})}  compatibility: ${JSON.stringify(m.compatibility ?? {})}`);
+    console.log(`  manifest sha256 ${p.manifestDigest}`);
+    console.log(`  archive ${kb(bytes.length)}, unpacked ${kb(Object.values(m.files).reduce((s, f) => s + f.size, 0))}`);
+    for (const [fp, f] of Object.entries(m.files)) console.log(`    ${f.role.padEnd(9)} ${kb(f.size).padStart(10)}  ${fp}`);
+    return 0;
+  } catch (e) {
+    return reportPackageError(file, e);
+  }
+}
+
+function reportPackageError(file: string, e: unknown): number {
+  if (e instanceof PackageError) {
+    console.log(`✗ ${file}: ${e.code}: ${e.message}`);
+    for (const d of e.details) console.log(`    ${d}`);
+  } else {
+    console.log(`✗ ${file}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return 1;
+}
+
+async function cmdValidate(args: string[]): Promise<number> {
+  if (args.length === 0) {
+    console.error("usage: hpg validate <file.hpg>…");
+    return 2;
+  }
+  let failures = 0;
+  for (const file of args) {
+    try {
+      const p = await readPackage(new Uint8Array(readFileSync(file)));
+      console.log(`✓ ${file}: ${p.manifest.id} ${p.manifest.version}, ${p.files.size} files verified`);
+    } catch (e) {
+      failures += reportPackageError(file, e);
+    }
+  }
+  return failures ? 1 : 0;
+}
+
+async function cmdAudit(args: string[], root: string): Promise<number> {
+  const rows = await auditGames(root, catalog, adapters);
+  console.log(args.includes("--json") ? JSON.stringify(rows, null, 2) : auditMarkdown(rows));
+  return 0;
+}
+
+/** The trust list for every valid package in `dir` (developer use: dev arcades and e2e). */
+export async function trustFromDir(dir: string): Promise<TrustList> {
+  const packages: TrustList["packages"] = [];
+  for (const name of readdirSync(dir).filter((n) => n.endsWith(".hpg")).sort()) {
+    const p = await readPackage(new Uint8Array(readFileSync(path.join(dir, name))));
+    packages.push({ id: p.manifest.id, version: p.manifest.version, manifestDigest: p.manifestDigest });
+  }
+  return { packages };
+}
+
+async function cmdLauncher(args: string[], root: string): Promise<number> {
+  const out = flagValues(args, "--out")[0];
+  if (!out) {
+    console.error("usage: hpg launcher --out <index.html> [--trust-dir <dir>]");
+    return 2;
+  }
+  const trustDir = flagValues(args, "--trust-dir")[0];
+  const trust = trustDir ? await trustFromDir(path.resolve(root, trustDir)) : { packages: [] };
+  const html = await buildLauncherHtml(path.join(root, "hpg", "src"), trust);
+  mkdirSync(path.dirname(path.resolve(root, out)), { recursive: true });
+  writeFileSync(path.resolve(root, out), html);
+  console.log(`✓ launcher → ${out} (${kb(html.length)}, trusts ${trust.packages.length} packages)`);
+  return 0;
+}
+
+/**
+ * The catalogue with each game's EFFECTIVE staged flag: the production
+ * override (game_overrides.staged) when the database can be read, else the
+ * static flag in games.ts. The same rule, and the same code, as
+ * scripts/sync-games.mjs (scripts/lib/staged.mjs), so a game published from
+ * the dashboard can be offered offline with no games.ts edit, and one staged
+ * from the dashboard is withdrawn. If the database is unset or unreadable, the
+ * static flags stand: that can only offer FEWER games, never a staged one.
+ */
+async function liveCatalog(): Promise<CatalogGame[]> {
+  const all = allGames as CatalogGame[];
+  const staticGames = all.map((g) => ({ slug: g.slug, staged: g.staged === true }));
+  let rows: Awaited<ReturnType<typeof fetchStagedRows>> = {
+    overrides: null,
+    externals: null,
+    error: "DATABASE_URL is not set",
+  };
+  if (process.env.DATABASE_URL) {
+    const { neon } = await import("@neondatabase/serverless");
+    const timeout = new Promise<typeof rows>((resolve) =>
+      setTimeout(() => resolve({ overrides: null, externals: null, error: "timed out after 10s" }), 10_000).unref(),
+    );
+    rows = await Promise.race([fetchStagedRows(neon(process.env.DATABASE_URL)), timeout]);
+  }
+  const { staged, registered } = resolveStaged({ staticGames, overrides: rows.overrides, externals: rows.externals });
+  console.log(
+    registered === null
+      ? `[arcade] staged flags from games.ts only (${rows.error})`
+      : `[arcade] staged flags from games.ts + database overrides`,
+  );
+  return all.map((g) => ({ ...g, staged: staged.has(g.slug) }));
+}
+
+export async function main(argv: string[]): Promise<number> {
+  const [cmd, ...args] = argv;
+  const root = process.cwd();
+  switch (cmd) {
+    case "build":
+      return cmdBuild(args, root);
+    case "inspect":
+      return cmdInspect(args);
+    case "validate":
+      return cmdValidate(args);
+    case "audit":
+      return cmdAudit(args, root);
+    case "launcher":
+      return cmdLauncher(args, root);
+    case "arcade": {
+      // Never fails the deploy: problems are ::warning:: lines (see build/arcade.ts).
+      const live = await liveCatalog();
+      const c = await buildArcade(root, adapters, live, console.log, args.includes("--include-experimental"));
+      console.log(`[arcade] catalog.json: ${c.games.length} games, available=${c.available}`);
+      return 0;
+    }
+    case "lab": {
+      const out = path.resolve(root, flagValues(args, "--out")[0] ?? "arcade-lab");
+      const sources: Record<string, string> = {};
+      for (const s of flagValues(args, "--source")) {
+        const [id, dir] = s.split("=");
+        if (!id || !dir) {
+          console.error(`--source expects <id>=<dir>, got ${s}`);
+          return 2;
+        }
+        sources[id] = path.resolve(root, dir);
+      }
+      // The full catalogue, staged games included: the lab is local-only.
+      const r = await buildLab(root, adapters, allGames as CatalogGame[], out, console.log, { sources });
+      const built = r.games.filter((g) => g.built).length;
+      console.log(`\n${built}/${r.games.length} games built → ${path.relative(root, out)}/ (open index.html, drop games.zip; npm run hpg:smoke tests them all)`);
+      return 0;
+    }
+    default:
+      console.log("usage: hpg <build|inspect|validate|audit|launcher|arcade|lab> …  (see hpg/src/cli/main.ts)");
+      return cmd ? 2 : 0;
+  }
+}
