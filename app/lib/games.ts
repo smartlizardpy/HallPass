@@ -760,6 +760,23 @@ export const games: Game[] = [
     staged: true,
     coverUrl: "/game-media/vanishing-point-3-14/hero-c994152402.png",
   },
+  {
+    slug: "frozen-abyss",
+    title: "Frozen Abyss",
+    tagline: "The only way out is up.",
+    description:
+      "Wake in a crashed pod nine kilometres under a frozen moon's ice, find the crew's recordings and rebuild a submarine to escape. Stay quiet and keep your lamp low: things down here hunt by sound and by light.",
+    category: "Horror",
+    tags: ["Horror", "Survival", "3D", "Underwater"],
+    gradient: ["#0a1418", "#5fe0c8"],
+    accent: "#5fe0c8",
+    art: "serpent",
+    isNew: true,
+    author: "Ateş Demir",
+    platform: "both",
+    staged: true,
+    coverUrl: "/game-media/frozen-abyss/hero-ffa55e10bb.png",
+  },
 ];
 
 /**
