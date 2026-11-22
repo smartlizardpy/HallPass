@@ -777,6 +777,21 @@ export const games: Game[] = [
     staged: true,
     coverUrl: "/game-media/frozen-abyss/hero-ffa55e10bb.png",
   },
+  {
+    slug: "blob-io",
+    title: "Blob.io",
+    tagline: "Eat, grow, swallow everything",
+    description:
+      "Steer your blob around the arena, eat everything smaller than you and dodge anything bigger. Pick from a stack of game modes, unlock skins in the shop and chase your best mass.",
+    category: "Arcade",
+    tags: ["Arcade", "IO", "Casual"],
+    gradient: ["#1e293b", "#4a9bff"],
+    accent: "#4a9bff",
+    art: "swarm",
+    isNew: true,
+    author: "Sohan",
+    platform: "both",
+  },
 ];
 
 /**
